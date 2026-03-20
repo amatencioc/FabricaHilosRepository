@@ -9,9 +9,10 @@ public class LecturaCorreosOptions
 
     /// <summary>
     /// Ruta base donde se guardarán los documentos descargados organizados por RUC/año/mes/día.
+    /// Se configura en appsettings.json → LecturaCorreos:RutaArchivos.
     /// Si está vacío, no se guarda nada en disco.
     /// </summary>
-    public string RutaArchivos { get; set; } = @"D:\.Net\Dev\Files_LecturaCorreos";
+    public string RutaArchivos { get; set; } = string.Empty;
 
     /// <summary>RUC de la empresa receptora. Se usa como primer nivel de carpeta.</summary>
     public string RucEmpresa   { get; set; } = "20100096260";
