@@ -13,7 +13,6 @@ obj/
 .nuget/
 packages/
 project.lock.json
-project.fragment.lock.json
 artifacts/
 
 ## Build results
@@ -30,21 +29,20 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-## Rider
+## Rider / JetBrains
 .idea/
 *.sln.iml
-
-## JetBrains
 *.DotSettings.user
 
-## Publish
+## Publish profiles
+**/Properties/PublishProfiles/
 **/publish/
-**/PublishProfiles/
 
 ## OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-## User-specific secrets
-**/appsettings.Development.json
+## Archivos con secretos - NO subir al repositorio
+**/appsettings.json
+**/appsettings.*.json
