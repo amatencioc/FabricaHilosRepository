@@ -12,12 +12,13 @@ using Microsoft.Extensions.Options;
 ///
 /// Estructura de carpetas:
 ///   {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/
+///   La fecha es siempre <see cref="DateTime.Today"/> (día en que se copian los archivos).
 ///
 /// Nombre de archivo:
 ///   {ruc_emisor}-{tipo_doc}-{serie}-{correlativo}.{ext}
 ///
 /// Si <see cref="LecturaCorreosOptions.RutaArchivos"/> está vacío, el servicio
-/// no hace nada (comportamiento opt-in desde appsettings.json).
+/// no hace nada (configurable desde appsettings.json).
 /// </summary>
 public sealed class ArchivoDocumentoService : IArchivoDocumentoService
 {
@@ -48,8 +49,7 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     {
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
 
-        var fecha   = documento.FechaEmision ?? documento.FechaCorreo ?? DateTime.Today;
-        var carpeta = ObtenerRutaCarpeta(fecha);
+        var carpeta = ObtenerRutaCarpeta();
         var nombre  = $"{documento.RucEmisor}-{documento.TipoDocumento}-{documento.Serie}-{documento.Correlativo}.xml";
         var ruta    = Path.Combine(carpeta, nombre);
 
@@ -57,12 +57,11 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     }
 
     public async Task GuardarPdfAsync(
-        string nombreArchivoOriginal, byte[] contenido,
-        DateTime fechaReferencia, CancellationToken ct = default)
+        string nombreArchivoOriginal, byte[] contenido, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
 
-        var carpeta = ObtenerRutaCarpeta(fechaReferencia);
+        var carpeta = ObtenerRutaCarpeta();
         var nombre  = ResolverNombrePdf(nombreArchivoOriginal);
         var ruta    = Path.Combine(carpeta, nombre);
 
@@ -71,14 +70,20 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>Construye la ruta de carpeta: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}</summary>
-    private string ObtenerRutaCarpeta(DateTime fecha) =>
-        Path.Combine(
+    /// <summary>
+    /// Construye la ruta de carpeta usando la fecha de hoy:
+    ///   {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}
+    /// </summary>
+    private string ObtenerRutaCarpeta()
+    {
+        var hoy = DateTime.Today;
+        return Path.Combine(
             _opciones.RutaArchivos,
             _opciones.RucEmpresa,
-            fecha.Year.ToString(),
-            fecha.Month.ToString("D2"),
-            fecha.Day.ToString("D2"));
+            hoy.Year.ToString(),
+            hoy.Month.ToString("D2"),
+            hoy.Day.ToString("D2"));
+    }
 
     /// <summary>
     /// Resuelve el nombre del PDF.

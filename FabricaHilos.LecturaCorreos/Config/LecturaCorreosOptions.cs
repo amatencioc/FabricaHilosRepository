@@ -10,9 +10,8 @@ public class LecturaCorreosOptions
     /// <summary>
     /// Ruta base donde se guardarán los documentos descargados organizados por RUC/año/mes/día.
     /// Si está vacío, no se guarda nada en disco.
-    /// Ejemplo: "D:\\Documentos\\Facturas"
     /// </summary>
-    public string RutaArchivos { get; set; } = string.Empty;
+    public string RutaArchivos { get; set; } = @"D:\.Net\Dev\Files_LecturaCorreos";
 
     /// <summary>RUC de la empresa receptora. Se usa como primer nivel de carpeta.</summary>
     public string RucEmpresa   { get; set; } = "20100096260";

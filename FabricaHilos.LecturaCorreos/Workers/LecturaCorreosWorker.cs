@@ -358,7 +358,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
         // Guardar PDF en disco: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/{ruc}-{tipo}-{serie}-{correlativo}.pdf
         await _archivoService.GuardarPdfAsync(
-            adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], adjunto.FechaCorreo);
+            adjunto.NombreArchivo, adjunto.ContenidoPdf ?? []);
 
         try
         {
