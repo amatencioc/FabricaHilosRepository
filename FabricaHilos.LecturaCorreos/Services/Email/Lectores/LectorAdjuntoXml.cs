@@ -5,11 +5,19 @@ using MimeKit;
 
 public class LectorAdjuntoXml : ILectorAdjuntoXml
 {
+    // Límite por XML: facturas UBL no superan unos pocos KB. 10 MB es suficientemente generoso.
+    private const long MaxXmlBytes = 10 * 1024 * 1024; // 10 MB
+
     public async Task<AdjuntoCorreo> ExtraerAsync(
         MimePart parte, string asunto, string remitente, DateTime fecha, CancellationToken ct)
     {
         using var ms = new MemoryStream();
         await parte.Content.DecodeToAsync(ms, ct);
+
+        if (ms.Length > MaxXmlBytes)
+            throw new InvalidOperationException(
+                $"XML '{parte.FileName}' excede el límite de {MaxXmlBytes / (1024 * 1024)} MB " +
+                $"({ms.Length / (1024.0 * 1024):F1} MB). Se omite el adjunto.");
 
         return new AdjuntoCorreo
         {

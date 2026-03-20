@@ -78,7 +78,16 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 .ToList();
 
             if (cuentasActivas.Count > 0)
-                await Task.WhenAll(cuentasActivas.Select(c => ProcesarCuentaAsync(c, stoppingToken)));
+            {
+                try
+                {
+                    await Task.WhenAll(cuentasActivas.Select(c => ProcesarCuentaAsync(c, stoppingToken)));
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogError(ex, "Error inesperado en el procesamiento paralelo de cuentas.");
+                }
+            }
             else
                 _logger.LogWarning("Ninguna cuenta activa disponible (todas suspendidas o desactivadas).");
 
@@ -128,30 +137,73 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             _logger.LogInformation("Cuenta {Nombre}: {Count} adjunto(s) encontrado(s) (XML + PDF).",
                 cuenta.Nombre, adjuntos.Count);
 
-            foreach (var adjunto in adjuntos)
+            // Agrupar adjuntos por correo (GrupoCorreo = UID IMAP del mensaje).
+            // Para cada grupo se parsea el XML primero y se pasa el DocumentoXml al PDF,
+            // de modo que ambos archivos compartan el mismo nombre normalizado SUNAT.
+            var grupos = adjuntos
+                .GroupBy(a => a.GrupoCorreo)
+                .OrderBy(g => g.Key);
+
+            foreach (var grupo in grupos)
             {
                 if (ct.IsCancellationRequested) break;
 
-                try
+                // Parseo previo del XML para extraer los datos de nombrado del grupo.
+                DocumentoXml? docXmlGrupo = null;
+                var xmlDelGrupo = grupo.FirstOrDefault(a => a.TipoAdjunto == "XML");
+                if (xmlDelGrupo is not null)
                 {
-                    if (adjunto.TipoAdjunto == "PDF")
-                        await ProcesarAdjuntoPdfAsync(cuenta.Nombre, adjunto);
-                    else
-                        await ProcesarAdjuntoAsync(
+                    try
+                    {
+                        var r = _xmlParser.Parsear(
+                            xmlDelGrupo.ContenidoXml ?? string.Empty,
+                            xmlDelGrupo.NombreArchivo,
                             cuenta.Nombre,
-                            adjunto.NombreArchivo,
-                            adjunto.ContenidoXml ?? string.Empty,
-                            adjunto.Asunto,
-                            adjunto.Remitente,
-                            adjunto.FechaCorreo);
+                            xmlDelGrupo.Asunto,
+                            xmlDelGrupo.Remitente,
+                            xmlDelGrupo.FechaCorreo);
+                        if (r.Estado == EstadoParseo.Exito)
+                            docXmlGrupo = r.Documento;
+                    }
+                    catch (Exception exParseo)
+                    {
+                        _logger.LogDebug(exParseo,
+                            "Pre-parseo del XML '{Archivo}' falló; el PDF del grupo se nombrará sin datos del XML.",
+                            xmlDelGrupo.NombreArchivo);
+                    }
                 }
-                catch (Exception ex)
+
+                foreach (var adjunto in grupo)
                 {
-                    _logger.LogError(ex,
-                        "Error al procesar adjunto '{Archivo}' de cuenta '{Cuenta}'. Se continúa con el siguiente.",
-                        adjunto.NombreArchivo, cuenta.Nombre);
+                    if (ct.IsCancellationRequested) break;
+
+                    try
+                    {
+                        if (adjunto.TipoAdjunto == "PDF")
+                            await ProcesarAdjuntoPdfAsync(cuenta.Nombre, adjunto, docXmlGrupo, ct);
+                        else
+                            await ProcesarAdjuntoAsync(
+                                cuenta.Nombre,
+                                adjunto.NombreArchivo,
+                                adjunto.ContenidoXml ?? string.Empty,
+                                adjunto.Asunto,
+                                adjunto.Remitente,
+                                adjunto.FechaCorreo,
+                                ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Error al procesar adjunto '{Archivo}' de cuenta '{Cuenta}'. Se continúa con el siguiente.",
+                            adjunto.NombreArchivo, cuenta.Nombre);
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Parada limpia del servicio: no contar como fallo de circuito.
+            _logger.LogInformation("Cuenta {Nombre}: procesamiento cancelado por parada del servicio.", cuenta.Nombre);
         }
         catch (Exception ex)
         {
@@ -169,8 +221,8 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         {
             var r = await _lecturaCorreosRepository.LimpiarTablasAsync(ct);
             _logger.LogWarning(
-                "Limpieza completada: {D} documentos, {L} líneas, {C} cuotas, {F} facturas CDR, {E} errores. Total: {T} filas.",
-                r.FilasDocumentos, r.FilasLineas, r.FilasCuotas, r.FilasFacturas, r.FilasErrores, r.TotalFilas);
+                "Limpieza completada: {D} documentos, {L} líneas, {C} cuotas, {F} facturas CDR, {E} errores, {P} PDF adjuntos. Total: {T} filas.",
+                r.FilasDocumentos, r.FilasLineas, r.FilasCuotas, r.FilasFacturas, r.FilasErrores, r.FilasPdfAdjuntos, r.TotalFilas);
         }
         catch (Exception ex)
         {
@@ -185,7 +237,8 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
     private async Task ProcesarAdjuntoAsync(
         string cuentaNombre, string nombreArchivo, string contenidoXml,
-        string asunto, string remitente, DateTime fechaCorreo)
+        string asunto, string remitente, DateTime fechaCorreo,
+        CancellationToken ct = default)
     {
         _logger.LogDebug("Procesando adjunto '{Archivo}' de cuenta '{Cuenta}'.",
             nombreArchivo, cuentaNombre);
@@ -205,7 +258,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 nombreArchivo);
             await RegistrarErrorSeguroAsync(
                 nombreArchivo, ext, cuentaNombre, asunto, remitente,
-                "EXCEPCION_PARSER", ex.Message, contenidoXml);
+                "EXCEPCION_PARSER", ex.Message, contenidoXml, ct);
             return;
         }
 
@@ -221,7 +274,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                     nombreArchivo, resultado.Descripcion);
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
-                    "XML_INVALIDO", resultado.Descripcion ?? string.Empty, contenidoXml);
+                    "XML_INVALIDO", resultado.Descripcion ?? string.Empty, contenidoXml, ct);
                 return;
 
             case EstadoParseo.TipoNoReconocido:
@@ -230,7 +283,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                     nombreArchivo, resultado.Descripcion);
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
-                    "XML_NO_RECONOCIDO", resultado.Descripcion ?? string.Empty, contenidoXml);
+                    "XML_NO_RECONOCIDO", resultado.Descripcion ?? string.Empty, contenidoXml, ct);
                 return;
 
             case EstadoParseo.Exito:
@@ -243,9 +296,6 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         }
 
         var documento = resultado.Documento!;
-
-        // Guardar XML en disco: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/{ruc}-{tipo}-{serie}-{correlativo}.xml
-        await _archivoService.GuardarXmlAsync(documento, contenidoXml);
 
         try
         {
@@ -268,7 +318,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
-                    "ERROR_INSERT_DOCUMENTO", mensaje, contenidoXml);
+                    "ERROR_INSERT_DOCUMENTO", mensaje, contenidoXml, ct);
                 return;
             }
 
@@ -277,24 +327,45 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 documento.NumeroDocumento, idGenerado,
                 documento.Lineas.Count, documento.Cuotas.Count);
 
-            // Insertar líneas
-            foreach (var linea in documento.Lineas)
+            // Guardar XML en disco solo si la inserción en BD fue exitosa.
+            await _archivoService.GuardarXmlAsync(documento, contenidoXml, ct);
+
+            // Insertar líneas — aislado para que un fallo de BD no active el catch del documento cabecera.
+            try
             {
-                var (codLinea, msgLinea) = await _repositorio.InsertarLineaAsync(idGenerado, linea);
-                if (codLinea != 0)
-                    _logger.LogWarning(
-                        "Línea {Num} del documento {Doc}: código {Cod} - {Msg}",
-                        linea.NumeroLinea, documento.NumeroDocumento, codLinea, msgLinea);
+                foreach (var linea in documento.Lineas)
+                {
+                    var (codLinea, msgLinea) = await _repositorio.InsertarLineaAsync(idGenerado, linea);
+                    if (codLinea != 0)
+                        _logger.LogWarning(
+                            "Línea {Num} del documento {Doc}: código {Cod} - {Msg}",
+                            linea.NumeroLinea, documento.NumeroDocumento, codLinea, msgLinea);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Error al insertar líneas del documento '{Numero}'. El cabecera ya está en BD.",
+                    documento.NumeroDocumento);
             }
 
-            // Insertar cuotas
-            foreach (var cuota in documento.Cuotas)
+            // Insertar cuotas — aislado por la misma razón.
+            try
             {
-                var (codCuota, msgCuota) = await _repositorio.InsertarCuotaAsync(idGenerado, cuota);
-                if (codCuota != 0)
-                    _logger.LogWarning(
-                        "Cuota {Num} del documento {Doc}: código {Cod} - {Msg}",
-                        cuota.NumeroCuota, documento.NumeroDocumento, codCuota, msgCuota);
+                foreach (var cuota in documento.Cuotas)
+                {
+                    var (codCuota, msgCuota) = await _repositorio.InsertarCuotaAsync(idGenerado, cuota);
+                    if (codCuota != 0)
+                        _logger.LogWarning(
+                            "Cuota {Num} del documento {Doc}: código {Cod} - {Msg}",
+                            cuota.NumeroCuota, documento.NumeroDocumento, codCuota, msgCuota);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Error al insertar cuotas del documento '{Numero}'. El cabecera ya está en BD.",
+                    documento.NumeroDocumento);
             }
 
             // Encolar en FH_LECTCORREOS_FACTURAS para verificación CDR en SUNAT
@@ -333,7 +404,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
             await RegistrarErrorSeguroAsync(
                 nombreArchivo, ext, cuentaNombre, asunto, remitente,
-                "EXCEPCION_PERSISTENCIA", $"{ex.Message} | {ex.StackTrace}", contenidoXml);
+                "EXCEPCION_PERSISTENCIA", $"{ex.Message} | {ex.StackTrace}", contenidoXml, ct);
         }
     }
 
@@ -341,7 +412,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     /// Persiste un adjunto PDF en la tabla FH_LECTCORREOS_PDF_ADJUNTOS
     /// vía PKG_LC_LOGISTICA.SP_GUARDAR_PDF_ADJUNTO.
     /// </summary>
-    private async Task ProcesarAdjuntoPdfAsync(string cuentaNombre, AdjuntoCorreo adjunto)
+    private async Task ProcesarAdjuntoPdfAsync(string cuentaNombre, AdjuntoCorreo adjunto, DocumentoXml? documentoXml = null, CancellationToken ct = default)
     {
         _logger.LogDebug("Guardando PDF '{Archivo}' de cuenta '{Cuenta}'.",
             adjunto.NombreArchivo, cuentaNombre);
@@ -355,10 +426,6 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             FechaCorreo     = adjunto.FechaCorreo,
             Contenido       = adjunto.ContenidoPdf ?? [],
         };
-
-        // Guardar PDF en disco: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/{ruc}-{tipo}-{serie}-{correlativo}.pdf
-        await _archivoService.GuardarPdfAsync(
-            adjunto.NombreArchivo, adjunto.ContenidoPdf ?? []);
 
         try
         {
@@ -380,6 +447,10 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 return;
             }
 
+            // Guardar PDF en disco solo si la operación de BD fue exitosa.
+            await _archivoService.GuardarPdfAsync(
+                adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], documentoXml, ct);
+
             _logger.LogInformation(
                 "PDF '{Archivo}' guardado con ID={Id}.",
                 adjunto.NombreArchivo, idGenerado);
@@ -397,7 +468,8 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     private async Task RegistrarErrorSeguroAsync(
         string nombreArchivo, string extension, string cuentaNombre,
         string asunto, string remitente, string tipoError,
-        string descripcion, string contenidoXml)
+        string descripcion, string contenidoXml,
+        CancellationToken ct = default)
     {
         try
         {

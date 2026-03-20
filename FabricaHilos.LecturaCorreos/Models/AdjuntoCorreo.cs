@@ -11,6 +11,12 @@ public class AdjuntoCorreo
     public string   TipoAdjunto   { get; set; } = string.Empty;
     public string   NombreArchivo { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Identificador del correo del que proviene este adjunto (UID IMAP del mensaje).
+    /// Permite agrupar todos los adjuntos de un mismo correo.
+    /// </summary>
+    public string   GrupoCorreo   { get; set; } = string.Empty;
+
     /// <summary>Contenido de texto del XML. Solo presente cuando <see cref="TipoAdjunto"/> es "XML".</summary>
     public string?  ContenidoXml  { get; set; }
 

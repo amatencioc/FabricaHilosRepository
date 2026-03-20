@@ -133,6 +133,8 @@ public class ImapEmailReaderService : IEmailReaderService
 
                     if (adjuntosMensaje.Count > 0)
                     {
+                        var grupoId = uid.Id.ToString();
+                        adjuntosMensaje.ForEach(a => a.GrupoCorreo = grupoId);
                         resultado.AddRange(adjuntosMensaje);
 
                         if (cuenta.MarcarLeido)

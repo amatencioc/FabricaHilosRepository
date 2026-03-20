@@ -145,11 +145,12 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
     public async Task<LimpiezaResultado> LimpiarTablasAsync(CancellationToken ct = default)
     {
         // El orden respeta las FK: primero tablas hijo, luego la tabla padre.
-        // FH_LC_LINEA           → hijo de FH_LC_DOCUMENTO
-        // FH_LC_CUOTA           → hijo de FH_LC_DOCUMENTO
-        // FH_LECTCORREOS_FACTURAS → hijo de FH_LC_DOCUMENTO
-        // FH_LC_ERROR           → independiente
-        // FH_LC_DOCUMENTO       → padre
+        // FH_LC_LINEA                  → hijo de FH_LC_DOCUMENTO
+        // FH_LC_CUOTA                  → hijo de FH_LC_DOCUMENTO
+        // FH_LECTCORREOS_FACTURAS      → hijo de FH_LC_DOCUMENTO
+        // FH_LC_ERROR                  → independiente
+        // FH_LECTCORREOS_PDF_ADJUNTOS  → independiente
+        // FH_LC_DOCUMENTO              → padre
         using var conn = CrearConexion();
         await conn.OpenAsync(ct);
 
@@ -159,15 +160,16 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
             static CommandDefinition Cmd(string sql, IDbTransaction t, CancellationToken c) =>
                 new(sql, transaction: t, cancellationToken: c);
 
-            int lineas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_LINEA",            tx, ct));
-            int cuotas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_CUOTA",            tx, ct));
-            int facturas   = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_FACTURAS", tx, ct));
-            int errores    = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_ERROR",            tx, ct));
-            int documentos = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_DOCUMENTO",        tx, ct));
+            int lineas       = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_LINEA",                   tx, ct));
+            int cuotas       = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_CUOTA",                   tx, ct));
+            int facturas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_FACTURAS",        tx, ct));
+            int errores      = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_ERROR",                   tx, ct));
+            int pdfAdjuntos  = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_PDF_ADJUNTOS",   tx, ct));
+            int documentos   = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_DOCUMENTO",               tx, ct));
 
             tx.Commit();
 
-            return new LimpiezaResultado(lineas, cuotas, facturas, errores, documentos);
+            return new LimpiezaResultado(lineas, cuotas, facturas, errores, documentos, pdfAdjuntos);
         }
         catch
         {

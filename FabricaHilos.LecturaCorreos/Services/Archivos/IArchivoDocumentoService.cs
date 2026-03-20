@@ -19,9 +19,9 @@ public interface IArchivoDocumentoService
 
     /// <summary>
     /// Guarda los bytes de un PDF.
-    /// Intenta extraer ruc/tipo/serie/correlativo del nombre del archivo;
-    /// si no coincide con el patrón SUNAT, conserva el nombre original.
+    /// Si <paramref name="documentoXml"/> está disponible (mismo correo), sus campos RUC/tipo/serie/correlativo
+    /// se usan para construir el nombre; de lo contrario se intenta extraer del nombre original del archivo.
     /// La carpeta de destino se calcula con la fecha actual de procesamiento.
     /// </summary>
-    Task GuardarPdfAsync(string nombreArchivoOriginal, byte[] contenido, CancellationToken ct = default);
+    Task GuardarPdfAsync(string nombreArchivoOriginal, byte[] contenido, DocumentoXml? documentoXml = null, CancellationToken ct = default);
 }

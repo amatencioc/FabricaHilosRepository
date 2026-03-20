@@ -42,37 +42,47 @@ public class LectorAdjuntoZip : ILectorAdjuntoZip
                 continue;
             }
 
-            if (entry.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                using var entryMs = new MemoryStream();
-                using (var s = entry.Open())
-                    await s.CopyToAsync(entryMs, ct);
-
-                resultado.Add(new AdjuntoCorreo
+                if (entry.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                 {
-                    TipoAdjunto   = "XML",
-                    NombreArchivo = entry.Name,
-                    ContenidoXml  = _lectorXml.LeerDesdeStream(entryMs),
-                    Asunto        = asunto,
-                    Remitente     = remitente,
-                    FechaCorreo   = fecha,
-                });
+                    using var entryMs = new MemoryStream();
+                    using (var s = entry.Open())
+                        await s.CopyToAsync(entryMs, ct);
+
+                    resultado.Add(new AdjuntoCorreo
+                    {
+                        TipoAdjunto   = "XML",
+                        NombreArchivo = entry.Name,
+                        ContenidoXml  = _lectorXml.LeerDesdeStream(entryMs),
+                        Asunto        = asunto,
+                        Remitente     = remitente,
+                        FechaCorreo   = fecha,
+                    });
+                }
+                else if (entry.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var entryMs = new MemoryStream();
+                    using (var s = entry.Open())
+                        await s.CopyToAsync(entryMs, ct);
+
+                    resultado.Add(new AdjuntoCorreo
+                    {
+                        TipoAdjunto   = "PDF",
+                        NombreArchivo = entry.Name,
+                        ContenidoPdf  = entryMs.ToArray(),
+                        Asunto        = asunto,
+                        Remitente     = remitente,
+                        FechaCorreo   = fecha,
+                    });
+                }
             }
-            else if (entry.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            catch (Exception ex)
             {
-                using var entryMs = new MemoryStream();
-                using (var s = entry.Open())
-                    await s.CopyToAsync(entryMs, ct);
-
-                resultado.Add(new AdjuntoCorreo
-                {
-                    TipoAdjunto   = "PDF",
-                    NombreArchivo = entry.Name,
-                    ContenidoPdf  = entryMs.ToArray(),
-                    Asunto        = asunto,
-                    Remitente     = remitente,
-                    FechaCorreo   = fecha,
-                });
+                // Una entrada corrupta no cancela el ZIP completo: se continúa con las demás.
+                _logger.LogWarning(ex,
+                    "Error al extraer entrada '{Nombre}' del ZIP. Se omite esta entrada.",
+                    entry.Name);
             }
         }
 
