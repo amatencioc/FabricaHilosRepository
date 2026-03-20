@@ -31,6 +31,16 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         @"^(\d{11})-(\d{2})-([A-Za-z0-9]{1,4})-(\d+)\.",
         RegexOptions.Compiled);
 
+    /// <summary>
+    /// Patrón alternativo para nombres que no incluyen el RUC al inicio:
+    ///   {PREFIJO}-{TIPO}-{SERIE}-{CORRELATIVO}.{ext}
+    ///   Ej: PDF-DOC-E001-622720537870614.pdf
+    /// El RUC se rellenará con "0".
+    /// </summary>
+    private static readonly Regex _patronAlternativo = new(
+        @"^[A-Za-z]+-([A-Za-z0-9]+)-([A-Za-z0-9]{1,6})-(\d+)\.",
+        RegexOptions.Compiled);
+
     private readonly LecturaCorreosOptions           _opciones;
     private readonly ILogger<ArchivoDocumentoService> _logger;
 
@@ -95,20 +105,35 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     }
 
     /// <summary>
-    /// Resuelve el nombre del PDF.
-    /// Si el nombre del archivo sigue el patrón SUNAT, lo normaliza al formato
-    /// ruc-tipo-serie-correlativo.pdf; de lo contrario devuelve el nombre original.
-    /// Los campos vacíos se rellenan con "0".
+    /// Resuelve el nombre del PDF aplicando tres intentos en orden:
+    ///   1. Patrón SUNAT estándar   → ruc-tipo-serie-correlativo.pdf
+    ///   2. Patrón alternativo      → 0-tipo-serie-correlativo.pdf
+    ///      (ej. PDF-DOC-E001-622720537870614 → 0-DOC-E001-622720537870614.pdf)
+    ///   3. Sin coincidencia        → nombre original sin cambios
+    /// Los campos vacíos se rellenan con "0". El sufijo -INFORME se añade cuando corresponde.
     /// </summary>
     private static string ResolverNombrePdf(string nombreOriginal)
     {
         var soloNombre = Path.GetFileName(nombreOriginal);
-        var m          = _patronSunat.Match(soloNombre);
         var sufijo     = EsInforme(soloNombre) ? "-INFORME" : string.Empty;
 
-        return m.Success
-            ? $"{Campo(m.Groups[1].Value)}-{Campo(m.Groups[2].Value)}-{Campo(m.Groups[3].Value)}-{Campo(m.Groups[4].Value)}{sufijo}.pdf"
-            : soloNombre;
+        // ── Intento 1: patrón SUNAT (RUC-tipo-serie-correlativo) ─────────────
+        var m = _patronSunat.Match(soloNombre);
+        if (m.Success)
+            return $"{Campo(m.Groups[1].Value)}-{Campo(m.Groups[2].Value)}-{Campo(m.Groups[3].Value)}-{Campo(m.Groups[4].Value)}{sufijo}.pdf";
+
+        // ── Intento 2: patrón alternativo (PREFIJO-tipo-serie-correlativo) ───
+        var ma = _patronAlternativo.Match(soloNombre);
+        if (ma.Success)
+        {
+            var tipo   = Campo(ma.Groups[1].Value);
+            var serie  = Campo(ma.Groups[2].Value);
+            var correl = Campo(ma.Groups[3].Value);
+            return $"0-{tipo}-{serie}-{correl}{sufijo}.pdf";
+        }
+
+        // ── Sin coincidencia: conservar el nombre original ────────────────────
+        return soloNombre;
     }
 
     /// <summary>
