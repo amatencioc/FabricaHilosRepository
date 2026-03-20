@@ -46,3 +46,6 @@ desktop.ini
 ## Archivos con secretos - NO subir al repositorio
 **/appsettings.json
 **/appsettings.*.json
+
+## Excepcion: appsettings.json de LecturaCorreos se sube SIN el ClientSecret
+!FabricaHilos.LecturaCorreos/appsettings.json
