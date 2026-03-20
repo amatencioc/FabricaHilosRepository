@@ -1,0 +1,232 @@
+@{
+    ViewData["Title"] = "Catálogos Electrónicos";
+    ViewData["ActivePage"] = "CatalogosElectronicos";
+    ViewData["Description"] = "Accede al portal de catálogos electrónicos y comprobantes de La Colonial Fábrica de Hilos S.A.";
+}
+
+<!-- HERO -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;
+    overflow:hidden;"
+    aria-labelledby="catel-hero-heading">
+    <div style="position:absolute;inset:0;background-image:url('/images/colonial-fabrica-hilos-slider.jpg');background-size:cover;background-position:center;opacity:0.12;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <div class="section-divider centered"></div>
+        <h1 id="catel-hero-heading" style="font-size:clamp(1.8rem,4vw,3rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            Catálogos Electrónicos
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:540px;margin:0 auto;font-size:var(--font-size-md);">
+            Portal de comprobantes de pago y documentos electrónicos oficiales
+        </p>
+    </div>
+</section>
+
+<!-- CONTENIDO PRINCIPAL -->
+<section class="section-pad" aria-labelledby="catel-main-heading">
+    <div class="container">
+        <div class="catel-layout">
+
+            <!-- DESCRIPCIÓN -->
+            <div class="catel-info" data-aos="fade-right">
+                <div class="section-divider"></div>
+                <h2 class="section-title" id="catel-main-heading">Portal de Documentos Electrónicos</h2>
+                <p style="color:var(--color-text-medium);line-height:1.8;margin-bottom:var(--spacing-md);">
+                    Accede al sistema de facturación electrónica de <strong>La Colonial Fábrica de Hilos S.A.</strong> para consultar, descargar y validar tus comprobantes de pago electrónicos: facturas, boletas, notas de crédito y débito.
+                </p>
+                <ul class="catel-features">
+                    <li>
+                        <i class="fa-solid fa-file-invoice" aria-hidden="true"></i>
+                        <span>Consulta y descarga de facturas y boletas electrónicas</span>
+                    </li>
+                    <li>
+                        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                        <span>Documentos validados ante SUNAT</span>
+                    </li>
+                    <li>
+                        <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+                        <span>Historial de comprobantes disponible en línea</span>
+                    </li>
+                    <li>
+                        <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                        <span>Acceso seguro con credenciales de cliente</span>
+                    </li>
+                </ul>
+
+                <a href="https://sfe.bizlinks.com.pe/sfeperu/public/loginAnonimo.jsf"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="catel-btn"
+                   aria-label="Abrir portal de catálogos electrónicos en nueva ventana">
+                    <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                    Acceder al Portal
+                </a>
+                <p class="catel-note">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    El portal se abrirá en una nueva ventana. Necesitarás tus credenciales de acceso.
+                </p>
+            </div>
+
+            <!-- CARD PORTAL -->
+            <div class="catel-card-wrap" data-aos="fade-left">
+                <div class="catel-portal-card">
+                    <div class="catel-portal-header">
+                        <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+                        <span>Portal Electrónico</span>
+                    </div>
+                    <div class="catel-portal-body">
+                        <img src="~/images/logo_colo.png" alt="La Colonial Fábrica de Hilos S.A." class="catel-logo" />
+                        <p class="catel-portal-label">Comprobantes de Pago Electrónicos</p>
+                        <p class="catel-portal-sub">La Colonial Fábrica de Hilos S.A.</p>
+                        <a href="https://sfe.bizlinks.com.pe/sfeperu/public/loginAnonimo.jsf"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="catel-btn catel-btn-full"
+                           aria-label="Abrir portal en nueva ventana">
+                            <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+                            Ingresar al Portal
+                        </a>
+                        <p class="catel-portal-url">
+                            <i class="fa-solid fa-globe" aria-hidden="true"></i>
+                            sfe.bizlinks.com.pe
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+@section Styles {
+<style>
+.catel-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-2xl);
+    align-items: center;
+}
+.catel-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--spacing-xl) 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.catel-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    color: var(--color-text-medium);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+.catel-features li i {
+    color: var(--color-secondary);
+    font-size: 1rem;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.catel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--color-secondary);
+    color: var(--color-primary) !important;
+    font-weight: 700;
+    font-size: var(--font-size-base);
+    padding: 14px 28px;
+    border-radius: var(--border-radius-lg);
+    text-decoration: none !important;
+    transition: background var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
+    box-shadow: 0 4px 16px rgba(132,189,0,0.3);
+}
+.catel-btn:hover {
+    background: var(--color-secondary-dark, #6aa500);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(132,189,0,0.4);
+}
+.catel-btn-full {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+}
+.catel-note {
+    margin-top: var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light, #888);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.catel-note i { color: var(--color-primary-light); }
+
+/* Portal card */
+.catel-card-wrap {
+    display: flex;
+    justify-content: center;
+}
+.catel-portal-card {
+    width: 100%;
+    max-width: 380px;
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-xl);
+    border: 1px solid rgba(0,0,0,0.08);
+}
+.catel-portal-header {
+    background: var(--gradient-primary);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--color-white);
+    font-weight: 700;
+    font-size: var(--font-size-md);
+}
+.catel-portal-header i { font-size: 1.4rem; color: var(--color-secondary); }
+.catel-portal-body {
+    background: var(--color-white);
+    padding: var(--spacing-lg) var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+}
+.catel-logo {
+    height: 60px;
+    width: auto;
+    object-fit: contain;
+    margin-bottom: 4px;
+}
+.catel-portal-label {
+    font-weight: 700;
+    color: var(--color-primary);
+    font-size: var(--font-size-base);
+    margin: 0;
+}
+.catel-portal-sub {
+    color: var(--color-text-medium);
+    font-size: var(--font-size-sm);
+    margin: 0;
+}
+.catel-portal-url {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light, #999);
+    margin: 4px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.catel-portal-url i { color: var(--color-primary-light); }
+
+@@media (min-width: 900px) {
+    .catel-layout { grid-template-columns: 1fr 380px; }
+}
+</style>
+}

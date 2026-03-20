@@ -1,0 +1,402 @@
+﻿@model FabricaHilos.Models.Produccion.OrdenProduccion
+
+@{
+    ViewData["Title"] = "Detalle de Producción";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index", "RegistroPreparatoria"))">Registro de Preparatoria</a></li>
+    <li class="breadcrumb-item active">Detalle de Producción</li>
+}
+
+<div class="d-flex align-items-center mb-4" style="border-bottom: 3px solid var(--color-secondary); padding-bottom: 10px;">
+    <i class="bi bi-file-earmark-text fs-3 me-3"></i>
+    <h4 class="mb-0 fw-bold">Detalle de Producción</h4>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-5">
+                <form asp-action="DetalleProduccion" method="post" id="formDetalleProduccion">
+                    @Html.AntiForgeryToken()
+                    <input name="id" type="hidden" value="@Model.Id" />
+                    <input type="hidden" name="returnUrl" value="@(ViewBag.ReturnUrl as string)" />
+
+                    <!-- Información de la Orden -->
+                    <div class="row mb-4 pb-3 border-bottom">
+                        <div class="col-md-3">
+                            <strong>Receta:</strong> @(Model.CodigoReceta ?? "-")
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Lote:</strong> @(Model.Lote ?? "-")
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Material:</strong> @Model.DescripcionMaterial
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Fecha Inicial:</strong> @Model.FechaInicio.ToString("dd/MM/yyyy HH:mm:ss")
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <!-- Fila 1 -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Metraje <span class="text-danger">*</span></label>
+                            <input id="metrajeInput" name="metraje" class="form-control" type="number" step="1" min="0" placeholder="Ingrese el metraje" value="@Model.Metraje" required tabindex="1" autofocus />
+                        </div>
+
+                        <!-- Fila 2 -->
+                        <div class="col-md-6" id="grupoRolloTacho">
+                            <label class="form-label fw-semibold">Rollo Tacho</label>
+                            <input id="rolloTachoInput" name="rolloTacho" class="form-control" type="number" min="0" placeholder="Ingrese el rollo tacho" value="@Model.RolloTacho" tabindex="3" />
+                        </div>
+                        <div class="col-md-6" id="grupoNroParada">
+                            <label class="form-label fw-semibold">Nro. Parada</label>
+                            <input id="nroParadaInput" name="nroParada" class="form-control" type="number" step="1" min="1" placeholder="Ingrese el número de parada" value="@Model.NroParada" tabindex="3" />
+                        </div>
+                        <div class="col-md-6" id="grupoKgNeto">
+                            <label class="form-label fw-semibold">Kg Neto <span class="text-danger">*</span></label>
+                            <input id="kgNetoInput" name="kgNeto" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese kg neto" value="@Model.KgNeto" required tabindex="6" />
+                        </div>
+
+                        <!-- Fila 3: Contador Final (Pabileras) -->
+                        <div class="col-md-6" id="grupoContadorFinal">
+                            <label class="form-label fw-semibold">Contador Final</label>
+                            <input name="contadorFinal" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese el contador final" value="@Model.ContadorFinal" tabindex="5" />
+                        </div>
+
+                        <!-- Fecha Final -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Fecha Final <span class="text-danger">*</span></label>
+                            <input id="fechaFinInput" name="fechaFin" type="datetime-local" step="60" class="form-control"
+                                   min="@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm")" required tabindex="4" />
+                            <span id="fechaFinError" class="text-danger small d-none">
+                                La Fecha Final no puede ser anterior a la Fecha Inicial (@Model.FechaInicio.ToString("dd/MM/yyyy HH:mm")).
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="button" id="btnGuardarDetalle" class="btn btn-primary px-4" tabindex="7">
+                            <i class="bi bi-save me-2"></i>Guardar y Cerrar
+                        </button>
+                        <a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index"))" class="btn btn-outline-secondary px-4">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación -->
+<div class="modal fade" id="modalConfirmarGuardar" tabindex="-1" aria-labelledby="modalConfirmarGuardarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmarGuardarLabel">Confirmar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro que desea guardar el registro?
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelarModal" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnAceptarModal" class="btn btn-primary">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // ===== CONFIGURACIÓN =====
+        // CodigoMaquina = TP_MAQ de Oracle (ej: 'M' para MANUARES, 'J' para MADEJERA).
+        // Si no existe estrategia definida para el tipo, se usa 'M' como fallback.
+        const tipoMaquina   = '@Model.CodigoMaquina';
+        // Código del TITULO de la fila (ej: "404") → SELECT PESO FROM H_TITULOS WHERE TITULO = :titulo
+        const tituloCodigo  = '@Model.Titulo';
+        const urlPesoTitulo = '@Url.Action("ObtenerPesoTitulo", "RegistroPreparatoria")';
+        const codigoMaquina    = '@(Model.Maquina ?? "")';
+        const contadorIniModel = @(Model.ContadorInicial.HasValue ? Model.ContadorInicial.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "0");
+        const husosInacModel   = @(Model.HorasInactivas.HasValue  ? Model.HorasInactivas.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)  : "0");
+        const urlHusosMaquina  = '@Url.Action("ObtenerHusosMaquina", "RegistroPreparatoria")';
+
+        // ===== CACHÉ del PESO para evitar llamadas repetidas a la API =====
+        let pesoCached = null;
+
+        // Ejecuta: SELECT PESO FROM H_TITULOS WHERE TITULO = tituloCodigo
+        async function fetchPesoTitulo(titulo) {
+            if (pesoCached !== null) return pesoCached;
+            try {
+                const response = await fetch(`${urlPesoTitulo}?titulo=${encodeURIComponent(titulo)}`);
+                const result = await response.json();
+                pesoCached = result.success ? parseFloat(result.peso) : 0;
+            } catch {
+                pesoCached = 0;
+            }
+            return pesoCached;
+        }
+
+        // ===== CACHÉ de HUSOS para Pabileras =====
+        let husosCached = null;
+
+        // Ejecuta: SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = tpMaq AND COD_MAQ = codMaq
+        async function fetchHusosMaquina(tpMaq, codMaq) {
+            if (husosCached !== null) return husosCached;
+            try {
+                const response = await fetch(`${urlHusosMaquina}?tpMaq=${encodeURIComponent(tpMaq)}&codMaq=${encodeURIComponent(codMaq)}`);
+                const result   = await response.json();
+                husosCached = result.success ? parseInt(result.husos) : 0;
+            } catch {
+                husosCached = 0;
+            }
+            return husosCached;
+        }
+
+        // ===== ESTRATEGIAS DE CÁLCULO POR TIPO DE MÁQUINA =====
+        // Para agregar un nuevo tipo, agregar una entrada al objeto con la clave = código del tipo.
+        const calculationStrategies = {
+            'M': async function(metraje, rolloTacho) {
+                // V_PESO_N = SELECT PESO FROM H_TITULOS WHERE TITULO = tituloCodigo
+                const vPesoN = await fetchPesoTitulo(tituloCodigo);
+                // KG_NETO = METRAJE * ROLLO_TACHO * V_PESO_N  → redondeado 2 decimales
+                return Math.round(metraje * rolloTacho * vPesoN * 100) / 100;
+            }
+            // Ejemplo para agregar otro tipo:
+            // 'X': async function(metraje, rolloTacho) {
+            //     const vPesoN = await fetchPesoTitulo(tituloCodigo);
+            //     return Math.round(metraje * rolloTacho * vPesoN * 100) / 100;
+            // }
+        };
+
+        // ===== ESTADO DEL CAMPO Kg Neto =====
+        function setKgNetoReadOnly(isAuto) {
+            const input = document.getElementById('kgNetoInput');
+            input.readOnly = isAuto;
+            input.style.backgroundColor = isAuto ? 'var(--color-bg-light)' : '';
+        }
+
+        // ===== CÁLCULO EN TIEMPO REAL =====
+        async function recalcularKgNeto() {
+            const rolloTachoInput = document.getElementById('rolloTachoInput');
+            const metrajeInput   = document.getElementById('metrajeInput');
+            const kgNetoInput    = document.getElementById('kgNetoInput');
+
+            const rolloTachoVal = rolloTachoInput.value.trim();
+            const rolloTacho    = parseFloat(rolloTachoVal);
+            const metraje       = parseFloat(metrajeInput.value);
+
+            // Si RolloTacho está completamente vacío → limpiar Kg Neto (activar validación required)
+            if (!rolloTachoVal) {
+                setKgNetoReadOnly(false);
+                kgNetoInput.value = '';
+                return;
+            }
+
+            // Si RolloTacho es 0 o inválido → Kg Neto es manual (no limpiar)
+            if (isNaN(rolloTacho) || rolloTacho <= 0) {
+                setKgNetoReadOnly(false);
+                return;
+            }
+
+            // Buscar estrategia por tipo de máquina; si no existe, usar 'M' como fallback
+            const strategy = calculationStrategies[tipoMaquina] ?? calculationStrategies['M'];
+            if (!strategy) {
+                setKgNetoReadOnly(false);
+                return;
+            }
+
+            // Bloquear Kg Neto y calcular
+            setKgNetoReadOnly(true);
+            if (!isNaN(metraje) && metraje > 0) {
+                const resultado = await strategy(metraje, rolloTacho);
+                kgNetoInput.value = resultado;
+            }
+        }
+
+        // ===== CÁLCULO EN TIEMPO REAL (Pabileras) =====
+        async function recalcularKgNetoPabilera() {
+            const contadorFinInput = document.querySelector('[name="contadorFinal"]');
+            const kgNetoInput      = document.getElementById('kgNetoInput');
+            const contadorFinVal   = contadorFinInput ? contadorFinInput.value.trim() : '';
+            if (!contadorFinVal) { kgNetoInput.value = ''; return; }
+            const contadorFin = parseFloat(contadorFinVal);
+            if (isNaN(contadorFin)) { kgNetoInput.value = ''; return; }
+            const xPesoNe = await fetchPesoTitulo(tituloCodigo);
+            const xHusos  = await fetchHusosMaquina(tipoMaquina, codigoMaquina);
+            // PESO_NETO = ROUND((CONTADOR_FIN - CONTADOR_INI) * XPESO_NE * (XHUSOS - NVL(HUSOS_INAC,0)), 2)
+            kgNetoInput.value = Math.round((contadorFin - contadorIniModel) * xPesoNe * (xHusos - husosInacModel) * 100) / 100;
+        }
+
+        // ===== FECHA FINAL: rellenar con hora actual del sistema =====
+        const fechaIniMin = new Date('@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm")');
+
+        function formatearFechaHora() {
+            const ahora   = new Date();
+            const año     = ahora.getFullYear();
+            const mes     = String(ahora.getMonth() + 1).padStart(2, '0');
+            const dia     = String(ahora.getDate()).padStart(2, '0');
+            const horas   = String(ahora.getHours()).padStart(2, '0');
+            const minutos = String(ahora.getMinutes()).padStart(2, '0');
+            return `${año}-${mes}-${dia}T${horas}:${minutos}`;
+        }
+
+        let fechaFinBloqueada = false;
+        function actualizarFechaFin() {
+            if (fechaFinBloqueada) return;
+            const campo = document.getElementById('fechaFinInput');
+            if (campo) campo.value = formatearFechaHora();
+        }
+
+        function validarFechaFin() {
+            const campo = document.getElementById('fechaFinInput');
+            const error = document.getElementById('fechaFinError');
+            if (!campo || !error || !campo.value) return true;
+            const fechaFin = new Date(campo.value);
+            if (fechaFin < fechaIniMin) {
+                error.classList.remove('d-none');
+                campo.classList.add('is-invalid');
+                return false;
+            }
+            error.classList.add('d-none');
+            campo.classList.remove('is-invalid');
+            return true;
+        }
+
+        // ===== VALIDACIÓN: ENTEROS CON LÍMITE DE DÍGITOS =====
+        function enforceIntegerInput(el, maxDigits) {
+            const blockedKeys = ['.', ',', '-', '+', 'e', 'E'];
+            el.addEventListener('keydown', function(e) {
+                if (['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight',
+                     'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+                if (blockedKeys.includes(e.key)) { e.preventDefault(); return; }
+                const sel = this.selectionEnd - this.selectionStart;
+                const currentLen = this.value.replace(/\D/g, '').length;
+                if (sel === 0 && currentLen >= maxDigits && /^\d$/.test(e.key)) {
+                    e.preventDefault();
+                }
+            });
+            el.addEventListener('input', function() {
+                const val = this.value;
+                if (val === '') return;
+                const num = parseInt(val, 10);
+                if (isNaN(num) || num < 0) { this.value = ''; return; }
+                const str = String(num);
+                if (str.length > maxDigits) this.value = parseInt(str.slice(0, maxDigits), 10);
+            });
+            el.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                const digits = text.replace(/[^\d]/g, '').slice(0, maxDigits);
+                this.value = digits ? parseInt(digits, 10) : '';
+            });
+        }
+
+        // ===== INICIALIZACIÓN =====
+        document.addEventListener('DOMContentLoaded', function () {
+            // Mostrar/ocultar campos según tipo de máquina
+            const grupoRolloTacho    = document.getElementById('grupoRolloTacho');
+            const grupoNroParada     = document.getElementById('grupoNroParada');
+            const grupoContadorFinal = document.getElementById('grupoContadorFinal');
+            const grupoKgNeto        = document.getElementById('grupoKgNeto');
+            const inputContadorFinal = grupoContadorFinal.querySelector('input');
+            if (tipoMaquina === 'P') {
+                // P: ocultar Rollo Tacho; mostrar Nro Parada (no obligatorio) y Contador Final (obligatorio)
+                grupoRolloTacho.style.display    = 'none';
+                grupoNroParada.style.display     = '';
+                grupoContadorFinal.style.display = '';
+                inputContadorFinal.required      = true;
+
+                // Intercambiar orden visual: ContadorFinal antes que KgNeto
+                grupoContadorFinal.style.order = '1';
+                grupoKgNeto.style.order        = '2';
+
+                // KgNeto se calcula automáticamente, no se edita manualmente
+                setKgNetoReadOnly(true);
+                document.getElementById('kgNetoInput').required = false;
+
+                // Calcular en tiempo real al cambiar ContadorFinal
+                ['input', 'change'].forEach(evt => inputContadorFinal.addEventListener(evt, recalcularKgNetoPabilera));
+                if (inputContadorFinal.value.trim()) recalcularKgNetoPabilera();
+            } else {
+                // M, E, L u otro: mostrar Rollo Tacho; ocultar Nro Parada y Contador Final
+                grupoRolloTacho.style.display    = '';
+                grupoNroParada.style.display     = 'none';
+                grupoContadorFinal.style.display = 'none';
+                inputContadorFinal.required      = false;
+                inputContadorFinal.value         = '';
+
+                if (tipoMaquina === 'E' || tipoMaquina === 'L') {
+                    // E y L: KG no se calcula automáticamente, el usuario lo ingresa manualmente
+                    setKgNetoReadOnly(false);
+
+                    // L: Metraje es opcional
+                    if (tipoMaquina === 'L') {
+                        const metrajeInput = document.getElementById('metrajeInput');
+                        metrajeInput.required = false;
+                        const metrajeLabel = metrajeInput.closest('.col-md-6').querySelector('label');
+                        if (metrajeLabel) metrajeLabel.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
+                    }
+                } else {
+                    // M y otros con estrategia: cálculo automático según RolloTacho
+                    const rolloTachoVal = document.getElementById('rolloTachoInput').value.trim();
+                    const rolloTacho    = parseFloat(rolloTachoVal);
+                    const tieneEstrategia = !!(calculationStrategies[tipoMaquina] ?? calculationStrategies['M']);
+                    setKgNetoReadOnly(tieneEstrategia && !!rolloTachoVal && !isNaN(rolloTacho) && rolloTacho > 0);
+
+                    // Eventos de cambio en tiempo real (input: teclado; change: flechas del spinner)
+                    ['input', 'change'].forEach(function(evt) {
+                        document.getElementById('metrajeInput').addEventListener(evt, recalcularKgNeto);
+                        document.getElementById('rolloTachoInput').addEventListener(evt, recalcularKgNeto);
+                    });
+                }
+            }
+
+            // Validación: enteros con límite de dígitos
+            enforceIntegerInput(document.getElementById('metrajeInput'), 5);
+            const nroParadaInputEl = document.getElementById('nroParadaInput');
+            if (nroParadaInputEl) enforceIntegerInput(nroParadaInputEl, 3);
+
+            // Fecha Final: rellenar con hora actual y actualizar cada segundo
+            actualizarFechaFin();
+            setInterval(actualizarFechaFin, 1000);
+
+            // Detener auto-actualización mientras el usuario interactúa con el picker
+            const campoFechaFin = document.getElementById('fechaFinInput');
+            if (campoFechaFin) {
+                campoFechaFin.addEventListener('focus',  () => { fechaFinBloqueada = true; });
+                campoFechaFin.addEventListener('change', () => { fechaFinBloqueada = true; validarFechaFin(); });
+                campoFechaFin.addEventListener('blur',   () => {
+                    if (!campoFechaFin.value) fechaFinBloqueada = false;
+                    else validarFechaFin();
+                });
+            }
+
+            // Botón Guardar y Cerrar: validar y mostrar modal de confirmación
+            document.getElementById('btnGuardarDetalle').addEventListener('click', function () {
+                const form = document.getElementById('formDetalleProduccion');
+                if (!form.reportValidity()) return;
+                if (!validarFechaFin()) {
+                    document.getElementById('fechaFinInput').focus();
+                    return;
+                }
+                var modal = new bootstrap.Modal(document.getElementById('modalConfirmarGuardar'));
+                modal.show();
+            });
+
+            document.getElementById('modalConfirmarGuardar').addEventListener('shown.bs.modal', function () {
+                document.getElementById('btnCancelarModal').focus();
+            });
+
+            document.getElementById('btnAceptarModal').addEventListener('click', function () {
+                document.getElementById('formDetalleProduccion').submit();
+            });
+
+            // Foco inicial en el primer campo
+            document.getElementById('velocidadInput').focus();
+        });
+    </script>
+}

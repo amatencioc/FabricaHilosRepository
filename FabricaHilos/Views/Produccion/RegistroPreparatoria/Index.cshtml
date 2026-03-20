@@ -1,0 +1,1245 @@
+﻿@model IEnumerable<FabricaHilos.Services.Produccion.PreparatoriaListDto>
+@using FabricaHilos.Helpers
+
+@{
+    ViewData["Title"] = "Registro de Preparatoria";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Registro de Preparatoria</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-gear-wide-connected me-2"></i>Registro de Preparatoria</h4>
+    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+    {
+        <a asp-action="Crear" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo
+        </a>
+    }
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex gap-2 flex-wrap">
+            <input type="text" name="buscar" value="@ViewBag.Buscar" class="form-control form-control-sm" placeholder="Buscar por lote..." style="max-width: 220px;" />
+            <select name="tipoMaquina" class="form-select form-select-sm" style="max-width: 220px;"
+                    onchange="document.querySelector('[name=maquina]').value=''; document.getElementById('hiddenPage').value='1'; this.form.submit();">
+                <option value="">Todos los tipos</option>
+                @if (ViewBag.TiposMaquinasFiltro != null)
+                {
+                    @foreach (var tipo in ViewBag.TiposMaquinasFiltro)
+                    {
+                        <option value="@tipo.TipoMaquina" selected="@(ViewBag.TipoMaquinaFiltro == tipo.TipoMaquina)">@tipo.TextoCompleto</option>
+                    }
+                }
+            </select>
+            <select name="maquina" class="form-select form-select-sm" style="max-width: 220px;">
+                <option value="">Todas las máquinas</option>
+                @if (ViewBag.Maquinas != null)
+                {
+                    @foreach (var maq in ViewBag.Maquinas)
+                    {
+                        <option value="@maq.Codigo" selected="@(ViewBag.MaquinaFiltro == maq.Codigo)">@maq.Descripcion</option>
+                    }
+                }
+            </select>
+            @{
+                var estadosFiltro = ViewBag.EstadoFiltro as List<string> ?? new List<string> { "1" };
+            }
+            <div class="position-relative" id="divEstado">
+                <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center"
+                        id="btnEstado" style="min-width:150px; max-width:190px; cursor:pointer; user-select:none;">
+                    <span id="spanEstadoTexto" class="text-truncate"></span>
+                    <i class="bi bi-chevron-down ms-1" style="font-size:.7rem; flex-shrink:0;"></i>
+                </button>
+                <div id="panelEstado" class="border rounded bg-white shadow-sm py-1"
+                     style="display:none; position:absolute; z-index:1050; min-width:150px; top:100%; left:0; margin-top:2px;">
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        @if (estadosFiltro.Contains("1"))
+                        {
+                            <input type="checkbox" name="estado" value="1" class="estado-chk form-check-input mt-0" checked />
+                        }
+                        else
+                        {
+                            <input type="checkbox" name="estado" value="1" class="estado-chk form-check-input mt-0" />
+                        }
+                        En Proceso
+                    </label>
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        @if (estadosFiltro.Contains("3"))
+                        {
+                            <input type="checkbox" name="estado" value="3" class="estado-chk form-check-input mt-0" checked />
+                        }
+                        else
+                        {
+                            <input type="checkbox" name="estado" value="3" class="estado-chk form-check-input mt-0" />
+                        }
+                        Terminado
+                    </label>
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        @if (estadosFiltro.Contains("9"))
+                        {
+                            <input type="checkbox" name="estado" value="9" class="estado-chk form-check-input mt-0" checked />
+                        }
+                        else
+                        {
+                            <input type="checkbox" name="estado" value="9" class="estado-chk form-check-input mt-0" />
+                        }
+                        Anulado
+                    </label>
+                </div>
+            </div>
+            <input type="hidden" name="page" id="hiddenPage" value="@(ViewBag.Page ?? 1)" />
+            <button type="submit" class="btn btn-sm btn-outline-primary" onclick="document.getElementById('hiddenPage').value='1';"><i class="bi bi-search"></i> Filtrar</button>
+            @if (!string.IsNullOrEmpty(ViewBag.Buscar as string) || !string.IsNullOrEmpty(ViewBag.TipoMaquinaFiltro as string) || !string.IsNullOrEmpty(ViewBag.MaquinaFiltro as string))
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros"><i class="bi bi-x-circle me-1"></i>Limpiar filtros</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Receta</th>
+                        <th>Lote</th>
+                        <th>Material</th>
+                        <th>Máquina</th>
+                        <th>Título</th>
+                        <th>Fecha Inicial</th>
+                        <th>Turno</th>
+                        <th style="display:none;">Operario</th>
+                        <th>Paso</th>
+                        <th>Estado</th>
+                        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @* Datos de la base de datos *@
+                    @if (Model != null && Model.Any())
+                    {
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@item.Receta</td>
+                                <td>@(item.Lote ?? "-")</td>
+                                <td>@(item.Material ?? "-")</td>
+                                <td>@(string.IsNullOrEmpty(item.DescripcionMaquina) ? "-" : item.DescripcionMaquina)</td>
+                                <td>@(string.IsNullOrEmpty(item.DescripcionTitulo) ? "-" : item.DescripcionTitulo)</td>
+                                <td>@item.FechaInicio.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                <td>@(item.Turno == null ? "-" : ProduccionLookups.GetTurno(item.Turno))</td>
+                                <td style="display:none;">@(string.IsNullOrEmpty(item.NombreOperario) ? "-" : item.NombreOperario)</td>
+                                <td>@(item.PasoManual == null ? "-" : ProduccionLookups.GetPaso(item.PasoManual))</td>
+                                <td>
+                                    @{
+                                        var estadoClass = item.Estado switch
+                                        {
+                                            "1" => new { Class = "bg-primary", Icon = "bi-gear-fill", Text = "En Proceso" },
+                                            "3" => new { Class = "bg-success", Icon = "bi-check-circle", Text = "Terminado" },
+                                            "9" => new { Class = "bg-danger", Icon = "bi-x-circle", Text = "Anulado" },
+                                            _ => new { Class = "bg-secondary", Icon = "bi-question-circle", Text = "Desconocido" }
+                                        };
+                                    }
+                                    <span class="badge @estadoClass.Class">
+                                        <i class="bi @estadoClass.Icon me-1"></i>@estadoClass.Text
+                                    </span>
+                                </td>
+                                @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                                {
+                                    <td>
+                                        @if (item.LocalId.HasValue && item.Estado == "1")
+                                        {
+                                            <a asp-action="Editar" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a asp-action="DetalleProduccion" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-info me-1" title="Detalle de Producción">
+                                                <i class="bi bi-bar-chart-line"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-outline-warning me-1 btn-registrar-paro" title="Registrar Paro"
+                                                    data-tp-maq="@item.TipoMaquina"
+                                                    data-cod-maq="@item.CodigoMaquina"
+                                                    data-turno="@item.Turno"
+                                                    data-maquina="@(string.IsNullOrEmpty(item.DescripcionMaquina) ? item.CodigoMaquina : item.DescripcionMaquina)">
+                                                <i class="bi bi-pause-circle"></i>
+                                            </button>
+                                            @if (User.IsInRole("Admin") || User.IsInRole("Gerencia"))
+                                            {
+                                                <form asp-action="Anular" asp-route-id="@item.LocalId" method="post" class="d-inline" id="formAnular_@item.LocalId">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                                                    <button type="button" class="btn btn-sm btn-danger btn-anular" title="Anular Preparatoria"
+                                                            data-form-id="formAnular_@item.LocalId">
+                                                        <i class="bi bi-slash-circle"></i>
+                                                    </button>
+                                                </form>
+                                            }
+                                        }
+                                        @if (item.LocalId.HasValue)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-secondary btn-ver-detalle"
+                                                    data-id="@item.LocalId" title="Ver Detalle">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        }
+                                        @if ((item.Estado == "3" || item.Estado == "9") && item.TieneParos)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-info ms-1 btn-ver-paros" title="Ver Paros"
+                                                    data-tp-maq="@item.TipoMaquina"
+                                                    data-cod-maq="@item.CodigoMaquina"
+                                                    data-maquina="@(string.IsNullOrEmpty(item.DescripcionMaquina) ? item.CodigoMaquina : item.DescripcionMaquina)">
+                                                <i class="bi bi-pause-fill"></i>
+                                            </button>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                @if (!string.IsNullOrEmpty(ViewBag.Buscar as string) || !string.IsNullOrEmpty(ViewBag.TipoMaquinaFiltro as string) || !string.IsNullOrEmpty(ViewBag.MaquinaFiltro as string))
+                                {
+                                    <span>No hay registros con los filtros aplicados.</span>
+                                    <br />
+                                    <a asp-action="Index" class="btn btn-sm btn-outline-secondary mt-2"><i class="bi bi-arrow-clockwise me-1"></i>Ver todos</a>
+                                }
+                                else
+                                {
+                                    <span>No hay registros de preparatoria.</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@{
+    int currentPage = ViewBag.Page != null ? Convert.ToInt32(ViewBag.Page) : 1;
+    int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+    int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+    int pgSize      = ViewBag.PageSize != null ? Convert.ToInt32(ViewBag.PageSize) : 10;
+    int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+    int endItem     = Math.Min(currentPage * pgSize, totalCount);
+}
+<div class="d-flex justify-content-between align-items-center mt-2 px-1">
+    <small class="text-muted">
+        @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}\u2013{endItem} de {totalCount} registros")
+    </small>
+    @if (totalPages > 1)
+    {
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                    <button type="button" class="page-link btn-pagina" data-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
+                </li>
+                @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                {
+                    <li class="page-item @(pg == currentPage ? "active" : "")">
+                        <button type="button" class="page-link btn-pagina" data-page="@pg">@pg</button>
+                    </li>
+                }
+                <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                    <button type="button" class="page-link btn-pagina" data-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></button>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>
+
+<!-- Modal de Confirmación Anular -->
+<div class="modal fade" id="modalConfirmarAnular" tabindex="-1" aria-labelledby="modalConfirmarAnularLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmarAnularLabel">Confirmar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro que desea anular esta preparatoria?
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelarAnularModal" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnAceptarAnularModal" class="btn btn-danger">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ver Detalle -->
+<div class="modal fade" id="modalVerDetalle" tabindex="-1" aria-labelledby="modalVerDetalleLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalVerDetalleLabel"><i class="bi bi-eye me-2"></i>Detalle de Preparatoria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modalVerDetalleLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                    <p class="mt-2 text-muted">Cargando información...</p>
+                </div>
+                <div id="modalVerDetalleContent" style="display:none;">
+                    <!-- Sección Preparatoria -->
+                    <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-gear-wide-connected me-2"></i>Información de Preparatoria</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Receta</span>
+                            <span id="det_receta">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Lote</span>
+                            <span id="det_lote">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Material</span>
+                            <span id="det_material">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Tipo Máquina</span>
+                            <span id="det_tipoMaquina">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Máquina</span>
+                            <span id="det_maquina">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Título</span>
+                            <span id="det_titulo">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Fecha de Inicio</span>
+                            <span id="det_fechaInicio">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Estado</span>
+                            <span id="det_estado">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Operario</span>
+                            <span id="det_operario">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Turno</span>
+                            <span id="det_turno">-</span>
+                        </div>
+                        <div id="det_grupoPasoManuar" class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Paso Manuar</span>
+                            <span id="det_pasoManuar">-</span>
+                        </div>
+                    </div>
+                    <!-- Sección Detalle de Producción -->
+                    <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-bar-chart-line me-2"></i>Detalle de Producción</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Velocidad</span>
+                            <span id="det_velocidad">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Metraje</span>
+                            <span id="det_metraje">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Rollo / Tacho</span>
+                            <span id="det_rolloTacho">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Kg Neto</span>
+                            <span id="det_kgNeto">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Fecha Final</span>
+                            <span id="det_fechaFin">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Produc. Teórico</span>
+                            <span id="det_producTeorico">-</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="form-label fw-semibold small text-muted d-block mb-0">Eficienc. Teórico</span>
+                            <span id="det_eficiencTeorico">-</span>
+                        </div>
+                    </div>
+                    <!-- Sección Pabilera (condicional) -->
+                    <div id="det_seccionPabilera" style="display:none;">
+                        <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-layers me-2"></i>Datos de Pabilera</h6>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <span class="form-label fw-semibold small text-muted d-block mb-0">Contador Inicial</span>
+                                <span id="det_contadorInicial">-</span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="form-label fw-semibold small text-muted d-block mb-0">Husos Inactivos (HI)</span>
+                                <span id="det_husosInactivas">-</span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="form-label fw-semibold small text-muted d-block mb-0">Contador Final</span>
+                                <span id="det_contadorFinal">-</span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="form-label fw-semibold small text-muted d-block mb-0">Nro. Parada</span>
+                                <span id="det_nroParada">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="modalVerDetalleError" class="alert alert-danger" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ver Paros -->
+<div class="modal fade" id="modalVerParos" tabindex="-1" aria-labelledby="modalVerParosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalVerParosLabel"><i class="bi bi-pause-fill me-2"></i>Paros — <span id="verParosCabMaquina"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="verParosLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+                    <p class="mt-2 text-muted">Cargando paros...</p>
+                </div>
+                <div id="verParosContent" style="display:none;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:36px;">#</th>
+                                        <th>Motivo</th>
+                                        <th class="text-nowrap">Turno</th>
+                                        <th class="text-nowrap">Fecha Inicio</th>
+                                        <th class="text-nowrap">Fecha Fin</th>
+                                        <th class="text-nowrap">Tiempo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="verParosCuerpo"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Registrar Paro -->
+<div class="modal fade" id="modalRegistrarParo" tabindex="-1" aria-labelledby="modalRegistrarParoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalRegistrarParoLabel"><i class="bi bi-pause-circle me-2"></i>Registrar Paro — <span id="paroCabMaquina"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Filtro de turno -->
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1">Filtrar por Turno</label>
+                        <div class="d-flex flex-wrap gap-2" id="filtroTurnoParos">
+                            <div class="form-check">
+                                <input class="form-check-input turno-filtro-chk" type="checkbox" value="1" id="chkTurno1" checked />
+                                <label class="form-check-label" for="chkTurno1">1er Turno</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input turno-filtro-chk" type="checkbox" value="2" id="chkTurno2" checked />
+                                <label class="form-check-label" for="chkTurno2">2do Turno</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input turno-filtro-chk" type="checkbox" value="3" id="chkTurno3" checked />
+                                <label class="form-check-label" for="chkTurno3">3er Turno</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input turno-filtro-chk" type="checkbox" value="4" id="chkTurno4" checked />
+                                <label class="form-check-label" for="chkTurno4">12 Hrs Da</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input turno-filtro-chk" type="checkbox" value="5" id="chkTurno5" checked />
+                                <label class="form-check-label" for="chkTurno5">12 Hrs Noche</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Campos del paro -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Motivo <span class="text-danger">*</span></label>
+                        <div class="position-relative">
+                            <input type="text" id="paroMotivoInput" class="form-control" placeholder="Buscar motivo..." autocomplete="off" />
+                            <input type="hidden" id="paroMotivo" />
+                            <ul id="paroMotivoDropdown" class="list-group mt-1 shadow-sm" style="display:none;position:absolute;z-index:1050;width:100%;max-height:200px;overflow-y:auto;"></ul>
+                        </div>
+                        <div id="errParoMotivo" class="text-danger small mt-1" style="display:none;"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Fecha Inicio <span class="text-danger">*</span></label>
+                        <input type="datetime-local" id="paroFechaIni" class="form-control" step="60" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                        <div id="errParoFechaIni" class="text-danger small mt-1" style="display:none;"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Fecha Fin <span class="text-muted small">(opcional)</span></label>
+                        <input type="datetime-local" id="paroFechaFin" class="form-control" step="60" />
+                        <div id="errParoFechaFin" class="text-danger small mt-1" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mb-3">
+                    <button type="button" id="btnParoAgregar" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-circle me-1"></i><span id="spanBtnParoTexto">Agregar</span>
+                    </button>
+                    <button type="button" id="btnParoCancelarEdicion" class="btn btn-sm btn-outline-secondary" style="display:none;">
+                        <i class="bi bi-x me-1"></i>Cancelar edición
+                    </button>
+                </div>
+                <div id="paroAlerta" class="alert alert-danger py-2" style="display:none;"></div>
+                <!-- Grilla de paros -->
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="tablaParos">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:30px;">#</th>
+                                <th>Motivo</th>
+                                <th>Turno</th>
+                                <th class="text-nowrap">Fecha Inicio</th>
+                                <th class="text-nowrap">Fecha Fin</th>
+                                <th style="width:110px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaParosCuerpo">
+                            <tr id="paroFilaVacia">
+                                <td colspan="6" class="text-center text-muted py-3"><i class="bi bi-inbox me-1"></i>Sin paros agregados</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>Cancelar</button>
+                <button type="button" id="btnParoGuardar" class="btn btn-success"><i class="bi bi-save me-1"></i>Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Eliminar Paro BD -->
+<div class="modal fade" id="modalConfirmarEliminarParo" tabindex="-1"
+     aria-labelledby="modalConfirmarEliminarParoLabel" aria-hidden="true"
+     data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalConfirmarEliminarParoLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar eliminación
+                </h5>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Está seguro que desea eliminar este paro de la base de datos?</p>
+                <p class="text-danger mb-0">
+                    <small><i class="bi bi-exclamation-circle me-1"></i>Esta acción no se puede deshacer.</small>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-danger" id="btnAceptarEliminarParo">
+                    <i class="bi bi-trash me-1"></i>Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Utilidades compartidas (accesibles a todos los handlers en este scope)
+        function formatDt(val) {
+            if (!val) return '-';
+            var d = new Date(val);
+            if (isNaN(d)) return val;
+            var pad = function (n) { return String(n).padStart(2, '0'); };
+            return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() +
+                   ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+        function escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function diffTiempo(ini, fin) {
+            if (!ini || !fin) return '-';
+            var dIni = new Date(ini);
+            var dFin = new Date(fin);
+            if (isNaN(dIni) || isNaN(dFin)) return '-';
+            var diffMs = dFin - dIni;
+            if (diffMs < 0) return '-';
+            var totalMin = Math.floor(diffMs / 60000);
+            var hrs = Math.floor(totalMin / 60);
+            var min = totalMin % 60;
+            return hrs + ' hrs. ' + min + ' min.';
+        }
+        function getTurnoDesc(t) {
+            var map = { '1': '1er Turno', '2': '2do Turno', '3': '3er Turno', '4': '12 Hrs Da', '5': '12 Hrs Noche' };
+            return map[t] || (t || '-');
+        }
+        function getFechaTurno() {
+            var now   = new Date();
+            var fecha = now.getHours() < 7 ? new Date(now.getTime() - 86400000) : now;
+            var y = fecha.getFullYear();
+            var m = String(fecha.getMonth() + 1).padStart(2, '0');
+            var d = String(fecha.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + d;
+        }
+
+        // === Modal de confirmación Anular ===
+        var formIdToSubmit = null;
+        var modalAnular = new bootstrap.Modal(document.getElementById('modalConfirmarAnular'));
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-anular');
+            if (btn) {
+                formIdToSubmit = btn.getAttribute('data-form-id');
+                modalAnular.show();
+            }
+        });
+
+        document.getElementById('modalConfirmarAnular').addEventListener('shown.bs.modal', function () {
+            document.getElementById('btnCancelarAnularModal').focus();
+        });
+
+        document.getElementById('btnAceptarAnularModal').addEventListener('click', function () {
+            if (formIdToSubmit) {
+                document.getElementById(formIdToSubmit).submit();
+            }
+        });
+
+        // === Combo multi-estado ===
+        (function () {
+            var btnEstado   = document.getElementById('btnEstado');
+            var panelEstado = document.getElementById('panelEstado');
+            var spanTexto   = document.getElementById('spanEstadoTexto');
+            var names = { '1': 'En Proceso', '3': 'Terminado', '9': 'Anulado' };
+
+            function updateEstadoText() {
+                var checks = document.querySelectorAll('.estado-chk');
+                var sel = Array.from(checks).filter(function (c) { return c.checked; }).map(function (c) { return names[c.value]; });
+                if (sel.length === 0)      spanTexto.textContent = 'Seleccionar...';
+                else if (sel.length === 3) spanTexto.textContent = 'Todos los estados';
+                else                       spanTexto.textContent = sel.join(', ');
+            }
+
+            btnEstado.addEventListener('click', function (e) {
+                e.stopPropagation();
+                panelEstado.style.display = panelEstado.style.display === 'none' ? 'block' : 'none';
+            });
+
+            document.querySelectorAll('.estado-chk').forEach(function (chk) {
+                chk.addEventListener('change', updateEstadoText);
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!document.getElementById('divEstado').contains(e.target)) {
+                    panelEstado.style.display = 'none';
+                }
+            });
+
+            updateEstadoText();
+        })();
+
+        // === Paginación ===
+        document.querySelectorAll('.btn-pagina').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var li = this.closest('.page-item');
+                if (li && li.classList.contains('disabled')) return;
+                var p = parseInt(this.getAttribute('data-page'));
+                if (isNaN(p)) return;
+                document.getElementById('hiddenPage').value = p;
+                document.querySelector('form[method="get"]').submit();
+            });
+        });
+
+        // === Modal Ver Detalle ===
+        var modalVerDetalle = new bootstrap.Modal(document.getElementById('modalVerDetalle'));
+
+        // === Modal Registrar Paro ===
+        (function () {
+            var modalRegistrarParo         = new bootstrap.Modal(document.getElementById('modalRegistrarParo'));
+            var modalConfirmarEliminarParo = new bootstrap.Modal(document.getElementById('modalConfirmarEliminarParo'));
+            var paroLista        = [];        // lista en memoria
+            var paroEditIdx      = -1;        // índice de la fila seleccionada para editar (-1 = ninguna)
+            var pendingDeleteIdx = -1;        // índice BD paro pendiente de confirmación
+            var paroTpMaq     = '';
+            var paroCodMaq    = '';
+            var paroTurno     = '';
+            var motivosCache  = null;
+
+            function showParoError(msg) {
+                var el = document.getElementById('paroAlerta');
+                el.textContent = msg;
+                el.style.display = '';
+            }
+            function hideParoError() {
+                document.getElementById('paroAlerta').style.display = 'none';
+            }
+            function clearParoFieldErrors() {
+                ['errParoFechaIni', 'errParoMotivo', 'errParoFechaFin'].forEach(function (id) {
+                    document.getElementById(id).style.display = 'none';
+                });
+                ['paroFechaIni', 'paroMotivoInput', 'paroFechaFin'].forEach(function (id) {
+                    document.getElementById(id).classList.remove('is-invalid');
+                });
+            }
+            function setParoFieldError(fieldId, errId, msg) {
+                var el = document.getElementById(fieldId);
+                el.classList.add('is-invalid');
+                var err = document.getElementById(errId);
+                err.textContent = msg;
+                err.style.display = '';
+            }
+
+            function getSelectedTurnos() {
+                return Array.from(document.querySelectorAll('.turno-filtro-chk:checked')).map(function (c) { return c.value; });
+            }
+
+            function getTurnoDesc(t) {
+                var map = { '1': '1er Turno', '2': '2do Turno', '3': '3er Turno', '4': '12 Hrs Da', '5': '12 Hrs Noche' };
+                return map[t] || (t || '-');
+            }
+
+            function renderTablaParos() {
+                var tbody = document.getElementById('tablaParosCuerpo');
+                tbody.innerHTML = '';
+                var turnosFiltro = getSelectedTurnos();
+                var lista = (turnosFiltro.length === 0
+                    ? paroLista.slice()
+                    : paroLista.filter(function (p) { return !p.turno || turnosFiltro.indexOf(p.turno) >= 0; }))
+                    .sort(function (a, b) {
+                        var da = a.fechaIni || '';
+                        var db = b.fechaIni || '';
+                        return db < da ? -1 : (db > da ? 1 : 0);
+                    });
+
+                if (lista.length === 0) {
+                    tbody.innerHTML = '<tr id="paroFilaVacia"><td colspan="6" class="text-center text-muted py-3"><i class="bi bi-inbox me-1"></i>Sin paros agregados</td></tr>';
+                    return;
+                }
+                lista.forEach(function (p, i) {
+                    var realIdx = paroLista.indexOf(p);
+                    var tr = document.createElement('tr');
+                    if (realIdx === paroEditIdx) tr.classList.add('table-warning');
+                    var motivoDisplay = escHtml(p.motivoDesc || p.motivoTexto || p.motivo || '');
+                    var botonesHtml;
+                    if (!p.esGuardado) {
+                        botonesHtml = '<div class="d-flex gap-1 justify-content-end">' +
+                                      '<button type="button" class="btn btn-xs btn-outline-primary btn-paro-editar" data-idx="' + realIdx + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+                                      '<button type="button" class="btn btn-xs btn-outline-danger btn-paro-eliminar" data-idx="' + realIdx + '" title="Eliminar"><i class="bi bi-trash"></i></button>' +
+                                      '</div>' +
+                                      '<div class="text-end mt-1"><span class="badge bg-success">Nuevo</span></div>';
+                    } else if (p.esAbierto) {
+                        botonesHtml = '<div class="d-flex gap-1 justify-content-end">' +
+                                      '<button type="button" class="btn btn-xs btn-outline-primary btn-paro-editar" data-idx="' + realIdx + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+                                      '<button type="button" class="btn btn-xs btn-outline-danger btn-paro-eliminar" data-idx="' + realIdx + '" data-es-bd="true" title="Eliminar de BD"><i class="bi bi-trash"></i></button>' +
+                                      '</div>' +
+                                      '<div class="text-end mt-1"><span class="badge bg-warning text-dark">Abierto</span></div>';
+                    } else {
+                        botonesHtml = '<div class="d-flex gap-1 justify-content-end">' +
+                                      '<button type="button" class="btn btn-xs btn-outline-danger btn-paro-eliminar" data-idx="' + realIdx + '" data-es-bd="true" title="Eliminar de BD"><i class="bi bi-trash"></i></button>' +
+                                      '</div>' +
+                                      '<div class="text-end mt-1"><span class="badge bg-secondary">Guardado</span></div>';
+                    }
+                    tr.innerHTML =
+                        '<td>' + (i + 1) + '</td>' +
+                        '<td>' + motivoDisplay + '</td>' +
+                        '<td>' + escHtml(getTurnoDesc(p.turno)) + '</td>' +
+                        '<td class="text-nowrap">' + formatDt(p.fechaIni) + '</td>' +
+                        '<td class="text-nowrap">' + (p.fechaFin ? formatDt(p.fechaFin) : '<span class="text-muted">-</span>') + '</td>' +
+                        '<td class="text-end">' + botonesHtml + '</td>';
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function formatDt(val) {
+                if (!val) return '-';
+                // val es "yyyy-MM-ddTHH:mm:ss" o similar
+                var d = new Date(val);
+                if (isNaN(d)) return val;
+                var pad = function (n) { return String(n).padStart(2, '0'); };
+                return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() +
+                       ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
+
+            function escHtml(s) {
+                return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+
+            function getLocalDateTimeInputValue() {
+                var d = new Date();
+                var pad = function (n) { return String(n).padStart(2, '0'); };
+                return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
+
+            function resetParoForm() {
+                paroEditIdx = -1;
+                document.getElementById('paroFechaIni').readOnly = false;
+                document.getElementById('paroFechaIni').value    = getLocalDateTimeInputValue();
+                document.getElementById('paroMotivoInput').value = '';
+                document.getElementById('paroMotivo').value      = '';
+                document.getElementById('paroFechaFin').value    = getLocalDateTimeInputValue();
+                document.getElementById('spanBtnParoTexto').textContent = 'Agregar';
+                document.getElementById('btnParoCancelarEdicion').style.display = 'none';
+                clearParoFieldErrors();
+                hideParoError();
+                renderTablaParos();
+            }
+
+            function cargarParosBD() {
+                var selectedTurnos = getSelectedTurnos();
+                if (selectedTurnos.length === 0) {
+                    paroLista = paroLista.filter(function (p) { return !p.esGuardado; });
+                    renderTablaParos();
+                    return;
+                }
+                var url = '@Url.Action("GetParosPorMaquina", "RegistroPreparatoria")?tpMaq=' + encodeURIComponent(paroTpMaq) + '&codMaq=' + encodeURIComponent(paroCodMaq) + '&fechaTurno=' + encodeURIComponent(getFechaTurno());
+                selectedTurnos.forEach(function (t) { url += '&turnos=' + encodeURIComponent(t); });
+                fetch(url)
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        paroLista = paroLista.filter(function (p) { return !p.esGuardado; });
+                        data.forEach(function (p) {
+                            paroLista.push({
+                                fechaIni:   p.fechaIni,
+                                motivo:     p.motivo,
+                                motivoDesc: p.motivoDesc,
+                                fechaFin:   p.fechaFin || null,
+                                esGuardado: true,
+                                esAbierto:  p.esAbierto,
+                                turno:      p.turno || ''
+                            });
+                        });
+                        renderTablaParos();
+                    })
+                    .catch(function () { /* ignorar, mostrar vacío */ });
+            }
+
+            function filtrarMotivosDropdown(texto) {
+                var ul = document.getElementById('paroMotivoDropdown');
+                if (!motivosCache) { ul.style.display = 'none'; return; }
+                var items = motivosCache.filter(function (m) {
+                    return !texto || m.texto.toUpperCase().indexOf(texto.toUpperCase()) >= 0 || m.codigo.toUpperCase().indexOf(texto.toUpperCase()) >= 0;
+                });
+                ul.innerHTML = '';
+                if (items.length === 0) { ul.style.display = 'none'; return; }
+                items.forEach(function (m) {
+                    var li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                    li.textContent = m.texto;
+                    li.style.cursor = 'pointer';
+                    li.addEventListener('mousedown', function (e) { e.preventDefault(); seleccionarMotivo(m); });
+                    ul.appendChild(li);
+                });
+                ul.style.display = '';
+            }
+
+            function seleccionarMotivo(m) {
+                document.getElementById('paroMotivoInput').value = m.texto;
+                document.getElementById('paroMotivo').value      = m.codigo;
+                document.getElementById('paroMotivoInput').classList.remove('is-invalid');
+                document.getElementById('errParoMotivo').style.display = 'none';
+                document.getElementById('paroMotivoDropdown').style.display = 'none';
+            }
+
+            function cargarMotivos() {
+                if (motivosCache !== null) return;
+                fetch('@Url.Action("GetMotivosParaModal", "RegistroPreparatoria")')
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        motivosCache = data;
+                    })
+                    .catch(function () { /* silenciar */ });
+            }
+
+            // Abrir modal desde botón de la fila
+            document.addEventListener('click', function (e) {
+                var btn = e.target.closest('.btn-registrar-paro');
+                if (!btn) return;
+                paroTpMaq  = btn.getAttribute('data-tp-maq')  || '';
+                paroCodMaq = btn.getAttribute('data-cod-maq') || '';
+                paroTurno  = btn.getAttribute('data-turno')   || '';
+                document.getElementById('paroCabMaquina').textContent = btn.getAttribute('data-maquina') || paroCodMaq;
+                paroLista   = [];
+                paroEditIdx = -1;
+                clearParoFieldErrors();
+                hideParoError();
+                document.getElementById('paroFechaIni').value    = getLocalDateTimeInputValue();
+                document.getElementById('paroMotivoInput').value = '';
+                document.getElementById('paroMotivo').value      = '';
+                document.getElementById('paroFechaFin').value    = getLocalDateTimeInputValue();
+                document.getElementById('paroMotivoDropdown').style.display = 'none';
+                document.getElementById('spanBtnParoTexto').textContent = 'Agregar';
+                document.getElementById('btnParoCancelarEdicion').style.display = 'none';
+                renderTablaParos();
+                cargarMotivos();
+                // Marcar solo el turno de la preparatoria; desmarcar el resto
+                document.querySelectorAll('.turno-filtro-chk').forEach(function (chk) { chk.checked = (chk.value === paroTurno); });
+                modalRegistrarParo.show();
+                // Cargar paros ya guardados en BD
+                cargarParosBD();
+            });
+
+            // Combobox de motivo: mostrar dropdown al escribir
+            document.getElementById('paroMotivoInput').addEventListener('input', function () {
+                filtrarMotivosDropdown(this.value);
+            });
+            document.getElementById('paroMotivoInput').addEventListener('focus', function () {
+                filtrarMotivosDropdown(this.value);
+            });
+            document.getElementById('paroMotivoInput').addEventListener('blur', function () {
+                setTimeout(function () { document.getElementById('paroMotivoDropdown').style.display = 'none'; }, 150);
+            });
+
+            // Filtros turno redibujan la tabla
+            document.querySelectorAll('.turno-filtro-chk').forEach(function (chk) {
+                chk.addEventListener('change', cargarParosBD);
+            });
+
+            // Botón Agregar / Actualizar
+            document.getElementById('btnParoAgregar').addEventListener('click', function () {
+                clearParoFieldErrors();
+                hideParoError();
+                var fechaIni  = document.getElementById('paroFechaIni').value.trim();
+                var motivoCod = document.getElementById('paroMotivo').value.trim();
+                var motivoTxt = document.getElementById('paroMotivoInput').value.trim();
+                var fechaFin  = document.getElementById('paroFechaFin').value.trim();
+                var ok = true;
+
+                // Change 1: bloquear si el último paro no tiene fecha fin
+                if (paroEditIdx < 0 && paroLista.length > 0) {
+                    var ultimo = paroLista[paroLista.length - 1];
+                    if (!ultimo.fechaFin) {
+                        showParoError('El último paro registrado no tiene Fecha Fin. Debe completarla antes de agregar uno nuevo.');
+                        return;
+                    }
+                }
+
+                if (!fechaIni) {
+                    setParoFieldError('paroFechaIni', 'errParoFechaIni', 'La Fecha Inicio es obligatoria.');
+                    ok = false;
+                }
+                if (!motivoCod) {
+                    setParoFieldError('paroMotivoInput', 'errParoMotivo', 'Debe seleccionar un motivo.');
+                    ok = false;
+                }
+                if (!ok) return;
+
+                if (fechaFin) {
+                    var dIni = new Date(fechaIni);
+                    var dFin = new Date(fechaFin);
+                    var ahora = new Date();
+                    if (dFin <= dIni) {
+                        setParoFieldError('paroFechaFin', 'errParoFechaFin', 'La Fecha Fin debe ser mayor a la Fecha Inicio.');
+                        return;
+                    }
+                    if (dFin > ahora) {
+                        setParoFieldError('paroFechaFin', 'errParoFechaFin', 'La Fecha Fin no puede ser mayor a la fecha y hora actual.');
+                        return;
+                    }
+                }
+
+                var esGuardadoExistente = paroEditIdx >= 0 && !!(paroLista[paroEditIdx]?.esGuardado);
+                var item;
+                if (esGuardadoExistente) {
+                    var orig = paroLista[paroEditIdx];
+                    item = {
+                        fechaIni:         fechaIni,
+                        motivo:           motivoCod,
+                        motivoDesc:       motivoTxt,
+                        fechaFin:         fechaFin || null,
+                        esGuardado:       true,
+                        esAbierto:        !fechaFin,
+                        esModificado:     true,
+                        originalFechaIni: orig.originalFechaIni || orig.fechaIni,
+                        nuevaFechaIni:    fechaIni,
+                        turno:            orig.turno || ''
+                    };
+                } else {
+                    item = { fechaIni: fechaIni, motivo: motivoCod, motivoDesc: motivoTxt, fechaFin: fechaFin || null, esGuardado: false, turno: paroTurno };
+                }
+
+                if (paroEditIdx >= 0) {
+                    paroLista[paroEditIdx] = item;
+                } else {
+                    paroLista.push(item);
+                }
+                resetParoForm();
+            });
+
+            // Cancelar edición
+            document.getElementById('btnParoCancelarEdicion').addEventListener('click', function () {
+                resetParoForm();
+            });
+
+            // Editar / eliminar filas de la grilla
+            document.getElementById('tablaParosCuerpo').addEventListener('click', function (e) {
+                var btnEdit = e.target.closest('.btn-paro-editar');
+                var btnDel  = e.target.closest('.btn-paro-eliminar');
+
+                if (btnEdit) {
+                    var idx = parseInt(btnEdit.getAttribute('data-idx'));
+                    var p   = paroLista[idx];
+                    paroEditIdx = idx;
+                    document.getElementById('paroFechaIni').value    = (p.fechaIni || '').slice(0, 16);
+                    document.getElementById('paroFechaIni').readOnly = false;
+                    document.getElementById('paroMotivoInput').value = p.motivoDesc || p.motivo || '';
+                    document.getElementById('paroMotivo').value      = p.motivo   || '';
+                    document.getElementById('paroFechaFin').value    = (p.fechaFin || '').slice(0, 16);
+                    document.getElementById('spanBtnParoTexto').textContent = 'Actualizar';
+                    document.getElementById('btnParoCancelarEdicion').style.display = '';
+                    clearParoFieldErrors();
+                    hideParoError();
+                    renderTablaParos();
+                }
+
+                if (btnDel) {
+                    var idx = parseInt(btnDel.getAttribute('data-idx'));
+                    var p   = paroLista[idx];
+                    if (p.esGuardado) {
+                        pendingDeleteIdx = idx;
+                        modalConfirmarEliminarParo.show();
+                    } else {
+                        if (paroEditIdx === idx) resetParoForm();
+                        paroLista.splice(idx, 1);
+                        if (paroEditIdx > idx) paroEditIdx--;
+                        renderTablaParos();
+                    }
+                }
+            });
+
+            document.getElementById('btnAceptarEliminarParo').addEventListener('click', function () {
+                if (pendingDeleteIdx < 0) return;
+                var idx = pendingDeleteIdx;
+                var p   = paroLista[idx];
+                if (!p || !p.esGuardado) { modalConfirmarEliminarParo.hide(); return; }
+                modalConfirmarEliminarParo.hide();
+                fetch('@Url.Action("EliminarParoBD", "RegistroPreparatoria")', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                    },
+                    body: JSON.stringify({ tpMaq: paroTpMaq, codMaq: paroCodMaq, fechaIni: p.fechaIni })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.success) {
+                        if (paroEditIdx === idx) resetParoForm(); else if (paroEditIdx > idx) paroEditIdx--;
+                        paroLista.splice(idx, 1);
+                        pendingDeleteIdx = -1;
+                        renderTablaParos();
+                    } else {
+                        showParoError(d.message || 'Error al eliminar el paro de la base de datos.');
+                    }
+                })
+                .catch(function () {
+                    showParoError('Error de red al eliminar el paro. Intente nuevamente.');
+                });
+            });
+
+            document.getElementById('modalConfirmarEliminarParo').addEventListener('hidden.bs.modal', function () {
+                pendingDeleteIdx = -1;
+            });
+
+            // Botón Guardar
+            document.getElementById('btnParoGuardar').addEventListener('click', function () {
+                hideParoError();
+                var nuevosParos = paroLista.filter(function (p) { return !p.esGuardado; });
+                var parosModif  = paroLista.filter(function (p) { return p.esGuardado && p.esModificado; });
+                if (nuevosParos.length === 0 && parosModif.length === 0) {
+                    var tieneBD = paroLista.some(function (p) { return p.esGuardado; });
+                    showParoError(tieneBD
+                        ? 'No hay paros nuevos ni modificaciones para guardar. Agregue un nuevo paro o edite uno existente.'
+                        : 'Debe agregar al menos un paro antes de guardar.');
+                    return;
+                }
+
+                var btn = document.getElementById('btnParoGuardar');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Guardando...';
+
+                var payload = {
+                    tpMaq:  paroTpMaq,
+                    codMaq: paroCodMaq,
+                    turno:  paroTurno,
+                    paros:  nuevosParos.map(function (p) {
+                        return { fechaIni: p.fechaIni, motivo: p.motivo, fechaFin: p.fechaFin || null };
+                    }),
+                    parosActualizar: parosModif.map(function (p) {
+                        return { originalFechaIni: p.originalFechaIni || p.fechaIni, nuevaFechaIni: p.nuevaFechaIni || null, motivo: p.motivo, fechaFin: p.fechaFin || null };
+                    })
+                };
+
+                fetch('@Url.Action("GuardarParos", "RegistroPreparatoria")', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-save me-1"></i>Guardar';
+                    if (d.success) {
+                        modalRegistrarParo.hide();
+                        // Mostrar alerta de éxito reutilizando el sistema existente
+                        var alerta = document.createElement('div');
+                        alerta.className = 'alert alert-success alert-dismissible fade show mt-2';
+                        alerta.innerHTML = '<i class="bi bi-check-circle me-2"></i>' + d.message +
+                            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                        document.querySelector('.card.mb-3')?.before(alerta);
+                        setTimeout(function () { alerta.remove(); }, 5000);
+                    } else {
+                        showParoError(d.message || 'Error al guardar los paros.');
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-save me-1"></i>Guardar';
+                    showParoError('Error de red al guardar los paros. Intente nuevamente.');
+                });
+            });
+        })();
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-ver-paros');
+            if (!btn) return;
+            var tpMaq   = btn.getAttribute('data-tp-maq')  || '';
+            var codMaq  = btn.getAttribute('data-cod-maq') || '';
+            var maquina = btn.getAttribute('data-maquina') || codMaq;
+
+            document.getElementById('verParosCabMaquina').textContent = maquina;
+            document.getElementById('verParosLoading').style.display  = '';
+            document.getElementById('verParosContent').style.display  = 'none';
+            var modalVerParos = new bootstrap.Modal(document.getElementById('modalVerParos'));
+            modalVerParos.show();
+
+            var verParosUrl = '@Url.Action("GetParosPorMaquina", "RegistroPreparatoria")?tpMaq=' + encodeURIComponent(tpMaq) + '&codMaq=' + encodeURIComponent(codMaq) + '&fechaTurno=' + encodeURIComponent(getFechaTurno()) + '&turnos=1&turnos=2&turnos=3&turnos=4&turnos=5';
+            fetch(verParosUrl)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var tbody = document.getElementById('verParosCuerpo');
+                    tbody.innerHTML = '';
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><i class="bi bi-inbox me-1"></i>Sin paros registrados</td></tr>';
+                    } else {
+                        data.forEach(function (p, i) {
+                            var tr = document.createElement('tr');
+                            tr.innerHTML =
+                                '<td>' + (i + 1) + '</td>' +
+                                    '<td>' + escHtml(p.motivoDesc || p.motivo) + '</td>' +
+                                    '<td>' + escHtml(getTurnoDesc(p.turno)) + '</td>' +
+                                    '<td class="text-nowrap">' + (p.fechaIni ? formatDt(p.fechaIni) : '-') + '</td>' +
+                                    '<td class="text-nowrap">' + (p.fechaFin ? formatDt(p.fechaFin) : '<span class="text-muted">-</span>') + '</td>' +
+                                    '<td class="text-nowrap">' + diffTiempo(p.fechaIni, p.fechaFin) + '</td>';
+                            tbody.appendChild(tr);
+                        });
+                    }
+                    document.getElementById('verParosLoading').style.display = 'none';
+                    document.getElementById('verParosContent').style.display = '';
+                })
+                .catch(function () {
+                    document.getElementById('verParosLoading').style.display = 'none';
+                    document.getElementById('verParosContent').innerHTML = '<p class="text-danger">Error al cargar los paros.</p>';
+                    document.getElementById('verParosContent').style.display = '';
+                });
+        });
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-ver-detalle');
+            if (!btn) return;
+            var id = btn.getAttribute('data-id');
+
+            document.getElementById('modalVerDetalleLoading').style.display = '';
+            document.getElementById('modalVerDetalleContent').style.display = 'none';
+            document.getElementById('modalVerDetalleError').style.display = 'none';
+            modalVerDetalle.show();
+
+            fetch('@Url.Action("GetDetallePreparatoria", "RegistroPreparatoria")?id=' + encodeURIComponent(id))
+                .then(function (r) {
+                    if (!r.ok) throw new Error('No se pudo obtener el detalle.');
+                    return r.json();
+                })
+                .then(function (d) {
+                    document.getElementById('det_receta').textContent        = d.receta || '-';
+                    document.getElementById('det_lote').textContent          = d.lote || '-';
+                    document.getElementById('det_material').textContent      = d.material || '-';
+                    document.getElementById('det_tipoMaquina').textContent   = d.tipoMaquina || '-';
+                    document.getElementById('det_maquina').textContent       = d.maquina || '-';
+                    document.getElementById('det_titulo').textContent        = d.titulo || '-';
+                    document.getElementById('det_fechaInicio').textContent   = d.fechaInicio || '-';
+                    var estadoBadgeMap = {
+                        '1': '<span class="badge bg-primary"><i class="bi bi-gear-fill me-1"></i>En Proceso</span>',
+                        '3': '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Terminado</span>',
+                        '9': '<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Anulado</span>'
+                    };
+                    document.getElementById('det_estado').innerHTML = estadoBadgeMap[d.estadoCodigo] || '<span class="badge bg-secondary">' + escHtml(d.estado || '-') + '</span>';
+                    document.getElementById('det_operario').textContent      = d.operario || '-';
+                    document.getElementById('det_turno').textContent         = d.turno || '-';
+                    document.getElementById('det_pasoManuar').textContent    = d.pasoManuar || '-';
+                    document.getElementById('det_grupoPasoManuar').style.display = d.esPabilera ? 'none' : '';
+
+                    document.getElementById('det_velocidad').textContent     = d.velocidad != null ? d.velocidad : '-';
+                    document.getElementById('det_metraje').textContent       = d.metraje != null ? d.metraje : '-';
+                    document.getElementById('det_rolloTacho').textContent    = d.rolloTacho != null ? d.rolloTacho : '-';
+                    document.getElementById('det_kgNeto').textContent        = d.kgNeto != null ? d.kgNeto : '-';
+                    document.getElementById('det_fechaFin').textContent      = d.fechaFin || '-';
+                    document.getElementById('det_producTeorico').textContent  = d.producTeorico != null ? d.producTeorico : '-';
+                    document.getElementById('det_eficiencTeorico').textContent = d.eficiencTeorico != null ? d.eficiencTeorico : '-';
+
+                    var secPabilera = document.getElementById('det_seccionPabilera');
+                    secPabilera.style.display = d.esPabilera ? '' : 'none';
+                    if (d.esPabilera) {
+                        document.getElementById('det_contadorInicial').textContent = d.contadorInicial != null ? d.contadorInicial : '-';
+                        document.getElementById('det_husosInactivas').textContent  = d.husosInactivas != null ? d.husosInactivas : '-';
+                        document.getElementById('det_contadorFinal').textContent   = d.contadorFinal != null ? d.contadorFinal : '-';
+                        document.getElementById('det_nroParada').textContent       = d.nroParada != null ? d.nroParada : '-';
+                    }
+
+                    document.getElementById('modalVerDetalleLoading').style.display = 'none';
+                    document.getElementById('modalVerDetalleContent').style.display = '';
+                })
+                .catch(function (err) {
+                    document.getElementById('modalVerDetalleLoading').style.display = 'none';
+                    var errEl = document.getElementById('modalVerDetalleError');
+                    errEl.textContent = err.message || 'Error al cargar los datos.';
+                    errEl.style.display = '';
+                });
+        });
+    });
+</script>
+<style>
+    .panel-estado-item:hover { background-color: var(--color-bg-light); }
+</style>
+}
+

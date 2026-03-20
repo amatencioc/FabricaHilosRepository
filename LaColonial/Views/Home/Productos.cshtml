@@ -1,0 +1,193 @@
+@{
+    ViewData["Title"] = "Productos";
+    ViewData["ActivePage"] = "Productos";
+    ViewData["Description"] = "Hilados, hilos de costura, heather e hilos de labores. Catálogo completo de La Colonial Fábrica de Hilos S.A.";
+}
+
+<!-- HERO PRODUCTOS -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;overflow:hidden;"
+    aria-labelledby="productos-hero-heading">
+    <div style="position:absolute;inset:0;background-image:url('/images/logos/productos_fon1.jpg');background-size:cover;background-position:center;opacity:0.12;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <div class="section-divider centered"></div>
+        <h1 id="productos-hero-heading" style="font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            Nuestros Productos
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:560px;margin:0 auto;font-size:var(--font-size-md);">
+            Línea completa de hilados y hilos para toda la industria textil y confecciones
+        </p>
+    </div>
+</section>
+
+<!-- INTRODUCCIÓN -->
+<section class="section-pad" aria-label="Introducción productos">
+    <div class="container" style="max-width:800px;text-align:center;">
+        <p style="font-size:var(--font-size-md);color:var(--color-text-medium);line-height:1.8;">
+            La Colonial ofrece una amplia gama de hilados y hilos fabricados con las mejores materias primas y una tintorería automatizada con más de <strong style="color:var(--color-primary)">500 colores</strong>. Todos nuestros productos cumplen con los estándares internacionales certificados por OEKO-TEX, GOTS y SGS.
+        </p>
+    </div>
+</section>
+
+<!-- CATÁLOGO DE PRODUCTOS -->
+<section class="section-pad" style="background:var(--color-bg-light);padding-top:0;" aria-labelledby="catalogo-heading">
+    <div class="container">
+
+        <!-- HILADOS -->
+        <div id="hilados" style="padding-top:var(--spacing-xl);">
+            <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+                <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;"></div>
+                <h2 class="section-title" id="catalogo-heading" style="margin:0;">Hilados</h2>
+            </div>
+            <div class="productos-grid">
+                @{
+                    var hilados = new[] {
+                        new { Img = "hilados-viscosa.jpg", Nombre = "Hilados de Viscosa", Desc = "Hilados de viscosa con suavidad y brillo natural. Ideales para prendas de vestir de alta gama.", Tags = new[]{"Viscosa","Alta calidad","Suavidad"} },
+                        new { Img = "algodon.jpg", Nombre = "Hilados de Algodón", Desc = "100% algodón natural, certificado GOTS y OEKO-TEX. Disponible en cardado y peinado.", Tags = new[]{"100% Algodón","GOTS","Peinado","Cardado"} },
+                        new { Img = "materia-prima-hilos.jpg", Nombre = "Hilados de Acrílico", Desc = "Hilados acrílicos de alta tenacidad para tejido de punto, alfombras y tapicería.", Tags = new[]{"Acrílico","Alta tenacidad","Tejido de punto"} },
+                        new { Img = "pict.jpg", Nombre = "Hilados de Mezcla", Desc = "Combinaciones de algodón/poliéster, algodón/viscosa y otras mezclas para propiedades especiales.", Tags = new[]{"Mezcla","Poliéster","Algodón"} },
+                    };
+                }
+                @foreach (var h in hilados)
+                {
+                    <a href="/producto/hilados" style="text-decoration:none;color:inherit;display:block;">
+                    <article class="producto-card" data-aos="fade-up" style="cursor:pointer;">
+                        <div class="producto-img-wrap">
+                            <img src="~/images/galeria/@h.Img" alt="@h.Nombre" loading="lazy" />
+                        </div>
+                        <div class="producto-body">
+                            <h3>@h.Nombre</h3>
+                            <p>@h.Desc</p>
+                            <div class="producto-tags">
+                                @foreach (var t in h.Tags) { <span class="producto-tag">@t</span> }
+                            </div>
+                        </div>
+                    </article>
+                    </a>
+                }
+            </div>
+        </div>
+
+        <!-- HILOS DE COSTURA -->
+        <div id="hilos-costura" style="padding-top:var(--spacing-2xl);">
+            <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+                <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;"></div>
+                <h2 class="section-title" style="margin:0;">Hilos de Costura</h2>
+            </div>
+            <div class="productos-grid">
+                @{
+                    var costura = new[] {
+                        new { Nombre = "Hilo Spun Poliéster", Desc = "Alta resistencia y suavidad. Para confecciones de ropa en general. Disponible en 120, 250, 500, 1000, 5000 m.", Tags = new[]{"Spun","Alta resistencia","Múltiples presentaciones"} },
+                        new { Nombre = "Hilo Core Spun", Desc = "Núcleo de filamento de poliéster recubierto de algodón o poliéster. Máxima resistencia para costuras exigentes.", Tags = new[]{"Core Spun","Jeans","Industrial"} },
+                        new { Nombre = "Hilo de Filamento", Desc = "Hilo de filamento de poliéster para aplicaciones que requieren brillo y resistencia al calor.", Tags = new[]{"Filamento","Brillo","Bordado"} },
+                        new { Nombre = "Hilo Blanqueado", Desc = "Hilos de costura blanqueados especiales para uso en prendas delicadas. Presentación 5,000m.", Tags = new[]{"Blanqueado","Prendas delicadas","5000m"} },
+                    };
+                }
+                @foreach (var c in costura)
+                {
+                    <a href="/producto/hilos-costura" style="text-decoration:none;color:inherit;display:block;">
+                    <article class="producto-card" data-aos="fade-up" style="cursor:pointer;">
+                        <div class="producto-img-wrap">
+                            <img src="~/images/galeria/colonial-hilos-noticias-calidad.jpg" alt="@c.Nombre" loading="lazy" />
+                        </div>
+                        <div class="producto-body">
+                            <h3>@c.Nombre</h3>
+                            <p>@c.Desc</p>
+                            <div class="producto-tags">
+                                @foreach (var t in c.Tags) { <span class="producto-tag">@t</span> }
+                            </div>
+                        </div>
+                    </article>
+                    </a>
+                }
+            </div>
+        </div>
+
+        <!-- HEATHER -->
+        <div id="heather" style="padding-top:var(--spacing-2xl);">
+            <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+                <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;"></div>
+                <h2 class="section-title" style="margin:0;">Heather</h2>
+            </div>
+            <div class="productos-grid">
+                @{
+                    var heather = new[] {
+                        new { Img = "galeria/algodon.jpg",         Nombre = "Heather Algodón",       Desc = "Efecto jaspeado en base algodón. Tonalidades naturales con mezcla de fibras crudas y teñidas. Ideal para polos y prendas casuales.",       Tags = new[]{"Algodón","Jaspeado","Casual"} },
+                        new { Img = "productos/CARTA-HEATHER.jpg", Nombre = "Carta de Colores Heather", Desc = "Amplia paleta de colores heather disponibles. Más de 100 tonalidades exclusivas producidas en nuestra tintorería automatizada.", Tags = new[]{"100+ colores","Paleta exclusiva","Tintorería propia"} },
+                        new { Img = "productos/chompa.jpg",        Nombre = "Heather para Tejido de Punto", Desc = "Hilados heather especiales para tejido a máquina. Textura única y tonalidades que varían con la luz. Alta demanda en moda internacional.", Tags = new[]{"Tejido de punto","Moda","Premium"} },
+                        new { Img = "galeria/materia-prima-hilos.jpg", Nombre = "Heather Fibras Mixtas", Desc = "Combinaciones de algodón/poliéster, algodón/viscosa y mezclas especiales con efecto heather. Para diferentes acabados y aplicaciones.", Tags = new[]{"Fibras mixtas","Poliéster","Viscosa"} },
+                    };
+                }
+                @foreach (var h in heather)
+                {
+                    <a href="/producto/heather" style="text-decoration:none;color:inherit;display:block;">
+                    <article class="producto-card" data-aos="fade-up" style="cursor:pointer;">
+                        <div class="producto-img-wrap">
+                            <img src="~/images/@h.Img" alt="@h.Nombre" loading="lazy" />
+                            <span class="producto-badge">Especial</span>
+                        </div>
+                        <div class="producto-body">
+                            <h3>@h.Nombre</h3>
+                            <p>@h.Desc</p>
+                            <div class="producto-tags">
+                                @foreach (var t in h.Tags) { <span class="producto-tag">@t</span> }
+                            </div>
+                        </div>
+                    </article>
+                    </a>
+                }
+            </div>
+        </div>
+
+        <!-- HILOS DE LABORES -->
+        <div id="hilos-labores" style="padding-top:var(--spacing-2xl);">
+            <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+                <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;"></div>
+                <h2 class="section-title" style="margin:0;">Hilos de Labores</h2>
+            </div>
+            <div class="productos-grid">
+                @{
+                    var labores = new[] {
+                        new { Nombre = "Hilo de Tejido", Desc = "Hilos ideales para tejido a dos agujas y crochet. Gran variedad de colores y fibras.", Tags = new[]{"Tejido","Crochet","Colores"} },
+                        new { Nombre = "Hilo de Bordado", Desc = "Especialmente diseñado para bordado a mano y máquina. Brillo y suavidad superiores.", Tags = new[]{"Bordado","Brillo","Suavidad"} },
+                    };
+                }
+                @foreach (var l in labores)
+                {
+                    <a href="/producto/hilos-labores" style="text-decoration:none;color:inherit;display:block;">
+                    <article class="producto-card" data-aos="fade-up" style="cursor:pointer;">
+                        <div class="producto-img-wrap">
+                            <img src="~/images/galeria/materia-prima-hilos.jpg" alt="@l.Nombre" loading="lazy" />
+                        </div>
+                        <div class="producto-body">
+                            <h3>@l.Nombre</h3>
+                            <p>@l.Desc</p>
+                            <div class="producto-tags">
+                                @foreach (var t in l.Tags) { <span class="producto-tag">@t</span> }
+                            </div>
+                        </div>
+                    </article>
+                    </a>
+                }
+            </div>
+        </div>
+
+    </div>
+</section>
+
+<!-- CTA -->
+<section style="padding:var(--spacing-2xl) 0;background:var(--gradient-primary);text-align:center;" aria-labelledby="cta-productos-heading">
+    <div class="container" data-aos="fade-up">
+        <h2 id="cta-productos-heading" style="font-size:clamp(1.4rem,3.5vw,2.2rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            ¿Necesita una cotización o más información?
+        </h2>
+        <p style="color:rgba(255,255,255,0.8);margin-bottom:var(--spacing-md);">Nuestro equipo de ventas le atenderá de lunes a viernes</p>
+        <a href="/contacto" class="btn-colonial btn-primary-col">
+            <i class="fa-solid fa-envelope" aria-hidden="true"></i> Solicitar cotización
+        </a>
+    </div>
+</section>

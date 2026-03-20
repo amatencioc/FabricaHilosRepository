@@ -1,0 +1,206 @@
+@model LaColonial.Models.Producto
+@using LaColonial.Controllers
+@{
+    ViewData["Title"] = Model.Nombre;
+    ViewData["ActivePage"] = "Productos";
+    ViewData["Description"] = Model.Extracto;
+    var otrosProductos = HomeController.ObtenerProductos()
+        .Where(p => p.Slug != Model.Slug).ToList();
+}
+
+<!-- HERO PRODUCTO DETALLE -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;overflow:hidden;"
+    aria-labelledby="prod-hero-heading">
+    <div style="position:absolute;inset:0;background-image:url('/images/@Model.ImagenPortada');background-size:cover;background-position:center;opacity:0.15;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <!-- Breadcrumb -->
+        <p style="color:rgba(255,255,255,0.7);font-size:var(--font-size-sm);margin-bottom:var(--spacing-xs);">
+            <a href="/productos" style="color:rgba(255,255,255,0.8);text-decoration:none;font-weight:500;">
+                <i class="fa-solid fa-arrow-left" aria-hidden="true" style="margin-right:4px;"></i>Productos
+            </a>
+            <span style="margin:0 8px;opacity:.5;">|</span>
+            @foreach (var p in HomeController.ObtenerProductos())
+            {
+                <a href="/producto/@p.Slug"
+                   style="color:@(p.Slug == Model.Slug ? "var(--color-secondary)" : "rgba(255,255,255,0.75)");
+                          text-decoration:none;font-weight:@(p.Slug == Model.Slug ? "700" : "400");
+                          margin-right:8px;">
+                    @p.NombreCorto
+                </a>
+                <span style="margin-right:8px;opacity:.4;">|</span>
+            }
+        </p>
+        <div class="section-divider centered"></div>
+        <h1 id="prod-hero-heading" style="font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            @Model.Nombre
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:560px;margin:0 auto;font-size:var(--font-size-md);">
+            @Model.Extracto
+        </p>
+    </div>
+</section>
+
+<!-- CONTENIDO PRODUCTO -->
+<section class="section-pad" aria-labelledby="prod-content-heading">
+    <div class="container" style="max-width:900px;">
+        <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+            <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;flex-shrink:0;"></div>
+            <h2 class="section-title" id="prod-content-heading" style="margin:0;">@Model.NombreCorto</h2>
+        </div>
+        <div class="noticia-contenido">
+            @Html.Raw(Model.ContenidoHtml)
+        </div>
+        <div style="margin-top:var(--spacing-lg);">
+            <a href="/contacto" class="btn-colonial btn-primary-col">
+                <i class="fa-solid fa-envelope" aria-hidden="true"></i> Solicitar cotización
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- GALERÍA DEL PRODUCTO -->
+@if (Model.Galeria.Length > 0)
+{
+    <section class="section-pad" style="background:var(--color-bg-light);" aria-labelledby="prod-galeria-heading">
+        <div class="container">
+            <div style="display:flex;align-items:center;gap:var(--spacing-sm);margin-bottom:var(--spacing-lg);">
+                <div style="width:4px;height:40px;background:var(--gradient-gold);border-radius:2px;flex-shrink:0;"></div>
+                <h2 class="section-title" id="prod-galeria-heading" style="margin:0;">GALERÍA</h2>
+            </div>
+            <div class="prod-det-galeria-grid">
+                @foreach (var img in Model.Galeria)
+                {
+                    <div class="prod-det-galeria-item"
+                         data-lightbox="/images/@img"
+                         data-alt="@Model.Nombre"
+                         role="button" tabindex="0" aria-label="Ampliar imagen de @Model.Nombre">
+                        <img src="/images/@img" alt="@Model.Nombre" loading="lazy" />
+                        <div class="galeria-overlay">
+                            <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+}
+
+<!-- OTROS PRODUCTOS -->
+@if (otrosProductos.Any())
+{
+    <section class="section-pad" aria-labelledby="otros-prod-heading">
+        <div class="container">
+            <div style="text-align:center;margin-bottom:var(--spacing-lg);">
+                <div class="section-divider centered"></div>
+                <h2 class="section-title" id="otros-prod-heading" style="margin:0 auto;">Otros productos</h2>
+            </div>
+            <div class="prod-cat-grid">
+                @foreach (var p in otrosProductos)
+                {
+                    <a href="/producto/@p.Slug" class="prod-cat-card" aria-label="Ver @p.Nombre">
+                        <div class="prod-cat-img">
+                            <img src="/images/@p.ImagenPortada" alt="@p.Nombre" loading="lazy" />
+                            <div class="prod-cat-overlay"></div>
+                        </div>
+                        <div class="prod-cat-label">@p.NombreCorto</div>
+                    </a>
+                }
+            </div>
+        </div>
+    </section>
+}
+
+<!-- CTA -->
+<section style="padding:var(--spacing-2xl) 0;background:var(--gradient-primary);text-align:center;" aria-label="Llamada a acción">
+    <div class="container" data-aos="fade-up">
+        <h2 style="font-size:clamp(1.4rem,3.5vw,2.2rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            ¿Necesita más información sobre @Model.Nombre?
+        </h2>
+        <p style="color:rgba(255,255,255,0.8);margin-bottom:var(--spacing-md);">Nuestro equipo de ventas le atenderá de lunes a viernes</p>
+        <div style="display:flex;gap:var(--spacing-md);justify-content:center;flex-wrap:wrap;">
+            <a href="/contacto" class="btn-colonial btn-primary-col">
+                <i class="fa-solid fa-envelope" aria-hidden="true"></i> Contactar Ventas
+            </a>
+            <a href="/productos" class="btn-colonial btn-outline-gold">
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Ver todos los productos
+            </a>
+        </div>
+    </div>
+</section>
+
+<style>
+/* ------- DETALLE PRODUCTO GALERÍA ------- */
+.prod-det-galeria-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.prod-det-galeria-item {
+    aspect-ratio: 4/3;
+    overflow: hidden;
+    border-radius: var(--border-radius-md);
+    position: relative;
+    cursor: pointer;
+}
+.prod-det-galeria-item img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform var(--transition-slow);
+}
+.prod-det-galeria-item:hover img { transform: scale(1.07); }
+.prod-det-galeria-item .galeria-overlay { opacity: 0; }
+.prod-det-galeria-item:hover .galeria-overlay { opacity: 1; }
+
+/* ------- OTROS PRODUCTOS GRID ------- */
+.prod-cat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md);
+}
+.prod-cat-card {
+    display: block;
+    text-decoration: none;
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.prod-cat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.prod-cat-img {
+    position: relative;
+    aspect-ratio: 4/3;
+    overflow: hidden;
+}
+.prod-cat-img img { width:100%;height:100%;object-fit:cover;transition:transform var(--transition-slow); }
+.prod-cat-card:hover .prod-cat-img img { transform: scale(1.07); }
+.prod-cat-overlay {
+    position:absolute;inset:0;
+    background:linear-gradient(to top, rgba(0,0,0,0.45) 0%, transparent 60%);
+}
+.prod-cat-label {
+    background: var(--color-primary);
+    color: var(--color-white);
+    font-weight: 700;
+    font-size: var(--font-size-sm);
+    letter-spacing: 0.08em;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-top: 3px solid var(--color-secondary);
+    text-align: center;
+}
+
+@@media (min-width: 600px) {
+    .prod-det-galeria-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@@media (min-width: 900px) {
+    .prod-det-galeria-grid { grid-template-columns: repeat(4, 1fr); }
+    .prod-cat-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@@media (max-width: 599px) {
+    .prod-cat-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>

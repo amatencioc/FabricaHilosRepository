@@ -1,0 +1,666 @@
+﻿@using LaColonial.Controllers
+@{
+    ViewData["Title"] = "Inicio";
+    ViewData["ActivePage"] = "Home";
+    ViewData["Description"] = "La Colonial Fábrica de Hilos S.A. — Hilamos calidad desde 1945. Hilados, heather e hilos de costura para la industria textil. Callao, Perú.";
+    var eventosHome = HomeController.ObtenerNoticias()
+        .Where(n => n.EsEvento)
+        .Take(3)
+        .ToList();
+}
+
+<!-- ===== HERO SLIDER ===== -->
+<section class="hero-section" aria-label="Presentación principal">
+    <div class="swiper hero-swiper">
+        <div class="swiper-wrapper">
+
+            <div class="swiper-slide swiper-slide-hero">
+                <img src="~/images/slider/colonial-fabrica-hilos-slider-tecnologia.jpg"
+                     alt="Tecnología textil de punta en La Colonial" loading="eager" />
+                <div class="hero-overlay"></div>
+                <div class="hero-content">
+                    <span class="hero-tag">Desde 1945</span>
+                    <h1 class="hero-title">Tecnología textil<br>de punta</h1>
+                    <p class="hero-text">Maquinaria de última generación para producir hilados y hilos de la más alta calidad del mercado.</p>
+                    <div class="hero-actions">
+                        <a href="/productos" class="btn-colonial btn-primary-col">
+                            <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Ver productos
+                        </a>
+                        <a href="/empresa" class="btn-colonial btn-secondary-col">Conocer más</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="swiper-slide swiper-slide-hero">
+                <img src="~/images/slider/colonial-fabrica-hilos-slider-calidad.jpg"
+                     alt="Compromiso con la calidad" loading="lazy" />
+                <div class="hero-overlay"></div>
+                <div class="hero-content">
+                    <span class="hero-tag">Calidad certificada</span>
+                    <h1 class="hero-title">Compromiso con<br>la mejora continua</h1>
+                    <p class="hero-text">Certificados por OEKO-TEX, GOTS y SGS. Garantizamos los más altos estándares internacionales.</p>
+                    <div class="hero-actions">
+                        <a href="/empresa#certificaciones" class="btn-colonial btn-primary-col">
+                            <i class="fa-solid fa-certificate" aria-hidden="true"></i> Nuestros certificados
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="swiper-slide swiper-slide-hero">
+                <img src="~/images/slider/colonial-fabrica-hilos-slider-tintoreria.jpg"
+                     alt="Tintorería totalmente automatizada" loading="lazy" />
+                <div class="hero-overlay"></div>
+                <div class="hero-content">
+                    <span class="hero-tag">Tintorería</span>
+                    <h1 class="hero-title">Amplia capacidad<br>de teñido</h1>
+                    <p class="hero-text">Tintorería automatizada con miles de colores disponibles para satisfacer cualquier necesidad de producción.</p>
+                    <div class="hero-actions">
+                        <a href="/contacto" class="btn-colonial btn-primary-col">
+                            <i class="fa-solid fa-envelope" aria-hidden="true"></i> Cotizar
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="swiper-slide swiper-slide-hero">
+                <img src="~/images/slider/colonial-fabrica-hilos-slider-diseno.jpg"
+                     alt="Diseño y variedad de productos" loading="lazy" />
+                <div class="hero-overlay"></div>
+                <div class="hero-content">
+                    <span class="hero-tag">Diseño</span>
+                    <h1 class="hero-title">Hilamos calidad<br>desde 1945</h1>
+                    <p class="hero-text">Más de 80 años de experiencia fabricando hilos y hilados para la industria textil peruana e internacional.</p>
+                    <div class="hero-actions">
+                        <a href="/galeria" class="btn-colonial btn-primary-col">
+                            <i class="fa-solid fa-images" aria-hidden="true"></i> Ver galería
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /swiper-wrapper -->
+        <div class="swiper-pagination swiper-pagination-hero"></div>
+    </div><!-- /swiper -->
+</section>
+
+<!-- ===== STATS ===== -->
+<section class="stats-section" aria-label="Números de la empresa">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-item" data-aos="fade-up" data-aos-delay="0">
+                <span class="stat-number" data-counter="80" data-suffix="+">80+</span>
+                <span class="stat-label">Años de experiencia</span>
+            </div>
+            <div class="stat-item" data-aos="fade-up" data-aos-delay="100">
+                <span class="stat-number" data-counter="500" data-suffix="+">500+</span>
+                <span class="stat-label">Colores disponibles</span>
+            </div>
+            <div class="stat-item" data-aos="fade-up" data-aos-delay="200">
+                <span class="stat-number" data-counter="3" data-suffix="">3</span>
+                <span class="stat-label">Certificaciones internacionales</span>
+            </div>
+            <div class="stat-item" data-aos="fade-up" data-aos-delay="300">
+                <span class="stat-number" data-counter="20" data-suffix="+">20+</span>
+                <span class="stat-label">Países de exportación</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== EMPRESA INTRO ===== -->
+<section class="empresa-intro section-pad" aria-labelledby="empresa-heading">
+    <div class="container">
+        <div style="max-width:640px;">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="empresa-heading">Más de 80 años hilando calidad</h2>
+            <p class="section-subtitle">La Colonial Fábrica de Hilos S.A. es una empresa peruana líder en la fabricación de hilados y hilos textiles, con tecnología de punta y compromiso absoluto con la calidad.</p>
+            <a href="/empresa" class="btn-colonial btn-outline-gold" data-aos="fade-up">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i> Conocer nuestra historia
+            </a>
+        </div>
+        <div class="empresa-features">
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="0">
+                <div class="feature-icon"><i class="fa-solid fa-industry" aria-hidden="true"></i></div>
+                <h3>Fabricación propia</h3>
+                <p>Planta industrial en Callao con maquinaria de última generación para producción de alta escala.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="100">
+                <div class="feature-icon"><i class="fa-solid fa-certificate" aria-hidden="true"></i></div>
+                <h3>Calidad certificada</h3>
+                <p>Certificados internacionalmente por OEKO-TEX Standard 100, GOTS y SGS. Estándares que garantizan excelencia.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="200">
+                <div class="feature-icon"><i class="fa-solid fa-palette" aria-hidden="true"></i></div>
+                <h3>Tintorería automatizada</h3>
+                <p>Amplia capacidad de teñido con más de 500 colores. Tintorería completamente automatizada y controlada.</p>
+            </div>
+            <div class="feature-card" data-aos="fade-up" data-aos-delay="300">
+                <div class="feature-icon"><i class="fa-solid fa-earth-americas" aria-hidden="true"></i></div>
+                <h3>Exportación</h3>
+                <p>Presencia en más de 20 países. Nuestros productos llegan a las principales industrias textiles del mundo.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== PRODUCTOS (PREVIEW) ===== -->
+<section class="productos-section section-pad" aria-labelledby="productos-heading">
+    <div class="container">
+        <div style="text-align:center;">
+            <div class="section-divider centered"></div>
+            <h2 class="section-title" id="productos-heading" style="margin:0 auto var(--spacing-sm);">Nuestros productos</h2>
+            <p class="section-subtitle" style="margin:0 auto var(--spacing-lg);">Línea completa de hilados y hilos para la industria textil y confecciones</p>
+        </div>
+        <div class="productos-grid">
+            <article class="producto-card" data-aos="fade-up" data-aos-delay="0">
+                <div class="producto-img-wrap">
+                    <img src="~/images/galeria/hilados-viscosa.jpg" alt="Línea de Hilados La Colonial" loading="lazy" />
+                    <span class="producto-badge">Premium</span>
+                </div>
+                <div class="producto-body">
+                    <h3>Hilados</h3>
+                    <p>Hilados de algodón, viscosa, acrílico y mezclas especiales para tejedoras y confecciones industriales.</p>
+                    <div class="producto-tags">
+                        <span class="producto-tag">Algodón</span>
+                        <span class="producto-tag">Viscosa</span>
+                        <span class="producto-tag">Acrílico</span>
+                    </div>
+                </div>
+            </article>
+            <article class="producto-card" data-aos="fade-up" data-aos-delay="100">
+                <div class="producto-img-wrap">
+                    <img src="~/images/galeria/materia-prima-hilos.jpg" alt="Hilos de Costura La Colonial" loading="lazy" />
+                    <span class="producto-badge">Industrial</span>
+                </div>
+                <div class="producto-body">
+                    <h3>Hilos de costura</h3>
+                    <p>Hilos de costura de alta resistencia para confecciones en general, disponibles en múltiples presentaciones.</p>
+                    <div class="producto-tags">
+                        <span class="producto-tag">100% Poliéster</span>
+                        <span class="producto-tag">Spun</span>
+                        <span class="producto-tag">Filamento</span>
+                    </div>
+                </div>
+            </article>
+            <article class="producto-card" data-aos="fade-up" data-aos-delay="200">
+                <div class="producto-img-wrap">
+                    <img src="~/images/galeria/algodon.jpg" alt="Heather La Colonial" loading="lazy" />
+                    <span class="producto-badge">Especial</span>
+                </div>
+                <div class="producto-body">
+                    <h3>Heather</h3>
+                    <p>Hilados heather con efecto jaspeado, combinación de fibras para texturas y colores únicos.</p>
+                    <div class="producto-tags">
+                        <span class="producto-tag">Jaspeado</span>
+                        <span class="producto-tag">Mezclas</span>
+                        <span class="producto-tag">Colores únicos</span>
+                    </div>
+                </div>
+            </article>
+            <article class="producto-card" data-aos="fade-up" data-aos-delay="300">
+                <div class="producto-img-wrap">
+                    <img src="~/images/galeria/colonial-hilos-noticias-calidad.jpg" alt="Hilos de Labores La Colonial" loading="lazy" />
+                    <span class="producto-badge">Artesanal</span>
+                </div>
+                <div class="producto-body">
+                    <h3>Hilos de labores</h3>
+                    <p>Hilos para tejido artesanal, bordado y labores manuales. Ideales para el segmento retail y artesanal.</p>
+                    <div class="producto-tags">
+                        <span class="producto-tag">Tejido</span>
+                        <span class="producto-tag">Bordado</span>
+                        <span class="producto-tag">Crochet</span>
+                    </div>
+                </div>
+            </article>
+        </div>
+        <div style="text-align:center;margin-top:var(--spacing-xl);">
+            <a href="/productos" class="btn-colonial btn-primary-col">
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Ver todos los productos
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ===== POR QUÉ ELEGIRNOS ===== -->
+<section class="why-section section-pad" aria-labelledby="why-heading">
+    <div class="container">
+        <div style="text-align:center;">
+            <div class="section-divider centered"></div>
+            <h2 class="section-title" id="why-heading" style="margin:0 auto var(--spacing-sm);color:var(--color-white)">¿Por qué elegirnos?</h2>
+            <p class="section-subtitle" style="margin:0 auto var(--spacing-lg);color:rgba(255,255,255,0.8);max-width:480px;">Décadas de experiencia y compromiso nos respaldan como líderes en el sector textil</p>
+        </div>
+        <div class="why-grid">
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="0">
+                <i class="fa-solid fa-star" aria-hidden="true"></i>
+                <h4>80+ años de experiencia</h4>
+                <p>Trayectoria que nos convierte en referente de confianza para la industria textil</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="80">
+                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                <h4>Calidad garantizada</h4>
+                <p>Procesos de control de calidad en cada etapa de producción</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="160">
+                <i class="fa-solid fa-leaf" aria-hidden="true"></i>
+                <h4>Sostenibilidad</h4>
+                <p>Certificación GOTS y OEKO-TEX para productos amigables con el medioambiente</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="240">
+                <i class="fa-solid fa-headset" aria-hidden="true"></i>
+                <h4>Atención personalizada</h4>
+                <p>Equipo de ventas dedicado para acompañar cada proyecto de forma personalizada</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="320">
+                <i class="fa-solid fa-palette" aria-hidden="true"></i>
+                <h4>500+ colores</h4>
+                <p>Amplia paleta de colores con capacidad de tintorería propia y automatizada</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="400">
+                <i class="fa-solid fa-truck-fast" aria-hidden="true"></i>
+                <h4>Entrega oportuna</h4>
+                <p>Gestión eficiente de pedidos y despacho para cumplir sus plazos de producción</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="480">
+                <i class="fa-solid fa-earth-americas" aria-hidden="true"></i>
+                <h4>Exportación</h4>
+                <p>Experiencia exportando a más de 20 países alrededor del mundo</p>
+            </div>
+            <div class="why-item" data-aos="zoom-in" data-aos-delay="560">
+                <i class="fa-solid fa-flask" aria-hidden="true"></i>
+                <h4>I+D constante</h4>
+                <p>Inversión continua en investigación y desarrollo de nuevos productos y fibras</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== VIDEO INSTITUCIONAL ===== -->
+<section class="section-pad" style="background:var(--color-bg-light);" aria-labelledby="video-heading">
+    <div class="container">
+        <div style="text-align:center;margin-bottom:var(--spacing-xl);">
+            <div class="section-divider centered"></div>
+            <h2 class="section-title" id="video-heading" style="margin:0 auto var(--spacing-xs);">Conózcanos en video</h2>
+            <p class="section-subtitle" style="margin:0 auto;">Descubra nuestros procesos, planta e instalaciones de la mano de La Colonial</p>
+        </div>
+        <div data-aos="fade-up" style="max-width:820px;margin:0 auto;">
+            <button id="videoPlayBtn"
+                aria-label="Reproducir video institucional de La Colonial"
+                style="
+                    display:block;width:100%;border:none;padding:0;background:none;cursor:pointer;
+                    position:relative;border-radius:var(--border-radius-xl);
+                    overflow:hidden;box-shadow:var(--shadow-xl);">
+                <img src="/images/galeria/S8C8472.jpg"
+                     alt="Video institucional La Colonial Fábrica de Hilos"
+                     style="width:100%;height:auto;display:block;max-height:460px;object-fit:cover;"
+                     loading="lazy" />
+                <span style="
+                    position:absolute;inset:0;
+                    background:rgba(15,46,37,0.45);
+                    display:flex;align-items:center;justify-content:center;
+                    transition:background 0.3s;"
+                    class="video-overlay">
+                    <span style="
+                        width:80px;height:80px;
+                        background:rgba(255,255,255,0.95);
+                        border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;
+                        box-shadow:0 8px 32px rgba(0,0,0,0.3);
+                        transition:transform 0.2s,box-shadow 0.2s;">
+                        <i class="fa-solid fa-play" style="color:var(--color-primary);font-size:28px;margin-left:5px;" aria-hidden="true"></i>
+                    </span>
+                </span>
+                <span style="
+                    position:absolute;bottom:var(--spacing-md);left:50%;transform:translateX(-50%);
+                    background:rgba(0,0,0,0.55);color:#fff;
+                    padding:6px 18px;border-radius:999px;
+                    font-size:var(--font-size-sm);white-space:nowrap;
+                    backdrop-filter:blur(4px);">
+                    <i class="fa-brands fa-youtube" style="color:#FF0000;margin-right:6px;" aria-hidden="true"></i>
+                    Video institucional &middot; La Colonial
+                </span>
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- MODAL VIDEO YOUTUBE -->
+<div id="videoModal" role="dialog" aria-modal="true" aria-label="Video institucional La Colonial" style="
+    display:none;position:fixed;inset:0;z-index:9999;
+    background:rgba(0,0,0,0.88);align-items:center;justify-content:center;
+    padding:var(--spacing-md);">
+    <div style="position:relative;width:100%;max-width:900px;">
+        <button id="videoModalClose"
+            aria-label="Cerrar video"
+            style="
+                position:absolute;top:-44px;right:0;
+                background:none;border:none;color:#fff;
+                font-size:2rem;cursor:pointer;padding:4px 10px;
+                line-height:1;">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:var(--border-radius-lg);">
+            <iframe id="videoIframe"
+                src=""
+                title="Video institucional La Colonial Fábrica de Hilos"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+                style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:var(--border-radius-lg);"
+                loading="lazy"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- ===== GALERÍA PREVIEW ===== -->
+<section class="galeria-section section-pad" aria-labelledby="galeria-heading">
+    <div class="container">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:var(--spacing-lg);">
+            <div>
+                <div class="section-divider"></div>
+                <h2 class="section-title" id="galeria-heading" style="margin-bottom:0">Galería</h2>
+            </div>
+            <a href="/galeria" class="btn-colonial btn-outline-gold">
+                <i class="fa-solid fa-images" aria-hidden="true"></i> Ver galería completa
+            </a>
+        </div>
+        <!-- 4 CATEGORÍAS DE PRODUCTO (link a detalle) -->
+        <div class="prod-cat-grid-home">
+            <a href="/producto/heather" class="prod-cat-home-card" data-aos="fade-up" data-aos-delay="0" aria-label="Ver productos Heather">
+                <div class="prod-cat-home-img">
+                    <img src="/images/productos/CARTA-HEATHER.jpg" alt="Heather La Colonial" loading="lazy" />
+                    <div class="prod-cat-home-overlay"></div>
+                </div>
+                <div class="prod-cat-home-label">HEATHER</div>
+            </a>
+            <a href="/producto/hilados" class="prod-cat-home-card" data-aos="fade-up" data-aos-delay="80" aria-label="Ver productos Hilados">
+                <div class="prod-cat-home-img">
+                    <img src="/images/galeria/hilados-viscosa.jpg" alt="Hilados La Colonial" loading="lazy" />
+                    <div class="prod-cat-home-overlay"></div>
+                </div>
+                <div class="prod-cat-home-label">HILADOS</div>
+            </a>
+            <a href="/producto/hilos-labores" class="prod-cat-home-card" data-aos="fade-up" data-aos-delay="160" aria-label="Ver productos Hilos de Labores">
+                <div class="prod-cat-home-img">
+                    <img src="/images/galeria/materia-prima-hilos.jpg" alt="Hilos de Labores La Colonial" loading="lazy" />
+                    <div class="prod-cat-home-overlay"></div>
+                </div>
+                <div class="prod-cat-home-label">HILOS DE LABORES</div>
+            </a>
+            <a href="/producto/hilos-costura" class="prod-cat-home-card" data-aos="fade-up" data-aos-delay="240" aria-label="Ver productos Hilos de Costura">
+                <div class="prod-cat-home-img">
+                    <img src="/images/galeria/colonial-hilos-noticias-calidad.jpg" alt="Hilos de Costura La Colonial" loading="lazy" />
+                    <div class="prod-cat-home-overlay"></div>
+                </div>
+                <div class="prod-cat-home-label">HILOS DE COSTURA</div>
+            </a>
+        </div>
+    </div>
+</section>
+
+<style>
+/* ---- GALERÍA HOME: PRODUCT CATEGORY CARDS ---- */
+.prod-cat-grid-home {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.prod-cat-home-card {
+    display: block;
+    text-decoration: none;
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.prod-cat-home-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.prod-cat-home-img {
+    position: relative;
+    aspect-ratio: 4/3;
+    overflow: hidden;
+}
+.prod-cat-home-img img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform var(--transition-slow);
+}
+.prod-cat-home-card:hover .prod-cat-home-img img { transform: scale(1.07); }
+.prod-cat-home-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 55%);
+}
+.prod-cat-home-label {
+    background: var(--color-white);
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: var(--font-size-sm);
+    letter-spacing: 0.08em;
+    padding: 10px var(--spacing-md);
+    border-top: 3px solid var(--color-secondary);
+    text-align: center;
+}
+@@media (min-width: 640px) {
+    .prod-cat-grid-home { grid-template-columns: repeat(4, 1fr); }
+}
+</style>
+
+<!-- ===== EVENTOS ===== -->
+<section class="section-pad" style="background:var(--color-bg-light);" aria-labelledby="eventos-home-heading">
+    <div class="container">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:var(--spacing-lg);">
+            <div>
+                <div class="section-divider"></div>
+                <h2 class="section-title" id="eventos-home-heading" style="margin-bottom:0;">Eventos</h2>
+            </div>
+            <a href="/noticias" class="btn-colonial btn-outline-gold">
+                <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Ver todos los eventos
+            </a>
+        </div>
+        <div class="eventos-home-list">
+            @foreach (var ev in eventosHome)
+            {
+                <a href="/noticias/@ev.Slug" class="evento-home-card" data-aos="fade-up">
+                    <div class="evento-home-text">
+                        <span class="evento-home-cat">
+                            <i class="fa-regular fa-calendar-days" aria-hidden="true"></i> @ev.Fecha
+                        </span>
+                        <h3 class="evento-home-titulo">@ev.Titulo</h3>
+                        <p class="evento-home-extracto">@ev.Extracto</p>
+                        <span class="evento-home-link">
+                            Ver más <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="evento-home-img">
+                        <img src="/images/noticias/@ev.Imagen" alt="@ev.Titulo" loading="lazy" />
+                    </div>
+                </a>
+            }
+        </div>
+    </div>
+</section>
+
+<style>
+/* ---- EVENTOS HOME ---- */
+.eventos-home-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+.evento-home-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    text-decoration: none;
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+    background: var(--color-white);
+}
+.evento-home-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-xl);
+}
+.evento-home-text {
+    background: var(--color-primary);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+}
+.evento-home-cat {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--color-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.evento-home-titulo {
+    font-size: clamp(1rem, 2.5vw, 1.25rem);
+    font-weight: 700;
+    color: var(--color-white);
+    margin: 0;
+    line-height: 1.3;
+}
+.evento-home-extracto {
+    font-size: var(--font-size-sm);
+    color: rgba(255,255,255,0.80);
+    margin: 0;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.evento-home-link {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+.evento-home-img {
+    aspect-ratio: 16/7;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.evento-home-img img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform var(--transition-slow);
+}
+.evento-home-card:hover .evento-home-img img { transform: scale(1.06); }
+@@media (min-width: 700px) {
+    .evento-home-card {
+        grid-template-columns: 1fr 38%;
+    }
+    .evento-home-img { aspect-ratio: auto; }
+}
+</style>
+
+<!-- ===== CERTIFICACIONES ===== -->
+<section class="cert-section section-pad" id="certificaciones" aria-labelledby="cert-heading">
+    <div class="container">
+        <div style="text-align:center;margin-bottom:var(--spacing-lg);">
+            <div class="section-divider centered"></div>
+            <h2 class="section-title" id="cert-heading" style="margin:0 auto var(--spacing-xs);">Certificaciones</h2>
+            <p class="section-subtitle" style="margin:0 auto;">Nuestros certificados demuestran el compromiso con los más altos estándares de calidad</p>
+        </div>
+        <div class="cert-grid">
+            <a class="cert-item" href="https://www.sgs.com/" target="_blank" rel="noopener noreferrer" data-aos="zoom-in" data-aos-delay="0" aria-label="Ver certificación SGS (abre en nueva pestaña)">
+                <img src="~/images/certificaciones/certificacion-sgs.png" alt="Certificación SGS" loading="lazy" />
+                <span>SGS</span>
+            </a>
+            <a class="cert-item" href="https://www.oeko-tex.com/en/our-standards/oeko-tex-standard-100" target="_blank" rel="noopener noreferrer" data-aos="zoom-in" data-aos-delay="100" aria-label="Ver certificación OEKO-TEX Standard 100 (abre en nueva pestaña)">
+                <img src="~/images/certificaciones/certificacion-oeko.png" alt="Certificación OEKO-TEX Standard 100" loading="lazy" />
+                <span>OEKO-TEX Std 100</span>
+            </a>
+            <a class="cert-item" href="https://www.global-standard.org/find-suppliers-shops-and-inputs/certified-suppliers/database/search_result/782" target="_blank" rel="noopener noreferrer" data-aos="zoom-in" data-aos-delay="200" aria-label="Ver certificación GOTS de La Colonial (abre en nueva pestaña)">
+                <img src="~/images/certificaciones/certificacion-gots.png" alt="Certificación GOTS" loading="lazy" />
+                <span>GOTS</span>
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ===== CTA CONTACTO ===== -->
+<section style="padding:var(--spacing-2xl) 0;background:var(--gradient-primary);text-align:center;" aria-labelledby="cta-heading">
+    <div class="container" data-aos="fade-up">
+        <div class="section-divider centered"></div>
+        <h2 id="cta-heading" style="font-size:clamp(1.5rem,4vw,2.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            ¿Listo para trabajar con nosotros?
+        </h2>
+        <p style="color:rgba(255,255,255,0.85);max-width:500px;margin:0 auto var(--spacing-lg);font-size:var(--font-size-md);">
+            Contáctenos y un asesor de ventas le atenderá personalmente
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+            <a href="/contacto" class="btn-colonial btn-primary-col">
+                <i class="fa-solid fa-envelope" aria-hidden="true"></i> Escribirnos
+            </a>
+            <a href="tel:+5116130200" class="btn-colonial btn-secondary-col">
+                <i class="fa-solid fa-phone" aria-hidden="true"></i> (511) 613-0200
+            </a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+    // Swiper Hero
+    new Swiper('.hero-swiper', {
+        loop: true,
+        autoplay: { delay: 5000, disableOnInteraction: false },
+        speed: 800,
+        effect: 'fade',
+        fadeEffect: { crossFade: true },
+        pagination: {
+            el: '.swiper-pagination-hero',
+            clickable: true
+        },
+        a11y: {
+            prevSlideMessage: 'Diapositiva anterior',
+            nextSlideMessage: 'Siguiente diapositiva'
+        }
+    });
+
+    // ===== MODAL VIDEO YOUTUBE =====
+    (function () {
+        const YT_EMBED = 'https://www.youtube.com/embed/tJeWPYvEJ28?autoplay=1&rel=0&modestbranding=1';
+        const modal    = document.getElementById('videoModal');
+        const iframe   = document.getElementById('videoIframe');
+        const btnPlay  = document.getElementById('videoPlayBtn');
+        const btnClose = document.getElementById('videoModalClose');
+        if (!modal || !iframe || !btnPlay) return;
+
+        const openModal = () => {
+            iframe.src = YT_EMBED;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            btnClose && btnClose.focus();
+        };
+        const closeModal = () => {
+            modal.style.display = 'none';
+            iframe.src = '';
+            document.body.style.overflow = '';
+        };
+
+        btnPlay.addEventListener('click', openModal);
+        btnClose && btnClose.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.style.display === 'flex') closeModal(); });
+
+        // Hover: agranda el botón play
+        const overlay = btnPlay.querySelector('.video-overlay');
+        const playCircle = overlay && overlay.querySelector('span');
+        if (playCircle) {
+            btnPlay.addEventListener('mouseenter', () => { playCircle.style.transform = 'scale(1.12)'; playCircle.style.boxShadow = '0 12px 40px rgba(0,0,0,0.4)'; });
+            btnPlay.addEventListener('mouseleave', () => { playCircle.style.transform = ''; playCircle.style.boxShadow = ''; });
+        }
+    })();
+</script>
+}

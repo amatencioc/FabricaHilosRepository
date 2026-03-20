@@ -1,0 +1,185 @@
+@model LaColonial.Models.Noticia
+@{
+    ViewData["Title"] = Model.Titulo + " | Noticias";
+    ViewData["ActivePage"] = "Noticias";
+    ViewData["Description"] = Model.Extracto;
+}
+
+<!-- HERO DETALLE -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    overflow:hidden;"
+    aria-label="Encabezado noticia">
+    <div style="position:absolute;inset:0;background-image:url('/images/noticias/@Model.Imagen');background-size:cover;background-position:center;opacity:0.18;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <a href="/noticias" style="display:inline-flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:var(--font-size-sm);margin-bottom:var(--spacing-md);text-decoration:none;transition:color var(--transition-fast);"
+           onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.75)'">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver a Noticias
+        </a>
+        <div class="section-divider"></div>
+        <span style="display:inline-block;background:var(--color-secondary);color:var(--color-primary-dark);font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:4px 14px;border-radius:999px;margin-bottom:var(--spacing-sm);">
+            @Model.Categoria
+        </span>
+        <h1 style="font-size:clamp(1.6rem,4vw,2.8rem);font-weight:700;color:var(--color-white);line-height:1.2;margin-bottom:var(--spacing-sm);max-width:800px;">
+            @Model.Titulo
+        </h1>
+        <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.70);font-size:var(--font-size-sm);">
+            <i class="fa-regular fa-calendar-days" aria-hidden="true"></i>
+            <time datetime="@Model.FechaHtml">@Model.Fecha</time>
+        </div>
+    </div>
+</section>
+
+<!-- CONTENIDO DETALLE -->
+<section class="section-pad" aria-label="Contenido de la noticia">
+    <div class="container">
+        <div style="display:grid;grid-template-columns:1fr;gap:var(--spacing-xl);" class="detalle-grid">
+
+            <!-- COLUMNA PRINCIPAL -->
+            <article style="max-width:800px;" data-aos="fade-up">
+
+                <!-- Imagen principal -->
+                <div style="border-radius:var(--border-radius-xl);overflow:hidden;box-shadow:var(--shadow-xl);margin-bottom:var(--spacing-xl);">
+                    <img src="/images/noticias/@Model.Imagen"
+                         alt="@Model.Titulo"
+                         style="width:100%;height:auto;display:block;max-height:480px;object-fit:cover;" />
+                </div>
+
+                <!-- Extracto destacado -->
+                <blockquote style="
+                    border-left:4px solid var(--color-secondary);
+                    padding:var(--spacing-md) var(--spacing-lg);
+                    background:var(--color-bg-light);
+                    border-radius:0 var(--border-radius-lg) var(--border-radius-lg) 0;
+                    margin-bottom:var(--spacing-xl);">
+                    <p style="font-size:var(--font-size-md);color:var(--color-text-medium);line-height:1.8;font-style:italic;margin:0;">
+                        @Model.Extracto
+                    </p>
+                </blockquote>
+
+                <!-- Cuerpo del artículo -->
+                <div class="noticia-contenido">
+                    @Html.Raw(Model.Contenido)
+                </div>
+
+                <!-- Compartir -->
+                <div style="margin-top:var(--spacing-xl);padding-top:var(--spacing-md);border-top:1px solid var(--color-border);display:flex;align-items:center;gap:var(--spacing-md);flex-wrap:wrap;">
+                    <span style="font-size:var(--font-size-sm);font-weight:600;color:var(--color-text-medium);text-transform:uppercase;letter-spacing:1px;">Compartir:</span>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=https://colonial.com.pe/noticias/@Model.Slug"
+                       target="_blank" rel="noopener noreferrer"
+                       style="width:38px;height:38px;border-radius:50%;background:var(--color-primary);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:opacity var(--transition-fast);"
+                       aria-label="Compartir en Facebook"
+                       onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                        <i class="fa-brands fa-facebook-f" aria-hidden="true"></i>
+                    </a>
+                    <a href="https://twitter.com/intent/tweet?url=https://colonial.com.pe/noticias/@Model.Slug&text=@Uri.EscapeDataString(Model.Titulo)"
+                       target="_blank" rel="noopener noreferrer"
+                       style="width:38px;height:38px;border-radius:50%;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:opacity var(--transition-fast);"
+                       aria-label="Compartir en X (Twitter)"
+                       onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                        <i class="fa-brands fa-x-twitter" aria-hidden="true"></i>
+                    </a>
+                    <a href="https://www.linkedin.com/sharing/share-offsite/?url=https://colonial.com.pe/noticias/@Model.Slug"
+                       target="_blank" rel="noopener noreferrer"
+                       style="width:38px;height:38px;border-radius:50%;background:#0A66C2;color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:opacity var(--transition-fast);"
+                       aria-label="Compartir en LinkedIn"
+                       onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                        <i class="fa-brands fa-linkedin-in" aria-hidden="true"></i>
+                    </a>
+                </div>
+            </article>
+
+            <!-- SIDEBAR -->
+            <aside aria-label="Últimas noticias">
+                <div style="background:var(--color-bg-light);border-radius:var(--border-radius-xl);padding:var(--spacing-lg);position:sticky;top:calc(var(--navbar-height-desktop) + 20px);">
+                    <div class="section-divider"></div>
+                    <h2 style="font-size:var(--font-size-md);font-weight:700;color:var(--color-primary);margin-bottom:var(--spacing-md);">Últimas noticias</h2>
+                    <div style="display:flex;flex-direction:column;gap:var(--spacing-sm);">
+                        @foreach (var n in LaColonial.Controllers.HomeController.ObtenerNoticias().Where(n => n.Slug != Model.Slug).Take(4))
+                        {
+                            <a href="/noticias/@n.Slug" style="display:flex;gap:var(--spacing-xs);text-decoration:none;align-items:center;padding:var(--spacing-xs);border-radius:var(--border-radius-md);transition:background var(--transition-fast);"
+                               onmouseover="this.style.background='var(--color-bg-medium)'" onmouseout="this.style.background='transparent'">
+                                <img src="/images/noticias/@n.Imagen" alt="@n.Titulo"
+                                     style="width:64px;height:48px;object-fit:cover;border-radius:var(--border-radius-sm);flex-shrink:0;" loading="lazy" />
+                                <div>
+                                    <span style="font-size:var(--font-size-xs);color:var(--color-primary-light);font-weight:600;display:block;">@n.Categoria</span>
+                                    <span style="font-size:var(--font-size-sm);color:var(--color-text-dark);font-weight:600;line-height:1.3;display:block;">@n.Titulo</span>
+                                    <span style="font-size:var(--font-size-xs);color:var(--color-text-light);">@n.Fecha</span>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                    <div style="margin-top:var(--spacing-md);padding-top:var(--spacing-md);border-top:1px solid var(--color-border);">
+                        <a href="/noticias" class="btn-colonial btn-primary-col" style="width:100%;justify-content:center;">
+                            <i class="fa-solid fa-newspaper" aria-hidden="true"></i> Ver todas las noticias
+                        </a>
+                    </div>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+</section>
+
+<!-- CTA CONTACTO -->
+<section style="padding:var(--spacing-2xl) 0;background:var(--gradient-primary);text-align:center;" aria-labelledby="cta-noticia-heading">
+    <div class="container" data-aos="fade-up">
+        <h2 id="cta-noticia-heading" style="font-size:clamp(1.3rem,3vw,2rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            ¿Desea más información?
+        </h2>
+        <p style="color:rgba(255,255,255,0.85);max-width:480px;margin:0 auto var(--spacing-lg);">
+            Contáctenos y un asesor le atenderá personalmente
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+            <a href="/contacto" class="btn-colonial btn-primary-col">
+                <i class="fa-solid fa-envelope" aria-hidden="true"></i> Contáctenos
+            </a>
+            <a href="/productos" class="btn-colonial btn-secondary-col">
+                <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Ver productos
+            </a>
+        </div>
+    </div>
+</section>
+
+@section Styles {
+<style>
+/* --- NOTICIA DETALLE --- */
+.noticia-contenido p {
+    color: var(--color-text-medium);
+    line-height: 1.85;
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-base);
+}
+.noticia-contenido h3 {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-primary);
+    margin: var(--spacing-lg) 0 var(--spacing-sm);
+}
+.noticia-contenido ul {
+    padding-left: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+.noticia-contenido ul li {
+    color: var(--color-text-medium);
+    line-height: 1.8;
+    margin-bottom: 6px;
+    font-size: var(--font-size-base);
+}
+.noticia-contenido a {
+    color: var(--color-primary);
+    text-decoration: underline;
+}
+.noticia-contenido strong { color: var(--color-primary-dark); }
+
+@@media (min-width: 900px) {
+    .detalle-grid {
+        grid-template-columns: 1fr 320px !important;
+        align-items: start;
+    }
+}
+</style>
+}

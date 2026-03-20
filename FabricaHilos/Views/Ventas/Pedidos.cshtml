@@ -1,0 +1,100 @@
+@model IEnumerable<FabricaHilos.Models.Ventas.Pedido>
+@using FabricaHilos.Models.Ventas
+
+@{
+    ViewData["Title"] = "Pedidos";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Pedidos</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-cart3 me-2"></i>Pedidos</h4>
+    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+    {
+        <a asp-action="CrearPedido" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo Pedido
+        </a>
+    }
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex gap-2 flex-wrap">
+            <input type="text" name="buscar" value="@ViewBag.Buscar" class="form-control form-control-sm" placeholder="Buscar por número o cliente..." style="max-width: 280px;" />
+            <select name="estado" class="form-select form-select-sm" style="max-width: 160px;">
+                <option value="">Todos los estados</option>
+                @foreach (var e in Enum.GetValues<EstadoPedido>())
+                {
+                    <option value="@e" selected="@(ViewBag.EstadoFiltro?.ToString() == e.ToString())">@e</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i> Filtrar</button>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>N° Pedido</th>
+                        <th>Cliente</th>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@item.NumeroPedido</td>
+                            <td>@(item.Cliente?.Nombre ?? "-")</td>
+                            <td>@item.Fecha.ToString("dd/MM/yyyy")</td>
+                            <td>@(item.Descripcion ?? "-")</td>
+                            <td>S/ @item.Total.ToString("N2")</td>
+                            <td>
+                                @{
+                                    var estadoClass = item.Estado switch
+                                    {
+                                        EstadoPedido.Pendiente => "bg-warning text-dark",
+                                        EstadoPedido.Entregado => "bg-success",
+                                        EstadoPedido.Cancelado => "bg-danger",
+                                        _ => "bg-secondary"
+                                    };
+                                }
+                                <span class="badge @estadoClass">@item.Estado</span>
+                            </td>
+                            @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                            {
+                                <td>
+                                    <a asp-action="EditarPedido" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary btn-accion">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </td>
+                            }
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>No hay pedidos registrados.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

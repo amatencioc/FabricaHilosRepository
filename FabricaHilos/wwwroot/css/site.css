@@ -1,0 +1,157 @@
+/* =============================================
+   Fábrica de Hilos - Estilos Corporativos
+   ============================================= */
+
+@import url('variables.css');
+
+:root {
+    /* Aliases de compatibilidad — usar las variables canónicas de variables.css */
+    --color-corporativo:       var(--color-primary);
+    --color-corporativo-claro: var(--color-primary-light);
+    --color-acento:            var(--color-secondary);
+    --color-sidebar-ancho:     var(--sidebar-width);
+}
+
+/* Layout principal */
+#wrapper {
+    min-height: 100vh;
+}
+
+/* Sidebar */
+#sidebar {
+    width: var(--color-sidebar-ancho);
+    min-height: 100vh;
+    background-color: var(--color-corporativo) !important;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.bg-corporate {
+    background-color: var(--color-corporativo) !important;
+}
+
+.sidebar-menu {
+    padding-top: 0.5rem;
+}
+
+.sidebar-section {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--sidebar-section-text);
+    padding: 0.8rem 1rem 0.2rem;
+    text-transform: uppercase;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    border-radius: 6px;
+    margin: 1px 0.5rem;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.sidebar-link:hover {
+    background-color: var(--sidebar-hover-bg);
+    color: var(--color-white);
+}
+
+.sidebar-link.active {
+    background-color: var(--sidebar-active);
+    color: var(--color-white);
+    font-weight: 600;
+}
+
+.sidebar-sublink {
+    font-size: 0.82rem;
+    padding: 0.4rem 0.8rem;
+    color: var(--sidebar-sublink-text);
+}
+
+.sidebar-sublink:hover {
+    color: var(--color-white);
+    background-color: var(--sidebar-sublink-hover-bg);
+}
+
+/* Header */
+header {
+    min-height: 55px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+/* Contenido */
+#content {
+    min-height: 100vh;
+    background-color: var(--color-bg-light);
+}
+
+/* Tarjetas del dashboard */
+.card-dashboard {
+    border: none;
+    border-radius: 10px;
+    box-shadow: var(--shadow-md);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-dashboard:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Encabezados de tabla */
+.table-corporate thead th {
+    background-color: var(--color-corporativo);
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: none;
+}
+
+.table-corporate tbody tr:hover {
+    background-color: rgba(27, 77, 62, 0.06);
+}
+
+/* Página de Login */
+.login-page {
+    min-height: 100vh;
+    background: var(--gradient-primary);
+}
+
+.login-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: var(--shadow-xl);
+}
+
+/* Alertas de stock */
+.badge-stock-bajo {
+    background-color: var(--color-accent);
+}
+
+/* Botones de acción */
+.btn-accion {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+/* Título de sección */
+.section-title {
+    color: var(--color-corporativo);
+    font-weight: 700;
+    border-bottom: 3px solid var(--color-acento);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Sidebar colapsado - funciona en cualquier tamaño de pantalla */
+#sidebar.sidebar-collapsed {
+    width: 0;
+    overflow: hidden;
+}

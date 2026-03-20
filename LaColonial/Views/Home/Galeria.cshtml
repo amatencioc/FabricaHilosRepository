@@ -1,0 +1,117 @@
+@{
+    ViewData["Title"] = "Galería";
+    ViewData["ActivePage"] = "Galeria";
+    ViewData["Description"] = "Galería de imágenes de La Colonial Fábrica de Hilos S.A. — Instalaciones, productos y procesos de fabricación.";
+}
+
+<!-- HERO GALERÍA -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;overflow:hidden;"
+    aria-labelledby="galeria-hero-heading">
+    <div class="container" style="position:relative;z-index:1;">
+        <div class="section-divider centered"></div>
+        <h1 id="galeria-hero-heading" style="font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            Galería
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:560px;margin:0 auto;font-size:var(--font-size-md);">
+            Conozca nuestras instalaciones, productos y procesos de fabricación
+        </p>
+    </div>
+</section>
+
+<!-- FILTROS -->
+<section class="section-pad" style="padding-bottom:var(--spacing-md);" aria-label="Filtros de galería">
+    <div class="container">
+        <div style="display:flex;gap:var(--spacing-xs);flex-wrap:wrap;justify-content:center;" role="group" aria-label="Filtrar por categoría">
+            <button class="btn-colonial btn-primary-col galeria-filter active" data-filter="all" style="padding:8px 20px;font-size:var(--font-size-sm);">
+                Todos
+            </button>
+            <button class="btn-colonial btn-outline-gold galeria-filter" data-filter="productos" style="padding:8px 20px;font-size:var(--font-size-sm);">
+                Productos
+            </button>
+            <button class="btn-colonial btn-outline-gold galeria-filter" data-filter="planta" style="padding:8px 20px;font-size:var(--font-size-sm);">
+                Planta
+            </button>
+            <button class="btn-colonial btn-outline-gold galeria-filter" data-filter="materia" style="padding:8px 20px;font-size:var(--font-size-sm);">
+                Materia Prima
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- GRID GALERÍA -->
+<section class="section-pad" style="padding-top:var(--spacing-md);" aria-label="Imágenes de galería">
+    <div class="container">
+        <div id="galeriaGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+
+            @{
+                var items = new[] {
+                    new { Img = "hilados-viscosa.jpg",                Alt = "Hilados de viscosa",              Cat = "productos" },
+                    new { Img = "materia-prima-hilos.jpg",            Alt = "Materia prima para hilos",         Cat = "materia"   },
+                    new { Img = "algodon.jpg",                        Alt = "Algodón — materia prima",          Cat = "materia"   },
+                    new { Img = "colonial-hilos-noticias-calidad.jpg",Alt = "Control de calidad",               Cat = "planta"    },
+                    new { Img = "pict.jpg",                           Alt = "Proceso de producción",            Cat = "planta"    },
+                    new { Img = "ingreso_pgs.jpg",                    Alt = "Instalaciones La Colonial",        Cat = "planta"    },
+                    new { Img = "S8C8472.jpg",                        Alt = "Instalaciones industriales",       Cat = "planta"    },
+                    new { Img = "img_7641_2.jpg",                     Alt = "Vista de planta La Colonial",      Cat = "planta"    },
+                    new { Img = "galeria_1.jpg",                      Alt = "Galería de productos",             Cat = "productos" },
+                    new { Img = "chompa.jpg",                         Alt = "Prendas de tejido artesanal",      Cat = "productos" },
+                };
+            }
+
+            @foreach (var item in items)
+            {
+                <div class="galeria-item"
+                     data-cat="@item.Cat"
+                     data-lightbox="/images/galeria/@item.Img"
+                     data-alt="@item.Alt"
+                     role="button" tabindex="0"
+                     aria-label="Ampliar imagen: @item.Alt"
+                     data-aos="fade-up">
+                    <img src="~/images/galeria/@item.Img" alt="@item.Alt" loading="lazy" />
+                    <div class="galeria-overlay">
+                        <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+// Filtros de galería
+document.querySelectorAll('.galeria-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Actualizar botones activos
+        document.querySelectorAll('.galeria-filter').forEach(b => {
+            b.classList.remove('btn-primary-col', 'active');
+            b.classList.add('btn-outline-gold');
+        });
+        btn.classList.add('btn-primary-col', 'active');
+        btn.classList.remove('btn-outline-gold');
+
+        const filter = btn.dataset.filter;
+        document.querySelectorAll('#galeriaGrid .galeria-item').forEach(item => {
+            if (filter === 'all' || item.dataset.cat === filter) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Accesibilidad: activar lightbox con Enter/Space en items de galería
+document.querySelectorAll('.galeria-item[role="button"]').forEach(el => {
+    el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+});
+</script>
+}

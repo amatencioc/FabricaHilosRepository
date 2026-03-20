@@ -1,0 +1,97 @@
+@model IEnumerable<FabricaHilos.Models.Inventario.ProductoTerminado>
+
+@{
+    ViewData["Title"] = "Productos Terminados";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Inventario" asp-action="Index">Inventario</a></li>
+    <li class="breadcrumb-item active">Producto Terminado</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-boxes me-2"></i>Productos Terminados</h4>
+    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+    {
+        <a asp-action="CrearProductoTerminado" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo Producto
+        </a>
+    }
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex gap-2">
+            <input type="text" name="buscar" value="@ViewBag.Buscar" class="form-control form-control-sm" placeholder="Buscar por nombre o tipo..." style="max-width: 300px;" />
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+            @if (!string.IsNullOrEmpty(ViewBag.Buscar as string))
+            {
+                <a asp-action="ProductoTerminado" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Tipo</th>
+                        <th>Color</th>
+                        <th>Calibre</th>
+                        <th>Unidad</th>
+                        <th>Cantidad</th>
+                        <th>Precio Unitario</th>
+                        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@item.Nombre</td>
+                            <td>@item.Tipo</td>
+                            <td>@(item.Color ?? "-")</td>
+                            <td>@(item.Calibre ?? "-")</td>
+                            <td>@item.Unidad</td>
+                            <td>@item.Cantidad.ToString("N2")</td>
+                            <td>S/ @item.PrecioUnitario.ToString("N2")</td>
+                            @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                            {
+                                <td>
+                                    <a asp-action="EditarProductoTerminado" asp-route-id="@item.Id" class="btn btn-sm btn-outline-primary btn-accion">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia"))
+                                    {
+                                        <form method="post" asp-action="EliminarProductoTerminado" asp-route-id="@item.Id" class="d-inline"
+                                              onsubmit="return confirm('¿Eliminar este producto?')">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-sm btn-outline-danger btn-accion">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>No hay productos terminados registrados.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

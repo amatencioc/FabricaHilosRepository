@@ -1,0 +1,802 @@
+﻿@model FabricaHilos.Models.Produccion.OrdenProduccion
+@using FabricaHilos.Models.Produccion
+
+@{
+    ViewData["Title"] = "Editar Preparatoria";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index", "RegistroPreparatoria"))">Registro de Preparatoria</a></li>
+    <li class="breadcrumb-item active">Editar</li>
+}
+
+<div class="d-flex align-items-center mb-4" style="border-bottom: 3px solid var(--color-secondary); padding-bottom: 10px;">
+    <i class="bi bi-pencil-square fs-3 me-3"></i>
+    <h4 class="mb-0 fw-bold">Editar Preparatoria</h4>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-5">
+                <form asp-action="Editar" method="post" id="formEditar">
+                    @Html.AntiForgeryToken()
+                    <input asp-for="Id" type="hidden" />
+                    <input type="hidden" name="returnUrl" value="@(ViewBag.ReturnUrl as string)" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                    <!-- Información de la Preparatoria -->
+                    <div class="row mb-4 pb-3 border-bottom">
+                        <div class="col-md-4">
+                            <strong>Receta:</strong> @(Model.CodigoReceta ?? "-")
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Lote:</strong> @(Model.Lote ?? "-")
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Material:</strong> @Model.DescripcionMaterial
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Fila 1: Receta y Lote -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Receta <span class="text-muted small">(opcional)</span></label>
+                            <div class="input-group">
+                                <input asp-for="CodigoReceta" id="recetaInput" class="form-control" placeholder="Ingrese el código de receta" autocomplete="off" autofocus />
+                                <button type="button" id="btnBuscarReceta" class="btn btn-outline-secondary" title="Buscar receta">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <span asp-validation-for="CodigoReceta" class="text-danger small"></span>
+                            <small id="recetaStatus" class="text-muted"></small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Lote <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input asp-for="Lote" id="loteInput" class="form-control" placeholder="Ingrese código de lote" autocomplete="off" />
+                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Lote" class="text-danger small"></span>
+                            <small id="loteStatus" class="text-muted"></small>
+                        </div>
+
+                        <!-- Fila 2: Material y Fecha de Inicio -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Material <span class="text-danger">*</span></label>
+                            <input asp-for="DescripcionMaterial" id="materialInput" class="form-control" placeholder="Se completará al buscar receta o lote" readonly style="background-color: var(--color-bg-light);" />
+                            <span asp-validation-for="DescripcionMaterial" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Fecha de Inicio <span class="text-danger">*</span></label>
+                            <input id="FechaInicio" name="FechaInicio" type="datetime-local" step="1" class="form-control"
+                                   value="@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm:ss")" />
+                            <span asp-validation-for="FechaInicio" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Fila 3: Tipo de Máquina y Máquina -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tipo de Máquina <span class="text-danger">*</span></label>
+                            <select asp-for="CodigoMaquina" id="codigoMaquinaSelect" class="form-select" disabled style="background-color: var(--color-bg-light);">
+                                <option value="">Seleccione tipo de máquina</option>
+                                @if (ViewBag.TiposMaquinas != null)
+                                {
+                                    @foreach (var maq in ViewBag.TiposMaquinas)
+                                    {
+                                        string tp = maq.TipoMaquina;
+                                        if (tp == "M" || tp == "P" || tp == "E" || tp == "L")
+                                        {
+                                            <option value="@maq.TipoMaquina">@maq.TextoCompleto</option>
+                                        }
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" name="CodigoMaquina" value="@Model.CodigoMaquina" />
+                            <span asp-validation-for="CodigoMaquina" class="text-danger small"></span>
+                            <div id="alertaTipoNoImplementado" class="alert alert-warning mt-2 py-2 small" style="display:none;">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i> Tipo de máquina aún no implementada.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Máquina <span class="text-danger">*</span></label>
+                            <select asp-for="Maquina" id="maquinaSelect" class="form-select">
+                                <option value="">Seleccione una máquina</option>
+                            </select>
+                            <span asp-validation-for="Maquina" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Fila 4: Título y Operario -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Título <span class="text-danger">*</span></label>
+                            <select asp-for="Titulo" class="form-select">
+                                <option value="">Seleccione un título</option>
+                                @if (ViewBag.Titulos != null)
+                                {
+                                    @foreach (var titulo in ViewBag.Titulos)
+                                    {
+                                        <option value="@titulo.Titulo">@titulo.TextoCompleto</option>
+                                    }
+                                }
+                            </select>
+                            <span asp-validation-for="Titulo" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Operario <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" id="operarioInput" class="form-control" placeholder="Ingrese código o nombre"
+                                       value="@(ViewBag.NombreOperario != null && !string.IsNullOrEmpty((string)ViewBag.NombreOperario) ? ViewBag.NombreOperario + " (" + Model.EmpleadoId + ")" : Model.EmpleadoId)" autocomplete="off" />
+                                <button type="button" id="btnBuscarOperario" class="btn btn-outline-secondary" title="Buscar operario">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <input asp-for="EmpleadoId" id="empleadoIdHidden" type="hidden" />
+                            <span asp-validation-for="EmpleadoId" class="text-danger small"></span>
+                            <small id="operarioStatus" class="text-muted"></small>
+                        </div>
+
+                        <!-- Fila 5: Turno y Paso Manuar -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Turno <span class="text-danger">*</span></label>
+                            <select asp-for="Turno" class="form-select">
+                                <option value="">Seleccione un turno</option>
+                                <option value="1">1er Turno</option>
+                                <option value="2">2do Turno</option>
+                                <option value="3">3er Turno</option>
+                                <option value="4">12 Hrs Dia</option>
+                                <option value="5">12 Hrs Noche</option>
+                            </select>
+                            <span asp-validation-for="Turno" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6" id="grupoPasoManuar">
+                            <label class="form-label fw-semibold">Paso Manuar <span class="text-danger">*</span></label>
+                            <select asp-for="PasoManuar" class="form-select">
+                                <option value="">Seleccione un paso</option>
+                                <option value="1">1ER</option>
+                                <option value="2">2DO</option>
+                                <option value="3">3ER</option>
+                                <option value="PRE">PRE</option>
+                                <option value="POST">POST</option>
+                            </select>
+                            <span asp-validation-for="PasoManuar" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Velocidad -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Velocidad <span class="text-danger">*</span></label>
+                            <input asp-for="Velocidad" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese la velocidad" required />
+                            <span asp-validation-for="Velocidad" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Fila 6: Contador Inicial y Husos Inactivas (Pabileras) -->
+                        <div class="col-md-6" id="grupoContadorInicial">
+                            <label class="form-label fw-semibold">Contador Inicial</label>
+                            <input asp-for="ContadorInicial" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese el contador inicial" />
+                            <span asp-validation-for="ContadorInicial" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6" id="grupoHusosInactivos">
+                            <label class="form-label fw-semibold">Husos Inactivas (HI)</label>
+                            <input asp-for="HorasInactivas" id="husosInactivasInput" class="form-control" type="number" step="1" min="0" placeholder="Ingrese los husos inactivos" />
+                            <span asp-validation-for="HorasInactivas" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="button" id="btnGuardar" class="btn btn-primary px-4">
+                            <i class="bi bi-save me-2"></i>Guardar
+                        </button>
+                        <a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index"))" class="btn btn-outline-secondary px-4">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación -->
+<div class="modal fade" id="modalConfirmarGuardar" tabindex="-1" aria-labelledby="modalConfirmarGuardarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmarGuardarLabel">Confirmar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro que desea guardar el registro?
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelarModal" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnAceptarModal" class="btn btn-primary">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // jQuery Validate no soporta step en datetime-local → omitir esa regla para ese tipo
+        if ($.validator && $.validator.methods && $.validator.methods.step) {
+            var _origStep = $.validator.methods.step;
+            $.validator.methods.step = function (value, element, param) {
+                if (element.type === 'datetime-local') return true;
+                return _origStep.call(this, value, element, param);
+            };
+        }
+    </script>
+    <script>
+        // Función para formatear la fecha en formato datetime-local con segundos (YYYY-MM-DDTHH:mm:ss)
+        function formatearFechaHora(fecha) {
+            const año = fecha.getFullYear();
+            const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+            const dia = String(fecha.getDate()).padStart(2, '0');
+            const horas = String(fecha.getHours()).padStart(2, '0');
+            const minutos = String(fecha.getMinutes()).padStart(2, '0');
+            const segundos = String(fecha.getSeconds()).padStart(2, '0');
+            return `${año}-${mes}-${dia}T${horas}:${minutos}:${segundos}`;
+        }
+
+        // === Función para buscar receta ===
+        async function buscarReceta() {
+            const recetaInput = document.getElementById('recetaInput');
+            const loteInput = document.getElementById('loteInput');
+            const materialInput = document.getElementById('materialInput');
+            const statusElement = document.getElementById('recetaStatus');
+            const btnBuscar = document.getElementById('btnBuscarReceta');
+            const codigo = recetaInput.value.trim();
+
+            if (!codigo) {
+                statusElement.textContent = 'Ingrese un código';
+                statusElement.className = 'text-danger small';
+                return;
+            }
+
+            btnBuscar.disabled = true;
+            btnBuscar.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            statusElement.textContent = 'Buscando...';
+            statusElement.className = 'text-info small';
+
+            try {
+                const response = await fetch(`@Url.Action("BuscarReceta", "RegistroPreparatoria")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    recetaInput.value = result.data.numero;
+                    loteInput.value = result.data.lote;
+                    materialInput.value = result.data.material;
+                    statusElement.textContent = '\u2713 Receta encontrada';
+                    statusElement.className = 'text-success small';
+                    document.getElementById('loteStatus').textContent = '';
+                    loteInput.style.backgroundColor = 'var(--color-success-light)';
+                    materialInput.style.backgroundColor = 'var(--color-success-light)';
+                    setTimeout(() => {
+                        loteInput.style.backgroundColor = 'var(--color-bg-light)';
+                        materialInput.style.backgroundColor = 'var(--color-bg-light)';
+                    }, 2000);
+                } else if (result.success && result.multiple) {
+                    mostrarListaRecetas(result.items);
+                    statusElement.textContent = result.items.length + ' recetas encontradas. Seleccione una.';
+                    statusElement.className = 'text-info small';
+                } else {
+                    statusElement.textContent = '\u2717 ' + (result.message || 'No se encontró la receta');
+                    statusElement.className = 'text-warning small';
+                    loteInput.value = '';
+                    materialInput.value = '';
+                }
+            } catch (error) {
+                console.error('Error al buscar receta:', error);
+                statusElement.textContent = '\u2717 Error al buscar la receta';
+                statusElement.className = 'text-danger small';
+            } finally {
+                btnBuscar.disabled = false;
+                btnBuscar.innerHTML = '<i class="bi bi-search"></i>';
+            }
+        }
+
+        // === Helpers para selección de receta cuando hay múltiples resultados ===
+        function mostrarListaRecetas(items) {
+            let listaEl = document.getElementById('recetaDropdownList');
+            if (listaEl) listaEl.remove();
+
+            listaEl = document.createElement('ul');
+            listaEl.id = 'recetaDropdownList';
+            listaEl.className = 'list-group mt-1 shadow-sm';
+            listaEl.style.maxHeight = '200px';
+            listaEl.style.overflowY = 'auto';
+            listaEl.style.cursor = 'pointer';
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.numero + (item.material ? ' \u2014 ' + item.material : '');
+                li.addEventListener('click', function () {
+                    seleccionarReceta(item);
+                });
+                listaEl.appendChild(li);
+            });
+
+            const inputGroup = document.getElementById('recetaInput').closest('.input-group');
+            inputGroup.insertAdjacentElement('afterend', listaEl);
+
+            document.addEventListener('click', function cerrarLista(e) {
+                const lista = document.getElementById('recetaDropdownList');
+                if (lista && !lista.contains(e.target) && e.target !== document.getElementById('recetaInput')) {
+                    lista.remove();
+                    document.removeEventListener('click', cerrarLista);
+                }
+            });
+        }
+
+        function seleccionarReceta(item) {
+            const listaEl = document.getElementById('recetaDropdownList');
+            if (listaEl) listaEl.remove();
+
+            const recetaInput = document.getElementById('recetaInput');
+            const loteInput = document.getElementById('loteInput');
+            const materialInput = document.getElementById('materialInput');
+            const statusElement = document.getElementById('recetaStatus');
+
+            recetaInput.value = item.numero;
+            loteInput.value = item.lote;
+            materialInput.value = item.material;
+
+            statusElement.textContent = '\u2713 Receta seleccionada';
+            statusElement.className = 'text-success small';
+            document.getElementById('loteStatus').textContent = '';
+
+            loteInput.style.backgroundColor = 'var(--color-success-light)';
+            materialInput.style.backgroundColor = 'var(--color-success-light)';
+            setTimeout(() => {
+                loteInput.style.backgroundColor = 'var(--color-bg-light)';
+                materialInput.style.backgroundColor = 'var(--color-bg-light)';
+            }, 2000);
+        }
+
+        // === Helpers para selección de lote cuando hay múltiples resultados ===
+        function mostrarListaLotes(items) {
+            let listaEl = document.getElementById('loteDropdownList');
+            if (listaEl) listaEl.remove();
+
+            listaEl = document.createElement('ul');
+            listaEl.id = 'loteDropdownList';
+            listaEl.className = 'list-group mt-1 shadow-sm';
+            listaEl.style.maxHeight = '200px';
+            listaEl.style.overflowY = 'auto';
+            listaEl.style.cursor = 'pointer';
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.lote + (item.material ? ' \u2014 ' + item.material : '');
+                li.addEventListener('click', function () {
+                    seleccionarLote(item);
+                });
+                listaEl.appendChild(li);
+            });
+
+            const inputGroup = document.getElementById('loteInput').closest('.input-group');
+            inputGroup.insertAdjacentElement('afterend', listaEl);
+
+            document.addEventListener('click', function cerrarLista(e) {
+                const lista = document.getElementById('loteDropdownList');
+                if (lista && !lista.contains(e.target) && e.target !== document.getElementById('loteInput')) {
+                    lista.remove();
+                    document.removeEventListener('click', cerrarLista);
+                }
+            });
+        }
+
+        function seleccionarLote(item) {
+            const listaEl = document.getElementById('loteDropdownList');
+            if (listaEl) listaEl.remove();
+
+            const loteInput = document.getElementById('loteInput');
+            const recetaInput = document.getElementById('recetaInput');
+            const materialInput = document.getElementById('materialInput');
+            const statusElement = document.getElementById('loteStatus');
+
+            loteInput.value = item.lote;
+            recetaInput.value = '';
+            materialInput.value = item.material;
+
+            statusElement.textContent = '\u2713 Lote seleccionado';
+            statusElement.className = 'text-success small';
+            document.getElementById('recetaStatus').textContent = '';
+
+            materialInput.style.backgroundColor = 'var(--color-success-light)';
+            setTimeout(() => { materialInput.style.backgroundColor = 'var(--color-bg-light)'; }, 2000);
+        }
+
+        // === Función para buscar lote ===
+        async function buscarLote() {
+            const loteInput = document.getElementById('loteInput');
+            const recetaInput = document.getElementById('recetaInput');
+            const materialInput = document.getElementById('materialInput');
+            const statusElement = document.getElementById('loteStatus');
+            const btnBuscar = document.getElementById('btnBuscarLote');
+            const codigo = loteInput.value.trim();
+
+            if (!codigo) {
+                statusElement.textContent = 'Ingrese un código';
+                statusElement.className = 'text-danger small';
+                return;
+            }
+
+            btnBuscar.disabled = true;
+            btnBuscar.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            statusElement.textContent = 'Buscando...';
+            statusElement.className = 'text-info small';
+
+            try {
+                const response = await fetch(`@Url.Action("BuscarLote", "RegistroPreparatoria")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    loteInput.value = result.data.lote;
+                    recetaInput.value = '';
+                    materialInput.value = result.data.material;
+                    statusElement.textContent = '\u2713 Lote encontrado';
+                    statusElement.className = 'text-success small';
+                    document.getElementById('recetaStatus').textContent = '';
+                    materialInput.style.backgroundColor = 'var(--color-success-light)';
+                    setTimeout(() => {
+                        materialInput.style.backgroundColor = 'var(--color-bg-light)';
+                    }, 2000);
+                } else if (result.success && result.multiple) {
+                    mostrarListaLotes(result.items);
+                    statusElement.textContent = result.items.length + ' lotes encontrados. Seleccione uno.';
+                    statusElement.className = 'text-info small';
+                } else {
+                    statusElement.textContent = '\u2717 ' + (result.message || 'No se encontró el lote');
+                    statusElement.className = 'text-warning small';
+                }
+            } catch (error) {
+                console.error('Error al buscar lote:', error);
+                statusElement.textContent = '\u2717 Error al buscar el lote';
+                statusElement.className = 'text-danger small';
+            } finally {
+                btnBuscar.disabled = false;
+                btnBuscar.innerHTML = '<i class="bi bi-search"></i>';
+            }
+        }
+
+        // === Función para buscar operario ===
+        async function buscarOperario() {
+            const operarioInput  = document.getElementById('operarioInput');
+            const hiddenInput    = document.getElementById('empleadoIdHidden');
+            const statusElement  = document.getElementById('operarioStatus');
+            const btnBuscar      = document.getElementById('btnBuscarOperario');
+            const codigo = operarioInput.value.trim();
+            if (!codigo) {
+                statusElement.textContent = 'Ingrese un código o nombre';
+                statusElement.className = 'text-danger small';
+                return;
+            }
+            btnBuscar.disabled = true;
+            btnBuscar.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            statusElement.textContent = 'Buscando...';
+            statusElement.className = 'text-info small';
+            try {
+                const response = await fetch(`@Url.Action("BuscarOperario", "RegistroPreparatoria")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await response.json();
+                if (result.success && result.items && result.items.length === 1) {
+                    seleccionarOperario(result.items[0]);
+                } else if (result.success && result.items && result.items.length > 1) {
+                    mostrarListaOperarios(result.items);
+                    statusElement.textContent = result.items.length + ' operarios encontrados. Seleccione uno.';
+                    statusElement.className = 'text-info small';
+                } else {
+                    statusElement.textContent = '✗ ' + (result.message || 'No se encontraron operarios');
+                    statusElement.className = 'text-warning small';
+                    hiddenInput.value = '';
+                }
+            } catch (error) {
+                statusElement.textContent = '✗ Error al buscar el operario';
+                statusElement.className = 'text-danger small';
+            } finally {
+                btnBuscar.disabled = false;
+                btnBuscar.innerHTML = '<i class="bi bi-search"></i>';
+            }
+        }
+
+        function mostrarListaOperarios(items) {
+            let listaEl = document.getElementById('operarioDropdownList');
+            if (listaEl) listaEl.remove();
+            listaEl = document.createElement('ul');
+            listaEl.id = 'operarioDropdownList';
+            listaEl.className = 'list-group mt-1 shadow-sm';
+            listaEl.style.maxHeight = '200px';
+            listaEl.style.overflowY = 'auto';
+            listaEl.style.cursor = 'pointer';
+            listaEl.style.position = 'relative';
+            listaEl.style.zIndex = '1000';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.codigo + ' — ' + item.nombre;
+                li.addEventListener('click', function () { seleccionarOperario(item); });
+                listaEl.appendChild(li);
+            });
+            const inputGroup = document.getElementById('operarioInput').closest('.input-group');
+            inputGroup.insertAdjacentElement('afterend', listaEl);
+            document.addEventListener('click', function cerrarLista(e) {
+                const lista = document.getElementById('operarioDropdownList');
+                if (lista && !lista.contains(e.target) && e.target !== document.getElementById('operarioInput')) {
+                    lista.remove();
+                    document.removeEventListener('click', cerrarLista);
+                }
+            });
+        }
+
+        function seleccionarOperario(item) {
+            const listaEl = document.getElementById('operarioDropdownList');
+            if (listaEl) listaEl.remove();
+            document.getElementById('operarioInput').value    = item.nombre + ' (' + item.codigo + ')';
+            document.getElementById('empleadoIdHidden').value = item.codigo;
+            const statusElement = document.getElementById('operarioStatus');
+            statusElement.textContent = '✓ Operario seleccionado';
+            statusElement.className = 'text-success small';
+        }
+
+        // === Validación: enteros con límite de dígitos ===
+        function enforceIntegerInput(el, maxDigits) {
+            const blockedKeys = ['.', ',', '-', '+', 'e', 'E'];
+            el.addEventListener('keydown', function(e) {
+                if (['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight',
+                     'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+                if (blockedKeys.includes(e.key)) { e.preventDefault(); return; }
+                const sel = this.selectionEnd - this.selectionStart;
+                const currentLen = this.value.replace(/\D/g, '').length;
+                if (sel === 0 && currentLen >= maxDigits && /^\d$/.test(e.key)) {
+                    e.preventDefault();
+                }
+            });
+            el.addEventListener('input', function() {
+                const val = this.value;
+                if (val === '') return;
+                const num = parseInt(val, 10);
+                if (isNaN(num) || num < 0) { this.value = ''; return; }
+                const str = String(num);
+                if (str.length > maxDigits) this.value = parseInt(str.slice(0, maxDigits), 10);
+            });
+            el.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                const digits = text.replace(/[^\d]/g, '').slice(0, maxDigits);
+                this.value = digits ? parseInt(digits, 10) : '';
+            });
+        }
+
+        // === Bloquear/desbloquear botón Guardar ===
+        function bloquearGuardar(bloquear) {
+            const btn = document.getElementById('btnGuardar');
+            if (!btn) return;
+            btn.disabled = bloquear;
+            btn.classList.toggle('btn-primary',  !bloquear);
+            btn.classList.toggle('btn-secondary', bloquear);
+        }
+
+        // Establecer fecha inicial al cargar la página (con la fecha actual del registro)
+        document.addEventListener('DOMContentLoaded', function() {
+            const campoFecha = document.getElementById('fechaInicio');
+            if (campoFecha && campoFecha.value) {
+                // Si ya tiene una fecha, mantenerla pero en formato datetime-local con segundos
+                const fechaExistente = new Date(campoFecha.value);
+                campoFecha.value = formatearFechaHora(fechaExistente);
+            }
+
+            // === Configurar carga dinámica de máquinas ===
+            const codigoMaquinaSelect = document.getElementById('codigoMaquinaSelect');
+            const maquinaSelect = document.getElementById('maquinaSelect');
+            const valorMaquinaActual = '@Model.Maquina';
+
+            // Función para cargar máquinas
+            async function cargarMaquinas(tipoMaquina, valorSeleccionado = null) {
+                // Limpiar select de máquinas
+                maquinaSelect.innerHTML = '<option value="">Seleccione una máquina</option>';
+                maquinaSelect.disabled = true;
+
+                if (!tipoMaquina) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`@Url.Action("ObtenerMaquinasPorTipo", "RegistroPreparatoria")?tipoMaquina=${encodeURIComponent(tipoMaquina)}`);
+                    const result = await response.json();
+
+                    if (result.success && result.data && result.data.length > 0) {
+                        result.data.forEach(maquina => {
+                            const option = document.createElement('option');
+                            option.value = maquina.codigo;
+                            option.textContent = maquina.textoCompleto;
+                            if (valorSeleccionado && maquina.codigo === valorSeleccionado) {
+                                option.selected = true;
+                            }
+                            maquinaSelect.appendChild(option);
+                        });
+                        maquinaSelect.disabled = false;
+                    } else {
+                        maquinaSelect.innerHTML = '<option value="">No hay máquinas disponibles</option>';
+                    }
+                } catch (error) {
+                    console.error('Error al cargar máquinas:', error);
+                    maquinaSelect.innerHTML = '<option value="">Error al cargar máquinas</option>';
+                }
+            }
+
+            // Forzar el CodigoMaquina del modelo y cargar sus máquinas
+            const codigoMaquinaActual = '@Model.CodigoMaquina';
+            codigoMaquinaSelect.value = codigoMaquinaActual;
+
+            // Aplicar visibilidad inicial de Paso Manuar y campos Pabileras
+            const grupoPasoManuar = document.getElementById('grupoPasoManuar');
+            grupoPasoManuar.style.display = (codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E') ? 'none' : '';
+            if (codigoMaquinaActual === 'E') grupoPasoManuar.querySelector('select').value = '';
+            document.getElementById('grupoContadorInicial').style.display = (codigoMaquinaActual === 'P') ? '' : 'none';
+            document.getElementById('grupoHusosInactivos').style.display  = (codigoMaquinaActual === 'P') ? '' : 'none';
+
+            // Mostrar alerta si el tipo actual no está implementado
+            const alertaTipoNI = document.getElementById('alertaTipoNoImplementado');
+            const tipoActualImpl = codigoMaquinaActual === 'M' || codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E' || codigoMaquinaActual === 'L';
+            const noImplInicial = !!(codigoMaquinaActual && !tipoActualImpl);
+            alertaTipoNI.style.display = noImplInicial ? '' : 'none';
+            bloquearGuardar(noImplInicial);
+
+            // Título visual fijo para PEINADORA (E)
+            const tituloSelInit = document.getElementById('Titulo');
+            if (codigoMaquinaActual === 'E' && tituloSelInit) {
+                tituloSelInit.style.pointerEvents = 'none';
+                tituloSelInit.style.backgroundColor = 'var(--color-bg-light)';
+                tituloSelInit.style.opacity = '0.65';
+            }
+
+            cargarMaquinas(codigoMaquinaActual, valorMaquinaActual);
+
+            // Configurar evento change
+            codigoMaquinaSelect.addEventListener('change', function() {
+                const tipo = this.value;
+                cargarMaquinas(tipo);
+
+                // Mostrar/ocultar Paso Manuar: ocultar para P y E
+                grupoPasoManuar.style.display = (tipo === 'P' || tipo === 'E') ? 'none' : '';
+                if (tipo !== 'M') grupoPasoManuar.querySelector('select').value = '';
+
+                // Mostrar/ocultar campos Pabileras (solo para tipo P)
+                const esPabilera = tipo === 'P';
+                document.getElementById('grupoContadorInicial').style.display = esPabilera ? '' : 'none';
+                document.getElementById('grupoHusosInactivos').style.display  = esPabilera ? '' : 'none';
+                if (!esPabilera) {
+                    document.querySelector('[name="ContadorInicial"]').value = '';
+                    document.querySelector('[name="HorasInactivas"]').value  = '';
+                }
+
+                // Título visual fijo para PEINADORA (E)
+                const tituloSelChg = document.getElementById('Titulo');
+                if (tituloSelChg) {
+                    if (tipo === 'E') {
+                        const op13 = Array.from(tituloSelChg.options).find(o => o.textContent.trim() === '.13');
+                        if (op13) tituloSelChg.value = op13.value;
+                        tituloSelChg.style.pointerEvents = 'none';
+                        tituloSelChg.style.backgroundColor = 'var(--color-bg-light)';
+                        tituloSelChg.style.opacity = '0.65';
+                    } else {
+                        tituloSelChg.style.pointerEvents = '';
+                        tituloSelChg.style.backgroundColor = '';
+                        tituloSelChg.style.opacity = '';
+                    }
+                }
+
+                // Bloquear formulario si el tipo no está implementado
+                const alertaNI = document.getElementById('alertaTipoNoImplementado');
+                const impl = tipo === 'M' || tipo === 'P' || tipo === 'E' || tipo === 'L';
+                const noImpl = !!(tipo && !impl);
+                alertaNI.style.display = noImpl ? '' : 'none';
+                bloquearGuardar(noImpl);
+            });
+
+            // === Configurar búsqueda de receta ===
+            const recetaInput = document.getElementById('recetaInput');
+            const btnBuscarReceta = document.getElementById('btnBuscarReceta');
+            btnBuscarReceta.addEventListener('click', buscarReceta);
+            recetaInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); buscarReceta(); }
+            });
+            recetaInput.addEventListener('input', function() {
+                document.getElementById('recetaStatus').textContent = '';
+                const listaEl = document.getElementById('recetaDropdownList');
+                if (listaEl) listaEl.remove();
+            });
+
+            // === Configurar búsqueda de lote ===
+            const loteInput = document.getElementById('loteInput');
+            const btnBuscarLote = document.getElementById('btnBuscarLote');
+            btnBuscarLote.addEventListener('click', buscarLote);
+            loteInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); buscarLote(); }
+            });
+            loteInput.addEventListener('input', function() {
+                document.getElementById('loteStatus').textContent = '';
+                const listaEl = document.getElementById('loteDropdownList');
+                if (listaEl) listaEl.remove();
+            });
+
+            // Validación: Husos Inactivas solo enteros, máx 4 dígitos
+            const husosInactivasInputEl = document.getElementById('husosInactivasInput');
+            if (husosInactivasInputEl) enforceIntegerInput(husosInactivasInputEl, 4);
+
+            // === Configurar búsqueda de operario ===
+            const operarioInput     = document.getElementById('operarioInput');
+            const btnBuscarOperario = document.getElementById('btnBuscarOperario');
+            btnBuscarOperario.addEventListener('click', buscarOperario);
+            operarioInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); buscarOperario(); }
+            });
+            operarioInput.addEventListener('input', function() {
+                document.getElementById('operarioStatus').textContent = '';
+                const listaEl = document.getElementById('operarioDropdownList');
+                if (listaEl) listaEl.remove();
+                document.getElementById('empleadoIdHidden').value = '';
+            });
+        });
+    </script>
+    <script>
+        // === Validación condicional según tipo de máquina ===
+        $(document).ready(function () {
+            function actualizarValidacionCampos(tipo) {
+                var $pasoManuar      = $('[name="PasoManuar"]');
+                var $contadorInicial = $('[name="ContadorInicial"]');
+                var $husosInactivas  = $('[name="HorasInactivas"]');
+
+                if (tipo === 'M') {
+                    $pasoManuar.rules('add', {
+                        required: true,
+                        messages: { required: 'El campo Paso Manuar es obligatorio.' }
+                    });
+                    try { $contadorInicial.rules('remove', 'required'); } catch (e) { }
+                    try { $husosInactivas.rules('remove', 'required'); } catch (e) { }
+                } else if (tipo === 'P') {
+                    try { $pasoManuar.rules('remove', 'required'); } catch (e) { }
+                    $contadorInicial.rules('add', {
+                        required: true,
+                        messages: { required: 'El campo Contador Inicial es obligatorio.' }
+                    });
+                    $husosInactivas.rules('add', {
+                        required: true,
+                        messages: { required: 'El campo Husos Inactivas (HI) es obligatorio.' }
+                    });
+                } else {
+                    try { $pasoManuar.rules('remove', 'required'); } catch (e) { }
+                    try { $contadorInicial.rules('remove', 'required'); } catch (e) { }
+                    try { $husosInactivas.rules('remove', 'required'); } catch (e) { }
+                }
+            }
+
+            // En Editar el select es fijo; aplicar según valor actual del select
+            actualizarValidacionCampos($('#codigoMaquinaSelect').val());
+        });
+    </script>
+    <script>
+        // === Modal de confirmación ===
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('btnGuardar').addEventListener('click', function () {
+                if ($('#formEditar').valid()) {
+                    var modal = new bootstrap.Modal(document.getElementById('modalConfirmarGuardar'));
+                    modal.show();
+                }
+            });
+
+            document.getElementById('modalConfirmarGuardar').addEventListener('shown.bs.modal', function () {
+                document.getElementById('btnCancelarModal').focus();
+            });
+
+            document.getElementById('btnAceptarModal').addEventListener('click', function () {
+                document.getElementById('formEditar').submit();
+            });
+
+            // Foco inicial en el primer campo
+            document.getElementById('recetaInput').focus();
+        });
+    </script>
+}

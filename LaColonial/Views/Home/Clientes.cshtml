@@ -1,0 +1,331 @@
+@{
+    ViewData["Title"] = "Clientes";
+    ViewData["ActivePage"] = "Clientes";
+    ViewData["Description"] = "Clientes y distribuidores de La Colonial Fábrica de Hilos S.A. — Confeccionistas y distribuidores de hilados e hilos de costura en Perú.";
+}
+
+<!-- HERO CLIENTES -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;overflow:hidden;"
+    aria-labelledby="clientes-hero-heading">
+    <div style="position:absolute;inset:0;background-image:url('/images/clientes/clientes.jpg');background-size:cover;background-position:center;opacity:0.12;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <div class="section-divider centered"></div>
+        <h1 id="clientes-hero-heading" style="font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            Nuestros Clientes
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:580px;margin:0 auto;font-size:var(--font-size-md);">
+            Empresas líderes de la industria textil peruana e internacional que confían en nuestra calidad
+        </p>
+    </div>
+</section>
+
+<!-- INTRODUCCIÓN -->
+<section class="section-pad" aria-label="Presentación de clientes">
+    <div class="container">
+        <div style="max-width:700px;margin:0 auto;text-align:center;">
+            <div class="section-divider centered"></div>
+            <h2 class="section-title" style="margin:0 auto var(--spacing-sm);">Confianza que se construye con calidad</h2>
+            <p style="color:var(--color-text-medium);line-height:1.8;font-size:var(--font-size-md);">
+                Más de 80 años de experiencia nos respaldan como el proveedor de hilados e hilos de mayor confianza para la industria textil peruana. Nuestra cartera de clientes incluye confeccionistas, importadoras y distribuidores en todo el país y el extranjero.
+            </p>
+        </div>
+
+        <!-- STATS CLIENTES -->
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:var(--spacing-md);margin-top:var(--spacing-xl);">
+            <div style="text-align:center;padding:var(--spacing-lg);background:var(--color-bg-light);border-radius:var(--border-radius-xl);" data-aos="fade-up" data-aos-delay="0">
+                <span style="font-size:2.5rem;font-weight:700;color:var(--color-secondary);display:block;" class="stat-number" data-counter="200" data-suffix="+">200+</span>
+                <span style="font-size:var(--font-size-xs);color:var(--color-text-medium);text-transform:uppercase;letter-spacing:1.5px;">Clientes activos</span>
+            </div>
+            <div style="text-align:center;padding:var(--spacing-lg);background:var(--color-bg-light);border-radius:var(--border-radius-xl);" data-aos="fade-up" data-aos-delay="100">
+                <span style="font-size:2.5rem;font-weight:700;color:var(--color-secondary);display:block;" class="stat-number" data-counter="20" data-suffix="+">20+</span>
+                <span style="font-size:var(--font-size-xs);color:var(--color-text-medium);text-transform:uppercase;letter-spacing:1.5px;">Países exportación</span>
+            </div>
+            <div style="text-align:center;padding:var(--spacing-lg);background:var(--color-bg-light);border-radius:var(--border-radius-xl);" data-aos="fade-up" data-aos-delay="200">
+                <span style="font-size:2.5rem;font-weight:700;color:var(--color-secondary);display:block;" class="stat-number" data-counter="80" data-suffix="+">80+</span>
+                <span style="font-size:var(--font-size-xs);color:var(--color-text-medium);text-transform:uppercase;letter-spacing:1.5px;">Años de trayectoria</span>
+            </div>
+            <div style="text-align:center;padding:var(--spacing-lg);background:var(--color-bg-light);border-radius:var(--border-radius-xl);" data-aos="fade-up" data-aos-delay="300">
+                <span style="font-size:2.5rem;font-weight:700;color:var(--color-secondary);display:block;" class="stat-number" data-counter="3" data-suffix="">3</span>
+                <span style="font-size:var(--font-size-xs);color:var(--color-text-medium);text-transform:uppercase;letter-spacing:1.5px;">Cert. internacionales</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CONFECCIONISTAS -->
+<section class="section-pad" id="confeccionistas" style="background:var(--color-bg-light);" aria-labelledby="confeccionistas-heading">
+    <div class="container">
+        <div style="margin-bottom:var(--spacing-xl);">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="confeccionistas-heading">Confeccionistas</h2>
+            <p class="section-subtitle">Estas y muchas empresas más confían en la calidad que les brinda La Colonial Fábrica de Hilos S.A.</p>
+        </div>
+        <div class="swiper confecc-swiper">
+            <div class="swiper-wrapper">
+                @{
+                    var confeccionistas = new[] {
+                        new { Logo = "incalpaca-tpx.jpg", Nombre = "Incalpaca TPX" },
+                        new { Logo = "lives.jpg",         Nombre = "Lives S.A.C." },
+                        new { Logo = "roxanlo.jpg",       Nombre = "Roxan Lo S.A.C." },
+                        new { Logo = "carmelita.jpg",     Nombre = "Textil Carmelita S.A.C." },
+                        new { Logo = "ritzy.jpg",         Nombre = "Confecciones Ritzy S.A." },
+                        new { Logo = "textilviso.jpg",    Nombre = "Textil Viso S.A.C." },
+                        new { Logo = "venator.jpg",       Nombre = "Venator" },
+                        new { Logo = "franky-ricky.jpg",  Nombre = "Franky & Ricky" },
+                    };
+                }
+                @foreach (var c in confeccionistas)
+                {
+                    <div class="swiper-slide">
+                        <div class="confecc-card">
+                            <div class="confecc-img-wrap">
+                                <img src="~/images/clientes/logos/@c.Logo" alt="Logo @c.Nombre" loading="lazy" />
+                            </div>
+                            <span>@c.Nombre</span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="swiper-pagination confecc-pagination"></div>
+            <div class="swiper-button-prev confecc-prev"></div>
+            <div class="swiper-button-next confecc-next"></div>
+        </div>
+    </div>
+</section>
+
+<!-- DISTRIBUIDORES DE HILADOS -->
+<section class="section-pad" id="distribuidores-hilados" aria-labelledby="dist-hilados-heading">
+    <div class="container">
+        <div style="margin-bottom:var(--spacing-xl);">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="dist-hilados-heading">Distribuidores de Hilados</h2>
+            <p class="section-subtitle">Red de distribuidores autorizados de hilados La Colonial en Lima</p>
+        </div>
+        <div class="dist-grid">
+            @{
+                var distHilados = new[] {
+                    new { Nombre = "Amat Inversiones S.A.C.",       Dir = "Jr. América 308 La Victoria, Lima",                Tel = "323 9036" },
+                    new { Nombre = "Comercial Noreli E.I.R.L.",     Dir = "Prol. Humboldt 1591, La Victoria, Lima",          Tel = "473 3395 / 474 4712" },
+                    new { Nombre = "Negociaciones Karemma S.A.C.",  Dir = "Jr. Giribaldi 483 Int. 204, La Victoria, Lima",   Tel = "783 3161" },
+                };
+                var bgHilados = new[] { "distribuidores-hilados.jpg", "distribuidores-hilados2.jpg", "distribuidores-hilados3.jpg" };
+                int idxH = 0;
+            }
+            @foreach (var d in distHilados)
+            {
+                <div class="dist-card" data-aos="fade-up" style="background-image:url('/images/clientes/@bgHilados[idxH % bgHilados.Length]');">
+                    <div class="dist-overlay">
+                        <div class="dist-info">
+                            <p><i class="fa-solid fa-location-dot" aria-hidden="true"></i> @d.Dir</p>
+                            <p><i class="fa-solid fa-phone" aria-hidden="true"></i> @d.Tel</p>
+                        </div>
+                    </div>
+                    <div class="dist-label">@d.Nombre</div>
+                </div>
+                idxH++;
+            }
+        </div>
+    </div>
+</section>
+
+<!-- DISTRIBUIDORES DE HILOS DE COSTURA -->
+<section class="section-pad" id="distribuidores-costura" style="background:var(--color-bg-light);" aria-labelledby="dist-costura-heading">
+    <div class="container">
+        <div style="margin-bottom:var(--spacing-xl);">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="dist-costura-heading">Distribuidores Hilos de Costura</h2>
+            <p class="section-subtitle">Distribuidores especializados en nuestra línea de hilos de costura industriales</p>
+        </div>
+        <div class="dist-grid">
+            @{
+                var distCostura = new[] {
+                    new { Nombre = "Aldal Corporation E.I.R.L.",      Dir = "Prol. Antonio Bazo 719 Int. 9, La Victoria, Lima",    Tel = "323-0571" },
+                    new { Nombre = "Hilados Edlitex S.A.C.",          Dir = "Jr. Antonio Bazo 766, La Victoria, Lima",             Tel = "324 0052" },
+                    new { Nombre = "Hilos Nataly S.R.L.",             Dir = "Jr. Junín 749 Tda. 109, Cercado de Lima",            Tel = "426 7048" },
+                    new { Nombre = "Horna Díaz José Alcides",        Dir = "Jr. Junín 749 Tda. 406, Cercado de Lima",            Tel = "427 7245" },
+                    new { Nombre = "D.M.F. S.C.R.L.",                 Dir = "Jr. Antonio Bazo 725, La Victoria, Lima",             Tel = "325 3377 / 347 8772" },
+                    new { Nombre = "Bejar Nuñez Jorge",              Dir = "Jr. Antonio Bazo 719 Int. 19, La Victoria, Lima",    Tel = "324 9013" },
+                    new { Nombre = "Bejar Bellido Luis Alfredo",      Dir = "Jr. Antonio Bazo 768, La Victoria, Lima",            Tel = "94 636*9651" },
+                    new { Nombre = "Brothers Trading Palomino S.R.L.",Dir = "Jr. Antonio Bazo 720, La Victoria, Lima",            Tel = "324 1971" },
+                };
+                var bgCostura = new[] { "distribuidores-hilados2.jpg", "distribuidores-hilados3.jpg", "distribuidores-hilados.jpg" };
+                int idxC = 0;
+            }
+            @foreach (var d in distCostura)
+            {
+                <div class="dist-card" data-aos="fade-up" style="background-image:url('/images/clientes/@bgCostura[idxC % bgCostura.Length]');">
+                    <div class="dist-overlay">
+                        <div class="dist-info">
+                            <p><i class="fa-solid fa-location-dot" aria-hidden="true"></i> @d.Dir</p>
+                            <p><i class="fa-solid fa-phone" aria-hidden="true"></i> @d.Tel</p>
+                        </div>
+                    </div>
+                    <div class="dist-label">@d.Nombre</div>
+                </div>
+                idxC++;
+            }
+        </div>
+    </div>
+</section>
+
+<!-- CTA CONVERTIRSE EN DISTRIBUIDOR -->
+<section class="section-pad" style="background:var(--gradient-primary);text-align:center;" aria-label="Conviértase en distribuidor">
+    <div class="container">
+        <div style="max-width:600px;margin:0 auto;">
+            <i class="fa-solid fa-handshake" style="font-size:3rem;color:var(--color-secondary);margin-bottom:var(--spacing-sm);display:block;" aria-hidden="true"></i>
+            <h2 class="section-title" style="color:var(--color-white);margin:0 auto var(--spacing-sm);">¿Quiere ser nuestro distribuidor?</h2>
+            <p class="section-subtitle" style="color:rgba(255,255,255,0.80);margin:0 auto var(--spacing-xl);">
+                Únase a nuestra red de distribuidores autorizados y ofrezca los mejores hilados e hilos del mercado peruano a sus clientes.
+            </p>
+            <div style="display:flex;gap:var(--spacing-sm);justify-content:center;flex-wrap:wrap;">
+                <a href="/contacto" class="btn-colonial btn-secondary-col">
+                    <i class="fa-solid fa-envelope" aria-hidden="true"></i> Contactar a ventas
+                </a>
+                <a href="/productos" class="btn-colonial btn-outline-gold">
+                    <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Ver productos
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+@section Styles {
+<style>
+/* --- CLIENTES PAGE --- */
+
+/* Confeccionistas Swiper */
+.confecc-swiper {
+    padding-bottom: 48px !important;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+.confecc-card {
+    background: var(--color-white);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    text-align: center;
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+    border-top: 4px solid var(--color-primary);
+    height: 100%;
+    box-sizing: border-box;
+}
+.confecc-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.confecc-img-wrap {
+    width: 100%;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.confecc-img-wrap img {
+    max-width: 100%;
+    max-height: 90px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    filter: grayscale(20%);
+    transition: filter var(--transition-base);
+}
+.confecc-card:hover .confecc-img-wrap img { filter: grayscale(0%); }
+.confecc-card span {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-primary);
+    line-height: 1.3;
+}
+.confecc-prev, .confecc-next {
+    color: var(--color-primary) !important;
+}
+.confecc-prev::after, .confecc-next::after {
+    font-size: 1.2rem !important;
+    font-weight: 700;
+}
+.confecc-pagination .swiper-pagination-bullet-active {
+    background: var(--color-secondary) !important;
+}
+
+/* Distributor cards (image + overlay) */
+.dist-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
+}
+.dist-card {
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+    display: flex;
+    flex-direction: column;
+    min-height: 260px;
+}
+.dist-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-xl); }
+.dist-overlay {
+    flex: 1;
+    background: rgba(22, 101, 52, 0.78);
+    padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+.dist-info p {
+    color: #fff;
+    font-size: var(--font-size-sm);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.5;
+}
+.dist-info i { margin-top: 3px; flex-shrink: 0; color: #a3e635; }
+.dist-label {
+    background: #fff;
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: var(--font-size-sm);
+    padding: 12px 16px;
+    border-left: 5px solid var(--color-secondary);
+}
+
+@@media (min-width: 576px) {
+    .dist-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@@media (min-width: 992px) {
+    .dist-grid { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+}
+
+@section Scripts {
+<script>
+(function () {
+    new Swiper('.confecc-swiper', {
+        loop: true,
+        autoplay: { delay: 3000, disableOnInteraction: false, pauseOnMouseEnter: true },
+        speed: 600,
+        slidesPerView: 1,
+        spaceBetween: 20,
+        pagination: { el: '.confecc-pagination', clickable: true },
+        navigation: { prevEl: '.confecc-prev', nextEl: '.confecc-next' },
+        breakpoints: {
+            480:  { slidesPerView: 2, spaceBetween: 20 },
+            768:  { slidesPerView: 3, spaceBetween: 24 },
+            1024: { slidesPerView: 4, spaceBetween: 28 },
+        }
+    });
+})();
+</script>
+}

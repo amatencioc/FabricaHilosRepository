@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FabricaHilos.LecturaCorreos/FabricaHilos.LecturaCorreos.csproj" />
+  <Project Path="FabricaHilos/FabricaHilos.csproj" />
+  <Project Path="LaColonial/LaColonial.csproj" />
+</Solution>

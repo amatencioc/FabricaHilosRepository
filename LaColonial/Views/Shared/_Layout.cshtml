@@ -1,0 +1,136 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="@(ViewData["Description"] ?? "La Colonial Fábrica de Hilos S.A. — Hilamos calidad desde 1945. Hilados, hilos de costura y heather de alta calidad. Callao, Perú.")" />
+    <meta name="theme-color" content="#1B4D3E" />
+    <title>@(ViewData["Title"]?.ToString() == "Inicio" ? "La Colonial · Fábrica de Hilos S.A." : ViewData["Title"] + " | La Colonial")</title>
+    <!-- Favicon -->
+    <link rel="icon" href="~/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="~/images/logos/logo_colo.png" sizes="256x256" />
+    <link rel="apple-touch-icon" href="~/images/logos/logo_colo.png" />
+    <!-- CSS Local — sin CDN -->
+    <link rel="stylesheet" href="~/lib/swiper/swiper-bundle.min.css" />
+    <link rel="stylesheet" href="~/lib/aos/aos.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+
+    <!-- ===== NAVBAR ===== -->
+    <nav class="navbar-colonial" id="navbar" role="navigation" aria-label="Menú principal">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-logo" aria-label="Inicio - La Colonial">
+                <img src="~/images/logos/logo_colo.png" alt="La Colonial Fábrica de Hilos" width="120" height="40" />
+            </a>
+            <button class="navbar-toggle" id="navToggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="navMenu">
+                <span></span><span></span><span></span>
+            </button>
+            <nav class="navbar-menu" id="navMenu" aria-label="Navegación">
+                <a href="/" class="@(ViewData["ActivePage"]?.ToString() == "Home" ? "active" : "")">
+                    <i class="fa-solid fa-house" aria-hidden="true"></i> Inicio
+                </a>
+                <a href="/empresa" class="@(ViewData["ActivePage"]?.ToString() == "Empresa" ? "active" : "")">
+                    <i class="fa-solid fa-industry" aria-hidden="true"></i> Empresa
+                </a>
+                <a href="/productos" class="@(ViewData["ActivePage"]?.ToString() == "Productos" ? "active" : "")">
+                    <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Productos
+                </a>
+                <a href="/galeria" class="@(ViewData["ActivePage"]?.ToString() == "Galeria" ? "active" : "")">
+                    <i class="fa-solid fa-images" aria-hidden="true"></i> Galería
+                </a>
+                <a href="/clientes" class="@(ViewData["ActivePage"]?.ToString() == "Clientes" ? "active" : "")">
+                    <i class="fa-solid fa-handshake" aria-hidden="true"></i> Clientes
+                </a>
+                <a href="/noticias" class="@(ViewData["ActivePage"]?.ToString() == "Noticias" ? "active" : "")">
+                    <i class="fa-solid fa-newspaper" aria-hidden="true"></i> Noticias
+                </a>
+                <a href="/contacto" class="@(ViewData["ActivePage"]?.ToString() == "Contacto" ? "active" : "")">
+                    <i class="fa-solid fa-envelope" aria-hidden="true"></i> Contacto
+                </a>
+                <a href="/catalogos-electronicos" class="@(ViewData["ActivePage"]?.ToString() == "CatalogosElectronicos" ? "active" : "")" style="white-space:nowrap;">
+                    <i class="fa-solid fa-file-invoice" aria-hidden="true"></i> C.Electrónicos
+                </a>
+            </nav>
+        </div>
+    </nav>
+
+    <!-- ===== CONTENIDO PRINCIPAL ===== -->
+    <main id="main-content" role="main">
+        @RenderBody()
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer-colonial" role="contentinfo">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-col footer-logo">
+                    <img src="~/images/logos/logo_colo.png" alt="La Colonial" width="140" height="44" />
+                    <p>Fábrica peruana de hilos y hilados de alta calidad desde 1945. Comprometidos con la excelencia textil y la innovación continua.</p>
+                    <div class="footer-social" style="margin-top:1rem;">
+                        <a href="https://www.facebook.com/lacolonialsa" target="_blank" rel="noopener" aria-label="Facebook">
+                            <i class="fa-brands fa-facebook-f"></i>
+                        </a>
+                        <a href="https://twitter.com/lacolonialsa" target="_blank" rel="noopener" aria-label="Twitter / X">
+                            <i class="fa-brands fa-x-twitter"></i>
+                        </a>
+                        <a href="https://www.youtube.com/LaColonialSA" target="_blank" rel="noopener" aria-label="YouTube">
+                            <i class="fa-brands fa-youtube"></i>
+                        </a>
+                        <a href="mailto:ventas@@colonial.com.pe" aria-label="Email ventas">
+                            <i class="fa-solid fa-envelope"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="footer-col">
+                    <h5>Navegación</h5>
+                    <ul>
+                        <li><a href="/">Inicio</a></li>
+                        <li><a href="/empresa">Empresa</a></li>
+                        <li><a href="/productos">Productos</a></li>
+                        <li><a href="/galeria">Galería</a></li>
+                        <li><a href="/clientes">Clientes</a></li>
+                        <li><a href="/noticias">Noticias</a></li>
+                        <li><a href="/contacto">Contacto</a></li>
+                        <li><a href="/catalogos-electronicos">C.Electrónicos</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h5>Contacto</h5>
+                    <ul>
+                        <li><a href="tel:+5116130200"><i class="fa-solid fa-phone fa-sm" style="margin-right:6px;color:var(--color-secondary)"></i>(511) 613-0200</a></li>
+                        <li><a href="mailto:ventas@@colonial.com.pe"><i class="fa-solid fa-envelope fa-sm" style="margin-right:6px;color:var(--color-secondary)"></i>ventas@@colonial.com.pe</a></li>
+                        <li><span><i class="fa-solid fa-location-dot fa-sm" style="margin-right:6px;color:var(--color-secondary)"></i>Av. Argentina 4151, Callao, Perú</span></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; @DateTime.Now.Year La Colonial Fábrica de Hilos S.A. — Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ===== SCROLL TO TOP ===== -->
+    <button class="scroll-top" id="scrollTop" aria-label="Volver arriba" title="Volver arriba">
+        <i class="fa-solid fa-chevron-up"></i>
+    </button>
+
+    <!-- ===== LIGHTBOX ===== -->
+    <div class="lightbox-overlay" id="lightbox" role="dialog" aria-modal="true" aria-label="Vista ampliada">
+        <div class="lightbox-inner">
+            <button class="lightbox-close" id="lightboxClose" aria-label="Cerrar">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <img id="lightboxImg" src="" alt="Imagen ampliada" />
+        </div>
+    </div>
+
+    <!-- ===== JS LOCAL ===== -->
+    <script src="~/lib/swiper/swiper-bundle.min.js"></script>
+    <script src="~/lib/aos/aos.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

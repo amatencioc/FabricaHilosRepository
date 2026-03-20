@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Fábrica de Hilos</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <div class="d-flex" id="wrapper">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="bg-corporate text-white">
+            <div class="sidebar-header p-3 border-bottom border-secondary">
+                <div class="d-flex align-items-center gap-2">
+                    <img src="~/images/logo-colonial-icon.svg" alt="La Colonial" style="height: 38px; width: auto; flex-shrink: 0;" />
+                    <div>
+                        <div class="fw-bold">La Colonial</div>
+                        <small class="text-light opacity-75">Fábrica de Hilos S.A.</small>
+                    </div>
+                </div>
+            </div>
+            <ul class="list-unstyled p-2 sidebar-menu">
+                <!-- Dashboard -->
+                <li class="d-none">
+                    <a asp-controller="Home" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                </li>
+
+                <!-- INVENTARIO -->
+                <li class="sidebar-section d-none">INVENTARIO</li>
+                <li class="d-none">
+                    <a asp-controller="Inventario" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" ? "active" : "")">
+                        <i class="bi bi-box-seam"></i> Inventario
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="Inventario" asp-action="MateriaPrima" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-archive"></i> Materia Prima
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Inventario" asp-action="ProductoTerminado" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-boxes"></i> Producto Terminado
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
+                <li class="sidebar-section">OPERACIONES</li>
+                <li>
+                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Produccion" || ViewContext.RouteData.Values["controller"]?.ToString() == "RegistroPreparatoria" ? "active" : "")">
+                        <i class="bi bi-gear-wide-connected"></i> Producción
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="RegistroPreparatoria" asp-action="Index" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-clipboard-data"></i> Registro de Preparatoria
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                <!-- VENTAS -->
+                <li class="d-none">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" ? "active" : "")">
+                        <i class="bi bi-cash-coin"></i> Ventas
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="Ventas" asp-action="Clientes" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-people"></i> Clientes
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Ventas" asp-action="Pedidos" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-cart3"></i> Pedidos
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
+                <!-- PERSONAL -->
+                <li class="sidebar-section d-none">PERSONAL</li>
+                <li class="d-none">
+                    <a asp-controller="RecursosHumanos" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "RecursosHumanos" ? "active" : "")">
+                        <i class="bi bi-person-badge"></i> Recursos Humanos
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="RecursosHumanos" asp-action="Empleados" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-person-lines-fill"></i> Empleados
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="RecursosHumanos" asp-action="Asistencia" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-calendar-check"></i> Asistencia
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
+                @if (User.IsInRole("Admin") || User.IsInRole("Gerencia"))
+                {
+                    <!-- ADMINISTRACIÓN -->
+                    <li class="sidebar-section d-none">ADMINISTRACIÓN</li>
+                    <li class="d-none">
+                        <a asp-controller="Account" asp-action="Register" class="sidebar-link">
+                            <i class="bi bi-person-plus"></i> Registrar Usuario
+                        </a>
+                    </li>
+                }
+            </ul>
+        </nav>
+
+        <!-- Contenido principal -->
+        <div id="content" class="flex-grow-1 d-flex flex-column">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-bottom px-4 py-2 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <button class="btn btn-sm btn-outline-secondary" id="sidebarToggle">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-0 small">
+                            @RenderSection("Breadcrumb", required: false)
+                        </ol>
+                    </nav>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="text-muted small">
+                        <i class="bi bi-person-circle me-1"></i>@User.Identity?.Name
+                    </span>
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-box-arrow-right"></i> Salir
+                        </button>
+                    </form>
+                </div>
+            </header>
+
+            <!-- Alertas globales -->
+            <div class="px-4 pt-2">
+                @if (TempData["Success"] != null)
+                {
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle me-2"></i>@TempData["Success"]
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                }
+                @if (TempData["Warning"] != null)
+                {
+                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-circle me-2"></i>@TempData["Warning"]
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                }
+                @if (TempData["Error"] != null)
+                {
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                }
+            </div>
+
+            <!-- Contenido de la página -->
+            <main class="flex-grow-1 p-4">
+                @RenderBody()
+            </main>
+
+            <footer class="bg-light border-top text-center py-2">
+                <small class="text-muted">&copy; @DateTime.Now.Year Fábrica de Hilos - Sistema de Gestión Empresarial</small>
+            </footer>
+        </div>
+    </div>
+}
+else
+{
+    @RenderBody()
+}
+
+<script src="~/lib/jquery/dist/jquery.min.js" asp-append-version="true"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
+<script src="~/lib/chart.js/dist/chart.umd.min.js" asp-append-version="true"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

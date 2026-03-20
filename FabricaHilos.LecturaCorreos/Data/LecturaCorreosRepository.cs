@@ -1,0 +1,178 @@
+using System.Data;
+using Dapper;
+using FabricaHilos.LecturaCorreos.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Oracle.ManagedDataAccess.Client;
+
+namespace FabricaHilos.LecturaCorreos.Data;
+
+public class LecturaCorreosRepository : ILecturaCorreosRepository
+{
+    private readonly string _connectionString;
+    private readonly ILogger<LecturaCorreosRepository> _logger;
+
+    public LecturaCorreosRepository(IConfiguration configuration, ILogger<LecturaCorreosRepository> logger)
+    {
+        _connectionString = configuration.GetConnectionString("OracleConnection")
+            ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'OracleConnection'.");
+        _logger = logger;
+    }
+
+    private OracleConnection CrearConexion() => new(_connectionString);
+
+    public async Task<IEnumerable<FacturaCorreo>> ObtenerFacturasPendientesCdrAsync()
+    {
+        const string sql = @"
+            SELECT * FROM (
+                SELECT ID, RUC, TIPO_COMPROBANTE AS TipoComprobante, SERIE, CORRELATIVO,
+                       ESTADO, CODIGO_RESPUESTA_SUNAT AS CodigoRespuestaSunat,
+                       MENSAJE_SUNAT AS MensajeSunat, CDR_CONTENIDO AS CdrContenido,
+                       MENSAJE_ERROR AS MensajeError,
+                       FECHA_CREACION AS FechaCreacion, FECHA_CONSULTA_SUNAT AS FechaConsultaSunat,
+                       INTENTOS, DOCUMENTO_ID AS DocumentoId, DOCUMENTO_REFERENCIA AS DocumentoReferencia
+                FROM FH_LECTCORREOS_FACTURAS
+                WHERE ESTADO = 'PENDIENTE_CDR'
+                  AND INTENTOS < 5
+                ORDER BY FECHA_CREACION ASC
+            ) WHERE ROWNUM <= 50";
+
+        return await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                return await conn.QueryAsync<FacturaCorreo>(sql);
+            },
+            _logger, nameof(ObtenerFacturasPendientesCdrAsync));
+    }
+
+    public async Task ActualizarEstadoAsync(
+        long id,
+        string estado,
+        string codigoSunat,
+        string mensajeSunat,
+        byte[]? cdrZip)
+    {
+        const string sql = @"
+            UPDATE FH_LECTCORREOS_FACTURAS
+            SET ESTADO = :Estado,
+                CODIGO_RESPUESTA_SUNAT = :CodigoSunat,
+                MENSAJE_SUNAT = :MensajeSunat,
+                CDR_CONTENIDO = :CdrZip,
+                FECHA_CONSULTA_SUNAT = SYSDATE
+            WHERE ID = :Id";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new
+                {
+                    Id = id,
+                    Estado = estado,
+                    CodigoSunat = codigoSunat,
+                    MensajeSunat = mensajeSunat,
+                    CdrZip = cdrZip
+                });
+            },
+            _logger, nameof(ActualizarEstadoAsync));
+    }
+
+    public async Task IncrementarIntentosAsync(long id)
+    {
+        const string sql = @"
+            UPDATE FH_LECTCORREOS_FACTURAS
+            SET INTENTOS = INTENTOS + 1,
+                FECHA_CONSULTA_SUNAT = SYSDATE
+            WHERE ID = :Id";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new { Id = id });
+            },
+            _logger, nameof(IncrementarIntentosAsync));
+    }
+
+    public async Task GuardarErrorAsync(long id, string mensajeError)
+    {
+        const string sql = @"
+            UPDATE FH_LECTCORREOS_FACTURAS
+            SET MENSAJE_ERROR = :MensajeError
+            WHERE ID = :Id";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new { Id = id, MensajeError = mensajeError });
+            },
+            _logger, nameof(GuardarErrorAsync));
+    }
+
+    public async Task InsertarFacturaPendienteCdrAsync(FacturaCorreo factura)
+    {
+        const string sql = @"
+            INSERT INTO FH_LECTCORREOS_FACTURAS
+                (RUC, TIPO_COMPROBANTE, SERIE, CORRELATIVO,
+                 ESTADO, FECHA_CREACION, INTENTOS,
+                 DOCUMENTO_ID, DOCUMENTO_REFERENCIA)
+            VALUES
+                (:Ruc, :TipoComprobante, :Serie, :Correlativo,
+                 :Estado, SYSDATE, 0,
+                 :DocumentoId, :DocumentoReferencia)";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new
+                {
+                    factura.Ruc,
+                    factura.TipoComprobante,
+                    factura.Serie,
+                    factura.Correlativo,
+                    factura.Estado,
+                    factura.DocumentoId,
+                    factura.DocumentoReferencia
+                });
+            },
+            _logger, nameof(InsertarFacturaPendienteCdrAsync));
+    }
+
+    // ── SOLO PRUEBAS: limpieza de tablas ─────────────────────────────────────
+    public async Task<LimpiezaResultado> LimpiarTablasAsync(CancellationToken ct = default)
+    {
+        // El orden respeta las FK: primero tablas hijo, luego la tabla padre.
+        // FH_LC_LINEA           → hijo de FH_LC_DOCUMENTO
+        // FH_LC_CUOTA           → hijo de FH_LC_DOCUMENTO
+        // FH_LECTCORREOS_FACTURAS → hijo de FH_LC_DOCUMENTO
+        // FH_LC_ERROR           → independiente
+        // FH_LC_DOCUMENTO       → padre
+        using var conn = CrearConexion();
+        await conn.OpenAsync(ct);
+
+        using var tx = conn.BeginTransaction();
+        try
+        {
+            static CommandDefinition Cmd(string sql, IDbTransaction t, CancellationToken c) =>
+                new(sql, transaction: t, cancellationToken: c);
+
+            int lineas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_LINEA",            tx, ct));
+            int cuotas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_CUOTA",            tx, ct));
+            int facturas   = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_FACTURAS", tx, ct));
+            int errores    = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_ERROR",            tx, ct));
+            int documentos = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_DOCUMENTO",        tx, ct));
+
+            tx.Commit();
+
+            return new LimpiezaResultado(lineas, cuotas, facturas, errores, documentos);
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+}

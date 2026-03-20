@@ -1,0 +1,79 @@
+using FabricaHilos.LecturaCorreos.Config;
+using FabricaHilos.LecturaCorreos.Data;
+using FabricaHilos.LecturaCorreos.Services;
+using FabricaHilos.LecturaCorreos.Services.Email;
+using FabricaHilos.LecturaCorreos.Services.Email.Conexion;
+using FabricaHilos.LecturaCorreos.Services.Email.Lectores;
+using FabricaHilos.LecturaCorreos.Services.Parsers;
+using FabricaHilos.LecturaCorreos.Services.Signals;
+using FabricaHilos.LecturaCorreos.Services.Sunat;
+using FabricaHilos.LecturaCorreos.Workers;
+using Serilog;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+// ─── Configuración de Serilog ────────────────────────────────
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "Logs/lecturaCorreos-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Logging.ClearProviders();
+builder.Logging.AddSerilog(Log.Logger);
+
+// ─── Windows Service ─────────────────────────────────────────
+builder.Services.AddWindowsService(options =>
+    options.ServiceName = "FabricaHilos LecturaCorreos CDR");
+
+// ─── Configuración tipada ─────────────────────────────────────
+builder.Services.Configure<LecturaCorreosOptions>(
+    builder.Configuration.GetSection(LecturaCorreosOptions.SeccionConfig));
+
+// ─── HttpClient ───────────────────────────────────────────────
+builder.Services.AddHttpClient("OAuth2Token");
+builder.Services.AddHttpClient<ISunatService, SunatService>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30));
+
+// ─── Repositorios Oracle ──────────────────────────────────────
+builder.Services.AddTransient<ILecturaCorreosRepository, LecturaCorreosRepository>();
+builder.Services.AddTransient<ILogisticaRepository, LogisticaRepository>();
+
+// ─── Servicios ────────────────────────────────────────────────
+// Conexión IMAP / OAuth2
+builder.Services.AddTransient<IImapConexionService, ImapConexionService>();
+// Lectores especializados
+builder.Services.AddTransient<ILectorAdjuntoXml, LectorAdjuntoXml>();
+builder.Services.AddTransient<ILectorAdjuntoPdf, LectorAdjuntoPdf>();
+builder.Services.AddTransient<ILectorAdjuntoZip, LectorAdjuntoZip>();
+// Orquestador de correo
+builder.Services.AddTransient<IEmailReaderService, ImapEmailReaderService>();
+builder.Services.AddTransient<IXmlParserService, UblXmlParserService>();
+builder.Services.AddSingleton<ILimpiezaSignal, LimpiezaSignal>();
+// Circuit breaker: Singleton para mantener el estado de fallos entre ciclos.
+builder.Services.AddSingleton<ICuentaCircuitBreaker, CuentaCircuitBreaker>();
+
+// ─── Workers (Hosted Services) ────────────────────────────────
+builder.Services.AddHostedService<LecturaCorreosSunatCdrWorker>();
+builder.Services.AddHostedService<SunatCdrWorker>();
+
+try
+{
+    Log.Information("Iniciando FabricaHilos.LecturaCorreos...");
+    var host = builder.Build();
+    await host.RunAsync();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "El servicio terminó de forma inesperada.");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+

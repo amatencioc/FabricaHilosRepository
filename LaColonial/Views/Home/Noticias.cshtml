@@ -1,0 +1,197 @@
+@model List<LaColonial.Models.Noticia>
+@{
+    ViewData["Title"] = "Noticias";
+    ViewData["ActivePage"] = "Noticias";
+    ViewData["Description"] = "Últimas noticias y novedades de La Colonial Fábrica de Hilos S.A. — Eventos, ferias, lanzamientos y aniversarios.";
+    var eventos  = Model.Where(n => n.EsEvento).ToList();
+    var noticias = Model.ToList();
+}
+
+<!-- HERO NOTICIAS -->
+<section style="
+    position:relative;
+    margin-top:var(--navbar-height-mobile);
+    background:var(--gradient-primary);
+    padding:var(--spacing-2xl) 0 var(--spacing-xl);
+    text-align:center;overflow:hidden;"
+    aria-labelledby="noticias-hero-heading">
+    <div style="position:absolute;inset:0;background-image:url('/images/noticias/limateje2023.jpg');background-size:cover;background-position:center;opacity:0.12;"></div>
+    <div class="container" style="position:relative;z-index:1;">
+        <div class="section-divider centered"></div>
+        <h1 id="noticias-hero-heading" style="font-size:clamp(2rem,5vw,3.5rem);font-weight:700;color:var(--color-white);margin-bottom:var(--spacing-sm);">
+            Noticias
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);max-width:560px;margin:0 auto;font-size:var(--font-size-md);">
+            Eventos, ferias internacionales, lanzamientos de productos y novedades de La Colonial
+        </p>
+    </div>
+</section>
+
+<!-- EVENTOS -->
+<section class="section-pad" style="background:var(--color-bg-light);" aria-labelledby="eventos-heading">
+    <div class="container">
+        <div style="margin-bottom:var(--spacing-xl);">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="eventos-heading">Eventos</h2>
+            <p class="section-subtitle">Ferias y eventos en los que La Colonial participa activamente</p>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr;gap:var(--spacing-md);" class="eventos-grid">
+            @foreach (var ev in eventos)
+            {
+                <a href="/noticias/@ev.Slug"
+                   style="display:grid;grid-template-columns:1fr;border-radius:var(--border-radius-xl);overflow:hidden;box-shadow:var(--shadow-md);background:var(--color-white);text-decoration:none;transition:transform var(--transition-base),box-shadow var(--transition-base);"
+                   data-aos="fade-up"
+                   onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='var(--shadow-xl)'"
+                   onmouseout="this.style.transform='';this.style.boxShadow='var(--shadow-md)'">
+                    <div style="display:grid;grid-template-columns:1fr;" class="evento-inner">
+                        <div style="aspect-ratio:16/6;overflow:hidden;">
+                            <img src="/images/noticias/@ev.Imagen" alt="@ev.Titulo"
+                                 style="width:100%;height:100%;object-fit:cover;transition:transform var(--transition-slow);"
+                                 loading="lazy" />
+                        </div>
+                        <div style="padding:var(--spacing-md) var(--spacing-lg);display:flex;flex-direction:column;justify-content:center;gap:8px;">
+                            <span style="font-size:var(--font-size-xs);font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--color-primary-light);">@ev.Categoria</span>
+                            <h3 style="font-size:var(--font-size-lg);font-weight:700;color:var(--color-primary);line-height:1.2;margin:0;">@ev.Titulo</h3>
+                            <p style="font-size:var(--font-size-sm);color:var(--color-text-medium);line-height:1.6;margin:0;">@ev.Extracto</p>
+                            <div style="display:flex;align-items:center;gap:8px;color:var(--color-text-light);font-size:var(--font-size-xs);margin-top:4px;">
+                                <i class="fa-regular fa-calendar-days" style="color:var(--color-secondary);" aria-hidden="true"></i>
+                                <time datetime="@ev.FechaHtml">@ev.Fecha</time>
+                            </div>
+                            <span style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;font-size:var(--font-size-sm);font-weight:600;color:var(--color-primary);">
+                                Leer más <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                            </span>
+                        </div>
+                    </div>
+                </a>
+            }
+        </div>
+    </div>
+</section>
+
+<!-- NOTICIAS DESTACADAS -->
+<section class="section-pad" aria-labelledby="noticias-recientes-heading">
+    <div class="container">
+
+        <div style="margin-bottom:var(--spacing-xl);">
+            <div class="section-divider"></div>
+            <h2 class="section-title" id="noticias-recientes-heading">Últimas noticias</h2>
+            <p class="section-subtitle">Conozca los eventos y logros más recientes de nuestra empresa</p>
+        </div>
+
+        <!-- GRID DE NOTICIAS -->
+        <div class="noticias-grid">
+            @{ bool primera = true; }
+            @foreach (var n in noticias)
+            {
+                <article class="noticia-card @(primera ? "noticia-featured" : "")" data-aos="fade-up">
+                    <a href="/noticias/@n.Slug" style="display:block;text-decoration:none;color:inherit;height:100%;">
+                        <div class="noticia-img-wrap">
+                            <img src="/images/noticias/@n.Imagen" alt="@n.Titulo" loading="lazy" />
+                            <span class="noticia-badge">@n.FechaHtml.Substring(0, 4)</span>
+                        </div>
+                        <div class="noticia-body">
+                            <span class="noticia-cat">@n.Categoria</span>
+                            <h3>@n.Titulo</h3>
+                            <p>@n.Extracto</p>
+                            <div class="noticia-meta">
+                                <i class="fa-regular fa-calendar-days" aria-hidden="true"></i>
+                                <time datetime="@n.FechaHtml">@n.Fecha</time>
+                            </div>
+                            <span style="display:inline-flex;align-items:center;gap:6px;margin-top:var(--spacing-xs);font-size:var(--font-size-sm);font-weight:600;color:var(--color-primary);">
+                                Leer más <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                            </span>
+                        </div>
+                    </a>
+                </article>
+                primera = false;
+            }
+        </div>
+
+    </div>
+</section>
+
+<!-- CTA BOLETÍN -->
+<section class="section-pad" style="background:var(--gradient-primary);text-align:center;" aria-label="Suscripción a noticias">
+    <div class="container">
+        <i class="fa-solid fa-bell" style="font-size:3rem;color:var(--color-secondary);margin-bottom:var(--spacing-sm);display:block;" aria-hidden="true"></i>
+        <h2 class="section-title" style="color:var(--color-white);margin:0 auto var(--spacing-sm);">¿Quiere recibir nuestras noticias?</h2>
+        <p class="section-subtitle" style="color:rgba(255,255,255,0.80);margin:0 auto var(--spacing-lg);">Contáctenos y lo mantenemos informado sobre eventos, productos y novedades</p>
+        <a href="/contacto" class="btn-colonial btn-secondary-col">
+            <i class="fa-solid fa-envelope" aria-hidden="true"></i> Contáctenos
+        </a>
+    </div>
+</section>
+
+@section Styles {
+<style>
+/* --- EVENTOS GRID --- */
+.eventos-grid { gap: var(--spacing-md); }
+@@media (min-width: 768px) {
+    .eventos-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .evento-inner { grid-template-columns: 280px 1fr !important; }
+}
+@@media (min-width: 1100px) {
+    .eventos-grid { grid-template-columns: repeat(3, 1fr) !important; }
+    .evento-inner { grid-template-columns: 1fr !important; }
+}
+
+/* --- NOTICIAS PAGE --- */
+.noticias-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-xl);
+}
+.noticia-card {
+    background: var(--color-white);
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.noticia-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-xl); }
+.noticia-img-wrap {
+    position: relative;
+    aspect-ratio: 16/9;
+    overflow: hidden;
+}
+.noticia-featured .noticia-img-wrap { aspect-ratio: 21/9; }
+.noticia-img-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform var(--transition-slow); }
+.noticia-card:hover .noticia-img-wrap img { transform: scale(1.05); }
+.noticia-badge {
+    position: absolute; top: 14px; right: 14px;
+    background: var(--color-secondary); color: var(--color-primary-dark);
+    font-size: 11px; font-weight: 700; padding: 3px 10px;
+    border-radius: var(--border-radius-full); text-transform: uppercase;
+}
+.noticia-body { padding: var(--spacing-md); }
+.noticia-cat {
+    font-size: var(--font-size-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--color-primary-light);
+    display: block; margin-bottom: 8px;
+}
+.noticia-body h3 {
+    font-size: var(--font-size-lg); font-weight: 700; color: var(--color-primary);
+    margin-bottom: var(--spacing-xs); line-height: 1.3;
+}
+.noticia-body p {
+    font-size: var(--font-size-sm); color: var(--color-text-medium);
+    line-height: 1.7; margin-bottom: var(--spacing-sm);
+}
+.noticia-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--font-size-xs); color: var(--color-text-light);
+}
+.noticia-meta i { color: var(--color-secondary); }
+
+@@media (min-width: 576px) {
+    .noticias-grid { grid-template-columns: repeat(2, 1fr); }
+    .noticia-featured { grid-column: span 2; }
+}
+@@media (min-width: 992px) {
+    .noticias-grid { grid-template-columns: repeat(3, 1fr); }
+    .noticia-featured { grid-column: span 3; }
+    .noticia-featured .noticia-body { padding: var(--spacing-xl); }
+    .noticia-featured .noticia-body h3 { font-size: var(--font-size-2xl); }
+}
+</style>
+}

@@ -1,0 +1,81 @@
+@model FabricaHilos.Models.RecursosHumanos.Asistencia
+@using FabricaHilos.Models.RecursosHumanos
+
+@{
+    ViewData["Title"] = "Registrar Asistencia";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item"><a asp-action="Asistencia">Asistencia</a></li>
+    <li class="breadcrumb-item active">Registrar</li>
+}
+
+<h4 class="section-title"><i class="bi bi-plus-circle me-2"></i>Registrar Asistencia</h4>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <form asp-action="RegistrarAsistencia" method="post">
+                    @Html.AntiForgeryToken()
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label asp-for="EmpleadoId" class="form-label fw-semibold"></label>
+                            <select asp-for="EmpleadoId" class="form-select">
+                                <option value="">-- Seleccionar empleado --</option>
+                                @if (ViewBag.Empleados != null)
+                                {
+                                    @foreach (var emp in ViewBag.Empleados)
+                                    {
+                                        <option value="@emp.Id">@emp.NombreCompleto</option>
+                                    }
+                                }
+                            </select>
+                            <span asp-validation-for="EmpleadoId" class="text-danger small"></span>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Fecha" class="form-label fw-semibold"></label>
+                            <input asp-for="Fecha" class="form-control" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            <span asp-validation-for="Fecha" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="HoraEntrada" class="form-label fw-semibold"></label>
+                            <input asp-for="HoraEntrada" class="form-control" type="time" />
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="HoraSalida" class="form-label fw-semibold"></label>
+                            <input asp-for="HoraSalida" class="form-control" type="time" />
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Estado" class="form-label fw-semibold"></label>
+                            <select asp-for="Estado" class="form-select">
+                                @foreach (var e in Enum.GetValues<EstadoAsistencia>())
+                                {
+                                    <option value="@e">@e</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="Observaciones" class="form-label fw-semibold"></label>
+                            <textarea asp-for="Observaciones" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Guardar
+                        </button>
+                        <a asp-action="Asistencia" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}
