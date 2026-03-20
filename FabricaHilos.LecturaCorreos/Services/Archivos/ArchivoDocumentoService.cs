@@ -50,7 +50,7 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
 
         var carpeta = ObtenerRutaCarpeta();
-        var nombre  = $"{documento.RucEmisor}-{documento.TipoDocumento}-{documento.Serie}-{documento.Correlativo}.xml";
+        var nombre  = $"{Campo(documento.RucEmisor)}-{Campo(documento.TipoDocumento)}-{Campo(documento.Serie)}-{Campo(documento.Correlativo)}.xml";
         var ruta    = Path.Combine(carpeta, nombre);
 
         await EscribirArchivoAsync(ruta, carpeta, Encoding.UTF8.GetBytes(contenidoXml), ct);
@@ -89,6 +89,7 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     /// Resuelve el nombre del PDF.
     /// Si el nombre del archivo sigue el patrón SUNAT, lo normaliza al formato
     /// ruc-tipo-serie-correlativo.pdf; de lo contrario devuelve el nombre original.
+    /// Los campos vacíos se rellenan con "0".
     /// </summary>
     private static string ResolverNombrePdf(string nombreOriginal)
     {
@@ -96,9 +97,16 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         var m          = _patronSunat.Match(soloNombre);
 
         return m.Success
-            ? $"{m.Groups[1].Value}-{m.Groups[2].Value}-{m.Groups[3].Value}-{m.Groups[4].Value}.pdf"
+            ? $"{Campo(m.Groups[1].Value)}-{Campo(m.Groups[2].Value)}-{Campo(m.Groups[3].Value)}-{Campo(m.Groups[4].Value)}.pdf"
             : soloNombre;
     }
+
+    /// <summary>
+    /// Devuelve el valor si no está vacío; en caso contrario devuelve "0".
+    /// Garantiza que ningún segmento del nombre de archivo quede en blanco.
+    /// </summary>
+    private static string Campo(string? valor) =>
+        string.IsNullOrWhiteSpace(valor) ? "0" : valor;
 
     /// <summary>
     /// Crea la carpeta si no existe y escribe el archivo.
