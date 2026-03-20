@@ -3,6 +3,7 @@ namespace FabricaHilos.LecturaCorreos.Workers;
 using FabricaHilos.LecturaCorreos.Config;
 using FabricaHilos.LecturaCorreos.Data;
 using FabricaHilos.LecturaCorreos.Services;
+using FabricaHilos.LecturaCorreos.Services.Archivos;
 using FabricaHilos.LecturaCorreos.Services.Email;
 using FabricaHilos.LecturaCorreos.Models;
 using FabricaHilos.LecturaCorreos.Services.Parsers;
@@ -21,6 +22,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     private readonly ILecturaCorreosRepository       _lecturaCorreosRepository;
     private readonly ILimpiezaSignal                 _limpiezaSignal;
     private readonly ICuentaCircuitBreaker            _circuitBreaker;
+    private readonly IArchivoDocumentoService        _archivoService;
     private readonly ILogger<LecturaCorreosSunatCdrWorker> _logger;
 
     // Garantiza que la limpieza/señal inicial se ejecute solo una vez,
@@ -35,6 +37,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         ILecturaCorreosRepository              lecturaCorreosRepository,
         ILimpiezaSignal                        limpiezaSignal,
         ICuentaCircuitBreaker                  circuitBreaker,
+        IArchivoDocumentoService               archivoService,
         ILogger<LecturaCorreosSunatCdrWorker>  logger)
     {
         _opciones                 = opciones.Value;
@@ -44,6 +47,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         _lecturaCorreosRepository = lecturaCorreosRepository;
         _limpiezaSignal           = limpiezaSignal;
         _circuitBreaker           = circuitBreaker;
+        _archivoService           = archivoService;
         _logger                   = logger;
     }
 
@@ -240,6 +244,9 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
         var documento = resultado.Documento!;
 
+        // Guardar XML en disco: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/{ruc}-{tipo}-{serie}-{correlativo}.xml
+        await _archivoService.GuardarXmlAsync(documento, contenidoXml);
+
         try
         {
             // Insertar cabecera
@@ -348,6 +355,10 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             FechaCorreo     = adjunto.FechaCorreo,
             Contenido       = adjunto.ContenidoPdf ?? [],
         };
+
+        // Guardar PDF en disco: {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}/{ruc}-{tipo}-{serie}-{correlativo}.pdf
+        await _archivoService.GuardarPdfAsync(
+            adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], adjunto.FechaCorreo);
 
         try
         {

@@ -1,6 +1,7 @@
 using FabricaHilos.LecturaCorreos.Config;
 using FabricaHilos.LecturaCorreos.Data;
 using FabricaHilos.LecturaCorreos.Services;
+using FabricaHilos.LecturaCorreos.Services.Archivos;
 using FabricaHilos.LecturaCorreos.Services.Email;
 using FabricaHilos.LecturaCorreos.Services.Email.Conexion;
 using FabricaHilos.LecturaCorreos.Services.Email.Lectores;
@@ -57,6 +58,8 @@ builder.Services.AddTransient<IXmlParserService, UblXmlParserService>();
 builder.Services.AddSingleton<ILimpiezaSignal, LimpiezaSignal>();
 // Circuit breaker: Singleton para mantener el estado de fallos entre ciclos.
 builder.Services.AddSingleton<ICuentaCircuitBreaker, CuentaCircuitBreaker>();
+// Archivos en disco: organiza documentos por RUC/año/mes/día.
+builder.Services.AddTransient<IArchivoDocumentoService, ArchivoDocumentoService>();
 
 // ─── Workers (Hosted Services) ────────────────────────────────
 builder.Services.AddHostedService<LecturaCorreosSunatCdrWorker>();
