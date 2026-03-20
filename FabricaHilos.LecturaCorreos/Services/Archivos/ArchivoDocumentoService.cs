@@ -49,8 +49,17 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     {
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
 
+        // Si algún campo del objeto parseado está vacío, se intenta extraerlo
+        // del nombre original del archivo adjunto (suele seguir el patrón SUNAT).
+        var fb      = ExtraerCamposSunat(documento.NombreArchivo);
+        var ruc     = Campo(documento.RucEmisor,    fb.Length > 0 ? fb[0] : null);
+        var tipo    = Campo(documento.TipoDocumento, fb.Length > 1 ? fb[1] : null);
+        var serie   = Campo(documento.Serie,         fb.Length > 2 ? fb[2] : null);
+        var correl  = Campo(documento.Correlativo,   fb.Length > 3 ? fb[3] : null);
+        var sufijo  = EsInforme(documento.NombreArchivo) ? "-INFORME" : string.Empty;
+
         var carpeta = ObtenerRutaCarpeta();
-        var nombre  = $"{Campo(documento.RucEmisor)}-{Campo(documento.TipoDocumento)}-{Campo(documento.Serie)}-{Campo(documento.Correlativo)}.xml";
+        var nombre  = $"{ruc}-{tipo}-{serie}-{correl}{sufijo}.xml";
         var ruta    = Path.Combine(carpeta, nombre);
 
         await EscribirArchivoAsync(ruta, carpeta, Encoding.UTF8.GetBytes(contenidoXml), ct);
@@ -95,18 +104,42 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     {
         var soloNombre = Path.GetFileName(nombreOriginal);
         var m          = _patronSunat.Match(soloNombre);
+        var sufijo     = EsInforme(soloNombre) ? "-INFORME" : string.Empty;
 
         return m.Success
-            ? $"{Campo(m.Groups[1].Value)}-{Campo(m.Groups[2].Value)}-{Campo(m.Groups[3].Value)}-{Campo(m.Groups[4].Value)}.pdf"
+            ? $"{Campo(m.Groups[1].Value)}-{Campo(m.Groups[2].Value)}-{Campo(m.Groups[3].Value)}-{Campo(m.Groups[4].Value)}{sufijo}.pdf"
             : soloNombre;
     }
 
     /// <summary>
-    /// Devuelve el valor si no está vacío; en caso contrario devuelve "0".
-    /// Garantiza que ningún segmento del nombre de archivo quede en blanco.
+    /// Devuelve <paramref name="valor"/> si no está vacío;
+    /// si lo está, prueba <paramref name="fallback"/>;
+    /// si también está vacío, devuelve "0".
     /// </summary>
-    private static string Campo(string? valor) =>
-        string.IsNullOrWhiteSpace(valor) ? "0" : valor;
+    private static string Campo(string? valor, string? fallback = null) =>
+        !string.IsNullOrWhiteSpace(valor)    ? valor    :
+        !string.IsNullOrWhiteSpace(fallback) ? fallback : "0";
+
+    /// <summary>
+    /// Intenta extraer los cuatro segmentos del nombre de archivo SUNAT:
+    ///   [ruc, tipo, serie, correlativo]
+    /// Devuelve un array vacío si el nombre no sigue el patrón.
+    /// </summary>
+    private static string[] ExtraerCamposSunat(string nombreArchivo)
+    {
+        var m = _patronSunat.Match(Path.GetFileName(nombreArchivo));
+        return m.Success
+            ? [m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value, m.Groups[4].Value]
+            : [];
+    }
+
+    /// <summary>
+    /// Devuelve true si el nombre del archivo (sin extensión) contiene la palabra "INFORME"
+    /// (sin distinguir mayúsculas/minúsculas).
+    /// </summary>
+    private static bool EsInforme(string nombreArchivo) =>
+        Path.GetFileNameWithoutExtension(nombreArchivo)
+            .Contains("INFORME", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Crea la carpeta si no existe y escribe el archivo.
