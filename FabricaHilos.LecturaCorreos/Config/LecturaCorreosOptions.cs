@@ -15,8 +15,8 @@ public class LecturaCorreosOptions
     public string RutaArchivos { get; set; } = string.Empty;
 
     /// <summary>
-    /// RUC de la empresa receptora. Se usa como primer nivel de carpeta al organizar archivos.
-    /// Obligatorio en appsettings.json → LecturaCorreos:RucEmpresa.
+    /// [Legado] RUC único de empresa. Se aplica a las cuentas de <see cref="Cuentas"/> planas.
+    /// Para multi-empresa usar <see cref="Empresas"/> con el RUC dentro de cada entrada.
     /// </summary>
     public string RucEmpresa { get; set; } = string.Empty;
 
@@ -50,7 +50,83 @@ public class LecturaCorreosOptions
     /// </summary>
     public bool LimpiarBdAlIniciar { get; set; } = false;
 
+    /// <summary>
+    /// [Legado] Cuentas directamente bajo LecturaCorreos (compatibilidad con configuración anterior).
+    /// Heredan el RUC de <see cref="RucEmpresa"/>. Para multi-empresa usar <see cref="Empresas"/>.
+    /// </summary>
     public List<CuentaCorreoOptions> Cuentas { get; set; } = [];
+
+    /// <summary>
+    /// Lista de empresas. Cada empresa agrupa sus propias cuentas de correo y credenciales SUNAT.
+    /// Permite procesar múltiples RUCs en paralelo en el mismo servicio.
+    /// </summary>
+    public List<EmpresaOptions> Empresas { get; set; } = [];
+
+    /// <summary>
+    /// Todas las cuentas a procesar: combina las de <see cref="Empresas"/> (con su RUC propio)
+    /// más las de <see cref="Cuentas"/> legadas (con <see cref="RucEmpresa"/> global).
+    /// Es la lista que usa el worker en cada ciclo.
+    /// </summary>
+    public IEnumerable<CuentaCorreoOptions> TodasLasCuentas
+    {
+        get
+        {
+            foreach (var empresa in Empresas.Where(e => e.Activa))
+                foreach (var cuenta in empresa.Cuentas
+                    .Where(c => c.Activa && !string.IsNullOrWhiteSpace(c.ImapHost)))
+                {
+                    cuenta.RucEmpresa    = empresa.Ruc;
+                    cuenta.NombreEmpresa = empresa.Nombre;
+                    yield return cuenta;
+                }
+
+            foreach (var cuenta in Cuentas
+                .Where(c => c.Activa && !string.IsNullOrWhiteSpace(c.ImapHost)))
+            {
+                if (string.IsNullOrEmpty(cuenta.RucEmpresa))
+                    cuenta.RucEmpresa = RucEmpresa;
+                yield return cuenta;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Agrupa la identidad fiscal de una empresa con sus cuentas de correo
+/// y sus credenciales SUNAT para consulta de CDR.
+/// </summary>
+public class EmpresaOptions
+{
+    /// <summary>RUC de 11 dígitos de la empresa receptora.</summary>
+    public string Ruc    { get; set; } = string.Empty;
+
+    /// <summary>Nombre descriptivo (ej. "EmpresaPrincipal", "Subsidiaria1").</summary>
+    public string Nombre { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Habilita o deshabilita el procesamiento de esta empresa.
+    /// Cuando es false, ninguna de sus cuentas se procesa en el ciclo.
+    /// </summary>
+    public bool Activa { get; set; } = true;
+
+    /// <summary>Cuentas de correo IMAP que pertenecen a esta empresa.</summary>
+    public List<CuentaCorreoOptions> Cuentas { get; set; } = [];
+
+    /// <summary>
+    /// Credenciales SOL de SUNAT para verificación de CDR de esta empresa.
+    /// Si es null, se usarán las credenciales globales de la sección Sunat en appsettings.
+    /// </summary>
+    public SunatEmpresaOptions? Sunat { get; set; }
+}
+
+/// <summary>
+/// Credenciales SOL de SUNAT específicas por empresa.
+/// </summary>
+public class SunatEmpresaOptions
+{
+    public string UsuarioSol          { get; set; } = string.Empty;
+    public string ClaveSol            { get; set; } = string.Empty;
+    public string EndpointConsultaCdr { get; set; } = string.Empty;
 }
 
 public class CuentaCorreoOptions
@@ -74,4 +150,17 @@ public class CuentaCorreoOptions
     public string ClientSecret { get; set; } = string.Empty;
     public string AuthUrl      { get; set; } = string.Empty;
     public string Scope        { get; set; } = string.Empty;
+
+    /// <summary>
+    /// RUC de la empresa dueña de esta cuenta. Se propaga automáticamente desde
+    /// <see cref="EmpresaOptions.Ruc"/> o desde <see cref="LecturaCorreosOptions.RucEmpresa"/>.
+    /// No se configura manualmente en appsettings.json.
+    /// </summary>
+    public string RucEmpresa { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Nombre descriptivo de la empresa dueña de esta cuenta. Propagado automáticamente
+    /// desde <see cref="EmpresaOptions.Nombre"/>. No se configura manualmente en appsettings.json.
+    /// </summary>
+    public string NombreEmpresa { get; set; } = string.Empty;
 }

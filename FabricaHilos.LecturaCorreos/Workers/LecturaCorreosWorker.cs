@@ -65,6 +65,16 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         _logger.LogInformation("LecturaCorreosSunatCdrWorker iniciado. Intervalo: {Minutos} min.",
             _opciones.IntervaloMinutos);
 
+        // Diagnóstico de arranque: lista las cuentas válidas que se procesarán.
+        var cuentasValidas = _opciones.TodasLasCuentas.ToList();
+        if (cuentasValidas.Count == 0)
+            _logger.LogWarning("No hay cuentas configuradas y válidas. " +
+                               "Verifica que las empresas activas tengan Cuentas con ImapHost no vacío.");
+        else
+            _logger.LogInformation("Cuentas válidas configuradas ({Count}): {Cuentas}",
+                cuentasValidas.Count,
+                string.Join(", ", cuentasValidas.Select(c => $"[{c.NombreEmpresa}] {c.Nombre} ({c.Proveedor})")));
+
         while (!stoppingToken.IsCancellationRequested)
         {
             // Solo en el primer ciclo: limpiar BD (si aplica) y desbloquear SunatCdrWorker.
@@ -82,8 +92,8 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             var sw = Stopwatch.StartNew();
 
             // Las cuentas activas y no suspendidas se procesan en paralelo.
-            var cuentasActivas = _opciones.Cuentas
-                .Where(c => c.Activa && !_circuitBreaker.EstaSuspendida(c.Nombre))
+            var cuentasActivas = _opciones.TodasLasCuentas
+                .Where(c => c.Activa && !string.IsNullOrWhiteSpace(c.ImapHost) && !_circuitBreaker.EstaSuspendida(c.Nombre))
                 .ToList();
 
             if (cuentasActivas.Count > 0)
@@ -133,7 +143,8 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     {
         if (ct.IsCancellationRequested) return;
 
-        _logger.LogInformation("Procesando cuenta: {Nombre} ({Proveedor})", cuenta.Nombre, cuenta.Proveedor);
+        _logger.LogInformation("[{Empresa}] Procesando cuenta: {Nombre} ({Proveedor})",
+            cuenta.NombreEmpresa, cuenta.Nombre, cuenta.Proveedor);
 
         try
         {
@@ -159,48 +170,61 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             {
                 if (ct.IsCancellationRequested) break;
 
-                // Parseo previo del XML para extraer los datos de nombrado del grupo.
-                DocumentoXml? docXmlGrupo = null;
-                var xmlDelGrupo = grupo.FirstOrDefault(a => a.TipoAdjunto == "XML");
-                if (xmlDelGrupo is not null)
+                // Parseo previo de TODOS los XMLs del grupo para extraer datos de nombrado y referencias cruzadas.
+                var mapaPreviewsXml = new Dictionary<string, DocumentoXml>(StringComparer.OrdinalIgnoreCase);
+                foreach (var xmlAdj in grupo.Where(a => a.TipoAdjunto == "XML"))
                 {
                     try
                     {
                         var r = _xmlParser.Parsear(
-                            xmlDelGrupo.ContenidoXml ?? string.Empty,
-                            xmlDelGrupo.NombreArchivo,
+                            xmlAdj.ContenidoXml ?? string.Empty,
+                            xmlAdj.NombreArchivo,
                             cuenta.Nombre,
-                            xmlDelGrupo.Asunto,
-                            xmlDelGrupo.Remitente,
-                            xmlDelGrupo.FechaCorreo);
-                        if (r.Estado == EstadoParseo.Exito)
-                            docXmlGrupo = r.Documento;
+                            xmlAdj.Asunto,
+                            xmlAdj.Remitente,
+                            xmlAdj.FechaCorreo);
+                        if (r.Estado == EstadoParseo.Exito && r.Documento is not null)
+                            mapaPreviewsXml[xmlAdj.NombreArchivo] = r.Documento;
                     }
                     catch (Exception exParseo)
                     {
                         _logger.LogDebug(exParseo,
                             "Pre-parseo del XML '{Archivo}' falló; el PDF del grupo se nombrará sin datos del XML.",
-                            xmlDelGrupo.NombreArchivo);
+                            xmlAdj.NombreArchivo);
                     }
                 }
+                DocumentoXml? facturaRefGrupo = mapaPreviewsXml.Values.FirstOrDefault(d => d.TipoDocumento is "01" or "03" && !d.EsCdr);
+                DocumentoXml? docXmlGrupo     = mapaPreviewsXml.Values.FirstOrDefault(d => !d.EsCdr);
 
                 // ── Paso 1: XMLs (y otros no-PDF) → capturar el documentoId generado ──
-                long? documentoIdGrupo = null;
-                foreach (var adjunto in grupo.Where(a => a.TipoAdjunto != "PDF"))
+                long? documentoIdGrupo    = null;
+                bool  hayDocumentosNuevos = false;
+                var   mapaDocumentosGrupo = new Dictionary<string, (long? Id, DocumentoXml? Doc, bool EsNuevo)>(StringComparer.OrdinalIgnoreCase);
+                // XMLs y otros no-PDF: procesar CDRs AL FINAL para garantizar que el comprobante
+                // ya esté en FH_LECTCORREOS_FACTURAS cuando el CDR intente actualizar su estado.
+                foreach (var adjunto in grupo
+                    .Where(a => a.TipoAdjunto != "PDF")
+                    .OrderBy(a => mapaPreviewsXml.TryGetValue(a.NombreArchivo, out var preDoc) && preDoc.EsCdr ? 1 : 0))
                 {
                     if (ct.IsCancellationRequested) break;
 
                     try
                     {
-                        var docId = await ProcesarAdjuntoAsync(
+                        var (docId, esNuevo) = await ProcesarAdjuntoAsync(
                             cuenta.Nombre,
+                            cuenta.RucEmpresa,
                             adjunto.NombreArchivo,
                             adjunto.ContenidoXml ?? string.Empty,
                             adjunto.Asunto,
                             adjunto.Remitente,
                             adjunto.FechaCorreo,
+                            facturaRefGrupo,
                             ct);
                         documentoIdGrupo ??= docId;
+                        if (esNuevo && docId.HasValue) hayDocumentosNuevos = true;
+                        var previewDoc = mapaPreviewsXml.GetValueOrDefault(adjunto.NombreArchivo);
+                        if (docId.HasValue && previewDoc is not null && !previewDoc.EsCdr)
+                            mapaDocumentosGrupo[$"{previewDoc.Serie}-{previewDoc.Correlativo}"] = (docId, previewDoc, esNuevo);
                     }
                     catch (Exception ex)
                     {
@@ -222,19 +246,31 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                         grupo.Key);
 
                 // ── Paso 2: PDFs → vinculados al documentoId del XML del mismo correo ──
-                foreach (var adjunto in grupo.Where(a => a.TipoAdjunto == "PDF"))
+                // Si todos los XMLs eran duplicados (ya en BD), omitir PDFs para no guardarlos de nuevo.
+                var tienePdfs = grupo.Any(a => a.TipoAdjunto == "PDF");
+                if (tienePdfs && !hayDocumentosNuevos && mapaDocumentosGrupo.Count > 0)
                 {
-                    if (ct.IsCancellationRequested) break;
+                    _logger.LogDebug(
+                        "Grupo {Grupo}: todos los XMLs son duplicados; PDFs del correo omitidos.",
+                        grupo.Key);
+                }
+                else
+                {
+                    foreach (var adjunto in grupo.Where(a => a.TipoAdjunto == "PDF"))
+                    {
+                        if (ct.IsCancellationRequested) break;
 
-                    try
-                    {
-                        await ProcesarAdjuntoPdfAsync(cuenta.Nombre, adjunto, documentoIdGrupo, docXmlGrupo, ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex,
-                            "Error al procesar adjunto '{Archivo}' de cuenta '{Cuenta}'. Se continúa con el siguiente.",
-                            adjunto.NombreArchivo, cuenta.Nombre);
+                        try
+                        {
+                            var (matchedId, matchedDoc) = MatchPdfADocumento(adjunto.NombreArchivo, mapaDocumentosGrupo);
+                            await ProcesarAdjuntoPdfAsync(cuenta.Nombre, cuenta.RucEmpresa, adjunto, matchedId ?? documentoIdGrupo, matchedDoc ?? docXmlGrupo, facturaRefGrupo, ct);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex,
+                                "Error al procesar adjunto '{Archivo}' de cuenta '{Cuenta}'. Se continúa con el siguiente.",
+                                adjunto.NombreArchivo, cuenta.Nombre);
+                        }
                     }
                 }
 
@@ -282,11 +318,11 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         }
     }
 
-    /// <returns>ID del documento insertado, o <see langword="null"/> si fue omitido o hubo error.</returns>
-    private async Task<long?> ProcesarAdjuntoAsync(
-        string cuentaNombre, string nombreArchivo, string contenidoXml,
+    /// <returns>ID del documento insertado y bandera de si fue nuevo, o (null, false) si fue omitido o hubo error.</returns>
+    private async Task<(long? Id, bool EsNuevo)> ProcesarAdjuntoAsync(
+        string cuentaNombre, string rucEmpresa, string nombreArchivo, string contenidoXml,
         string asunto, string remitente, DateTime fechaCorreo,
-        CancellationToken ct = default)
+        DocumentoXml? facturaRef = null, CancellationToken ct = default)
     {
         _logger.LogDebug("Procesando adjunto '{Archivo}' de cuenta '{Cuenta}'.",
             nombreArchivo, cuentaNombre);
@@ -307,14 +343,14 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             await RegistrarErrorSeguroAsync(
                 nombreArchivo, ext, cuentaNombre, asunto, remitente,
                 "EXCEPCION_PARSER", ex.Message, contenidoXml, ct);
-            return null;
+            return (null, false);
         }
 
         switch (resultado.Estado)
         {
             case EstadoParseo.CdrOmitido:
                 _logger.LogDebug("Adjunto '{Archivo}' es CDR de SUNAT. Se omite.", nombreArchivo);
-                return null;
+                return (null, false);
 
             case EstadoParseo.XmlInvalido:
                 _logger.LogWarning(
@@ -323,7 +359,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
                     "XML_INVALIDO", resultado.Descripcion ?? string.Empty, contenidoXml, ct);
-                return null;
+                return (null, false);
 
             case EstadoParseo.TipoNoReconocido:
                 _logger.LogWarning(
@@ -332,7 +368,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
                     "XML_NO_RECONOCIDO", resultado.Descripcion ?? string.Empty, contenidoXml, ct);
-                return null;
+                return (null, false);
 
             case EstadoParseo.Exito:
                 break;
@@ -340,13 +376,70 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             default:
                 _logger.LogError("Estado de parseo inesperado '{Estado}' para '{Archivo}'.",
                     resultado.Estado, nombreArchivo);
-                return null;
+                return (null, false);
         }
 
         var documento = resultado.Documento!;
 
         try
         {
+            // CDR (Constancia de Recepción): no se inserta en la tabla de documentos
+            // (el SP rechaza APPLICATION_RESPONSE). Se guarda en disco y se vincula
+            // al comprobante original si ya existe en BD.
+            if (documento.EsCdr)
+            {
+                var referencedNumero = $"{documento.Serie}-{documento.Correlativo}";
+                var idOriginal = string.IsNullOrWhiteSpace(documento.Serie)
+                    ? null
+                    : await _repositorio.ObtenerDocumentoIdAsync(referencedNumero);
+
+                var rutaXmlCdr = await _archivoService.GuardarXmlAsync(documento, contenidoXml, rucEmpresa, facturaRef, ct);
+                if (!string.IsNullOrEmpty(rutaXmlCdr))
+                {
+                    await _repositorio.RegistrarArchivoAsync(idOriginal, "XML", nombreArchivo, Path.GetFileName(rutaXmlCdr), rutaXmlCdr);
+                    _logger.LogInformation(
+                        "CDR '{Numero}' guardado en disco. Vinculado a documento ID={Id}.",
+                        documento.NumeroDocumento, idOriginal);
+                }
+                else
+                    _logger.LogDebug("CDR '{Numero}' omitido del disco (sin identificación SUNAT).", documento.NumeroDocumento);
+
+                // Actualizar FH_LECTCORREOS_FACTURAS si el comprobante fue encolado previamente.
+                // Código de respuesta "0" = SUNAT aceptó; cualquier otro = rechazó.
+                if (!string.IsNullOrWhiteSpace(documento.Serie)
+                    && int.TryParse(documento.Correlativo, out var corrIntCdr))
+                {
+                    try
+                    {
+                        var idFactura = await _lecturaCorreosRepository.ObtenerIdFacturaPorSerieAsync(
+                            documento.RucEmisor, documento.Serie, corrIntCdr);
+                        if (idFactura.HasValue)
+                        {
+                            var codigoRespuesta = documento.NumeroDocRef.Split(':')[0].Trim();
+                            var estadoCdr = codigoRespuesta == "0" ? "ACEPTADO_CORREO" : "RECHAZADO_CORREO";
+                            await _lecturaCorreosRepository.ActualizarEstadoAsync(
+                                idFactura.Value, estadoCdr, codigoRespuesta, documento.NumeroDocRef, null);
+                            _logger.LogInformation(
+                                "CDR '{Numero}': FH_LECTCORREOS_FACTURAS actualizado a {Estado} (código={Codigo}, fuente=CORREO).",
+                                documento.NumeroDocumento, estadoCdr, codigoRespuesta);
+                        }
+                        else
+                            _logger.LogWarning(
+                                "CDR '{Numero}' (RUC={Ruc} Serie={Serie} Corr={Corr}): no se encontró registro PENDIENTE_CDR en " +
+                                "FH_LECTCORREOS_FACTURAS. El CDR llegó antes que el comprobante o ya fue procesado por SunatCdrWorker.",
+                                documento.NumeroDocumento, documento.RucEmisor, documento.Serie, corrIntCdr);
+                    }
+                    catch (Exception exCdr)
+                    {
+                        _logger.LogWarning(exCdr,
+                            "No se pudo actualizar FH_LECTCORREOS_FACTURAS para el CDR '{Numero}'. " +
+                            "SunatCdrWorker lo consultará en el próximo ciclo.",
+                            documento.NumeroDocumento);
+                    }
+                }
+                return (idOriginal, false);
+            }
+
             // Insertar cabecera
             var (idGenerado, codigo, mensaje) = await _repositorio.InsertarDocumentoAsync(documento);
 
@@ -362,7 +455,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                     "Documento '{Numero}' ya existe en BD (duplicado). " +
                     "Se reutiliza ID={Id} para vincular el PDF del correo. Mensaje SP: {Msg}",
                     documento.NumeroDocumento, idExistente, mensaje);
-                return idExistente;
+                return (idExistente, false);
             }
 
             if (codigo != 0)
@@ -374,7 +467,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 await RegistrarErrorSeguroAsync(
                     nombreArchivo, ext, cuentaNombre, asunto, remitente,
                     "ERROR_INSERT_DOCUMENTO", mensaje, contenidoXml, ct);
-                return null;
+                return (null, false);
             }
 
             _logger.LogInformation(
@@ -383,7 +476,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 documento.Lineas.Count, documento.Cuotas.Count);
 
             // Guardar XML en disco solo si la inserción en BD fue exitosa.
-            var rutaXml = await _archivoService.GuardarXmlAsync(documento, contenidoXml, ct);
+            var rutaXml = await _archivoService.GuardarXmlAsync(documento, contenidoXml, rucEmpresa, facturaRef, ct);
             if (!string.IsNullOrEmpty(rutaXml))
                 await _repositorio.RegistrarArchivoAsync(idGenerado, "XML", nombreArchivo, Path.GetFileName(rutaXml), rutaXml);
 
@@ -428,6 +521,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             // Encolar en FH_LECTCORREOS_FACTURAS para verificación CDR en SUNAT.
             // Tipos válidos: 01=Factura, 03=Boleta, 07=Nota de Crédito, 08=Nota de Débito.
             if (documento.TipoDocumento is "01" or "03" or "07" or "08"
+                && !documento.EsCdr
                 && int.TryParse(documento.Correlativo, out var correlativoInt))
             {
                 try
@@ -454,7 +548,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                         documento.NumeroDocumento);
                 }
             }
-            return idGenerado;
+            return (idGenerado, true);
         }
         catch (Exception ex)
         {
@@ -464,7 +558,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             await RegistrarErrorSeguroAsync(
                 nombreArchivo, ext, cuentaNombre, asunto, remitente,
                 "EXCEPCION_PERSISTENCIA", $"{ex.Message} | {ex.StackTrace}", contenidoXml, ct);
-            return null;
+            return (null, false);
         }
     }
 
@@ -473,7 +567,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     /// - Con documento: guarda en disco y registra en FH_LECTCORREOS_ARCHIVOS.
     /// - Sin documento: inserta en FH_LECTCORREOS_PDF_ADJUNTOS para notificación al cliente.
     /// </summary>
-    private async Task ProcesarAdjuntoPdfAsync(string cuentaNombre, AdjuntoCorreo adjunto, long? documentoId = null, DocumentoXml? documentoXml = null, CancellationToken ct = default)
+    private async Task ProcesarAdjuntoPdfAsync(string cuentaNombre, string rucEmpresa, AdjuntoCorreo adjunto, long? documentoId = null, DocumentoXml? documentoXml = null, DocumentoXml? facturaRef = null, CancellationToken ct = default)
     {
         _logger.LogDebug("Procesando PDF '{Archivo}' de cuenta '{Cuenta}'.",
             adjunto.NombreArchivo, cuentaNombre);
@@ -504,7 +598,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 // PDF vinculado a un documento válido: disco + FH_LECTCORREOS_ARCHIVOS.
                 // NO insertar en FH_LECTCORREOS_PDF_ADJUNTOS (tabla reservada para PDFs huérfanos).
                 var rutaPdf = await _archivoService.GuardarPdfAsync(
-                    adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], documentoXml, ct);
+                    adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], rucEmpresa, documentoXml, facturaRef, ct);
                 if (!string.IsNullOrEmpty(rutaPdf))
                 {
                     await _repositorio.RegistrarArchivoAsync(documentoId, "PDF", adjunto.NombreArchivo, Path.GetFileName(rutaPdf), rutaPdf);
@@ -583,6 +677,36 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 "No se pudo registrar el error '{Tipo}' para '{Archivo}' en la base de datos.",
                 tipoError, nombreArchivo);
         }
+    }
+
+    /// <summary>
+    /// Intenta asociar un PDF al documento XML del mismo grupo de correo comparando serie y correlativo.
+    /// Si solo hay un documento en el mapa, se devuelve directamente.
+    /// Si hay varios, extrae RUC/serie/correlativo del nombre del PDF y busca coincidencia por serie exacta
+    /// y correlativo (comparación de prefijo para tolerar el patrón PDF-DOC donde el correlativo lleva el RUC concatenado).
+    /// </summary>
+    private static (long? Id, DocumentoXml? Doc) MatchPdfADocumento(
+        string pdfNombre,
+        Dictionary<string, (long? Id, DocumentoXml? Doc, bool EsNuevo)> mapa)
+    {
+        if (mapa.Count == 0) return (null, null);
+        if (mapa.Count == 1) { var u = mapa.Values.First(); return (u.Id, u.Doc); }
+
+        var (_, pdfSerie, pdfCorrel) = TryExtraerRefDocDePdfNombre(pdfNombre);
+        if (pdfSerie is null) return (null, null);
+
+        foreach (var value in mapa.Values)
+        {
+            if (value.Doc is null) continue;
+            if (!string.Equals(pdfSerie, value.Doc.Serie, StringComparison.OrdinalIgnoreCase)) continue;
+
+            // Tolerar patrón PDF-DOC donde el número combinado es CORRELATIVO+RUC (p.ej. 558220544458907).
+            var pc = pdfCorrel?.ToString() ?? string.Empty;
+            var dc = value.Doc.Correlativo;
+            if (pc == dc || pc.StartsWith(dc) || dc.StartsWith(pc))
+                return (value.Id, value.Doc);
+        }
+        return (null, null);
     }
 
     /// <summary>

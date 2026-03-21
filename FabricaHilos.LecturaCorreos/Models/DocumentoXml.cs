@@ -10,11 +10,13 @@ public class DocumentoXml
     public DateTime? FechaCorreo           { get; set; }
 
     // ── Clasificación ─────────────────────────────────────────
-    public string    TipoXml              { get; set; } = string.Empty; // INVOICE, DESPATCH_ADVICE, CREDIT_NOTE, DEBIT_NOTE
+    public string    TipoXml              { get; set; } = string.Empty; // INVOICE, DESPATCH_ADVICE, CREDIT_NOTE, DEBIT_NOTE, APPLICATION_RESPONSE
     public string    TipoDocumento        { get; set; } = string.Empty; // 01, 03, 07, 08, 09
     public string    Serie                { get; set; } = string.Empty;
     public string    Correlativo          { get; set; } = string.Empty;
     public string    NumeroDocumento      { get; set; } = string.Empty;
+    /// <summary>Indica que este documento es una Constancia de Recepción (CDR / ApplicationResponse).</summary>
+    public bool      EsCdr                { get; set; }
     public DateTime? FechaEmision         { get; set; }
     public string    HoraEmision          { get; set; } = string.Empty;
     public DateTime? FechaVencimiento     { get; set; }

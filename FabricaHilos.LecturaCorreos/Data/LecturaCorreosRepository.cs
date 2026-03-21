@@ -141,6 +141,23 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
             _logger, nameof(InsertarFacturaPendienteCdrAsync));
     }
 
+    public async Task<long?> ObtenerIdFacturaPorSerieAsync(string ruc, string serie, int correlativo)
+    {
+        const string sql = @"
+            SELECT ID FROM FH_LECTCORREOS_FACTURAS
+            WHERE RUC = :Ruc AND SERIE = :Serie AND CORRELATIVO = :Correlativo
+              AND ESTADO = 'PENDIENTE_CDR'
+              AND ROWNUM = 1";
+
+        return await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                return await conn.QueryFirstOrDefaultAsync<long?>(sql, new { Ruc = ruc, Serie = serie, Correlativo = correlativo });
+            },
+            _logger, nameof(ObtenerIdFacturaPorSerieAsync));
+    }
+
     // ── SOLO PRUEBAS: limpieza de tablas ─────────────────────────────────────
     public async Task<LimpiezaResultado> LimpiarTablasAsync(CancellationToken ct = default)
     {

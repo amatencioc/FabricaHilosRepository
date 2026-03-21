@@ -114,12 +114,12 @@ public class SunatCdrWorker : BackgroundService
                 if (respuesta.EstaAceptado)
                 {
                     _logger.LogInformation(
-                        "Factura ID {Id} ACEPTADA por SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
+                        "Factura ID {Id} ACEPTADA_SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
                         factura.Id, respuesta.CodigoRespuesta, respuesta.MensajeRespuesta);
 
                     await repositorio.ActualizarEstadoAsync(
                         factura.Id,
-                        "ACEPTADO",
+                        "ACEPTADO_SUNAT",
                         respuesta.CodigoRespuesta,
                         respuesta.MensajeRespuesta,
                         respuesta.CdrZip);
@@ -127,12 +127,12 @@ public class SunatCdrWorker : BackgroundService
                 else if (respuesta.EstaRechazado)
                 {
                     _logger.LogWarning(
-                        "Factura ID {Id} RECHAZADA por SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
+                        "Factura ID {Id} RECHAZADA_SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
                         factura.Id, respuesta.CodigoRespuesta, respuesta.MensajeRespuesta);
 
                     await repositorio.ActualizarEstadoAsync(
                         factura.Id,
-                        "RECHAZADO",
+                        "RECHAZADO_SUNAT",
                         respuesta.CodigoRespuesta,
                         respuesta.MensajeRespuesta,
                         respuesta.CdrZip);

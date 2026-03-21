@@ -65,10 +65,14 @@ public class UblXmlParserService : IXmlParserService
                     ParsearGuiaRemision(root, documento);
                     break;
                 case "ApplicationResponse":
-                    _logger.LogDebug("XML '{Archivo}' es un CDR de SUNAT (ApplicationResponse). Se omite.",
+                    documento.TipoXml = "APPLICATION_RESPONSE";
+                    documento.EsCdr   = true;
+                    ParsearApplicationResponse(root, documento);
+                    _logger.LogDebug("CDR (ApplicationResponse) '{Archivo}' parseado correctamente.",
                         nombreArchivo);
-                    return new ResultadoParseo(EstadoParseo.CdrOmitido,
-                        Descripcion: "CDR ApplicationResponse de SUNAT.");
+                    // Serie y Correlativo ya establecidos por ParsearApplicationResponse.
+                    // No se aplica SepararNumeroDoc (NumeroDocumento lleva prefijo "CDR-").
+                    return new ResultadoParseo(EstadoParseo.Exito, documento);
                 default:
                     _logger.LogWarning("XML '{Archivo}' no reconocido: elemento raíz '{Root}'.",
                         nombreArchivo, localName);
@@ -412,6 +416,69 @@ public class UblXmlParserService : IXmlParserService
             Lote           = Elem(loteId, NsCbc, "LotNumberID") ?? string.Empty,
             FechaVencLote  = Fecha(Elem(loteId, NsCbc, "ExpiryDate")),
         };
+    }
+
+    // ── ApplicationResponse (CDR / Constancia de Recepción) ──────────────────
+
+    /// <summary>
+    /// Parsea una Constancia de Recepción (CDR) emitida por SUNAT o un OSE.
+    /// Extrae los datos del comprobante referenciado para construir el nombre de
+    /// archivo con el sufijo <c>_CDR</c> y registrar el CDR vinculado a ese documento.
+    /// </summary>
+    private static void ParsearApplicationResponse(XElement root, DocumentoXml doc)
+    {
+        doc.FechaEmision = Fecha(Elem(root, NsCbc, "IssueDate"));
+        doc.HoraEmision  = Elem(root, NsCbc, "IssueTime") ?? string.Empty;
+
+        // ReceiverParty = empresa que recibe el CDR = emisor del comprobante original.
+        var receiver = root.Element(NsCac + "ReceiverParty");
+        doc.RucEmisor         = Elem(receiver?.Element(NsCac + "PartyIdentification"), NsCbc, "ID") ?? string.Empty;
+        doc.RazonSocialEmisor = Elem(receiver?.Element(NsCac + "PartyLegalEntity"),    NsCbc, "RegistrationName")
+                             ?? Elem(receiver?.Element(NsCac + "PartyName"),            NsCbc, "Name")
+                             ?? string.Empty;
+
+        // Fallback: algunos OSEs no incluyen el RUC en ReceiverParty; se extrae del nombre del archivo.
+        // Patrón habitual: R-{RUC}-{TIPO}-{SERIE}-{CORRELATIVO}.xml
+        if (string.IsNullOrWhiteSpace(doc.RucEmisor) && !string.IsNullOrWhiteSpace(doc.NombreArchivo))
+        {
+            var partesFn = Path.GetFileNameWithoutExtension(doc.NombreArchivo).Split('-');
+            if (partesFn.Length >= 5
+                && partesFn[0].Equals("R", StringComparison.OrdinalIgnoreCase)
+                && partesFn[1].Length == 11
+                && long.TryParse(partesFn[1], out _))
+                doc.RucEmisor = partesFn[1];
+        }
+
+        // SenderParty = OSE o SUNAT que emite el CDR.
+        var sender = root.Element(NsCac + "SenderParty");
+        doc.RucReceptor         = Elem(sender?.Element(NsCac + "PartyIdentification"), NsCbc, "ID") ?? string.Empty;
+        doc.RazonSocialReceptor = Elem(sender?.Element(NsCac + "PartyLegalEntity"),    NsCbc, "RegistrationName")
+                               ?? Elem(sender?.Element(NsCac + "PartyName"),            NsCbc, "Name")
+                               ?? string.Empty;
+
+        // ── Comprobante original referenciado ─────────────────────────────────
+        var docResponse  = root.Element(NsCac + "DocumentResponse");
+        var docRef       = docResponse?.Element(NsCac + "DocumentReference");
+        var referencedId = Elem(docRef, NsCbc, "ID") ?? string.Empty;          // ej. "FF05-74833"
+        doc.TipoDocumento = Elem(docRef, NsCbc, "DocumentTypeCode") ?? string.Empty;  // ej. "01"
+
+        // Separar serie y correlativo del comprobante referenciado (para nombrado de archivo).
+        var partes      = referencedId.Split('-', 2);
+        doc.Serie       = partes.Length >= 1 ? partes[0] : string.Empty;
+        doc.Correlativo = partes.Length >= 2 ? partes[1] : string.Empty;
+
+        // NumeroDocumento único en BD: el prefijo "CDR-" evita colisión con el comprobante original.
+        doc.NumeroDocumento = string.IsNullOrWhiteSpace(referencedId)
+            ? (Elem(root, NsCbc, "ID") ?? doc.NombreArchivo)
+            : $"CDR-{referencedId}";
+
+        // ── Código de respuesta (para diagnóstico) ────────────────────────────
+        var response     = docResponse?.Element(NsCac + "Response");
+        var responseCode = Elem(response, NsCbc, "ResponseCode") ?? string.Empty;
+        var description  = Elem(response, NsCbc, "Description")  ?? string.Empty;
+        doc.NumeroDocRef = string.IsNullOrWhiteSpace(description)
+            ? responseCode
+            : $"{responseCode}: {description}".TrimStart(':').Trim();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

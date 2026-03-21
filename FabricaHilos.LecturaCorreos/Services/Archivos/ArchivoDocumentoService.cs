@@ -60,7 +60,16 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         @"^([A-Za-z][A-Za-z0-9]{0,5})-(\d+)",
         RegexOptions.Compiled);
 
-    // ── Valores por defecto con relleno de ceros según longitud SUNAT ─────────
+    /// <summary>
+    /// Patrón para CDR (Constancia de Recepción) emitido por SUNAT u OSE:
+    ///   R-{RUC 11 dígitos}-{tipo 2 dígitos}-{serie}-{correlativo}
+    ///   Ej: R-20347646891-01-FF05-74833.xml
+    /// </summary>
+    private static readonly Regex _patronCdr = new(
+        @"^R-(\d{11})-(\d{2})-([A-Za-z0-9]{1,4})-(\d+)\.",
+        RegexOptions.Compiled);
+
+    // ── Valores por defecto
     private const string CerosRuc    = "00000000000"; // 11 dígitos
     private const string CerosTipo   = "00";           //  2 dígitos
     private const string CerosSerie  = "0000";         //  4 dígitos
@@ -80,7 +89,7 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     // ── IArchivoDocumentoService ──────────────────────────────────────────────
 
     public async Task<string?> GuardarXmlAsync(
-        DocumentoXml documento, string contenidoXml, CancellationToken ct = default)
+        DocumentoXml documento, string contenidoXml, string rucEmpresa, DocumentoXml? facturaRef = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return null;
 
@@ -102,19 +111,20 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
             return null;
         }
 
-        var carpeta = ObtenerRutaCarpeta();
-        var nombre  = $"{ruc}-{tipo}-{serie}-{correl}{sufijo}.xml";
-        var ruta    = Path.Combine(carpeta, nombre);
+        var carpeta   = ObtenerRutaCarpeta(rucEmpresa);
+        var sufijoCdr = documento.EsCdr ? "_CDR" : string.Empty;
+        var nombre    = $"{ruc}-{tipo}-{serie}-{correl}{ObtenerSufijoFacturaRef(documento, facturaRef)}{sufijoCdr}{sufijo}.xml";
+        var ruta      = Path.Combine(carpeta, nombre);
 
         return await EscribirArchivoAsync(ruta, carpeta, Encoding.UTF8.GetBytes(contenidoXml), ct);
     }
 
     public async Task<string?> GuardarPdfAsync(
-        string nombreArchivoOriginal, byte[] contenido, DocumentoXml? documentoXml = null, CancellationToken ct = default)
+        string nombreArchivoOriginal, byte[] contenido, string rucEmpresa, DocumentoXml? documentoXml = null, DocumentoXml? facturaRef = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return null;
 
-        var carpeta = ObtenerRutaCarpeta();
+        var carpeta = ObtenerRutaCarpeta(rucEmpresa);
         string nombre;
 
         if (documentoXml is not null)
@@ -136,7 +146,7 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
                 return null;
             }
 
-            nombre = $"{ruc}-{tipo}-{serie}-{correl}{sufijo}.pdf";
+            nombre = $"{ruc}-{tipo}-{serie}-{correl}{ObtenerSufijoFacturaRef(documentoXml, facturaRef)}{sufijo}.pdf";
         }
         else
         {
@@ -159,6 +169,18 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     // ── Helpers ─────────────────────────────────────────────────
 
     /// <summary>
+    /// Retorna "_CORRELATIVO" de la factura de referencia cuando el documento es una guía
+    /// de remisión (tipo "09") y se proporcionó una factura del mismo correo.
+    /// Vacío en cualquier otro caso.
+    /// </summary>
+    private static string ObtenerSufijoFacturaRef(DocumentoXml documento, DocumentoXml? facturaRef)
+    {
+        if (facturaRef is null) return string.Empty;
+        if (documento.TipoDocumento != "09") return string.Empty;
+        return $"_{PadCorrel(Campo(facturaRef.Correlativo, null, CerosCorrel))}";
+    }
+
+    /// <summary>
     /// Devuelve <see langword="true"/> si al menos uno de los cuatro campos SUNAT
     /// contiene datos reales (no es el valor cero por defecto).
     /// </summary>
@@ -175,19 +197,20 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         return _patronSunat.IsMatch(soloNombre)
             || _patronSubraya.IsMatch(soloNombre)
             || _patronAlternativo.IsMatch(soloNombre)
-            || _patronSerieCorrel.IsMatch(soloNombre);
+            || _patronSerieCorrel.IsMatch(soloNombre)
+            || _patronCdr.IsMatch(soloNombre);
     }
 
     /// <summary>
     /// Construye la ruta de carpeta usando la fecha de hoy:
-    ///   {RutaArchivos}/{RucEmpresa}/{yyyy}/{MM}/{dd}
+    ///   {RutaArchivos}/{rucEmpresa}/{yyyy}/{MM}/{dd}
     /// </summary>
-    private string ObtenerRutaCarpeta()
+    private string ObtenerRutaCarpeta(string rucEmpresa)
     {
         var hoy = DateTime.Today;
         return Path.Combine(
             _opciones.RutaArchivos,
-            _opciones.RucEmpresa,
+            rucEmpresa,
             hoy.Year.ToString(),
             hoy.Month.ToString("D2"),
             hoy.Day.ToString("D2"));
@@ -264,6 +287,9 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         var ms = _patronSubraya.Match(nombre);
         if (ms.Success)
             return [ms.Groups[1].Value, ms.Groups[2].Value, ms.Groups[3].Value, ms.Groups[4].Value];
+        var mc = _patronCdr.Match(nombre);
+        if (mc.Success)
+            return [mc.Groups[1].Value, mc.Groups[2].Value, mc.Groups[3].Value, mc.Groups[4].Value];
         return [];
     }
 
