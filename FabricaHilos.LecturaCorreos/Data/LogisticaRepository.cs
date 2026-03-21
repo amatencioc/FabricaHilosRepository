@@ -464,6 +464,51 @@ public class LogisticaRepository : ILogisticaRepository
         return (cabecera, lineas, cuotas);
     }
 
+    // ── SELECT ID por NUMERO_DOCUMENTO ───────────────────────────────────────
+    public async Task<long?> ObtenerDocumentoIdAsync(string numeroDocumento)
+    {
+        using var conn = new OracleConnection(_connStr);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT ID FROM FH_LC_DOCUMENTO WHERE NUMERO_DOCUMENTO = :P_NUM AND ROWNUM = 1";
+        cmd.CommandType = System.Data.CommandType.Text;
+        cmd.BindByName  = true;
+
+        AddParam(cmd, "P_NUM", OracleDbType.Varchar2, numeroDocumento);
+
+        var val = await cmd.ExecuteScalarAsync();
+        if (val is null || val == DBNull.Value) return null;
+        if (val is OracleDecimal od) return (long)od.Value;
+        return Convert.ToInt64(val);
+    }
+
+    // ── SELECT ID por RUC_EMISOR + SERIE + CORRELATIVO ───────────────────────
+    public async Task<long?> ObtenerDocumentoIdPorRucYSerieAsync(
+        string rucEmisor, string serie, long correlativo)
+    {
+        using var conn = new OracleConnection(_connStr);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT ID FROM FH_LC_DOCUMENTO
+                             WHERE RUC_EMISOR = :P_RUC
+                               AND SERIE      = :P_SERIE
+                               AND TO_NUMBER(CORRELATIVO) = :P_CORR
+                               AND ROWNUM = 1";
+        cmd.CommandType = System.Data.CommandType.Text;
+        cmd.BindByName  = true;
+
+        AddParam(cmd, "P_RUC",  OracleDbType.Varchar2, rucEmisor);
+        AddParam(cmd, "P_SERIE", OracleDbType.Varchar2, serie);
+        AddParam(cmd, "P_CORR", OracleDbType.Decimal,  correlativo);
+
+        var val = await cmd.ExecuteScalarAsync();
+        if (val is null || val == DBNull.Value) return null;
+        if (val is OracleDecimal od) return (long)od.Value;
+        return Convert.ToInt64(val);
+    }
+
     // ── SP_DOC_POR_VENCER ─────────────────────────────────────────────────────
     public async Task<IReadOnlyList<DocumentoPorVencer>>
         ObtenerDocumentosPorVencerAsync(int diasAdelante = 30)

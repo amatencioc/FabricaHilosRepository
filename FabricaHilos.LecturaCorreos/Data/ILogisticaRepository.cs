@@ -40,6 +40,19 @@ public interface ILogisticaRepository
     Task<(DocumentoResumen? Cabecera, IReadOnlyList<LineaDocumento> Lineas, IReadOnlyList<CuotaPago> Cuotas)>
         ObtenerDocumentoAsync(long id);
 
+    /// <summary>
+    /// Devuelve el <c>DOC_ID</c> de un documento ya existente en <c>FH_LC_DOCUMENTO</c>
+    /// buscando por <paramref name="numeroDocumento"/>. Retorna <c>null</c> si no existe.
+    /// </summary>
+    Task<long?> ObtenerDocumentoIdAsync(string numeroDocumento);
+
+    /// <summary>
+    /// Devuelve el <c>ID</c> de un documento existente buscando por RUC emisor, serie y
+    /// correlativo (comparado numéricamente para ignorar ceros de relleno).
+    /// Útil para rescatar PDFs huérfanos cuyo XML llegó en un correo separado.
+    /// </summary>
+    Task<long?> ObtenerDocumentoIdPorRucYSerieAsync(string rucEmisor, string serie, long correlativo);
+
     Task<IReadOnlyList<DocumentoPorVencer>>
         ObtenerDocumentosPorVencerAsync(int diasAdelante = 30);
 

@@ -343,10 +343,17 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
             if (codigo == -2)
             {
+                // El SP detectó duplicado. Intentamos reusar el ID que ya devolvió el SP;
+                // si no lo trae (idGenerado == 0), consultamos directamente la BD.
+                var idExistente = idGenerado > 0
+                    ? idGenerado
+                    : await _repositorio.ObtenerDocumentoIdAsync(documento.NumeroDocumento);
+
                 _logger.LogWarning(
-                    "Documento '{Numero}' ya existe en BD (duplicado). Se omite. Mensaje: {Msg}",
-                    documento.NumeroDocumento, mensaje);
-                return null;
+                    "Documento '{Numero}' ya existe en BD (duplicado). " +
+                    "Se reutiliza ID={Id} para vincular el PDF del correo. Mensaje SP: {Msg}",
+                    documento.NumeroDocumento, idExistente, mensaje);
+                return idExistente;
             }
 
             if (codigo != 0)
@@ -464,6 +471,25 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
         try
         {
+            // Rescate: si el PDF llegó en un correo separado al XML, intentar vincularlo
+            // buscando el documento en BD por RUC+Serie+Correlativo extraídos del nombre del archivo.
+            if (documentoId is null)
+            {
+                var (ruc, serie, corr) = TryExtraerRefDocDePdfNombre(adjunto.NombreArchivo);
+                if (ruc is not null && serie is not null && corr is not null)
+                {
+                    var idRescatado = await _repositorio.ObtenerDocumentoIdPorRucYSerieAsync(ruc, serie, corr.Value);
+                    if (idRescatado is not null)
+                    {
+                        _logger.LogInformation(
+                            "PDF '{Archivo}' rescatado: vinculado al documento ID={Id} " +
+                            "(RUC={Ruc} Serie={Serie} Correlativo={Corr}). No se registrará como huérfano.",
+                            adjunto.NombreArchivo, idRescatado, ruc, serie, corr);
+                        documentoId = idRescatado;
+                    }
+                }
+            }
+
             if (documentoId is not null)
             {
                 // PDF vinculado a un documento válido: disco + FH_LECTCORREOS_ARCHIVOS.
@@ -548,5 +574,53 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
                 "No se pudo registrar el error '{Tipo}' para '{Archivo}' en la base de datos.",
                 tipoError, nombreArchivo);
         }
+    }
+
+    /// <summary>
+    /// Extrae RUC emisor, serie y correlativo desde el nombre de un archivo PDF.
+    /// Soporta dos patrones habituales:
+    /// <list type="bullet">
+    ///   <item>PDF-DOC-{SERIE}-{CORRELATIVO}{RUC}  (p.ej. PDF-DOC-E001-622720537870614.pdf)</item>
+    ///   <item>{RUC}-{TIPO}-{SERIE}-{CORRELATIVO}  (p.ej. 20268214527-01-F001-90757.pdf)</item>
+    /// </list>
+    /// Devuelve (null, null, null) si el nombre no coincide con ningún patrón.
+    /// </summary>
+    private static (string? Ruc, string? Serie, long? Correlativo)
+        TryExtraerRefDocDePdfNombre(string nombreArchivo)
+    {
+        var nombre = Path.GetFileNameWithoutExtension(nombreArchivo);
+
+        // Patrón 1: PDF-DOC-{SERIE}-{CORRELATIVO}{RUC}
+        // El RUC (11 dígitos) está concatenado al final del correlativo sin separador.
+        if (nombre.StartsWith("PDF-DOC-", StringComparison.OrdinalIgnoreCase))
+        {
+            var resto = nombre[8..];                       // quita "PDF-DOC-"
+            var guion = resto.IndexOf('-');
+            if (guion > 0)
+            {
+                var serie    = resto[..guion];
+                var combined = resto[(guion + 1)..];       // {CORRELATIVO}{RUC}
+                if (combined.Length > 11)
+                {
+                    var rucStr  = combined[^11..];         // últimos 11 dígitos = RUC
+                    var corrStr = combined[..^11];         // resto = correlativo
+                    if (long.TryParse(rucStr, out _) && long.TryParse(corrStr, out var corr))
+                        return (rucStr, serie, corr);
+                }
+            }
+            return (null, null, null);
+        }
+
+        // Patrón 2: {RUC}-{TIPO}-{SERIE}-{CORRELATIVO}
+        var partes = nombre.Split('-');
+        if (partes.Length >= 4
+            && partes[0].Length == 11
+            && long.TryParse(partes[0], out _)
+            && long.TryParse(partes[3], out var correlativo))
+        {
+            return (partes[0], partes[2], correlativo);
+        }
+
+        return (null, null, null);
     }
 }
