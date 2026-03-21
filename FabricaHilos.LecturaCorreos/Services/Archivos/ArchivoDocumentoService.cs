@@ -79,10 +79,10 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
 
     // ── IArchivoDocumentoService ──────────────────────────────────────────────
 
-    public async Task GuardarXmlAsync(
+    public async Task<string?> GuardarXmlAsync(
         DocumentoXml documento, string contenidoXml, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
+        if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return null;
 
         // Si algún campo del objeto parseado está vacío, se intenta extraerlo
         // del nombre original del archivo adjunto (suele seguir el patrón SUNAT).
@@ -93,17 +93,26 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         var correl  = PadCorrel(Campo(documento.Correlativo, fb.Length > 3 ? fb[3] : null, CerosCorrel));
         var sufijo  = ExtraerSufijo(documento.NombreArchivo);
 
+        // Solo guardar si el documento tiene al menos un campo SUNAT identificatorio.
+        if (!TieneIdentificacion(ruc, tipo, serie, correl))
+        {
+            _logger.LogDebug(
+                "XML '{Archivo}' omitido del disco: sin RUC, tipo, serie ni correlativo identificable.",
+                documento.NombreArchivo);
+            return null;
+        }
+
         var carpeta = ObtenerRutaCarpeta();
         var nombre  = $"{ruc}-{tipo}-{serie}-{correl}{sufijo}.xml";
         var ruta    = Path.Combine(carpeta, nombre);
 
-        await EscribirArchivoAsync(ruta, carpeta, Encoding.UTF8.GetBytes(contenidoXml), ct);
+        return await EscribirArchivoAsync(ruta, carpeta, Encoding.UTF8.GetBytes(contenidoXml), ct);
     }
 
-    public async Task GuardarPdfAsync(
+    public async Task<string?> GuardarPdfAsync(
         string nombreArchivoOriginal, byte[] contenido, DocumentoXml? documentoXml = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return;
+        if (string.IsNullOrWhiteSpace(_opciones.RutaArchivos)) return null;
 
         var carpeta = ObtenerRutaCarpeta();
         string nombre;
@@ -117,19 +126,57 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
             var serie  = Campo(documentoXml.Serie,         fb.Length > 2 ? fb[2] : null, CerosSerie);
             var correl = PadCorrel(Campo(documentoXml.Correlativo, fb.Length > 3 ? fb[3] : null, CerosCorrel));
             var sufijo = ExtraerSufijo(nombreArchivoOriginal);
+
+            // Solo guardar si el XML asociado tiene al menos un campo SUNAT identificatorio.
+            if (!TieneIdentificacion(ruc, tipo, serie, correl))
+            {
+                _logger.LogDebug(
+                    "PDF '{Archivo}' omitido del disco: el XML asociado no tiene RUC, tipo, serie ni correlativo identificable.",
+                    nombreArchivoOriginal);
+                return null;
+            }
+
             nombre = $"{ruc}-{tipo}-{serie}-{correl}{sufijo}.pdf";
         }
         else
         {
-            // Sin datos XML: intentar extraer del nombre original (patrón SUNAT o alternativo).
+            // Sin datos XML: solo guardar si el nombre original coincide con un patrón SUNAT conocido.
+            if (!NombreOriginalTieneIdentificacion(nombreArchivoOriginal))
+            {
+                _logger.LogDebug(
+                    "PDF '{Archivo}' omitido del disco: nombre sin patrón SUNAT reconocible y sin XML asociado.",
+                    nombreArchivoOriginal);
+                return null;
+            }
+
             nombre = ResolverNombrePdf(nombreArchivoOriginal);
         }
 
         var ruta = Path.Combine(carpeta, nombre);
-        await EscribirArchivoAsync(ruta, carpeta, contenido, ct);
+        return await EscribirArchivoAsync(ruta, carpeta, contenido, ct);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Devuelve <see langword="true"/> si al menos uno de los cuatro campos SUNAT
+    /// contiene datos reales (no es el valor cero por defecto).
+    /// </summary>
+    private static bool TieneIdentificacion(string ruc, string tipo, string serie, string correl) =>
+        ruc != CerosRuc || tipo != CerosTipo || serie != CerosSerie || correl != CerosCorrel;
+
+    /// <summary>
+    /// Devuelve <see langword="true"/> si el nombre de archivo original coincide con
+    /// alguno de los cuatro patrones SUNAT conocidos (excluye el fallback de ceros).
+    /// </summary>
+    private static bool NombreOriginalTieneIdentificacion(string nombreOriginal)
+    {
+        var soloNombre = Path.GetFileName(nombreOriginal);
+        return _patronSunat.IsMatch(soloNombre)
+            || _patronSubraya.IsMatch(soloNombre)
+            || _patronAlternativo.IsMatch(soloNombre)
+            || _patronSerieCorrel.IsMatch(soloNombre);
+    }
 
     /// <summary>
     /// Construye la ruta de carpeta usando la fecha de hoy:
@@ -223,7 +270,8 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     /// <summary>
     /// Extrae el sufijo de tipo de documento según palabras clave en el nombre del archivo.
     ///   "REGLAMENTO" → "-REGLAMENTO" | "INFORME" → "-INFORME" | "REGLA" → "-REGLA"
-    /// El orden importa: REGLAMENTO se evalúa antes de REGLA para evitar coincidencia parcial.
+    ///   "HOJA"       → "-HOJA"       | "SERVICIO" → "-SERVICIO" | "ACTA" → "-ACTA"
+    /// El orden importa: REGLAMENTO antes de REGLA para evitar coincidencia parcial.
     /// Comparación insensible a mayúsculas/minúsculas.
     /// </summary>
     private static string ExtraerSufijo(string nombreArchivo)
@@ -232,6 +280,9 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         if (sinExt.Contains("REGLAMENTO", StringComparison.OrdinalIgnoreCase)) return "-REGLAMENTO";
         if (sinExt.Contains("INFORME",    StringComparison.OrdinalIgnoreCase)) return "-INFORME";
         if (sinExt.Contains("REGLA",      StringComparison.OrdinalIgnoreCase)) return "-REGLA";
+        if (sinExt.Contains("HOJA",       StringComparison.OrdinalIgnoreCase)) return "-HOJA";
+        if (sinExt.Contains("SERVICIO",   StringComparison.OrdinalIgnoreCase)) return "-SERVICIO";
+        if (sinExt.Contains("ACTA",       StringComparison.OrdinalIgnoreCase)) return "-ACTA";
         return string.Empty;
     }
 
@@ -242,27 +293,43 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
 
     /// <summary>
     /// Crea la carpeta si no existe y escribe el archivo.
-    /// Si el archivo ya existe lo omite para no sobreescribir.
+    /// Si el nombre ya existe en disco, busca un nombre único añadiendo un contador (-1, -2, …).
+    /// Retorna la ruta definitivamente escrita, o <see langword="null"/> si hubo error.
     /// </summary>
-    private async Task EscribirArchivoAsync(
+    private async Task<string?> EscribirArchivoAsync(
         string ruta, string carpeta, byte[] contenido, CancellationToken ct)
     {
         try
         {
             Directory.CreateDirectory(carpeta); // no hace nada si la carpeta ya existe
 
-            if (File.Exists(ruta))
+            // Si el nombre ya existe, buscar el primer nombre libre con sufijo numérico.
+            var rutaFinal = ruta;
+            if (File.Exists(rutaFinal))
             {
-                _logger.LogDebug("Archivo ya existe, se omite: {Ruta}", ruta);
-                return;
+                var sinExt  = Path.GetFileNameWithoutExtension(ruta);
+                var ext     = Path.GetExtension(ruta);
+                int contador = 1;
+                do
+                {
+                    rutaFinal = Path.Combine(carpeta, $"{sinExt}-{contador}{ext}");
+                    contador++;
+                }
+                while (File.Exists(rutaFinal));
+
+                _logger.LogDebug(
+                    "Nombre '{Nombre}' ya existente en disco; se usa: {RutaFinal}",
+                    Path.GetFileName(ruta), rutaFinal);
             }
 
-            await File.WriteAllBytesAsync(ruta, contenido, ct);
-            _logger.LogInformation("Archivo guardado en disco: {Ruta}", ruta);
+            await File.WriteAllBytesAsync(rutaFinal, contenido, ct);
+            _logger.LogInformation("Archivo guardado en disco: {Ruta}", rutaFinal);
+            return rutaFinal;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al guardar archivo en '{Ruta}'.", ruta);
+            return null;
         }
     }
 }

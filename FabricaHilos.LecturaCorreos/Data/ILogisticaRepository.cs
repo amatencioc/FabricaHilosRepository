@@ -23,6 +23,9 @@ public interface ILogisticaRepository
     Task<(long IdGenerado, int CodigoResultado, string MensajeResultado)>
         GuardarAdjuntoPdfAsync(AdjuntoPdf pdf);
 
+    /// <summary>Registra en <c>FH_LECTCORREOS_ARCHIVOS</c> un archivo confirmado en disco.</summary>
+    Task RegistrarArchivoAsync(long? documentoId, string tipoArchivo, string nombreOriginal, string nombreGuardado, string rutaArchivo);
+
     Task<(int CodigoResultado, string MensajeResultado)>
         MarcarErrorRevisadoAsync(long id, string observaciones);
 

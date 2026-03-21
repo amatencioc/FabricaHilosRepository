@@ -66,9 +66,9 @@ public class ImapEmailReaderService : IEmailReaderService
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "Cuenta '{Nombre}': error de conexión IMAP a {Host}:{Port} tras {Max} intento(s). Se omite esta cuenta.",
+                    "Cuenta '{Nombre}': error de conexión IMAP a {Host}:{Port} tras {Max} intento(s). Se propaga al circuit breaker.",
                     cuenta.Nombre, cuenta.ImapHost, cuenta.ImapPort, MaxIntentosImap);
-                return [];
+                throw;
             }
         }
 
@@ -88,21 +88,6 @@ public class ImapEmailReaderService : IEmailReaderService
             var uids = await carpeta.SearchAsync(SearchQuery.NotSeen, ct);
             _logger.LogInformation("Cuenta {Nombre}: {Count} correos no leídos encontrados.",
                 cuenta.Nombre, uids.Count);
-
-            IMailFolder? carpetaProcesados = null;
-            if (cuenta.MoverProcesado && !string.IsNullOrWhiteSpace(cuenta.CarpetaProcesados))
-            {
-                try
-                {
-                    carpetaProcesados = await client.GetFolderAsync(cuenta.CarpetaProcesados, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Cuenta {Nombre}: no se pudo acceder a la carpeta '{Carpeta}'. Se continuará sin mover mensajes.",
-                        cuenta.Nombre, cuenta.CarpetaProcesados);
-                }
-            }
 
             var candidatos    = uids.Take(maxCorreos).ToList();
             int procesados    = 0;
@@ -133,22 +118,22 @@ public class ImapEmailReaderService : IEmailReaderService
 
                     if (adjuntosMensaje.Count > 0)
                     {
+                        // No se marca como leído aquí: se difiere a MarcarProcesadosAsync,
+                        // que se invoca DESPUÉS de persistir en BD y disco.
                         var grupoId = uid.Id.ToString();
                         adjuntosMensaje.ForEach(a => a.GrupoCorreo = grupoId);
                         resultado.AddRange(adjuntosMensaje);
-
-                        if (cuenta.MarcarLeido)
-                            await carpeta.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
-                        if (cuenta.MoverProcesado && carpetaProcesados is not null)
-                            await carpeta.MoveToAsync(uid, carpetaProcesados, ct);
-
                         procesados++;
                     }
                     else
                     {
-                        _logger.LogDebug(
-                            "Cuenta {Nombre}: UID {Uid} ('{Asunto}') sin adjuntos XML/PDF/ZIP. Queda no leído.",
-                            cuenta.Nombre, uid, asunto);
+                        // Sin adjuntos: no hay datos que perder, se puede marcar ahora.
+                        if (cuenta.MarcarLeido)
+                            await carpeta.AddFlagsAsync(uid, MessageFlags.Seen, true, ct);
+                        _logger.LogInformation(
+                            "Cuenta {Nombre}: UID {Uid} ('{Asunto}') sin adjuntos XML/PDF/ZIP.{Accion}",
+                            cuenta.Nombre, uid, asunto,
+                            cuenta.MarcarLeido ? " Marcado como leído." : " No se marca (MarcarLeido=false).");
                     }
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -187,7 +172,14 @@ public class ImapEmailReaderService : IEmailReaderService
     {
         var adjuntos = new List<AdjuntoCorreo>();
 
-        foreach (var parte in mensaje.BodyParts.OfType<MimePart>())
+        // Detectar message/rfc822 cuyo Message no pudo ser parseado por MimeKit:
+        // en ese caso IterarPartes los silencia y sus adjuntos serían invisibles.
+        AdvertirMessagePartsVacios(mensaje.Body, cuentaNombre, asunto);
+
+        // IterarPartes desciende recursivamente en correos reenviados (RV:/FW:).
+        // Un correo reenviado embebe el original como MessagePart (message/rfc822),
+        // que BodyParts.OfType<MimePart>() no traversa, dejando XML/PDF invisibles.
+        foreach (var parte in IterarPartes(mensaje.Body))
         {
             if (ct.IsCancellationRequested) break;
 
@@ -199,18 +191,18 @@ public class ImapEmailReaderService : IEmailReaderService
                 if (nombre.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                 {
                     adjuntos.Add(await _lectorXml.ExtraerAsync(parte, asunto, remitente, fecha, ct));
-                    _logger.LogDebug("Cuenta {Nombre}: XML '{Archivo}' leído.", cuentaNombre, nombre);
+                    _logger.LogInformation("Cuenta {Nombre}: XML '{Archivo}' leído.", cuentaNombre, nombre);
                 }
                 else if (nombre.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
                     adjuntos.Add(await _lectorPdf.ExtraerAsync(parte, asunto, remitente, fecha, ct));
-                    _logger.LogDebug("Cuenta {Nombre}: PDF '{Archivo}' leído.", cuentaNombre, nombre);
+                    _logger.LogInformation("Cuenta {Nombre}: PDF '{Archivo}' leído.", cuentaNombre, nombre);
                 }
                 else if (nombre.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     var deZip = await _lectorZip.ExtraerAsync(parte, asunto, remitente, fecha, ct);
                     adjuntos.AddRange(deZip);
-                    _logger.LogDebug("Cuenta {Nombre}: ZIP '{Archivo}' — {N} adjunto(s) extraídos.",
+                    _logger.LogInformation("Cuenta {Nombre}: ZIP '{Archivo}' — {N} adjunto(s) extraídos.",
                         cuentaNombre, nombre, deZip.Count);
                 }
             }
@@ -224,5 +216,155 @@ public class ImapEmailReaderService : IEmailReaderService
         }
 
         return adjuntos;
+    }
+
+    /// <summary>
+    /// Recorre el árbol MIME y emite un Warning por cada <see cref="MessagePart"/>
+    /// cuyo <c>Message</c> es null (MimeKit no pudo parsear el correo embebido).
+    /// En ese caso <see cref="IterarPartes"/> omite silenciosamente esa rama.
+    /// </summary>
+    private void AdvertirMessagePartsVacios(MimeEntity? entidad, string cuentaNombre, string asunto)
+    {
+        switch (entidad)
+        {
+            case MessagePart mp:
+                if (mp.Message is null)
+                    _logger.LogWarning(
+                        "Cuenta {Nombre}: '{Asunto}' contiene un message/rfc822 con cuerpo nulo — " +
+                        "MimeKit no pudo parsear el correo embebido; sus adjuntos no serán procesados.",
+                        cuentaNombre, asunto);
+                else
+                    AdvertirMessagePartsVacios(mp.Message.Body, cuentaNombre, asunto);
+                break;
+            case Multipart multi:
+                foreach (var hijo in multi)
+                    AdvertirMessagePartsVacios(hijo, cuentaNombre, asunto);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Traversal recursivo del árbol MIME que descende dentro de correos
+    /// reenviados (<c>message/rfc822</c> / <see cref="MessagePart"/>),
+    /// invisibles para <c>BodyParts.OfType&lt;MimePart&gt;()</c>.
+    /// </summary>
+    private static IEnumerable<MimePart> IterarPartes(MimeEntity? entidad)
+    {
+        switch (entidad)
+        {
+            case null:
+                break;
+
+            case MimePart parte:
+                yield return parte;
+                break;
+
+            case Multipart multipart:
+                foreach (var hijo in multipart)
+                foreach (var p in IterarPartes(hijo))
+                    yield return p;
+                break;
+
+            case MessagePart msgParte:
+                // Correo original embebido (RV:/FW:): descender en su cuerpo.
+                if (msgParte.Message?.Body is not null)
+                    foreach (var p in IterarPartes(msgParte.Message.Body))
+                        yield return p;
+                break;
+        }
+    }
+
+    // ── Marcar mensajes como leídos post-persistencia ────────────────────────
+
+    /// <inheritdoc/>
+    public async Task MarcarProcesadosAsync(
+        CuentaCorreoOptions cuenta, IReadOnlySet<string> grupoIds, CancellationToken ct)
+    {
+        if (grupoIds.Count == 0) return;
+
+        for (int intento = 1; intento <= MaxIntentosImap; intento++)
+        {
+            try
+            {
+                await MarcarEnImapAsync(cuenta, grupoIds, ct);
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    "Cuenta {Nombre}: marcado de leídos cancelado por parada del servicio.", cuenta.Nombre);
+                return;
+            }
+            catch (Exception ex) when (intento < MaxIntentosImap)
+            {
+                var espera = BackoffImap[intento - 1];
+                _logger.LogWarning(ex,
+                    "Cuenta '{Nombre}': fallo al marcar mensajes en intento {N}/{Max}. Reintentando en {Seg} s...",
+                    cuenta.Nombre, intento, MaxIntentosImap, (int)espera.TotalSeconds);
+                try   { await Task.Delay(espera, ct); }
+                catch (OperationCanceledException) { return; }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Cuenta '{Nombre}': error al marcar mensajes como leídos tras {Max} intento(s). Los correos se reprocesarán en el próximo ciclo.",
+                    cuenta.Nombre, MaxIntentosImap);
+                return;
+            }
+        }
+    }
+
+    private async Task MarcarEnImapAsync(
+        CuentaCorreoOptions cuenta, IReadOnlySet<string> grupoIds, CancellationToken ct)
+    {
+        using var client = await _conexion.ConectarAsync(cuenta, ct);
+
+        var carpeta = await client.GetFolderAsync(cuenta.Carpeta, ct);
+        await carpeta.OpenAsync(FolderAccess.ReadWrite, ct);
+
+        var uids = grupoIds
+            .Select(g => new UniqueId(uint.Parse(g)))
+            .ToList();
+
+        if (cuenta.MarcarLeido)
+            await carpeta.AddFlagsAsync(uids, MessageFlags.Seen, true, ct);
+
+        if (cuenta.MoverProcesado && !string.IsNullOrWhiteSpace(cuenta.CarpetaProcesados))
+        {
+            IMailFolder? carpetaProcesados = null;
+            try
+            {
+                carpetaProcesados = await client.GetFolderAsync(cuenta.CarpetaProcesados, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Cuenta {Nombre}: no se pudo acceder a la carpeta '{Carpeta}'. Se omite el movimiento.",
+                    cuenta.Nombre, cuenta.CarpetaProcesados);
+            }
+
+            if (carpetaProcesados is not null)
+            {
+                foreach (var uid in uids)
+                {
+                    try
+                    {
+                        await carpeta.MoveToAsync(uid, carpetaProcesados, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Cuenta {Nombre}: no se pudo mover el UID {Uid} a '{Carpeta}'.",
+                            cuenta.Nombre, uid, cuenta.CarpetaProcesados);
+                    }
+                }
+            }
+        }
+
+        _logger.LogInformation(
+            "Cuenta {Nombre}: {Count} mensaje(s) marcado(s) como leído(s).",
+            cuenta.Nombre, uids.Count);
+
+        await client.DisconnectAsync(quit: true, CancellationToken.None);
     }
 }

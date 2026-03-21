@@ -145,6 +145,7 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
     public async Task<LimpiezaResultado> LimpiarTablasAsync(CancellationToken ct = default)
     {
         // El orden respeta las FK: primero tablas hijo, luego la tabla padre.
+        // FH_LECTCORREOS_ARCHIVOS      → hijo de FH_LC_DOCUMENTO (DOCUMENTO_ID nullable)
         // FH_LC_LINEA                  → hijo de FH_LC_DOCUMENTO
         // FH_LC_CUOTA                  → hijo de FH_LC_DOCUMENTO
         // FH_LECTCORREOS_FACTURAS      → hijo de FH_LC_DOCUMENTO
@@ -160,6 +161,7 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
             static CommandDefinition Cmd(string sql, IDbTransaction t, CancellationToken c) =>
                 new(sql, transaction: t, cancellationToken: c);
 
+            int archivos     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_ARCHIVOS",        tx, ct));
             int lineas       = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_LINEA",                   tx, ct));
             int cuotas       = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_CUOTA",                   tx, ct));
             int facturas     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_FACTURAS",        tx, ct));
@@ -169,7 +171,7 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
 
             tx.Commit();
 
-            return new LimpiezaResultado(lineas, cuotas, facturas, errores, documentos, pdfAdjuntos);
+            return new LimpiezaResultado(lineas, cuotas, facturas, errores, documentos, pdfAdjuntos, archivos);
         }
         catch
         {

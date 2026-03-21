@@ -302,6 +302,57 @@ public class LogisticaRepository : ILogisticaRepository
         }
     }
 
+    // ── SP_REGISTRAR_ARCHIVO ──────────────────────────────────────────────────
+    public async Task RegistrarArchivoAsync(
+        long? documentoId, string tipoArchivo, string nombreOriginal, string nombreGuardado, string rutaArchivo)
+    {
+        // Sin relación con FH_LC_DOCUMENTO no se inserta en FH_LECTCORREOS_ARCHIVOS.
+        if (documentoId is null)
+        {
+            _logger.LogDebug(
+                "RegistrarArchivo omitido para '{Nombre}' ({Tipo}): sin DOCUMENTO_ID asociado.",
+                nombreOriginal, tipoArchivo);
+            return;
+        }
+
+        try
+        {
+            using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "PKG_LC_LOGISTICA.SP_REGISTRAR_ARCHIVO";
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
+            cmd.BindByName  = true;
+
+            AddParam(cmd, "P_DOCUMENTO_ID",   OracleDbType.Decimal,  documentoId.Value);
+            AddParam(cmd, "P_TIPO_ARCHIVO",   OracleDbType.Varchar2, tipoArchivo);
+            AddParam(cmd, "P_NOMBRE_ORIGINAL",OracleDbType.Varchar2, nombreOriginal);
+            AddParam(cmd, "P_NOMBRE_GUARDADO",OracleDbType.Varchar2, nombreGuardado);
+            AddParam(cmd, "P_RUTA_ARCHIVO",   OracleDbType.Varchar2, rutaArchivo);
+
+            var pCod = new OracleParameter("P_CODIGO_RESULTADO",  OracleDbType.Int32)
+                       { Direction = System.Data.ParameterDirection.Output };
+            var pMsg = new OracleParameter("P_MENSAJE_RESULTADO", OracleDbType.Varchar2, 4000)
+                       { Direction = System.Data.ParameterDirection.Output };
+            cmd.Parameters.Add(pCod);
+            cmd.Parameters.Add(pMsg);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            int    codigo  = pCod.Value is OracleDecimal oc ? (int)oc.Value : -1;
+            string mensaje = pMsg.Value?.ToString() ?? string.Empty;
+            if (codigo != 0)
+                _logger.LogWarning(
+                    "RegistrarArchivo tipo {Tipo} '{Nombre}': código {Cod} - {Msg}",
+                    tipoArchivo, nombreOriginal, codigo, mensaje);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al registrar archivo '{Nombre}' en BD.", nombreOriginal);
+        }
+    }
+
     // ── SP_MARCAR_ERROR_REVISADO ──────────────────────────────────────────────
     public async Task<(int CodigoResultado, string MensajeResultado)>
         MarcarErrorRevisadoAsync(long id, string observaciones)

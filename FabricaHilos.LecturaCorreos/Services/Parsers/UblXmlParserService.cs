@@ -106,10 +106,17 @@ public class UblXmlParserService : IXmlParserService
         doc.FechaVencimiento = Fecha(Elem(root, NsCbc, "DueDate"));
         doc.Moneda          = Elem(root, NsCbc, "DocumentCurrencyCode") ?? string.Empty;
 
+        // Facturas/Boletas incluyen InvoiceTypeCode ("01","03").
+        // Notas de Crédito/Débito no incluyen ese nodo: se deriva del elemento raíz.
         doc.TipoDocumento = Elem(root, NsCbc, "InvoiceTypeCode")
                          ?? Elem(root, NsCbc, "CreditNoteTypeCode")
                          ?? Elem(root, NsCbc, "DebitNoteTypeCode")
-                         ?? string.Empty;
+                         ?? doc.TipoXml switch
+                            {
+                                "CREDIT_NOTE" => "07",
+                                "DEBIT_NOTE"  => "08",
+                                _             => string.Empty,
+                            };
 
         // ── Emisor ────────────────────────────────────────────────────────────
         var supplier = root.Element(NsCac + "AccountingSupplierParty")

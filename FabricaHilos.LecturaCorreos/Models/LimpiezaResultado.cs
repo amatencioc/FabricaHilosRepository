@@ -9,7 +9,8 @@ public record LimpiezaResultado(
     int FilasFacturas,
     int FilasErrores,
     int FilasDocumentos,
-    int FilasPdfAdjuntos)
+    int FilasPdfAdjuntos,
+    int FilasArchivos)
 {
-    public int TotalFilas => FilasLineas + FilasCuotas + FilasFacturas + FilasErrores + FilasDocumentos + FilasPdfAdjuntos;
+    public int TotalFilas => FilasLineas + FilasCuotas + FilasFacturas + FilasErrores + FilasDocumentos + FilasPdfAdjuntos + FilasArchivos;
 }
