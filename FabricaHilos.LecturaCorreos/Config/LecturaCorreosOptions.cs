@@ -14,8 +14,34 @@ public class LecturaCorreosOptions
     /// </summary>
     public string RutaArchivos { get; set; } = string.Empty;
 
-    /// <summary>RUC de la empresa receptora. Se usa como primer nivel de carpeta.</summary>
-    public string RucEmpresa   { get; set; } = "20100096260";
+    /// <summary>
+    /// RUC de la empresa receptora. Se usa como primer nivel de carpeta al organizar archivos.
+    /// Obligatorio en appsettings.json → LecturaCorreos:RucEmpresa.
+    /// </summary>
+    public string RucEmpresa { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Habilita o deshabilita el worker de lectura de correos (LecturaCorreosSunatCdrWorker).
+    /// Cuando es false el servicio arranca pero el worker no procesa ningún ciclo.
+    /// </summary>
+    public bool WorkerCorreosActivo { get; set; } = true;
+
+    /// <summary>
+    /// Habilita o deshabilita el worker de consulta de CDR a SUNAT (SunatCdrWorker).
+    /// Cuando es false el servicio arranca pero el worker no procesa ningún ciclo.
+    /// </summary>
+    public bool WorkerSunatActivo { get; set; } = true;
+
+    /// <summary>
+    /// Habilita o deshabilita el worker de notificación de PDFs en limbo (NotificacionPdfLimboWorker).
+    /// Cuando es false el servicio arranca pero el worker no procesa ningún ciclo.
+    /// </summary>
+    public bool WorkerNotificacionPdfActivo { get; set; } = true;
+
+    /// <summary>
+    /// Intervalo en minutos entre ciclos del NotificacionPdfLimboWorker.
+    /// </summary>
+    public int IntervaloNotificacionPdfMinutos { get; set; } = 5;
 
     /// <summary>
     /// SOLO PRUEBAS. Si es true, elimina todos los registros de las tablas del proceso

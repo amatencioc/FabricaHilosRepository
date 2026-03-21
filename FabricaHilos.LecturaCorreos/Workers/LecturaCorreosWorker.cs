@@ -53,6 +53,15 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!_opciones.WorkerCorreosActivo)
+        {
+            _logger.LogWarning("LecturaCorreosSunatCdrWorker está DESHABILITADO (WorkerCorreosActivo = false). " +
+                               "Actívalo en appsettings.json → LecturaCorreos:WorkerCorreosActivo.");
+            // Libera la señal para que SunatCdrWorker no quede bloqueado esperando.
+            _limpiezaSignal.Completar();
+            return;
+        }
+
         _logger.LogInformation("LecturaCorreosSunatCdrWorker iniciado. Intervalo: {Minutos} min.",
             _opciones.IntervaloMinutos);
 

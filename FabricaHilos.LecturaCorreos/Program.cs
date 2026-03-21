@@ -9,6 +9,7 @@ using FabricaHilos.LecturaCorreos.Services.Parsers;
 using FabricaHilos.LecturaCorreos.Services.Signals;
 using FabricaHilos.LecturaCorreos.Services.Sunat;
 using FabricaHilos.LecturaCorreos.Workers;
+using FabricaHilos.Notificaciones.Extensions;
 using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -60,10 +61,16 @@ builder.Services.AddSingleton<ILimpiezaSignal, LimpiezaSignal>();
 builder.Services.AddSingleton<ICuentaCircuitBreaker, CuentaCircuitBreaker>();
 // Archivos en disco: organiza documentos por RUC/año/mes/día.
 builder.Services.AddTransient<IArchivoDocumentoService, ArchivoDocumentoService>();
+// PDF Limbo: notificación por correo de adjuntos huérfanos.
+builder.Services.AddTransient<IPdfLimboRepository, PdfLimboRepository>();
+
+// ─── Notificaciones ───────────────────────────────────────────
+builder.Services.AddNotificaciones(builder.Configuration);
 
 // ─── Workers (Hosted Services) ────────────────────────────────
 builder.Services.AddHostedService<LecturaCorreosSunatCdrWorker>();
 builder.Services.AddHostedService<SunatCdrWorker>();
+builder.Services.AddHostedService<NotificacionPdfLimboWorker>();
 
 try
 {

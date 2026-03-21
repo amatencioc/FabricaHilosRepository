@@ -4,114 +4,239 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Documento con error - Acción requerida</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background-color: #F4F6F5;
-      color: #1A1A1E;
-      padding: 32px 16px;
-    }
-    .email-wrapper {
-      max-width: 640px; margin: 0 auto; background-color: #ffffff;
-      border-radius: 8px; overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);
-    }
-    .email-header {
-      background: linear-gradient(135deg, #0F2E25 0%, #1F5C49 60%, #2D7A5F 100%);
-      padding: 28px 36px; text-align: center;
-    }
-    .email-header img.logo {
-      height: 56px; margin-bottom: 16px; display: block; margin-left: auto; margin-right: auto;
-    }
-    .email-header h1 { color: #C8A951; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; margin: 0; }
-    .email-header p.subtitle { color: rgba(255,255,255,0.82); font-size: 13px; margin-top: 6px; }
-    .gold-band { height: 4px; background: linear-gradient(135deg, #8B6F00 0%, #D4AC1A 100%); }
-    .email-body { padding: 32px 36px; }
-    .email-body p { font-size: 14px; line-height: 1.75; color: #3D4451; margin-bottom: 16px; }
-    .email-body p strong { color: #1A1A1E; }
-    .alert-box {
-      background-color: #FFFBEA; border-left: 5px solid #C8A951;
-      padding: 16px 20px; border-radius: 4px; margin: 20px 0;
-    }
-    .alert-box p { margin: 0; font-size: 13px; color: #8B6F00; line-height: 1.8; }
-    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 20px 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #F4F6F5; color: #1A1A1E; margin: 0; padding: 0; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .info-table th { background-color: #1B4D3E; color: #ffffff; text-align: left; padding: 10px 14px; font-weight: 600; }
-    .info-table td { padding: 10px 14px; border: 1px solid #CBD2D9; color: #3D4451; background-color: #fff; }
+    .info-table td { padding: 10px 14px; border: 1px solid #CBD2D9; color: #3D4451; background-color: #ffffff; }
     .info-table tr:nth-child(even) td { background-color: #E8EDEB; }
-    .steps-title { font-size: 14px; font-weight: 700; color: #1B4D3E; margin-bottom: 8px; }
-    .steps { padding-left: 20px; font-size: 14px; color: #3D4451; line-height: 2; }
+    .steps { padding-left: 20px; font-size: 14px; color: #3D4451; line-height: 2; margin: 0; }
     .steps li { margin-bottom: 4px; }
-    .cta-wrapper { text-align: center; margin: 28px 0 8px; }
-    .cta-button {
-      display: inline-block; background-color: #1B4D3E; color: #C8A951 !important;
-      text-decoration: none; font-weight: 700; font-size: 14px;
-      padding: 13px 32px; border-radius: 4px; letter-spacing: 0.3px;
+    @media only screen and (max-width: 640px) {
+      .email-outer { padding: 16px 8px !important; }
+      .email-wrapper { width: 100% !important; }
+      .email-body-td { padding: 24px 20px !important; }
+      .header-td { padding: 20px !important; }
     }
-    .email-footer { background-color: #0B231C; padding: 24px 36px; text-align: center; }
-    .email-footer p { color: rgba(255,255,255,0.65); font-size: 11px; line-height: 1.8; margin: 0; }
-    .email-footer a { color: #C8A951; text-decoration: none; }
-    .email-footer .company-name { color: rgba(255,255,255,0.82); font-size: 12px; font-weight: 600; margin-bottom: 8px; }
   </style>
 </head>
-<body>
-  <div class="email-wrapper">
-    <div class="email-header">
-      <img class="logo"
-        src="{{Asset:logo_colo.png}}"
-        alt="La Colonial Fabrica de Hilos S.A." />
-      <h1>Documento Pendiente de Validación</h1>
-      <p class="subtitle">Notificación automática del Sistema de Gestión Documental</p>
-    </div>
-    <div class="gold-band"></div>
-    <div class="email-body">
-      <p>Estimado(a) <strong>{{NombreRemitente}}</strong>,</p>
-      <p>
-        Hemos recibido su correo electrónico con fecha <strong>{{FechaRecepcion}}</strong>;
-        sin embargo, al procesar los documentos adjuntos, nuestro sistema detecto que
-        uno o mas archivos <strong>no pueden ser procesados</strong> por alguna de las siguientes razones:
-      </p>
-      <div class="alert-box">
-        <p>
-          El documento <strong>no cuenta con un archivo XML valido</strong> asociado.<br/>
-          El <strong>tipo de documento no esta registrado</strong> en el sistema.
-        </p>
-      </div>
-      <p>A continuación el detalle del documento recibido:</p>
-      <table class="info-table">
-        <tr><th>Campo</th><th>Valor</th></tr>
-        <tr><td>Remitente</td><td>{{CorreoRemitente}}</td></tr>
-        <tr><td>Fecha de recepción</td><td>{{FechaRecepcion}}</td></tr>
-        <tr><td>Nombre del archivo</td><td>{{NombreArchivo}}</td></tr>
-        <tr><td>Motivo</td><td>{{MotivoError}}</td></tr>
-      </table>
-      <p class="steps-title">¿Qué debe hacer?</p>
-      <ol class="steps">
-        <li>Verifique que el archivo adjunto sea un <strong>documento valido y reconocido</strong> por el sistema.</li>
-        <li>Asegúrese de incluir el <strong>archivo XML correspondiente</strong> junto con su documento.</li>
-        <li>Reenvie su correo con los documentos corregidos a la misma direccion.</li>
-        <li>Si el problema persiste, comuníquese con nosotros para recibir asistencia.</li>
-      </ol>
-      <div class="cta-wrapper">
-        <a class="cta-button" href="mailto:soporte@lacolonial.com.pe">Contactar Soporte</a>
-      </div>
-      <p style="margin-top: 24px;">
-        Lamentamos los inconvenientes causados y agradecemos su comprensión y pronta atención.
-      </p>
-      <p>
-        Atentamente,<br/>
-        <strong style="color:#1B4D3E;">Sistema de Gestión Documental</strong><br/>
-        <span style="color:#5E6472; font-size:13px;">La Colonial Fabrica de Hilos S.A.</span>
-      </p>
-    </div>
-    <div class="email-footer">
-      <p class="company-name">La Colonial Fabrica de Hilos S.A.</p>
-      <p>
-        Este es un mensaje automatico, por favor no responda directamente a este correo.<br/>
-        Tiene dudas? Escribanos a <a href="mailto:soporte@lacolonial.com.pe">soporte@lacolonial.com.pe</a>
-      </p>
-      <p style="margin-top: 12px;">2026 La Colonial Fábrica de Hilos S.A. - Todos los derechos reservados.</p>
-    </div>
-  </div>
+<body style="margin:0; padding:0; background-color:#F4F6F5;">
+
+  <!-- OUTER WRAPPER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" class="email-outer"
+         style="background-color:#F4F6F5; padding:32px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- EMAIL CARD -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" class="email-wrapper"
+               style="max-width:640px; width:640px; background-color:#ffffff;
+                      border-radius:8px; overflow:hidden;
+                      box-shadow:0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);">
+
+          <!-- ===== HEADER ===== -->
+          <tr>
+            <td bgcolor="#1B4D3E" align="center" class="header-td"
+                style="background-color:#1B4D3E; padding:28px 36px; text-align:center;">
+              <img src="{{Asset:logo_colo.png}}"
+                   alt="La Colonial Fábrica de Hilos S.A."
+                   width="auto" height="56"
+                   style="display:block; height:56px; margin:0 auto 14px; border:0;" />
+              <h1 style="color:#C8A951; font-size:18px; font-weight:700;
+                         letter-spacing:0.5px; margin:0;
+                         font-family:Arial, Helvetica, sans-serif;">
+                &#9888;&#65039; Documento Pendiente de Validación
+              </h1>
+              <p style="color:rgba(255,255,255,0.82); font-size:13px; margin-top:6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Notificación automática del Sistema de Gestión Documental
+              </p>
+            </td>
+          </tr>
+
+          <!-- ===== BANDA DORADA ===== -->
+          <tr>
+            <td bgcolor="#C8A951" height="4"
+                style="background-color:#C8A951; height:4px;
+                       line-height:4px; font-size:1px; mso-line-height-rule:exactly;">
+              &nbsp;
+            </td>
+          </tr>
+
+          <!-- ===== CUERPO ===== -->
+          <tr>
+            <td class="email-body-td"
+                style="padding:32px 36px; background-color:#ffffff;">
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Estimado(a) <strong style="color:#1A1A1E;">{{NombreRemitente}}</strong>,
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Hemos recibido su correo electrónico con fecha
+                <strong style="color:#1A1A1E;">{{FechaRecepcion}}</strong>;
+                sin embargo, al procesar los documentos adjuntos, nuestro sistema detectó que
+                uno o más archivos <strong style="color:#1A1A1E;">no pueden ser procesados</strong>
+                por alguna de las siguientes razones:
+              </p>
+
+              <!-- ALERTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:16px 0;">
+                <tr>
+                  <td bgcolor="#FFFBEA"
+                      style="background-color:#FFFBEA;
+                             border-left:5px solid #C8A951;
+                             padding:14px 18px; border-radius:4px;">
+                    <p style="margin:0; font-size:13px; color:#8B6F00;
+                               line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
+                      &#128312; El documento
+                      <strong>no cuenta con un archivo XML válido</strong> asociado.<br/>
+                      &#128312; El <strong>tipo de documento no está registrado</strong> en el sistema.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 10px; font-family:Arial, Helvetica, sans-serif;">
+                A continuación el detalle del documento recibido:
+              </p>
+
+              <!-- TABLA DE DETALLE -->
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Remitente</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{CorreoRemitente}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Fecha de recepción</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{FechaRecepcion}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Nombre del archivo</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{NombreArchivo}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Motivo</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{MotivoError}}</td>
+                </tr>
+              </table>
+
+              <!-- PASOS -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:0 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                ¿Qué debe hacer?
+              </p>
+              <ol class="steps"
+                  style="padding-left:20px; font-size:14px; color:#3D4451;
+                         line-height:2; margin:0 0 20px;
+                         font-family:Arial, Helvetica, sans-serif;">
+                <li style="margin-bottom:4px;">Verifique que el archivo adjunto sea un
+                  <strong>documento válido y reconocido</strong> por el sistema.</li>
+                <li style="margin-bottom:4px;">Asegúrese de incluir el
+                  <strong>archivo XML correspondiente</strong> junto con su documento.</li>
+                <li style="margin-bottom:4px;">Reenvíe su correo con los documentos
+                  corregidos a la misma dirección.</li>
+                <li style="margin-bottom:4px;">Si el problema persiste, comuníquese con
+                  nosotros para recibir asistencia.</li>
+              </ol>
+
+              <!-- CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:4px 0 20px;">
+                <tr>
+                  <td align="center">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td bgcolor="#1B4D3E" align="center"
+                            style="background-color:#1B4D3E; border-radius:4px; padding:0;">
+                          <a href="mailto:sistemas@lacolonial.com.pe"
+                             style="display:block; padding:14px 36px;
+                                    color:#C8A951; text-decoration:none;
+                                    font-weight:700; font-size:14px;
+                                    letter-spacing:0.3px; border-radius:4px;
+                                    font-family:Arial, Helvetica, sans-serif;
+                                    mso-padding-alt:14px 36px;">
+                            Contactar Soporte
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Lamentamos los inconvenientes causados y agradecemos su comprensión
+                y pronta atención.
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0; font-family:Arial, Helvetica, sans-serif;">
+                Atentamente,<br/>
+                <strong style="color:#1B4D3E;">Sistema de Gestión Documental</strong><br/>
+                <span style="color:#5E6472; font-size:13px;">La Colonial Fábrica de Hilos S.A.</span>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ===== FOOTER ===== -->
+          <tr>
+            <td bgcolor="#0B231C" align="center"
+                style="background-color:#0B231C; padding:24px 36px; text-align:center;">
+              <p style="color:rgba(255,255,255,0.85); font-size:12px; font-weight:600;
+                        margin:0 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                La Colonial Fábrica de Hilos S.A.
+              </p>
+              <p style="color:rgba(255,255,255,0.65); font-size:11px; line-height:1.8;
+                        margin:0; font-family:Arial, Helvetica, sans-serif;">
+                Este es un mensaje automático, por favor no responda directamente a este correo.<br/>
+                ¿Tiene dudas? Escríbanos a
+                <a href="mailto:sistemas@lacolonial.com.pe"
+                   style="color:#C8A951; text-decoration:none;">sistemas@lacolonial.com.pe</a>
+              </p>
+              <p style="color:rgba(255,255,255,0.45); font-size:11px;
+                        margin-top:12px; font-family:Arial, Helvetica, sans-serif;">
+                &copy; 2026 La Colonial Fábrica de Hilos S.A. &mdash; Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /EMAIL CARD -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- /OUTER WRAPPER -->
+
 </body>
 </html>

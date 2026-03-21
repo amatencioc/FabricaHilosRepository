@@ -1,3 +1,4 @@
+using FabricaHilos.LecturaCorreos.Config;
 using FabricaHilos.LecturaCorreos.Data;
 using FabricaHilos.LecturaCorreos.Services.Signals;
 using FabricaHilos.LecturaCorreos.Services.Sunat;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace FabricaHilos.LecturaCorreos.Workers;
 
@@ -14,22 +16,32 @@ public class SunatCdrWorker : BackgroundService
     private readonly ILimpiezaSignal         _limpiezaSignal;
     private readonly ILogger<SunatCdrWorker> _logger;
     private readonly TimeSpan                _intervalo;
+    private readonly bool                    _activo;
 
     public SunatCdrWorker(
-        IServiceScopeFactory    scopeFactory,
-        ILimpiezaSignal         limpiezaSignal,
-        ILogger<SunatCdrWorker> logger,
-        IConfiguration          configuration)
+        IServiceScopeFactory          scopeFactory,
+        ILimpiezaSignal               limpiezaSignal,
+        ILogger<SunatCdrWorker>       logger,
+        IConfiguration                configuration,
+        IOptions<LecturaCorreosOptions> opciones)
     {
         _scopeFactory   = scopeFactory;
         _limpiezaSignal = limpiezaSignal;
         _logger         = logger;
+        _activo         = opciones.Value.WorkerSunatActivo;
         var minutos = configuration.GetValue<int>("Sunat:IntervaloConsultaMinutos", 10);
         _intervalo = TimeSpan.FromMinutes(minutos);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!_activo)
+        {
+            _logger.LogWarning("SunatCdrWorker está DESHABILITADO (WorkerSunatActivo = false). " +
+                               "Actívalo en appsettings.json → LecturaCorreos:WorkerSunatActivo.");
+            return;
+        }
+
         _logger.LogInformation("SunatCdrWorker iniciado. Intervalo: {Intervalo} minutos.", _intervalo.TotalMinutes);
 
         // Espera a que LecturaCorreosSunatCdrWorker complete la limpieza de tablas

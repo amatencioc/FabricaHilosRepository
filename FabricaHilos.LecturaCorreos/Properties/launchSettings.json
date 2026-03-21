@@ -1,0 +1,23 @@
+{
+  "profiles": {
+
+    // ── Producción ────────────────────────────────────────────────────────────
+    // Lee SOLO appsettings.json. Workers y configuración real.
+    "Producción": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production"
+      }
+    },
+
+    // ── Desarrollo (todos los workers) ────────────────────────────────────────
+    // Lee appsettings.json + appsettings.Development.json.
+    // El Development.json sobreescribe los valores del base.
+    "Desarrollo": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
