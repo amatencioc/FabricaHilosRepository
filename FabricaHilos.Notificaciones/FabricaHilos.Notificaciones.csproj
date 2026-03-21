@@ -15,9 +15,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"            Version="9.0.0" />
   </ItemGroup>
 
-  <!-- Los templates HTML se embeben en el .dll — no dependen de rutas físicas -->
+  <!-- Los templates HTML y sus assets se embeben en el .dll — no dependen de rutas físicas -->
   <ItemGroup>
     <EmbeddedResource Include="Templates\**\*.html" />
+    <EmbeddedResource Include="Templates\Assets\**\*" />
   </ItemGroup>
 
 </Project>
