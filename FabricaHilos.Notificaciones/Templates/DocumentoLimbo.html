@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Documento con error - Acción requerida</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background-color: #F4F6F5;
+      color: #1A1A1E;
+      padding: 32px 16px;
+    }
+
+    .email-wrapper {
+      max-width: 640px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);
+    }
+
+    /* HEADER */
+    .email-header {
+      background: linear-gradient(135deg, #0F2E25 0%, #1F5C49 60%, #2D7A5F 100%);
+      padding: 28px 36px;
+      text-align: center;
+    }
+    .email-header img.logo {
+      height: 56px;
+      margin-bottom: 16px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .email-header h1 {
+      color: #C8A951;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin: 0;
+    }
+    .email-header p.subtitle {
+      color: rgba(255,255,255,0.82);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    /* BANDA DORADA */
+    .gold-band {
+      height: 4px;
+      background: linear-gradient(135deg, #8B6F00 0%, #D4AC1A 100%);
+    }
+
+    /* CUERPO */
+    .email-body { padding: 32px 36px; }
+    .email-body p {
+      font-size: 14px;
+      line-height: 1.75;
+      color: #3D4451;
+      margin-bottom: 16px;
+    }
+    .email-body p strong { color: #1A1A1E; }
+
+    /* CAJA DE ALERTA */
+    .alert-box {
+      background-color: #FFFBEA;
+      border-left: 5px solid #C8A951;
+      padding: 16px 20px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    .alert-box p { margin: 0; font-size: 13px; color: #8B6F00; line-height: 1.8; }
+
+    /* TABLA */
+    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 20px 0; }
+    .info-table th {
+      background-color: #1B4D3E;
+      color: #ffffff;
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+    }
+    .info-table td {
+      padding: 10px 14px;
+      border: 1px solid #CBD2D9;
+      color: #3D4451;
+      background-color: #fff;
+    }
+    .info-table tr:nth-child(even) td { background-color: #E8EDEB; }
+
+    /* PASOS */
+    .steps-title { font-size: 14px; font-weight: 700; color: #1B4D3E; margin-bottom: 8px; }
+    .steps { padding-left: 20px; font-size: 14px; color: #3D4451; line-height: 2; }
+    .steps li { margin-bottom: 4px; }
+
+    /* CTA */
+    .cta-wrapper { text-align: center; margin: 28px 0 8px; }
+    .cta-button {
+      display: inline-block;
+      background-color: #1B4D3E;
+      color: #C8A951 !important;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 13px 32px;
+      border-radius: 4px;
+      letter-spacing: 0.3px;
+    }
+
+    /* FOOTER */
+    .email-footer { background-color: #0B231C; padding: 24px 36px; text-align: center; }
+    .email-footer p { color: rgba(255,255,255,0.65); font-size: 11px; line-height: 1.8; margin: 0; }
+    .email-footer a { color: #C8A951; text-decoration: none; }
+    .email-footer .company-name {
+      color: rgba(255,255,255,0.82);
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+
+    <!-- HEADER -->
+    <div class="email-header">
+      <img class="logo"
+        src="https://raw.githubusercontent.com/amatencioc/FabricaHilosRepository/main/LaColonial/wwwroot/images/logos/logo_colo.png"
+        alt="La Colonial Fábrica de Hilos S.A." />
+      <h1>⚠️ Documento Pendiente de Validación</h1>
+      <p class="subtitle">Notificación automática del Sistema de Gestión Documental</p>
+    </div>
+
+    <!-- BANDA DORADA -->
+    <div class="gold-band"></div>
+
+    <!-- CUERPO -->
+    <div class="email-body">
+
+      <p>Estimado(a) <strong>{{NombreRemitente}}</strong>,</p>
+
+      <p>
+        Hemos recibido su correo electrónico con fecha <strong>{{FechaRecepcion}}</strong>;
+        sin embargo, al procesar los documentos adjuntos, nuestro sistema detectó que
+        uno o más archivos <strong>no pueden ser procesados</strong> por alguna de las
+        siguientes razones:
+      </p>
+
+      <div class="alert-box">
+        <p>
+          🔸 El documento <strong>no cuenta con un archivo XML válido</strong> asociado.<br/>
+          🔸 El <strong>tipo de documento no está registrado</strong> en el sistema.
+        </p>
+      </div>
+
+      <p>A continuación el detalle del documento recibido:</p>
+      <table class="info-table">
+        <tr>
+          <th>Campo</th>
+          <th>Valor</th>
+        </tr>
+        <tr>
+          <td>Remitente</td>
+          <td>{{CorreoRemitente}}</td>
+        </tr>
+        <tr>
+          <td>Fecha de recepción</td>
+          <td>{{FechaRecepcion}}</td>
+        </tr>
+        <tr>
+          <td>Nombre del archivo</td>
+          <td>{{NombreArchivo}}</td>
+        </tr>
+        <tr>
+          <td>Motivo</td>
+          <td>{{MotivoError}}</td>
+        </tr>
+      </table>
+
+      <p class="steps-title">¿Qué debe hacer?</p>
+      <ol class="steps">
+        <li>Verifique que el archivo adjunto sea un <strong>documento válido y reconocido</strong> por el sistema.</li>
+        <li>Asegúrese de incluir el <strong>archivo XML correspondiente</strong> junto con su documento.</li>
+        <li>Reenvíe su correo con los documentos corregidos a la misma dirección.</li>
+        <li>Si el problema persiste, comuníquese con nosotros para recibir asistencia.</li>
+      </ol>
+
+      <div class="cta-wrapper">
+        <a class="cta-button" href="mailto:soporte@lacolonial.com.gt">
+          Contactar Soporte
+        </a>
+      </div>
+
+      <p style="margin-top: 24px;">
+        Lamentamos los inconvenientes causados y agradecemos su comprensión y pronta atención.
+      </p>
+
+      <p>
+        Atentamente,<br/>
+        <strong style="color:#1B4D3E;">Sistema de Gestión Documental</strong><br/>
+        <span style="color:#5E6472; font-size:13px;">La Colonial Fábrica de Hilos S.A.</span>
+      </p>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="email-footer">
+      <p class="company-name">La Colonial Fábrica de Hilos S.A.</p>
+      <p>
+        Este es un mensaje automático, por favor no responda directamente a este correo.<br/>
+        ¿Tiene dudas? Escríbanos a <a href="mailto:soporte@lacolonial.com.gt">soporte@lacolonial.com.gt</a>
+      </p>
+      <p style="margin-top: 12px;">&copy; 2026 La Colonial Fábrica de Hilos S.A. — Todos los derechos reservados.</p>
+    </div>
+
+  </div>
+</body>
+</html>
