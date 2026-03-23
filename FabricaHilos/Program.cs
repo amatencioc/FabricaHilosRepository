@@ -6,6 +6,7 @@ using FabricaHilos.Models.Inventario;
 using FabricaHilos.Models.Ventas;
 using FabricaHilos.Models.RecursosHumanos;
 using FabricaHilos.Services.Produccion;
+using FabricaHilos.Services.Sgc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +56,7 @@ builder.Services.AddSession(options =>
 // Registrar servicio de búsqueda de recetas (Oracle)
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
+builder.Services.AddScoped<ISgcService, SgcService>();
 
 // Agregar MVC con vistas y registrar ubicación de vistas anidadas bajo Produccion
 builder.Services.AddControllersWithViews()

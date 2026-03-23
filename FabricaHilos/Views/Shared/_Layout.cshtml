@@ -64,6 +64,18 @@
                         </li>
                     </ul>
                 </li>
+                <li>
+                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sgc" ? "active" : "")">
+                        <i class="bi bi-file-earmark-text"></i> SGC
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="Sgc" asp-action="Pedidos" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-cart-check"></i> Pedidos
+                            </a>
+                        </li>
+                    </ul>
+                </li>
                 <!-- VENTAS -->
                 <li class="d-none">
                     <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" ? "active" : "")">

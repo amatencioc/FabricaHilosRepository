@@ -1,0 +1,141 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.KardexGDto>
+
+@{
+    ViewData["Title"] = "Guías";
+    int pedSerie = ViewBag.PedSerie;
+    int numPed   = ViewBag.NumPed;
+    int itemNro  = ViewBag.ItemNro;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedidos">Pedidos</a></li>
+    <li class="breadcrumb-item">
+        <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed">
+            Pedido @numPed
+        </a>
+    </li>
+    <li class="breadcrumb-item active">Guías (Ítem @itemNro)</li>
+}
+
+<div class="mb-3">
+    <h4 class="section-title mb-1">
+        <i class="bi bi-truck me-2"></i>Guías del Pedido @numPed — Ítem @itemNro
+    </h4>
+    <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed"
+       class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver al pedido
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Almacén</th>
+                        <th>Transacción</th>
+                        <th>Serie</th>
+                        <th>N° Guía</th>
+                        <th>Fecha</th>
+                        <th>Destinatario</th>
+                        <th>RUC</th>
+                        <th>Glosa</th>
+                        <th class="text-end">Peso Total</th>
+                        <th>Facturado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>@item.CodAlm</td>
+                            <td>@item.TpTransac</td>
+                            <td>@item.Serie</td>
+                            <td class="fw-semibold">@item.Numero</td>
+                            <td>@(item.FchTransac?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td>@(item.Nombre ?? "-")</td>
+                            <td>@(item.Ruc ?? "-")</td>
+                            <td>@(item.Glosa ?? "-")</td>
+                            <td class="text-end">@(item.PesoTotal?.ToString("N4") ?? "-")</td>
+                            <td>
+                                @if (item.IndFact == "S" || item.IndFact == "1")
+                                {
+                                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Sí</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">No</span>
+                                }
+                            </td>
+                            <td>
+                                <a asp-action="DetalleGuia"
+                                   asp-route-codAlm="@item.CodAlm"
+                                   asp-route-tpTransac="@item.TpTransac"
+                                   asp-route-serie="@item.Serie"
+                                   asp-route-numero="@item.Numero"
+                                   asp-route-pedSerie="@pedSerie"
+                                   asp-route-numPed="@numPed"
+                                   asp-route-nro="@itemNro"
+                                   class="btn btn-sm btn-outline-primary btn-accion"
+                                   title="Ver detalle de la guía">
+                                    <i class="bi bi-list-columns-reverse"></i> Detalle
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox me-2"></i>No se encontraron guías para este pedido.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer py-2">
+        @{
+            int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+            int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+            int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+            int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
+            int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+            int endItem     = Math.Min(currentPage * pgSize, totalCount);
+        }
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">
+                @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}\u2013{endItem} de {totalCount} registros")
+            </small>
+            @if (totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Guias"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                               asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
+                        </li>
+                        @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                        {
+                            <li class="page-item @(pg == currentPage ? "active" : "")">
+                                <a class="page-link" asp-action="Guias"
+                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                                   asp-route-page="@pg">@pg</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Guias"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                               asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+</div>

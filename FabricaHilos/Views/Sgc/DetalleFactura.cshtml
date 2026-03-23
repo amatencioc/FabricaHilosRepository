@@ -1,0 +1,183 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.ItemDocuDto>
+@using FabricaHilos.Models.Sgc
+
+@{
+    ViewData["Title"] = "Detalle de Factura";
+    var  factura    = ViewBag.Factura   as DocuVentDto;
+    string codAlm   = ViewBag.CodAlm    ?? string.Empty;
+    string tpTransac= ViewBag.TpTransac ?? string.Empty;
+    int  guiaSerie  = ViewBag.GuiaSerie;
+    int  guiaNumero = ViewBag.GuiaNumero;
+    int  pedSerie   = ViewBag.PedSerie;
+    int  numPed     = ViewBag.NumPed;
+    int  itemNro    = ViewBag.ItemNro;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedidos">Pedidos</a></li>
+    <li class="breadcrumb-item">
+        <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed">
+            Pedido @numPed
+        </a>
+    </li>
+    <li class="breadcrumb-item">
+        <a asp-action="Guias" asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro">
+            Guías (Ítem @itemNro)
+        </a>
+    </li>
+    <li class="breadcrumb-item">
+        <a asp-action="DetalleGuia"
+           asp-route-codAlm="@codAlm"
+           asp-route-tpTransac="@tpTransac"
+           asp-route-serie="@guiaSerie"
+           asp-route-numero="@guiaNumero"
+           asp-route-pedSerie="@pedSerie"
+           asp-route-numPed="@numPed"
+           asp-route-nro="@itemNro">
+            Guía @guiaNumero
+        </a>
+    </li>
+    <li class="breadcrumb-item active">Factura @factura?.Numero</li>
+}
+
+<div class="mb-3">
+    <h4 class="section-title mb-1"><i class="bi bi-list-ul me-2"></i>Detalle de Factura</h4>
+    <a asp-action="Facturas"
+       asp-route-cTipo="@factura?.Tipodoc"
+       asp-route-cSerie="@factura?.Serie"
+       asp-route-cNumero="@factura?.Numero"
+       asp-route-codAlm="@codAlm"
+       asp-route-tpTransac="@tpTransac"
+       asp-route-guiaSerie="@guiaSerie"
+       asp-route-guiaNumero="@guiaNumero"
+       asp-route-pedSerie="@pedSerie"
+       asp-route-numPed="@numPed"
+       asp-route-itemNro="@itemNro"
+       asp-route-kdNro="0"
+       class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver a facturas
+    </a>
+</div>
+
+@if (factura != null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-receipt me-1"></i>
+            @factura.Tipodoc — Serie <strong>@factura.Serie</strong>
+        </div>
+        <div class="card-body py-2">
+            <div class="row row-cols-2 row-cols-md-4 g-2 small">
+                <div><span class="text-muted">Fecha:</span> @(factura.Fecha?.ToString("dd/MM/yyyy") ?? "-")</div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(factura.Nombre ?? factura.CodCliente)</span></div>
+                <div><span class="text-muted">RUC:</span> @(factura.Ruc ?? "-")</div>
+                <div><span class="text-muted">Moneda:</span> @(factura.Moneda ?? "-")</div>
+                <div><span class="text-muted">Total:</span> <span class="fw-semibold text-success">@(factura.Total?.ToString("N2") ?? "-")</span></div>
+                <div class="col-span-2"><span class="text-muted">Glosa:</span> @(factura.Glosa ?? "-")</div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Ítem</th>
+                        <th>Cód. Art.</th>
+                        <th>Título</th>
+                        <th>Detalle</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Precio</th>
+                        <th class="text-end">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>@item.Nro</td>
+                            <td class="fw-semibold">@(item.CodArt ?? "-")</td>
+                            <td>@(item.Titulo ?? "-")</td>
+                            <td>@(item.Detalle ?? "-")</td>
+                            <td class="text-end">@(item.Cantidad?.ToString("N4") ?? "-")</td>
+                            <td class="text-end">@(item.Precio?.ToString("N2") ?? "-")</td>
+                            <td class="text-end fw-semibold text-success">@(item.Importe?.ToString("N2") ?? "-")</td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox me-2"></i>No se encontraron ítems para esta factura.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                @if (Model.Any())
+                {
+                    <tfoot class="table-light fw-semibold">
+                        <tr>
+                            <td colspan="6" class="text-end">Total:</td>
+                            <td class="text-end text-success">
+                                @(factura?.Total?.ToString("N2") ?? "-")
+                            </td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+    <div class="card-footer py-2">
+        @{
+            int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+            int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+            int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+            int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
+            int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+            int endItem     = Math.Min(currentPage * pgSize, totalCount);
+        }
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">
+                @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}\u2013{endItem} de {totalCount} registros")
+            </small>
+            @if (totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="DetalleFactura"
+                               asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
+                               asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
+                               asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
+                               asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
+                        </li>
+                        @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                        {
+                            <li class="page-item @(pg == currentPage ? "active" : "")">
+                                <a class="page-link" asp-action="DetalleFactura"
+                                   asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
+                                   asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
+                                   asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
+                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
+                                   asp-route-page="@pg">@pg</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="DetalleFactura"
+                               asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
+                               asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
+                               asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
+                               asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+</div>
