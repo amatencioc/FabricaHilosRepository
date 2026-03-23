@@ -76,6 +76,23 @@
                         </li>
                     </ul>
                 </li>
+                <li>
+                    <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" ? "active" : "")">
+                        <i class="bi bi-receipt"></i> Facturación
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="Facturacion" asp-action="ImportarFacturas" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-file-earmark-arrow-up"></i> Importar Facturas
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Facturacion" asp-action="ListaDocumentos" class="sidebar-link sidebar-sublink">
+                                <i class="bi bi-list-ul"></i> Lista de Documentos
+                            </a>
+                        </li>
+                    </ul>
+                </li>
                 <!-- VENTAS -->
                 <li class="d-none">
                     <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" ? "active" : "")">
