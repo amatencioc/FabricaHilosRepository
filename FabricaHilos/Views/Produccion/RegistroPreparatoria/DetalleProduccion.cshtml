@@ -42,12 +42,6 @@
 
                     <div class="row g-4">
                         <!-- Fila 1 -->
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Metraje <span class="text-danger">*</span></label>
-                            <input id="metrajeInput" name="metraje" class="form-control" type="number" step="1" min="0" placeholder="Ingrese el metraje" value="@Model.Metraje" required tabindex="1" autofocus />
-                        </div>
-
-                        <!-- Fila 2 -->
                         <div class="col-md-6" id="grupoRolloTacho">
                             <label class="form-label fw-semibold">Rollo Tacho</label>
                             <input id="rolloTachoInput" name="rolloTacho" class="form-control" type="number" min="0" placeholder="Ingrese el rollo tacho" value="@Model.RolloTacho" tabindex="3" />
@@ -123,6 +117,7 @@
         const contadorIniModel = @(Model.ContadorInicial.HasValue ? Model.ContadorInicial.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "0");
         const husosInacModel   = @(Model.HorasInactivas.HasValue  ? Model.HorasInactivas.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)  : "0");
         const urlHusosMaquina  = '@Url.Action("ObtenerHusosMaquina", "RegistroPreparatoria")';
+        const metrajeModel     = @(Model.Metraje.HasValue ? Model.Metraje.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "0");
 
         // ===== CACHÉ del PESO para evitar llamadas repetidas a la API =====
         let pesoCached = null;
@@ -182,12 +177,11 @@
         // ===== CÁLCULO EN TIEMPO REAL =====
         async function recalcularKgNeto() {
             const rolloTachoInput = document.getElementById('rolloTachoInput');
-            const metrajeInput   = document.getElementById('metrajeInput');
             const kgNetoInput    = document.getElementById('kgNetoInput');
 
             const rolloTachoVal = rolloTachoInput.value.trim();
             const rolloTacho    = parseFloat(rolloTachoVal);
-            const metraje       = parseFloat(metrajeInput.value);
+            const metraje       = metrajeModel;
 
             // Si RolloTacho está completamente vacío → limpiar Kg Neto (activar validación required)
             if (!rolloTachoVal) {
@@ -332,14 +326,6 @@
                 if (tipoMaquina === 'E' || tipoMaquina === 'L') {
                     // E y L: KG no se calcula automáticamente, el usuario lo ingresa manualmente
                     setKgNetoReadOnly(false);
-
-                    // L: Metraje es opcional
-                    if (tipoMaquina === 'L') {
-                        const metrajeInput = document.getElementById('metrajeInput');
-                        metrajeInput.required = false;
-                        const metrajeLabel = metrajeInput.closest('.col-md-6').querySelector('label');
-                        if (metrajeLabel) metrajeLabel.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
-                    }
                 } else {
                     // M y otros con estrategia: cálculo automático según RolloTacho
                     const rolloTachoVal = document.getElementById('rolloTachoInput').value.trim();
@@ -349,14 +335,12 @@
 
                     // Eventos de cambio en tiempo real (input: teclado; change: flechas del spinner)
                     ['input', 'change'].forEach(function(evt) {
-                        document.getElementById('metrajeInput').addEventListener(evt, recalcularKgNeto);
                         document.getElementById('rolloTachoInput').addEventListener(evt, recalcularKgNeto);
                     });
                 }
             }
 
             // Validación: enteros con límite de dígitos
-            enforceIntegerInput(document.getElementById('metrajeInput'), 5);
             const nroParadaInputEl = document.getElementById('nroParadaInput');
             if (nroParadaInputEl) enforceIntegerInput(nroParadaInputEl, 3);
 
@@ -395,8 +379,14 @@
                 document.getElementById('formDetalleProduccion').submit();
             });
 
-            // Foco inicial en el primer campo
-            document.getElementById('velocidadInput').focus();
+            // Foco inicial en el primer campo visible
+            if (tipoMaquina === 'P') {
+                const cf = document.querySelector('[name="contadorFinal"]');
+                if (cf) cf.focus();
+            } else {
+                const rt = document.getElementById('rolloTachoInput');
+                if (rt) rt.focus();
+            }
         });
     </script>
 }

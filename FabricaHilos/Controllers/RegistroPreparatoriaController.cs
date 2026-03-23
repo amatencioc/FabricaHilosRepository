@@ -217,6 +217,13 @@ namespace FabricaHilos.Controllers
         {
             if (ModelState.IsValid)
             {
+                // Validar Metraje: obligatorio para todos los tipos excepto L (CARDAS)
+                if (model.CodigoMaquina != "L" && !model.Metraje.HasValue)
+                {
+                    ModelState.AddModelError("Metraje", "El campo Metraje es obligatorio.");
+                }
+                else
+                {
                 try
                 {
                     // Validar que la máquina no tenga una preparatoria en proceso
@@ -276,10 +283,11 @@ namespace FabricaHilos.Controllers
                     var errorMsg = ex.InnerException?.Message ?? ex.Message;
                     TempData["Error"] = $"Error al crear la preparatoria: {errorMsg}";
                 }
+            } // end else (Metraje válido)
             }
             else
             {
-                _logger.LogWarning("ModelState inválido al crear preparatoria. Errores: {Errors}", 
+                _logger.LogWarning("ModelState inválido al crear preparatoria. Errores: {Errors}",
                     string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
             }
 
@@ -344,6 +352,7 @@ namespace FabricaHilos.Controllers
                 orden.HorasInactivas       = model.HorasInactivas;
                 orden.FechaInicio         = model.FechaInicio;
                 orden.Velocidad           = model.Velocidad;
+                orden.Metraje             = model.Metraje;
 
                 await _context.SaveChangesAsync();
 
@@ -353,7 +362,7 @@ namespace FabricaHilos.Controllers
                     oldReceta, oldLote, oldTpMaq, oldCodMaq, oldTitulo, oldFechaInicio,
                     orden.CodigoReceta, orden.Lote, orden.CodigoMaquina, orden.Maquina, orden.Titulo,
                     orden.EmpleadoId, orden.Turno, orden.PasoManuar, orden.FechaInicio,
-                    orden.ContadorInicial, orden.HorasInactivas, User.Identity?.Name, orden.Velocidad);
+                    orden.ContadorInicial, orden.HorasInactivas, User.Identity?.Name, orden.Velocidad, orden.Metraje);
 
                 TempData["Success"] = "Preparatoria actualizada correctamente.";
                 if (actualizadoEnOracle)
@@ -507,7 +516,7 @@ namespace FabricaHilos.Controllers
         [HttpPost]
         [Authorize(Roles = "Admin,Gerencia,Supervisor")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DetalleProduccion(int id, decimal? metraje, int? rolloTacho, decimal? kgNeto, decimal? contadorFinal, int? nroParada, DateTime? fechaFin = null, string? returnUrl = null)
+        public async Task<IActionResult> DetalleProduccion(int id, int? rolloTacho, decimal? kgNeto, decimal? contadorFinal, int? nroParada, DateTime? fechaFin = null, string? returnUrl = null)
         {
             var orden = await _context.OrdenesProduccion.FindAsync(id);
             if (orden == null)
@@ -517,11 +526,11 @@ namespace FabricaHilos.Controllers
             }
 
             var esMetrajeOpcional = orden.CodigoMaquina == "L";
-            if ((!metraje.HasValue && !esMetrajeOpcional) || !kgNeto.HasValue)
+            if ((!orden.Metraje.HasValue && !esMetrajeOpcional) || !kgNeto.HasValue)
             {
                 TempData["Error"] = !kgNeto.HasValue
                     ? "El campo Kg Neto es obligatorio."
-                    : "El campo Metraje es obligatorio.";
+                    : "El campo Metraje es obligatorio. Por favor edite la preparatoria para ingresar el metraje.";
                 ViewBag.ReturnUrl = returnUrl;
                 return View(orden);
             }
@@ -545,7 +554,6 @@ namespace FabricaHilos.Controllers
             }
 
             // Actualizar campos de detalle y cerrar localmente
-            orden.Metraje   = metraje;
             orden.RolloTacho = rolloTacho;
             orden.KgNeto    = kgNeto;
             orden.ContadorFinal = contadorFinal;
@@ -561,7 +569,7 @@ namespace FabricaHilos.Controllers
                 orden.CodigoReceta, orden.Lote,
                 orden.CodigoMaquina, orden.Maquina,
                 orden.Titulo, orden.FechaInicio,
-                orden.Velocidad, metraje, rolloTacho, kgNeto,
+                orden.Velocidad, rolloTacho, kgNeto,
                 nroParada, contadorFinal, fechaFinEfectiva);
 
             if (!resultado.UpdateExitoso)

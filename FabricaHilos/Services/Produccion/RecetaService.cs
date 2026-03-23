@@ -117,10 +117,10 @@ namespace FabricaHilos.Services.Produccion
             string? oldReceta, string? oldLote, string? oldTpMaq, string? oldCodMaq, string? oldTitulo, DateTime fechaIni,
             string? newReceta, string? newLote, string? newTpMaq, string? newCodMaq, string? newTitulo,
             string? cCodigo, string? turno, string? pasoManuar, DateTime newFechaIni,
-            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null);
+            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null);
         Task<GuardarCerrarResultado> GuardarYCerrarDetalleProduccionAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni,
-            decimal? velocidad, decimal? metraje, int? rolloTacho, decimal? kgNeto,
+            decimal? velocidad, int? rolloTacho, decimal? kgNeto,
             int? nroParada = null, decimal? contadorFinal = null, DateTime? fechaFin = null);
         Task<DetalleProductivoOracleDto?> ObtenerDetalleProductivoOracleAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
@@ -744,27 +744,29 @@ namespace FabricaHilos.Services.Produccion
                     HUSOS_INAC,
                     CONTADOR_INI,
                     FECHA_TURNO,
-                    VELOCIDAD,
-                    A_ADUSER,
-                    A_MDUSER
-                ) VALUES (
-                    :receta,
-                    :lote,
-                    :tp_maq,
-                    :cod_maq,
-                    :titulo,
-                    :fecha_ini,
-                    :estado,
-                    :c_codigo,
-                    :turno,
-                    :paso_manuar,
-                    :husos_inac,
-                    :contador_ini,
-                    :fecha_turno,
-                    :velocidad,
-                    :a_aduser,
-                    :a_mduser
-                )";
+                         VELOCIDAD,
+                         METRAJE,
+                         A_ADUSER,
+                         A_MDUSER
+                    ) VALUES (
+                        :receta,
+                        :lote,
+                        :tp_maq,
+                        :cod_maq,
+                        :titulo,
+                        :fecha_ini,
+                        :estado,
+                        :c_codigo,
+                        :turno,
+                        :paso_manuar,
+                        :husos_inac,
+                        :contador_ini,
+                        :fecha_turno,
+                        :velocidad,
+                        :metraje,
+                        :a_aduser,
+                         :a_mduser
+                    )";
 
             try
             {
@@ -797,6 +799,7 @@ namespace FabricaHilos.Services.Produccion
                     : orden.FechaInicio.Date;
                 command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Varchar2, fechaTurno.ToString("dd/MM/yyyy"), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal) { Value = orden.Velocidad.HasValue ? (object)orden.Velocidad.Value : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal) { Value = orden.Metraje.HasValue  ? (object)orden.Metraje.Value  : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":a_aduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":a_mduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));
 
@@ -1136,7 +1139,7 @@ namespace FabricaHilos.Services.Produccion
             string? oldReceta, string? oldLote, string? oldTpMaq, string? oldCodMaq, string? oldTitulo, DateTime fechaIni,
             string? newReceta, string? newLote, string? newTpMaq, string? newCodMaq, string? newTitulo,
             string? cCodigo, string? turno, string? pasoManuar, DateTime newFechaIni,
-            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null)
+            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null)
         {
             var connectionString = GetOracleConnectionString();
 
@@ -1170,6 +1173,7 @@ namespace FabricaHilos.Services.Produccion
                     FECHA_TURNO  = :fechaTurno,
                     A_MDUSER     = :mdUser,
                     VELOCIDAD    = :velocidad,
+                    METRAJE      = :metraje,
                     FECHA_INI    = TO_DATE(:newFechaIni, 'YYYY-MM-DD HH24:MI:SS'){extraSetActualizar}
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:oldReceta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:oldLote)
@@ -1200,8 +1204,9 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":pasoManuar",  OracleDbType.Varchar2) { Value = Str(pasoManuar) });
                 command.Parameters.Add(new OracleParameter(":mdUser",      OracleDbType.Varchar2) { Value = Str(mdUser) });
                 command.Parameters.Add(new OracleParameter(":velocidad",   OracleDbType.Decimal)  { Value = velocidad.HasValue ? (object)velocidad.Value : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal)  { Value = metraje.HasValue   ? (object)metraje.Value   : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":newFechaIni", OracleDbType.Varchar2) { Value = newFechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
-                // FECHA_TURNO en formato 24h: hora < 7 → día anterior; hora >= 7 → misma fecha
+                // FECHA_TURNO
                 var fechaTurno = newFechaIni.Hour < 7
                     ? newFechaIni.Date.AddDays(-1)
                     : newFechaIni.Date;
@@ -1237,7 +1242,7 @@ namespace FabricaHilos.Services.Produccion
 
         public async Task<GuardarCerrarResultado> GuardarYCerrarDetalleProduccionAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni,
-            decimal? velocidad, decimal? metraje, int? rolloTacho, decimal? kgNeto,
+            decimal? velocidad, int? rolloTacho, decimal? kgNeto,
             int? nroParada = null, decimal? contadorFinal = null, DateTime? fechaFin = null)
         {
             var connectionString = GetOracleConnectionString();
@@ -1254,7 +1259,6 @@ namespace FabricaHilos.Services.Produccion
             var query = $@"
                 UPDATE H_RPRODUC
                 SET VELOCIDAD = :velocidad,
-                    METRAJE   = :metraje,
                     UNIDADES  = :unidades,
                     PESO_NETO = :kgPeso,
                     ESTADO    = '3',
@@ -1280,7 +1284,6 @@ namespace FabricaHilos.Services.Produccion
                 static object Int(int? v) => v.HasValue ? (object)v.Value : DBNull.Value;
 
                 command.Parameters.Add(new OracleParameter(":velocidad", OracleDbType.Decimal)    { Value = Dec(velocidad) });
-                command.Parameters.Add(new OracleParameter(":metraje",   OracleDbType.Decimal)    { Value = Dec(metraje) });
                 command.Parameters.Add(new OracleParameter(":unidades",  OracleDbType.Int32)      { Value = Int(rolloTacho) });
                 command.Parameters.Add(new OracleParameter(":kgPeso",    OracleDbType.Decimal)    { Value = Dec(kgNeto) });
                 command.Parameters.Add(new OracleParameter(":fechaFin",  OracleDbType.Date)       { Value = fechaFin ?? DateTime.Now });

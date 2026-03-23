@@ -104,7 +104,7 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Operario <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input type="text" id="operarioInput" class="form-control" placeholder="Ingrese código o nombre" autocomplete="off" />
+                                <input type="text" id="operarioInput" class="form-control" placeholder="ÚLtimos 4 dígitos del código" autocomplete="off" />
                                 <button type="button" id="btnBuscarOperario" class="btn btn-outline-secondary" title="Buscar operario">
                                     <i class="bi bi-search"></i>
                                 </button>
@@ -112,6 +112,7 @@
                             <input asp-for="EmpleadoId" id="empleadoIdHidden" type="hidden" />
                             <span asp-validation-for="EmpleadoId" class="text-danger small"></span>
                             <small id="operarioStatus" class="text-muted"></small>
+                            <small class="text-muted d-block">El prefijo 03 se agrega automáticamente al código.</small>
                         </div>
 
                         <!-- Fila 5: Turno y Paso Manuar -->
@@ -145,6 +146,13 @@
                             <label class="form-label fw-semibold">Velocidad <span class="text-danger">*</span></label>
                             <input asp-for="Velocidad" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese la velocidad" required />
                             <span asp-validation-for="Velocidad" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Metraje -->
+                        <div class="col-md-6" id="grupoMetraje">
+                            <label class="form-label fw-semibold" id="labelMetraje">Metraje <span class="text-danger">*</span></label>
+                            <input asp-for="Metraje" id="metrajeInput" class="form-control" type="number" step="1" min="0" placeholder="Ingrese el metraje" />
+                            <span asp-validation-for="Metraje" class="text-danger small"></span>
                         </div>
 
                         <!-- Fila 6: Contador Inicial y Horas Inactivas (Pabileras) -->
@@ -475,12 +483,13 @@
             const hiddenInput    = document.getElementById('empleadoIdHidden');
             const statusElement  = document.getElementById('operarioStatus');
             const btnBuscar      = document.getElementById('btnBuscarOperario');
-            const codigo = operarioInput.value.trim();
-            if (!codigo) {
-                statusElement.textContent = 'Ingrese un código o nombre';
+            const codigoDigitado = operarioInput.value.trim();
+            if (!codigoDigitado) {
+                statusElement.textContent = 'Ingrese los últimos 4 dígitos';
                 statusElement.className = 'text-danger small';
                 return;
             }
+            const codigo = '03' + codigoDigitado;
             btnBuscar.disabled = true;
             btnBuscar.innerHTML = '<i class="bi bi-hourglass-split"></i>';
             statusElement.textContent = 'Buscando...';
@@ -545,6 +554,34 @@
             const statusElement = document.getElementById('operarioStatus');
             statusElement.textContent = '✓ Operario seleccionado';
             statusElement.className = 'text-success small';
+        }
+
+        // === Almacenamiento de opciones de título y filtrado por tipo de máquina ===
+        let allTituloOptions = [];
+
+        function filtrarTitulos(tipo) {
+            const tituloSel = document.getElementById('Titulo');
+            if (!tituloSel || allTituloOptions.length === 0) return;
+            const titulosPermitidos = {
+                'L': ['.11', '.12'],
+                'P': ['.90', '1.4', '1.2', '.75']
+            };
+            const allowed = titulosPermitidos[tipo] || null;
+            const currentVal = tituloSel.value;
+            tituloSel.innerHTML = '';
+            allTituloOptions.forEach(op => {
+                if (op.value === '' || !allowed || allowed.some(keyword => op.text.trim() === keyword)) {
+                    const opt = document.createElement('option');
+                    opt.value = op.value;
+                    opt.textContent = op.text;
+                    tituloSel.appendChild(opt);
+                }
+            });
+            if (currentVal && Array.from(tituloSel.options).some(o => o.value === currentVal)) {
+                tituloSel.value = currentVal;
+            } else {
+                tituloSel.value = '';
+            }
         }
 
         // === Validación: enteros con límite de dígitos ===
@@ -658,9 +695,9 @@
             codigoMaquinaSelect.addEventListener('change', async function() {
                 const tipoMaquina = this.value;
 
-                // Mostrar/ocultar Paso Manuar: ocultar para P y E
+                // Mostrar/ocultar Paso Manuar: ocultar para P, E y L
                 const grupoPasoManuar = document.getElementById('grupoPasoManuar');
-                if (tipoMaquina === 'P' || tipoMaquina === 'E') {
+                if (tipoMaquina === 'P' || tipoMaquina === 'E' || tipoMaquina === 'L') {
                     grupoPasoManuar.style.display = 'none';
                     grupoPasoManuar.querySelector('select').value = '';
                 } else {
@@ -678,10 +715,11 @@
                     grupoHusosInactivos.querySelector('input').value  = '';
                 }
 
-                // Título fijo ".13" para PEINADORA (E); habilitado para otros tipos
+                // Filtrar y configurar títulos según tipo de máquina
                 const tituloSel = document.getElementById('Titulo');
                 if (tituloSel) {
                     if (tipoMaquina === 'E') {
+                        filtrarTitulos('E');
                         const op13 = Array.from(tituloSel.options).find(o => o.textContent.trim() === '.13');
                         if (op13) tituloSel.value = op13.value;
                         tituloSel.style.pointerEvents = 'none';
@@ -691,6 +729,20 @@
                         tituloSel.style.pointerEvents = '';
                         tituloSel.style.backgroundColor = '';
                         tituloSel.style.opacity = '';
+                        filtrarTitulos(tipoMaquina);
+                    }
+                }
+
+                // Metraje: opcional para L (CARDAS), obligatorio para otros
+                const inputMetraje = document.getElementById('metrajeInput');
+                const labelMetraje = document.getElementById('labelMetraje');
+                if (inputMetraje && labelMetraje) {
+                    if (tipoMaquina === 'L') {
+                        inputMetraje.required = false;
+                        labelMetraje.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
+                    } else {
+                        inputMetraje.required = true;
+                        labelMetraje.innerHTML = 'Metraje <span class="text-danger">*</span>';
                     }
                 }
 
@@ -732,14 +784,22 @@
 
             // Establecer "M" por defecto y cargar sus máquinas
             codigoMaquinaSelect.value = 'M';
+            // Almacenar opciones de título originales para filtrado
+            const tituloSelInit = document.getElementById('Titulo');
+            if (tituloSelInit) {
+                allTituloOptions = Array.from(tituloSelInit.options).map(o => ({ value: o.value, text: o.textContent }));
+            }
             // Aplicar visibilidad inicial (el dispatchEvent ejecutará la lógica completa del change handler)
             const grupoPasoManuarInit = document.getElementById('grupoPasoManuar');
-            grupoPasoManuarInit.style.display = (codigoMaquinaSelect.value === 'P' || codigoMaquinaSelect.value === 'E') ? 'none' : '';
+            grupoPasoManuarInit.style.display = (codigoMaquinaSelect.value === 'P' || codigoMaquinaSelect.value === 'E' || codigoMaquinaSelect.value === 'L') ? 'none' : '';
             codigoMaquinaSelect.dispatchEvent(new Event('change'));
 
             // Validación: Husos Inactivas solo enteros, máx 4 dígitos
             const husosInactivasInputEl = document.getElementById('husosInactivasInput');
             if (husosInactivasInputEl) enforceIntegerInput(husosInactivasInputEl, 4);
+
+            // Validación: operario solo últimos 4 dígitos (numéricos)
+            enforceIntegerInput(operarioInput, 4);
         });
     </script>
     <script>
