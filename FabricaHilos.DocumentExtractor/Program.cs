@@ -2,6 +2,13 @@ using FabricaHilos.DocumentExtractor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Allow up to 30 MB globally for multipart/form-data uploads
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 30 * 1024 * 1024;
+});
+builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 30 * 1024 * 1024);
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -14,7 +21,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddScoped<IDocumentExtractorService, PdfExtractorService>();
+// Singleton: PdfExtractorService has no mutable instance state — all methods are static
+// and create a new TesseractEngine per call. Singleton avoids repeated DI overhead.
+builder.Services.AddSingleton<IDocumentExtractorService, PdfExtractorService>();
 
 var app = builder.Build();
 
