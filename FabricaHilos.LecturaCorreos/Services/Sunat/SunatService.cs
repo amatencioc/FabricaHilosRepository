@@ -3,35 +3,35 @@ namespace FabricaHilos.LecturaCorreos.Services.Sunat;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Xml.Linq;
-using Microsoft.Extensions.Configuration;
+using FabricaHilos.LecturaCorreos.Config;
 using Microsoft.Extensions.Logging;
 
 public class SunatService : ISunatService
 {
     private readonly HttpClient            _httpClient;
     private readonly ILogger<SunatService> _logger;
-    private readonly string                _ruc;
-    private readonly string                _usuarioSol;
-    private readonly string                _claveSol;
-    private readonly string                _endpoint;
 
-    public SunatService(HttpClient httpClient, IConfiguration configuration, ILogger<SunatService> logger)
+    public SunatService(HttpClient httpClient, ILogger<SunatService> logger)
     {
         _httpClient = httpClient;
         _logger     = logger;
-
-        var sunat   = configuration.GetSection("Sunat");
-        _ruc        = sunat["Ruc"]        ?? throw new InvalidOperationException("No se configuró 'Sunat:Ruc'.");
-        _usuarioSol = sunat["UsuarioSol"] ?? throw new InvalidOperationException("No se configuró 'Sunat:UsuarioSol'.");
-        _claveSol   = sunat["ClaveSol"]   ?? throw new InvalidOperationException("No se configuró 'Sunat:ClaveSol'.");
-        _endpoint   = sunat["EndpointConsultaCdr"]
-                   ?? "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService";
     }
 
     public async Task<RespuestaCdrSunat> ConsultarCdrAsync(
-        string ruc, string tipoComprobante, string serie, int correlativo)
+        string ruc, string tipoComprobante, string serie, int correlativo,
+        EmpresaOptions empresa)
     {
-        var soapEnvelope = ConstruirSoapEnvelope(ruc, tipoComprobante, serie, correlativo);
+        var sunat = empresa.Sunat
+            ?? throw new InvalidOperationException(
+                $"La empresa '{empresa.Nombre}' ({empresa.Ruc}) no tiene configuración SUNAT.");
+
+        var soapEnvelope = ConstruirSoapEnvelope(
+            empresa.Ruc, sunat.UsuarioSol, sunat.ClaveSol,
+            ruc, tipoComprobante, serie, correlativo);
+
+        var endpoint = string.IsNullOrWhiteSpace(sunat.EndpointConsultaCdr)
+            ? "https://e-factura.sunat.gob.pe/ol-it-wsconscpegem/billConsultService"
+            : sunat.EndpointConsultaCdr;
 
         try
         {
@@ -41,9 +41,9 @@ public class SunatService : ISunatService
 
             _logger.LogInformation(
                 "Consultando CDR para {Ruc}/{Tipo}/{Serie}/{Correlativo} → {Endpoint}",
-                ruc, tipoComprobante, serie, correlativo, _endpoint);
+                ruc, tipoComprobante, serie, correlativo, endpoint);
 
-            var respuestaHttp  = await _httpClient.PostAsync(_endpoint, contenido);
+            var respuestaHttp   = await _httpClient.PostAsync(endpoint, contenido);
             var cuerpoRespuesta = await respuestaHttp.Content.ReadAsStringAsync();
 
             if (!respuestaHttp.IsSuccessStatusCode)
@@ -75,9 +75,11 @@ public class SunatService : ISunatService
 
     // ── Construcción del envelope SOAP ───────────────────────────────────────
 
-    private string ConstruirSoapEnvelope(string ruc, string tipoComprobante, string serie, int correlativo)
+    private string ConstruirSoapEnvelope(
+        string authRuc, string usuarioSol, string claveSol,
+        string ruc, string tipoComprobante, string serie, int correlativo)
     {
-        var usuarioCompleto = $"{_ruc}{_usuarioSol}";
+        var usuarioCompleto = $"{authRuc}{usuarioSol}";
 
         return $@"<soapenv:Envelope xmlns:soapenv=""http://schemas.xmlsoap.org/soap/envelope/""
                   xmlns:ser=""http://service.sunat.gob.pe""
@@ -86,7 +88,7 @@ public class SunatService : ISunatService
     <wsse:Security>
       <wsse:UsernameToken>
         <wsse:Username>{EscaparXml(usuarioCompleto)}</wsse:Username>
-        <wsse:Password>{EscaparXml(_claveSol)}</wsse:Password>
+        <wsse:Password>{EscaparXml(claveSol)}</wsse:Password>
       </wsse:UsernameToken>
     </wsse:Security>
   </soapenv:Header>

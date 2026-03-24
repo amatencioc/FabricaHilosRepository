@@ -8,6 +8,11 @@ public class LecturaCorreosOptions
     public int  MaxCorreosPorCiclo { get; set; } = 50;
 
     /// <summary>
+    /// Intervalo en minutos entre ciclos de consulta de CDR a SUNAT (SunatCdrWorker).
+    /// </summary>
+    public int IntervaloConsultaMinutos { get; set; } = 15;
+
+    /// <summary>
     /// Ruta base donde se guardarán los documentos descargados organizados por RUC/año/mes/día.
     /// Se configura en appsettings.json → LecturaCorreos:RutaArchivos.
     /// Si está vacío, no se guarda nada en disco.

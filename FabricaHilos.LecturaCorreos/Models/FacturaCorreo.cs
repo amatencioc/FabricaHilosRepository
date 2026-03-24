@@ -27,4 +27,11 @@ public class FacturaCorreo
     // Referencia al documento/factura que originó este registro (enlace al documento)
     public long? DocumentoId { get; set; }           // FK hacia tabla de documentos/facturas emitidas
     public string? DocumentoReferencia { get; set; } // Ej: número de pedido, guía, etc.
+
+    /// <summary>
+    /// RUC de la empresa receptora (LaColonial, etc.) obtenido de FH_LC_DOCUMENTO.
+    /// Es el RUC que se usa para autenticarse en SUNAT al consultar el CDR.
+    /// Distinto de <see cref="Ruc"/> que es el RUC del EMISOR del comprobante.
+    /// </summary>
+    public string? RucReceptor { get; set; }
 }

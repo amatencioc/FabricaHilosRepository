@@ -563,8 +563,9 @@
             const tituloSel = document.getElementById('Titulo');
             if (!tituloSel || allTituloOptions.length === 0) return;
             const titulosPermitidos = {
+                'M': ['.11', '.125', '.13', '.15'],
                 'L': ['.11', '.12'],
-                'P': ['.90', '1.4', '1.2', '.75']
+                'P': ['.90', '1.4', '1.2', '.75', '1.0']
             };
             const allowed = titulosPermitidos[tipo] || null;
             const currentVal = tituloSel.value;

@@ -22,4 +22,11 @@
     <ProjectReference Include="..\FabricaHilos.Notificaciones\FabricaHilos.Notificaciones.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="appsettings.Development.json">
+      <DependentUpon>appsettings.json</DependentUpon>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

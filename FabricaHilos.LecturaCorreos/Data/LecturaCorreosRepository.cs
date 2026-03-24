@@ -25,16 +25,18 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
     {
         const string sql = @"
             SELECT * FROM (
-                SELECT ID, RUC, TIPO_COMPROBANTE AS TipoComprobante, SERIE, CORRELATIVO,
-                       ESTADO, CODIGO_RESPUESTA_SUNAT AS CodigoRespuestaSunat,
-                       MENSAJE_SUNAT AS MensajeSunat, CDR_CONTENIDO AS CdrContenido,
-                       MENSAJE_ERROR AS MensajeError,
-                       FECHA_CREACION AS FechaCreacion, FECHA_CONSULTA_SUNAT AS FechaConsultaSunat,
-                       INTENTOS, DOCUMENTO_ID AS DocumentoId, DOCUMENTO_REFERENCIA AS DocumentoReferencia
-                FROM FH_LECTCORREOS_FACTURAS
-                WHERE ESTADO = 'PENDIENTE_CDR'
-                  AND INTENTOS < 5
-                ORDER BY FECHA_CREACION ASC
+                SELECT f.ID, f.RUC, f.TIPO_COMPROBANTE AS TipoComprobante, f.SERIE, f.CORRELATIVO,
+                       f.ESTADO, f.CODIGO_RESPUESTA_SUNAT AS CodigoRespuestaSunat,
+                       f.MENSAJE_SUNAT AS MensajeSunat, f.CDR_CONTENIDO AS CdrContenido,
+                       f.MENSAJE_ERROR AS MensajeError,
+                       f.FECHA_CREACION AS FechaCreacion, f.FECHA_CONSULTA_SUNAT AS FechaConsultaSunat,
+                       f.INTENTOS, f.DOCUMENTO_ID AS DocumentoId, f.DOCUMENTO_REFERENCIA AS DocumentoReferencia,
+                       d.RUC_RECEPTOR AS RucReceptor
+                FROM FH_LECTCORREOS_FACTURAS f
+                LEFT JOIN FH_LC_DOCUMENTO d ON d.ID = f.DOCUMENTO_ID
+                WHERE f.ESTADO = 'PENDIENTE_CDR'
+                  AND f.INTENTOS < 5
+                ORDER BY f.FECHA_CREACION ASC
             ) WHERE ROWNUM <= 50";
 
         return await OracleRetry.EjecutarAsync(
@@ -175,8 +177,10 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
         using var tx = conn.BeginTransaction();
         try
         {
+            // Timeout de 30 s por DELETE: evita colgarse indefinidamente si otra
+            // sesión Oracle mantiene un bloqueo sobre alguna de estas tablas.
             static CommandDefinition Cmd(string sql, IDbTransaction t, CancellationToken c) =>
-                new(sql, transaction: t, cancellationToken: c);
+                new(sql, transaction: t, cancellationToken: c, commandTimeout: 30);
 
             int archivos     = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LECTCORREOS_ARCHIVOS",        tx, ct));
             int lineas       = await conn.ExecuteAsync(Cmd("DELETE FROM FH_LC_LINEA",                   tx, ct));

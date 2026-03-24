@@ -556,8 +556,9 @@
             const tituloSel = document.getElementById('Titulo');
             if (!tituloSel || allTituloOptions.length === 0) return;
             const titulosPermitidos = {
+                'M': ['.11', '.125', '.13', '.15'],
                 'L': ['.11', '.12'],
-                'P': ['.90', '1.4', '1.2', '.75']
+                'P': ['.90', '1.4', '1.2', '.75', '1.0']
             };
             const allowed = titulosPermitidos[tipo] || null;
             const currentVal = tituloSel.value;
@@ -796,9 +797,22 @@
                 if (listaEl) listaEl.remove();
             });
 
+            // Normalizar Metraje y Husos Inactivos a enteros al cargar (step=1 requiere entero)
+            const metrajeInputEl = document.getElementById('metrajeInput');
+            if (metrajeInputEl && metrajeInputEl.value !== '') {
+                const mv = parseFloat(metrajeInputEl.value);
+                if (!isNaN(mv)) metrajeInputEl.value = Math.trunc(mv);
+            }
+
             // Validación: Husos Inactivas solo enteros, máx 4 dígitos
             const husosInactivasInputEl = document.getElementById('husosInactivasInput');
-            if (husosInactivasInputEl) enforceIntegerInput(husosInactivasInputEl, 4);
+            if (husosInactivasInputEl) {
+                enforceIntegerInput(husosInactivasInputEl, 4);
+                if (husosInactivasInputEl.value !== '') {
+                    const hv = parseFloat(husosInactivasInputEl.value);
+                    if (!isNaN(hv)) husosInactivasInputEl.value = Math.trunc(hv);
+                }
+            }
 
             // Validación: operario solo últimos 4 dígitos (numéricos)
             const operarioInputEl = document.getElementById('operarioInput');

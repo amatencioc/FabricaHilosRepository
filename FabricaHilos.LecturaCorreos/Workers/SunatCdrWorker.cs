@@ -2,7 +2,6 @@ using FabricaHilos.LecturaCorreos.Config;
 using FabricaHilos.LecturaCorreos.Data;
 using FabricaHilos.LecturaCorreos.Services.Signals;
 using FabricaHilos.LecturaCorreos.Services.Sunat;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,25 +11,25 @@ namespace FabricaHilos.LecturaCorreos.Workers;
 
 public class SunatCdrWorker : BackgroundService
 {
-    private readonly IServiceScopeFactory    _scopeFactory;
-    private readonly ILimpiezaSignal         _limpiezaSignal;
-    private readonly ILogger<SunatCdrWorker> _logger;
-    private readonly TimeSpan                _intervalo;
-    private readonly bool                    _activo;
+    private readonly IServiceScopeFactory       _scopeFactory;
+    private readonly ILimpiezaSignal            _limpiezaSignal;
+    private readonly ILogger<SunatCdrWorker>    _logger;
+    private readonly TimeSpan                   _intervalo;
+    private readonly bool                       _activo;
+    private readonly LecturaCorreosOptions      _opciones;
 
     public SunatCdrWorker(
-        IServiceScopeFactory          scopeFactory,
-        ILimpiezaSignal               limpiezaSignal,
-        ILogger<SunatCdrWorker>       logger,
-        IConfiguration                configuration,
+        IServiceScopeFactory            scopeFactory,
+        ILimpiezaSignal                 limpiezaSignal,
+        ILogger<SunatCdrWorker>         logger,
         IOptions<LecturaCorreosOptions> opciones)
     {
         _scopeFactory   = scopeFactory;
         _limpiezaSignal = limpiezaSignal;
         _logger         = logger;
-        _activo         = opciones.Value.WorkerSunatActivo;
-        var minutos = configuration.GetValue<int>("Sunat:IntervaloConsultaMinutos", 10);
-        _intervalo = TimeSpan.FromMinutes(minutos);
+        _opciones       = opciones.Value;
+        _activo         = _opciones.WorkerSunatActivo;
+        _intervalo      = TimeSpan.FromMinutes(_opciones.IntervaloConsultaMinutos);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -88,6 +87,24 @@ public class SunatCdrWorker : BackgroundService
         {
             if (cancellationToken.IsCancellationRequested) break;
 
+            var empresa = _opciones.Empresas.FirstOrDefault(e => e.Ruc == factura.RucReceptor);
+            if (empresa is null)
+            {
+                _logger.LogWarning(
+                    "No se encontró empresa configurada para el RUC receptor '{RucReceptor}' " +
+                    "(factura ID {Id}, emisor {RucEmisor}). Se omite.",
+                    factura.RucReceptor ?? "null", factura.Id, factura.Ruc);
+                continue;
+            }
+
+            if (empresa.Sunat is null)
+            {
+                _logger.LogWarning(
+                    "La empresa '{Nombre}' ({Ruc}) no tiene configuración SUNAT. Se omite factura ID {Id}.",
+                    empresa.Nombre, empresa.Ruc, factura.Id);
+                continue;
+            }
+
             try
             {
                 await repositorio.IncrementarIntentosAsync(factura.Id);
@@ -100,7 +117,8 @@ public class SunatCdrWorker : BackgroundService
                     factura.Ruc,
                     factura.TipoComprobante,
                     factura.Serie,
-                    factura.Correlativo);
+                    factura.Correlativo,
+                    empresa);
 
                 if (!respuesta.Exitoso)
                 {

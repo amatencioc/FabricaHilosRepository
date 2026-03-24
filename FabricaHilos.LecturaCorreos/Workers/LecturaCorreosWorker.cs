@@ -596,7 +596,7 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             if (documentoId is not null)
             {
                 // PDF vinculado a un documento válido: disco + FH_LECTCORREOS_ARCHIVOS.
-                // NO insertar en FH_LECTCORREOS_PDF_ADJUNTOS (tabla reservada para PDFs huérfanos).
+                    // NO insertar como huérfano pendiente de notificación.
                 var rutaPdf = await _archivoService.GuardarPdfAsync(
                     adjunto.NombreArchivo, adjunto.ContenidoPdf ?? [], rucEmpresa, documentoXml, facturaRef, ct);
                 if (!string.IsNullOrEmpty(rutaPdf))

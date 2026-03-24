@@ -3,7 +3,7 @@ using FabricaHilos.LecturaCorreos.Models;
 namespace FabricaHilos.LecturaCorreos.Data;
 
 /// <summary>
-/// Operaciones sobre FH_LECTCORREOS_PDF_ADJUNTOS para el ciclo de notificación por correo.
+/// Operaciones sobre FH_LECTCORREOS_ARCHIVOS para el ciclo de notificación por correo.
 /// </summary>
 public interface IPdfLimboRepository
 {
