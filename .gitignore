@@ -49,3 +49,7 @@ desktop.ini
 
 ## Excepcion: appsettings.json de LecturaCorreos se sube SIN el ClientSecret
 !FabricaHilos.LecturaCorreos/appsettings.json
+
+## Tesseract OCR - datos de entrenamiento (archivos grandes, no subir al repo)
+**/tessdata/eng.traineddata
+**/tessdata/spa.traineddata
