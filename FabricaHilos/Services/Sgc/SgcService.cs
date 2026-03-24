@@ -16,6 +16,10 @@ namespace FabricaHilos.Services.Sgc
         Task<DocuVentDto?> ObtenerFacturaAsync(string tipo, string serie, string numero);
         Task<(List<ItemDocuDto> Items, int TotalCount)> ObtenerDetalleFacturaAsync(string tipo, string serie, string numero, int page = 1, int pageSize = 10);
         Task<ItemPedDto?> ObtenerItemPedAsync(int numPed, int nro);
+        Task<bool> TieneGuiasAsync(int pedSerie, int numPed);
+        Task<(List<PackingGDto> Items, int TotalCount)> ObtenerPackingsAsync(int numPed, int page = 1, int pageSize = 10);
+        Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
+        Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
     }
 
     public class SgcService : ISgcService
@@ -76,13 +80,23 @@ namespace FabricaHilos.Services.Sgc
                 return ([], 0);
             }
 
-            int startRow = (page - 1) * pageSize + 1;
-            int endRow   = page * pageSize;
+            int startRow   = (page - 1) * pageSize + 1;
+            int endRow     = page * pageSize;
+            bool hasBuscar = !string.IsNullOrWhiteSpace(buscar);
 
-            var sql = new System.Text.StringBuilder(@"
-                SELECT RN, TOTAL_COUNT, SERIE, NUM_PED, TIPO_DOCTO, ESTADO, FECHA,
-                       COD_CLIENTE, NOMBRE, RUC, DETALLE,
-                       TOTAL_PEDIDO, TOTAL_FACTURADO, COD_VENDE, MONEDA, NRO_SUCUR
+            string buscarFilter = hasBuscar ? @"
+                      AND (UPPER(P.NOMBRE)    LIKE '%' || UPPER(:buscar) || '%'
+                        OR UPPER(P.RUC)       LIKE '%' || UPPER(:buscar) || '%'
+                        OR TO_CHAR(P.NUM_PED) LIKE :buscar || '%')" : string.Empty;
+
+            // Los EXISTS van en la query EXTERNA: solo corren contra los 10 registros ya paginados
+            string sql = $@"
+                SELECT PAGED.TOTAL_COUNT,
+                       PAGED.SERIE, PAGED.NUM_PED, PAGED.TIPO_DOCTO, PAGED.ESTADO, PAGED.FECHA,
+                       PAGED.COD_CLIENTE, PAGED.NOMBRE, PAGED.RUC, PAGED.DETALLE,
+                       PAGED.TOTAL_PEDIDO, PAGED.TOTAL_FACTURADO, PAGED.COD_VENDE, PAGED.MONEDA, PAGED.NRO_SUCUR,
+                       CASE WHEN EXISTS (SELECT 1 FROM SIG.ITEMPED   I  WHERE I.NUM_PED  = PAGED.NUM_PED AND I.SERIE = PAGED.SERIE) THEN 1 ELSE 0 END AS CNT_DETALLE,
+                       CASE WHEN EXISTS (SELECT 1 FROM SIG.PACKING_G PK WHERE PK.NUM_PED = PAGED.NUM_PED) THEN 1 ELSE 0 END AS CNT_PACKING
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY P.FECHA DESC, P.NUM_PED DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
@@ -90,17 +104,9 @@ namespace FabricaHilos.Services.Sgc
                            P.COD_CLIENTE, P.NOMBRE, P.RUC, P.DETALLE,
                            P.TOTAL_PEDIDO, P.TOTAL_FACTURADO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
                     FROM SIG.PEDIDO P
-                    WHERE P.ESTADO <> '9'");
-
-            if (!string.IsNullOrWhiteSpace(buscar))
-                sql.Append(@"
-                      AND (UPPER(P.NOMBRE)    LIKE '%' || UPPER(:buscar) || '%'
-                        OR UPPER(P.RUC)       LIKE '%' || UPPER(:buscar) || '%'
-                        OR TO_CHAR(P.NUM_PED) LIKE :buscar || '%')");
-
-            sql.Append(@"
-                )
-                WHERE RN BETWEEN :startRow AND :endRow");
+                    WHERE P.ESTADO <> '9'{buscarFilter}
+                ) PAGED
+                WHERE PAGED.RN BETWEEN :startRow AND :endRow";
 
             var result = new List<PedidoSgcDto>();
             int totalCount = 0;
@@ -108,11 +114,11 @@ namespace FabricaHilos.Services.Sgc
             {
                 using var conn = new OracleConnection(connStr);
                 await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql.ToString(), conn);
+                using var cmd = new OracleCommand(sql, conn);
                 cmd.BindByName = true;
 
-                if (!string.IsNullOrWhiteSpace(buscar))
-                    cmd.Parameters.Add(new OracleParameter(":buscar",   OracleDbType.Varchar2, buscar,   ParameterDirection.Input));
+                if (hasBuscar)
+                    cmd.Parameters.Add(new OracleParameter(":buscar", OracleDbType.Varchar2, buscar, ParameterDirection.Input));
 
                 cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":endRow",   OracleDbType.Int32, endRow,   ParameterDirection.Input));
@@ -138,7 +144,9 @@ namespace FabricaHilos.Services.Sgc
                         TotalFacturado  = GetDec(reader, "TOTAL_FACTURADO"),
                         CodVende        = GetStr(reader, "COD_VENDE"),
                         Moneda          = GetStr(reader, "MONEDA"),
-                        NroSucur        = GetStr(reader, "NRO_SUCUR")
+                        NroSucur        = GetStr(reader, "NRO_SUCUR"),
+                        TieneDetalle    = GetInt(reader, "CNT_DETALLE") > 0,
+                        TienePacking    = GetInt(reader, "CNT_PACKING") > 0
                     });
                 }
             }
@@ -351,14 +359,15 @@ namespace FabricaHilos.Services.Sgc
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO, FCH_TRANSAC,
                        NOMBRE, RUC, GLOSA, ESTADO, IND_FACT, PESO_TOTAL,
-                       TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA, SERIE_SUNAT
+                       TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA, SERIE_SUNAT, CNT_DETALLE
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY G.FCH_TRANSAC DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
                            G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                            G.TIP_REF, G.SER_REF, G.NRO_REF,
-                           G.MOTIVO, G.MONEDA, G.SERIE_SUNAT
+                           G.MOTIVO, G.MONEDA, G.SERIE_SUNAT,
+                           (SELECT COUNT(*) FROM SIG.KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
                     FROM SIG.KARDEX_G G
                     INNER JOIN SIG.PEDIDO P
                             ON TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
@@ -409,7 +418,8 @@ namespace FabricaHilos.Services.Sgc
                 SELECT G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
                        G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                        G.TIP_REF, G.SER_REF, G.NRO_REF,
-                       G.MOTIVO, G.MONEDA, G.SERIE_SUNAT
+                       G.MOTIVO, G.MONEDA, G.SERIE_SUNAT,
+                       (SELECT COUNT(*) FROM SIG.KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
                 FROM SIG.KARDEX_G G
                 WHERE G.COD_ALM   = :codAlm
                   AND G.TP_TRANSAC = :tpTransac
@@ -460,7 +470,8 @@ namespace FabricaHilos.Services.Sgc
             NroRef     = GetStr(r, "NRO_REF"),
             Motivo     = GetStr(r, "MOTIVO"),
             Moneda     = GetStr(r, "MONEDA"),
-            SerieSunat = GetStr(r, "SERIE_SUNAT")
+            SerieSunat = GetStr(r, "SERIE_SUNAT"),
+            TieneDetalle = GetInt(r, "CNT_DETALLE") > 0
         };
 
         // ========== KARDEX_D (Detalle de Guía) ==========
@@ -566,13 +577,14 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO, FECHA, COD_CLIENTE,
-                       NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA
+                       NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA, CNT_DETALLE
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY F.FECHA DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
                            F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
-                           F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA
+                           F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
+                           (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
                     FROM SIG.DOCUVENT F
                     WHERE F.TIPODOC = :tipo
                       AND TRIM(F.SERIE)  = TRIM(:serie)
@@ -620,7 +632,8 @@ namespace FabricaHilos.Services.Sgc
             const string sql = @"
                 SELECT F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
                        F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
-                       F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA
+                       F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
+                       (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
                 FROM SIG.DOCUVENT F
                 WHERE F.TIPODOC = :tipo
                   AND TRIM(F.SERIE)  = TRIM(:serie)
@@ -666,7 +679,8 @@ namespace FabricaHilos.Services.Sgc
             Moneda     = GetStr(r, "MONEDA"),
             ValVenta   = GetDec(r, "VAL_VENTA"),
             ImpIgv     = GetDec(r, "IMP_IGV"),
-            PrecioVta  = GetDec(r, "PRECIO_VTA")
+            PrecioVta  = GetDec(r, "PRECIO_VTA"),
+            TieneDetalle = GetInt(r, "CNT_DETALLE") > 0
         };
 
         // ========== ITEMDOCU (Detalle de Factura) ==========
@@ -744,5 +758,194 @@ namespace FabricaHilos.Services.Sgc
 
             return (result, totalCount);
         }
+
+        public async Task<bool> TieneGuiasAsync(int pedSerie, int numPed)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return false;
+
+            const string sql = @"
+                SELECT COUNT(*) FROM SIG.KARDEX_G G
+                INNER JOIN SIG.PEDIDO P
+                        ON TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                       AND G.TIP_DOC_REF        = P.TIPO_DOCTO
+                       AND TRIM(G.NRO_DOC_REF)  = TO_CHAR(P.NUM_PED)
+                WHERE P.SERIE   = :pedSerie
+                  AND P.NUM_PED = :numPed";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":pedSerie", OracleDbType.Int32, pedSerie, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":numPed",   OracleDbType.Int32, numPed,   ParameterDirection.Input));
+                var result = await cmd.ExecuteScalarAsync();
+                return Convert.ToInt32(result) > 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al verificar guías para pedido {PedSerie}/{NumPed}", pedSerie, numPed);
+                return false;
+            }
+        }
+
+        // ========== PACKING_G ==========
+
+        public async Task<(List<PackingGDto> Items, int TotalCount)> ObtenerPackingsAsync(int numPed, int page = 1, int pageSize = 10)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return ([], 0);
+
+            int startRow = (page - 1) * pageSize + 1;
+            int endRow   = page * pageSize;
+
+            const string sql = @"
+                SELECT RN, TOTAL_COUNT, TIPO, SERIE, NUMERO, OBSERVACION, SER_REF, NRO_REF, NUM_PED, NUM_ORDCOMPRA
+                FROM (
+                    SELECT ROW_NUMBER() OVER (ORDER BY P.SERIE, P.NUMERO) AS RN,
+                           COUNT(*) OVER() AS TOTAL_COUNT,
+                           P.TIPO, P.SERIE, P.NUMERO, P.OBSERVACION, P.SER_REF, P.NRO_REF, P.NUM_PED, P.NUM_ORDCOMPRA
+                    FROM SIG.PACKING_G P
+                    WHERE P.NUM_PED = :pedido
+                )
+                WHERE RN BETWEEN :startRow AND :endRow";
+
+            var result = new List<PackingGDto>();
+            int totalCount = 0;
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":pedido",   OracleDbType.Int32, numPed,   ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":endRow",   OracleDbType.Int32, endRow,   ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                while (await reader.ReadAsync())
+                {
+                    if (result.Count == 0) totalCount = GetInt(reader, "TOTAL_COUNT");
+                    result.Add(MapPackingG(reader));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener packings para pedido {NumPed}", numPed);
+                throw;
+            }
+
+            return (result, totalCount);
+        }
+
+        public async Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return null;
+
+            const string sql = @"
+                SELECT P.TIPO, P.SERIE, P.NUMERO, P.OBSERVACION, P.SER_REF, P.NRO_REF, P.NUM_PED, P.NUM_ORDCOMPRA
+                FROM SIG.PACKING_G P
+                WHERE P.TIPO   = :tipo
+                  AND P.SERIE  = :serie
+                  AND P.NUMERO = :numero";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":tipo",   OracleDbType.Varchar2, tipo,   ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":serie",  OracleDbType.Int32,    serie,  ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":numero", OracleDbType.Int32,    numero, ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                if (await reader.ReadAsync())
+                    return MapPackingG(reader);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener packing {Tipo}/{Serie}/{Numero}", tipo, serie, numero);
+                throw;
+            }
+
+            return null;
+        }
+
+        public async Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return ([], 0);
+
+            int startRow = (page - 1) * pageSize + 1;
+            int endRow   = page * pageSize;
+
+            const string sql = @"
+                SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO, FECHA, COD_CLIENTE,
+                       NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA, CNT_DETALLE
+                FROM (
+                    SELECT ROW_NUMBER() OVER (ORDER BY F.FECHA DESC) AS RN,
+                           COUNT(*) OVER() AS TOTAL_COUNT,
+                           F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
+                           F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
+                           F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
+                           (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
+                    FROM SIG.DOCUVENT F
+                    WHERE F.TIP_DOC_REF = :tipo
+                      AND TRIM(F.SER_DOC_REF) = TRIM(TO_CHAR(:serie))
+                      AND TRIM(F.NRO_DOC_REF) = TRIM(TO_CHAR(:numero))
+                )
+                WHERE RN BETWEEN :startRow AND :endRow";
+
+            var result = new List<DocuVentDto>();
+            int totalCount = 0;
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":tipo",     OracleDbType.Varchar2, tipo,     ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":serie",    OracleDbType.Int32,    serie,    ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":numero",   OracleDbType.Int32,    numero,   ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32,    startRow, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":endRow",   OracleDbType.Int32,    endRow,   ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                while (await reader.ReadAsync())
+                {
+                    if (result.Count == 0) totalCount = GetInt(reader, "TOTAL_COUNT");
+                    result.Add(MapDocuVent(reader));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener facturas para packing {Tipo}/{Serie}/{Numero}", tipo, serie, numero);
+                throw;
+            }
+
+            return (result, totalCount);
+        }
+
+        private static PackingGDto MapPackingG(OracleDataReader r) => new()
+        {
+            Tipo         = GetStr(r, "TIPO"),
+            Serie        = GetInt(r, "SERIE"),
+            Numero       = GetInt(r, "NUMERO"),
+            Observacion  = GetStr(r, "OBSERVACION"),
+            SerRef       = GetStr(r, "SER_REF"),
+            NroRef       = GetStr(r, "NRO_REF"),
+            NumPed       = GetInt(r, "NUM_PED"),
+            NumOrdcompra = GetStr(r, "NUM_ORDCOMPRA")
+        };
     }
 }

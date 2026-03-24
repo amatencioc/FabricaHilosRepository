@@ -1,0 +1,142 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.PackingGDto>
+@using FabricaHilos.Models.Sgc
+
+@{
+    ViewData["Title"] = "Packing";
+    var pedido       = ViewBag.Pedido as PedidoSgcDto;
+    int pedSerie     = ViewBag.PedSerie;
+    int numPed       = ViewBag.NumPed;
+    string? numOrdcompra = ViewBag.NumOrdcompra as string;
+    string? buscar   = ViewBag.Buscar as string;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-buscar="@buscar">Pedidos</a></li>
+    <li class="breadcrumb-item active">Packing — Pedido @numPed</li>
+}
+
+<div class="mb-3">
+    <h4 class="section-title mb-1"><i class="bi bi-box-seam me-2"></i>Packing</h4>
+    <a asp-action="Pedidos" asp-route-buscar="@buscar" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver a pedidos
+    </a>
+</div>
+
+@if (pedido != null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-cart-check me-1"></i>
+            Serie <strong>@pedido.Serie</strong> — Pedido N° <strong>@pedido.NumPed</strong>
+        </div>
+        <div class="card-body py-2 small">
+            <div class="row row-cols-2 row-cols-md-4 g-2">
+                <div><span class="text-muted">N° Pedido:</span> <span class="fw-semibold">@pedido.NumPed</span></div>
+                <div><span class="text-muted">N° Ord. Compra:</span> <span class="fw-semibold">@(numOrdcompra ?? "-")</span></div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(pedido.Nombre ?? pedido.CodCliente ?? "-")</span></div>
+                <div><span class="text-muted">RUC:</span> @(pedido.Ruc ?? "-")</div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center">Serie</th>
+                        <th class="text-center">N° Packing</th>
+                        <th>Observación</th>
+                        <th class="text-center">Ser. Ref.</th>
+                        <th class="text-center">Nro. Ref.</th>
+                        <th class="text-center">N° Pedido</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="text-center">@item.Serie</td>
+                            <td class="fw-semibold text-center">@item.Numero</td>
+                            <td>@(item.Observacion ?? "-")</td>
+                            <td class="text-center">@(item.SerRef?.ToString() ?? "-")</td>
+                            <td class="text-center">@(item.NroRef ?? "-")</td>
+                            <td class="text-center">@item.NumPed</td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(item.Tipo))
+                                {
+                                    <a asp-action="Facturas"
+                                       asp-route-cTipo="@item.Tipo"
+                                       asp-route-packingSerie="@item.Serie"
+                                       asp-route-packingNumero="@item.Numero"
+                                       asp-route-pedSerie="@pedSerie"
+                                       asp-route-numPed="@numPed"
+                                       asp-route-buscar="@buscar"
+                                       class="btn btn-sm btn-outline-success btn-accion"
+                                       title="Ver facturas de este packing">
+                                        <i class="bi bi-receipt"></i> Facturas
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox me-2"></i>No se encontraron registros de packing para este pedido.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer py-2">
+        @{
+            int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+            int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+            int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+            int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
+            int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+            int endItem     = Math.Min(currentPage * pgSize, totalCount);
+        }
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">
+                @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}\u2013{endItem} de {totalCount} registros")
+            </small>
+            @if (totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Packing"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
+                               asp-route-buscar="@buscar"
+                               asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
+                        </li>
+                        @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                        {
+                            <li class="page-item @(pg == currentPage ? "active" : "")">
+                                <a class="page-link" asp-action="Packing"
+                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
+                                   asp-route-buscar="@buscar"
+                                   asp-route-page="@pg">@pg</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Packing"
+                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
+                               asp-route-buscar="@buscar"
+                               asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+</div>

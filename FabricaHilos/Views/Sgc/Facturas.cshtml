@@ -15,23 +15,70 @@
     int     numPed     = ViewBag.NumPed;
     int     itemNro    = ViewBag.ItemNro;
     int     kdNro      = ViewBag.KdNro;
-    bool    sinFactura = ViewBag.SinFactura == true;
+    bool    sinFactura  = ViewBag.SinFactura == true;
+    string? buscar      = ViewBag.Buscar as string;
+    var     packing     = ViewBag.Packing as PackingGDto;
+    bool    fromPacking = ViewBag.FromPacking == true;
+    int?    packingSerie  = ViewBag.PackingSerie  != null ? Convert.ToInt32(ViewBag.PackingSerie)  : (int?)null;
+    int?    packingNumero = ViewBag.PackingNumero != null ? Convert.ToInt32(ViewBag.PackingNumero) : (int?)null;
+    string? codArt        = ViewBag.CodArt as string;
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item"><a asp-action="Pedidos">Pedidos</a></li>
-    <li class="breadcrumb-item">
-        <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed">
-            Pedido @numPed
+    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-buscar="@buscar">Pedidos</a></li>
+    @if (fromPacking)
+    {
+        <li class="breadcrumb-item">
+            <a asp-action="Packing" asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-buscar="@buscar">
+                Packing — Pedido @numPed
+            </a>
+        </li>
+    }
+    else
+    {
+        <li class="breadcrumb-item">
+            <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed" asp-route-buscar="@buscar">
+                Pedido @numPed
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a asp-action="Guias" asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro" asp-route-buscar="@buscar">
+                Guías (Ítem @itemNro)
+            </a>
+        </li>
+        <li class="breadcrumb-item">
+            <a asp-action="DetalleGuia"
+               asp-route-codAlm="@codAlm"
+               asp-route-tpTransac="@tpTransac"
+               asp-route-serie="@guiaSerie"
+               asp-route-numero="@guiaNumero"
+               asp-route-pedSerie="@pedSerie"
+               asp-route-numPed="@numPed"
+               asp-route-nro="@itemNro"
+               asp-route-codArt="@codArt"
+               asp-route-buscar="@buscar">
+                Guía @guiaNumero (Ítem @kdNro)
+            </a>
+        </li>
+    }
+    <li class="breadcrumb-item active">Facturas</li>
+}
+
+<div class="mb-3">
+    <h4 class="section-title mb-1"><i class="bi bi-receipt me-2"></i>Facturas</h4>
+    @if (fromPacking)
+    {
+        <a asp-action="Packing"
+           asp-route-pedSerie="@pedSerie"
+           asp-route-numPed="@numPed"
+           asp-route-buscar="@buscar"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver al packing
         </a>
-    </li>
-    <li class="breadcrumb-item">
-        <a asp-action="Guias" asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro">
-            Guías (Ítem @itemNro)
-        </a>
-    </li>
-    <li class="breadcrumb-item">
+    }
+    else
+    {
         <a asp-action="DetalleGuia"
            asp-route-codAlm="@codAlm"
            asp-route-tpTransac="@tpTransac"
@@ -39,29 +86,33 @@
            asp-route-numero="@guiaNumero"
            asp-route-pedSerie="@pedSerie"
            asp-route-numPed="@numPed"
-           asp-route-nro="@itemNro">
-            Guía @guiaNumero (Ítem @kdNro)
+           asp-route-nro="@itemNro"
+           asp-route-codArt="@codArt"
+           asp-route-buscar="@buscar"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver al detalle de guía
         </a>
-    </li>
-    <li class="breadcrumb-item active">Facturas</li>
-}
-
-<div class="mb-3">
-    <h4 class="section-title mb-1"><i class="bi bi-receipt me-2"></i>Facturas</h4>
-    <a asp-action="DetalleGuia"
-       asp-route-codAlm="@codAlm"
-       asp-route-tpTransac="@tpTransac"
-       asp-route-serie="@guiaSerie"
-       asp-route-numero="@guiaNumero"
-       asp-route-pedSerie="@pedSerie"
-       asp-route-numPed="@numPed"
-       asp-route-nro="@itemNro"
-       class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Volver al detalle de guía
-    </a>
+    }
 </div>
 
-@if (guia != null)
+@if (fromPacking && packing != null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-box-seam me-1"></i>
+            Packing <strong>@packing.Tipo</strong> — Serie <strong>@packing.Serie</strong> N° <strong>@packing.Numero</strong>
+        </div>
+        <div class="card-body py-2 small">
+            <div class="row row-cols-2 row-cols-md-4 g-2">
+                <div><span class="text-muted">N° Pedido:</span> <span class="fw-semibold">@packing.NumPed</span></div>
+                <div><span class="text-muted">N° Ord. Compra:</span> @(packing.NumOrdcompra ?? "-")</div>
+                <div><span class="text-muted">Observación:</span> @(packing.Observacion ?? "-")</div>
+                <div><span class="text-muted">Ref.:</span> @(packing.SerRef?.ToString() ?? "-") / @(packing.NroRef ?? "-")</div>
+            </div>
+        </div>
+    </div>
+}
+else if (!fromPacking && guia != null)
 {
     <div class="card mb-3">
         <div class="card-header fw-semibold bg-light">
@@ -118,35 +169,44 @@ else
                                     {
                                         <div class="d-flex gap-1 justify-content-center">
                                             <a asp-action="DescargarFacturaPdf"
-                                               asp-route-tipo="@item.Tipodoc"
-                                               asp-route-serie="@item.Serie"
-                                               asp-route-numero="@item.Numero"
-                                               asp-route-codAlm="@codAlm"
-                                               asp-route-tpTransac="@tpTransac"
-                                               asp-route-guiaSerie="@guiaSerie"
-                                               asp-route-guiaNumero="@guiaNumero"
-                                               asp-route-pedSerie="@pedSerie"
-                                               asp-route-numPed="@numPed"
-                                               asp-route-itemNro="@itemNro"
-                                               class="btn btn-sm btn-outline-danger btn-accion"
-                                               title="Descargar PDF">
-                                                <i class="bi bi-file-pdf"></i> PDF
-                                            </a>
-                                            <a asp-action="DetalleFactura"
-                                               asp-route-tipo="@item.Tipodoc"
-                                               asp-route-serie="@item.Serie"
-                                               asp-route-numero="@item.Numero"
-                                               asp-route-codAlm="@codAlm"
-                                               asp-route-tpTransac="@tpTransac"
-                                               asp-route-guiaSerie="@guiaSerie"
-                                               asp-route-guiaNumero="@guiaNumero"
-                                               asp-route-pedSerie="@pedSerie"
-                                               asp-route-numPed="@numPed"
-                                               asp-route-itemNro="@itemNro"
-                                               class="btn btn-sm btn-outline-primary btn-accion"
-                                               title="Ver detalle de la factura">
-                                                <i class="bi bi-list-ul"></i> Detalle
-                                            </a>
+                                                               asp-route-tipo="@item.Tipodoc"
+                                                               asp-route-serie="@item.Serie"
+                                                               asp-route-numero="@item.Numero"
+                                                               asp-route-codAlm="@codAlm"
+                                                               asp-route-tpTransac="@tpTransac"
+                                                               asp-route-guiaSerie="@guiaSerie"
+                                                               asp-route-guiaNumero="@guiaNumero"
+                                                               asp-route-pedSerie="@pedSerie"
+                                                               asp-route-numPed="@numPed"
+                                                               asp-route-itemNro="@itemNro"
+                                                               class="btn btn-sm btn-outline-danger btn-accion"
+                                                               onclick="descargarPdf(event, this)"
+                                                               title="Descargar PDF">
+                                                                <i class="bi bi-file-pdf"></i> PDF
+                                                            </a>
+                                            @if (item.TieneDetalle)
+                                            {
+                                                <a asp-action="DetalleFactura"
+                                                                   asp-route-tipo="@item.Tipodoc"
+                                                                   asp-route-serie="@item.Serie"
+                                                                   asp-route-numero="@item.Numero"
+                                                                   asp-route-codAlm="@codAlm"
+                                                                   asp-route-tpTransac="@tpTransac"
+                                                                   asp-route-guiaSerie="@guiaSerie"
+                                                                   asp-route-guiaNumero="@guiaNumero"
+                                                                   asp-route-pedSerie="@pedSerie"
+                                                                   asp-route-numPed="@numPed"
+                                                                   asp-route-itemNro="@itemNro"
+                                                                   asp-route-buscar="@buscar"
+                                                                   asp-route-fromPacking="@fromPacking"
+                                                                   asp-route-packingSerie="@packingSerie"
+                                                                   asp-route-packingNumero="@packingNumero"
+                                                                   asp-route-cTipo="@cTipo"
+                                                                   class="btn btn-sm btn-outline-primary btn-accion"
+                                                                   title="Ver detalle de la factura">
+                                                                    <i class="bi bi-list-ul"></i> Detalle
+                                                                </a>
+                                            }
                                         </div>
                                     }
                                 </td>
@@ -188,6 +248,9 @@ else
                                    asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
                                    asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
                                    asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
+                                   asp-route-codArt="@codArt"
+                                   asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
+                                   asp-route-buscar="@buscar"
                                    asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                             </li>
                             @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
@@ -199,22 +262,94 @@ else
                                        asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
                                        asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
                                        asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
+                                       asp-route-codArt="@codArt"
+                                       asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
+                                       asp-route-buscar="@buscar"
                                        asp-route-page="@pg">@pg</a>
                                 </li>
                             }
                             <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-                                <a class="page-link" asp-action="Facturas"
-                                   asp-route-cTipo="@cTipo" asp-route-cSerie="@cSerie" asp-route-cNumero="@cNumero"
-                                   asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                                   asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                                   asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
-                                   asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
-                            </li>
-                        </ul>
-                    </nav>
-                }
-            </div>
-        </div>
-    </div>
-}
+                                                                 <a class="page-link" asp-action="Facturas"
+                                                                    asp-route-cTipo="@cTipo" asp-route-cSerie="@cSerie" asp-route-cNumero="@cNumero"
+                                                                    asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
+                                                                    asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
+                                                                    asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
+                                                                    asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
+                                                                    asp-route-codArt="@codArt"
+                                                                    asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
+                                                                    asp-route-buscar="@buscar"
+                                                                    asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                                                             </li>
+                                                         </ul>
+                                                     </nav>
+                                                 }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div class="modal fade" id="pdfModal" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header" id="pdfModalHeader">
+                                                <h5 class="modal-title d-flex align-items-center">
+                                                    <i class="bi me-2" id="pdfModalIcono"></i>
+                                                    <span id="pdfModalTitulo"></span>
+                                                </h5>
+                                                <button type="button" class="btn-close" id="pdfModalCloseBtn"
+                                                        data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="mb-0" id="pdfModalMensaje" style="white-space: pre-wrap; word-break: break-all;"></p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                                                    <i class="bi bi-x-lg me-1"></i>Cerrar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @section Scripts {
+                                <script>
+                                    async function descargarPdf(event, anchor) {
+                                        event.preventDefault();
+                                        try {
+                                            const resp = await fetch(anchor.href, { credentials: 'include' });
+                                            const ct = resp.headers.get('Content-Type') ?? '';
+                                            if (ct.includes('application/json')) {
+                                                const data = await resp.json();
+                                                mostrarPdfModal(data.tipo, data.mensaje);
+                                            } else {
+                                                const blob = await resp.blob();
+                                                const cd = resp.headers.get('Content-Disposition') ?? '';
+                                                const m  = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                                                const fn = m ? m[1].replace(/['"]/g, '') : 'documento.pdf';
+                                                const a  = document.createElement('a');
+                                                a.href = URL.createObjectURL(blob);
+                                                a.download = fn;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(a.href);
+                                            }
+                                        } catch {
+                                            mostrarPdfModal('Error', 'Ocurrió un error inesperado al obtener el PDF.');
+                                        }
+                                    }
+
+                                    function mostrarPdfModal(tipo, mensaje) {
+                                        const esError = tipo === 'Error';
+                                        document.getElementById('pdfModalHeader').className =
+                                            'modal-header ' + (esError ? 'bg-danger text-white' : 'bg-warning text-dark');
+                                        const closeBtn = document.getElementById('pdfModalCloseBtn');
+                                        closeBtn.className = 'btn-close' + (esError ? ' btn-close-white' : '');
+                                        document.getElementById('pdfModalIcono').className =
+                                            'bi me-2 ' + (esError ? 'bi-x-circle-fill' : 'bi-exclamation-triangle-fill');
+                                        document.getElementById('pdfModalTitulo').textContent = tipo;
+                                        document.getElementById('pdfModalMensaje').textContent = mensaje;
+                                        bootstrap.Modal.getOrCreateInstance(document.getElementById('pdfModal')).show();
+                                    }
+                                </script>
+                                }

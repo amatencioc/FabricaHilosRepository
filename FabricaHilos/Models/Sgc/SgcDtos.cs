@@ -16,6 +16,8 @@ namespace FabricaHilos.Models.Sgc
         public string? CodVende { get; set; }
         public string? Moneda { get; set; }
         public string? NroSucur { get; set; }
+        public bool TieneDetalle { get; set; }
+        public bool TienePacking  { get; set; }
     }
 
     public class ItemPedDto
@@ -68,9 +70,10 @@ namespace FabricaHilos.Models.Sgc
         public string? Motivo { get; set; }
         public string? Moneda { get; set; }
         public string? SerieSunat { get; set; }
+        public bool TieneDetalle { get; set; }
     }
 
-    // NOTE: SIG.KARDEX_D columns are assumed based on ERP conventions.
+    // NOTE: SIG.KARDEX_D
     // Adjust column names in SgcService if they differ in your schema.
     public class KardexDDto
     {
@@ -109,6 +112,19 @@ namespace FabricaHilos.Models.Sgc
         public decimal? ValVenta { get; set; }
         public decimal? ImpIgv { get; set; }
         public decimal? PrecioVta { get; set; }
+        public bool TieneDetalle { get; set; }
+    }
+
+    public class PackingGDto
+    {
+        public string? Tipo         { get; set; }
+        public int     Serie        { get; set; }
+        public int     Numero       { get; set; }
+        public string? Observacion  { get; set; }
+        public string? SerRef       { get; set; }
+        public string? NroRef       { get; set; }
+        public int     NumPed       { get; set; }
+        public string? NumOrdcompra { get; set; }
     }
 
     // NOTE: SIG.ITEMDOCU

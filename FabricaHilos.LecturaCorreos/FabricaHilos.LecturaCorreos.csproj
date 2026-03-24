@@ -6,6 +6,8 @@
     <RootNamespace>FabricaHilos.LecturaCorreos</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="appsettings.json" />
+    <Content Include="appsettings.Development.json" />
     <Content Include="Properties\launchSettings.json" />
   </ItemGroup>
 

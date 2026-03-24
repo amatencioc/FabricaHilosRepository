@@ -62,13 +62,30 @@
                             <td class="text-end">@(item.TotalPedido?.ToString("N2") ?? "-")</td>
                             <td class="text-end">@(item.TotalFacturado?.ToString("N2") ?? "-")</td>
                             <td class="text-center">
-                                <a asp-action="DetallePedido"
-                                   asp-route-serie="@item.Serie"
-                                   asp-route-numPed="@item.NumPed"
-                                   class="btn btn-sm btn-outline-primary btn-accion"
-                                   title="Ver detalle del pedido">
-                                    <i class="bi bi-list-ul"></i> Detalle
-                                </a>
+                                <div class="d-flex gap-1 justify-content-center">
+                                @if (item.TieneDetalle)
+                                {
+                                    <a asp-action="DetallePedido"
+                                       asp-route-serie="@item.Serie"
+                                       asp-route-numPed="@item.NumPed"
+                                       asp-route-buscar="@ViewBag.Buscar"
+                                       class="btn btn-sm btn-outline-primary btn-accion"
+                                       title="Ver detalle del pedido">
+                                        <i class="bi bi-list-ul"></i> Detalle
+                                    </a>
+                                }
+                                @if (item.TienePacking)
+                                {
+                                    <a asp-action="Packing"
+                                       asp-route-pedSerie="@item.Serie"
+                                       asp-route-numPed="@item.NumPed"
+                                       asp-route-buscar="@ViewBag.Buscar"
+                                       class="btn btn-sm btn-outline-warning btn-accion"
+                                       title="Ver packing">
+                                        <i class="bi bi-box-seam"></i> Packing
+                                    </a>
+                                }
+                                </div>
                             </td>
                         </tr>
                     }
