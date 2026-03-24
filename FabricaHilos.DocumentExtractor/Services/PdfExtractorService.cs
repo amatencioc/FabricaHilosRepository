@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using FabricaHilos.DocumentExtractor.Models;
@@ -19,18 +20,43 @@ public class PdfExtractorService : IDocumentExtractorService
     private static readonly string[] FormatosFecha = ["dd/MM/yyyy", "dd-MM-yyyy", "yyyy-MM-dd", "yyyy/MM/dd", "d/M/yyyy", "d-M-yyyy"];
     private static readonly string[] FormatosFechaEspanol = ["d 'de' MMMM 'de' yyyy", "dd 'de' MMMM 'de' yyyy"];
 
+    public static string? GetTessDataPathForDiagnostics() => TessDataPath;
+
     private static string? FindTessData()
     {
-        var candidates = new[]
+        var candidates = new List<string?>
         {
+            // Rutas relativas al ejecutable (producción y publicación)
             Path.Combine(AppContext.BaseDirectory, "tessdata"),
+            Path.Combine(AppContext.BaseDirectory, "..", "tessdata"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "tessdata"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "tessdata"),
+
+            // Directorio de trabajo actual (desde donde se corre dotnet run)
             Path.Combine(Directory.GetCurrentDirectory(), "tessdata"),
-            AppContext.BaseDirectory,
-            Directory.GetCurrentDirectory(),
-            Environment.GetEnvironmentVariable("TESSDATA_PREFIX") ?? string.Empty
+            Path.Combine(Directory.GetCurrentDirectory(), "..", "tessdata"),
+
+            // Variable de entorno estándar de Tesseract
+            Environment.GetEnvironmentVariable("TESSDATA_PREFIX"),
+
+            // Instalaciones típicas de Tesseract en Windows
+            @"C:\Program Files\Tesseract-OCR\tessdata",
+            @"C:\Program Files (x86)\Tesseract-OCR\tessdata",
+            @"C:\Tesseract-OCR\tessdata",
+            @"C:\tessdata",
+
+            // Rutas de usuario en Windows
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "tessdata"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "tessdata"),
         };
-        return candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && Directory.Exists(p) &&
-            (File.Exists(Path.Combine(p, "spa.traineddata")) || File.Exists(Path.Combine(p, "eng.traineddata"))));
+
+        return candidates
+            .OfType<string>()
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => Path.GetFullPath(p))
+            .FirstOrDefault(p => Directory.Exists(p) &&
+                (File.Exists(Path.Combine(p, "spa.traineddata")) ||
+                 File.Exists(Path.Combine(p, "eng.traineddata"))));
     }
 
     public Task<DocumentoExtraido> ExtraerAsync(Stream archivo, string tipoMime, string nombreArchivo)
@@ -157,6 +183,45 @@ public class PdfExtractorService : IDocumentExtractorService
         return encoded.ToArray();
     }
 
+    public Task<(string texto, string fuente)> ExtraerTextoRawAsync(Stream archivo, string tipoMime)
+    {
+        using var ms = new MemoryStream();
+        archivo.CopyTo(ms);
+        var bytes = ms.ToArray();
+
+        if (tipoMime == "application/pdf")
+        {
+            var sb = new StringBuilder();
+            int pageCount;
+            ms.Position = 0;
+            using (var pdf = PdfDocument.Open(ms))
+            {
+                pageCount = pdf.NumberOfPages;
+                foreach (UglyToad.PdfPig.Content.Page page in pdf.GetPages())
+                    sb.AppendLine(page.Text);
+            }
+            string textoNativo = sb.ToString();
+            if (textoNativo.Trim().Length >= 50)
+                return Task.FromResult((textoNativo, "PdfPig"));
+
+            // Fallback a OCR
+            if (TessDataPath != null)
+            {
+                string textoOcr = ExtraerTextoOcrDesdePdf(bytes, pageCount);
+                return Task.FromResult((textoOcr, "Tesseract-OCR (PDF)"));
+            }
+            return Task.FromResult((textoNativo, "PdfPig (sin OCR)"));
+        }
+
+        if (tipoMime is "image/png" or "image/jpeg" or "image/jpg" or "image/tiff" or "image/bmp" or "image/webp")
+        {
+            string textoOcr = OcrBytes(PreprocesarImagen(bytes));
+            return Task.FromResult((textoOcr, "Tesseract-OCR"));
+        }
+
+        return Task.FromResult((string.Empty, "Ninguna"));
+    }
+
     // LSTM OCR with dual-pass PSM: Auto first, SparseText fallback for forms/invoices.
     // Uses spa+eng for best coverage of Peruvian documents. Gracefully falls back if tessdata missing.
     private static string OcrBytes(byte[] imageBytes)
@@ -195,7 +260,17 @@ public class PdfExtractorService : IDocumentExtractorService
     {
         if (string.IsNullOrWhiteSpace(texto))
         {
-            doc.MensajeError = "No se pudo extraer texto del documento.";
+            if (TessDataPath == null)
+            {
+                string installHint = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? @"Coloque los archivos en la carpeta 'tessdata' del proyecto o instale Tesseract-OCR en C:\Program Files\Tesseract-OCR\"
+                    : "Coloque los archivos en la carpeta 'tessdata' del proyecto o instale Tesseract-OCR en el sistema.";
+                doc.MensajeError = "OCR no disponible: No se encontraron archivos tessdata (spa.traineddata/eng.traineddata). " + installHint;
+            }
+            else
+                doc.MensajeError = $"No se pudo extraer texto del documento. " +
+                    $"Fuente: {doc.FuenteExtraccion}. " +
+                    $"Tesseract activo en: {TessDataPath}";
             doc.Confianza = 0;
             return;
         }
@@ -213,14 +288,16 @@ public class PdfExtractorService : IDocumentExtractorService
             doc.TipoDocumento = "FACTURA";
         else if (Regex.IsMatch(texto, @"BOLETA", RegexOptions.IgnoreCase))
             doc.TipoDocumento = "BOLETA";
+        else if (Regex.IsMatch(texto, @"SEDAPAL|Servicio\s*de\s*Agua\s*Potable", RegexOptions.IgnoreCase))
+            doc.TipoDocumento = "RECIBO DE AGUA";
         else if (Regex.IsMatch(texto, @"RECIBO\s*DE\s*AGUA|RECIBO\s*DE\s*LUZ|RECIBO\s*DE\s*SERVICIO", RegexOptions.IgnoreCase))
             doc.TipoDocumento = "RECIBO DE SERVICIO";
         else if (Regex.IsMatch(texto, @"RECIBO", RegexOptions.IgnoreCase))
             doc.TipoDocumento = "RECIBO";
 
-        // ── N° comprobante: prefijos SUNAT ampliados ───────────────────────────────
-        // Cubre: E001, F001, B001, T001, y variantes multi-letra como RC01, RH001, etc.
-        var matchComp = Regex.Match(texto, @"\b([EFBT]\d{3}|[A-Z]{1,4}\d{2,3})-(\d{4,8})\b");
+        // ── N° comprobante: prefijos SUNAT ampliados + recibos SEDAPAL/servicios ────
+        // Cubre: E001, F001, B001, T001, variantes multi-letra RC01, RH001, y SEDAPAL S107-XXXXXXXX
+        var matchComp = Regex.Match(texto, @"\b([EFBTS]\d{3}|[A-Z]{1,4}\d{2,3})-(\d{4,10})\b");
         if (matchComp.Success)
         {
             doc.Serie = matchComp.Groups[1].Value;
@@ -355,8 +432,11 @@ public class PdfExtractorService : IDocumentExtractorService
             @"(?:I\.?G\.?V\.?|Impuesto\s*(?:General\s*)?a\s*la\s*Venta)[^\d]*([\d,\.]+)");
 
         doc.TotalPagar = ExtraerMonto(texto,
-            @"(?:Importe\s*Total|TOTAL\s*A\s*PAGAR|TOTAL\s*GENERAL|TOTAL\s*PAGAR|Total\s*a\s*Cobrar)[^\d]*([\d,\.]+)");
-        // Fallback: linea que contenga solo "TOTAL" seguido de monto
+            @"(?:Importe\s*Total|TOTAL\s*A\s*PAGAR|TOTAL\s*GENERAL|TOTAL\s*PAGAR|Total\s*a\s*Cobrar|IMPORTE\s*A\s*PAGAR)[^\d]*([\d,\.]+)");
+        // Fallback 1: monto con asteriscos (formato SEDAPAL: S/ *****684.20)
+        if (doc.TotalPagar == null)
+            doc.TotalPagar = ExtraerMonto(texto, @"S/\.?\s*\*+([\d,\.]+)");
+        // Fallback 2: linea que contenga solo "TOTAL" seguido de monto
         if (doc.TotalPagar == null)
             doc.TotalPagar = ExtraerMonto(texto, @"(?<!\w)TOTAL(?!\s*(?:GRAVAD|EXONER|INAFECT|DESCUENT|ANTICIP|GRATU))[^\d]*([\d,\.]+)");
 

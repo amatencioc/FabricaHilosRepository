@@ -10,9 +10,17 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
+  <!-- Copiar tessdata al directorio de salida -->
   <ItemGroup>
-    <Content Include="tessdata\**">
+    <None Update="tessdata\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
+    <!-- También copiar las DLLs nativas de Tesseract -->
+    <None Update="x64\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="x86\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

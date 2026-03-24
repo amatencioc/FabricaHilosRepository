@@ -48,4 +48,49 @@ public class ExtractorController : ControllerBase
         var resultado = await _service.ExtraerAsync(stream, archivo.ContentType, archivo.FileName);
         return Ok(resultado);
     }
+
+    /// <summary>
+    /// Endpoint de diagnóstico: muestra el texto crudo extraído y el estado del OCR.
+    /// Útil para depurar documentos que no se procesan correctamente.
+    /// </summary>
+    /// <param name="archivo">Archivo a diagnosticar (PDF, PNG, JPEG, TIFF, BMP, WebP). Límite: 30 MB.</param>
+    [HttpPost("diagnostico")]
+    [RequestSizeLimit(30 * 1024 * 1024)]
+    public async Task<IActionResult> Diagnostico(IFormFile archivo)
+    {
+        if (archivo == null || archivo.Length == 0)
+            return BadRequest(new { error = "No se proporcionó ningún archivo." });
+
+        var tessDataPath = PdfExtractorService.GetTessDataPathForDiagnostics();
+        var baseDir = AppContext.BaseDirectory;
+        var workingDir = Directory.GetCurrentDirectory();
+
+        var tessFiles = tessDataPath != null && Directory.Exists(tessDataPath)
+            ? Directory.GetFiles(tessDataPath).Select(Path.GetFileName).ToArray()
+            : Array.Empty<string>();
+
+        using var streamRaw = archivo.OpenReadStream();
+        var (textoRaw, fuente) = await _service.ExtraerTextoRawAsync(streamRaw, archivo.ContentType);
+
+        using var streamExtract = archivo.OpenReadStream();
+        var resultado = await _service.ExtraerAsync(streamExtract, archivo.ContentType, archivo.FileName);
+
+        return Ok(new
+        {
+            diagnostico = new
+            {
+                tessDataPath,
+                tessDataEncontrado = tessDataPath != null,
+                tessDataArchivos = tessFiles,
+                baseDirectory = baseDir,
+                workingDirectory = workingDir,
+                fuenteExtraccion = fuente,
+                caracteresExtraidos = textoRaw?.Length ?? 0,
+                textoRaw = textoRaw != null
+                    ? textoRaw.Substring(0, Math.Min(textoRaw.Length, 2000))
+                    : null
+            },
+            resultado
+        });
+    }
 }
