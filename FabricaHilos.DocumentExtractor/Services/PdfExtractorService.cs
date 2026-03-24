@@ -16,6 +16,9 @@ public class PdfExtractorService : IDocumentExtractorService
     // Search tessdata in multiple locations; gracefully degrade if not found.
     private static readonly string? TessDataPath = FindTessData();
 
+    // Compiled regex for fast repeated use in ContieneTextoUtil.
+    private static readonly Regex RegexDosDigitos = new(@"\d{2}", RegexOptions.Compiled);
+
     // Static date format arrays shared across extraction methods.
     private static readonly string[] FormatosFecha = ["dd/MM/yyyy", "dd-MM-yyyy", "yyyy-MM-dd", "yyyy/MM/dd", "d/M/yyyy", "d-M-yyyy"];
     private static readonly string[] FormatosFechaEspanol = ["d 'de' MMMM 'de' yyyy", "dd 'de' MMMM 'de' yyyy"];
@@ -103,7 +106,7 @@ public class PdfExtractorService : IDocumentExtractorService
             }
 
             string texto = sb.ToString();
-            if (texto.Trim().Length < 50)
+            if (texto.Trim().Length < 20 || !ContieneTextoUtil(texto))
             {
                 usedOcr = true;
                 string textoOcr = ExtraerTextoOcrDesdePdf(pdfBytes);
@@ -122,45 +125,21 @@ public class PdfExtractorService : IDocumentExtractorService
     private static string ExtraerTextoOcrDesdePdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();
-        var renderOptions = new RenderOptions { Dpi = 300, Grayscale = true };
+        // Aumentar DPI a 400 para mejor calidad en documentos con texto pequeño
+        var renderOptions = new RenderOptions { Dpi = 400, WithAnnotations = false, WithFormFill = false };
 
-        foreach (var bitmap in Conversion.ToImages(pdfBytes, options: renderOptions))
+        using var pdfMs = new MemoryStream(pdfBytes);
+        int pageCount = Conversion.GetPageCount(pdfMs);
+        for (int i = 0; i < pageCount; i++)
         {
-            using (bitmap)
-                sb.AppendLine(OcrBytes(PreprocesarBitmap(bitmap)));
+            using var pageMs = new MemoryStream();
+            Conversion.SavePng(pageMs, pdfBytes, page: i, options: renderOptions);
+            byte[] rawBytes = pageMs.ToArray();
+            byte[] processedBytes = PreprocesarImagen(rawBytes);
+            string textoOcr = OcrBytes(processedBytes);
+            sb.AppendLine(textoOcr);
         }
         return sb.ToString();
-    }
-
-    private static byte[] PreprocesarBitmap(SKBitmap original)
-    {
-        if (original == null) return Array.Empty<byte>();
-
-        int w = original.Width, h = original.Height;
-        const int minLongSide = 2400;
-        float scale = (float)minLongSide / Math.Max(w, h);
-
-        using var upscaled = scale > 1f
-            ? original.Resize(new SKImageInfo((int)(w * scale), (int)(h * scale)),
-                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None))
-            : null;
-        var source = upscaled ?? original;
-
-        const float c = 1.4f;
-        float t = (1f - c) / 2f * 255f;
-        float[] cm = [c, 0, 0, 0, t, 0, c, 0, 0, t, 0, 0, c, 0, t, 0, 0, 0, 1, 0];
-
-        using var output = new SKBitmap(source.Width, source.Height);
-        using (var canvas = new SKCanvas(output))
-        {
-            canvas.Clear(SKColors.White);
-            using var paint = new SKPaint { ColorFilter = SKColorFilter.CreateColorMatrix(cm) };
-            canvas.DrawBitmap(source, 0f, 0f, paint);
-        }
-
-        using var image = SKImage.FromBitmap(output);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-        return encoded.ToArray();
     }
 
     private static string ExtraerTextoOcr(Stream archivo)
@@ -170,20 +149,20 @@ public class PdfExtractorService : IDocumentExtractorService
         return OcrBytes(PreprocesarImagen(ms.ToArray()));
     }
 
-    // Upscale to >= 2400px longest side, convert to grayscale, boost contrast 1.4x.
+    // Escalar al lado más largo a >= 2800px, convertir a escala de grises, aumentar contraste 1.6x y binarizar.
     private static byte[] PreprocesarImagen(byte[] imageBytes)
     {
         using var original = SKBitmap.Decode(imageBytes);
         if (original == null) return imageBytes;
 
         int w = original.Width, h = original.Height;
-        const int minLongSide = 2400;
+        const int minLongSide = 2800;
         float scale = (float)minLongSide / Math.Max(w, h);
         int newW = scale > 1f ? (int)(w * scale) : w;
         int newH = scale > 1f ? (int)(h * scale) : h;
 
-        // Grayscale + 1.4x contrast via 4x5 color matrix
-        const float c = 1.4f;
+        // Paso 1: Escala de grises + contraste 1.6x (aumentado de 1.4x)
+        const float c = 1.6f;
         float t = (1f - c) / 2f * 255f;
         float[] cm =
         [
@@ -193,21 +172,39 @@ public class PdfExtractorService : IDocumentExtractorService
             0,          0,          0,          1, 0
         ];
 
-        // Resize first (if needed), then draw at (0,0) with color matrix
-        using var upscaled = scale > 1f
+        using var scaled = scale > 1f
             ? original.Resize(new SKImageInfo(newW, newH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None))
             : null;
-        var source = upscaled ?? original;
+        var source = scaled ?? original;
 
-        using var output = new SKBitmap(newW, newH);
-        using (var canvas = new SKCanvas(output))
+        using var gray = new SKBitmap(newW, newH);
+        using (var canvas = new SKCanvas(gray))
         {
             canvas.Clear(SKColors.White);
             using var paint = new SKPaint { ColorFilter = SKColorFilter.CreateColorMatrix(cm) };
             canvas.DrawBitmap(source, 0f, 0f, paint);
         }
 
-        using var image = SKImage.FromBitmap(output);
+        // Paso 2: Binarización con umbral fijo de 140 — elimina fondos grises y marcas de agua,
+        // convirtiendo la imagen a blanco/negro puro para mejorar el OCR en documentos SEDAPAL.
+        using var binary = new SKBitmap(newW, newH);
+        unsafe
+        {
+            IntPtr srcPtr = gray.GetPixels();
+            IntPtr dstPtr = binary.GetPixels();
+            int pixelCount = newW * newH;
+            uint* src = (uint*)srcPtr;
+            uint* dst = (uint*)dstPtr;
+            for (int i = 0; i < pixelCount; i++)
+            {
+                uint px = src[i];
+                // La imagen ya está en escala de grises (R=G=B), extraer canal azul (byte bajo en BGRA)
+                byte b = (byte)(px & 0xFF);
+                dst[i] = b < 140 ? 0xFF000000u : 0xFFFFFFFFu;
+            }
+        }
+
+        using var image = SKImage.FromBitmap(binary);
         using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
         return encoded.ToArray();
     }
@@ -228,7 +225,7 @@ public class PdfExtractorService : IDocumentExtractorService
                     sb.AppendLine(page.Text);
             }
             string textoNativo = sb.ToString();
-            if (textoNativo.Trim().Length >= 50)
+            if (textoNativo.Trim().Length >= 20 && ContieneTextoUtil(textoNativo))
                 return Task.FromResult((textoNativo, "PdfPig"));
 
             // Fallback a OCR
@@ -250,7 +247,7 @@ public class PdfExtractorService : IDocumentExtractorService
         return Task.FromResult((string.Empty, "Ninguna"));
     }
 
-    // LSTM OCR with dual-pass PSM: Auto first, SparseText fallback for forms/invoices.
+    // LSTM OCR with triple-pass PSM: Auto → SparseText → SingleColumn.
     // Uses spa+eng for best coverage of Peruvian documents. Gracefully falls back if tessdata missing.
     private static string OcrBytes(byte[] imageBytes)
     {
@@ -262,26 +259,46 @@ public class PdfExtractorService : IDocumentExtractorService
 
         using var engine = new TesseractEngine(TessDataPath, lang, EngineMode.LstmOnly);
         engine.SetVariable("preserve_interword_spaces", "1");
-        engine.SetVariable("user_defined_dpi", "300");
+        engine.SetVariable("user_defined_dpi", "400"); // Sincronizar con renderizado
+        engine.SetVariable("tessedit_char_whitelist", ""); // Sin restricciones
+        engine.SetVariable("load_system_dawg", "0"); // Mejora reconocimiento de RUCs y códigos
+        engine.SetVariable("load_freq_dawg", "0");
 
         using var pix = Pix.LoadFromMemory(imageBytes);
 
+        // Intento 1: Auto (para layouts complejos)
         string textAuto;
         using (var page = engine.Process(pix, PageSegMode.Auto))
             textAuto = page.GetText() ?? string.Empty;
 
-        // If Auto produces few lines, also try SparseText (better for label/value forms)
+        // Intento 2: SparseText (para formularios con label:value)
+        string textSparse = string.Empty;
         var lineCount = textAuto.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-        if (lineCount < 6)
+        if (lineCount < 8)
         {
-            string textSparse;
-            using (var page = engine.Process(pix, PageSegMode.SparseText))
-                textSparse = page.GetText() ?? string.Empty;
-            if (textSparse.Length > textAuto.Length)
-                return textSparse;
+            using var page = engine.Process(pix, PageSegMode.SparseText);
+            textSparse = page.GetText() ?? string.Empty;
         }
 
-        return textAuto;
+        // Intento 3: SingleColumn (para recibos con una sola columna de datos)
+        string textSingleCol = string.Empty;
+        if (textAuto.Trim().Length < 100 && textSparse.Trim().Length < 100)
+        {
+            using var page = engine.Process(pix, PageSegMode.SingleColumn);
+            textSingleCol = page.GetText() ?? string.Empty;
+        }
+
+        // Retornar el texto más largo (más información)
+        if (textSparse.Length > textAuto.Length)
+            return textSingleCol.Length > textSparse.Length ? textSingleCol : textSparse;
+        return textSingleCol.Length > textAuto.Length ? textSingleCol : textAuto;
+    }
+
+    private static bool ContieneTextoUtil(string texto)
+    {
+        // Si el texto extraído no contiene al menos un número de dos dígitos
+        // o no tiene al menos 5 palabras, considerarlo como no útil.
+        return RegexDosDigitos.IsMatch(texto) && texto.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 5;
     }
 
     private static void ProcesarTexto(string texto, DocumentoExtraido doc)
@@ -296,9 +313,14 @@ public class PdfExtractorService : IDocumentExtractorService
                 doc.MensajeError = "OCR no disponible: No se encontraron archivos tessdata (spa.traineddata/eng.traineddata). " + installHint;
             }
             else
+            {
+                string tessStatus = TessDataPath != null ? $"activo en: {TessDataPath}" : "no disponible";
                 doc.MensajeError = $"No se pudo extraer texto del documento. " +
                     $"Fuente: {doc.FuenteExtraccion}. " +
-                    $"Tesseract activo en: {TessDataPath}";
+                    $"Tesseract {tessStatus}. " +
+                    $"El documento puede tener contenido vectorial con encoding especial, " +
+                    $"o ser un PDF protegido/con contraseña.";
+            }
             doc.Confianza = 0;
             return;
         }
