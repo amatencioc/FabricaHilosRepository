@@ -50,6 +50,28 @@ public class ExtractorController : ControllerBase
     }
 
     /// <summary>
+    /// Estado del servicio OCR: tessdata path, archivos encontrados y directorio base.
+    /// No requiere archivo — útil para verificar la configuración del servidor.
+    /// </summary>
+    [HttpGet("diagnostico")]
+    public IActionResult DiagnosticoGet()
+    {
+        var tessDataPath = PdfExtractorService.GetTessDataPathForDiagnostics();
+        var tessFiles = tessDataPath != null && Directory.Exists(tessDataPath)
+            ? Directory.GetFiles(tessDataPath).Select(Path.GetFileName).ToArray()
+            : Array.Empty<string>();
+
+        return Ok(new
+        {
+            tessDataPath,
+            tessDataEncontrado = tessDataPath != null,
+            tessDataArchivos = tessFiles,
+            baseDirectory = AppContext.BaseDirectory,
+            workingDirectory = Directory.GetCurrentDirectory()
+        });
+    }
+
+    /// <summary>
     /// Endpoint de diagnóstico: muestra el texto crudo extraído y el estado del OCR.
     /// Útil para depurar documentos que no se procesan correctamente.
     /// </summary>
