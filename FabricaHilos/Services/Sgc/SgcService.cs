@@ -11,10 +11,11 @@ namespace FabricaHilos.Services.Sgc
         Task<(List<ItemPedDto> Items, int TotalCount)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10);
         Task<(List<KardexGDto> Items, int TotalCount)> ObtenerGuiasAsync(int pedSerie, int numPed, int page = 1, int pageSize = 10);
         Task<KardexGDto?> ObtenerGuiaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10);
+        Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, string codArt, int page = 1, int pageSize = 10);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasAsync(string? cTipo, string? cSerie, string? cNumero, int page = 1, int pageSize = 10);
         Task<DocuVentDto?> ObtenerFacturaAsync(string tipo, string serie, string numero);
         Task<(List<ItemDocuDto> Items, int TotalCount)> ObtenerDetalleFacturaAsync(string tipo, string serie, string numero, int page = 1, int pageSize = 10);
+        Task<ItemPedDto?> ObtenerItemPedAsync(int numPed, int nro);
     }
 
     public class SgcService : ISgcService
@@ -215,19 +216,22 @@ namespace FabricaHilos.Services.Sgc
             int endRow   = page * pageSize;
 
             const string sql = @"
-                SELECT RN, TOTAL_COUNT, SERIE, NUM_PED, NRO, COD_ART, TITULO, TIPO_FIBRA,
-                       VALPF, COLOR, CANTIDAD, PRECIO, SALDO, IMP_VVB,
-                       ESTADO, DETALLE, COLOR_DET, HILO_DET, PROCESO,
-                       PRESENTACION, R_TIPO, R_SERIE, R_NUMERO
+                SELECT RN, TOTAL_COUNT, SERIE, NUM_PED, NRO, COD_ART, TIPO_FIBRA,
+                       VALPF, CANTIDAD, PRECIO, SALDO, SALDO_R, IMP_VVB,
+                       ESTADO, DETALLE, COLOR_DET, HILO_DET,
+                       PRESENTACION, R_TIPO, R_SERIE, R_NUMERO,
+                       A_DESCRIP, A_UNIDAD
                 FROM (
-                    SELECT ROW_NUMBER() OVER (ORDER BY I.NRO) AS RN,
+                    SELECT ROW_NUMBER() OVER (ORDER BY I.NRO ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
-                           I.SERIE, I.NUM_PED, I.NRO, I.COD_ART, I.TITULO, I.TIPO_FIBRA,
-                           I.VALPF, I.COLOR, I.CANTIDAD, I.PRECIO, I.SALDO, I.IMP_VVB,
-                           I.ESTADO, I.DETALLE, I.COLOR_DET, I.HILO_DET, I.PROCESO,
-                           I.PRESENTACION, I.R_TIPO, I.R_SERIE, I.R_NUMERO
-                    FROM SIG.ITEMPED I
-                    WHERE I.NUM_PED = :numPed
+                           I.SERIE, I.NUM_PED, I.NRO, I.COD_ART, I.TIPO_FIBRA,
+                           I.VALPF, I.CANTIDAD, I.PRECIO, I.SALDO, I.SALDO_R, I.IMP_VVB,
+                           I.ESTADO, I.DETALLE, I.COLOR_DET, I.HILO_DET,
+                           I.PRESENTACION, I.R_TIPO, I.R_SERIE, I.R_NUMERO,
+                           A.DESCRIPCION AS A_DESCRIP, A.UNIDAD AS A_UNIDAD
+                     FROM SIG.ITEMPED I
+                     LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                     WHERE I.NUM_PED = :numPed
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
 
@@ -255,23 +259,23 @@ namespace FabricaHilos.Services.Sgc
                         NumPed       = GetInt(reader, "NUM_PED"),
                         Nro          = GetInt(reader, "NRO"),
                         CodArt       = GetStr(reader, "COD_ART"),
-                        Titulo       = GetStr(reader, "TITULO"),
                         TipoFibra    = GetStr(reader, "TIPO_FIBRA"),
                         Valpf        = GetStr(reader, "VALPF"),
-                        Color        = GetStr(reader, "COLOR"),
                         Cantidad     = GetDec(reader, "CANTIDAD"),
                         Precio       = GetDec(reader, "PRECIO"),
                         Saldo        = GetDec(reader, "SALDO"),
+                        SaldoR       = GetDec(reader, "SALDO_R"),
                         ImpVvb       = GetDec(reader, "IMP_VVB"),
                         Estado       = GetStr(reader, "ESTADO"),
                         Detalle      = GetStr(reader, "DETALLE"),
                         ColorDet     = GetStr(reader, "COLOR_DET"),
                         HiloDet      = GetStr(reader, "HILO_DET"),
-                        Proceso      = GetStr(reader, "PROCESO"),
                         Presentacion = GetStr(reader, "PRESENTACION"),
                         RTipo        = GetStr(reader, "R_TIPO"),
                         RSerie       = GetNullInt(reader, "R_SERIE"),
-                        RNumero      = GetNullInt(reader, "R_NUMERO")
+                        RNumero      = GetNullInt(reader, "R_NUMERO"),
+                        Descripcion  = GetStr(reader, "A_DESCRIP"),
+                        Unidad       = GetStr(reader, "A_UNIDAD")
                     });
                 }
             }
@@ -282,6 +286,52 @@ namespace FabricaHilos.Services.Sgc
             }
 
             return (result, totalCount);
+        }
+
+        public async Task<ItemPedDto?> ObtenerItemPedAsync(int numPed, int nro)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return null;
+
+            const string sql = @"
+                SELECT I.SERIE, I.NUM_PED, I.NRO, I.COD_ART,
+                       A.DESCRIPCION AS A_DESCRIP, A.UNIDAD AS A_UNIDAD
+                FROM SIG.ITEMPED I
+                LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                WHERE I.NUM_PED = :numPed AND I.NRO = :nro";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":numPed", OracleDbType.Int32, numPed, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":nro",    OracleDbType.Int32, nro,    ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                if (await reader.ReadAsync())
+                {
+                    return new ItemPedDto
+                    {
+                        Serie       = GetInt(reader, "SERIE"),
+                        NumPed      = GetInt(reader, "NUM_PED"),
+                        Nro         = GetInt(reader, "NRO"),
+                        CodArt      = GetStr(reader, "COD_ART"),
+                        Descripcion = GetStr(reader, "A_DESCRIP"),
+                        Unidad      = GetStr(reader, "A_UNIDAD")
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener ítem pedido {NumPed}/{Nro}", numPed, nro);
+                throw;
+            }
+
+            return null;
         }
 
         // ========== KARDEX_G (Guías) ==========
@@ -300,15 +350,15 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO, FCH_TRANSAC,
-                       NOMBRE, RUC, ESTADO, IND_FACT, PESO_TOTAL,
-                       TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA
+                       NOMBRE, RUC, GLOSA, ESTADO, IND_FACT, PESO_TOTAL,
+                       TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA, SERIE_SUNAT
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY G.FCH_TRANSAC DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
-                           G.NOMBRE, G.RUC, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
+                           G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                            G.TIP_REF, G.SER_REF, G.NRO_REF,
-                           G.MOTIVO, G.MONEDA
+                           G.MOTIVO, G.MONEDA, G.SERIE_SUNAT
                     FROM SIG.KARDEX_G G
                     INNER JOIN SIG.PEDIDO P
                             ON TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
@@ -357,9 +407,9 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
-                       G.NOMBRE, G.RUC, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
+                       G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                        G.TIP_REF, G.SER_REF, G.NRO_REF,
-                       G.MOTIVO, G.MONEDA
+                       G.MOTIVO, G.MONEDA, G.SERIE_SUNAT
                 FROM SIG.KARDEX_G G
                 WHERE G.COD_ALM   = :codAlm
                   AND G.TP_TRANSAC = :tpTransac
@@ -401,7 +451,7 @@ namespace FabricaHilos.Services.Sgc
             FchTransac = GetDt(r, "FCH_TRANSAC"),
             Nombre     = GetStr(r, "NOMBRE"),
             Ruc        = GetStr(r, "RUC"),
-            Glosa      = null,
+            Glosa      = GetStr(r, "GLOSA"),
             Estado     = GetStr(r, "ESTADO"),
             IndFact    = GetStr(r, "IND_FACT"),
             PesoTotal  = GetDec(r, "PESO_TOTAL"),
@@ -409,13 +459,14 @@ namespace FabricaHilos.Services.Sgc
             SerRef     = GetStr(r, "SER_REF"),
             NroRef     = GetStr(r, "NRO_REF"),
             Motivo     = GetStr(r, "MOTIVO"),
-            Moneda     = GetStr(r, "MONEDA")
+            Moneda     = GetStr(r, "MONEDA"),
+            SerieSunat = GetStr(r, "SERIE_SUNAT")
         };
 
         // ========== KARDEX_D (Detalle de Guía) ==========
 
         // NOTE: Ajuste los nombres de columna de SIG.KARDEX_D según su esquema real.
-        public async Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10)
+        public async Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, string codArt, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return ([], 0);
@@ -425,18 +476,25 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO,
-                       COD_ART, CANTIDAD, ESTADO, DETALLE
+                       COD_ART, CANTIDAD, ESTADO, DETALLE, COLOR_DET, A_DESCRIP
                 FROM (
-                    SELECT ROW_NUMBER() OVER (ORDER BY D.COD_ART) AS RN,
+                    SELECT ROW_NUMBER() OVER (ORDER BY D.COD_ART ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            D.COD_ALM, D.TP_TRANSAC, D.SERIE, D.NUMERO,
                            D.COD_ART, D.CANTIDAD,
-                           D.ESTADO, D.DETALLE
-                    FROM SIG.KARDEX_D D
-                    WHERE D.COD_ALM    = :codAlm
-                      AND D.TP_TRANSAC = :tpTransac
-                      AND D.SERIE      = :serie
-                      AND D.NUMERO     = :numero
+                           D.ESTADO, D.DETALLE, D.COLOR_DET,
+                           A.DESCRIPCION AS A_DESCRIP
+                     FROM SIG.KARDEX_D D
+                     INNER JOIN SIG.KARDEX_G G ON G.COD_ALM    = D.COD_ALM
+                                              AND G.TP_TRANSAC  = D.TP_TRANSAC
+                                              AND G.SERIE       = D.SERIE
+                                              AND G.NUMERO      = D.NUMERO
+                     LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                     WHERE G.COD_ALM    = :codAlm
+                       AND G.TP_TRANSAC = :tpTransac
+                       AND G.SERIE      = :serie
+                       AND G.NUMERO     = :numero
+                       AND D.COD_ART   = :codArt
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
 
@@ -452,6 +510,7 @@ namespace FabricaHilos.Services.Sgc
                 cmd.Parameters.Add(new OracleParameter(":tpTransac", OracleDbType.Varchar2, tpTransac, ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32,    serie,     ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":numero",    OracleDbType.Int32,    numero,    ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":codArt",    OracleDbType.Varchar2, codArt,    ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":startRow",  OracleDbType.Int32,    startRow,  ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":endRow",    OracleDbType.Int32,    endRow,    ParameterDirection.Input));
 
@@ -464,18 +523,20 @@ namespace FabricaHilos.Services.Sgc
                     var cantidad = GetDec(reader, "CANTIDAD");
                     result.Add(new KardexDDto
                     {
-                        CodAlm    = GetStr(reader, "COD_ALM")    ?? string.Empty,
-                        TpTransac = GetStr(reader, "TP_TRANSAC") ?? string.Empty,
-                        Serie     = GetInt(reader, "SERIE"),
-                        Numero    = GetInt(reader, "NUMERO"),
-                        Nro       = GetInt(reader, "RN"),
-                        CodArt    = GetStr(reader, "COD_ART"),
-                        Titulo    = null,
-                        Cantidad  = cantidad,
-                        Precio    = null,
-                        Importe   = null,
-                        Estado    = GetStr(reader, "ESTADO"),
-                        Detalle   = GetStr(reader, "DETALLE")
+                        CodAlm      = GetStr(reader, "COD_ALM")    ?? string.Empty,
+                        TpTransac   = GetStr(reader, "TP_TRANSAC") ?? string.Empty,
+                        Serie       = GetInt(reader, "SERIE"),
+                        Numero      = GetInt(reader, "NUMERO"),
+                        Nro         = GetInt(reader, "RN"),
+                        CodArt      = GetStr(reader, "COD_ART"),
+                        Titulo      = null,
+                        Cantidad    = cantidad,
+                        Precio      = null,
+                        Importe     = null,
+                        Estado      = GetStr(reader, "ESTADO"),
+                        Detalle     = GetStr(reader, "DETALLE"),
+                        Descripcion = GetStr(reader, "A_DESCRIP"),
+                        ColorDet    = GetStr(reader, "COLOR_DET")
                     });
                 }
             }
@@ -505,12 +566,13 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO, FECHA, COD_CLIENTE,
-                       NOMBRE, RUC, ESTADO, MONEDA
+                       NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY F.FECHA DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
-                           F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA
+                           F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
+                           F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA
                     FROM SIG.DOCUVENT F
                     WHERE F.TIPODOC = :tipo
                       AND TRIM(F.SERIE)  = TRIM(:serie)
@@ -557,7 +619,8 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
-                       F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA
+                       F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
+                       F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA
                 FROM SIG.DOCUVENT F
                 WHERE F.TIPODOC = :tipo
                   AND TRIM(F.SERIE)  = TRIM(:serie)
@@ -600,7 +663,10 @@ namespace FabricaHilos.Services.Sgc
             Total      = null,
             Estado     = GetStr(r, "ESTADO"),
             Glosa      = null,
-            Moneda     = GetStr(r, "MONEDA")
+            Moneda     = GetStr(r, "MONEDA"),
+            ValVenta   = GetDec(r, "VAL_VENTA"),
+            ImpIgv     = GetDec(r, "IMP_IGV"),
+            PrecioVta  = GetDec(r, "PRECIO_VTA")
         };
 
         // ========== ITEMDOCU (Detalle de Factura) ==========
@@ -616,16 +682,21 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO,
-                       COD_ART, CANTIDAD, PVTU, IMP_VVTA, DETALLE
+                       COD_ART, CANTIDAD, VVTU, IMP_VVTA, DETALLE, A_DESCRIP
                 FROM (
-                    SELECT ROW_NUMBER() OVER (ORDER BY D.COD_ART) AS RN,
+                    SELECT ROW_NUMBER() OVER (ORDER BY D.ORDEN ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            D.TIPODOC, D.SERIE, D.NUMERO,
-                           D.COD_ART, D.CANTIDAD, D.PVTU, D.IMP_VVTA, D.DETALLE
+                           D.COD_ART, D.CANTIDAD, D.VVTU, D.IMP_VVTA, D.DETALLE,
+                           A.DESCRIPCION AS A_DESCRIP
                     FROM SIG.ITEMDOCU D
-                    WHERE D.TIPODOC = :tipo
-                      AND TRIM(D.SERIE)  = TRIM(:serie)
-                      AND TRIM(D.NUMERO) = TRIM(:numero)
+                    INNER JOIN SIG.DOCUVENT F ON F.TIPODOC = D.TIPODOC
+                                             AND TRIM(F.SERIE)  = TRIM(D.SERIE)
+                                             AND TRIM(F.NUMERO) = TRIM(D.NUMERO)
+                    LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                    WHERE F.TIPODOC = :tipo
+                      AND TRIM(F.SERIE)  = TRIM(:serie)
+                      AND TRIM(F.NUMERO) = TRIM(:numero)
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
 
@@ -651,16 +722,17 @@ namespace FabricaHilos.Services.Sgc
                     if (result.Count == 0) totalCount = GetInt(reader, "TOTAL_COUNT");
                     result.Add(new ItemDocuDto
                     {
-                        Tipodoc  = GetStr(reader, "TIPODOC"),
-                        Serie    = GetStr(reader, "SERIE"),
-                        Numero   = GetStr(reader, "NUMERO"),
-                        Nro      = GetInt(reader, "RN"),
-                        CodArt   = GetStr(reader, "COD_ART"),
-                        Titulo   = null,
-                        Cantidad = GetDec(reader, "CANTIDAD"),
-                        Precio   = GetDec(reader, "PVTU"),
-                        Importe  = GetDec(reader, "IMP_VVTA"),
-                        Detalle  = GetStr(reader, "DETALLE")
+                        Tipodoc     = GetStr(reader, "TIPODOC"),
+                        Serie       = GetStr(reader, "SERIE"),
+                        Numero      = GetStr(reader, "NUMERO"),
+                        Nro         = GetInt(reader, "RN"),
+                        CodArt      = GetStr(reader, "COD_ART"),
+                        Titulo      = null,
+                        Cantidad    = GetDec(reader, "CANTIDAD"),
+                        Precio      = GetDec(reader, "VVTU"),
+                        Importe     = GetDec(reader, "IMP_VVTA"),
+                        Detalle     = GetStr(reader, "DETALLE"),
+                        Descripcion = GetStr(reader, "A_DESCRIP")
                     });
                 }
             }

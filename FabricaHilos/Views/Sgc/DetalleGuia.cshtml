@@ -7,6 +7,7 @@
     int pedSerie = ViewBag.PedSerie;
     int numPed   = ViewBag.NumPed;
     int itemNro  = ViewBag.ItemNro;
+    string? codArt = ViewBag.CodArt as string;
 }
 
 @section Breadcrumb {
@@ -42,13 +43,11 @@
             (Almacén: @guia.CodAlm)
         </div>
         <div class="card-body py-2">
-            <div class="row row-cols-2 row-cols-md-4 g-2 small">
-                <div><span class="text-muted">Fecha:</span> @(guia.FchTransac?.ToString("dd/MM/yyyy") ?? "-")</div>
-                <div><span class="text-muted">Destinatario:</span> <span class="fw-semibold">@(guia.Nombre ?? "-")</span></div>
+            <div class="row row-cols-2 row-cols-md-3 g-2 small">
                 <div><span class="text-muted">RUC:</span> @(guia.Ruc ?? "-")</div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(guia.Nombre ?? "-")</span></div>
+                <div><span class="text-muted">Fecha de Transacción:</span> @(guia.FchTransac?.ToString("dd/MM/yyyy") ?? "-")</div>
                 <div><span class="text-muted">Glosa:</span> @(guia.Glosa ?? "-")</div>
-                <div><span class="text-muted">Motivo:</span> @(guia.Motivo ?? "-")</div>
-                <div><span class="text-muted">Peso Total:</span> @(guia.PesoTotal?.ToString("N4") ?? "-")</div>
                 <div>
                     <span class="text-muted">Factura ref.:</span>
                     @if (!string.IsNullOrEmpty(guia.TipRef))
@@ -60,6 +59,7 @@
                         <span class="text-muted">Sin factura</span>
                     }
                 </div>
+                <div><span class="text-muted">Peso Total:</span> @(guia.PesoTotal?.ToString("N4") ?? "-")</div>
             </div>
         </div>
     </div>
@@ -71,28 +71,22 @@
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>Ítem</th>
-                        <th>Cód. Art.</th>
-                        <th>Título</th>
-                        <th>Detalle</th>
-                        <th class="text-end">Cantidad</th>
-                        <th class="text-end">Precio</th>
-                        <th class="text-end">Importe</th>
-                        <th>Acciones</th>
+                        <th class="text-center">Ítem</th>
+                        <th class="text-center">Cód. Art.</th>
+                        <th class="text-center">Descripción</th>
+                        <th class="text-center">Color</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in Model)
                     {
                         <tr>
-                            <td>@item.Nro</td>
+                            <td class="text-center">@item.Nro</td>
                             <td class="fw-semibold">@(item.CodArt ?? "-")</td>
-                            <td>@(item.Titulo ?? "-")</td>
-                            <td>@(item.Detalle ?? "-")</td>
-                            <td class="text-end">@(item.Cantidad?.ToString("N4") ?? "-")</td>
-                            <td class="text-end">@(item.Precio?.ToString("N2") ?? "-")</td>
-                            <td class="text-end fw-semibold">@(item.Importe?.ToString("N2") ?? "-")</td>
-                            <td>
+                            <td>@(item.Descripcion ?? "-")</td>
+                            <td>@(item.ColorDet ?? "-")</td>
+                            <td class="text-center">
                                 @if (guia != null && !string.IsNullOrEmpty(guia.TipRef))
                                                 {
                                                     <a asp-action="Facturas"
@@ -122,7 +116,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">
+                            <td colspan="5" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron ítems para esta guía.
                             </td>
                         </tr>
@@ -153,6 +147,7 @@
                                asp-route-codAlm="@guia?.CodAlm" asp-route-tpTransac="@guia?.TpTransac"
                                asp-route-serie="@guia?.Serie" asp-route-numero="@guia?.Numero"
                                asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                               asp-route-codArt="@codArt"
                                asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                         </li>
                         @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
@@ -162,6 +157,7 @@
                                    asp-route-codAlm="@guia?.CodAlm" asp-route-tpTransac="@guia?.TpTransac"
                                    asp-route-serie="@guia?.Serie" asp-route-numero="@guia?.Numero"
                                    asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                                   asp-route-codArt="@codArt"
                                    asp-route-page="@pg">@pg</a>
                             </li>
                         }
@@ -170,6 +166,7 @@
                                asp-route-codAlm="@guia?.CodAlm" asp-route-tpTransac="@guia?.TpTransac"
                                asp-route-serie="@guia?.Serie" asp-route-numero="@guia?.Numero"
                                asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
+                               asp-route-codArt="@codArt"
                                asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
                         </li>
                     </ul>

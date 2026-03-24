@@ -82,6 +82,11 @@ namespace FabricaHilos.Controllers
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(Guias), new { pedSerie, numPed, nro, page = 1 });
 
+            var pedido  = await _sgcService.ObtenerPedidoAsync(pedSerie, numPed);
+            var itemPed = await _sgcService.ObtenerItemPedAsync(numPed, nro);
+
+            ViewBag.Pedido     = pedido;
+            ViewBag.ItemPed    = itemPed;
             ViewBag.PedSerie   = pedSerie;
             ViewBag.NumPed     = numPed;
             ViewBag.ItemNro    = nro;
@@ -95,20 +100,21 @@ namespace FabricaHilos.Controllers
         // ========== DETALLE DE GUÍA (KARDEX_D) ==========
 
         public async Task<IActionResult> DetalleGuia(string codAlm, string tpTransac, int serie, int numero,
-            int pedSerie, int numPed, int nro, int page = 1)
+            int pedSerie, int numPed, int nro, string codArt, int page = 1)
         {
             var guia = await _sgcService.ObtenerGuiaAsync(codAlm, tpTransac, serie, numero);
             if (guia == null) return NotFound();
 
             const int pageSize = 10;
-            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm, tpTransac, serie, numero, page, pageSize);
+            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm, tpTransac, serie, numero, codArt, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(DetalleGuia), new { codAlm, tpTransac, serie, numero, pedSerie, numPed, nro, page = 1 });
+                return RedirectToAction(nameof(DetalleGuia), new { codAlm, tpTransac, serie, numero, pedSerie, numPed, nro, codArt, page = 1 });
 
             ViewBag.Guia       = guia;
             ViewBag.PedSerie   = pedSerie;
             ViewBag.NumPed     = numPed;
             ViewBag.ItemNro    = nro;
+            ViewBag.CodArt     = codArt;
             ViewBag.Page       = page;
             ViewBag.PageSize   = pageSize;
             ViewBag.TotalCount = resultado.TotalCount;
@@ -123,10 +129,12 @@ namespace FabricaHilos.Controllers
             int pedSerie, int numPed, int itemNro, int kdNro, int page = 1)
         {
             const int pageSize = 10;
+            var guia      = await _sgcService.ObtenerGuiaAsync(codAlm, tpTransac, guiaSerie, guiaNumero);
             var resultado = await _sgcService.ObtenerFacturasAsync(cTipo, cSerie, cNumero, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(Facturas), new { cTipo, cSerie, cNumero, codAlm, tpTransac, guiaSerie, guiaNumero, pedSerie, numPed, itemNro, kdNro, page = 1 });
 
+            ViewBag.Guia        = guia;
             ViewBag.CTipo       = cTipo;
             ViewBag.CSerie      = cSerie;
             ViewBag.CNumero     = cNumero;
@@ -173,6 +181,25 @@ namespace FabricaHilos.Controllers
             ViewBag.TotalCount  = resultado.TotalCount;
             ViewBag.TotalPages  = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
             return View(resultado.Items);
+        }
+
+        // ========== PDF DOWNLOADS ==========
+
+        public IActionResult DescargarGuiaPdf(string codAlm, string tpTransac, int serie, int numero,
+            int pedSerie, int numPed, int nro, string codArt)
+        {
+            // TODO: Implementar generación de PDF para guía
+            TempData["Info"] = "La descarga de PDF para guías aún no está implementada.";
+            return RedirectToAction(nameof(DetalleGuia), new { codAlm, tpTransac, serie, numero, pedSerie, numPed, nro, codArt });
+        }
+
+        public IActionResult DescargarFacturaPdf(string tipo, string serie, string numero,
+            string codAlm, string tpTransac, int guiaSerie, int guiaNumero,
+            int pedSerie, int numPed, int itemNro)
+        {
+            // TODO: Implementar generación de PDF para factura
+            TempData["Info"] = "La descarga de PDF para facturas aún no está implementada.";
+            return RedirectToAction(nameof(DetalleFactura), new { tipo, serie, numero, codAlm, tpTransac, guiaSerie, guiaNumero, pedSerie, numPed, itemNro });
         }
     }
 }

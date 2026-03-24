@@ -1,10 +1,13 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.KardexGDto>
+@using FabricaHilos.Models.Sgc
 
 @{
     ViewData["Title"] = "Guías";
     int pedSerie = ViewBag.PedSerie;
     int numPed   = ViewBag.NumPed;
     int itemNro  = ViewBag.ItemNro;
+    var pedido   = ViewBag.Pedido  as PedidoSgcDto;
+    var itemPed  = ViewBag.ItemPed as ItemPedDto;
 }
 
 @section Breadcrumb {
@@ -28,39 +31,48 @@
     </a>
 </div>
 
+<input type="hidden" id="tipCompSunat" value="01" />
+
+@if (pedido != null || itemPed != null)
+{
+    <div class="card mb-3">
+        <div class="card-body py-2 small">
+            <div class="row row-cols-2 row-cols-md-3 g-2">
+                <div><span class="text-muted">RUC:</span> <span class="fw-semibold">@(pedido?.Ruc ?? "-")</span></div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(pedido?.Nombre ?? pedido?.CodCliente ?? "-")</span></div>
+                <div><span class="text-muted">Descripción:</span> <span class="fw-semibold">@(itemPed?.Descripcion ?? "-")</span></div>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="card shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>Almacén</th>
-                        <th>Transacción</th>
-                        <th>Serie</th>
-                        <th>N° Guía</th>
-                        <th>Fecha</th>
-                        <th>Destinatario</th>
-                        <th>RUC</th>
-                        <th>Glosa</th>
-                        <th class="text-end">Peso Total</th>
-                        <th>Facturado</th>
-                        <th>Acciones</th>
+                        <th class="text-center">Almacén</th>
+                        <th class="text-center">Transacción</th>
+                        <th class="text-center">Serie</th>
+                        <th class="text-center">N° Guía</th>
+                        <th class="text-center">Fec. Transacción</th>
+                        <th class="text-center">Glosa</th>
+                        <th class="text-center">Facturado</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in Model)
                     {
-                        <tr>
+                        <tr data-serie-sunat="@(item.SerieSunat ?? "")">
                             <td>@item.CodAlm</td>
                             <td>@item.TpTransac</td>
-                            <td>@item.Serie</td>
-                            <td class="fw-semibold">@item.Numero</td>
+                            <td class="text-center">@item.Serie</td>
+                            <td class="fw-semibold text-center">@item.Numero</td>
                             <td>@(item.FchTransac?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td>@(item.Nombre ?? "-")</td>
-                            <td>@(item.Ruc ?? "-")</td>
                             <td>@(item.Glosa ?? "-")</td>
-                            <td class="text-end">@(item.PesoTotal?.ToString("N4") ?? "-")</td>
-                            <td>
+                            <td class="text-center">
                                 @if (item.IndFact == "S" || item.IndFact == "1")
                                 {
                                     <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Sí</span>
@@ -70,26 +82,42 @@
                                     <span class="badge bg-secondary">No</span>
                                 }
                             </td>
-                            <td>
-                                <a asp-action="DetalleGuia"
-                                   asp-route-codAlm="@item.CodAlm"
-                                   asp-route-tpTransac="@item.TpTransac"
-                                   asp-route-serie="@item.Serie"
-                                   asp-route-numero="@item.Numero"
-                                   asp-route-pedSerie="@pedSerie"
-                                   asp-route-numPed="@numPed"
-                                   asp-route-nro="@itemNro"
-                                   class="btn btn-sm btn-outline-primary btn-accion"
-                                   title="Ver detalle de la guía">
-                                    <i class="bi bi-list-columns-reverse"></i> Detalle
-                                </a>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <a asp-action="DescargarGuiaPdf"
+                                       asp-route-codAlm="@item.CodAlm"
+                                       asp-route-tpTransac="@item.TpTransac"
+                                       asp-route-serie="@item.Serie"
+                                       asp-route-numero="@item.Numero"
+                                       asp-route-pedSerie="@pedSerie"
+                                       asp-route-numPed="@numPed"
+                                       asp-route-nro="@itemNro"
+                                       asp-route-codArt="@itemPed?.CodArt"
+                                       class="btn btn-sm btn-outline-danger btn-accion"
+                                       title="Descargar PDF">
+                                        <i class="bi bi-file-pdf"></i> PDF
+                                    </a>
+                                    <a asp-action="DetalleGuia"
+                                       asp-route-codAlm="@item.CodAlm"
+                                       asp-route-tpTransac="@item.TpTransac"
+                                       asp-route-serie="@item.Serie"
+                                       asp-route-numero="@item.Numero"
+                                       asp-route-pedSerie="@pedSerie"
+                                       asp-route-numPed="@numPed"
+                                       asp-route-nro="@itemNro"
+                                       asp-route-codArt="@itemPed?.CodArt"
+                                       class="btn btn-sm btn-outline-primary btn-accion"
+                                       title="Ver detalle de la guía">
+                                        <i class="bi bi-list-columns-reverse"></i> Detalle
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     }
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-4">
+                            <td colspan="8" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron guías para este pedido.
                             </td>
                         </tr>

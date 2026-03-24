@@ -41,6 +41,9 @@ namespace FabricaHilos.Models.Sgc
         public string? RTipo { get; set; }
         public int? RSerie { get; set; }
         public int? RNumero { get; set; }
+        public decimal? SaldoR { get; set; }
+        public string? Descripcion { get; set; }
+        public string? Unidad { get; set; }
     }
 
     public class KardexGDto
@@ -64,6 +67,7 @@ namespace FabricaHilos.Models.Sgc
         public string? NroRef { get; set; }
         public string? Motivo { get; set; }
         public string? Moneda { get; set; }
+        public string? SerieSunat { get; set; }
     }
 
     // NOTE: SIG.KARDEX_D columns are assumed based on ERP conventions.
@@ -75,6 +79,7 @@ namespace FabricaHilos.Models.Sgc
         public int Serie { get; set; }
         public int Numero { get; set; }
         public int Nro { get; set; }
+        public int? IpNro { get; set; }
         public string? CodArt { get; set; }
         public string? Titulo { get; set; }
         public decimal? Cantidad { get; set; }
@@ -82,9 +87,11 @@ namespace FabricaHilos.Models.Sgc
         public decimal? Importe { get; set; }
         public string? Estado { get; set; }
         public string? Detalle { get; set; }
+        public string? Descripcion { get; set; }
+        public string? ColorDet { get; set; }
     }
 
-    // NOTE: SIG.DOCUVENT columns are assumed based on ERP conventions.
+    // NOTE: SIG.DOCUVENT
     // Adjust column names in SgcService if they differ in your schema.
     public class DocuVentDto
     {
@@ -99,9 +106,12 @@ namespace FabricaHilos.Models.Sgc
         public string? Estado { get; set; }
         public string? Glosa { get; set; }
         public string? Moneda { get; set; }
+        public decimal? ValVenta { get; set; }
+        public decimal? ImpIgv { get; set; }
+        public decimal? PrecioVta { get; set; }
     }
 
-    // NOTE: SIG.ITEMDOCU columns are assumed based on ERP conventions.
+    // NOTE: SIG.ITEMDOCU
     // Adjust column names in SgcService if they differ in your schema.
     public class ItemDocuDto
     {
@@ -115,5 +125,6 @@ namespace FabricaHilos.Models.Sgc
         public decimal? Precio { get; set; }
         public decimal? Importe { get; set; }
         public string? Detalle { get; set; }
+        public string? Descripcion { get; set; }
     }
 }

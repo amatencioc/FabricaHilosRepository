@@ -38,32 +38,30 @@
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>Serie</th>
-                        <th>N° Pedido</th>
-                        <th>Fecha</th>
-                        <th>Cliente</th>
-                        <th>RUC</th>
-                        <th>Detalle</th>
-                        <th>Moneda</th>
-                        <th class="text-end">Total Pedido</th>
-                        <th class="text-end">Total Facturado</th>
-                        <th>Acciones</th>
+                        <th class="text-center">Serie</th>
+                        <th class="text-center">N° Pedido</th>
+                        <th class="text-center">RUC</th>
+                        <th class="text-center">Cliente</th>
+                        <th class="text-center">Detalle</th>
+                        <th class="text-center">Moneda</th>
+                        <th class="text-center">T. Pedido</th>
+                        <th class="text-center">T. Facturado</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in Model)
                     {
                         <tr>
-                            <td>@item.Serie</td>
-                            <td class="fw-semibold">@item.NumPed</td>
-                            <td>@(item.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td>@(item.Nombre ?? item.CodCliente ?? "-")</td>
+                            <td class="text-center">@item.Serie</td>
+                            <td class="fw-semibold text-center">@item.NumPed</td>
                             <td>@(item.Ruc ?? "-")</td>
+                            <td>@(item.Nombre ?? item.CodCliente ?? "-")</td>
                             <td>@(item.Detalle ?? "-")</td>
-                            <td>@(item.Moneda ?? "-")</td>
+                            <td class="text-center">@(item.Moneda == "D" ? "Dólares ($)" : item.Moneda == "S" ? "Soles (S/)" : (item.Moneda ?? "-"))</td>
                             <td class="text-end">@(item.TotalPedido?.ToString("N2") ?? "-")</td>
                             <td class="text-end">@(item.TotalFacturado?.ToString("N2") ?? "-")</td>
-                            <td>
+                            <td class="text-center">
                                 <a asp-action="DetallePedido"
                                    asp-route-serie="@item.Serie"
                                    asp-route-numPed="@item.NumPed"
@@ -77,7 +75,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="10" class="text-center text-muted py-4">
+                            <td colspan="9" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron pedidos.
                             </td>
                         </tr>

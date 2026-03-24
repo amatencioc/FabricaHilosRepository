@@ -1,7 +1,9 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.DocuVentDto>
+@using FabricaHilos.Models.Sgc
 
 @{
     ViewData["Title"] = "Facturas";
+    var guia           = ViewBag.Guia as KardexGDto;
     string? cTipo      = ViewBag.CTipo;
     string? cSerie     = ViewBag.CSerie;
     string? cNumero    = ViewBag.CNumero;
@@ -59,6 +61,25 @@
     </a>
 </div>
 
+@if (guia != null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold bg-light">
+            <i class="bi bi-truck me-1"></i>
+            Guía <strong>@guia.TpTransac</strong> — Serie <strong>@guia.Serie</strong> N° <strong>@guia.Numero</strong>
+            (Almacén: @guia.CodAlm)
+        </div>
+        <div class="card-body py-2 small">
+            <div class="row row-cols-2 row-cols-md-4 g-2">
+                <div><span class="text-muted">Fecha de Transacción:</span> @(guia.FchTransac?.ToString("dd/MM/yyyy") ?? "-")</div>
+                <div><span class="text-muted">RUC:</span> @(guia.Ruc ?? "-")</div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(guia.Nombre ?? "-")</span></div>
+                <div><span class="text-muted">Glosa:</span> @(guia.Glosa ?? "-")</div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (sinFactura)
 {
     <div class="alert alert-info">
@@ -73,47 +94,60 @@ else
                 <table class="table table-corporate table-hover mb-0">
                     <thead>
                         <tr>
-                            <th>Tipo</th>
-                            <th>Serie</th>
-                            <th>N° Factura</th>
-                            <th>Fecha</th>
-                            <th>Cliente</th>
-                            <th>RUC</th>
-                            <th>Moneda</th>
-                            <th class="text-end">Total</th>
-                            <th>Acciones</th>
+                            <th class="text-center">Tipo</th>
+                            <th class="text-center">Serie</th>
+                            <th class="text-center">N° Factura</th>
+                            <th class="text-center">F. Facturación</th>
+                            <th class="text-center">Moneda</th>
+                            <th class="text-end">Precio Vta</th>
+                            <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var item in Model)
                         {
                             <tr>
-                                <td>@(item.Tipodoc ?? "-")</td>
-                                <td>@(item.Serie ?? "-")</td>
-                                <td class="fw-semibold">@(item.Numero ?? "-")</td>
+                                <td class="text-center">@(item.Tipodoc ?? "-")</td>
+                                <td class="text-center">@(item.Serie ?? "-")</td>
+                                <td class="fw-semibold text-center">@(item.Numero ?? "-")</td>
                                 <td>@(item.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(item.Nombre ?? item.CodCliente ?? "-")</td>
-                                <td>@(item.Ruc ?? "-")</td>
-                                <td>@(item.Moneda ?? "-")</td>
-                                <td class="text-end fw-semibold">@(item.Total?.ToString("N2") ?? "-")</td>
-                                <td>
+                                <td class="text-center">@(item.Moneda == "D" ? "Dólares ($)" : item.Moneda == "S" ? "Soles (S/)" : (item.Moneda ?? "-"))</td>
+                                <td class="text-end fw-semibold">@(item.PrecioVta?.ToString("N2") ?? "-")</td>
+                                <td class="text-center">
                                     @if (item.Tipodoc != null && item.Serie != null && item.Numero != null)
                                     {
-                                        <a asp-action="DetalleFactura"
-                                           asp-route-tipo="@item.Tipodoc"
-                                           asp-route-serie="@item.Serie"
-                                           asp-route-numero="@item.Numero"
-                                           asp-route-codAlm="@codAlm"
-                                           asp-route-tpTransac="@tpTransac"
-                                           asp-route-guiaSerie="@guiaSerie"
-                                           asp-route-guiaNumero="@guiaNumero"
-                                           asp-route-pedSerie="@pedSerie"
-                                           asp-route-numPed="@numPed"
-                                           asp-route-itemNro="@itemNro"
-                                           class="btn btn-sm btn-outline-primary btn-accion"
-                                           title="Ver detalle de la factura">
-                                            <i class="bi bi-list-ul"></i> Detalle
-                                        </a>
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            <a asp-action="DescargarFacturaPdf"
+                                               asp-route-tipo="@item.Tipodoc"
+                                               asp-route-serie="@item.Serie"
+                                               asp-route-numero="@item.Numero"
+                                               asp-route-codAlm="@codAlm"
+                                               asp-route-tpTransac="@tpTransac"
+                                               asp-route-guiaSerie="@guiaSerie"
+                                               asp-route-guiaNumero="@guiaNumero"
+                                               asp-route-pedSerie="@pedSerie"
+                                               asp-route-numPed="@numPed"
+                                               asp-route-itemNro="@itemNro"
+                                               class="btn btn-sm btn-outline-danger btn-accion"
+                                               title="Descargar PDF">
+                                                <i class="bi bi-file-pdf"></i> PDF
+                                            </a>
+                                            <a asp-action="DetalleFactura"
+                                               asp-route-tipo="@item.Tipodoc"
+                                               asp-route-serie="@item.Serie"
+                                               asp-route-numero="@item.Numero"
+                                               asp-route-codAlm="@codAlm"
+                                               asp-route-tpTransac="@tpTransac"
+                                               asp-route-guiaSerie="@guiaSerie"
+                                               asp-route-guiaNumero="@guiaNumero"
+                                               asp-route-pedSerie="@pedSerie"
+                                               asp-route-numPed="@numPed"
+                                               asp-route-itemNro="@itemNro"
+                                               class="btn btn-sm btn-outline-primary btn-accion"
+                                               title="Ver detalle de la factura">
+                                                <i class="bi bi-list-ul"></i> Detalle
+                                            </a>
+                                        </div>
                                     }
                                 </td>
                             </tr>
@@ -121,7 +155,7 @@ else
                         @if (!Model.Any())
                         {
                             <tr>
-                                <td colspan="9" class="text-center text-muted py-4">
+                                <td colspan="7" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox me-2"></i>No se encontraron facturas.
                                 </td>
                             </tr>

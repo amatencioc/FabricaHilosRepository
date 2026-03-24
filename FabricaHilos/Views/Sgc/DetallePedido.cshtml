@@ -27,11 +27,12 @@
             Serie <strong>@pedido.Serie</strong> — Pedido N° <strong>@pedido.NumPed</strong>
         </div>
         <div class="card-body py-2">
+            @{ var monedaLabel = pedido.Moneda == "D" ? "Dólares ($)" : pedido.Moneda == "S" ? "Soles (S/)" : (pedido.Moneda ?? "-"); }
             <div class="row row-cols-2 row-cols-md-4 g-2 small">
-                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(pedido.Nombre ?? pedido.CodCliente)</span></div>
                 <div><span class="text-muted">RUC:</span> @(pedido.Ruc ?? "-")</div>
-                <div><span class="text-muted">Fecha:</span> @(pedido.Fecha?.ToString("dd/MM/yyyy") ?? "-")</div>
-                <div><span class="text-muted">Moneda:</span> @(pedido.Moneda ?? "-")</div>
+                <div><span class="text-muted">Cliente:</span> <span class="fw-semibold">@(pedido.Nombre ?? pedido.CodCliente)</span></div>
+                <div><span class="text-muted">Fecha de Pedido:</span> @(pedido.Fecha?.ToString("dd/MM/yyyy") ?? "-")</div>
+                <div><span class="text-muted">Moneda:</span> @monedaLabel</div>
                 <div><span class="text-muted">Total Pedido:</span> <span class="fw-semibold">@(pedido.TotalPedido?.ToString("N2") ?? "-")</span></div>
                 <div><span class="text-muted">Total Facturado:</span> <span class="fw-semibold">@(pedido.TotalFacturado?.ToString("N2") ?? "-")</span></div>
                 <div><span class="text-muted">Detalle:</span> @(pedido.Detalle ?? "-")</div>
@@ -46,32 +47,34 @@
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>Ítem</th>
-                        <th>Cód. Art.</th>
-                        <th>Título</th>
-                        <th>Color</th>
-                        <th>Detalle Color</th>
-                        <th>Proceso</th>
-                        <th class="text-end">Cantidad</th>
+                        <th class="text-center">Ítem</th>
+                        <th class="text-center">Cód. Art.</th>
+                        <th class="text-center">Descripción</th>
+                        <th class="text-center">Color</th>
+                        <th class="text-center">Unidad</th>
+                        <th class="text-end">Cant. Pedido</th>
                         <th class="text-end">Precio</th>
-                        <th class="text-end">Saldo</th>
-                        <th>Acciones</th>
+                        <th class="text-end">Cant. Despacho</th>
+                        <th class="text-end">Dif. Despacho</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in Model)
                     {
+                        var saldo = (item.SaldoR.HasValue && item.SaldoR != 0) ? item.SaldoR : item.Saldo;
+                        var cantDespacho = (item.Cantidad.HasValue && saldo.HasValue) ? (item.Cantidad - saldo) : null;
                         <tr>
-                            <td>@item.Nro</td>
+                            <td class="text-center">@item.Nro</td>
                             <td class="fw-semibold">@(item.CodArt ?? "-")</td>
-                            <td>@(item.Titulo ?? "-")</td>
-                            <td>@(item.Color ?? "-")</td>
+                            <td>@(item.Descripcion ?? "-")</td>
                             <td>@(item.ColorDet ?? item.HiloDet ?? "-")</td>
-                            <td>@(item.Proceso ?? "-")</td>
-                            <td class="text-end">@(item.Cantidad?.ToString("N4") ?? "-")</td>
+                            <td class="text-center">@(item.Unidad ?? "-")</td>
+                            <td class="text-end">@(item.Cantidad?.ToString("N2") ?? "-")</td>
                             <td class="text-end">@(item.Precio?.ToString("N2") ?? "-")</td>
-                            <td class="text-end">@(item.Saldo?.ToString("N4") ?? "-")</td>
-                            <td>
+                            <td class="text-end">@(cantDespacho?.ToString("N2") ?? "-")</td>
+                            <td class="text-end">@(saldo?.ToString("N2") ?? "-")</td>
+                            <td class="text-center">
                                 <a asp-action="Guias"
                                    asp-route-pedSerie="@item.Serie"
                                    asp-route-numPed="@item.NumPed"
