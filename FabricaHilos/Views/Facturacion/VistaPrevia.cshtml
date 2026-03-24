@@ -39,6 +39,29 @@
     <input type="hidden" asp-for="FechaProcesamiento" />
     <input type="hidden" asp-for="Confianza" />
     <input type="hidden" asp-for="MensajeError" />
+    <input type="hidden" asp-for="HoraEmision" />
+    <input type="hidden" asp-for="NombreComercialEmisor" />
+    <input type="hidden" asp-for="TotalCargo" />
+    <input type="hidden" asp-for="NumeroDocRef" />
+    <input type="hidden" asp-for="ModalidadTraslado" />
+    <input type="hidden" asp-for="MotivoTraslado" />
+    <input type="hidden" asp-for="ModoTransporte" />
+    <input type="hidden" asp-for="PesoBruto" />
+    <input type="hidden" asp-for="UnidadPeso" />
+    <input type="hidden" asp-for="FechaInicioTraslado" />
+    <input type="hidden" asp-for="FechaFinTraslado" />
+    <input type="hidden" asp-for="RucTransportista" />
+    <input type="hidden" asp-for="RazonSocTransportista" />
+    <input type="hidden" asp-for="NombreConductor" />
+    <input type="hidden" asp-for="LicenciaConductor" />
+    <input type="hidden" asp-for="PlacaVehiculo" />
+    <input type="hidden" asp-for="MarcaVehiculo" />
+    <input type="hidden" asp-for="NroDocConductor" />
+    <input type="hidden" asp-for="UbigeoOrigen" />
+    <input type="hidden" asp-for="DirOrigen" />
+    <input type="hidden" asp-for="UbigeoDestino" />
+    <input type="hidden" asp-for="DirDestino" />
+    <input type="hidden" asp-for="Vendedor" />
 
     <div class="row g-4">
         <!-- Card Identificación -->
@@ -226,6 +249,33 @@
                 </div>
             </div>
         }
+
+        <!-- Detracción -->
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-percent me-2"></i>Detracción
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-md-3">
+                            <div class="form-check form-switch mt-2">
+                                <input asp-for="TieneDetraccion" class="form-check-input" role="switch" />
+                                <label asp-for="TieneDetraccion" class="form-check-label fw-semibold">Tiene Detracción</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="PctDetraccion" class="form-label fw-semibold">Porcentaje (%)</label>
+                            <input asp-for="PctDetraccion" type="number" step="0.01" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="MontoDetraccion" class="form-label fw-semibold">Monto Detracción</label>
+                            <input asp-for="MontoDetraccion" type="number" step="0.01" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Observaciones -->
         <div class="col-12">
