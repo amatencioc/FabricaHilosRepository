@@ -100,6 +100,24 @@ public class NotificacionPdfLimboWorker : BackgroundService
 
             var (nombre, email) = ParsearRemitente(pdf.RemitenteCorreo);
 
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                _logger.LogWarning(
+                    "PDF ID={Id} sin correo destino válido (remitente='{R}'). Se omite.",
+                    pdf.Id, pdf.RemitenteCorreo);
+                try
+                {
+                    await repo.MarcarErrorNotificacionAsync(pdf.Id, "Correo destinatario vacío o inválido.");
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogError(dbEx,
+                        "No se pudo persistir el estado ERROR_CORREO para PDF ID={Id}.", pdf.Id);
+                }
+                fallidos++;
+                continue;
+            }
+
             _logger.LogInformation(
                 ">>> Enviando correo → ID={Id} | Para: {Email} | Archivo: '{Archivo}'",
                 pdf.Id, email, pdf.NombreArchivo);

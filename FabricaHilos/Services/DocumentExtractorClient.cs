@@ -19,7 +19,13 @@ public class DocumentExtractorClient
         content.Add(fileContent, "archivo", archivo.FileName);
 
         var response = await _http.PostAsync("api/v1/extractor/extraer", content);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(
+                $"El servicio de extracción devolvió {(int)response.StatusCode}: {body}");
+        }
 
         return await response.Content.ReadFromJsonAsync<DocumentoExtraido>(
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
