@@ -96,10 +96,8 @@ public class PdfExtractorService : IDocumentExtractorService
             var pdfBytes = ms.ToArray();
 
             var sb = new StringBuilder();
-            int pageCount;
             using (var pdf = PdfDocument.Open(new MemoryStream(pdfBytes)))
             {
-                pageCount = pdf.NumberOfPages;
                 foreach (UglyToad.PdfPig.Content.Page page in pdf.GetPages())
                     sb.AppendLine(page.Text);
             }
@@ -108,7 +106,8 @@ public class PdfExtractorService : IDocumentExtractorService
             if (texto.Trim().Length < 50)
             {
                 usedOcr = true;
-                return ExtraerTextoOcrDesdePdf(pdfBytes, pageCount);
+                string textoOcr = ExtraerTextoOcrDesdePdf(pdfBytes);
+                return string.IsNullOrWhiteSpace(textoOcr) ? texto : textoOcr;
             }
             return texto;
         }
@@ -120,18 +119,48 @@ public class PdfExtractorService : IDocumentExtractorService
         return string.Empty;
     }
 
-    private static string ExtraerTextoOcrDesdePdf(byte[] pdfBytes, int pageCount)
+    private static string ExtraerTextoOcrDesdePdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();
-        var renderOptions = new RenderOptions { Dpi = 300 };
+        var renderOptions = new RenderOptions { Dpi = 300, Grayscale = true };
 
-        for (int i = 0; i < pageCount; i++)
+        foreach (var bitmap in Conversion.ToImages(pdfBytes, options: renderOptions))
         {
-            using var pageMs = new MemoryStream();
-            Conversion.SavePng(pageMs, pdfBytes, page: i, options: renderOptions);
-            sb.AppendLine(OcrBytes(PreprocesarImagen(pageMs.ToArray())));
+            using (bitmap)
+                sb.AppendLine(OcrBytes(PreprocesarBitmap(bitmap)));
         }
         return sb.ToString();
+    }
+
+    private static byte[] PreprocesarBitmap(SKBitmap original)
+    {
+        if (original == null) return Array.Empty<byte>();
+
+        int w = original.Width, h = original.Height;
+        const int minLongSide = 2400;
+        float scale = (float)minLongSide / Math.Max(w, h);
+
+        using var upscaled = scale > 1f
+            ? original.Resize(new SKImageInfo((int)(w * scale), (int)(h * scale)),
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None))
+            : null;
+        var source = upscaled ?? original;
+
+        const float c = 1.4f;
+        float t = (1f - c) / 2f * 255f;
+        float[] cm = [c, 0, 0, 0, t, 0, c, 0, 0, t, 0, 0, c, 0, t, 0, 0, 0, 1, 0];
+
+        using var output = new SKBitmap(source.Width, source.Height);
+        using (var canvas = new SKCanvas(output))
+        {
+            canvas.Clear(SKColors.White);
+            using var paint = new SKPaint { ColorFilter = SKColorFilter.CreateColorMatrix(cm) };
+            canvas.DrawBitmap(source, 0f, 0f, paint);
+        }
+
+        using var image = SKImage.FromBitmap(output);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
     }
 
     private static string ExtraerTextoOcr(Stream archivo)
@@ -192,11 +221,9 @@ public class PdfExtractorService : IDocumentExtractorService
         if (tipoMime == "application/pdf")
         {
             var sb = new StringBuilder();
-            int pageCount;
             ms.Position = 0;
             using (var pdf = PdfDocument.Open(ms))
             {
-                pageCount = pdf.NumberOfPages;
                 foreach (UglyToad.PdfPig.Content.Page page in pdf.GetPages())
                     sb.AppendLine(page.Text);
             }
@@ -207,8 +234,9 @@ public class PdfExtractorService : IDocumentExtractorService
             // Fallback a OCR
             if (TessDataPath != null)
             {
-                string textoOcr = ExtraerTextoOcrDesdePdf(bytes, pageCount);
-                return Task.FromResult((textoOcr, "Tesseract-OCR (PDF)"));
+                string textoOcr = ExtraerTextoOcrDesdePdf(bytes);
+                if (!string.IsNullOrWhiteSpace(textoOcr))
+                    return Task.FromResult((textoOcr, "Tesseract-OCR (PDF)"));
             }
             return Task.FromResult((textoNativo, "PdfPig (sin OCR)"));
         }
