@@ -13,11 +13,17 @@ namespace FabricaHilos.Controllers
         private readonly ISgcService _sgcService;
             private readonly ILogger<SgcController> _logger;
             private readonly IConfiguration _configuration;
+            private readonly ISalidaInternaPdfService _salidaInternaPdf;
+            private readonly IWebHostEnvironment _env;
 
-            public SgcController(ISgcService sgcService, ILogger<SgcController> logger, IConfiguration configuration)
+            public SgcController(ISgcService sgcService, ILogger<SgcController> logger,
+                IConfiguration configuration, ISalidaInternaPdfService salidaInternaPdf,
+                IWebHostEnvironment env)
             {
-                _sgcService    = sgcService;
-                _logger        = logger;
+                _sgcService       = sgcService;
+                _logger           = logger;
+                _salidaInternaPdf = salidaInternaPdf;
+                _env              = env;
                 _configuration = configuration;
             }
 
@@ -113,7 +119,7 @@ namespace FabricaHilos.Controllers
             if (guia == null) return NotFound();
 
             const int pageSize = 10;
-            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm, tpTransac, serie, numero, codArt, page, pageSize);
+            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm, tpTransac, serie, numero, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(DetalleGuia), new { codAlm, tpTransac, serie, numero, pedSerie, numPed, nro, codArt, buscar, page = 1 });
 
@@ -254,25 +260,33 @@ namespace FabricaHilos.Controllers
             if (guia == null)
                 return Json(new { tipo = "Error", mensaje = "No se encontró la guía." });
 
-            var faltantesGuia = new List<string>();
-            if (guia.FchTransac == null)              faltantesGuia.Add("Fecha de Transacción");
-            if (string.IsNullOrEmpty(guia.Ruc))        faltantesGuia.Add("RUC");
-            if (string.IsNullOrEmpty(guia.SerieSunat)) faltantesGuia.Add("Serie SUNAT");
-            if (faltantesGuia.Count > 0)
+            // Para TP_TRANSAC = 23 (Salida Interna) no existe PDF físico: se genera on-the-fly
+            if (tpTransac == "23" || string.IsNullOrEmpty(guia.SerieSunat))
             {
-                var msg = $"La guía no tiene los datos necesarios para construir la ruta del PDF.\n\n"
-                    + $"- Fecha de Transacción: {guia.FchTransac?.ToString("dd/MM/yyyy") ?? "[nula]"}\n"
-                    + $"- RUC: {(string.IsNullOrEmpty(guia.Ruc) ? "[nulo]" : guia.Ruc)}\n"
-                    + $"- Serie SUNAT: {(string.IsNullOrEmpty(guia.SerieSunat) ? "[nula]" : guia.SerieSunat)}.\n\n"
-                    + $"Falta: {string.Join(", ", faltantesGuia)}.";
-                return Json(new { tipo = "Error", mensaje = msg });
+                try
+                {
+                    var datos = await _sgcService.ObtenerSalidaInternaAsync(codAlm, tpTransac, serie, numero);
+                    if (datos == null)
+                        return Json(new { tipo = "Error", mensaje = "No se encontraron datos para generar el reporte." });
+
+                    var rucEmpresa = _configuration["RucEmpresa"] ?? string.Empty;
+                    var logoPath   = Path.Combine(_env.WebRootPath, "images", "logo-colonial.png");
+                    var pdfBytes   = _salidaInternaPdf.Generar(datos, rucEmpresa, logoPath);
+                    var fileName   = $"SalidaInterna-{datos.Serie:D3}-{datos.Numero:D8}.pdf";
+                    return File(pdfBytes, "application/pdf", fileName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al generar Salida Interna PDF {CodAlm}/{TpTransac}/{Serie}/{Numero}", codAlm, tpTransac, serie, numero);
+                    return Json(new { tipo = "Error", mensaje = $"Error al generar el reporte: {ex.Message}" });
+                }
             }
 
             var fecha         = guia.FchTransac!.Value;
             var rutaProv      = _configuration["RutaProv"] ?? string.Empty;
-            var rucEmpresa    = _configuration["RucEmpresa"] ?? string.Empty;
+            var rucEmpresaPdf = _configuration["RucEmpresa"] ?? string.Empty;
             var nroFormato    = guia.Numero.ToString("D8");
-            var nombreArchivo = $"{rucEmpresa}-09-{guia.SerieSunat}-{nroFormato}.pdf";
+            var nombreArchivo = $"{rucEmpresaPdf}-09-{guia.SerieSunat}-{nroFormato}.pdf";
 
             var rutaPdf = !string.IsNullOrEmpty(rutaProv)
                 ? Path.Combine(rutaProv, fecha.ToString("yyyyMMdd"), nombreArchivo)

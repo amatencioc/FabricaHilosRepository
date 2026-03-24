@@ -1,3 +1,6 @@
+@using FabricaHilos.Services
+@inject IMenuService MenuService
+@{ var menus = MenuService.GetMenusActuales(); }
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -25,15 +28,20 @@
             </div>
             <ul class="list-unstyled p-2 sidebar-menu">
                 <!-- Dashboard -->
-                <li class="d-none">
+                @if (menus.Dashboard)
+                {
+                <li>
                     <a asp-controller="Home" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
                 </li>
+                }
 
                 <!-- INVENTARIO -->
-                <li class="sidebar-section d-none">INVENTARIO</li>
-                <li class="d-none">
+                @if (menus.Inventario)
+                {
+                <li class="sidebar-section">INVENTARIO</li>
+                <li>
                     <a asp-controller="Inventario" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" ? "active" : "")">
                         <i class="bi bi-box-seam"></i> Inventario
                     </a>
@@ -50,8 +58,14 @@
                         </li>
                     </ul>
                 </li>
+                }
 
+                @if (menus.Produccion || menus.Sgc || menus.Facturacion)
+                {
                 <li class="sidebar-section">OPERACIONES</li>
+                }
+                @if (menus.Produccion)
+                {
                 <li>
                     <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Produccion" || ViewContext.RouteData.Values["controller"]?.ToString() == "RegistroPreparatoria" ? "active" : "")">
                         <i class="bi bi-gear-wide-connected"></i> Producción
@@ -64,6 +78,9 @@
                         </li>
                     </ul>
                 </li>
+                }
+                @if (menus.Sgc)
+                {
                 <li>
                     <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sgc" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
@@ -76,6 +93,9 @@
                         </li>
                     </ul>
                 </li>
+                }
+                @if (menus.Facturacion)
+                {
                 <li>
                     <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" ? "active" : "")">
                         <i class="bi bi-receipt"></i> Facturación
@@ -93,8 +113,11 @@
                         </li>
                     </ul>
                 </li>
+                }
                 <!-- VENTAS -->
-                <li class="d-none">
+                @if (menus.Ventas)
+                {
+                <li>
                     <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
@@ -111,10 +134,13 @@
                         </li>
                     </ul>
                 </li>
+                }
 
                 <!-- PERSONAL -->
-                <li class="sidebar-section d-none">PERSONAL</li>
-                <li class="d-none">
+                @if (menus.RecursosHumanos)
+                {
+                <li class="sidebar-section">PERSONAL</li>
+                <li>
                     <a asp-controller="RecursosHumanos" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "RecursosHumanos" ? "active" : "")">
                         <i class="bi bi-person-badge"></i> Recursos Humanos
                     </a>
@@ -131,12 +157,13 @@
                         </li>
                     </ul>
                 </li>
+                }
 
-                @if (User.IsInRole("Admin") || User.IsInRole("Gerencia"))
+                @if (menus.Administracion && (User.IsInRole("Admin") || User.IsInRole("Gerencia")))
                 {
                     <!-- ADMINISTRACIÓN -->
-                    <li class="sidebar-section d-none">ADMINISTRACIÓN</li>
-                    <li class="d-none">
+                    <li class="sidebar-section">ADMINISTRACIÓN</li>
+                    <li>
                         <a asp-controller="Account" asp-action="Register" class="sidebar-link">
                             <i class="bi bi-person-plus"></i> Registrar Usuario
                         </a>

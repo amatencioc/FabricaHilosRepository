@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Data;
 using FabricaHilos.Models;
+using FabricaHilos.Services;
 using System.Diagnostics;
 
 namespace FabricaHilos.Controllers
@@ -12,11 +13,20 @@ namespace FabricaHilos.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<HomeController> _logger;
+        private readonly IMenuService _menuService;
 
-        public HomeController(ApplicationDbContext context, ILogger<HomeController> logger)
+        public HomeController(ApplicationDbContext context, ILogger<HomeController> logger, IMenuService menuService)
         {
             _context = context;
             _logger = logger;
+            _menuService = menuService;
+        }
+
+        // Punto de entrada por defecto: redirige al primer módulo disponible del usuario
+        public IActionResult Landing()
+        {
+            var (ctrl, act) = _menuService.GetLanding();
+            return RedirectToAction(act, ctrl);
         }
 
         public async Task<IActionResult> Index()

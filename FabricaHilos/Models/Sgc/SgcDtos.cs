@@ -91,7 +91,43 @@ namespace FabricaHilos.Models.Sgc
         public string? Estado { get; set; }
         public string? Detalle { get; set; }
         public string? Descripcion { get; set; }
+        public string? Unidad { get; set; }
         public string? ColorDet { get; set; }
+    }
+
+    public class SalidaInternaDto
+    {
+        public string CodAlm { get; set; } = string.Empty;
+        public string TpTransac { get; set; } = string.Empty;
+        public int Serie { get; set; }
+        public int Numero { get; set; }
+        public DateTime? FchTransac { get; set; }
+        public string? Nombre { get; set; }
+        public string? Ruc { get; set; }
+        public string? Glosa { get; set; }
+        public decimal? PesoTotal { get; set; }
+        public string? TipRef { get; set; }
+        public string? SerRef { get; set; }
+        public string? NroRef { get; set; }
+        public string? NroDocRef { get; set; }
+        public string? Motivo { get; set; }
+        public int? NroBultos { get; set; }
+        public string? NomTranspor { get; set; }
+        public string? NroTranspor { get; set; }
+        public string? NomVehiculo { get; set; }
+        public string? DirPartida { get; set; }
+        public string? DirLlegada { get; set; }
+        public DateTime? FchEntrega { get; set; }
+        public string? ModTraslado { get; set; }
+        public List<SalidaInternaItemDto> Items { get; set; } = [];
+    }
+
+    public class SalidaInternaItemDto
+    {
+        public string? CodArt { get; set; }
+        public string? Descripcion { get; set; }
+        public string? Unidad { get; set; }
+        public decimal? Cantidad { get; set; }
     }
 
     // NOTE: SIG.DOCUVENT

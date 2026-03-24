@@ -11,7 +11,7 @@ namespace FabricaHilos.Services.Sgc
         Task<(List<ItemPedDto> Items, int TotalCount)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10);
         Task<(List<KardexGDto> Items, int TotalCount)> ObtenerGuiasAsync(int pedSerie, int numPed, int page = 1, int pageSize = 10);
         Task<KardexGDto?> ObtenerGuiaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, string codArt, int page = 1, int pageSize = 10);
+        Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasAsync(string? cTipo, string? cSerie, string? cNumero, int page = 1, int pageSize = 10);
         Task<DocuVentDto?> ObtenerFacturaAsync(string tipo, string serie, string numero);
         Task<(List<ItemDocuDto> Items, int TotalCount)> ObtenerDetalleFacturaAsync(string tipo, string serie, string numero, int page = 1, int pageSize = 10);
@@ -20,6 +20,7 @@ namespace FabricaHilos.Services.Sgc
         Task<(List<PackingGDto> Items, int TotalCount)> ObtenerPackingsAsync(int numPed, int page = 1, int pageSize = 10);
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
+        Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
     }
 
     public class SgcService : ISgcService
@@ -477,7 +478,7 @@ namespace FabricaHilos.Services.Sgc
         // ========== KARDEX_D (Detalle de Guía) ==========
 
         // NOTE: Ajuste los nombres de columna de SIG.KARDEX_D según su esquema real.
-        public async Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, string codArt, int page = 1, int pageSize = 10)
+        public async Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return ([], 0);
@@ -487,14 +488,15 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO,
-                       COD_ART, CANTIDAD, ESTADO, DETALLE, COLOR_DET, A_DESCRIP
+                       COD_ART, CANTIDAD, ESTADO, DETALLE, COLOR_DET, A_DESCRIP, A_UNIDAD
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY D.COD_ART ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            D.COD_ALM, D.TP_TRANSAC, D.SERIE, D.NUMERO,
                            D.COD_ART, D.CANTIDAD,
                            D.ESTADO, D.DETALLE, D.COLOR_DET,
-                           A.DESCRIPCION AS A_DESCRIP
+                           A.DESCRIPCION AS A_DESCRIP,
+                           A.UNIDAD      AS A_UNIDAD
                      FROM SIG.KARDEX_D D
                      INNER JOIN SIG.KARDEX_G G ON G.COD_ALM    = D.COD_ALM
                                               AND G.TP_TRANSAC  = D.TP_TRANSAC
@@ -505,9 +507,8 @@ namespace FabricaHilos.Services.Sgc
                        AND G.TP_TRANSAC = :tpTransac
                        AND G.SERIE      = :serie
                        AND G.NUMERO     = :numero
-                       AND D.COD_ART   = :codArt
-                )
-                WHERE RN BETWEEN :startRow AND :endRow";
+                 )
+                 WHERE RN BETWEEN :startRow AND :endRow";
 
             var result = new List<KardexDDto>();
             int totalCount = 0;
@@ -521,7 +522,6 @@ namespace FabricaHilos.Services.Sgc
                 cmd.Parameters.Add(new OracleParameter(":tpTransac", OracleDbType.Varchar2, tpTransac, ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32,    serie,     ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":numero",    OracleDbType.Int32,    numero,    ParameterDirection.Input));
-                cmd.Parameters.Add(new OracleParameter(":codArt",    OracleDbType.Varchar2, codArt,    ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":startRow",  OracleDbType.Int32,    startRow,  ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":endRow",    OracleDbType.Int32,    endRow,    ParameterDirection.Input));
 
@@ -547,6 +547,7 @@ namespace FabricaHilos.Services.Sgc
                         Estado      = GetStr(reader, "ESTADO"),
                         Detalle     = GetStr(reader, "DETALLE"),
                         Descripcion = GetStr(reader, "A_DESCRIP"),
+                        Unidad      = GetStr(reader, "A_UNIDAD"),
                         ColorDet    = GetStr(reader, "COLOR_DET")
                     });
                 }
@@ -947,5 +948,180 @@ namespace FabricaHilos.Services.Sgc
             NumPed       = GetInt(r, "NUM_PED"),
             NumOrdcompra = GetStr(r, "NUM_ORDCOMPRA")
         };
+
+        // ========== SALIDA INTERNA (PDF para TP_TRANSAC = 23) ==========
+
+        public async Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return null;
+
+            const string sqlBase = @"
+                SELECT G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
+                       G.NOMBRE, G.RUC, G.GLOSA, G.PESO_TOTAL,
+                       G.TIP_REF, G.SER_REF, G.NRO_REF, G.NRO_DOC_REF,
+                       G.MOTIVO
+                FROM SIG.KARDEX_G G
+                WHERE G.COD_ALM    = :codAlm
+                  AND G.TP_TRANSAC = :tpTransac
+                  AND G.SERIE      = :serie
+                  AND G.NUMERO     = :numero";
+
+            SalidaInternaDto? dto = null;
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sqlBase, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.Add(new OracleParameter(":codAlm",    OracleDbType.Varchar2, codAlm,    ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":tpTransac", OracleDbType.Varchar2, tpTransac, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32,    serie,     ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":numero",    OracleDbType.Int32,    numero,    ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                if (await reader.ReadAsync())
+                {
+                    dto = new SalidaInternaDto
+                    {
+                        CodAlm     = GetStr(reader, "COD_ALM")    ?? string.Empty,
+                        TpTransac  = GetStr(reader, "TP_TRANSAC") ?? string.Empty,
+                        Serie      = GetInt(reader, "SERIE"),
+                        Numero     = GetInt(reader, "NUMERO"),
+                        FchTransac = GetDt(reader, "FCH_TRANSAC"),
+                        Nombre     = GetStr(reader, "NOMBRE"),
+                        Ruc        = GetStr(reader, "RUC"),
+                        Glosa      = GetStr(reader, "GLOSA"),
+                        PesoTotal  = GetDec(reader, "PESO_TOTAL"),
+                        TipRef     = GetStr(reader, "TIP_REF"),
+                        SerRef     = GetStr(reader, "SER_REF"),
+                        NroRef     = GetStr(reader, "NRO_REF"),
+                        NroDocRef  = GetStr(reader, "NRO_DOC_REF"),
+                        Motivo     = GetStr(reader, "MOTIVO")
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener Salida Interna {CodAlm}/{TpTransac}/{Serie}/{Numero}", codAlm, tpTransac, serie, numero);
+                throw;
+            }
+
+            if (dto == null) return null;
+
+            // Campos extra (best-effort: si la columna no existe en el esquema se ignora)
+            try
+            {
+                const string sqlExtra = @"
+                    SELECT NOM_TRANSPOR, NRO_TRANSPOR, NOM_VEHICULO,
+                           DIR_PARTIDA, DIR_LLEGADA, FCH_ENTREGA,
+                           NRO_BULTOS, MOD_TRASLADO
+                    FROM SIG.KARDEX_G
+                    WHERE COD_ALM    = :codAlm
+                      AND TP_TRANSAC = :tpTransac
+                      AND SERIE      = :serie
+                      AND NUMERO     = :numero";
+
+                using var conn2 = new OracleConnection(connStr);
+                await conn2.OpenAsync();
+                using var cmd2 = new OracleCommand(sqlExtra, conn2);
+                cmd2.BindByName = true;
+                cmd2.Parameters.Add(new OracleParameter(":codAlm",    OracleDbType.Varchar2, codAlm,    ParameterDirection.Input));
+                cmd2.Parameters.Add(new OracleParameter(":tpTransac", OracleDbType.Varchar2, tpTransac, ParameterDirection.Input));
+                cmd2.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32,    serie,     ParameterDirection.Input));
+                cmd2.Parameters.Add(new OracleParameter(":numero",    OracleDbType.Int32,    numero,    ParameterDirection.Input));
+
+                using var r2 = await cmd2.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                if (await r2.ReadAsync())
+                {
+                    dto.NomTranspor = GetStr(r2, "NOM_TRANSPOR");
+                    dto.NroTranspor = GetStr(r2, "NRO_TRANSPOR");
+                    dto.NomVehiculo = GetStr(r2, "NOM_VEHICULO");
+                    dto.DirPartida  = GetStr(r2, "DIR_PARTIDA");
+                    dto.DirLlegada  = GetStr(r2, "DIR_LLEGADA");
+                    dto.FchEntrega  = GetDt(r2, "FCH_ENTREGA");
+                    dto.NroBultos   = GetNullInt(r2, "NRO_BULTOS");
+                    dto.ModTraslado = GetStr(r2, "MOD_TRASLADO");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Campos extra de KARDEX_G no disponibles para Salida Interna {Serie}/{Numero} — se generará el PDF con los datos base", serie, numero);
+            }
+
+            // Descripción del Motivo de Traslado desde TABLAS_AUXILIARES (TIPO=88, CODIGO=dto.Motivo)
+            if (!string.IsNullOrWhiteSpace(dto.Motivo))
+            {
+                try
+                {
+                    const string sqlMotivo = @"
+                        SELECT DESCRIPCION
+                        FROM SIG.TABLAS_AUXILIARES
+                        WHERE TIPO   = 88
+                          AND CODIGO = :codigo";
+
+                    using var connM = new OracleConnection(connStr);
+                    await connM.OpenAsync();
+                    using var cmdM = new OracleCommand(sqlMotivo, connM);
+                    cmdM.BindByName = true;
+                    cmdM.Parameters.Add(new OracleParameter(":codigo", OracleDbType.Varchar2, dto.Motivo, ParameterDirection.Input));
+
+                    var desc = await cmdM.ExecuteScalarAsync();
+                    if (desc != null && desc != DBNull.Value)
+                        dto.Motivo = desc.ToString();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo obtener descripción de Motivo '{Motivo}' desde TABLAS_AUXILIARES", dto.Motivo);
+                }
+            }
+
+            // Items de detalle (sin paginación)
+            try
+            {
+                const string sqlItems = @"
+                    SELECT D.COD_ART, A.DESCRIPCION, A.UNIDAD, D.CANTIDAD
+                    FROM SIG.KARDEX_D D
+                    LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                    WHERE D.COD_ALM    = :codAlm
+                      AND D.TP_TRANSAC = :tpTransac
+                      AND D.SERIE      = :serie
+                      AND D.NUMERO     = :numero
+                    ORDER BY D.COD_ART";
+
+                using var conn3 = new OracleConnection(connStr);
+                await conn3.OpenAsync();
+                using var cmd3 = new OracleCommand(sqlItems, conn3);
+                cmd3.BindByName = true;
+                cmd3.Parameters.Add(new OracleParameter(":codAlm",    OracleDbType.Varchar2, codAlm,    ParameterDirection.Input));
+                cmd3.Parameters.Add(new OracleParameter(":tpTransac", OracleDbType.Varchar2, tpTransac, ParameterDirection.Input));
+                cmd3.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32,    serie,     ParameterDirection.Input));
+                cmd3.Parameters.Add(new OracleParameter(":numero",    OracleDbType.Int32,    numero,    ParameterDirection.Input));
+
+                using var r3 = await cmd3.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                while (await r3.ReadAsync())
+                {
+                    dto.Items.Add(new SalidaInternaItemDto
+                    {
+                        CodArt      = GetStr(r3, "COD_ART"),
+                        Descripcion = GetStr(r3, "DESCRIPCION"),
+                        Unidad      = GetStr(r3, "UNIDAD"),
+                        Cantidad    = GetDec(r3, "CANTIDAD")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener items Salida Interna {CodAlm}/{TpTransac}/{Serie}/{Numero}", codAlm, tpTransac, serie, numero);
+            }
+
+            return dto;
+        }
     }
 }

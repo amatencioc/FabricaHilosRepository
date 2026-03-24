@@ -8,6 +8,8 @@ using FabricaHilos.Models.RecursosHumanos;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.Sgc;
+using QuestPDF.Infrastructure;
+using FabricaHilos.Config;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +60,11 @@ builder.Services.AddSession(options =>
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
+
+// Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
+QuestPDF.Settings.License = LicenseType.Community;
 
 // Registrar cliente HTTP para la API de extracción de documentos
 builder.Services.AddHttpClient<DocumentExtractorClient>(client =>
@@ -74,6 +81,10 @@ builder.Services.AddControllersWithViews()
         // Permite que Views/Produccion/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/Produccion/{1}/{0}.cshtml");
     });
+
+// Visibilidad de menús del sidebar (configurable en appsettings.json)
+builder.Services.Configure<MenuOptions>(
+    builder.Configuration.GetSection(MenuOptions.Seccion));
 
 var app = builder.Build();
 
@@ -100,7 +111,7 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=RegistroPreparatoria}/{action=Index}/{id?}");
+    pattern: "{controller=Home}/{action=Landing}/{id?}");
 
 app.Run();
 

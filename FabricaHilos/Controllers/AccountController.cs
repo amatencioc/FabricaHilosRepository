@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Models;
 using FabricaHilos.Logica;
+using FabricaHilos.Services;
 
 namespace FabricaHilos.Controllers
 {
@@ -14,19 +15,22 @@ namespace FabricaHilos.Controllers
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
+        private readonly IMenuService _menuService;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             RoleManager<IdentityRole> roleManager,
             ILogger<AccountController> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IMenuService menuService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _roleManager = roleManager;
             _logger = logger;
             _configuration = configuration;
+            _menuService = menuService;
         }
 
         [HttpGet]
@@ -36,7 +40,10 @@ namespace FabricaHilos.Controllers
             {
                 // Si la sesión Oracle también está activa, redirigir a la app directamente
                 if (!string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-                    return RedirectToAction("Index", "RegistroPreparatoria");
+                {
+                    var (ctrl, act) = _menuService.GetLanding();
+                    return RedirectToAction(act, ctrl);
+                }
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
                 // → cerrar sesión web y redirigir a login limpio para evitar HTTP 400
@@ -133,7 +140,8 @@ namespace FabricaHilos.Controllers
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    return RedirectToAction("Index", "RegistroPreparatoria");
+                    var (ctrl, act) = _menuService.GetLanding();
+                    return RedirectToAction(act, ctrl);
                 }
 
                 // 2. Validar contra Identity local
@@ -142,7 +150,8 @@ namespace FabricaHilos.Controllers
                 {
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    return RedirectToAction("Index", "RegistroPreparatoria");
+                    var (ctrl, act) = _menuService.GetLanding();
+                    return RedirectToAction(act, ctrl);
                 }
 
                 ModelState.AddModelError(string.Empty, "Usuario o contraseña incorrectos.");

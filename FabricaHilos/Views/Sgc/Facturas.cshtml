@@ -322,17 +322,10 @@ else
                                                 const data = await resp.json();
                                                 mostrarPdfModal(data.tipo, data.mensaje);
                                             } else {
-                                                const blob = await resp.blob();
-                                                const cd = resp.headers.get('Content-Disposition') ?? '';
-                                                const m  = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                                                const fn = m ? m[1].replace(/['"]/g, '') : 'documento.pdf';
-                                                const a  = document.createElement('a');
-                                                a.href = URL.createObjectURL(blob);
-                                                a.download = fn;
-                                                document.body.appendChild(a);
-                                                a.click();
-                                                document.body.removeChild(a);
-                                                URL.revokeObjectURL(a.href);
+                                                    const blob = await resp.blob();
+                                                    const url  = URL.createObjectURL(blob);
+                                                    window.open(url, '_blank');
+                                                    setTimeout(() => URL.revokeObjectURL(url), 60000);
                                             }
                                         } catch {
                                             mostrarPdfModal('Error', 'Ocurrió un error inesperado al obtener el PDF.');
