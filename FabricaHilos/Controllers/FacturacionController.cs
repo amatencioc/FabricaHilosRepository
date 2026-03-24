@@ -51,6 +51,11 @@ public class FacturacionController : Controller
 
             return View("VistaPrevia", extraido);
         }
+        catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
+        {
+            TempData["Error"] = "No se puede conectar al servicio de extracción de documentos. Verifique que el servicio FabricaHilos.DocumentExtractor esté en ejecución.";
+            return View();
+        }
         catch (Exception ex)
         {
             TempData["Error"] = $"Error al procesar el archivo: {ex.Message}";
