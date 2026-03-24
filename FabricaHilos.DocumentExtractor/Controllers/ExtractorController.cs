@@ -91,11 +91,14 @@ public class ExtractorController : ControllerBase
             ? Directory.GetFiles(tessDataPath).Select(Path.GetFileName).ToArray()
             : Array.Empty<string>();
 
-        using var streamRaw = archivo.OpenReadStream();
-        var (textoRaw, fuente) = await _service.ExtraerTextoRawAsync(streamRaw, archivo.ContentType);
+        using var buffer = new MemoryStream();
+        await archivo.CopyToAsync(buffer);
 
-        using var streamExtract = archivo.OpenReadStream();
-        var resultado = await _service.ExtraerAsync(streamExtract, archivo.ContentType, archivo.FileName);
+        buffer.Position = 0;
+        var (textoRaw, fuente) = await _service.ExtraerTextoRawAsync(buffer, archivo.ContentType);
+
+        buffer.Position = 0;
+        var resultado = await _service.ExtraerAsync(buffer, archivo.ContentType, archivo.FileName);
 
         return Ok(new
         {
