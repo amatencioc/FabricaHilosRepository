@@ -1,0 +1,39 @@
+@{
+    ViewData["Title"] = "Facturación";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RegistroPreparatoria" asp-action="Index">Inicio</a></li>
+    <li class="breadcrumb-item active">Facturación</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-receipt me-2"></i>Facturación</h4>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-file-earmark-arrow-up text-primary" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-3">Importar Facturas</h5>
+                <p class="card-text text-muted">Suba un archivo PDF, PNG o JPEG de una factura SUNAT o recibo de servicios para extraer y registrar sus datos automáticamente.</p>
+                <a asp-controller="Facturacion" asp-action="ImportarFacturas" class="btn btn-primary mt-2">
+                    <i class="bi bi-upload me-1"></i> Importar Factura
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-list-ul text-success" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-3">Lista de Documentos</h5>
+                <p class="card-text text-muted">Consulte todos los documentos importados y su estado de procesamiento.</p>
+                <a asp-controller="Facturacion" asp-action="ListaDocumentos" class="btn btn-success mt-2">
+                    <i class="bi bi-eye me-1"></i> Ver Documentos
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

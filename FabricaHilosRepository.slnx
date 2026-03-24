@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="FabricaHilos.DocumentExtractor/FabricaHilos.DocumentExtractor.csproj" />
   <Project Path="FabricaHilos.LecturaCorreos/FabricaHilos.LecturaCorreos.csproj" />
   <Project Path="FabricaHilos.Notificaciones/FabricaHilos.Notificaciones.csproj" />
   <Project Path="FabricaHilos/FabricaHilos.csproj" />

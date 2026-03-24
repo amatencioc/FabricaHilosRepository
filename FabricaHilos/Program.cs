@@ -5,6 +5,7 @@ using FabricaHilos.Models;
 using FabricaHilos.Models.Inventario;
 using FabricaHilos.Models.Ventas;
 using FabricaHilos.Models.RecursosHumanos;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.Sgc;
 
@@ -57,6 +58,14 @@ builder.Services.AddSession(options =>
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
+
+// Registrar cliente HTTP para la API de extracción de documentos
+builder.Services.AddHttpClient<DocumentExtractorClient>(client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["DocumentExtractor:BaseUrl"] ?? "https://localhost:7200/");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 
 // Agregar MVC con vistas y registrar ubicación de vistas anidadas bajo Produccion
 builder.Services.AddControllersWithViews()
