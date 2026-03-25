@@ -6,7 +6,7 @@ namespace FabricaHilos.Services.Sgc
 {
     public interface ISgcService
     {
-        Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalFacturado)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
+        Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalDespacho)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
         Task<PedidoSgcDto?> ObtenerPedidoAsync(int serie, int numPed);
         Task<(List<ItemPedDto> Items, int TotalCount, decimal SumCantidad, decimal SumPrecio, decimal SumCantDespacho, decimal SumDifDespacho)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10);
         Task<(List<KardexGDto> Items, int TotalCount)> ObtenerGuiasAsync(int pedSerie, int numPed, int page = 1, int pageSize = 10);
@@ -72,7 +72,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== PEDIDO ==========
 
-        public async Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalFacturado)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
+        public async Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalDespacho)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr))
@@ -111,28 +111,39 @@ namespace FabricaHilos.Services.Sgc
 
             // Los EXISTS van en la query EXTERNA: solo corren contra los 10 registros ya paginados
             string sql = $@"
-                SELECT PAGED.TOTAL_COUNT, PAGED.SUM_TOTAL_PEDIDO, PAGED.SUM_TOTAL_FACTURADO,
+                SELECT PAGED.TOTAL_COUNT, PAGED.SUM_TOTAL_PEDIDO,
+                       PAGED.TOTAL_DESPACHO, PAGED.SUM_TOTAL_DESPACHO, PAGED.UNIDAD_DESPACHO,
                        PAGED.SERIE, PAGED.NUM_PED, PAGED.TIPO_DOCTO, PAGED.ESTADO, PAGED.FECHA,
                        PAGED.COD_CLIENTE, PAGED.NOMBRE, PAGED.RUC, PAGED.DETALLE,
-                       PAGED.TOTAL_PEDIDO, PAGED.TOTAL_FACTURADO, PAGED.COD_VENDE, PAGED.MONEDA, PAGED.NRO_SUCUR,
+                       PAGED.TOTAL_PEDIDO, PAGED.COD_VENDE, PAGED.MONEDA, PAGED.NRO_SUCUR,
                        CASE WHEN EXISTS (SELECT 1 FROM SIG.ITEMPED   I  WHERE I.NUM_PED  = PAGED.NUM_PED AND I.SERIE = PAGED.SERIE) THEN 1 ELSE 0 END AS CNT_DETALLE,
                        CASE WHEN EXISTS (SELECT 1 FROM SIG.PACKING_G PK WHERE PK.NUM_PED = PAGED.NUM_PED) THEN 1 ELSE 0 END AS CNT_PACKING
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY P.FECHA DESC, P.NUM_PED DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            SUM(NVL(P.TOTAL_PEDIDO, 0)) OVER() AS SUM_TOTAL_PEDIDO,
-                           SUM(NVL(P.TOTAL_FACTURADO, 0)) OVER() AS SUM_TOTAL_FACTURADO,
+                           NVL(ID.TOTAL_DESPACHO, 0)              AS TOTAL_DESPACHO,
+                           SUM(NVL(ID.TOTAL_DESPACHO, 0)) OVER()  AS SUM_TOTAL_DESPACHO,
+                           ID.UNIDAD_DESPACHO,
                            P.SERIE, P.NUM_PED, P.TIPO_DOCTO, P.ESTADO, P.FECHA,
                            P.COD_CLIENTE, P.NOMBRE, P.RUC, P.DETALLE,
-                           P.TOTAL_PEDIDO, P.TOTAL_FACTURADO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
+                           P.TOTAL_PEDIDO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
                     FROM SIG.PEDIDO P
-                    WHERE P.ESTADO <> '9'{buscarFilter}{fechaFilter}
-                ) PAGED
+                    LEFT JOIN (
+                        SELECT I.NUM_PED, I.SERIE,
+                               SUM(NVL(I.CANTIDAD, 0) - NVL(CASE WHEN I.SALDO_R IS NOT NULL AND I.SALDO_R <> 0 THEN I.SALDO_R ELSE I.SALDO END, 0)) AS TOTAL_DESPACHO,
+                               MIN(A.UNIDAD) AS UNIDAD_DESPACHO
+                        FROM SIG.ITEMPED I
+                        LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                        GROUP BY I.NUM_PED, I.SERIE
+                        ) ID ON ID.NUM_PED = P.NUM_PED AND ID.SERIE = P.SERIE
+                        WHERE P.ESTADO <> '9'{buscarFilter}{fechaFilter}
+                    ) PAGED
                 WHERE PAGED.RN BETWEEN :startRow AND :endRow";
 
             var result = new List<PedidoSgcDto>();
             int totalCount = 0;
-            decimal sumTotalPedido = 0m, sumTotalFacturado = 0m;
+            decimal sumTotalPedido = 0m, sumTotalDespacho = 0m;
             try
             {
                 using var conn = new OracleConnection(connStr);
@@ -158,8 +169,8 @@ namespace FabricaHilos.Services.Sgc
                     if (result.Count == 0)
                     {
                         totalCount        = GetInt(reader, "TOTAL_COUNT");
-                        sumTotalPedido    = GetDec(reader, "SUM_TOTAL_PEDIDO")    ?? 0m;
-                        sumTotalFacturado = GetDec(reader, "SUM_TOTAL_FACTURADO") ?? 0m;
+                        sumTotalPedido   = GetDec(reader, "SUM_TOTAL_PEDIDO")   ?? 0m;
+                        sumTotalDespacho = GetDec(reader, "SUM_TOTAL_DESPACHO") ?? 0m;
                     }
                     result.Add(new PedidoSgcDto
                     {
@@ -172,8 +183,9 @@ namespace FabricaHilos.Services.Sgc
                         Nombre         = GetStr(reader, "NOMBRE"),
                         Ruc            = GetStr(reader, "RUC"),
                         Detalle        = GetStr(reader, "DETALLE"),
-                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO"),
+                        TotalPedido   = GetDec(reader, "TOTAL_PEDIDO"),
+                        TotalDespacho = GetDec(reader, "TOTAL_DESPACHO"),
+                        UnidadDespacho = GetStr(reader, "UNIDAD_DESPACHO"),
                         CodVende       = GetStr(reader, "COD_VENDE"),
                         Moneda         = GetStr(reader, "MONEDA"),
                         NroSucur       = GetStr(reader, "NRO_SUCUR"),
@@ -189,7 +201,7 @@ namespace FabricaHilos.Services.Sgc
                 throw;
             }
 
-            return (result, totalCount, sumTotalPedido, sumTotalFacturado);
+            return (result, totalCount, sumTotalPedido, sumTotalDespacho);
         }
 
         public async Task<PedidoSgcDto?> ObtenerPedidoAsync(int serie, int numPed)

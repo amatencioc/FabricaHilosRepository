@@ -1,5 +1,6 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.KardexGDto>
 @using FabricaHilos.Models.Sgc
+@inject FabricaHilos.Services.INavTokenService NavToken
 
 @{
     ViewData["Title"] = "Guías";
@@ -9,13 +10,22 @@
     var pedido   = ViewBag.Pedido  as PedidoSgcDto;
     var itemPed  = ViewBag.ItemPed as ItemPedDto;
     string? buscar = ViewBag.Buscar as string;
+    string navToken     = ViewBag.NavToken as string ?? "";
+    string pedidosToken = NavToken.Protect(new Dictionary<string, string?> {
+        ["buscar"] = buscar
+    });
+    string detPedToken = NavToken.Protect(new Dictionary<string, string?> {
+        ["serie"]  = pedSerie.ToString(),
+        ["numPed"] = numPed.ToString(),
+        ["buscar"] = buscar
+    });
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-buscar="@buscar">Pedidos</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-t="@pedidosToken">Pedidos</a></li>
     <li class="breadcrumb-item">
-        <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed" asp-route-buscar="@buscar">
+        <a asp-action="DetallePedido" asp-route-t="@detPedToken">
             Pedido @numPed
         </a>
     </li>
@@ -26,9 +36,7 @@
     <h4 class="section-title mb-1">
         <i class="bi bi-truck me-2"></i>Guías del Pedido @numPed — Ítem @itemNro
     </h4>
-    <a asp-action="DetallePedido" asp-route-serie="@pedSerie" asp-route-numPed="@numPed"
-       asp-route-buscar="@buscar"
-       class="btn btn-sm btn-outline-secondary">
+    <a asp-action="DetallePedido" asp-route-t="@detPedToken" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i>Volver al pedido
     </a>
 </div>
@@ -102,16 +110,19 @@
                                     </a>
                                     @if (item.TieneDetalle)
                                     {
+                                        string detGuiaToken = NavToken.Protect(new Dictionary<string, string?> {
+                                            ["codAlm"]    = item.CodAlm,
+                                            ["tpTransac"] = item.TpTransac,
+                                            ["serie"]     = item.Serie.ToString(),
+                                            ["numero"]    = item.Numero.ToString(),
+                                            ["pedSerie"]  = pedSerie.ToString(),
+                                            ["numPed"]    = numPed.ToString(),
+                                            ["nro"]       = itemNro.ToString(),
+                                            ["codArt"]    = itemPed?.CodArt,
+                                            ["buscar"]    = buscar
+                                        });
                                     <a asp-action="DetalleGuia"
-                                       asp-route-codAlm="@item.CodAlm"
-                                       asp-route-tpTransac="@item.TpTransac"
-                                       asp-route-serie="@item.Serie"
-                                       asp-route-numero="@item.Numero"
-                                       asp-route-pedSerie="@pedSerie"
-                                       asp-route-numPed="@numPed"
-                                       asp-route-nro="@itemNro"
-                                       asp-route-codArt="@itemPed?.CodArt"
-                                       asp-route-buscar="@buscar"
+                                       asp-route-t="@detGuiaToken"
                                        class="btn btn-sm btn-outline-primary btn-accion"
                                        title="Ver detalle de la guía">
                                         <i class="bi bi-list-columns-reverse"></i> Detalle
@@ -151,25 +162,16 @@
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item @(currentPage == 1 ? "disabled" : "")">
-                            <a class="page-link" asp-action="Guias"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
-                               asp-route-buscar="@buscar"
-                               asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
+                            <a class="page-link" asp-action="Guias" asp-route-t="@navToken" asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                         </li>
                         @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
                         {
                             <li class="page-item @(pg == currentPage ? "active" : "")">
-                                <a class="page-link" asp-action="Guias"
-                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
-                                   asp-route-buscar="@buscar"
-                                   asp-route-page="@pg">@pg</a>
+                                <a class="page-link" asp-action="Guias" asp-route-t="@navToken" asp-route-page="@pg">@pg</a>
                             </li>
                         }
                         <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-                            <a class="page-link" asp-action="Guias"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-nro="@itemNro"
-                               asp-route-buscar="@buscar"
-                               asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                            <a class="page-link" asp-action="Guias" asp-route-t="@navToken" asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
                         </li>
                     </ul>
                 </nav>

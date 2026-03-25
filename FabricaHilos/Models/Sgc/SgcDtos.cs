@@ -16,6 +16,8 @@ namespace FabricaHilos.Models.Sgc
         public string? CodVende { get; set; }
         public string? Moneda { get; set; }
         public string? NroSucur { get; set; }
+        public decimal? TotalDespacho { get; set; }
+        public string? UnidadDespacho { get; set; }
         public bool TieneDetalle { get; set; }
         public bool TienePacking  { get; set; }
     }

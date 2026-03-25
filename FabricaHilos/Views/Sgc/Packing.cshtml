@@ -11,17 +11,23 @@
     string? buscar      = ViewBag.Buscar      as string;
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
+    string navToken = ViewBag.NavToken as string ?? "";
+    string pedidosToken = NavToken.Protect(new Dictionary<string, string?> {
+        ["buscar"]      = buscar,
+        ["fechaInicio"] = fechaInicio,
+        ["fechaFin"]    = fechaFin
+    });
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio" asp-route-fechaFin="@fechaFin">Pedidos</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedidos" asp-route-t="@pedidosToken">Pedidos</a></li>
     <li class="breadcrumb-item active">Packing — Pedido @numPed</li>
 }
 
 <div class="mb-3">
     <h4 class="section-title mb-1"><i class="bi bi-box-seam me-2"></i>Packing</h4>
-    <a asp-action="Pedidos" asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio" asp-route-fechaFin="@fechaFin" class="btn btn-sm btn-outline-secondary">
+    <a asp-action="Pedidos" asp-route-t="@pedidosToken" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i>Volver a pedidos
     </a>
 </div>
@@ -120,25 +126,16 @@
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item @(currentPage == 1 ? "disabled" : "")">
-                            <a class="page-link" asp-action="Packing"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                               asp-route-buscar="@buscar"
-                               asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
+                            <a class="page-link" asp-action="Packing" asp-route-t="@navToken" asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                         </li>
                         @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
                         {
                             <li class="page-item @(pg == currentPage ? "active" : "")">
-                                <a class="page-link" asp-action="Packing"
-                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                                   asp-route-buscar="@buscar"
-                                   asp-route-page="@pg">@pg</a>
+                                <a class="page-link" asp-action="Packing" asp-route-t="@navToken" asp-route-page="@pg">@pg</a>
                             </li>
                         }
                         <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-                            <a class="page-link" asp-action="Packing"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                               asp-route-buscar="@buscar"
-                               asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                            <a class="page-link" asp-action="Packing" asp-route-t="@navToken" asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
                         </li>
                     </ul>
                 </nav>

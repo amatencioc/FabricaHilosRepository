@@ -1,7 +1,12 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.PedidoSgcDto>
+@inject FabricaHilos.Services.INavTokenService NavToken
 
 @{
     ViewData["Title"] = "Pedidos";
+    string navToken    = ViewBag.NavToken as string ?? "";
+    string? buscar     = ViewBag.Buscar      as string;
+    string? fechaIni   = ViewBag.FechaInicio as string;
+    string? fechaFin   = ViewBag.FechaFin    as string;
 }
 
 @section Breadcrumb {
@@ -30,8 +35,7 @@
                 <input type="date" name="fechaFin" value="@ViewBag.FechaFin"
                        class="form-control form-control-sm" style="max-width: 155px;" />
             </div>
-            <input type="hidden" name="page" id="hiddenPage" value="@(ViewBag.Page ?? 1)" />
-            <button type="submit" class="btn btn-sm btn-outline-primary" onclick="document.getElementById('hiddenPage').value='1';">
+            <button type="submit" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-search"></i> Buscar
             </button>
             @if (!string.IsNullOrEmpty(ViewBag.Buscar as string) || !string.IsNullOrEmpty(ViewBag.FechaInicio as string) || !string.IsNullOrEmpty(ViewBag.FechaFin as string))
@@ -54,7 +58,7 @@
                         <th class="text-center">Cliente</th>
                         <th class="text-center">Moneda</th>
                         <th class="text-center">T. Pedido</th>
-                        <th class="text-center">T. Facturado</th>
+                        <th class="text-center">T. Despacho</th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -68,17 +72,20 @@
                             <td>@(item.Nombre ?? item.CodCliente ?? "-")</td>
                             <td class="text-center">@(item.Moneda == "D" ? "Dólares ($)" : item.Moneda == "S" ? "Soles (S/)" : (item.Moneda ?? "-"))</td>
                             <td class="text-end">@(item.TotalPedido?.ToString("N2") ?? "-")</td>
-                            <td class="text-end">@(item.TotalFacturado?.ToString("N2") ?? "-")</td>
+                            <td class="text-end">@(item.TotalDespacho.HasValue ? $"{item.TotalDespacho.Value:N2} {item.UnidadDespacho}".Trim() : "-")</td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center">
                                 @if (item.TieneDetalle)
                                 {
+                                    string detToken = NavToken.Protect(new Dictionary<string, string?> {
+                                        ["serie"]       = item.Serie.ToString(),
+                                        ["numPed"]      = item.NumPed.ToString(),
+                                        ["buscar"]      = buscar,
+                                        ["fechaInicio"] = fechaIni,
+                                        ["fechaFin"]    = fechaFin
+                                    });
                                     <a asp-action="DetallePedido"
-                                      asp-route-serie="@item.Serie"
-                                      asp-route-numPed="@item.NumPed"
-                                      asp-route-buscar="@ViewBag.Buscar"
-                                      asp-route-fechaInicio="@ViewBag.FechaInicio"
-                                      asp-route-fechaFin="@ViewBag.FechaFin"
+                                      asp-route-t="@detToken"
                                       class="btn btn-sm btn-outline-primary btn-accion"
                                       title="Ver detalle del pedido">
                                         <i class="bi bi-list-ul"></i> Detalle
@@ -86,12 +93,15 @@
                                 }
                                 @if (item.TienePacking)
                                 {
+                                    string packToken = NavToken.Protect(new Dictionary<string, string?> {
+                                        ["pedSerie"]    = item.Serie.ToString(),
+                                        ["numPed"]      = item.NumPed.ToString(),
+                                        ["buscar"]      = buscar,
+                                        ["fechaInicio"] = fechaIni,
+                                        ["fechaFin"]    = fechaFin
+                                    });
                                     <a asp-action="Packing"
-                                      asp-route-pedSerie="@item.Serie"
-                                      asp-route-numPed="@item.NumPed"
-                                      asp-route-buscar="@ViewBag.Buscar"
-                                      asp-route-fechaInicio="@ViewBag.FechaInicio"
-                                      asp-route-fechaFin="@ViewBag.FechaFin"
+                                      asp-route-t="@packToken"
                                       class="btn btn-sm btn-outline-warning btn-accion"
                                       title="Ver packing">
                                         <i class="bi bi-box-seam"></i> Packing
@@ -103,12 +113,13 @@
                     }
                     @if ((ViewBag.TieneFiltroPedido as bool?) == true && Model.Any())
                     {
-                        decimal sumPed = (decimal)(ViewBag.SumTotalPedido ?? 0m);
-                        decimal sumFac = (decimal)(ViewBag.SumTotalFacturado ?? 0m);
+                        decimal sumPed   = (decimal)(ViewBag.SumTotalPedido ?? 0m);
+                        decimal sumDes   = (decimal)(ViewBag.SumTotalDespacho ?? 0m);
+                        string? unitoDes = Model.FirstOrDefault()?.UnidadDespacho;
                         <tr class="table-secondary fw-semibold border-top">
                             <td colspan="5" class="text-end pe-3">Totales:</td>
                             <td class="text-end">@sumPed.ToString("N2")</td>
-                            <td class="text-end">@sumFac.ToString("N2")</td>
+                            <td class="text-end">@($"{sumDes:N2} {unitoDes}".Trim())</td>
                             <td></td>
                         </tr>
                     }
@@ -143,33 +154,20 @@
         <nav>
             <ul class="pagination pagination-sm mb-0">
                 <li class="page-item @(currentPage == 1 ? "disabled" : "")">
-                    <button type="button" class="page-link btn-pagina" data-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
+                    <a class="page-link" asp-action="Pedidos" asp-route-t="@navToken" asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                 </li>
                 @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
                 {
                     <li class="page-item @(pg == currentPage ? "active" : "")">
-                        <button type="button" class="page-link btn-pagina" data-page="@pg">@pg</button>
+                        <a class="page-link" asp-action="Pedidos" asp-route-t="@navToken" asp-route-page="@pg">@pg</a>
                     </li>
                 }
                 <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-                    <button type="button" class="page-link btn-pagina" data-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></button>
+                    <a class="page-link" asp-action="Pedidos" asp-route-t="@navToken" asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
                 </li>
             </ul>
         </nav>
     }
 </div>
 
-@section Scripts {
-<script>
-    document.querySelectorAll('.btn-pagina').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var li = this.closest('.page-item');
-            if (li && li.classList.contains('disabled')) return;
-            var p = parseInt(this.getAttribute('data-page'));
-            if (isNaN(p)) return;
-            document.getElementById('hiddenPage').value = p;
-            document.querySelector('form[method="get"]').submit();
-        });
-    });
-</script>
-}
+@section Scripts { }

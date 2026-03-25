@@ -52,12 +52,34 @@ namespace FabricaHilos.Controllers
 
         // ========== PEDIDOS (ESTADO <> '9') ==========
 
-        public async Task<IActionResult> Pedidos(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1)
+        public async Task<IActionResult> Pedidos(string? t = null, string? buscar = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, int page = 1)
         {
+            if (string.IsNullOrEmpty(t) && (buscar != null || fechaInicio.HasValue || fechaFin.HasValue))
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> {
+                    ["buscar"]      = buscar,
+                    ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                    ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+                });
+                return RedirectToAction(nameof(Pedidos), new { t = token, page });
+            }
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                buscar = nav.GetValueOrDefault("buscar");
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+            });
+            ViewBag.NavToken = navToken;
+
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerPedidosAsync(buscar, fechaInicio, fechaFin, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Pedidos), new { buscar, fechaInicio, fechaFin, page = 1 });
+                return RedirectToAction(nameof(Pedidos), new { t, page = 1 });
 
             bool tieneFiltroPedido = !string.IsNullOrWhiteSpace(buscar) || fechaInicio.HasValue || fechaFin.HasValue;
             ViewBag.Buscar            = buscar;
@@ -68,22 +90,39 @@ namespace FabricaHilos.Controllers
             ViewBag.TotalCount        = resultado.TotalCount;
             ViewBag.TotalPages        = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
             ViewBag.TieneFiltroPedido = tieneFiltroPedido;
-            ViewBag.SumTotalPedido    = resultado.SumTotalPedido;
-            ViewBag.SumTotalFacturado = resultado.SumTotalFacturado;
+            ViewBag.SumTotalPedido   = resultado.SumTotalPedido;
+            ViewBag.SumTotalDespacho = resultado.SumTotalDespacho;
             return View(resultado.Items);
         }
 
         // ========== DETALLE DE PEDIDO (ITEMPED) ==========
 
-        public async Task<IActionResult> DetallePedido(int serie, int numPed, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
+        public async Task<IActionResult> DetallePedido(string? t = null, int serie = 0, int numPed = 0, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
         {
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                if (int.TryParse(nav.GetValueOrDefault("serie"),  out var s))  serie  = s;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"), out var np)) numPed = np;
+                buscar      = nav.GetValueOrDefault("buscar")      ?? buscar;
+                fechaInicio = nav.GetValueOrDefault("fechaInicio") ?? fechaInicio;
+                fechaFin    = nav.GetValueOrDefault("fechaFin")    ?? fechaFin;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["serie"]       = serie.ToString(),
+                ["numPed"]      = numPed.ToString(),
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio,
+                ["fechaFin"]    = fechaFin
+            });
+            ViewBag.NavToken = navToken;
+
             var pedido = await _sgcService.ObtenerPedidoAsync(serie, numPed);
             if (pedido == null) return NotFound();
 
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerDetallePedidoAsync(serie, numPed, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(DetallePedido), new { serie, numPed, buscar, fechaInicio, fechaFin, page = 1 });
+                return RedirectToAction(nameof(DetallePedido), new { t, page = 1 });
 
             ViewBag.Pedido          = pedido;
             ViewBag.Buscar          = buscar;
@@ -103,12 +142,27 @@ namespace FabricaHilos.Controllers
 
         // ========== GUÍAS (KARDEX_G) ==========
 
-        public async Task<IActionResult> Guias(int pedSerie, int numPed, int nro, string? buscar = null, int page = 1)
+        public async Task<IActionResult> Guias(string? t = null, int pedSerie = 0, int numPed = 0, int nro = 0, string? buscar = null, int page = 1)
         {
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                if (int.TryParse(nav.GetValueOrDefault("pedSerie"), out var ps)) pedSerie = ps;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"),   out var np)) numPed   = np;
+                if (int.TryParse(nav.GetValueOrDefault("nro"),      out var n))  nro      = n;
+                buscar = nav.GetValueOrDefault("buscar") ?? buscar;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["pedSerie"] = pedSerie.ToString(),
+                ["numPed"]   = numPed.ToString(),
+                ["nro"]      = nro.ToString(),
+                ["buscar"]   = buscar
+            });
+            ViewBag.NavToken = navToken;
+
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerGuiasAsync(pedSerie, numPed, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Guias), new { pedSerie, numPed, nro, buscar, page = 1 });
+                return RedirectToAction(nameof(Guias), new { t, page = 1 });
 
             var pedido  = await _sgcService.ObtenerPedidoAsync(pedSerie, numPed);
             var itemPed = await _sgcService.ObtenerItemPedAsync(numPed, nro);
@@ -128,16 +182,41 @@ namespace FabricaHilos.Controllers
 
         // ========== DETALLE DE GUÍA (KARDEX_D) ==========
 
-        public async Task<IActionResult> DetalleGuia(string codAlm, string tpTransac, int serie, int numero,
-            int pedSerie, int numPed, int nro, string codArt, string? buscar = null, int page = 1)
+        public async Task<IActionResult> DetalleGuia(string? t = null, string? codAlm = null, string? tpTransac = null,
+            int serie = 0, int numero = 0, int pedSerie = 0, int numPed = 0, int nro = 0, string? codArt = null, string? buscar = null, int page = 1)
         {
-            var guia = await _sgcService.ObtenerGuiaAsync(codAlm, tpTransac, serie, numero);
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                codAlm    = nav.GetValueOrDefault("codAlm")    ?? codAlm;
+                tpTransac = nav.GetValueOrDefault("tpTransac") ?? tpTransac;
+                codArt    = nav.GetValueOrDefault("codArt")    ?? codArt;
+                buscar    = nav.GetValueOrDefault("buscar")    ?? buscar;
+                if (int.TryParse(nav.GetValueOrDefault("serie"),    out var sr)) serie    = sr;
+                if (int.TryParse(nav.GetValueOrDefault("numero"),   out var nm)) numero   = nm;
+                if (int.TryParse(nav.GetValueOrDefault("pedSerie"), out var ps)) pedSerie = ps;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"),   out var np)) numPed   = np;
+                if (int.TryParse(nav.GetValueOrDefault("nro"),      out var n))  nro      = n;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["codAlm"]    = codAlm,
+                ["tpTransac"] = tpTransac,
+                ["serie"]     = serie.ToString(),
+                ["numero"]    = numero.ToString(),
+                ["pedSerie"]  = pedSerie.ToString(),
+                ["numPed"]    = numPed.ToString(),
+                ["nro"]       = nro.ToString(),
+                ["codArt"]    = codArt,
+                ["buscar"]    = buscar
+            });
+            ViewBag.NavToken = navToken;
+
+            var guia = await _sgcService.ObtenerGuiaAsync(codAlm ?? string.Empty, tpTransac ?? string.Empty, serie, numero);
             if (guia == null) return NotFound();
 
             const int pageSize = 10;
-            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm, tpTransac, serie, numero, page, pageSize);
+            var resultado = await _sgcService.ObtenerDetalleGuiaAsync(codAlm ?? string.Empty, tpTransac ?? string.Empty, serie, numero, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(DetalleGuia), new { codAlm, tpTransac, serie, numero, pedSerie, numPed, nro, codArt, buscar, page = 1 });
+                return RedirectToAction(nameof(DetalleGuia), new { t, page = 1 });
 
             ViewBag.Guia       = guia;
             ViewBag.Buscar     = buscar;
@@ -305,15 +384,32 @@ namespace FabricaHilos.Controllers
 
         // ========== PACKING (PACKING_G) ==========
 
-        public async Task<IActionResult> Packing(int pedSerie, int numPed, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
+        public async Task<IActionResult> Packing(string? t = null, int pedSerie = 0, int numPed = 0, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
         {
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                if (int.TryParse(nav.GetValueOrDefault("pedSerie"), out var ps)) pedSerie = ps;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"),   out var np)) numPed   = np;
+                buscar      = nav.GetValueOrDefault("buscar")      ?? buscar;
+                fechaInicio = nav.GetValueOrDefault("fechaInicio") ?? fechaInicio;
+                fechaFin    = nav.GetValueOrDefault("fechaFin")    ?? fechaFin;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["pedSerie"]    = pedSerie.ToString(),
+                ["numPed"]      = numPed.ToString(),
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio,
+                ["fechaFin"]    = fechaFin
+            });
+            ViewBag.NavToken = navToken;
+
             var pedido = await _sgcService.ObtenerPedidoAsync(pedSerie, numPed);
             if (pedido == null) return NotFound();
 
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerPackingsAsync(numPed, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Packing), new { pedSerie, numPed, buscar, fechaInicio, fechaFin, page = 1 });
+                return RedirectToAction(nameof(Packing), new { t, page = 1 });
 
             ViewBag.Pedido       = pedido;
             ViewBag.PedSerie     = pedSerie;
