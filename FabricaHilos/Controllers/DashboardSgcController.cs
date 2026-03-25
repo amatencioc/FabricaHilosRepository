@@ -112,13 +112,68 @@ namespace FabricaHilos.Controllers
             return Json(data);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> DatosRiesgo(int dias = 30)
+        {
+            var data = await _dashService.ObtenerPedidosEnRiesgoAsync(dias);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosTicketCliente(DateTime? fechaInicio, DateTime? fechaFin, int top = 15)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerTicketPorClienteAsync(fi, ff, top);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosCicloCierre(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerCicloCierreAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosRecompra(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerRecompraAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosConcentracion(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerConcentracionRiesgoAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosPorZona(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerPorZonaAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosMixProducto(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _dashService.ObtenerMixProductoAsync(fi, ff);
+            return Json(data);
+        }
+
         // ─────────────────────────────────────────────────────────
         // Helper
         // ─────────────────────────────────────────────────────────
         private static (DateTime fi, DateTime ff) ResolverFechas(DateTime? fechaInicio, DateTime? fechaFin)
         {
             var ff = fechaFin    ?? DateTime.Today;
-            var fi = fechaInicio ?? ff.AddDays(-90);
+            var fi = fechaInicio ?? new DateTime(ff.Year, ff.Month, 1);
             return (fi, ff);
         }
     }
