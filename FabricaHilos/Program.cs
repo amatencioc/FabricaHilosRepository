@@ -62,6 +62,8 @@ builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;

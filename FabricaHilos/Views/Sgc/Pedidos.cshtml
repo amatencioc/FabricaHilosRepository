@@ -15,16 +15,26 @@
 
 <div class="card mb-3">
     <div class="card-body py-2">
-        <form method="get" class="d-flex gap-2 flex-wrap">
+        <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
             <input type="text" name="buscar" value="@ViewBag.Buscar"
                    class="form-control form-control-sm"
                    placeholder="Buscar por nombre, RUC o N° pedido..."
-                   style="max-width: 320px;" />
+                   style="max-width: 280px;" />
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">Despacho desde:</label>
+                <input type="date" name="fechaInicio" value="@ViewBag.FechaInicio"
+                       class="form-control form-control-sm" style="max-width: 155px;" />
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">hasta:</label>
+                <input type="date" name="fechaFin" value="@ViewBag.FechaFin"
+                       class="form-control form-control-sm" style="max-width: 155px;" />
+            </div>
             <input type="hidden" name="page" id="hiddenPage" value="@(ViewBag.Page ?? 1)" />
             <button type="submit" class="btn btn-sm btn-outline-primary" onclick="document.getElementById('hiddenPage').value='1';">
                 <i class="bi bi-search"></i> Buscar
             </button>
-            @if (!string.IsNullOrEmpty(ViewBag.Buscar as string))
+            @if (!string.IsNullOrEmpty(ViewBag.Buscar as string) || !string.IsNullOrEmpty(ViewBag.FechaInicio as string) || !string.IsNullOrEmpty(ViewBag.FechaFin as string))
             {
                 <a asp-action="Pedidos" class="btn btn-sm btn-outline-secondary">Limpiar</a>
             }
@@ -42,7 +52,6 @@
                         <th class="text-center">N° Pedido</th>
                         <th class="text-center">RUC</th>
                         <th class="text-center">Cliente</th>
-                        <th class="text-center">Detalle</th>
                         <th class="text-center">Moneda</th>
                         <th class="text-center">T. Pedido</th>
                         <th class="text-center">T. Facturado</th>
@@ -57,7 +66,6 @@
                             <td class="fw-semibold text-center">@item.NumPed</td>
                             <td>@(item.Ruc ?? "-")</td>
                             <td>@(item.Nombre ?? item.CodCliente ?? "-")</td>
-                            <td>@(item.Detalle ?? "-")</td>
                             <td class="text-center">@(item.Moneda == "D" ? "Dólares ($)" : item.Moneda == "S" ? "Soles (S/)" : (item.Moneda ?? "-"))</td>
                             <td class="text-end">@(item.TotalPedido?.ToString("N2") ?? "-")</td>
                             <td class="text-end">@(item.TotalFacturado?.ToString("N2") ?? "-")</td>
@@ -66,22 +74,26 @@
                                 @if (item.TieneDetalle)
                                 {
                                     <a asp-action="DetallePedido"
-                                       asp-route-serie="@item.Serie"
-                                       asp-route-numPed="@item.NumPed"
-                                       asp-route-buscar="@ViewBag.Buscar"
-                                       class="btn btn-sm btn-outline-primary btn-accion"
-                                       title="Ver detalle del pedido">
+                                      asp-route-serie="@item.Serie"
+                                      asp-route-numPed="@item.NumPed"
+                                      asp-route-buscar="@ViewBag.Buscar"
+                                      asp-route-fechaInicio="@ViewBag.FechaInicio"
+                                      asp-route-fechaFin="@ViewBag.FechaFin"
+                                      class="btn btn-sm btn-outline-primary btn-accion"
+                                      title="Ver detalle del pedido">
                                         <i class="bi bi-list-ul"></i> Detalle
                                     </a>
                                 }
                                 @if (item.TienePacking)
                                 {
                                     <a asp-action="Packing"
-                                       asp-route-pedSerie="@item.Serie"
-                                       asp-route-numPed="@item.NumPed"
-                                       asp-route-buscar="@ViewBag.Buscar"
-                                       class="btn btn-sm btn-outline-warning btn-accion"
-                                       title="Ver packing">
+                                      asp-route-pedSerie="@item.Serie"
+                                      asp-route-numPed="@item.NumPed"
+                                      asp-route-buscar="@ViewBag.Buscar"
+                                      asp-route-fechaInicio="@ViewBag.FechaInicio"
+                                      asp-route-fechaFin="@ViewBag.FechaFin"
+                                      class="btn btn-sm btn-outline-warning btn-accion"
+                                      title="Ver packing">
                                         <i class="bi bi-box-seam"></i> Packing
                                     </a>
                                 }
@@ -89,10 +101,21 @@
                             </td>
                         </tr>
                     }
+                    @if ((ViewBag.TieneFiltroPedido as bool?) == true && Model.Any())
+                    {
+                        decimal sumPed = (decimal)(ViewBag.SumTotalPedido ?? 0m);
+                        decimal sumFac = (decimal)(ViewBag.SumTotalFacturado ?? 0m);
+                        <tr class="table-secondary fw-semibold border-top">
+                            <td colspan="5" class="text-end pe-3">Totales:</td>
+                            <td class="text-end">@sumPed.ToString("N2")</td>
+                            <td class="text-end">@sumFac.ToString("N2")</td>
+                            <td></td>
+                        </tr>
+                    }
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-4">
+                            <td colspan="8" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron pedidos.
                             </td>
                         </tr>

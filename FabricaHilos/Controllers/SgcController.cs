@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Configuration;
+using FabricaHilos.Helpers;
 using FabricaHilos.Models.Sgc;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
 
 namespace FabricaHilos.Controllers
@@ -15,16 +17,18 @@ namespace FabricaHilos.Controllers
             private readonly IConfiguration _configuration;
             private readonly ISalidaInternaPdfService _salidaInternaPdf;
             private readonly IWebHostEnvironment _env;
+            private readonly INavTokenService _navToken;
 
             public SgcController(ISgcService sgcService, ILogger<SgcController> logger,
                 IConfiguration configuration, ISalidaInternaPdfService salidaInternaPdf,
-                IWebHostEnvironment env)
+                IWebHostEnvironment env, INavTokenService navToken)
             {
                 _sgcService       = sgcService;
                 _logger           = logger;
                 _salidaInternaPdf = salidaInternaPdf;
                 _env              = env;
-                _configuration = configuration;
+                _configuration    = configuration;
+                _navToken         = navToken;
             }
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -48,24 +52,30 @@ namespace FabricaHilos.Controllers
 
         // ========== PEDIDOS (ESTADO <> '9') ==========
 
-        public async Task<IActionResult> Pedidos(string? buscar, int page = 1)
+        public async Task<IActionResult> Pedidos(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1)
         {
             const int pageSize = 10;
-            var resultado       = await _sgcService.ObtenerPedidosAsync(buscar, page, pageSize);
+            var resultado = await _sgcService.ObtenerPedidosAsync(buscar, fechaInicio, fechaFin, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Pedidos), new { buscar, page = 1 });
+                return RedirectToAction(nameof(Pedidos), new { buscar, fechaInicio, fechaFin, page = 1 });
 
-            ViewBag.Buscar     = buscar;
-            ViewBag.Page       = page;
-            ViewBag.PageSize   = pageSize;
-            ViewBag.TotalCount = resultado.TotalCount;
-            ViewBag.TotalPages = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
+            bool tieneFiltroPedido = !string.IsNullOrWhiteSpace(buscar) || fechaInicio.HasValue || fechaFin.HasValue;
+            ViewBag.Buscar            = buscar;
+            ViewBag.FechaInicio       = fechaInicio?.ToString("yyyy-MM-dd");
+            ViewBag.FechaFin          = fechaFin?.ToString("yyyy-MM-dd");
+            ViewBag.Page              = page;
+            ViewBag.PageSize          = pageSize;
+            ViewBag.TotalCount        = resultado.TotalCount;
+            ViewBag.TotalPages        = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
+            ViewBag.TieneFiltroPedido = tieneFiltroPedido;
+            ViewBag.SumTotalPedido    = resultado.SumTotalPedido;
+            ViewBag.SumTotalFacturado = resultado.SumTotalFacturado;
             return View(resultado.Items);
         }
 
         // ========== DETALLE DE PEDIDO (ITEMPED) ==========
 
-        public async Task<IActionResult> DetallePedido(int serie, int numPed, string? buscar = null, int page = 1)
+        public async Task<IActionResult> DetallePedido(int serie, int numPed, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
         {
             var pedido = await _sgcService.ObtenerPedidoAsync(serie, numPed);
             if (pedido == null) return NotFound();
@@ -73,15 +83,21 @@ namespace FabricaHilos.Controllers
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerDetallePedidoAsync(serie, numPed, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(DetallePedido), new { serie, numPed, buscar, page = 1 });
+                return RedirectToAction(nameof(DetallePedido), new { serie, numPed, buscar, fechaInicio, fechaFin, page = 1 });
 
-            ViewBag.Pedido     = pedido;
-            ViewBag.Buscar     = buscar;
-            ViewBag.Page       = page;
-            ViewBag.PageSize   = pageSize;
-            ViewBag.TotalCount = resultado.TotalCount;
-            ViewBag.TotalPages = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            ViewBag.TieneGuias = await _sgcService.TieneGuiasAsync(serie, numPed);
+            ViewBag.Pedido          = pedido;
+            ViewBag.Buscar          = buscar;
+            ViewBag.FechaInicio     = fechaInicio;
+            ViewBag.FechaFin        = fechaFin;
+            ViewBag.Page            = page;
+            ViewBag.PageSize        = pageSize;
+            ViewBag.TotalCount      = resultado.TotalCount;
+            ViewBag.TotalPages      = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
+            ViewBag.TieneGuias      = await _sgcService.TieneGuiasAsync(serie, numPed);
+            ViewBag.SumCantidad     = resultado.SumCantidad;
+            ViewBag.SumPrecio       = resultado.SumPrecio;
+            ViewBag.SumCantDespacho = resultado.SumCantDespacho;
+            ViewBag.SumDifDespacho  = resultado.SumDifDespacho;
             return View(resultado.Items);
         }
 
@@ -138,12 +154,50 @@ namespace FabricaHilos.Controllers
 
         // ========== FACTURAS (DOCUVENT) ==========
 
-        public async Task<IActionResult> Facturas(string? cTipo, string? cSerie, string? cNumero,
-            string? codAlm, string? tpTransac, int guiaSerie, int guiaNumero,
-            int pedSerie, int numPed, int itemNro, int kdNro,
+        public async Task<IActionResult> Facturas(string? t = null,
+            string? cTipo = null, string? cSerie = null, string? cNumero = null,
+            string? codAlm = null, string? tpTransac = null, int guiaSerie = 0, int guiaNumero = 0,
+            int pedSerie = 0, int numPed = 0, int itemNro = 0, int kdNro = 0,
             string? codArt = null, int? packingSerie = null, int? packingNumero = null,
             string? buscar = null, int page = 1)
         {
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                cTipo     = nav.GetValueOrDefault("cTipo")     ?? cTipo;
+                cSerie    = nav.GetValueOrDefault("cSerie")    ?? cSerie;
+                cNumero   = nav.GetValueOrDefault("cNumero")   ?? cNumero;
+                codAlm    = nav.GetValueOrDefault("codAlm")    ?? codAlm;
+                tpTransac = nav.GetValueOrDefault("tpTransac") ?? tpTransac;
+                buscar    = nav.GetValueOrDefault("buscar")    ?? buscar;
+                codArt    = nav.GetValueOrDefault("codArt")    ?? codArt;
+                if (int.TryParse(nav.GetValueOrDefault("guiaSerie"),    out var gs))  guiaSerie    = gs;
+                if (int.TryParse(nav.GetValueOrDefault("guiaNumero"),   out var gn))  guiaNumero   = gn;
+                if (int.TryParse(nav.GetValueOrDefault("pedSerie"),     out var ps))  pedSerie     = ps;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"),       out var np))  numPed       = np;
+                if (int.TryParse(nav.GetValueOrDefault("itemNro"),      out var it))  itemNro      = it;
+                if (int.TryParse(nav.GetValueOrDefault("kdNro"),        out var kd))  kdNro        = kd;
+                if (int.TryParse(nav.GetValueOrDefault("packingSerie"),  out var pks)) packingSerie  = pks;
+                if (int.TryParse(nav.GetValueOrDefault("packingNumero"), out var pkn)) packingNumero = pkn;
+            }
+
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["cTipo"]         = cTipo,
+                ["cSerie"]        = cSerie,
+                ["cNumero"]       = cNumero,
+                ["codAlm"]        = codAlm,
+                ["tpTransac"]     = tpTransac,
+                ["guiaSerie"]     = guiaSerie.ToString(),
+                ["guiaNumero"]    = guiaNumero.ToString(),
+                ["pedSerie"]      = pedSerie.ToString(),
+                ["numPed"]        = numPed.ToString(),
+                ["itemNro"]       = itemNro.ToString(),
+                ["kdNro"]         = kdNro.ToString(),
+                ["codArt"]        = codArt,
+                ["buscar"]        = buscar,
+                ["packingSerie"]  = packingSerie?.ToString(),
+                ["packingNumero"] = packingNumero?.ToString()
+            });
+
             const int pageSize = 10;
             bool fromPacking = packingSerie.HasValue && packingNumero.HasValue;
 
@@ -163,7 +217,7 @@ namespace FabricaHilos.Controllers
             }
 
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Facturas), new { cTipo, cSerie, cNumero, codAlm, tpTransac, guiaSerie, guiaNumero, pedSerie, numPed, itemNro, kdNro, codArt, packingSerie, packingNumero, buscar, page = 1 });
+                return RedirectToAction(nameof(Facturas), new { t = navToken, page = 1 });
 
             ViewBag.Guia          = guia;
             ViewBag.Packing       = packing;
@@ -184,6 +238,7 @@ namespace FabricaHilos.Controllers
             ViewBag.KdNro         = kdNro;
             ViewBag.CodArt        = codArt;
             ViewBag.SinFactura    = !fromPacking && string.IsNullOrEmpty(cTipo);
+            ViewBag.NavToken      = navToken;
             ViewBag.Page          = page;
             ViewBag.PageSize      = pageSize;
             ViewBag.TotalCount    = resultado.TotalCount;
@@ -193,19 +248,39 @@ namespace FabricaHilos.Controllers
 
         // ========== DETALLE DE FACTURA (ITEMDOCU) ==========
 
-        public async Task<IActionResult> DetalleFactura(string tipo, string serie, string numero,
-            string codAlm, string tpTransac, int guiaSerie, int guiaNumero,
-            int pedSerie, int numPed, int itemNro, string? buscar = null,
+        public async Task<IActionResult> DetalleFactura(string? t = null,
+            string tipo = "", string serie = "", string numero = "",
+            string codAlm = "", string tpTransac = "", int guiaSerie = 0, int guiaNumero = 0,
+            int pedSerie = 0, int numPed = 0, int itemNro = 0, string? buscar = null,
             bool fromPacking = false, int? packingSerie = null, int? packingNumero = null,
             string? cTipo = null, int page = 1)
         {
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                tipo      = nav.GetValueOrDefault("tipo")      ?? tipo;
+                serie     = nav.GetValueOrDefault("serie")     ?? serie;
+                numero    = nav.GetValueOrDefault("numero")    ?? numero;
+                codAlm    = nav.GetValueOrDefault("codAlm")    ?? codAlm;
+                tpTransac = nav.GetValueOrDefault("tpTransac") ?? tpTransac;
+                buscar    = nav.GetValueOrDefault("buscar")    ?? buscar;
+                cTipo     = nav.GetValueOrDefault("cTipo")     ?? cTipo;
+                if (int.TryParse(nav.GetValueOrDefault("guiaSerie"),    out var gs))  guiaSerie    = gs;
+                if (int.TryParse(nav.GetValueOrDefault("guiaNumero"),   out var gn))  guiaNumero   = gn;
+                if (int.TryParse(nav.GetValueOrDefault("pedSerie"),     out var ps))  pedSerie     = ps;
+                if (int.TryParse(nav.GetValueOrDefault("numPed"),       out var np))  numPed       = np;
+                if (int.TryParse(nav.GetValueOrDefault("itemNro"),      out var it))  itemNro      = it;
+                if (bool.TryParse(nav.GetValueOrDefault("fromPacking"), out var fp))  fromPacking  = fp;
+                if (int.TryParse(nav.GetValueOrDefault("packingSerie"),  out var pks)) packingSerie  = pks;
+                if (int.TryParse(nav.GetValueOrDefault("packingNumero"), out var pkn)) packingNumero = pkn;
+            }
+
             var factura = await _sgcService.ObtenerFacturaAsync(tipo, serie, numero);
             if (factura == null) return NotFound();
 
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerDetalleFacturaAsync(tipo, serie, numero, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(DetalleFactura), new { tipo, serie, numero, codAlm, tpTransac, guiaSerie, guiaNumero, pedSerie, numPed, itemNro, buscar, fromPacking, packingSerie, packingNumero, cTipo, page = 1 });
+                return RedirectToAction(nameof(DetalleFactura), new { t, page = 1 });
 
             ViewBag.Factura       = factura;
             ViewBag.Buscar        = buscar;
@@ -220,6 +295,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PackingSerie  = packingSerie;
             ViewBag.PackingNumero = packingNumero;
             ViewBag.CTipo         = cTipo;
+            ViewBag.NavToken      = t;
             ViewBag.Page          = page;
             ViewBag.PageSize      = pageSize;
             ViewBag.TotalCount    = resultado.TotalCount;
@@ -229,7 +305,7 @@ namespace FabricaHilos.Controllers
 
         // ========== PACKING (PACKING_G) ==========
 
-        public async Task<IActionResult> Packing(int pedSerie, int numPed, string? buscar = null, int page = 1)
+        public async Task<IActionResult> Packing(int pedSerie, int numPed, string? buscar = null, string? fechaInicio = null, string? fechaFin = null, int page = 1)
         {
             var pedido = await _sgcService.ObtenerPedidoAsync(pedSerie, numPed);
             if (pedido == null) return NotFound();
@@ -237,13 +313,15 @@ namespace FabricaHilos.Controllers
             const int pageSize = 10;
             var resultado = await _sgcService.ObtenerPackingsAsync(numPed, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
-                return RedirectToAction(nameof(Packing), new { pedSerie, numPed, buscar, page = 1 });
+                return RedirectToAction(nameof(Packing), new { pedSerie, numPed, buscar, fechaInicio, fechaFin, page = 1 });
 
             ViewBag.Pedido       = pedido;
             ViewBag.PedSerie     = pedSerie;
             ViewBag.NumPed       = numPed;
             ViewBag.NumOrdcompra = resultado.Items.FirstOrDefault()?.NumOrdcompra;
             ViewBag.Buscar       = buscar;
+            ViewBag.FechaInicio  = fechaInicio;
+            ViewBag.FechaFin     = fechaFin;
             ViewBag.Page         = page;
             ViewBag.PageSize     = pageSize;
             ViewBag.TotalCount   = resultado.TotalCount;
@@ -292,8 +370,24 @@ namespace FabricaHilos.Controllers
                 ? Path.Combine(rutaProv, fecha.ToString("yyyyMMdd"), nombreArchivo)
                 : string.Empty;
 
-            if (!string.IsNullOrEmpty(rutaPdf) && System.IO.File.Exists(rutaPdf))
-                return File(await System.IO.File.ReadAllBytesAsync(rutaPdf), "application/pdf", nombreArchivo);
+            if (!string.IsNullOrEmpty(rutaPdf))
+            {
+                EnsureNetworkShare(rutaPdf);
+                try
+                {
+                    var pdfBytes = await System.IO.File.ReadAllBytesAsync(rutaPdf);
+                    return File(pdfBytes, "application/pdf", nombreArchivo);
+                }
+                catch (FileNotFoundException)
+                {
+                    return Json(new { tipo = "Advertencia", mensaje = $"No se encontró el PDF. Fecha: {fecha:dd/MM/yyyy}\nRuta: {rutaPdf}" });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error al leer PDF de guía: {Ruta}", rutaPdf);
+                    return Json(new { tipo = "Advertencia", mensaje = $"Error al acceder al PDF.\nRuta: {rutaPdf}\nDetalle: {ex.Message}" });
+                }
+            }
 
             return Json(new { tipo = "Advertencia", mensaje = $"No se encontró el PDF. Fecha: {fecha:dd/MM/yyyy}\nRuta: {rutaPdf}" });
         }
@@ -330,10 +424,46 @@ namespace FabricaHilos.Controllers
                 ? Path.Combine(rutaProv, fecha.ToString("yyyyMMdd"), nombreArchivo)
                 : string.Empty;
 
-            if (!string.IsNullOrEmpty(rutaPdf) && System.IO.File.Exists(rutaPdf))
-                return File(await System.IO.File.ReadAllBytesAsync(rutaPdf), "application/pdf", nombreArchivo);
+            if (!string.IsNullOrEmpty(rutaPdf))
+            {
+                EnsureNetworkShare(rutaPdf);
+                try
+                {
+                    var pdfBytes = await System.IO.File.ReadAllBytesAsync(rutaPdf);
+                    return File(pdfBytes, "application/pdf", nombreArchivo);
+                }
+                catch (FileNotFoundException)
+                {
+                    return Json(new { tipo = "Advertencia", mensaje = $"No se encontró el PDF. Fecha: {fecha:dd/MM/yyyy}\nRuta: {rutaPdf}" });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error al leer PDF de factura: {Ruta}", rutaPdf);
+                    return Json(new { tipo = "Advertencia", mensaje = $"Error al acceder al PDF.\nRuta: {rutaPdf}\nDetalle: {ex.Message}" });
+                }
+            }
 
             return Json(new { tipo = "Advertencia", mensaje = $"No se encontró el PDF. Fecha: {fecha:dd/MM/yyyy}\nRuta: {rutaPdf}" });
+        }
+
+        // ── Helpers ──────────────────────────────────────────────────────────────
+
+        private void EnsureNetworkShare(string filePath)
+        {
+            var username = _configuration["NetworkShare:Username"];
+            if (string.IsNullOrEmpty(username)) return;
+            try
+            {
+                NetworkShareHelper.Connect(
+                    filePath,
+                    username,
+                    _configuration["NetworkShare:Password"],
+                    _configuration["NetworkShare:Domain"]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo establecer conexión al recurso de red: {Path}", filePath);
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.KardexDDto>
 @using FabricaHilos.Models.Sgc
+@inject FabricaHilos.Services.INavTokenService NavToken
 
 @{
     ViewData["Title"] = "Detalle de Guía";
@@ -91,20 +92,23 @@
                             <td class="text-center">
                                 @if (guia != null && !string.IsNullOrEmpty(guia.TipRef))
                                                 {
+                                                    var facToken = NavToken.Protect(new Dictionary<string, string?> {
+                                                        ["cTipo"]     = guia.TipRef,
+                                                        ["cSerie"]    = guia.SerRef,
+                                                        ["cNumero"]   = guia.NroRef,
+                                                        ["codAlm"]    = item.CodAlm,
+                                                        ["tpTransac"] = item.TpTransac,
+                                                        ["guiaSerie"] = item.Serie.ToString(),
+                                                        ["guiaNumero"]= item.Numero.ToString(),
+                                                        ["pedSerie"]  = pedSerie.ToString(),
+                                                        ["numPed"]    = numPed.ToString(),
+                                                        ["itemNro"]   = itemNro.ToString(),
+                                                        ["kdNro"]     = item.Nro.ToString(),
+                                                        ["codArt"]    = item.CodArt,
+                                                        ["buscar"]    = buscar
+                                                    });
                                                     <a asp-action="Facturas"
-                                                                       asp-route-cTipo="@guia.TipRef"
-                                                                       asp-route-cSerie="@guia.SerRef"
-                                                                       asp-route-cNumero="@guia.NroRef"
-                                                       asp-route-codAlm="@item.CodAlm"
-                                                       asp-route-tpTransac="@item.TpTransac"
-                                                       asp-route-guiaSerie="@item.Serie"
-                                                       asp-route-guiaNumero="@item.Numero"
-                                                       asp-route-pedSerie="@pedSerie"
-                                                       asp-route-numPed="@numPed"
-                                                       asp-route-itemNro="@itemNro"
-                                                       asp-route-kdNro="@item.Nro"
-                                                       asp-route-codArt="@item.CodArt"
-                                                       asp-route-buscar="@buscar"
+                                                       asp-route-t="@facToken"
                                                        class="btn btn-sm btn-outline-success btn-accion"
                                                        title="Ver facturas asociadas">
                                         <i class="bi bi-receipt"></i> Facturas

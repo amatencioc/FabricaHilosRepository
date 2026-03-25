@@ -1,5 +1,6 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.DocuVentDto>
 @using FabricaHilos.Models.Sgc
+@inject FabricaHilos.Services.INavTokenService NavToken
 
 @{
     ViewData["Title"] = "Facturas";
@@ -22,6 +23,7 @@
     int?    packingSerie  = ViewBag.PackingSerie  != null ? Convert.ToInt32(ViewBag.PackingSerie)  : (int?)null;
     int?    packingNumero = ViewBag.PackingNumero != null ? Convert.ToInt32(ViewBag.PackingNumero) : (int?)null;
     string? codArt        = ViewBag.CodArt as string;
+    string? navToken      = ViewBag.NavToken as string;
 }
 
 @section Breadcrumb {
@@ -150,6 +152,7 @@ else
                             <th class="text-center">N° Factura</th>
                             <th class="text-center">F. Facturación</th>
                             <th class="text-center">Moneda</th>
+                            <th class="text-end">Val. Venta</th>
                             <th class="text-end">Precio Vta</th>
                             <th class="text-center">Acciones</th>
                         </tr>
@@ -163,6 +166,7 @@ else
                                 <td class="fw-semibold text-center">@(item.Numero ?? "-")</td>
                                 <td>@(item.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
                                 <td class="text-center">@(item.Moneda == "D" ? "Dólares ($)" : item.Moneda == "S" ? "Soles (S/)" : (item.Moneda ?? "-"))</td>
+                                <td class="text-end">@(item.ValVenta?.ToString("N2") ?? "-")</td>
                                 <td class="text-end fw-semibold">@(item.PrecioVta?.ToString("N2") ?? "-")</td>
                                 <td class="text-center">
                                     @if (item.Tipodoc != null && item.Serie != null && item.Numero != null)
@@ -186,26 +190,29 @@ else
                                                             </a>
                                             @if (item.TieneDetalle)
                                             {
+                                                var detToken = NavToken.Protect(new Dictionary<string, string?> {
+                                                    ["tipo"]          = item.Tipodoc,
+                                                    ["serie"]         = item.Serie,
+                                                    ["numero"]        = item.Numero,
+                                                    ["codAlm"]        = codAlm,
+                                                    ["tpTransac"]     = tpTransac,
+                                                    ["guiaSerie"]     = guiaSerie.ToString(),
+                                                    ["guiaNumero"]    = guiaNumero.ToString(),
+                                                    ["pedSerie"]      = pedSerie.ToString(),
+                                                    ["numPed"]        = numPed.ToString(),
+                                                    ["itemNro"]       = itemNro.ToString(),
+                                                    ["buscar"]        = buscar,
+                                                    ["fromPacking"]   = fromPacking.ToString(),
+                                                    ["packingSerie"]  = packingSerie?.ToString(),
+                                                    ["packingNumero"] = packingNumero?.ToString(),
+                                                    ["cTipo"]         = cTipo
+                                                });
                                                 <a asp-action="DetalleFactura"
-                                                                   asp-route-tipo="@item.Tipodoc"
-                                                                   asp-route-serie="@item.Serie"
-                                                                   asp-route-numero="@item.Numero"
-                                                                   asp-route-codAlm="@codAlm"
-                                                                   asp-route-tpTransac="@tpTransac"
-                                                                   asp-route-guiaSerie="@guiaSerie"
-                                                                   asp-route-guiaNumero="@guiaNumero"
-                                                                   asp-route-pedSerie="@pedSerie"
-                                                                   asp-route-numPed="@numPed"
-                                                                   asp-route-itemNro="@itemNro"
-                                                                   asp-route-buscar="@buscar"
-                                                                   asp-route-fromPacking="@fromPacking"
-                                                                   asp-route-packingSerie="@packingSerie"
-                                                                   asp-route-packingNumero="@packingNumero"
-                                                                   asp-route-cTipo="@cTipo"
-                                                                   class="btn btn-sm btn-outline-primary btn-accion"
-                                                                   title="Ver detalle de la factura">
-                                                                    <i class="bi bi-list-ul"></i> Detalle
-                                                                </a>
+                                                   asp-route-t="@detToken"
+                                                   class="btn btn-sm btn-outline-primary btn-accion"
+                                                   title="Ver detalle de la factura">
+                                                    <i class="bi bi-list-ul"></i> Detalle
+                                                </a>
                                             }
                                         </div>
                                     }
@@ -215,7 +222,7 @@ else
                         @if (!Model.Any())
                         {
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
+                                <td colspan="8" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox me-2"></i>No se encontraron facturas.
                                 </td>
                             </tr>
@@ -243,43 +250,22 @@ else
                         <ul class="pagination pagination-sm mb-0">
                             <li class="page-item @(currentPage == 1 ? "disabled" : "")">
                                 <a class="page-link" asp-action="Facturas"
-                                   asp-route-cTipo="@cTipo" asp-route-cSerie="@cSerie" asp-route-cNumero="@cNumero"
-                                   asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                                   asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                                   asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
-                                   asp-route-codArt="@codArt"
-                                   asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
-                                   asp-route-buscar="@buscar"
+                                   asp-route-t="@navToken"
                                    asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                             </li>
                             @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
                             {
                                 <li class="page-item @(pg == currentPage ? "active" : "")">
                                     <a class="page-link" asp-action="Facturas"
-                                       asp-route-cTipo="@cTipo" asp-route-cSerie="@cSerie" asp-route-cNumero="@cNumero"
-                                       asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                                       asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                                       asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                                       asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
-                                       asp-route-codArt="@codArt"
-                                       asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
-                                       asp-route-buscar="@buscar"
+                                       asp-route-t="@navToken"
                                        asp-route-page="@pg">@pg</a>
                                 </li>
                             }
                             <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
-                                                                 <a class="page-link" asp-action="Facturas"
-                                                                    asp-route-cTipo="@cTipo" asp-route-cSerie="@cSerie" asp-route-cNumero="@cNumero"
-                                                                    asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                                                                    asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                                                                    asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed"
-                                                                    asp-route-itemNro="@itemNro" asp-route-kdNro="@kdNro"
-                                                                    asp-route-codArt="@codArt"
-                                                                    asp-route-packingSerie="@packingSerie" asp-route-packingNumero="@packingNumero"
-                                                                    asp-route-buscar="@buscar"
-                                                                    asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
-                                                             </li>
+                                                             <a class="page-link" asp-action="Facturas"
+                                                                asp-route-t="@navToken"
+                                                                asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
+                                                         </li>
                                                          </ul>
                                                      </nav>
                                                  }

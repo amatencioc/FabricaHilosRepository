@@ -6,9 +6,9 @@ namespace FabricaHilos.Services.Sgc
 {
     public interface ISgcService
     {
-        Task<(List<PedidoSgcDto> Items, int TotalCount)> ObtenerPedidosAsync(string? buscar, int page = 1, int pageSize = 10);
+        Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalFacturado)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
         Task<PedidoSgcDto?> ObtenerPedidoAsync(int serie, int numPed);
-        Task<(List<ItemPedDto> Items, int TotalCount)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10);
+        Task<(List<ItemPedDto> Items, int TotalCount, decimal SumCantidad, decimal SumPrecio, decimal SumCantDespacho, decimal SumDifDespacho)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10);
         Task<(List<KardexGDto> Items, int TotalCount)> ObtenerGuiasAsync(int pedSerie, int numPed, int page = 1, int pageSize = 10);
         Task<KardexGDto?> ObtenerGuiaAsync(string codAlm, string tpTransac, int serie, int numero);
         Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10);
@@ -72,27 +72,46 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== PEDIDO ==========
 
-        public async Task<(List<PedidoSgcDto> Items, int TotalCount)> ObtenerPedidosAsync(string? buscar, int page = 1, int pageSize = 10)
+        public async Task<(List<PedidoSgcDto> Items, int TotalCount, decimal SumTotalPedido, decimal SumTotalFacturado)> ObtenerPedidosAsync(string? buscar, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr))
             {
                 _logger.LogWarning("Oracle connection string not configured");
-                return ([], 0);
+                return ([], 0, 0m, 0m);
             }
 
-            int startRow   = (page - 1) * pageSize + 1;
-            int endRow     = page * pageSize;
-            bool hasBuscar = !string.IsNullOrWhiteSpace(buscar);
+            int startRow     = (page - 1) * pageSize + 1;
+            int endRow       = page * pageSize;
+            bool hasBuscar   = !string.IsNullOrWhiteSpace(buscar);
+            bool hasFechaIni = fechaInicio.HasValue;
+            bool hasFechaFin = fechaFin.HasValue;
+            bool hasFechas   = hasFechaIni || hasFechaFin;
 
             string buscarFilter = hasBuscar ? @"
                       AND (UPPER(P.NOMBRE)    LIKE '%' || UPPER(:buscar) || '%'
                         OR UPPER(P.RUC)       LIKE '%' || UPPER(:buscar) || '%'
                         OR TO_CHAR(P.NUM_PED) LIKE :buscar || '%')" : string.Empty;
 
+            string fechaClause;
+            if (hasFechaIni && hasFechaFin)
+                fechaClause = "\n                          AND TRUNC(G.FCH_TRANSAC) BETWEEN TRUNC(:fechaInicio) AND TRUNC(:fechaFin)";
+            else if (hasFechaIni)
+                fechaClause = "\n                          AND TRUNC(G.FCH_TRANSAC) = TRUNC(:fechaInicio)";
+            else
+                fechaClause = "\n                          AND TRUNC(G.FCH_TRANSAC) <= TRUNC(:fechaFin)";
+
+            string fechaFilter = hasFechas ? $@"
+                      AND EXISTS (
+                          SELECT 1 FROM SIG.KARDEX_G G
+                          WHERE TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                            AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                            AND G.TIP_DOC_REF       = P.TIPO_DOCTO{fechaClause}
+                      )" : string.Empty;
+
             // Los EXISTS van en la query EXTERNA: solo corren contra los 10 registros ya paginados
             string sql = $@"
-                SELECT PAGED.TOTAL_COUNT,
+                SELECT PAGED.TOTAL_COUNT, PAGED.SUM_TOTAL_PEDIDO, PAGED.SUM_TOTAL_FACTURADO,
                        PAGED.SERIE, PAGED.NUM_PED, PAGED.TIPO_DOCTO, PAGED.ESTADO, PAGED.FECHA,
                        PAGED.COD_CLIENTE, PAGED.NOMBRE, PAGED.RUC, PAGED.DETALLE,
                        PAGED.TOTAL_PEDIDO, PAGED.TOTAL_FACTURADO, PAGED.COD_VENDE, PAGED.MONEDA, PAGED.NRO_SUCUR,
@@ -101,16 +120,19 @@ namespace FabricaHilos.Services.Sgc
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY P.FECHA DESC, P.NUM_PED DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
+                           SUM(NVL(P.TOTAL_PEDIDO, 0)) OVER() AS SUM_TOTAL_PEDIDO,
+                           SUM(NVL(P.TOTAL_FACTURADO, 0)) OVER() AS SUM_TOTAL_FACTURADO,
                            P.SERIE, P.NUM_PED, P.TIPO_DOCTO, P.ESTADO, P.FECHA,
                            P.COD_CLIENTE, P.NOMBRE, P.RUC, P.DETALLE,
                            P.TOTAL_PEDIDO, P.TOTAL_FACTURADO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
                     FROM SIG.PEDIDO P
-                    WHERE P.ESTADO <> '9'{buscarFilter}
+                    WHERE P.ESTADO <> '9'{buscarFilter}{fechaFilter}
                 ) PAGED
                 WHERE PAGED.RN BETWEEN :startRow AND :endRow";
 
             var result = new List<PedidoSgcDto>();
             int totalCount = 0;
+            decimal sumTotalPedido = 0m, sumTotalFacturado = 0m;
             try
             {
                 using var conn = new OracleConnection(connStr);
@@ -119,7 +141,11 @@ namespace FabricaHilos.Services.Sgc
                 cmd.BindByName = true;
 
                 if (hasBuscar)
-                    cmd.Parameters.Add(new OracleParameter(":buscar", OracleDbType.Varchar2, buscar, ParameterDirection.Input));
+                    cmd.Parameters.Add(new OracleParameter(":buscar",      OracleDbType.Varchar2, buscar,                  ParameterDirection.Input));
+                if (hasFechaIni)
+                    cmd.Parameters.Add(new OracleParameter(":fechaInicio", OracleDbType.Date,     fechaInicio!.Value.Date, ParameterDirection.Input));
+                if (hasFechaFin)
+                    cmd.Parameters.Add(new OracleParameter(":fechaFin",    OracleDbType.Date,     fechaFin!.Value.Date,    ParameterDirection.Input));
 
                 cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));
                 cmd.Parameters.Add(new OracleParameter(":endRow",   OracleDbType.Int32, endRow,   ParameterDirection.Input));
@@ -129,35 +155,41 @@ namespace FabricaHilos.Services.Sgc
 
                 while (await reader.ReadAsync())
                 {
-                    if (result.Count == 0) totalCount = GetInt(reader, "TOTAL_COUNT");
+                    if (result.Count == 0)
+                    {
+                        totalCount        = GetInt(reader, "TOTAL_COUNT");
+                        sumTotalPedido    = GetDec(reader, "SUM_TOTAL_PEDIDO")    ?? 0m;
+                        sumTotalFacturado = GetDec(reader, "SUM_TOTAL_FACTURADO") ?? 0m;
+                    }
                     result.Add(new PedidoSgcDto
                     {
-                        Serie           = GetInt(reader, "SERIE"),
-                        NumPed          = GetInt(reader, "NUM_PED"),
-                        TipoDocto       = GetStr(reader, "TIPO_DOCTO"),
-                        Estado          = GetStr(reader, "ESTADO"),
-                        Fecha           = GetDt(reader, "FECHA"),
-                        CodCliente      = GetStr(reader, "COD_CLIENTE"),
-                        Nombre          = GetStr(reader, "NOMBRE"),
-                        Ruc             = GetStr(reader, "RUC"),
-                        Detalle         = GetStr(reader, "DETALLE"),
-                        TotalPedido     = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado  = GetDec(reader, "TOTAL_FACTURADO"),
-                        CodVende        = GetStr(reader, "COD_VENDE"),
-                        Moneda          = GetStr(reader, "MONEDA"),
-                        NroSucur        = GetStr(reader, "NRO_SUCUR"),
-                        TieneDetalle    = GetInt(reader, "CNT_DETALLE") > 0,
-                        TienePacking    = GetInt(reader, "CNT_PACKING") > 0
+                        Serie          = GetInt(reader, "SERIE"),
+                        NumPed         = GetInt(reader, "NUM_PED"),
+                        TipoDocto      = GetStr(reader, "TIPO_DOCTO"),
+                        Estado         = GetStr(reader, "ESTADO"),
+                        Fecha          = GetDt(reader, "FECHA"),
+                        CodCliente     = GetStr(reader, "COD_CLIENTE"),
+                        Nombre         = GetStr(reader, "NOMBRE"),
+                        Ruc            = GetStr(reader, "RUC"),
+                        Detalle        = GetStr(reader, "DETALLE"),
+                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
+                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO"),
+                        CodVende       = GetStr(reader, "COD_VENDE"),
+                        Moneda         = GetStr(reader, "MONEDA"),
+                        NroSucur       = GetStr(reader, "NRO_SUCUR"),
+                        TieneDetalle   = GetInt(reader, "CNT_DETALLE") > 0,
+                        TienePacking   = GetInt(reader, "CNT_PACKING") > 0
                     });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener pedidos SGC. Buscar: {Buscar}", buscar);
+                _logger.LogError(ex, "Error al obtener pedidos SGC. Buscar: {Buscar}, FechaInicio: {FechaInicio}, FechaFin: {FechaFin}",
+                    buscar, fechaInicio, fechaFin);
                 throw;
             }
 
-            return (result, totalCount);
+            return (result, totalCount, sumTotalPedido, sumTotalFacturado);
         }
 
         public async Task<PedidoSgcDto?> ObtenerPedidoAsync(int serie, int numPed)
@@ -216,16 +248,17 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== ITEMPED ==========
 
-        public async Task<(List<ItemPedDto> Items, int TotalCount)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10)
+        public async Task<(List<ItemPedDto> Items, int TotalCount, decimal SumCantidad, decimal SumPrecio, decimal SumCantDespacho, decimal SumDifDespacho)> ObtenerDetallePedidoAsync(int serie, int numPed, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
-            if (string.IsNullOrEmpty(connStr)) return ([], 0);
+            if (string.IsNullOrEmpty(connStr)) return ([], 0, 0m, 0m, 0m, 0m);
 
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
             const string sql = @"
-                SELECT RN, TOTAL_COUNT, SERIE, NUM_PED, NRO, COD_ART, TIPO_FIBRA,
+                SELECT RN, TOTAL_COUNT, SUM_CANTIDAD, SUM_PRECIO, SUM_CANT_DESPACHO, SUM_DIF_DESPACHO,
+                       SERIE, NUM_PED, NRO, COD_ART, TIPO_FIBRA,
                        VALPF, CANTIDAD, PRECIO, SALDO, SALDO_R, IMP_VVB,
                        ESTADO, DETALLE, COLOR_DET, HILO_DET,
                        PRESENTACION, R_TIPO, R_SERIE, R_NUMERO,
@@ -233,6 +266,10 @@ namespace FabricaHilos.Services.Sgc
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY I.NRO ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
+                           SUM(NVL(I.CANTIDAD, 0)) OVER() AS SUM_CANTIDAD,
+                           SUM(NVL(I.PRECIO, 0)) OVER() AS SUM_PRECIO,
+                           SUM(NVL(I.CANTIDAD, 0) - NVL(CASE WHEN I.SALDO_R IS NOT NULL AND I.SALDO_R <> 0 THEN I.SALDO_R ELSE I.SALDO END, 0)) OVER() AS SUM_CANT_DESPACHO,
+                           SUM(NVL(CASE WHEN I.SALDO_R IS NOT NULL AND I.SALDO_R <> 0 THEN I.SALDO_R ELSE I.SALDO END, 0)) OVER() AS SUM_DIF_DESPACHO,
                            I.SERIE, I.NUM_PED, I.NRO, I.COD_ART, I.TIPO_FIBRA,
                            I.VALPF, I.CANTIDAD, I.PRECIO, I.SALDO, I.SALDO_R, I.IMP_VVB,
                            I.ESTADO, I.DETALLE, I.COLOR_DET, I.HILO_DET,
@@ -246,6 +283,7 @@ namespace FabricaHilos.Services.Sgc
 
             var result = new List<ItemPedDto>();
             int totalCount = 0;
+            decimal sumCantidad = 0m, sumPrecio = 0m, sumCantDespacho = 0m, sumDifDespacho = 0m;
             try
             {
                 using var conn = new OracleConnection(connStr);
@@ -261,7 +299,14 @@ namespace FabricaHilos.Services.Sgc
 
                 while (await reader.ReadAsync())
                 {
-                    if (result.Count == 0) totalCount = GetInt(reader, "TOTAL_COUNT");
+                    if (result.Count == 0)
+                    {
+                        totalCount      = GetInt(reader, "TOTAL_COUNT");
+                        sumCantidad     = GetDec(reader, "SUM_CANTIDAD")      ?? 0m;
+                        sumPrecio       = GetDec(reader, "SUM_PRECIO")        ?? 0m;
+                        sumCantDespacho = GetDec(reader, "SUM_CANT_DESPACHO") ?? 0m;
+                        sumDifDespacho  = GetDec(reader, "SUM_DIF_DESPACHO")  ?? 0m;
+                    }
                     result.Add(new ItemPedDto
                     {
                         Serie        = GetInt(reader, "SERIE"),
@@ -294,7 +339,7 @@ namespace FabricaHilos.Services.Sgc
                 throw;
             }
 
-            return (result, totalCount);
+            return (result, totalCount, sumCantidad, sumPrecio, sumCantDespacho, sumDifDespacho);
         }
 
         public async Task<ItemPedDto?> ObtenerItemPedAsync(int numPed, int nro)
@@ -362,7 +407,7 @@ namespace FabricaHilos.Services.Sgc
                        NOMBRE, RUC, GLOSA, ESTADO, IND_FACT, PESO_TOTAL,
                        TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA, SERIE_SUNAT, CNT_DETALLE
                 FROM (
-                    SELECT ROW_NUMBER() OVER (ORDER BY G.FCH_TRANSAC DESC) AS RN,
+                    SELECT ROW_NUMBER() OVER (ORDER BY G.NUMERO ASC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
                            G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,

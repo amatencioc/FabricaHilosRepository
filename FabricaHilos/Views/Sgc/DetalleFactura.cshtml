@@ -1,5 +1,6 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.ItemDocuDto>
 @using FabricaHilos.Models.Sgc
+@inject FabricaHilos.Services.INavTokenService NavToken
 
 @{
     ViewData["Title"] = "Detalle de Factura";
@@ -16,6 +17,7 @@
     int? packingSerie  = ViewBag.PackingSerie  != null ? Convert.ToInt32(ViewBag.PackingSerie)  : (int?)null;
     int? packingNumero = ViewBag.PackingNumero != null ? Convert.ToInt32(ViewBag.PackingNumero) : (int?)null;
     string? cTipo      = ViewBag.CTipo as string;
+    string? navToken   = ViewBag.NavToken as string;
 }
 
 @section Breadcrumb {
@@ -142,6 +144,15 @@
                             <td class="text-end fw-semibold text-success">@(item.Importe?.ToString("N2") ?? "-")</td>
                         </tr>
                     }
+                    @if (Model.Any())
+                    {
+                        <tr class="table-secondary fw-semibold border-top">
+                            <td colspan="3" class="text-end pe-3">Totales:</td>
+                            <td class="text-end">@(Model.Sum(x => x.Cantidad ?? 0).ToString("N2"))</td>
+                            <td class="text-end">@(Model.Sum(x => x.Precio ?? 0).ToString("N2"))</td>
+                            <td class="text-end text-success">@(Model.Sum(x => x.Importe ?? 0).ToString("N2"))</td>
+                        </tr>
+                    }
                     @if (!Model.Any())
                     {
                         <tr>
@@ -151,17 +162,6 @@
                         </tr>
                     }
                 </tbody>
-                @if (Model.Any())
-                {
-                    <tfoot class="table-light fw-semibold">
-                        <tr>
-                            <td colspan="5" class="text-end">Total:</td>
-                            <td class="text-end text-success">
-                                @(Model.Sum(x => x.Importe ?? 0).ToString("N2"))
-                            </td>
-                        </tr>
-                    </tfoot>
-                }
             </table>
         </div>
     </div>
@@ -184,32 +184,20 @@
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item @(currentPage == 1 ? "disabled" : "")">
                             <a class="page-link" asp-action="DetalleFactura"
-                               asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
-                               asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                               asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
-                               asp-route-buscar="@buscar"
+                               asp-route-t="@navToken"
                                asp-route-page="@(currentPage - 1)"><i class="bi bi-chevron-left"></i></a>
                         </li>
                         @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
                         {
                             <li class="page-item @(pg == currentPage ? "active" : "")">
                                 <a class="page-link" asp-action="DetalleFactura"
-                                   asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
-                                   asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                                   asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                                   asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
-                                   asp-route-buscar="@buscar"
+                                   asp-route-t="@navToken"
                                    asp-route-page="@pg">@pg</a>
                             </li>
                         }
                         <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
                             <a class="page-link" asp-action="DetalleFactura"
-                               asp-route-tipo="@factura?.Tipodoc" asp-route-serie="@factura?.Serie" asp-route-numero="@factura?.Numero"
-                               asp-route-codAlm="@codAlm" asp-route-tpTransac="@tpTransac"
-                               asp-route-guiaSerie="@guiaSerie" asp-route-guiaNumero="@guiaNumero"
-                               asp-route-pedSerie="@pedSerie" asp-route-numPed="@numPed" asp-route-itemNro="@itemNro"
-                               asp-route-buscar="@buscar"
+                               asp-route-t="@navToken"
                                asp-route-page="@(currentPage + 1)"><i class="bi bi-chevron-right"></i></a>
                         </li>
                     </ul>
