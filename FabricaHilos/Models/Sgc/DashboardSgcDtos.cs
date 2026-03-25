@@ -4,13 +4,6 @@ namespace FabricaHilos.Models.Sgc
     {
         public int TotalPedidos { get; set; }
         public decimal TotalPedido { get; set; }
-        public decimal TotalFacturado { get; set; }
-        public decimal TotalPendiente { get; set; }
-    }
-
-    public class DashDonaDto
-    {
-        public decimal TotalFacturado { get; set; }
         public decimal TotalPendiente { get; set; }
     }
 
@@ -27,7 +20,6 @@ namespace FabricaHilos.Models.Sgc
         public string? Mes { get; set; }
         public int NumPedidos { get; set; }
         public decimal TotalPedido { get; set; }
-        public decimal TotalFacturado { get; set; }
     }
 
     public class DashTopClienteDto
@@ -36,8 +28,7 @@ namespace FabricaHilos.Models.Sgc
         public string? Nombre { get; set; }
         public int NumPedidos { get; set; }
         public decimal TotalPedido { get; set; }
-        public decimal TotalFacturado { get; set; }
-        public decimal PctFacturado { get; set; }
+        public decimal PesoTotal { get; set; }
     }
 
     public class DashTopArticuloDto
@@ -56,8 +47,6 @@ namespace FabricaHilos.Models.Sgc
         public string? NombreVendedor { get; set; }
         public int NumPedidos { get; set; }
         public decimal TotalPedido { get; set; }
-        public decimal TotalFacturado { get; set; }
-        public decimal PctFacturado { get; set; }
     }
 
     public class DashMonedaDto
@@ -75,7 +64,6 @@ namespace FabricaHilos.Models.Sgc
         public string? Distrito { get; set; }
         public int NumPedidos { get; set; }
         public decimal TotalPedido { get; set; }
-        public decimal TotalFacturado { get; set; }
     }
 
     public class DashDespachoDto

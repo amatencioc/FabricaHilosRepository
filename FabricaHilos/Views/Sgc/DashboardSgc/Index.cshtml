@@ -113,7 +113,7 @@
 
 <!-- ── Sección 1: KPI Cards ───────────────────────────── -->
 <div class="row g-3 mb-3" id="kpiRow">
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <div class="kpi-card bg-kpi-1">
             <i class="bi bi-cart3 kpi-icon"></i>
             <div>
@@ -122,7 +122,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <div class="kpi-card bg-kpi-2">
             <i class="bi bi-currency-dollar kpi-icon"></i>
             <div>
@@ -131,22 +131,12 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi-card bg-kpi-3">
-            <i class="bi bi-receipt kpi-icon"></i>
-            <div>
-                <div class="kpi-label">Total Facturado S/</div>
-                <div class="kpi-value" id="kpiTotalFacturado">—</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl-4">
         <div class="kpi-card bg-kpi-4">
             <i class="bi bi-hourglass-split kpi-icon"></i>
             <div>
                 <div class="kpi-label">Pendiente S/</div>
                 <div class="kpi-value" id="kpiPendiente">—</div>
-                <div class="kpi-sub" id="kpiPctFacturado">—% facturado</div>
             </div>
         </div>
     </div>
@@ -155,14 +145,7 @@
 <!-- ── Sección 2: Dona + Barras Estado ───────────────── -->
 <div class="section-title">Distribución por Estado</div>
 <div class="row g-3 mb-3">
-    <div class="col-md-4">
-        <div class="card chart-card position-relative">
-            <div id="spinnerDona" class="chart-spinner"><div class="spinner-border text-success"></div></div>
-            <div class="card-header small">Facturado vs Pendiente</div>
-            <div class="card-body"><canvas id="chartDona" style="max-height:260px"></canvas></div>
-        </div>
-    </div>
-    <div class="col-md-8">
+    <div class="col-12">
         <div class="card chart-card position-relative">
             <div id="spinnerEstado" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">Pedidos por Estado</div>
@@ -177,7 +160,7 @@
     <div class="col-12">
         <div class="card chart-card position-relative">
             <div id="spinnerEvolucion" class="chart-spinner"><div class="spinner-border text-success"></div></div>
-            <div class="card-header small">Total Pedido vs Facturado &amp; N° Pedidos</div>
+            <div class="card-header small">Total Pedido &amp; N° Pedidos</div>
             <div class="card-body"><canvas id="chartEvolucion" style="max-height:280px"></canvas></div>
         </div>
     </div>
@@ -249,7 +232,7 @@
                             <th>Nombre</th>
                             <th class="text-end">Pedidos</th>
                             <th class="text-end">Total S/</th>
-                            <th class="text-center">%</th>
+                            <th class="text-end">Peso (kg)</th>
                         </tr>
                     </thead>
                     <tbody id="tablaClientes"></tbody>
@@ -333,37 +316,7 @@
     function renderKpi(d) {
         document.getElementById('kpiTotalPedidos').textContent   = d.totalPedidos ?? 0;
         document.getElementById('kpiTotalPedido').textContent    = fmtMil(d.totalPedido);
-        document.getElementById('kpiTotalFacturado').textContent = fmtMil(d.totalFacturado);
         document.getElementById('kpiPendiente').textContent      = fmtMil(d.totalPendiente);
-        const pct = d.totalPedido > 0
-            ? ((d.totalFacturado / d.totalPedido) * 100).toFixed(1)
-            : '0.0';
-        document.getElementById('kpiPctFacturado').textContent   = pct + '% facturado';
-    }
-
-    /* ── Render Dona (Facturado vs Pendiente) ────────── */
-    function renderDona(kpi) {
-        destroyChart('dona');
-        const ctx = document.getElementById('chartDona').getContext('2d');
-        charts['dona'] = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Facturado', 'Pendiente'],
-                datasets: [{
-                    data: [kpi.totalFacturado, kpi.totalPendiente],
-                    backgroundColor: [C.exito, C.naranja],
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: true,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: { callbacks: { label: ctx => ' S/ ' + fmt(ctx.raw) } }
-                },
-                cutout: '62%'
-            }
-        });
     }
 
     /* ── Render Por Estado ──────────────────────────── */
@@ -417,7 +370,6 @@
         destroyChart('evolucion');
         const labels  = data.map(d => d.mes);
         const pedidos = data.map(d => d.totalPedido);
-        const factus  = data.map(d => d.totalFacturado);
         const nums    = data.map(d => d.numPedidos);
         const ctx = document.getElementById('chartEvolucion').getContext('2d');
         charts['evolucion'] = new Chart(ctx, {
@@ -430,15 +382,6 @@
                         data: pedidos,
                         borderColor: C.azul,
                         backgroundColor: C.alpha(C.azul, .1),
-                        fill: true, tension: .3, yAxisID: 'y',
-                        pointRadius: 4
-                    },
-                    {
-                        type: 'line',
-                        label: 'Total Facturado S/',
-                        data: factus,
-                        borderColor: C.exito,
-                        backgroundColor: C.alpha(C.exito, .1),
                         fill: true, tension: .3, yAxisID: 'y',
                         pointRadius: 4
                     },
@@ -470,15 +413,13 @@
         destroyChart('clientes');
         const labels = data.map(d => d.nombre ? d.nombre.substring(0, MAX_LABEL_CLIENTE) : d.codCliente);
         const pedido = data.map(d => d.totalPedido);
-        const factu  = data.map(d => d.totalFacturado);
         const ctx = document.getElementById('chartClientes').getContext('2d');
         charts['clientes'] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [
-                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.azul, .75) },
-                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.exito, .75) }
+                    { label: 'Total Pedido S/', data: pedido, backgroundColor: C.alpha(C.azul, .75) }
                 ]
             },
             options: {
@@ -492,14 +433,12 @@
         /* tabla lateral */
         const tbody = document.getElementById('tablaClientes');
         tbody.innerHTML = data.map((d, i) => {
-            const pct  = d.pctFacturado ?? 0;
-            const badge = pct >= 80 ? 'success' : pct >= 50 ? 'warning' : 'danger';
             return `<tr>
                 <td>${i + 1}</td>
                 <td title="${d.nombre || ''}">${(d.nombre || d.codCliente || '').substring(0, MAX_LABEL_TABLA)}</td>
                 <td class="text-end">${d.numPedidos}</td>
                 <td class="text-end">${fmtMil(d.totalPedido)}</td>
-                <td class="text-center"><span class="badge bg-${badge}">${pct.toFixed(1)}%</span></td>
+                <td class="text-end">${fmt(d.pesoTotal ?? 0)}</td>
             </tr>`;
         }).join('');
     }
@@ -534,15 +473,13 @@
         destroyChart('vendedor');
         const labels = data.map(d => d.nombreVendedor || d.codVende || '—');
         const pedido = data.map(d => d.totalPedido);
-        const factu  = data.map(d => d.totalFacturado);
         const ctx = document.getElementById('chartVendedor').getContext('2d');
         charts['vendedor'] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [
-                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.verde, .78) },
-                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.azul,  .78) }
+                    { label: 'Total Pedido S/', data: pedido, backgroundColor: C.alpha(C.verde, .78) }
                 ]
             },
             options: {
@@ -554,13 +491,15 @@
     }
 
     /* ── Render Moneda (dona pequeña) ───────────────── */
+    const monedaLabel = c => c === 'D' ? 'Dólares' : c === 'S' ? 'Soles' : c || '—';
+
     function renderMoneda(data) {
         destroyChart('moneda');
         const ctx = document.getElementById('chartMoneda').getContext('2d');
         charts['moneda'] = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: data.map(d => d.moneda || '—'),
+                labels: data.map(d => monedaLabel(d.moneda)),
                 datasets: [{
                     data: data.map(d => d.totalPedido),
                     backgroundColor: [C.verde, C.azul2, C.naranja, C.gris],
@@ -626,15 +565,13 @@
         destroyChart('sucursal');
         const labels = data.map(d => d.nombreSucursal || ('Suc. ' + d.nroSucur));
         const pedido = data.map(d => d.totalPedido);
-        const factu  = data.map(d => d.totalFacturado);
         const ctx = document.getElementById('chartSucursal').getContext('2d');
         charts['sucursal'] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [
-                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.verde, .75) },
-                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.azul,  .75) }
+                    { label: 'Total Pedido S/', data: pedido, backgroundColor: C.alpha(C.verde, .75) }
                 ]
             },
             options: {
@@ -652,7 +589,7 @@
         const base = url => '/DashboardSgc/' + url + '?' + p;
 
         /* mostrar spinners */
-        ['spinnerDona','spinnerEstado','spinnerEvolucion','spinnerClientes',
+        ['spinnerEstado','spinnerEvolucion','spinnerClientes',
          'spinnerArticulos','spinnerVendedor','spinnerMoneda','spinnerDespachos',
          'spinnerSucursal'].forEach(showSpin);
 
@@ -671,7 +608,6 @@
                 ]);
 
             renderKpi(kpi);
-            renderDona(kpi);          hideSpin('spinnerDona');
             renderEstado(estados);    hideSpin('spinnerEstado');
             renderEvolucion(evolucion); hideSpin('spinnerEvolucion');
             renderClientes(clientes); hideSpin('spinnerClientes');
@@ -682,7 +618,7 @@
             renderSucursal(sucursales); hideSpin('spinnerSucursal');
         } catch (err) {
             console.error('Error cargando dashboard:', err);
-            ['spinnerDona','spinnerEstado','spinnerEvolucion','spinnerClientes',
+            ['spinnerEstado','spinnerEvolucion','spinnerClientes',
              'spinnerArticulos','spinnerVendedor','spinnerMoneda','spinnerDespachos',
              'spinnerSucursal'].forEach(hideSpin);
         }

@@ -58,10 +58,9 @@ namespace FabricaHilos.Services.Sgc
 
             const string sql = @"
 SELECT
-    COUNT(*)                                                AS TOTAL_PEDIDOS,
-    NVL(SUM(P.TOTAL_PEDIDO),    0)                          AS TOTAL_PEDIDO,
-    NVL(SUM(P.TOTAL_FACTURADO), 0)                          AS TOTAL_FACTURADO,
-    NVL(SUM(P.TOTAL_PEDIDO - NVL(P.TOTAL_FACTURADO, 0)), 0) AS TOTAL_PENDIENTE
+    COUNT(*)                                                                      AS TOTAL_PEDIDOS,
+    NVL(SUM(P.TOTAL_PEDIDO), 0)                                                  AS TOTAL_PEDIDO,
+    NVL(SUM(CASE WHEN P.ESTADO IN ('0','1','5') THEN P.TOTAL_PEDIDO ELSE 0 END), 0) AS TOTAL_PENDIENTE
 FROM SIG.PEDIDO P
 WHERE P.ESTADO <> '9'
   AND P.FECHA >= :fechaInicio
@@ -80,7 +79,6 @@ WHERE P.ESTADO <> '9'
                 {
                     result.TotalPedidos    = GetInt(reader, "TOTAL_PEDIDOS");
                     result.TotalPedido     = GetDec(reader, "TOTAL_PEDIDO");
-                    result.TotalFacturado  = GetDec(reader, "TOTAL_FACTURADO");
                     result.TotalPendiente  = GetDec(reader, "TOTAL_PENDIENTE");
                 }
             }
@@ -104,7 +102,7 @@ WHERE P.ESTADO <> '9'
             const string sql = @"
 SELECT P.ESTADO, COUNT(*) AS CANTIDAD, NVL(SUM(P.TOTAL_PEDIDO), 0) AS TOTAL
 FROM SIG.PEDIDO P
-WHERE P.ESTADO <> '9'
+WHERE P.ESTADO IN ('5', '6')
   AND P.FECHA >= :fechaInicio
   AND P.FECHA <  :fechaFin + 1
 GROUP BY P.ESTADO
@@ -152,8 +150,7 @@ ORDER BY CANTIDAD DESC";
 SELECT
     TO_CHAR(TRUNC(P.FECHA, 'MM'), 'YYYY-MM') AS MES,
     COUNT(*)                                   AS NUM_PEDIDOS,
-    NVL(SUM(P.TOTAL_PEDIDO),    0)             AS TOTAL_PEDIDO,
-    NVL(SUM(P.TOTAL_FACTURADO), 0)             AS TOTAL_FACTURADO
+    NVL(SUM(P.TOTAL_PEDIDO),    0)             AS TOTAL_PEDIDO
 FROM SIG.PEDIDO P
 WHERE P.ESTADO <> '9'
   AND P.FECHA >= :fechaInicio
@@ -174,10 +171,9 @@ ORDER BY TRUNC(P.FECHA, 'MM')";
                 {
                     result.Add(new DashEvolucionDto
                     {
-                        Mes            = GetStr(reader, "MES"),
-                        NumPedidos     = GetInt(reader, "NUM_PEDIDOS"),
-                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO")
+                        Mes         = GetStr(reader, "MES"),
+                        NumPedidos  = GetInt(reader, "NUM_PEDIDOS"),
+                        TotalPedido = GetDec(reader, "TOTAL_PEDIDO")
                     });
                 }
             }
@@ -202,15 +198,20 @@ ORDER BY TRUNC(P.FECHA, 'MM')";
             const string sql = @"
 SELECT * FROM (
     SELECT P.COD_CLIENTE, P.NOMBRE,
-           COUNT(*)                    AS NUM_PEDIDOS,
-           NVL(SUM(P.TOTAL_PEDIDO),    0) AS TOTAL_PEDIDO,
-           NVL(SUM(P.TOTAL_FACTURADO), 0) AS TOTAL_FACTURADO,
-           ROUND(
-               NVL(SUM(P.TOTAL_FACTURADO), 0)
-               / DECODE(NVL(SUM(P.TOTAL_PEDIDO), 0), 0, 1, NVL(SUM(P.TOTAL_PEDIDO), 0))
-               * 100, 2
-           ) AS PCT_FACTURADO
+           COUNT(*)                        AS NUM_PEDIDOS,
+           NVL(SUM(P.TOTAL_PEDIDO),    0)  AS TOTAL_PEDIDO,
+           NVL(SUM(KG_AGG.PESO_GUIAS), 0) AS PESO_TOTAL
     FROM SIG.PEDIDO P
+    LEFT JOIN (
+        SELECT TRIM(KG.NRO_DOC_REF)        AS NUM_PED_REF,
+               TRIM(KG.SER_DOC_REF)        AS SER_REF,
+               KG.TIP_DOC_REF,
+               NVL(SUM(KG.PESO_TOTAL), 0)  AS PESO_GUIAS
+        FROM SIG.KARDEX_G KG
+        GROUP BY TRIM(KG.NRO_DOC_REF), TRIM(KG.SER_DOC_REF), KG.TIP_DOC_REF
+    ) KG_AGG ON TO_CHAR(P.NUM_PED) = KG_AGG.NUM_PED_REF
+           AND TO_CHAR(P.SERIE)   = KG_AGG.SER_REF
+           AND P.TIPO_DOCTO       = KG_AGG.TIP_DOC_REF
     WHERE P.ESTADO <> '9'
       AND P.FECHA >= :fechaInicio
       AND P.FECHA <  :fechaFin + 1
@@ -232,12 +233,11 @@ SELECT * FROM (
                 {
                     result.Add(new DashTopClienteDto
                     {
-                        CodCliente     = GetStr(reader, "COD_CLIENTE"),
-                        Nombre         = GetStr(reader, "NOMBRE"),
-                        NumPedidos     = GetInt(reader, "NUM_PEDIDOS"),
-                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO"),
-                        PctFacturado   = GetDec(reader, "PCT_FACTURADO")
+                        CodCliente  = GetStr(reader, "COD_CLIENTE"),
+                        Nombre      = GetStr(reader, "NOMBRE"),
+                        NumPedidos  = GetInt(reader, "NUM_PEDIDOS"),
+                        TotalPedido = GetDec(reader, "TOTAL_PEDIDO"),
+                        PesoTotal   = GetDec(reader, "PESO_TOTAL")
                     });
                 }
             }
@@ -321,13 +321,7 @@ SELECT
     P.COD_VENDE,
     NVL(TA.DESCRIPCION, P.COD_VENDE)  AS NOMBRE_VENDEDOR,
     COUNT(*)                            AS NUM_PEDIDOS,
-    NVL(SUM(P.TOTAL_PEDIDO),    0)      AS TOTAL_PEDIDO,
-    NVL(SUM(P.TOTAL_FACTURADO), 0)      AS TOTAL_FACTURADO,
-    ROUND(
-        NVL(SUM(P.TOTAL_FACTURADO), 0)
-        / DECODE(NVL(SUM(P.TOTAL_PEDIDO), 0), 0, 1, NVL(SUM(P.TOTAL_PEDIDO), 0))
-        * 100, 2
-    ) AS PCT_FACTURADO
+    NVL(SUM(P.TOTAL_PEDIDO),    0)      AS TOTAL_PEDIDO
 FROM SIG.PEDIDO P
 LEFT JOIN SIG.TABLAS_AUXILIARES TA
        ON TA.TIPO   = 29
@@ -354,9 +348,7 @@ ORDER BY TOTAL_PEDIDO DESC";
                         CodVende       = GetStr(reader, "COD_VENDE"),
                         NombreVendedor = GetStr(reader, "NOMBRE_VENDEDOR"),
                         NumPedidos     = GetInt(reader, "NUM_PEDIDOS"),
-                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO"),
-                        PctFacturado   = GetDec(reader, "PCT_FACTURADO")
+                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO")
                     });
                 }
             }
@@ -431,8 +423,7 @@ SELECT * FROM (
         NVL(S.CIUDAD,   '—') AS CIUDAD,
         NVL(S.DISTRITO, '—') AS DISTRITO,
         COUNT(P.NUM_PED)               AS NUM_PEDIDOS,
-        NVL(SUM(P.TOTAL_PEDIDO),    0) AS TOTAL_PEDIDO,
-        NVL(SUM(P.TOTAL_FACTURADO), 0) AS TOTAL_FACTURADO
+        NVL(SUM(P.TOTAL_PEDIDO),    0) AS TOTAL_PEDIDO
     FROM SIG.PEDIDO P
     INNER JOIN SIG.SUCURSALES S
            ON S.COD_CLIENTE = P.COD_CLIENTE
@@ -463,8 +454,7 @@ SELECT * FROM (
                         Ciudad         = GetStr(reader, "CIUDAD"),
                         Distrito       = GetStr(reader, "DISTRITO"),
                         NumPedidos     = GetInt(reader, "NUM_PEDIDOS"),
-                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO"),
-                        TotalFacturado = GetDec(reader, "TOTAL_FACTURADO")
+                        TotalPedido    = GetDec(reader, "TOTAL_PEDIDO")
                     });
                 }
             }
@@ -528,12 +518,11 @@ ORDER BY TRUNC(KG.FCH_TRANSAC, 'MM')";
         // ─────────────────────────────────────────────────────────
         private static string DescripcionEstado(string estado) => estado switch
         {
-            "0" => "Ingresado",
-            "1" => "Aprobado",
-            "2" => "En proceso",
-            "3" => "Despachado",
-            "4" => "Facturado",
-            "5" => "Cerrado",
+            "0" => "Emitido",
+            "1" => "Emitido",
+            "5" => "Aprobado",
+            "6" => "Cerrado",
+            "8" => "Anulado Pactado / Problema de Planta",
             "9" => "Anulado",
             _   => estado
         };

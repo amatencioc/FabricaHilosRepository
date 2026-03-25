@@ -83,6 +83,8 @@ builder.Services.AddControllersWithViews()
     {
         // Permite que Views/Produccion/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/Produccion/{1}/{0}.cshtml");
+        // Permite que Views/Sgc/{Controller}/{Action}.cshtml sea encontrado automáticamente
+        options.ViewLocationFormats.Add("/Views/Sgc/{1}/{0}.cshtml");
     });
 
 // Visibilidad de menús del sidebar (configurable en appsettings.json)
