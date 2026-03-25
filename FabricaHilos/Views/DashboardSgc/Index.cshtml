@@ -1,0 +1,707 @@
+@{
+    ViewData["Title"] = "Dashboard SGC";
+}
+
+@section Styles {
+<style>
+    /* KPI Cards */
+    .kpi-card {
+        border-radius: 12px;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(0,0,0,.18);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .kpi-card .kpi-icon { font-size: 2.4rem; opacity: .85; }
+    .kpi-card .kpi-label { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
+    .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-sub   { font-size: .75rem; opacity: .8; margin-top: 2px; }
+    .bg-kpi-1 { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
+    .bg-kpi-2 { background: linear-gradient(135deg, #1565C0, #1e88e5); }
+    .bg-kpi-3 { background: linear-gradient(135deg, #2e7d32, #43a047); }
+    .bg-kpi-4 { background: linear-gradient(135deg, #e65100, #fb8c00); }
+
+    /* Chart cards */
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+
+    /* Spinner overlay */
+    .chart-spinner {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+
+    /* Top table */
+    .top-table thead th {
+        background: #1B4D3E;
+        color: #fff;
+        font-weight: 600;
+        font-size: .82rem;
+        white-space: nowrap;
+    }
+    .top-table td { font-size: .83rem; vertical-align: middle; }
+
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .6rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item active">Dashboard</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar d-flex flex-wrap align-items-end gap-3">
+    <div>
+        <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+        <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:135px">
+    </div>
+    <div>
+        <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+        <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:135px">
+    </div>
+    <div>
+        <label class="form-label mb-1 small fw-semibold">Top</label>
+        <select id="topN" class="form-select form-select-sm" style="min-width:75px">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+        </select>
+    </div>
+    <button class="btn btn-sm btn-success" onclick="loadAll()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+        <i class="bi bi-x-circle me-1"></i>Limpiar
+    </button>
+</div>
+
+<!-- ── Sección 1: KPI Cards ───────────────────────────── -->
+<div class="row g-3 mb-3" id="kpiRow">
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-1">
+            <i class="bi bi-cart3 kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total Pedidos</div>
+                <div class="kpi-value" id="kpiTotalPedidos">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-2">
+            <i class="bi bi-currency-dollar kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total Pedido S/</div>
+                <div class="kpi-value" id="kpiTotalPedido">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-3">
+            <i class="bi bi-receipt kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total Facturado S/</div>
+                <div class="kpi-value" id="kpiTotalFacturado">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-4">
+            <i class="bi bi-hourglass-split kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Pendiente S/</div>
+                <div class="kpi-value" id="kpiPendiente">—</div>
+                <div class="kpi-sub" id="kpiPctFacturado">—% facturado</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 2: Dona + Barras Estado ───────────────── -->
+<div class="section-title">Distribución por Estado</div>
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card chart-card position-relative">
+            <div id="spinnerDona" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Facturado vs Pendiente</div>
+            <div class="card-body"><canvas id="chartDona" style="max-height:260px"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card chart-card position-relative">
+            <div id="spinnerEstado" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Pedidos por Estado</div>
+            <div class="card-body"><canvas id="chartEstado" style="max-height:260px"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 3: Evolución mensual ──────────────────── -->
+<div class="section-title">Evolución Mensual</div>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerEvolucion" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Total Pedido vs Facturado &amp; N° Pedidos</div>
+            <div class="card-body"><canvas id="chartEvolucion" style="max-height:280px"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 4: Top Clientes + Top Artículos ────────── -->
+<div class="section-title">Top Clientes y Artículos</div>
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card chart-card position-relative">
+            <div id="spinnerClientes" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Top Clientes por Monto</div>
+            <div class="card-body"><canvas id="chartClientes" style="max-height:320px"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card chart-card position-relative">
+            <div id="spinnerArticulos" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Top Artículos (Despachado | Pendiente)</div>
+            <div class="card-body"><canvas id="chartArticulos" style="max-height:320px"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 5: Vendedores + Moneda + Despachos ──────── -->
+<div class="section-title">Vendedores · Moneda · Despachos</div>
+<div class="row g-3 mb-3">
+    <div class="col-md-5">
+        <div class="card chart-card position-relative">
+            <div id="spinnerVendedor" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Rendimiento por Vendedor</div>
+            <div class="card-body"><canvas id="chartVendedor" style="max-height:280px"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card chart-card position-relative">
+            <div id="spinnerMoneda" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Pedidos por Moneda</div>
+            <div class="card-body"><canvas id="chartMoneda" style="max-height:280px"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card chart-card position-relative">
+            <div id="spinnerDespachos" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Despachos Mensuales</div>
+            <div class="card-body"><canvas id="chartDespachos" style="max-height:280px"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 6: Sucursal Cliente + Tabla Top Clientes ── -->
+<div class="section-title">Sucursales del Cliente &amp; Detalle</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-7">
+        <div class="card chart-card position-relative">
+            <div id="spinnerSucursal" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Top Sucursales del Cliente</div>
+            <div class="card-body"><canvas id="chartSucursal" style="max-height:320px"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card chart-card">
+            <div class="card-header small">Top Clientes — Detalle</div>
+            <div class="card-body p-0" style="overflow-x:auto">
+                <table class="table table-hover table-sm mb-0 top-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Nombre</th>
+                            <th class="text-end">Pedidos</th>
+                            <th class="text-end">Total S/</th>
+                            <th class="text-center">%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaClientes"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    /* ── Formato de números ─────────────────────────── */
+    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmt  = n => fmtPE.format(n ?? 0);
+    const fmtMil = n => {
+        n = n ?? 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return fmt(n);
+    };
+
+    /* ── Constantes de truncado de etiquetas ────────── */
+    const MAX_LABEL_CLIENTE  = 22;
+    const MAX_LABEL_TABLA    = 18;
+    const MAX_LABEL_ARTICULO = 20;
+    const C = {
+        verde:    '#1B4D3E',
+        verde2:   '#2e7d5e',
+        azul:     '#1565C0',
+        azul2:    '#1e88e5',
+        exito:    '#2e7d32',
+        exito2:   '#43a047',
+        naranja:  '#e65100',
+        naranja2: '#fb8c00',
+        gris:     '#9e9e9e',
+        alpha: (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0')
+    };
+
+    /* ── Instancias de charts ──────────────────────── */
+    const charts = {};
+    function destroyChart(key) {
+        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+    }
+
+    /* ── Spinner helpers ───────────────────────────── */
+    function showSpin(id)  { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+    function hideSpin(id)  { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    /* ── Fechas por defecto (últimos 90 días) ──────── */
+    function setDefaultDates() {
+        const hoy  = new Date();
+        const ini  = new Date(hoy); ini.setDate(ini.getDate() - 90);
+        const toISO = d => d.toISOString().slice(0, 10);
+        document.getElementById('fechaInicio').value = toISO(ini);
+        document.getElementById('fechaFin').value    = toISO(hoy);
+    }
+
+    /* ── Parámetros del query string ────────────────── */
+    function buildParams() {
+        const fi  = document.getElementById('fechaInicio').value;
+        const ff  = document.getElementById('fechaFin').value;
+        const top = document.getElementById('topN').value;
+        const p   = new URLSearchParams();
+        if (fi)  p.set('fechaInicio', fi);
+        if (ff)  p.set('fechaFin',    ff);
+        p.set('top', top);
+        return p;
+    }
+
+    /* ── Fetch genérico ─────────────────────────────── */
+    async function apiFetch(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    }
+
+    /* ── Render KPI ─────────────────────────────────── */
+    function renderKpi(d) {
+        document.getElementById('kpiTotalPedidos').textContent   = d.totalPedidos ?? 0;
+        document.getElementById('kpiTotalPedido').textContent    = fmtMil(d.totalPedido);
+        document.getElementById('kpiTotalFacturado').textContent = fmtMil(d.totalFacturado);
+        document.getElementById('kpiPendiente').textContent      = fmtMil(d.totalPendiente);
+        const pct = d.totalPedido > 0
+            ? ((d.totalFacturado / d.totalPedido) * 100).toFixed(1)
+            : '0.0';
+        document.getElementById('kpiPctFacturado').textContent   = pct + '% facturado';
+    }
+
+    /* ── Render Dona (Facturado vs Pendiente) ────────── */
+    function renderDona(kpi) {
+        destroyChart('dona');
+        const ctx = document.getElementById('chartDona').getContext('2d');
+        charts['dona'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Facturado', 'Pendiente'],
+                datasets: [{
+                    data: [kpi.totalFacturado, kpi.totalPendiente],
+                    backgroundColor: [C.exito, C.naranja],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: { callbacks: { label: ctx => ' S/ ' + fmt(ctx.raw) } }
+                },
+                cutout: '62%'
+            }
+        });
+    }
+
+    /* ── Render Por Estado ──────────────────────────── */
+    function renderEstado(data) {
+        destroyChart('estado');
+        const labels  = data.map(d => d.descEstado || d.estado);
+        const counts  = data.map(d => d.cantidad);
+        const totales = data.map(d => d.total);
+        const ctx = document.getElementById('chartEstado').getContext('2d');
+        charts['estado'] = new Chart(ctx, {
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'N° Pedidos',
+                        data: counts,
+                        backgroundColor: C.alpha(C.verde, .8),
+                        borderColor: C.verde,
+                        borderWidth: 1,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'line',
+                        label: 'Total S/',
+                        data: totales,
+                        borderColor: C.naranja,
+                        backgroundColor: C.alpha(C.naranja, .15),
+                        fill: true,
+                        tension: .3,
+                        yAxisID: 'y2',
+                        pointRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y:  { beginAtZero: true, title: { display: true, text: 'Pedidos' } },
+                    y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+                          title: { display: true, text: 'Total S/' },
+                          ticks: { callback: v => fmtMil(v) } }
+                }
+            }
+        });
+    }
+
+    /* ── Render Evolución mensual ──────────────────── */
+    function renderEvolucion(data) {
+        destroyChart('evolucion');
+        const labels  = data.map(d => d.mes);
+        const pedidos = data.map(d => d.totalPedido);
+        const factus  = data.map(d => d.totalFacturado);
+        const nums    = data.map(d => d.numPedidos);
+        const ctx = document.getElementById('chartEvolucion').getContext('2d');
+        charts['evolucion'] = new Chart(ctx, {
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Total Pedido S/',
+                        data: pedidos,
+                        borderColor: C.azul,
+                        backgroundColor: C.alpha(C.azul, .1),
+                        fill: true, tension: .3, yAxisID: 'y',
+                        pointRadius: 4
+                    },
+                    {
+                        type: 'line',
+                        label: 'Total Facturado S/',
+                        data: factus,
+                        borderColor: C.exito,
+                        backgroundColor: C.alpha(C.exito, .1),
+                        fill: true, tension: .3, yAxisID: 'y',
+                        pointRadius: 4
+                    },
+                    {
+                        type: 'bar',
+                        label: 'N° Pedidos',
+                        data: nums,
+                        backgroundColor: C.alpha(C.naranja, .55),
+                        borderColor: C.naranja,
+                        borderWidth: 1,
+                        yAxisID: 'y2'
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y:  { beginAtZero: true, ticks: { callback: v => fmtMil(v) } },
+                    y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+                          title: { display: true, text: 'N° Pedidos' } }
+                }
+            }
+        });
+    }
+
+    /* ── Render Top Clientes (barras H) ─────────────── */
+    function renderClientes(data) {
+        destroyChart('clientes');
+        const labels = data.map(d => d.nombre ? d.nombre.substring(0, MAX_LABEL_CLIENTE) : d.codCliente);
+        const pedido = data.map(d => d.totalPedido);
+        const factu  = data.map(d => d.totalFacturado);
+        const ctx = document.getElementById('chartClientes').getContext('2d');
+        charts['clientes'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.azul, .75) },
+                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.exito, .75) }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+
+        /* tabla lateral */
+        const tbody = document.getElementById('tablaClientes');
+        tbody.innerHTML = data.map((d, i) => {
+            const pct  = d.pctFacturado ?? 0;
+            const badge = pct >= 80 ? 'success' : pct >= 50 ? 'warning' : 'danger';
+            return `<tr>
+                <td>${i + 1}</td>
+                <td title="${d.nombre || ''}">${(d.nombre || d.codCliente || '').substring(0, MAX_LABEL_TABLA)}</td>
+                <td class="text-end">${d.numPedidos}</td>
+                <td class="text-end">${fmtMil(d.totalPedido)}</td>
+                <td class="text-center"><span class="badge bg-${badge}">${pct.toFixed(1)}%</span></td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ── Render Top Artículos (barras apiladas H) ──── */
+    function renderArticulos(data) {
+        destroyChart('articulos');
+        const labels  = data.map(d => d.descripcion ? d.descripcion.substring(0, MAX_LABEL_ARTICULO) : d.codArt);
+        const desp    = data.map(d => d.cantDespachada);
+        const pend    = data.map(d => d.cantPendiente);
+        const ctx = document.getElementById('chartArticulos').getContext('2d');
+        charts['articulos'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Despachado', data: desp, backgroundColor: C.alpha(C.exito, .78), stack: 'total' },
+                    { label: 'Pendiente',  data: pend, backgroundColor: C.alpha(C.naranja, .78), stack: 'total' }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } }
+            }
+        });
+    }
+
+    /* ── Render Vendedores ──────────────────────────── */
+    function renderVendedor(data) {
+        destroyChart('vendedor');
+        const labels = data.map(d => d.nombreVendedor || d.codVende || '—');
+        const pedido = data.map(d => d.totalPedido);
+        const factu  = data.map(d => d.totalFacturado);
+        const ctx = document.getElementById('chartVendedor').getContext('2d');
+        charts['vendedor'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.verde, .78) },
+                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.azul,  .78) }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ── Render Moneda (dona pequeña) ───────────────── */
+    function renderMoneda(data) {
+        destroyChart('moneda');
+        const ctx = document.getElementById('chartMoneda').getContext('2d');
+        charts['moneda'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.moneda || '—'),
+                datasets: [{
+                    data: data.map(d => d.totalPedido),
+                    backgroundColor: [C.verde, C.azul2, C.naranja, C.gris],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: { callbacks: { label: ctx => ' S/ ' + fmt(ctx.raw) } }
+                },
+                cutout: '55%'
+            }
+        });
+    }
+
+    /* ── Render Despachos (área doble) ─────────────── */
+    function renderDespachos(data) {
+        destroyChart('despachos');
+        const labels = data.map(d => d.mes);
+        const guias  = data.map(d => d.numGuias);
+        const pesos  = data.map(d => d.pesoTotal);
+        const ctx = document.getElementById('chartDespachos').getContext('2d');
+        charts['despachos'] = new Chart(ctx, {
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'N° Guías',
+                        data: guias,
+                        borderColor: C.azul,
+                        backgroundColor: C.alpha(C.azul, .15),
+                        fill: true, tension: .3, yAxisID: 'y',
+                        pointRadius: 4
+                    },
+                    {
+                        type: 'line',
+                        label: 'Peso Total (kg)',
+                        data: pesos,
+                        borderColor: C.naranja,
+                        backgroundColor: C.alpha(C.naranja, .12),
+                        fill: true, tension: .3, yAxisID: 'y2',
+                        pointRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y:  { beginAtZero: true, title: { display: true, text: 'Guías' } },
+                    y2: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+                          title: { display: true, text: 'Peso (kg)' }, ticks: { callback: v => fmtMil(v) } }
+                }
+            }
+        });
+    }
+
+    /* ── Render Sucursal Cliente (barras H) ─────────── */
+    function renderSucursal(data) {
+        destroyChart('sucursal');
+        const labels = data.map(d => d.nombreSucursal || ('Suc. ' + d.nroSucur));
+        const pedido = data.map(d => d.totalPedido);
+        const factu  = data.map(d => d.totalFacturado);
+        const ctx = document.getElementById('chartSucursal').getContext('2d');
+        charts['sucursal'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Total Pedido S/',    data: pedido, backgroundColor: C.alpha(C.verde, .75) },
+                    { label: 'Total Facturado S/', data: factu,  backgroundColor: C.alpha(C.azul,  .75) }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ── loadAll: carga todos los datos en paralelo ── */
+    async function loadAll() {
+        const p = buildParams();
+        const base = url => '/DashboardSgc/' + url + '?' + p;
+
+        /* mostrar spinners */
+        ['spinnerDona','spinnerEstado','spinnerEvolucion','spinnerClientes',
+         'spinnerArticulos','spinnerVendedor','spinnerMoneda','spinnerDespachos',
+         'spinnerSucursal'].forEach(showSpin);
+
+        try {
+            const [kpi, estados, evolucion, clientes, articulos, vendedores, monedas, sucursales, despachos] =
+                await Promise.all([
+                    apiFetch(base('DatosKpi')),
+                    apiFetch(base('DatosPorEstado')),
+                    apiFetch(base('DatosEvolucionMensual')),
+                    apiFetch(base('DatosTopClientes')),
+                    apiFetch(base('DatosTopArticulos')),
+                    apiFetch(base('DatosPorVendedor')),
+                    apiFetch(base('DatosPorMoneda')),
+                    apiFetch(base('DatosSucursalCliente')),
+                    apiFetch(base('DatosDespachos'))
+                ]);
+
+            renderKpi(kpi);
+            renderDona(kpi);          hideSpin('spinnerDona');
+            renderEstado(estados);    hideSpin('spinnerEstado');
+            renderEvolucion(evolucion); hideSpin('spinnerEvolucion');
+            renderClientes(clientes); hideSpin('spinnerClientes');
+            renderArticulos(articulos); hideSpin('spinnerArticulos');
+            renderVendedor(vendedores); hideSpin('spinnerVendedor');
+            renderMoneda(monedas);    hideSpin('spinnerMoneda');
+            renderDespachos(despachos); hideSpin('spinnerDespachos');
+            renderSucursal(sucursales); hideSpin('spinnerSucursal');
+        } catch (err) {
+            console.error('Error cargando dashboard:', err);
+            ['spinnerDona','spinnerEstado','spinnerEvolucion','spinnerClientes',
+             'spinnerArticulos','spinnerVendedor','spinnerMoneda','spinnerDespachos',
+             'spinnerSucursal'].forEach(hideSpin);
+        }
+    }
+
+    /* ── Limpiar filtros y recargar ─────────────────── */
+    window.clearFilters = function () {
+        setDefaultDates();
+        document.getElementById('topN').value = '10';
+        loadAll();
+    };
+
+    window.loadAll = loadAll;
+
+    /* ── Init ───────────────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', function () {
+        setDefaultDates();
+        loadAll();
+    });
+}());
+</script>
+}
