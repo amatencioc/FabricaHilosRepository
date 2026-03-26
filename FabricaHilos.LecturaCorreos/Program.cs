@@ -42,6 +42,12 @@ builder.Services.Configure<LecturaCorreosOptions>(
 builder.Services.AddHttpClient("OAuth2Token");
 builder.Services.AddHttpClient<ISunatService, SunatService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<IPortalDescargaService, BizlinksPortalService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+});
 
 // ─── Repositorios Oracle ──────────────────────────────────────
 builder.Services.AddTransient<ILecturaCorreosRepository, LecturaCorreosRepository>();
