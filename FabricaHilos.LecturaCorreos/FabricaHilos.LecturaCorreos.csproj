@@ -6,6 +6,7 @@
     <RootNamespace>FabricaHilos.LecturaCorreos</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.2.0" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="MailKit" Version="4.9.0" />
     <PackageReference Include="MimeKit" Version="4.15.1" />
