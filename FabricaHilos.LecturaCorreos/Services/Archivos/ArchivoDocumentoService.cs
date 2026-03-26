@@ -64,9 +64,10 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     /// Patrón para CDR (Constancia de Recepción) emitido por SUNAT u OSE:
     ///   R-{RUC 11 dígitos}-{tipo 2 dígitos}-{serie}-{correlativo}
     ///   Ej: R-20347646891-01-FF05-74833.xml
+    ///   Ej: R-20607958221-01-F001-00000019-2026-03-20-354.00.xml (softpad — tiene segmentos extra)
     /// </summary>
     private static readonly Regex _patronCdr = new(
-        @"^R-(\d{11})-(\d{2})-([A-Za-z0-9]{1,4})-(\d+)\.",
+        @"^R-(\d{11})-(\d{2})-([A-Za-z0-9]{1,4})-(\d+)",
         RegexOptions.Compiled);
 
     // ── Valores por defecto

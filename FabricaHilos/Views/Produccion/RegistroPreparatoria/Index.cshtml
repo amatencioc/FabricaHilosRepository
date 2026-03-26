@@ -1346,7 +1346,7 @@
                                             }
                                         }
                                         var tr = document.createElement('tr');
-                                        tr.innerHTML = '<td>' + escHtml(r.item) + '</td>' +
+                                        tr.innerHTML = '<td>' + (i + 1) + '</td>' +
                                                        '<td class="text-end">' + parseFloat(r.neto).toFixed(2) + '</td>' +
                                                        '<td class="text-end text-muted small">' + diffStr + '</td>';
                                         tbody.appendChild(tr);

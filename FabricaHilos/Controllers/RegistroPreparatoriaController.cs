@@ -416,6 +416,22 @@ namespace FabricaHilos.Controllers
                     orden.Titulo,
                     orden.FechaInicio);
 
+                // Si es BATAN, actualizar A_MDUSER y A_MDFECHA en el último rollo asociado
+                if (orden.CodigoMaquina == "B")
+                {
+                    var fechaTurno = orden.FechaInicio.Hour < 7
+                        ? orden.FechaInicio.Date.AddDays(-1)
+                        : orden.FechaInicio.Date;
+
+                    await _recetaService.ActualizarUltimoRolloBatanAsync(
+                        fechaTurno,
+                        orden.Turno ?? string.Empty,
+                        orden.CodigoMaquina,
+                        orden.Maquina ?? string.Empty,
+                        orden.FechaInicio,
+                        User.Identity?.Name);
+                }
+
                 if (anulado)
                 {
                     TempData["Success"] = $"Preparatoria {orden.CodigoReceta} anulada exitosamente.";

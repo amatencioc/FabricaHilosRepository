@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Data;
 using FabricaHilos.Models;
@@ -54,16 +55,28 @@ builder.Services.AddSession(options =>
     options.Cookie.HttpOnly    = true;
     options.Cookie.IsEssential = true;
     options.Cookie.Name        = ".FabricaHilos.Session";
+    options.Cookie.SameSite    = SameSiteMode.Lax;
 });
 
-// Registrar servicio de búsqueda de recetas (Oracle)
+// Persistir claves de Data Protection en disco, fuera del folder de publicación,
+// para que las cookies de autenticación sobrevivan reinicios de IIS y nuevas publicaciones.
+var keysRelativePath = builder.Configuration["DataProtection:KeysPath"] ?? "DataProtectionKeys";
+var keysFolder = Path.IsPathRooted(keysRelativePath)
+    ? new DirectoryInfo(keysRelativePath)
+    : new DirectoryInfo(Path.GetFullPath(
+          Path.Combine(builder.Environment.ContentRootPath, keysRelativePath)));
+keysFolder.Create();
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(keysFolder)
+    .SetApplicationName("FabricaHilos");
+
+// Registrar servicios de negocio
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<IDashboardSgcService, DashboardSgcService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
-builder.Services.AddDataProtection();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)

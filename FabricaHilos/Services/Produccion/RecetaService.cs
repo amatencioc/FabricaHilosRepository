@@ -133,6 +133,7 @@ namespace FabricaHilos.Services.Produccion
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
         Task<bool> AgregarRolloAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, decimal neto, string? adUser);
         Task<List<RolloDto>> ObtenerRollosPorMaquinaAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, DateTime? fechaIni = null, DateTime? fechaFin = null);
+        Task<bool> ActualizarUltimoRolloBatanAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, DateTime fechaIni, string? mdUser);
     }
 
     public class RecetaService : IRecetaService
@@ -1582,9 +1583,9 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":tpMaq",      OracleDbType.Varchar2) { Value = tpMaq });
                 command.Parameters.Add(new OracleParameter(":codMaq",     OracleDbType.Varchar2) { Value = codMaq });
                 if (fechaIni.HasValue)
-                    command.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Date) { Value = fechaIni.Value });
+                    command.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.TimeStamp) { Value = fechaIni.Value });
                 if (fechaFin.HasValue)
-                    command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date) { Value = fechaFin.Value });
+                    command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.TimeStamp) { Value = fechaFin.Value });
 
                 var result = new List<RolloDto>();
                 using var reader = await command.ExecuteReaderAsync();
@@ -1608,6 +1609,60 @@ namespace FabricaHilos.Services.Produccion
             {
                 _logger.LogError(ex, "Error general al obtener rollos BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
                 return new List<RolloDto>();
+            }
+        }
+
+        public async Task<bool> ActualizarUltimoRolloBatanAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, DateTime fechaIni, string? mdUser)
+        {
+            var connectionString = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connectionString)) return false;
+
+            const string query = @"
+                UPDATE SIG.H_RPRODUC_ROLLO
+                SET    A_MDUSER  = :mdUser,
+                       A_MDFECHA = :mdFecha
+                WHERE  FECHA_TURNO = :fechaTurno
+                  AND  TURNO       = :turno
+                  AND  TP_MAQ      = :tpMaq
+                  AND  COD_MAQ     = :codMaq
+                  AND  A_ADFECHA   >= :fechaIni
+                  AND  ITEM        = (
+                           SELECT MAX(ITEM)
+                           FROM   SIG.H_RPRODUC_ROLLO
+                           WHERE  FECHA_TURNO = :fechaTurno
+                             AND  TURNO       = :turno
+                             AND  TP_MAQ      = :tpMaq
+                             AND  COD_MAQ     = :codMaq
+                             AND  A_ADFECHA   >= :fechaIni
+                       )";
+
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+                using var command = new OracleCommand(query, connection);
+                command.BindByName = true;
+                command.Parameters.Add(new OracleParameter(":mdUser",     OracleDbType.Varchar2)  { Value = mdUser ?? string.Empty });
+                command.Parameters.Add(new OracleParameter(":mdFecha",    OracleDbType.TimeStamp) { Value = DateTime.Now });
+                command.Parameters.Add(new OracleParameter(":fechaTurno", OracleDbType.Date)      { Value = fechaTurno.Date });
+                command.Parameters.Add(new OracleParameter(":turno",      OracleDbType.Varchar2)  { Value = turno });
+                command.Parameters.Add(new OracleParameter(":tpMaq",      OracleDbType.Varchar2)  { Value = tpMaq });
+                command.Parameters.Add(new OracleParameter(":codMaq",     OracleDbType.Varchar2)  { Value = codMaq });
+                command.Parameters.Add(new OracleParameter(":fechaIni",   OracleDbType.TimeStamp) { Value = fechaIni });
+
+                var rows = await command.ExecuteNonQueryAsync();
+                _logger.LogInformation("Último rollo BATAN actualizado (A_MDUSER/A_MDFECHA). TpMaq={TpMaq}, CodMaq={CodMaq}, Filas={Rows}", tpMaq, codMaq, rows);
+                return rows > 0;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al actualizar último rollo BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al actualizar último rollo BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return false;
             }
         }
     }

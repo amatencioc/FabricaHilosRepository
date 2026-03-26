@@ -1,5 +1,6 @@
 namespace FabricaHilos.LecturaCorreos.Services.Parsers;
 
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FabricaHilos.LecturaCorreos.Models;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,45 @@ public class UblXmlParserService : IXmlParserService
     static readonly XNamespace NsSac      = "urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1";
     static readonly XNamespace NsFac      = "urn:facele:names:specification:ubl:peru:schema:xsd:FaceleAggregateComponents-1";
 
+    // Regex: captura entidades HTML con nombre (&nbsp; &mdash; etc.) que XML estándar no reconoce.
+    // La negación lookahead preserva: &amp; &lt; &gt; &quot; &apos; y referencias numéricas &#NNN; &#xHH;
+    private static readonly Regex RegexEntidadHtml = new(
+        @"&(?!(?:amp|lt|gt|quot|apos);|#)([A-Za-z]\w*);",
+        RegexOptions.Compiled);
+
+    // Entidades HTML comunes → referencia numérica XML equivalente.
+    private static readonly Dictionary<string, string> HtmlEntidadesXml =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["nbsp"]   = "&#160;",  ["mdash"]  = "&#8212;", ["ndash"]  = "&#8211;",
+            ["rsquo"]  = "&#8217;", ["lsquo"]  = "&#8216;", ["rdquo"]  = "&#8221;",
+            ["ldquo"]  = "&#8220;", ["hellip"] = "&#8230;", ["bull"]   = "&#8226;",
+            ["copy"]   = "&#169;",  ["reg"]    = "&#174;",  ["trade"]  = "&#8482;",
+            ["euro"]   = "&#8364;", ["pound"]  = "&#163;",  ["yen"]    = "&#165;",
+            ["aacute"] = "&#225;",  ["eacute"] = "&#233;",  ["iacute"] = "&#237;",
+            ["oacute"] = "&#243;",  ["uacute"] = "&#250;",  ["ntilde"] = "&#241;",
+            ["Aacute"] = "&#193;",  ["Eacute"] = "&#201;",  ["Iacute"] = "&#205;",
+            ["Oacute"] = "&#211;",  ["Uacute"] = "&#218;",  ["Ntilde"] = "&#209;",
+            ["auml"]   = "&#228;",  ["euml"]   = "&#235;",  ["iuml"]   = "&#239;",
+            ["ouml"]   = "&#246;",  ["uuml"]   = "&#252;",  ["szlig"]  = "&#223;",
+            ["agrave"] = "&#224;",  ["egrave"] = "&#232;",  ["ograve"] = "&#242;",
+            ["ugrave"] = "&#249;",  ["ccedil"] = "&#231;",  ["laquo"]  = "&#171;",
+            ["raquo"]  = "&#187;",  ["acute"]  = "&#180;",  ["times"]  = "&#215;",
+            ["divide"] = "&#247;",  ["frac12"] = "&#189;",  ["frac14"] = "&#188;",
+        };
+
+    /// <summary>
+    /// Reemplaza entidades HTML con nombre (&amp;nbsp; &amp;mdash; etc.) con su referencia
+    /// numérica XML equivalente para que <see cref="XDocument.Parse"/> no las rechace.
+    /// Las entidades XML estándar y referencias numéricas se conservan intactas.
+    /// </summary>
+    private static string SanitizarEntidadesHtml(string xml)
+    {
+        if (!xml.Contains('&')) return xml;
+        return RegexEntidadHtml.Replace(xml, m =>
+            HtmlEntidadesXml.TryGetValue(m.Groups[1].Value, out var repl) ? repl : " ");
+    }
+
     private readonly ILogger<UblXmlParserService> _logger;
 
     public UblXmlParserService(ILogger<UblXmlParserService> logger)
@@ -28,7 +68,7 @@ public class UblXmlParserService : IXmlParserService
     {
         try
         {
-            var doc = XDocument.Parse(xmlContenido);
+            var doc = XDocument.Parse(SanitizarEntidadesHtml(xmlContenido));
             var root = doc.Root;
             if (root is null)
                 return new ResultadoParseo(EstadoParseo.XmlInvalido,

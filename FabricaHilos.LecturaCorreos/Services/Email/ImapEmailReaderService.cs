@@ -9,6 +9,7 @@ using MailKit;
 using MailKit.Search;
 using Microsoft.Extensions.Logging;
 using MimeKit;
+using System.Net;
 using System.Text.RegularExpressions;
 
 /// <summary>
@@ -220,25 +221,30 @@ public class ImapEmailReaderService : IEmailReaderService
             }
         }
 
-        // Si el correo no tiene adjuntos directos, buscar el link CONSULTAR en todas las
-        // partes HTML del mensaje, incluyendo correos reenviados (RV:/FW:) donde el HTML
-        // de Bizlinks está embebido como message/rfc822 y no aparece en mensaje.HtmlBody.
+        // Si el correo no tiene adjuntos directos, buscar links en el cuerpo HTML.
+        // Soporta dos patrones:
+        //   1. Links directos XML/PDF por contexto (efacturacion.pe: "formato XML ... aquí")
+        //   2. Link CONSULTAR hacia portal JSF (BizLinks: consultarDocumento.jsf)
         if (adjuntos.Count == 0)
         {
-            var urlConsultar = ExtraerUrlConsultarDeMensaje(mensaje);
-            if (!string.IsNullOrEmpty(urlConsultar))
+            var enlace = new EnlacePortal
+            {
+                Asunto      = asunto,
+                Remitente   = remitente,
+                FechaCorreo = fecha,
+            };
+
+            ExtraerLinksDirectosDeMensaje(mensaje, enlace);
+
+            if (!enlace.TieneLinksDirectos)
+                enlace.UrlConsultar = ExtraerUrlConsultarDeMensaje(mensaje) ?? string.Empty;
+
+            if (enlace.TieneLinksDirectos || !string.IsNullOrEmpty(enlace.UrlConsultar))
             {
                 _logger.LogInformation(
-                    "Cuenta {Nombre}: sin adjuntos directos — link CONSULTAR detectado. Accediendo al portal...",
-                    cuentaNombre);
-
-                var enlace = new EnlacePortal
-                {
-                    UrlConsultar = urlConsultar,
-                    Asunto       = asunto,
-                    Remitente    = remitente,
-                    FechaCorreo  = fecha,
-                };
+                    "Cuenta {Nombre}: sin adjuntos directos — {Patron} detectado. Accediendo al portal...",
+                    cuentaNombre,
+                    enlace.TieneLinksDirectos ? "links directos XML/PDF" : "link CONSULTAR");
 
                 var dePortal = await _portalService.DescargarAdjuntosAsync(enlace, ct);
                 adjuntos.AddRange(dePortal);
@@ -246,6 +252,48 @@ public class ImapEmailReaderService : IEmailReaderService
         }
 
         return adjuntos;
+    }
+
+    /// <summary>
+    /// Detecta el patrón "links directos XML/PDF" en el cuerpo del correo.
+    /// Usado por proveedores como efacturacion.pe que incluyen links de descarga
+    /// directa en el HTML: "...en formato XML lo puede obtener accediendo aquí..."
+    /// Rellena <see cref="EnlacePortal.UrlXmlDirecto"/> y/o <see cref="EnlacePortal.UrlPdfDirecto"/>.
+    /// </summary>
+    private static void ExtraerLinksDirectosDeMensaje(MimeMessage mensaje, EnlacePortal enlace)
+    {
+        IEnumerable<string> ObtenerHtmls()
+        {
+            if (!string.IsNullOrWhiteSpace(mensaje.HtmlBody))
+                yield return mensaje.HtmlBody;
+            foreach (var parte in IterarPartes(mensaje.Body))
+            {
+                if (parte is TextPart tp
+                    && tp.ContentType.IsMimeType("text", "html")
+                    && !string.IsNullOrWhiteSpace(tp.Text))
+                    yield return tp.Text;
+            }
+        }
+
+        foreach (var html in ObtenerHtmls())
+        {
+            enlace.UrlXmlDirecto ??= ExtraerUrlPorContexto(html, "XML");
+            enlace.UrlPdfDirecto ??= ExtraerUrlPorContexto(html, "PDF");
+            if (enlace.TieneLinksDirectos) break;
+        }
+    }
+
+    /// <summary>
+    /// Busca en el HTML un href cuya frase de contexto cercana contiene "formato {tipo}".
+    /// Cubre: "formato XML[hasta 300 chars]&lt;a href='URL'&gt;"
+    /// </summary>
+    private static string? ExtraerUrlPorContexto(string html, string tipo)
+    {
+        var m = Regex.Match(
+            html,
+            @"formato\s+" + tipo + @"[^<]{0,300}<a\s[^>]*href\s*=\s*[""'](https?://[^""']+)[""']",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        return m.Success ? m.Groups[1].Value : null;
     }
 
     /// <summary>
@@ -279,21 +327,21 @@ public class ImapEmailReaderService : IEmailReaderService
     }
 
     /// <summary>
-    /// Extrae la URL del botón/link "CONSULTAR" del cuerpo HTML del correo.
-    /// Cubre variantes: "CONSULTAR", "Consultar", "consultar".
-    /// Devuelve null si no encuentra ningún link.
+    /// Extrae la URL del botón/link de consulta del cuerpo HTML del correo.
+    /// Cubre: "CONSULTAR", "Consultar", "consultar" (BizLinks) y "Ver documento" (softpad.com.pe).
+    /// Devuelve null si no encuentra ningún link. Decodifica entidades HTML (&amp; → &).
     /// </summary>
     private static string? ExtraerUrlConsultar(string? htmlBody)
     {
         if (string.IsNullOrWhiteSpace(htmlBody)) return null;
 
-        // Patrón 1: <a href="...">...Consultar...</a>
+        // Patrón 1: <a href="...">...Consultar...</a>  o  <a href="...">...Ver documento...</a>
         var m = Regex.Match(
             htmlBody,
-            @"<a\s[^>]*href\s*=\s*[""']([^""']+)[""'][^>]*>\s*(?:<[^>]+>)*\s*Consultar\s*(?:</[^>]+>)*\s*</a>",
+            @"<a\s[^>]*href\s*=\s*[""']([^""']+)[""'][^>]*>\s*(?:<[^>]+>)*\s*(?:Consultar|Ver\s+documento)\s*(?:</[^>]+>)*\s*</a>",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-        if (m.Success) return m.Groups[1].Value;
+        if (m.Success) return WebUtility.HtmlDecode(m.Groups[1].Value);
 
         // Patrón 2: href cuya URL contiene la palabra "consultar"
         // Cubre consultarDocumento.jsf, consultarComprobante, etc.
@@ -302,7 +350,7 @@ public class ImapEmailReaderService : IEmailReaderService
             @"href\s*=\s*[""'](https?://[^""']*consultar[^""']*)[""']",
             RegexOptions.IgnoreCase);
 
-        return m2.Success ? m2.Groups[1].Value : null;
+        return m2.Success ? WebUtility.HtmlDecode(m2.Groups[1].Value) : null;
     }
 
     /// <summary>
