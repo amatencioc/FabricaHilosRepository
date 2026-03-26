@@ -41,7 +41,10 @@ namespace FabricaHilos.Controllers
             nameof(GetMotivosParaModal),
             nameof(GuardarParos),
             nameof(GetParosPorMaquina),
-            nameof(EliminarParoBD)
+            nameof(EliminarParoBD),
+            nameof(AgregarRollo),
+            nameof(GetRollosBatan),
+            nameof(CerrarPreparatoriaBatan)
         };
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -218,7 +221,7 @@ namespace FabricaHilos.Controllers
             if (ModelState.IsValid)
             {
                 // Validar Metraje: obligatorio para todos los tipos excepto L (CARDAS)
-                if (model.CodigoMaquina != "L" && !model.Metraje.HasValue)
+                if (model.CodigoMaquina != "L" && model.CodigoMaquina != "B" && !model.Metraje.HasValue)
                 {
                     ModelState.AddModelError("Metraje", "El campo Metraje es obligatorio.");
                 }
@@ -677,6 +680,7 @@ namespace FabricaHilos.Controllers
                 producTeorico,
                 eficiencTeorico,
                 esPabilera      = orden.CodigoMaquina == "P",
+                esBatan         = orden.CodigoMaquina == "B",
                 contadorInicial,
                 husosInactivas,
                 contadorFinal,
@@ -998,5 +1002,98 @@ namespace FabricaHilos.Controllers
             return Json(new { success = ok, message = ok ? "Paro eliminado exitosamente." : "No se pudo eliminar el paro. Intente nuevamente." });
         }
 
-            }
+        [HttpPost]
+        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        public async Task<IActionResult> AgregarRollo([FromBody] AgregarRolloRequest request)
+        {
+            if (request == null || string.IsNullOrEmpty(request.TpMaq) || string.IsNullOrEmpty(request.CodMaq))
+                return Json(new { success = false, message = "Datos incompletos." });
+
+            if (request.PesoBruto <= 0)
+                return Json(new { success = false, message = "El peso bruto debe ser mayor a 0." });
+
+            if (!DateTime.TryParse(request.FechaTurno, out var fechaTurno))
+                return Json(new { success = false, message = "Fecha de turno inválida." });
+
+            const decimal varilla = 1.2m;
+            var neto   = Math.Round(request.PesoBruto - varilla, 2);
+            var adUser = User.Identity?.Name;
+
+            var ok = await _recetaService.AgregarRolloAsync(
+                fechaTurno, request.Turno, request.TpMaq, request.CodMaq, neto, adUser);
+
+            if (ok)
+                _logger.LogInformation("Rollo agregado por {User}: TpMaq={TpMaq}, CodMaq={CodMaq}, Neto={Neto}", adUser, request.TpMaq, request.CodMaq, neto);
+            else
+                _logger.LogWarning("Fallo al agregar rollo: TpMaq={TpMaq}, CodMaq={CodMaq}", request.TpMaq, request.CodMaq);
+
+            return Json(new { success = ok, message = ok ? "Rollo registrado exitosamente." : "Error al registrar el rollo. Intente nuevamente." });
         }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        public async Task<IActionResult> GetRollosBatan(int id)
+        {
+            var orden = await _context.OrdenesProduccion.FindAsync(id);
+            if (orden == null) return NotFound();
+
+            var fechaTurno = orden.FechaInicio.Hour < 7
+                ? orden.FechaInicio.Date.AddDays(-1)
+                : orden.FechaInicio.Date;
+
+            var rollos = await _recetaService.ObtenerRollosPorMaquinaAsync(
+                fechaTurno, orden.Turno ?? string.Empty,
+                orden.CodigoMaquina ?? string.Empty, orden.Maquina ?? string.Empty,
+                fechaIni: orden.FechaInicio,
+                fechaFin: orden.FechaFin);
+
+            return Json(rollos.Select(r => new { item = r.Item, neto = r.Neto, fechaHora = r.FechaRegistro?.ToString("yyyy-MM-ddTHH:mm:ss") }));
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        public async Task<IActionResult> CerrarPreparatoriaBatan([FromBody] CerrarBatanRequest request)
+        {
+            var orden = await _context.OrdenesProduccion.FindAsync(request.Id);
+            if (orden == null)
+                return Json(new { success = false, message = "Preparatoria no encontrada." });
+
+            if (orden.CodigoMaquina != "B")
+                return Json(new { success = false, message = "Esta acción solo aplica para máquinas tipo B (BATAN)." });
+
+            if (orden.Estado != EstadoOrden.EnProceso)
+                return Json(new { success = false, message = "La preparatoria no está en proceso." });
+
+            var tieneParosAbiertos = await _paroService.TieneParosAbiertosAsync(
+                orden.CodigoMaquina ?? string.Empty, orden.Maquina ?? string.Empty);
+            if (tieneParosAbiertos)
+                return Json(new { success = false, message = "No se puede cerrar la preparatoria porque tiene paros registrados sin fecha de fin. Cierre los paros abiertos antes de continuar." });
+
+            var mdUser = User.Identity?.Name;
+            var ok = await _recetaService.CerrarPreparatoriaOracleAsync(
+                orden.CodigoReceta,
+                orden.Lote,
+                orden.CodigoMaquina,
+                orden.Maquina,
+                orden.Titulo,
+                orden.FechaInicio,
+                mdUser);
+
+            if (ok)
+            {
+                orden.Estado   = EstadoOrden.Terminado;
+                orden.FechaFin = DateTime.Now;
+                orden.Cerrado  = true;
+                _context.OrdenesProduccion.Update(orden);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Preparatoria BATAN {Id} cerrada por {User}", orden.Id, mdUser);
+            }
+            else
+            {
+                _logger.LogWarning("Fallo al cerrar preparatoria BATAN {Id} en Oracle", orden.Id);
+            }
+
+            return Json(new { success = ok, message = ok ? "Preparatoria cerrada exitosamente." : "Error al cerrar la preparatoria en Oracle. Intente nuevamente." });
+        }
+    }
+}

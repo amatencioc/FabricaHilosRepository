@@ -58,6 +58,20 @@ namespace FabricaHilos.Services.Produccion
         public string FechaIni { get; set; } = string.Empty;
     }
 
+    public class AgregarRolloRequest
+    {
+        public decimal PesoBruto  { get; set; }
+        public string  FechaTurno { get; set; } = string.Empty;
+        public string  Turno      { get; set; } = string.Empty;
+        public string  TpMaq      { get; set; } = string.Empty;
+        public string  CodMaq     { get; set; } = string.Empty;
+    }
+
+    public class CerrarBatanRequest
+    {
+        public int Id { get; set; }
+    }
+
     public class ParoGuardadoDto
     {
         public string  FechaIni   { get; set; } = string.Empty;  // yyyy-MM-ddTHH:mm

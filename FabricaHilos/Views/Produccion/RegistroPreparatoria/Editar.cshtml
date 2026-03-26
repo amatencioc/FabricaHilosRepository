@@ -87,10 +87,10 @@
                                     @foreach (var maq in ViewBag.TiposMaquinas)
                                     {
                                         string tp = maq.TipoMaquina;
-                                        if (tp == "M" || tp == "P" || tp == "E" || tp == "L")
-                                        {
-                                            <option value="@maq.TipoMaquina">@maq.TextoCompleto</option>
-                                        }
+                                        if (tp == "M" || tp == "P" || tp == "E" || tp == "L" || tp == "B")
+                                                        {
+                                                            <option value="@maq.TipoMaquina">@maq.TextoCompleto</option>
+                                                        }
                                     }
                                 }
                             </select>
@@ -165,7 +165,7 @@
                         </div>
 
                         <!-- Velocidad -->
-                        <div class="col-md-6">
+                        <div class="col-md-6" id="grupoVelocidad">
                             <label class="form-label fw-semibold">Velocidad <span class="text-danger">*</span></label>
                             <input asp-for="Velocidad" class="form-control" type="number" step="0.01" min="0" placeholder="Ingrese la velocidad" required />
                             <span asp-validation-for="Velocidad" class="text-danger small"></span>
@@ -558,7 +558,8 @@
             const titulosPermitidos = {
                 'M': ['.11', '.125', '.13', '.15'],
                 'L': ['.11', '.12'],
-                'P': ['.90', '1.4', '1.2', '.75', '1.0']
+                'P': ['.90', '1.4', '1.2', '.75', '1.0'],
+                'B': ['0.001311']
             };
             const allowed = titulosPermitidos[tipo] || null;
             const currentVal = tituloSel.value;
@@ -676,21 +677,21 @@
 
             // Aplicar visibilidad inicial de Paso Manuar y campos Pabileras
             const grupoPasoManuar = document.getElementById('grupoPasoManuar');
-            grupoPasoManuar.style.display = (codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E' || codigoMaquinaActual === 'L') ? 'none' : '';
+            grupoPasoManuar.style.display = (codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E' || codigoMaquinaActual === 'L' || codigoMaquinaActual === 'B') ? 'none' : '';
             if (codigoMaquinaActual === 'E') grupoPasoManuar.querySelector('select').value = '';
             document.getElementById('grupoContadorInicial').style.display = (codigoMaquinaActual === 'P') ? '' : 'none';
             document.getElementById('grupoHusosInactivos').style.display  = (codigoMaquinaActual === 'P') ? '' : 'none';
 
             // Mostrar alerta si el tipo actual no está implementado
             const alertaTipoNI = document.getElementById('alertaTipoNoImplementado');
-            const tipoActualImpl = codigoMaquinaActual === 'M' || codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E' || codigoMaquinaActual === 'L';
+            const tipoActualImpl = codigoMaquinaActual === 'M' || codigoMaquinaActual === 'P' || codigoMaquinaActual === 'E' || codigoMaquinaActual === 'L' || codigoMaquinaActual === 'B';
             const noImplInicial = !!(codigoMaquinaActual && !tipoActualImpl);
             alertaTipoNI.style.display = noImplInicial ? '' : 'none';
             bloquearGuardar(noImplInicial);
 
-            // Título visual fijo para PEINADORA (E)
+            // Título visual fijo para PEINADORA (E) y BATAN (B)
             const tituloSelInit2 = document.getElementById('Titulo');
-            if (codigoMaquinaActual === 'E' && tituloSelInit2) {
+            if ((codigoMaquinaActual === 'E' || codigoMaquinaActual === 'B') && tituloSelInit2) {
                 tituloSelInit2.style.pointerEvents = 'none';
                 tituloSelInit2.style.backgroundColor = 'var(--color-bg-light)';
                 tituloSelInit2.style.opacity = '0.65';
@@ -699,11 +700,23 @@
             // Filtrar títulos según tipo actual
             filtrarTitulos(codigoMaquinaActual);
 
-            // Metraje: opcional para L, obligatorio para otros
+            // Velocidad: ocultar para B (BATAN)
+            const grupoVelocidadInit = document.getElementById('grupoVelocidad');
+            const inputVelocidadInit = grupoVelocidadInit ? grupoVelocidadInit.querySelector('input[type="number"]') : null;
+            if (codigoMaquinaActual === 'B') {
+                if (grupoVelocidadInit) grupoVelocidadInit.style.display = 'none';
+                if (inputVelocidadInit) inputVelocidadInit.required = false;
+            }
+
+            // Metraje: ocultar para B, opcional para L, obligatorio para otros
+            const grupoMetrajeInit = document.getElementById('grupoMetraje');
             const inputMetrajeInit = document.getElementById('metrajeInput');
             const labelMetrajeInit = document.getElementById('labelMetraje');
             if (inputMetrajeInit && labelMetrajeInit) {
-                if (codigoMaquinaActual === 'L') {
+                if (codigoMaquinaActual === 'B') {
+                    if (grupoMetrajeInit) grupoMetrajeInit.style.display = 'none';
+                    inputMetrajeInit.required = false;
+                } else if (codigoMaquinaActual === 'L') {
                     inputMetrajeInit.required = false;
                     labelMetrajeInit.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
                 } else {
@@ -719,8 +732,8 @@
                 const tipo = this.value;
                 cargarMaquinas(tipo);
 
-                // Mostrar/ocultar Paso Manuar: ocultar para P, E y L
-                grupoPasoManuar.style.display = (tipo === 'P' || tipo === 'E' || tipo === 'L') ? 'none' : '';
+                // Mostrar/ocultar Paso Manuar: ocultar para P, E, L y B
+                grupoPasoManuar.style.display = (tipo === 'P' || tipo === 'E' || tipo === 'L' || tipo === 'B') ? 'none' : '';
                 if (tipo !== 'M') grupoPasoManuar.querySelector('select').value = '';
 
                 // Mostrar/ocultar campos Pabileras (solo para tipo P)
@@ -742,6 +755,13 @@
                         tituloSelChg.style.pointerEvents = 'none';
                         tituloSelChg.style.backgroundColor = 'var(--color-bg-light)';
                         tituloSelChg.style.opacity = '0.65';
+                    } else if (tipo === 'B') {
+                        filtrarTitulos('B');
+                        const opB = Array.from(tituloSelChg.options).find(o => o.textContent.trim() === '0.001311');
+                        if (opB) tituloSelChg.value = opB.value;
+                        tituloSelChg.style.pointerEvents = 'none';
+                        tituloSelChg.style.backgroundColor = 'var(--color-bg-light)';
+                        tituloSelChg.style.opacity = '0.65';
                     } else {
                         tituloSelChg.style.pointerEvents = '';
                         tituloSelChg.style.backgroundColor = '';
@@ -750,22 +770,41 @@
                     }
                 }
 
-                // Metraje: opcional para L (CARDAS), obligatorio para otros
+                // Velocidad: ocultar y hacer opcional para B (BATAN)
+                const grupoVelocidadChg = document.getElementById('grupoVelocidad');
+                const inputVelocidadChg = grupoVelocidadChg ? grupoVelocidadChg.querySelector('input[type="number"]') : null;
+                if (tipo === 'B') {
+                    if (grupoVelocidadChg) grupoVelocidadChg.style.display = 'none';
+                    if (inputVelocidadChg) { inputVelocidadChg.required = false; inputVelocidadChg.value = ''; }
+                } else {
+                    if (grupoVelocidadChg) grupoVelocidadChg.style.display = '';
+                    if (inputVelocidadChg) inputVelocidadChg.required = true;
+                }
+
+                // Metraje: ocultar para B, opcional para L (CARDAS), obligatorio para otros
+                const grupoMetrajeChg = document.getElementById('grupoMetraje');
                 const inputMetrajeChg = document.getElementById('metrajeInput');
                 const labelMetrajeChg = document.getElementById('labelMetraje');
                 if (inputMetrajeChg && labelMetrajeChg) {
-                    if (tipo === 'L') {
+                    if (tipo === 'B') {
+                        if (grupoMetrajeChg) grupoMetrajeChg.style.display = 'none';
                         inputMetrajeChg.required = false;
-                        labelMetrajeChg.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
+                        inputMetrajeChg.value = '';
                     } else {
-                        inputMetrajeChg.required = true;
-                        labelMetrajeChg.innerHTML = 'Metraje <span class="text-danger">*</span>';
+                        if (grupoMetrajeChg) grupoMetrajeChg.style.display = '';
+                        if (tipo === 'L') {
+                            inputMetrajeChg.required = false;
+                            labelMetrajeChg.innerHTML = 'Metraje <span class="text-muted small">(opcional)</span>';
+                        } else {
+                            inputMetrajeChg.required = true;
+                            labelMetrajeChg.innerHTML = 'Metraje <span class="text-danger">*</span>';
+                        }
                     }
                 }
 
                 // Bloquear formulario si el tipo no está implementado
                 const alertaNI = document.getElementById('alertaTipoNoImplementado');
-                const impl = tipo === 'M' || tipo === 'P' || tipo === 'E' || tipo === 'L';
+                const impl = tipo === 'M' || tipo === 'P' || tipo === 'E' || tipo === 'L' || tipo === 'B';
                 const noImpl = !!(tipo && !impl);
                 alertaNI.style.display = noImpl ? '' : 'none';
                 bloquearGuardar(noImpl);
@@ -858,6 +897,11 @@
                         required: true,
                         messages: { required: 'El campo Husos Inactivas (HI) es obligatorio.' }
                     });
+                } else if (tipo === 'B') {
+                    try { $pasoManuar.rules('remove', 'required'); } catch (e) { }
+                    try { $contadorInicial.rules('remove', 'required'); } catch (e) { }
+                    try { $husosInactivas.rules('remove', 'required'); } catch (e) { }
+                    try { $('[name="Velocidad"]').rules('remove', 'required'); } catch (e) { }
                 } else {
                     try { $pasoManuar.rules('remove', 'required'); } catch (e) { }
                     try { $contadorInicial.rules('remove', 'required'); } catch (e) { }

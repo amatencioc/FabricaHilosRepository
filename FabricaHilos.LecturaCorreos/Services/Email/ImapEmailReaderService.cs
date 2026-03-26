@@ -3,11 +3,13 @@ namespace FabricaHilos.LecturaCorreos.Services.Email;
 using FabricaHilos.LecturaCorreos.Config;
 using FabricaHilos.LecturaCorreos.Services.Email.Conexion;
 using FabricaHilos.LecturaCorreos.Services.Email.Lectores;
+using FabricaHilos.LecturaCorreos.Services.Email.Portales;
 using FabricaHilos.LecturaCorreos.Models;
 using MailKit;
 using MailKit.Search;
 using Microsoft.Extensions.Logging;
 using MimeKit;
+using System.Text.RegularExpressions;
 
 /// <summary>
 /// Orquesta la lectura de correos IMAP delegando cada responsabilidad
@@ -19,6 +21,7 @@ public class ImapEmailReaderService : IEmailReaderService
     private readonly ILectorAdjuntoXml              _lectorXml;
     private readonly ILectorAdjuntoPdf              _lectorPdf;
     private readonly ILectorAdjuntoZip              _lectorZip;
+    private readonly IPortalDescargaService         _portalService;
     private readonly ILogger<ImapEmailReaderService> _logger;
 
     public ImapEmailReaderService(
@@ -26,13 +29,15 @@ public class ImapEmailReaderService : IEmailReaderService
         ILectorAdjuntoXml               lectorXml,
         ILectorAdjuntoPdf               lectorPdf,
         ILectorAdjuntoZip               lectorZip,
+        IPortalDescargaService          portalService,
         ILogger<ImapEmailReaderService> logger)
     {
-        _conexion   = conexion;
-        _lectorXml  = lectorXml;
-        _lectorPdf  = lectorPdf;
-        _lectorZip  = lectorZip;
-        _logger     = logger;
+        _conexion       = conexion;
+        _lectorXml      = lectorXml;
+        _lectorPdf      = lectorPdf;
+        _lectorZip      = lectorZip;
+        _portalService  = portalService;
+        _logger         = logger;
     }
 
     // Reintentos en caso de error de conexión transitorio: 5 s → 15 s → 30 s.
@@ -215,7 +220,56 @@ public class ImapEmailReaderService : IEmailReaderService
             }
         }
 
+        // Si el correo no tiene adjuntos directos, buscar el link CONSULTAR en el cuerpo HTML.
+        if (adjuntos.Count == 0)
+        {
+            var urlConsultar = ExtraerUrlConsultar(mensaje.HtmlBody);
+            if (!string.IsNullOrEmpty(urlConsultar))
+            {
+                _logger.LogInformation(
+                    "Cuenta {Nombre}: sin adjuntos directos — link CONSULTAR detectado. Accediendo al portal...",
+                    cuentaNombre);
+
+                var enlace = new EnlacePortal
+                {
+                    UrlConsultar = urlConsultar,
+                    Asunto       = asunto,
+                    Remitente    = remitente,
+                    FechaCorreo  = fecha,
+                };
+
+                var dePortal = await _portalService.DescargarAdjuntosAsync(enlace, ct);
+                adjuntos.AddRange(dePortal);
+            }
+        }
+
         return adjuntos;
+    }
+
+    /// <summary>
+    /// Extrae la URL del botón/link "CONSULTAR" del cuerpo HTML del correo.
+    /// Cubre variantes: "CONSULTAR", "Consultar", "consultar".
+    /// Devuelve null si no encuentra ningún link.
+    /// </summary>
+    private static string? ExtraerUrlConsultar(string? htmlBody)
+    {
+        if (string.IsNullOrWhiteSpace(htmlBody)) return null;
+
+        // Patrón 1: <a href="...">...Consultar...</a>
+        var m = Regex.Match(
+            htmlBody,
+            @"<a\s[^>]*href\s*=\s*[""']([^""']+)[""'][^>]*>\s*(?:<[^>]+>)*\s*Consultar\s*(?:</[^>]+>)*\s*</a>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        if (m.Success) return m.Groups[1].Value;
+
+        // Patrón 2: href cuya URL contiene la palabra "consultar"
+        var m2 = Regex.Match(
+            htmlBody,
+            @"href\s*=\s*[""'](https?://[^""']*consultar[^""']*)[""']",
+            RegexOptions.IgnoreCase);
+
+        return m2.Success ? m2.Groups[1].Value : null;
     }
 
     /// <summary>

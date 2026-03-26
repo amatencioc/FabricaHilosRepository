@@ -96,6 +96,13 @@ namespace FabricaHilos.Services.Produccion
         public int TotalCount { get; set; }
     }
 
+    public class RolloDto
+    {
+        public int Item { get; set; }
+        public decimal Neto { get; set; }
+        public DateTime? FechaRegistro { get; set; }
+    }
+
     public interface IRecetaService
     {
         Task<List<RecetaDto>> BuscarRecetaPorCodigoAsync(string codigo);
@@ -111,7 +118,7 @@ namespace FabricaHilos.Services.Produccion
         Task<int> ObtenerHusosMaquinaAsync(string tpMaq, string codMaq);
         Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10);
         Task<bool> TieneMaquinaEnProcesoAsync(string tpMaq, string codMaq);
-        Task<bool> CerrarPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
+        Task<bool> CerrarPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni, string? mdUser = null);
         Task<bool> AnularPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
         Task<bool> ActualizarPreparatoriaOracleAsync(
             string? oldReceta, string? oldLote, string? oldTpMaq, string? oldCodMaq, string? oldTitulo, DateTime fechaIni,
@@ -124,6 +131,8 @@ namespace FabricaHilos.Services.Produccion
             int? nroParada = null, decimal? contadorFinal = null, DateTime? fechaFin = null);
         Task<DetalleProductivoOracleDto?> ObtenerDetalleProductivoOracleAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
+        Task<bool> AgregarRolloAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, decimal neto, string? adUser);
+        Task<List<RolloDto>> ObtenerRollosPorMaquinaAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, DateTime? fechaIni = null, DateTime? fechaFin = null);
     }
 
     public class RecetaService : IRecetaService
@@ -857,7 +866,7 @@ namespace FabricaHilos.Services.Produccion
             }
 
             // ── CONTEO: query liviano, solo H_RPRODUC ────────────────────────────
-            var countQuery = "SELECT COUNT(*) FROM H_RPRODUC R WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY') AND R.TP_MAQ IN ('M', 'P', 'E', 'L')" + filterSuffix;
+            var countQuery = "SELECT COUNT(*) FROM H_RPRODUC R WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY') AND R.TP_MAQ IN ('M', 'P', 'E', 'L', 'B')" + filterSuffix;
 
             // ── DATOS: paginación en dos fases ────────────────────────────────────
             // Fase 1: query ligero (sin subqueries correlacionadas).
@@ -872,7 +881,7 @@ namespace FabricaHilos.Services.Produccion
                 LEFT JOIN V_MAQUINA  M ON M.COD_MAQ  = R.COD_MAQ  AND M.AREA = '01'
                 LEFT JOIN H_TITULOS  T ON T.TITULO   = R.TITULO
                 LEFT JOIN V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
-                WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY') AND R.TP_MAQ IN ('M', 'P', 'E', 'L')";
+                WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY') AND R.TP_MAQ IN ('M', 'P', 'E', 'L', 'B')";
             innerLightQuery += filterSuffix;
             innerLightQuery += " ORDER BY R.FECHA_INI DESC";
 
@@ -1019,7 +1028,7 @@ namespace FabricaHilos.Services.Produccion
             }
         }
 
-        public async Task<bool> CerrarPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni)
+        public async Task<bool> CerrarPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni, string? mdUser = null)
         {
             var connectionString = GetOracleConnectionString();
 
@@ -1034,7 +1043,9 @@ namespace FabricaHilos.Services.Produccion
 
             const string query = @"
                 UPDATE H_RPRODUC SET ESTADO = '3',
-                                    FECHA_FIN = :fechaFin
+                                    FECHA_FIN = :fechaFin,
+                                    A_MDUSER  = :mdUser,
+                                    A_MDFECHA = :mdFecha
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:receta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:lote)
                   AND TRIM(TP_MAQ)                                  = TRIM(:tpMaq)
@@ -1052,7 +1063,9 @@ namespace FabricaHilos.Services.Produccion
 
                 static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
 
-                command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date) { Value = DateTime.Now });
+                command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date)    { Value = DateTime.Now });
+                command.Parameters.Add(new OracleParameter(":mdUser",   OracleDbType.Varchar2) { Value = Str(mdUser) });
+                command.Parameters.Add(new OracleParameter(":mdFecha",  OracleDbType.Date)    { Value = DateTime.Now });
                 command.Parameters.Add(new OracleParameter(":receta",   OracleDbType.Varchar2) { Value = Str(receta) });
                 command.Parameters.Add(new OracleParameter(":lote",     OracleDbType.Varchar2) { Value = Str(lote) });
                 command.Parameters.Add(new OracleParameter(":tpMaq",    OracleDbType.Varchar2) { Value = Str(tpMaq) });
@@ -1470,6 +1483,131 @@ namespace FabricaHilos.Services.Produccion
             {
                 _logger.LogError(ex, "Error general al obtener detalle productivo en Oracle");
                 return null;
+            }
+        }
+
+        public async Task<bool> AgregarRolloAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, decimal neto, string? adUser)
+        {
+            var connectionString = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                _logger.LogWarning("Oracle connection string not configured");
+                return false;
+            }
+
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+
+                const string queryMaxItem = @"
+                    SELECT NVL(MAX(ITEM), 0) + 1 AS NEXT_ITEM
+                    FROM SIG.H_RPRODUC_ROLLO
+                    WHERE FECHA_TURNO = :fechaTurno
+                      AND TURNO       = :turno
+                      AND TP_MAQ      = :tpMaq
+                      AND COD_MAQ     = :codMaq";
+
+                int nextItem;
+                using (var cmdMax = new OracleCommand(queryMaxItem, connection))
+                {
+                    cmdMax.BindByName = true;
+                    cmdMax.Parameters.Add(new OracleParameter(":fechaTurno", OracleDbType.Date)     { Value = fechaTurno.Date });
+                    cmdMax.Parameters.Add(new OracleParameter(":turno",      OracleDbType.Varchar2) { Value = turno });
+                    cmdMax.Parameters.Add(new OracleParameter(":tpMaq",      OracleDbType.Varchar2) { Value = tpMaq });
+                    cmdMax.Parameters.Add(new OracleParameter(":codMaq",     OracleDbType.Varchar2) { Value = codMaq });
+                    var result = await cmdMax.ExecuteScalarAsync();
+                    nextItem = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
+                }
+
+                const string queryInsert = @"
+                    INSERT INTO SIG.H_RPRODUC_ROLLO (FECHA_TURNO, TURNO, TP_MAQ, COD_MAQ, ITEM, NETO, A_ADUSER, A_ADFECHA)
+                    VALUES (:fechaTurno, :turno, :tpMaq, :codMaq, :item, :neto, :adUser, :adFecha)";
+
+                using var cmdInsert = new OracleCommand(queryInsert, connection);
+                cmdInsert.BindByName = true;
+                cmdInsert.Parameters.Add(new OracleParameter(":fechaTurno", OracleDbType.Date)     { Value = fechaTurno.Date });
+                cmdInsert.Parameters.Add(new OracleParameter(":turno",      OracleDbType.Varchar2) { Value = turno });
+                cmdInsert.Parameters.Add(new OracleParameter(":tpMaq",      OracleDbType.Varchar2) { Value = tpMaq });
+                cmdInsert.Parameters.Add(new OracleParameter(":codMaq",     OracleDbType.Varchar2) { Value = codMaq });
+                cmdInsert.Parameters.Add(new OracleParameter(":item",       OracleDbType.Int32)    { Value = nextItem });
+                cmdInsert.Parameters.Add(new OracleParameter(":neto",       OracleDbType.Decimal)  { Value = neto });
+                cmdInsert.Parameters.Add(new OracleParameter(":adUser",     OracleDbType.Varchar2) { Value = adUser ?? string.Empty });
+                cmdInsert.Parameters.Add(new OracleParameter(":adFecha",    OracleDbType.Date)     { Value = DateTime.Now });
+
+                var rows = await cmdInsert.ExecuteNonQueryAsync();
+                _logger.LogInformation("Rollo insertado en H_RPRODUC_ROLLOS. Item={Item}, TpMaq={TpMaq}, CodMaq={CodMaq}, Neto={Neto}", nextItem, tpMaq, codMaq, neto);
+                return rows > 0;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al agregar rollo. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al agregar rollo. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return false;
+            }
+        }
+
+        public async Task<List<RolloDto>> ObtenerRollosPorMaquinaAsync(DateTime fechaTurno, string turno, string tpMaq, string codMaq, DateTime? fechaIni = null, DateTime? fechaFin = null)
+        {
+            var connectionString = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connectionString)) return new List<RolloDto>();
+
+            var query = @"
+                SELECT ITEM, NETO, A_ADFECHA
+                FROM SIG.H_RPRODUC_ROLLO
+                WHERE FECHA_TURNO = :fechaTurno
+                  AND TURNO       = :turno
+                  AND TP_MAQ      = :tpMaq
+                  AND COD_MAQ     = :codMaq";
+
+            if (fechaIni.HasValue)
+                query += "\n                  AND A_ADFECHA >= :fechaIni";
+            if (fechaFin.HasValue)
+                query += "\n                  AND A_ADFECHA <= :fechaFin";
+
+            query += "\n                ORDER BY ITEM";
+
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+                using var command = new OracleCommand(query, connection);
+                command.BindByName = true;
+                command.Parameters.Add(new OracleParameter(":fechaTurno", OracleDbType.Date)     { Value = fechaTurno.Date });
+                command.Parameters.Add(new OracleParameter(":turno",      OracleDbType.Varchar2) { Value = turno });
+                command.Parameters.Add(new OracleParameter(":tpMaq",      OracleDbType.Varchar2) { Value = tpMaq });
+                command.Parameters.Add(new OracleParameter(":codMaq",     OracleDbType.Varchar2) { Value = codMaq });
+                if (fechaIni.HasValue)
+                    command.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Date) { Value = fechaIni.Value });
+                if (fechaFin.HasValue)
+                    command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date) { Value = fechaFin.Value });
+
+                var result = new List<RolloDto>();
+                using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new RolloDto
+                    {
+                        Item = reader.IsDBNull(reader.GetOrdinal("ITEM")) ? 0 : Convert.ToInt32(reader["ITEM"]),
+                        Neto = reader.IsDBNull(reader.GetOrdinal("NETO")) ? 0m : Convert.ToDecimal(reader["NETO"]),
+                        FechaRegistro = reader.IsDBNull(reader.GetOrdinal("A_ADFECHA")) ? null : Convert.ToDateTime(reader["A_ADFECHA"])
+                    });
+                }
+                return result;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al obtener rollos BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return new List<RolloDto>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al obtener rollos BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
+                return new List<RolloDto>();
             }
         }
     }

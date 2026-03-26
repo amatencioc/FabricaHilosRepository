@@ -161,9 +161,23 @@
                                             <a asp-action="Editar" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-primary me-1" title="Editar">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
-                                            <a asp-action="DetalleProduccion" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-info me-1" title="Detalle de Producción">
-                                                <i class="bi bi-bar-chart-line"></i>
-                                            </a>
+                                            @if (item.TipoMaquina != "B")
+                                            {
+                                                <a asp-action="DetalleProduccion" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-info me-1" title="Detalle de Producción">
+                                                    <i class="bi bi-bar-chart-line"></i>
+                                                </a>
+                                            }
+                                            @if (item.TipoMaquina == "B")
+                                            {
+                                                var _ftDate = item.FechaInicio.Hour < 7 ? item.FechaInicio.Date.AddDays(-1) : item.FechaInicio.Date;
+                                                <button type="button" class="btn btn-sm btn-outline-success me-1 btn-agregar-rollo" title="Agregar Rollo"
+                                                        data-tp-maq="@item.TipoMaquina"
+                                                        data-cod-maq="@item.CodigoMaquina"
+                                                        data-turno="@item.Turno"
+                                                        data-fecha-turno="@_ftDate.ToString("yyyy-MM-dd")">
+                                                    <i class="bi bi-plus-circle"></i>
+                                                </button>
+                                            }
                                             <button type="button" class="btn btn-sm btn-outline-warning me-1 btn-registrar-paro" title="Registrar Paro"
                                                     data-tp-maq="@item.TipoMaquina"
                                                     data-cod-maq="@item.CodigoMaquina"
@@ -171,16 +185,12 @@
                                                     data-maquina="@(string.IsNullOrEmpty(item.DescripcionMaquina) ? item.CodigoMaquina : item.DescripcionMaquina)">
                                                 <i class="bi bi-pause-circle"></i>
                                             </button>
-                                            @if (User.IsInRole("Admin") || User.IsInRole("Gerencia"))
+                                            @if (item.TipoMaquina == "B")
                                             {
-                                                <form asp-action="Anular" asp-route-id="@item.LocalId" method="post" class="d-inline" id="formAnular_@item.LocalId">
-                                                        @Html.AntiForgeryToken()
-                                                        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
-                                                    <button type="button" class="btn btn-sm btn-danger btn-anular" title="Anular Preparatoria"
-                                                            data-form-id="formAnular_@item.LocalId">
-                                                        <i class="bi bi-slash-circle"></i>
-                                                    </button>
-                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-success me-1 btn-cerrar-batan" title="Cerrar Preparatoria"
+                                                        data-id="@item.LocalId">
+                                                    <i class="bi bi-check-circle"></i>
+                                                </button>
                                             }
                                         }
                                         @if (item.LocalId.HasValue)
@@ -198,6 +208,17 @@
                                                     data-maquina="@(string.IsNullOrEmpty(item.DescripcionMaquina) ? item.CodigoMaquina : item.DescripcionMaquina)">
                                                 <i class="bi bi-pause-fill"></i>
                                             </button>
+                                        }
+                                        @if (item.LocalId.HasValue && item.Estado == "1" && (User.IsInRole("Admin") || User.IsInRole("Gerencia")))
+                                        {
+                                            <form asp-action="Anular" asp-route-id="@item.LocalId" method="post" class="d-inline" id="formAnular_@item.LocalId">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-anular" title="Anular Preparatoria"
+                                                        data-form-id="formAnular_@item.LocalId">
+                                                    <i class="bi bi-slash-circle"></i>
+                                                </button>
+                                            </form>
                                         }
                                     </td>
                                 }
@@ -280,6 +301,25 @@
     </div>
 </div>
 
+<!-- Modal Confirmar Cerrar Preparatoria -->
+<div class="modal fade" id="modalConfirmarCerrarBatan" tabindex="-1" aria-labelledby="modalConfirmarCerrarBatanLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title" id="modalConfirmarCerrarBatanLabel"><i class="bi bi-exclamation-triangle me-2"></i>Confirmar cierre</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro que desea cerrar esta preparatoria? El estado se actualizará a <strong>Terminado</strong> en Oracle.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnAceptarCerrarBatan" class="btn btn-warning"><i class="bi bi-check-circle me-1"></i>Cerrar Preparatoria</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Ver Detalle -->
 <div class="modal fade" id="modalVerDetalle" tabindex="-1" aria-labelledby="modalVerDetalleLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
@@ -342,7 +382,8 @@
                             <span id="det_pasoManuar">-</span>
                         </div>
                     </div>
-                    <!-- Sección Detalle de Producción -->
+                    <!-- Sección Detalle de Producción (oculta para tipo B) -->
+                    <div id="det_seccionProduccion">
                     <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-bar-chart-line me-2"></i>Detalle de Producción</h6>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
@@ -394,6 +435,30 @@
                                 <span class="form-label fw-semibold small text-muted d-block mb-0">Nro. Parada</span>
                                 <span id="det_nroParada">-</span>
                             </div>
+                        </div>
+                    </div>
+                    </div>
+                    <!-- Sección Rollos BATAN (solo tipo B) -->
+                    <div id="det_seccionRollos" style="display:none;">
+                        <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-list-ol me-2"></i>Rollos</h6>
+                        <div id="det_rollosLoading" class="text-center py-3" style="display:none;">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span class="ms-2 text-muted">Cargando rollos...</span>
+                        </div>
+                        <div style="max-height:260px; overflow-y:auto;">
+                            <table class="table table-sm table-hover mb-0" id="det_tablaRollos">
+                                <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th style="width:60px;">#</th>
+                                            <th class="text-end">Kg Neto</th>
+                                            <th class="text-end">Diferencia</th>
+                                        </tr>
+                                    </thead>
+                                <tbody id="det_tablaRollosCuerpo"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-2 text-end">
+                            <span class="text-muted small">Total Kg Neto: <strong id="det_rollosTotalNeto">-</strong></span>
                         </div>
                     </div>
                 </div>
@@ -567,6 +632,43 @@
                 <button type="button" class="btn btn-danger" id="btnAceptarEliminarParo">
                     <i class="bi bi-trash me-1"></i>Eliminar
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Agregar Rollo -->
+<div class="modal fade" id="modalAgregarRollo" tabindex="-1" aria-labelledby="modalAgregarRolloLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAgregarRolloLabel"><i class="bi bi-plus-circle me-2"></i>Agregar Rollo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Peso Bruto <span class="text-danger">*</span></label>
+                        <input type="number" id="rolloPesoBruto" class="form-control" step="0.01" min="0.01" placeholder="Ingrese el peso bruto" />
+                        <div id="errRolloPesoBruto" class="text-danger small mt-1" style="display:none;"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Varilla</label>
+                        <div class="input-group">
+                            <input type="number" id="rolloVarilla" class="form-control" value="1.2" readonly style="background-color: var(--color-bg-light);" />
+                            <span class="input-group-text">Kg</span>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Peso Neto</label>
+                        <input type="number" id="rolloPesoNeto" class="form-control" readonly step="0.01" style="background-color: var(--color-bg-light);" placeholder="-" />
+                    </div>
+                </div>
+                <div id="rolloAlerta" class="alert mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>Cerrar</button>
+                <button type="button" id="btnRolloGuardar" class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button>
             </div>
         </div>
     </div>
@@ -1209,21 +1311,73 @@
                     document.getElementById('det_pasoManuar').textContent    = d.pasoManuar || '-';
                     document.getElementById('det_grupoPasoManuar').style.display = d.esPabilera ? 'none' : '';
 
-                    document.getElementById('det_velocidad').textContent     = d.velocidad != null ? d.velocidad : '-';
-                    document.getElementById('det_metraje').textContent       = d.metraje != null ? d.metraje : '-';
-                    document.getElementById('det_rolloTacho').textContent    = d.rolloTacho != null ? d.rolloTacho : '-';
-                    document.getElementById('det_kgNeto').textContent        = d.kgNeto != null ? d.kgNeto : '-';
-                    document.getElementById('det_fechaFin').textContent      = d.fechaFin || '-';
-                    document.getElementById('det_producTeorico').textContent  = d.producTeorico != null ? d.producTeorico : '-';
-                    document.getElementById('det_eficiencTeorico').textContent = d.eficiencTeorico != null ? d.eficiencTeorico : '-';
+                    // Sección producción vs rollos BATAN
+                    var secProduccion = document.getElementById('det_seccionProduccion');
+                    var secRollos     = document.getElementById('det_seccionRollos');
+                    if (d.esBatan) {
+                        secProduccion.style.display = 'none';
+                        secRollos.style.display     = '';
+                        // Cargar rollos vía AJAX
+                        document.getElementById('det_rollosLoading').style.display   = '';
+                        document.getElementById('det_tablaRollosCuerpo').innerHTML   = '';
+                        document.getElementById('det_rollosTotalNeto').textContent    = '-';
+                        fetch('@Url.Action("GetRollosBatan", "RegistroPreparatoria")?id=' + encodeURIComponent(id))
+                            .then(function (r) { return r.json(); })
+                            .then(function (rollos) {
+                                document.getElementById('det_rollosLoading').style.display = 'none';
+                                var tbody = document.getElementById('det_tablaRollosCuerpo');
+                                if (!rollos || rollos.length === 0) {
+                                    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><i class="bi bi-inbox me-1"></i>Sin rollos registrados</td></tr>';
+                                    document.getElementById('det_rollosTotalNeto').textContent = '0.00';
+                                } else {
+                                    var total = 0;
+                                    rollos.forEach(function (r, i) {
+                                        var diffStr = '-';
+                                        if (i > 0 && rollos[i - 1].fechaHora && r.fechaHora) {
+                                            var prev = new Date(rollos[i - 1].fechaHora);
+                                            var curr = new Date(r.fechaHora);
+                                            var diffMs = curr - prev;
+                                            if (diffMs >= 0) {
+                                                var totalSec = Math.floor(diffMs / 1000);
+                                                var hrs  = Math.floor(totalSec / 3600);
+                                                var mins = Math.floor((totalSec % 3600) / 60);
+                                                var secs = totalSec % 60;
+                                                diffStr = hrs + 'hrs. ' + mins + 'min. ' + secs + 'seg.';
+                                            }
+                                        }
+                                        var tr = document.createElement('tr');
+                                        tr.innerHTML = '<td>' + escHtml(r.item) + '</td>' +
+                                                       '<td class="text-end">' + parseFloat(r.neto).toFixed(2) + '</td>' +
+                                                       '<td class="text-end text-muted small">' + diffStr + '</td>';
+                                        tbody.appendChild(tr);
+                                        total += parseFloat(r.neto) || 0;
+                                    });
+                                    document.getElementById('det_rollosTotalNeto').textContent = total.toFixed(2);
+                                }
+                            })
+                            .catch(function () {
+                                document.getElementById('det_rollosLoading').style.display = 'none';
+                                document.getElementById('det_tablaRollosCuerpo').innerHTML = '<tr><td colspan="2" class="text-danger text-center py-2">Error al cargar rollos.</td></tr>';
+                            });
+                    } else {
+                        secProduccion.style.display = '';
+                        secRollos.style.display     = 'none';
+                        document.getElementById('det_velocidad').textContent      = d.velocidad != null ? d.velocidad : '-';
+                        document.getElementById('det_metraje').textContent        = d.metraje != null ? d.metraje : '-';
+                        document.getElementById('det_rolloTacho').textContent     = d.rolloTacho != null ? d.rolloTacho : '-';
+                        document.getElementById('det_kgNeto').textContent         = d.kgNeto != null ? d.kgNeto : '-';
+                        document.getElementById('det_fechaFin').textContent       = d.fechaFin || '-';
+                        document.getElementById('det_producTeorico').textContent  = d.producTeorico != null ? d.producTeorico : '-';
+                        document.getElementById('det_eficiencTeorico').textContent = d.eficiencTeorico != null ? d.eficiencTeorico : '-';
 
-                    var secPabilera = document.getElementById('det_seccionPabilera');
-                    secPabilera.style.display = d.esPabilera ? '' : 'none';
-                    if (d.esPabilera) {
-                        document.getElementById('det_contadorInicial').textContent = d.contadorInicial != null ? d.contadorInicial : '-';
-                        document.getElementById('det_husosInactivas').textContent  = d.husosInactivas != null ? d.husosInactivas : '-';
-                        document.getElementById('det_contadorFinal').textContent   = d.contadorFinal != null ? d.contadorFinal : '-';
-                        document.getElementById('det_nroParada').textContent       = d.nroParada != null ? d.nroParada : '-';
+                        var secPabilera = document.getElementById('det_seccionPabilera');
+                        secPabilera.style.display = d.esPabilera ? '' : 'none';
+                        if (d.esPabilera) {
+                            document.getElementById('det_contadorInicial').textContent = d.contadorInicial != null ? d.contadorInicial : '-';
+                            document.getElementById('det_husosInactivas').textContent  = d.husosInactivas != null ? d.husosInactivas : '-';
+                            document.getElementById('det_contadorFinal').textContent   = d.contadorFinal != null ? d.contadorFinal : '-';
+                            document.getElementById('det_nroParada').textContent       = d.nroParada != null ? d.nroParada : '-';
+                        }
                     }
 
                     document.getElementById('modalVerDetalleLoading').style.display = 'none';
@@ -1237,6 +1391,158 @@
                 });
         });
     });
+</script>
+<script>
+    // === Modal Agregar Rollo ===
+    (function () {
+        var rolloTpMaq = '', rolloCodMaq = '', rolloTurno = '', rolloFechaTurno = '';
+        var modalAgregarRollo = new bootstrap.Modal(document.getElementById('modalAgregarRollo'));
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-agregar-rollo');
+            if (!btn) return;
+            rolloTpMaq      = btn.getAttribute('data-tp-maq')      || '';
+            rolloCodMaq     = btn.getAttribute('data-cod-maq')     || '';
+            rolloTurno      = btn.getAttribute('data-turno')       || '';
+            rolloFechaTurno = btn.getAttribute('data-fecha-turno') || '';
+            document.getElementById('rolloPesoBruto').value = '';
+            document.getElementById('rolloPesoNeto').value  = '';
+            document.getElementById('rolloAlerta').style.display = 'none';
+            document.getElementById('errRolloPesoBruto').style.display = 'none';
+            modalAgregarRollo.show();
+        });
+
+        document.getElementById('rolloPesoBruto').addEventListener('input', function () {
+            var bruto   = parseFloat(this.value);
+            var varilla = 1.2;
+            document.getElementById('rolloPesoNeto').value = !isNaN(bruto)
+                ? (Math.round((bruto - varilla) * 100) / 100).toFixed(2)
+                : '';
+        });
+
+        document.getElementById('rolloPesoBruto').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('btnRolloGuardar').click();
+            }
+        });
+
+        document.getElementById('modalAgregarRollo').addEventListener('shown.bs.modal', function () {
+            document.getElementById('rolloPesoBruto').focus();
+        });
+
+        document.getElementById('btnRolloGuardar').addEventListener('click', function () {
+            var errDiv    = document.getElementById('errRolloPesoBruto');
+            var alerta    = document.getElementById('rolloAlerta');
+            var pesoBruto = parseFloat(document.getElementById('rolloPesoBruto').value);
+            errDiv.style.display = 'none';
+            alerta.style.display = 'none';
+
+            if (isNaN(pesoBruto) || pesoBruto <= 0) {
+                errDiv.textContent   = 'Ingrese un peso bruto válido mayor a 0.';
+                errDiv.style.display = '';
+                return;
+            }
+
+            var btn = this;
+            btn.disabled  = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Guardando...';
+
+            fetch('@Url.Action("AgregarRollo", "RegistroPreparatoria")', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pesoBruto:  pesoBruto,
+                    fechaTurno: rolloFechaTurno,
+                    turno:      rolloTurno,
+                    tpMaq:      rolloTpMaq,
+                    codMaq:     rolloCodMaq
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                alerta.className     = 'alert mt-3 ' + (d.success ? 'alert-success' : 'alert-danger');
+                alerta.textContent   = d.message;
+                alerta.style.display = '';
+                if (d.success) {
+                    document.getElementById('rolloPesoBruto').value = '';
+                    document.getElementById('rolloPesoNeto').value  = '';
+                    document.getElementById('rolloPesoBruto').focus();
+                }
+            })
+            .catch(function () {
+                alerta.className     = 'alert mt-3 alert-danger';
+                alerta.textContent   = 'Error al registrar el rollo. Intente nuevamente.';
+                alerta.style.display = '';
+            })
+            .finally(function () {
+                btn.disabled  = false;
+                btn.innerHTML = '<i class="bi bi-save me-1"></i>Guardar';
+            });
+        });
+    })();
+</script>
+<script>
+    // === Cerrar Preparatoria BATAN ===
+    (function () {
+        var cerrarBatanId = null;
+        var modalCerrarBatan = new bootstrap.Modal(document.getElementById('modalConfirmarCerrarBatan'));
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-cerrar-batan');
+            if (!btn) return;
+            cerrarBatanId = btn.getAttribute('data-id');
+            modalCerrarBatan.show();
+        });
+
+        document.getElementById('btnAceptarCerrarBatan').addEventListener('click', function () {
+            if (!cerrarBatanId) return;
+            var btn = this;
+            btn.disabled  = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Cerrando...';
+
+            fetch('@Url.Action("CerrarPreparatoriaBatan", "RegistroPreparatoria")', {
+                method:  'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+                },
+                body: JSON.stringify({ id: parseInt(cerrarBatanId) })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                modalCerrarBatan.hide();
+                if (d.success) {
+                    location.reload();
+                } else {
+                    var alerta = document.createElement('div');
+                    alerta.className = 'alert alert-danger alert-dismissible fade show mt-2';
+                    alerta.innerHTML = '<i class="bi bi-exclamation-circle me-2"></i>' + (d.message || 'Error al cerrar la preparatoria.') +
+                        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                    document.querySelector('.card.mb-3')?.before(alerta);
+                    setTimeout(function () { alerta.remove(); }, 6000);
+                }
+            })
+            .catch(function () {
+                modalCerrarBatan.hide();
+                var alerta = document.createElement('div');
+                alerta.className = 'alert alert-danger alert-dismissible fade show mt-2';
+                alerta.innerHTML = '<i class="bi bi-exclamation-circle me-2"></i>Error de red al cerrar la preparatoria.' +
+                    '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                document.querySelector('.card.mb-3')?.before(alerta);
+                setTimeout(function () { alerta.remove(); }, 6000);
+            })
+            .finally(function () {
+                btn.disabled  = false;
+                btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Cerrar Preparatoria';
+                cerrarBatanId = null;
+            });
+        });
+
+        document.getElementById('modalConfirmarCerrarBatan').addEventListener('hidden.bs.modal', function () {
+            cerrarBatanId = null;
+        });
+    })();
 </script>
 <style>
     .panel-estado-item:hover { background-color: var(--color-bg-light); }
