@@ -42,12 +42,6 @@ builder.Services.Configure<LecturaCorreosOptions>(
 builder.Services.AddHttpClient("OAuth2Token");
 builder.Services.AddHttpClient<ISunatService, SunatService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
-builder.Services.AddHttpClient<IPortalDescargaService, BizlinksPortalService>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(60);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-});
 
 // ─── Repositorios Oracle ──────────────────────────────────────
 builder.Services.AddTransient<ILecturaCorreosRepository, LecturaCorreosRepository>();
@@ -60,6 +54,8 @@ builder.Services.AddTransient<IImapConexionService, ImapConexionService>();
 builder.Services.AddTransient<ILectorAdjuntoXml, LectorAdjuntoXml>();
 builder.Services.AddTransient<ILectorAdjuntoPdf, LectorAdjuntoPdf>();
 builder.Services.AddTransient<ILectorAdjuntoZip, LectorAdjuntoZip>();
+// Portal de descarga (Bizlinks / JSF): crea su propio HttpClient con cookies por sesión.
+builder.Services.AddTransient<IPortalDescargaService, BizlinksPortalService>();
 // Orquestador de correo
 builder.Services.AddTransient<IEmailReaderService, ImapEmailReaderService>();
 builder.Services.AddTransient<IXmlParserService, UblXmlParserService>();

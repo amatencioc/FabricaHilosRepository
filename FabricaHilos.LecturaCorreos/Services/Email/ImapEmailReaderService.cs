@@ -220,10 +220,12 @@ public class ImapEmailReaderService : IEmailReaderService
             }
         }
 
-        // Si el correo no tiene adjuntos directos, buscar el link CONSULTAR en el cuerpo HTML.
+        // Si el correo no tiene adjuntos directos, buscar el link CONSULTAR en todas las
+        // partes HTML del mensaje, incluyendo correos reenviados (RV:/FW:) donde el HTML
+        // de Bizlinks está embebido como message/rfc822 y no aparece en mensaje.HtmlBody.
         if (adjuntos.Count == 0)
         {
-            var urlConsultar = ExtraerUrlConsultar(mensaje.HtmlBody);
+            var urlConsultar = ExtraerUrlConsultarDeMensaje(mensaje);
             if (!string.IsNullOrEmpty(urlConsultar))
             {
                 _logger.LogInformation(
@@ -247,6 +249,36 @@ public class ImapEmailReaderService : IEmailReaderService
     }
 
     /// <summary>
+    /// Busca el link "CONSULTAR" en TODAS las partes HTML del mensaje,
+    /// incluyendo mensajes embebidos en correos reenviados (RV:/FW:).
+    /// <c>mensaje.HtmlBody</c> solo devuelve el HTML del nivel superior;
+    /// para correos reenviados el HTML de Bizlinks está dentro del MessagePart.
+    /// </summary>
+    private static string? ExtraerUrlConsultarDeMensaje(MimeMessage mensaje)
+    {
+        // Nivel superior: funciona para correos directos de Bizlinks.
+        if (!string.IsNullOrWhiteSpace(mensaje.HtmlBody))
+        {
+            var url = ExtraerUrlConsultar(mensaje.HtmlBody);
+            if (url is not null) return url;
+        }
+
+        // Traversal completo: cubre correos reenviados (RV:/FW:) donde el HTML
+        // de Bizlinks está dentro de un MessagePart (message/rfc822).
+        foreach (var parte in IterarPartes(mensaje.Body))
+        {
+            if (parte is not TextPart textPart) continue;
+            if (!textPart.ContentType.IsMimeType("text", "html")) continue;
+            if (string.IsNullOrWhiteSpace(textPart.Text)) continue;
+
+            var url = ExtraerUrlConsultar(textPart.Text);
+            if (url is not null) return url;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Extrae la URL del botón/link "CONSULTAR" del cuerpo HTML del correo.
     /// Cubre variantes: "CONSULTAR", "Consultar", "consultar".
     /// Devuelve null si no encuentra ningún link.
@@ -264,6 +296,7 @@ public class ImapEmailReaderService : IEmailReaderService
         if (m.Success) return m.Groups[1].Value;
 
         // Patrón 2: href cuya URL contiene la palabra "consultar"
+        // Cubre consultarDocumento.jsf, consultarComprobante, etc.
         var m2 = Regex.Match(
             htmlBody,
             @"href\s*=\s*[""'](https?://[^""']*consultar[^""']*)[""']",
