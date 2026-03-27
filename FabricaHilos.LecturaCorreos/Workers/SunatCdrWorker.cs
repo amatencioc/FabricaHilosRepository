@@ -45,22 +45,61 @@ public class SunatCdrWorker : BackgroundService
 
         // Espera a que LecturaCorreosSunatCdrWorker complete la limpieza de tablas
         // antes de iniciar el primer ciclo de consulta CDR.
-        await _limpiezaSignal.EsperarAsync(stoppingToken);
+        // Timeout de 10 min: si el worker de correos falla antes de señalizar, CDR arranca de todas formas.
+        using var esperaCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        esperaCts.CancelAfter(TimeSpan.FromMinutes(10));
+        try
+        {
+            await _limpiezaSignal.EsperarAsync(esperaCts.Token);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("SunatCdrWorker: parada solicitada durante la espera de señal de limpieza.");
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("SunatCdrWorker: timeout (10 min) esperando señal de limpieza. Iniciando ciclos de CDR de todas formas.");
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Iniciando ciclo de consulta de CDR — {Hora}", DateTimeOffset.Now);
-
             try
             {
-                await ProcesarFacturasPendientesAsync(stoppingToken);
+                _logger.LogInformation("Iniciando ciclo de consulta de CDR — {Hora}", DateTimeOffset.Now);
+
+                try
+                {
+                    await ProcesarFacturasPendientesAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error general en el ciclo de consulta de CDR.");
+                }
+
+                try
+                {
+                    await Task.Delay(_intervalo, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error general en el ciclo de consulta de CDR.");
+                _logger.LogCritical(ex, "Error crítico inesperado en SunatCdrWorker. El worker reintentará en 60s.");
+                try { await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken); }
+                catch (OperationCanceledException) { break; }
             }
-
-            await Task.Delay(_intervalo, stoppingToken);
         }
 
         _logger.LogInformation("SunatCdrWorker detenido.");
@@ -107,8 +146,6 @@ public class SunatCdrWorker : BackgroundService
 
             try
             {
-                await repositorio.IncrementarIntentosAsync(factura.Id);
-
                 _logger.LogInformation(
                     "Consultando CDR en SUNAT para factura ID {Id} — {Tipo}/{Serie}/{Correlativo}",
                     factura.Id, factura.TipoComprobante, factura.Serie, factura.Correlativo);
@@ -118,14 +155,15 @@ public class SunatCdrWorker : BackgroundService
                     factura.TipoComprobante,
                     factura.Serie,
                     factura.Correlativo,
-                    empresa);
+                    empresa,
+                    cancellationToken);
 
                 if (!respuesta.Exitoso)
                 {
                     _logger.LogWarning(
                         "La consulta a SUNAT falló para factura ID {Id}: {Error}",
                         factura.Id, respuesta.ErrorDetalle);
-                    await repositorio.GuardarErrorAsync(factura.Id, respuesta.ErrorDetalle ?? "Error desconocido");
+                    await GuardarErrorSeguroAsync(repositorio, factura.Id, respuesta.ErrorDetalle ?? "Error desconocido");
                     continue;
                 }
 
@@ -135,7 +173,7 @@ public class SunatCdrWorker : BackgroundService
                         "Factura ID {Id} ACEPTADA_SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
                         factura.Id, respuesta.CodigoRespuesta, respuesta.MensajeRespuesta);
 
-                    await repositorio.ActualizarEstadoAsync(
+                    await repositorio.ActualizarEstadoConIncrementoAsync(
                         factura.Id,
                         "ACEPTADO_SUNAT",
                         respuesta.CodigoRespuesta,
@@ -148,7 +186,7 @@ public class SunatCdrWorker : BackgroundService
                         "Factura ID {Id} RECHAZADA_SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
                         factura.Id, respuesta.CodigoRespuesta, respuesta.MensajeRespuesta);
 
-                    await repositorio.ActualizarEstadoAsync(
+                    await repositorio.ActualizarEstadoConIncrementoAsync(
                         factura.Id,
                         "RECHAZADO_SUNAT",
                         respuesta.CodigoRespuesta,
@@ -157,20 +195,44 @@ public class SunatCdrWorker : BackgroundService
                 }
                 else
                 {
-                    // En proceso / sin CDR aún disponible
+                    // En proceso / sin CDR aún disponible.
+                    // GuardarErrorSeguroAsync usa GuardarErrorConIncrementoAsync, por lo que
+                    // INTENTOS siempre se incrementa atómicamente con el guardado del mensaje.
                     _logger.LogInformation(
                         "Factura ID {Id} aún en proceso en SUNAT — Código: {Codigo}, Mensaje: {Mensaje}",
                         factura.Id, respuesta.CodigoRespuesta, respuesta.MensajeRespuesta);
 
-                    if (!string.IsNullOrWhiteSpace(respuesta.MensajeRespuesta))
-                        await repositorio.GuardarErrorAsync(factura.Id, respuesta.MensajeRespuesta);
+                    var mensajeEnProceso = string.IsNullOrWhiteSpace(respuesta.MensajeRespuesta)
+                        ? $"En proceso — código: {respuesta.CodigoRespuesta}"
+                        : respuesta.MensajeRespuesta;
+                    await GuardarErrorSeguroAsync(repositorio, factura.Id, mensajeEnProceso);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al procesar factura ID {Id}", factura.Id);
-                await repositorio.GuardarErrorAsync(factura.Id, ex.Message);
+                await GuardarErrorSeguroAsync(repositorio, factura.Id, ex.Message);
             }
+        }
+    }
+
+    /// <summary>
+    /// Wrapper defensivo: si Oracle falla al guardar el error, loguea y continúa
+    /// en lugar de matar el foreach de facturas pendientes.
+    /// Usa <see cref="ILecturaCorreosRepository.GuardarErrorConIncrementoAsync"/> para que
+    /// el incremento de INTENTOS y el guardado del error sean atómicos.
+    /// </summary>
+    private async Task GuardarErrorSeguroAsync(ILecturaCorreosRepository repositorio, long facturaId, string mensaje)
+    {
+        try
+        {
+            await repositorio.GuardarErrorConIncrementoAsync(facturaId, mensaje);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "No se pudo registrar el error en BD para factura ID {Id}. Se continúa con la siguiente.",
+                facturaId);
         }
     }
 }

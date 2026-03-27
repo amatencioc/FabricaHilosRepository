@@ -50,15 +50,24 @@ public class LectorAdjuntoZip : ILectorAdjuntoZip
                     using (var s = entry.Open())
                         await s.CopyToAsync(entryMs, ct);
 
-                    resultado.Add(new AdjuntoCorreo
+                    if (entryMs.Length > MaxEntradaBytes)
                     {
-                        TipoAdjunto   = "XML",
-                        NombreArchivo = entry.Name,
-                        ContenidoXml  = _lectorXml.LeerDesdeStream(entryMs),
-                        Asunto        = asunto,
-                        Remitente     = remitente,
-                        FechaCorreo   = fecha,
-                    });
+                        _logger.LogWarning(
+                            "Entrada ZIP '{Nombre}' omitida: tamaño real {MB:F1} MB supera el límite de {Max} MB.",
+                            entry.Name, entryMs.Length / (1024.0 * 1024), MaxEntradaBytes / (1024 * 1024));
+                    }
+                    else
+                    {
+                        resultado.Add(new AdjuntoCorreo
+                        {
+                            TipoAdjunto   = "XML",
+                            NombreArchivo = entry.Name,
+                            ContenidoXml  = _lectorXml.LeerDesdeStream(entryMs),
+                            Asunto        = asunto,
+                            Remitente     = remitente,
+                            FechaCorreo   = fecha,
+                        });
+                    }
                 }
                 else if (entry.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
@@ -66,15 +75,24 @@ public class LectorAdjuntoZip : ILectorAdjuntoZip
                     using (var s = entry.Open())
                         await s.CopyToAsync(entryMs, ct);
 
-                    resultado.Add(new AdjuntoCorreo
+                    if (entryMs.Length > MaxEntradaBytes)
                     {
-                        TipoAdjunto   = "PDF",
-                        NombreArchivo = entry.Name,
-                        ContenidoPdf  = entryMs.ToArray(),
-                        Asunto        = asunto,
-                        Remitente     = remitente,
-                        FechaCorreo   = fecha,
-                    });
+                        _logger.LogWarning(
+                            "Entrada ZIP '{Nombre}' omitida: tamaño real {MB:F1} MB supera el límite de {Max} MB.",
+                            entry.Name, entryMs.Length / (1024.0 * 1024), MaxEntradaBytes / (1024 * 1024));
+                    }
+                    else
+                    {
+                        resultado.Add(new AdjuntoCorreo
+                        {
+                            TipoAdjunto   = "PDF",
+                            NombreArchivo = entry.Name,
+                            ContenidoPdf  = entryMs.ToArray(),
+                            Asunto        = asunto,
+                            Remitente     = remitente,
+                            FechaCorreo   = fecha,
+                        });
+                    }
                 }
             }
             catch (Exception ex)

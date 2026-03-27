@@ -260,8 +260,8 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
         if (msc.Success)
             return $"{CerosRuc}-{CerosTipo}-{Campo(msc.Groups[1].Value, null, CerosSerie)}-{PadCorrel(Campo(msc.Groups[2].Value, null, CerosCorrel))}{sufijo}.pdf";
 
-        // ── Sin coincidencia: formato con ceros, nombre original como correlativo
-        var sinExt = Path.GetFileNameWithoutExtension(soloNombre);
+        // ── Sin coincidencia: formato con ceros, nombre original sanitizado como correlativo
+        var sinExt = SanitizarNombreArchivo(Path.GetFileNameWithoutExtension(soloNombre));
         return $"{CerosRuc}-{CerosTipo}-{CerosSerie}-{sinExt}{sufijo}.pdf";
     }
 
@@ -273,6 +273,18 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
     private static string Campo(string? valor, string? fallback = null, string valorDefault = "0") =>
         !string.IsNullOrWhiteSpace(valor)    ? valor    :
         !string.IsNullOrWhiteSpace(fallback) ? fallback : valorDefault;
+
+    /// <summary>
+    /// Elimina caracteres no válidos en nombres de archivo y trunca a 100 caracteres
+    /// para evitar path traversal y rutas demasiado largas.
+    /// </summary>
+    private static string SanitizarNombreArchivo(string nombre)
+    {
+        var invalidos = Path.GetInvalidFileNameChars();
+        var limpio = new string(nombre.Where(c => Array.IndexOf(invalidos, c) < 0).ToArray());
+        if (limpio.Length > 100) limpio = limpio[..100];
+        return limpio.Length > 0 ? limpio : "_";
+    }
 
     /// <summary>
     /// Intenta extraer los cuatro segmentos [ruc, tipo, serie, correlativo] del nombre de archivo.
@@ -337,12 +349,21 @@ public sealed class ArchivoDocumentoService : IArchivoDocumentoService
                 var sinExt  = Path.GetFileNameWithoutExtension(ruta);
                 var ext     = Path.GetExtension(ruta);
                 int contador = 1;
+                const int maxIntentos = 999;
                 do
                 {
                     rutaFinal = Path.Combine(carpeta, $"{sinExt}-{contador}{ext}");
                     contador++;
                 }
-                while (File.Exists(rutaFinal));
+                while (File.Exists(rutaFinal) && contador <= maxIntentos);
+
+                if (contador > maxIntentos)
+                {
+                    _logger.LogWarning(
+                        "Se alcanzó el límite de {Max} nombres en disco para '{Nombre}'. Se omite el archivo.",
+                        maxIntentos, Path.GetFileName(ruta));
+                    return null;
+                }
 
                 _logger.LogDebug(
                     "Nombre '{Nombre}' ya existente en disco; se usa: {RutaFinal}",

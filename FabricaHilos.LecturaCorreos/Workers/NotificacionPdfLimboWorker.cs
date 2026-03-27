@@ -31,7 +31,8 @@ public class NotificacionPdfLimboWorker : BackgroundService
         _scopeFactory = scopeFactory;
         _logger       = logger;
         _activo       = opciones.Value.WorkerNotificacionPdfActivo;
-        _intervalo    = TimeSpan.FromMinutes(opciones.Value.IntervaloNotificacionPdfMinutos);
+        // Guardia: intervalo mínimo de 1 min para no saturar la BD si el valor está mal configurado.
+        _intervalo    = TimeSpan.FromMinutes(Math.Max(1, opciones.Value.IntervaloNotificacionPdfMinutos));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -51,14 +52,38 @@ public class NotificacionPdfLimboWorker : BackgroundService
         {
             try
             {
-                await ProcesarPendientesAsync(stoppingToken);
+                try
+                {
+                    await ProcesarPendientesAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error general en el ciclo de NotificacionPdfLimboWorker.");
+                }
+
+                try
+                {
+                    await Task.Delay(_intervalo, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error general en el ciclo de NotificacionPdfLimboWorker.");
+                _logger.LogCritical(ex, "Error cr\u00edtico inesperado en NotificacionPdfLimboWorker. El worker reintentar\u00e1 en 60s.");
+                try { await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken); }
+                catch (OperationCanceledException) { break; }
             }
-
-            await Task.Delay(_intervalo, stoppingToken);
         }
 
         _logger.LogInformation("NotificacionPdfLimboWorker detenido.");
@@ -99,6 +124,17 @@ public class NotificacionPdfLimboWorker : BackgroundService
             if (ct.IsCancellationRequested) break;
 
             var (nombre, email) = ParsearRemitente(pdf.RemitenteCorreo);
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                fallidos++;
+                _logger.LogWarning(
+                    ">>> SKIP → ID={Id} | Remitente='{Remitente}' no tiene dirección de correo válida. Se marca como error.",
+                    pdf.Id, pdf.RemitenteCorreo);
+                try { await repo.MarcarErrorNotificacionAsync(pdf.Id, "Dirección de correo del remitente vacía o inválida."); }
+                catch (Exception dbEx) { _logger.LogError(dbEx, "No se pudo persistir ERROR_CORREO para PDF ID={Id}.", pdf.Id); }
+                continue;
+            }
 
             _logger.LogInformation(
                 ">>> Enviando correo → ID={Id} | Para: {Email} | Archivo: '{Archivo}'",

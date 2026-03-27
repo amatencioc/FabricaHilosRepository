@@ -162,6 +162,32 @@ namespace FabricaHilos.Controllers
                     p.TieneParos = maquinasConParos.Contains($"{p.TipoMaquina}|{p.CodigoMaquina}");
             }
 
+            // Cargar Cant. Rollos y Total Neto para preparatorias tipo B (BATAN)
+            var batanPreps = preparatorias.Where(p => p.TipoMaquina == "B").ToList();
+            if (batanPreps.Count > 0)
+            {
+                var rollosTasks = batanPreps.Select(async p =>
+                {
+                    try
+                    {
+                        var ftDate = p.FechaInicio.Hour < 7
+                            ? p.FechaInicio.Date.AddDays(-1)
+                            : p.FechaInicio.Date;
+                        var rollos = await _recetaService.ObtenerRollosPorMaquinaAsync(
+                            ftDate, p.Turno, p.TipoMaquina, p.CodigoMaquina,
+                            fechaIni: p.FechaInicio);
+                        p.CantRollos = rollos.Count;
+                        p.TotalNeto  = rollos.Sum(r => r.Neto);
+                    }
+                    catch
+                    {
+                        p.CantRollos = 0;
+                        p.TotalNeto  = 0m;
+                    }
+                });
+                await Task.WhenAll(rollosTasks);
+            }
+
             ViewBag.Buscar = buscar;
             ViewBag.TipoMaquinaFiltro = tipoMaquina;
             ViewBag.MaquinaFiltro = maquina;

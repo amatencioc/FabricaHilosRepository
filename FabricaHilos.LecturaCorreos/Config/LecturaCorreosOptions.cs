@@ -8,6 +8,13 @@ public class LecturaCorreosOptions
     public int  MaxCorreosPorCiclo { get; set; } = 50;
 
     /// <summary>
+    /// Máximo de cuentas procesadas en paralelo por ciclo.
+    /// Limita conexiones IMAP simultáneas y el consumo de memoria/conexiones Oracle.
+    /// Aumentar solo si hay muchas cuentas y la máquina tiene recursos suficientes.
+    /// </summary>
+    public int MaxCuentasParalelo { get; set; } = 4;
+
+    /// <summary>
     /// Intervalo en minutos entre ciclos de consulta de CDR a SUNAT (SunatCdrWorker).
     /// </summary>
     public int IntervaloConsultaMinutos { get; set; } = 15;

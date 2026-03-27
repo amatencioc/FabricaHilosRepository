@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Models;
+using FabricaHilos.Models.Facturacion;
 using FabricaHilos.Models.Inventario;
 using FabricaHilos.Models.Produccion;
 using FabricaHilos.Models.Ventas;
@@ -22,6 +23,7 @@ namespace FabricaHilos.Data
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<Empleado> Empleados { get; set; }
         public DbSet<Asistencia> Asistencias { get; set; }
+        public DbSet<FhLcDocumento> LcDocumentos { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -63,6 +65,7 @@ namespace FabricaHilos.Data
             {
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.NumeroPedido).IsRequired().HasMaxLength(20);
+                entity.HasIndex(e => e.NumeroPedido).IsUnique();
                 entity.Property(e => e.Total).HasColumnType("decimal(18,2)");
                 entity.HasOne(e => e.Cliente)
                       .WithMany(c => c.Pedidos)

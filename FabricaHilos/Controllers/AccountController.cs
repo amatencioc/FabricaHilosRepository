@@ -145,13 +145,20 @@ namespace FabricaHilos.Controllers
                 }
 
                 // 2. Validar contra Identity local
-                var resultado = await _signInManager.PasswordSignInAsync(usuario, password, recordarme, lockoutOnFailure: false);
+                var resultado = await _signInManager.PasswordSignInAsync(usuario, password, recordarme, lockoutOnFailure: true);
                 if (resultado.Succeeded)
                 {
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
                     var (ctrl, act) = _menuService.GetLanding();
                     return RedirectToAction(act, ctrl);
+                }
+
+                if (resultado.IsLockedOut)
+                {
+                    _logger.LogWarning("Cuenta bloqueada tras múltiples intentos fallidos: {Usuario}", usuario);
+                    ModelState.AddModelError(string.Empty, "Cuenta bloqueada temporalmente por múltiples intentos fallidos. Intente nuevamente en 10 minutos.");
+                    return View();
                 }
 
                 ModelState.AddModelError(string.Empty, "Usuario o contraseña incorrectos.");

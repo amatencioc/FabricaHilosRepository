@@ -292,7 +292,7 @@ public class ImapEmailReaderService : IEmailReaderService
         var m = Regex.Match(
             html,
             @"formato\s+" + tipo + @"[^<]{0,300}<a\s[^>]*href\s*=\s*[""'](https?://[^""']+)[""']",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.NonBacktracking);
         return m.Success ? m.Groups[1].Value : null;
     }
 
@@ -339,7 +339,7 @@ public class ImapEmailReaderService : IEmailReaderService
         var m = Regex.Match(
             htmlBody,
             @"<a\s[^>]*href\s*=\s*[""']([^""']+)[""'][^>]*>\s*(?:<[^>]+>)*\s*(?:Consultar|Ver\s+documento)\s*(?:</[^>]+>)*\s*</a>",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.NonBacktracking);
 
         if (m.Success) return WebUtility.HtmlDecode(m.Groups[1].Value);
 
@@ -348,7 +348,7 @@ public class ImapEmailReaderService : IEmailReaderService
         var m2 = Regex.Match(
             htmlBody,
             @"href\s*=\s*[""'](https?://[^""']*consultar[^""']*)[""']",
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase | RegexOptions.NonBacktracking);
 
         return m2.Success ? WebUtility.HtmlDecode(m2.Groups[1].Value) : null;
     }

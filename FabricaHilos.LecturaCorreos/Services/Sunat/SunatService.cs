@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 
 public class SunatService : ISunatService
 {
+    private static readonly TimeSpan TimeoutSoap = TimeSpan.FromSeconds(30);
+
     private readonly HttpClient            _httpClient;
     private readonly ILogger<SunatService> _logger;
 
@@ -19,7 +21,7 @@ public class SunatService : ISunatService
 
     public async Task<RespuestaCdrSunat> ConsultarCdrAsync(
         string ruc, string tipoComprobante, string serie, int correlativo,
-        EmpresaOptions empresa)
+        EmpresaOptions empresa, CancellationToken ct = default)
     {
         var sunat = empresa.Sunat
             ?? throw new InvalidOperationException(
@@ -43,8 +45,12 @@ public class SunatService : ISunatService
                 "Consultando CDR para {Ruc}/{Tipo}/{Serie}/{Correlativo} → {Endpoint}",
                 ruc, tipoComprobante, serie, correlativo, endpoint);
 
-            var respuestaHttp   = await _httpClient.PostAsync(endpoint, contenido);
-            var cuerpoRespuesta = await respuestaHttp.Content.ReadAsStringAsync();
+            // Timeout propio de 30 s para no bloquear el ciclo si SUNAT no responde.
+            using var soapCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            soapCts.CancelAfter(TimeoutSoap);
+
+            var respuestaHttp   = await _httpClient.PostAsync(endpoint, contenido, soapCts.Token);
+            var cuerpoRespuesta = await respuestaHttp.Content.ReadAsStringAsync(soapCts.Token);
 
             if (!respuestaHttp.IsSuccessStatusCode)
             {
@@ -62,6 +68,21 @@ public class SunatService : ISunatService
             _logger.LogDebug("Respuesta XML recibida para {Ruc}/{Serie}/{Correlativo}.", ruc, serie, correlativo);
 
             return ParsarRespuestaSoap(cuerpoRespuesta);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "Timeout ({Seg}s) en consulta CDR para {Ruc}/{Serie}/{Correlativo}.",
+                (int)TimeoutSoap.TotalSeconds, ruc, serie, correlativo);
+            return new RespuestaCdrSunat
+            {
+                Exitoso      = false,
+                ErrorDetalle = $"Timeout de {(int)TimeoutSoap.TotalSeconds}s en llamada SOAP a SUNAT."
+            };
         }
         catch (Exception ex)
         {

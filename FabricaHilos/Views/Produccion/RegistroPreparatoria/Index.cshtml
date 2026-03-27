@@ -138,7 +138,15 @@
                                 <td>@item.FechaInicio.ToString("dd/MM/yyyy HH:mm:ss")</td>
                                 <td>@(item.Turno == null ? "-" : ProduccionLookups.GetTurno(item.Turno))</td>
                                 <td style="display:none;">@(string.IsNullOrEmpty(item.NombreOperario) ? "-" : item.NombreOperario)</td>
-                                <td>@(item.PasoManual == null ? "-" : ProduccionLookups.GetPaso(item.PasoManual))</td>
+                                @if (item.TipoMaquina == "B")
+                                {
+                                    var _netoFmt = item.TotalNeto.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                                    <td>R: @item.CantRollos / PN: @_netoFmt</td>
+                                }
+                                else
+                                {
+                                    <td>@(item.PasoManual == null ? "-" : ProduccionLookups.GetPaso(item.PasoManual))</td>
+                                }
                                 <td>
                                     @{
                                         var estadoClass = item.Estado switch
@@ -170,11 +178,14 @@
                                             @if (item.TipoMaquina == "B")
                                             {
                                                 var _ftDate = item.FechaInicio.Hour < 7 ? item.FechaInicio.Date.AddDays(-1) : item.FechaInicio.Date;
+                                                var _totalNetoStr = item.TotalNeto.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
                                                 <button type="button" class="btn btn-sm btn-outline-success me-1 btn-agregar-rollo" title="Agregar Rollo"
                                                         data-tp-maq="@item.TipoMaquina"
                                                         data-cod-maq="@item.CodigoMaquina"
                                                         data-turno="@item.Turno"
-                                                        data-fecha-turno="@_ftDate.ToString("yyyy-MM-dd")">
+                                                        data-fecha-turno="@_ftDate.ToString("yyyy-MM-dd")"
+                                                        data-cant-rollos="@item.CantRollos"
+                                                        data-total-neto="@_totalNetoStr">
                                                     <i class="bi bi-plus-circle"></i>
                                                 </button>
                                             }
@@ -646,6 +657,10 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
+                <div class="d-flex gap-4 mb-3 p-2 rounded border bg-light">
+                    <span><span class="text-muted small">Cant. Rollos:</span> <strong id="rolloCantRollos" class="text-primary">0</strong></span>
+                    <span><span class="text-muted small">T. Neto:</span> <strong id="rolloTotalNeto" class="text-primary">0.00</strong></span>
+                </div>
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label fw-semibold">Peso Bruto <span class="text-danger">*</span></label>
@@ -1396,19 +1411,28 @@
     // === Modal Agregar Rollo ===
     (function () {
         var rolloTpMaq = '', rolloCodMaq = '', rolloTurno = '', rolloFechaTurno = '';
+        var rolloCantRollosActual = 0, rolloTotalNetoActual = 0;
         var modalAgregarRollo = new bootstrap.Modal(document.getElementById('modalAgregarRollo'));
+
+        function actualizarRolloResumen() {
+            document.getElementById('rolloCantRollos').textContent = rolloCantRollosActual;
+            document.getElementById('rolloTotalNeto').textContent  = rolloTotalNetoActual.toFixed(2);
+        }
 
         document.addEventListener('click', function (e) {
             var btn = e.target.closest('.btn-agregar-rollo');
             if (!btn) return;
-            rolloTpMaq      = btn.getAttribute('data-tp-maq')      || '';
-            rolloCodMaq     = btn.getAttribute('data-cod-maq')     || '';
-            rolloTurno      = btn.getAttribute('data-turno')       || '';
-            rolloFechaTurno = btn.getAttribute('data-fecha-turno') || '';
+            rolloTpMaq            = btn.getAttribute('data-tp-maq')      || '';
+            rolloCodMaq           = btn.getAttribute('data-cod-maq')     || '';
+            rolloTurno            = btn.getAttribute('data-turno')       || '';
+            rolloFechaTurno       = btn.getAttribute('data-fecha-turno') || '';
+            rolloCantRollosActual = parseInt(btn.getAttribute('data-cant-rollos') || '0', 10);
+            rolloTotalNetoActual  = parseFloat(btn.getAttribute('data-total-neto') || '0');
             document.getElementById('rolloPesoBruto').value = '';
             document.getElementById('rolloPesoNeto').value  = '';
             document.getElementById('rolloAlerta').style.display = 'none';
             document.getElementById('errRolloPesoBruto').style.display = 'none';
+            actualizarRolloResumen();
             modalAgregarRollo.show();
         });
 
@@ -1465,6 +1489,10 @@
                 alerta.textContent   = d.message;
                 alerta.style.display = '';
                 if (d.success) {
+                    var neto = Math.round((pesoBruto - 1.2) * 100) / 100;
+                    rolloCantRollosActual += 1;
+                    rolloTotalNetoActual   = Math.round((rolloTotalNetoActual + neto) * 100) / 100;
+                    actualizarRolloResumen();
                     document.getElementById('rolloPesoBruto').value = '';
                     document.getElementById('rolloPesoNeto').value  = '';
                     document.getElementById('rolloPesoBruto').focus();

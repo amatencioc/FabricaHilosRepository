@@ -23,17 +23,20 @@ public class PdfLimboRepository : IPdfLimboRepository
     public async Task<IReadOnlyList<AdjuntoPdf>> ObtenerPendientesNotificacionAsync()
     {
         // Se excluye CONTENIDO (blob) para evitar cargar binarios innecesariamente.
+        // ROWNUM <= 100: procesa en lotes para no cargar grandes backlog en memoria de una vez.
         const string sql = @"
-            SELECT ID, NOMBRE_ARCHIVO   AS NombreArchivo,
-                        CUENTA_CORREO   AS CuentaCorreo,
-                        ASUNTO_CORREO   AS AsuntoCorreo,
-                        REMITENTE_CORREO AS RemitenteCorreo,
-                        FECHA_CORREO    AS FechaCorreo,
-                        ESTADO,
-                        FECHA_CREACION  AS FechaCreacion
-            FROM  FH_LECTCORREOS_PDF_ADJUNTOS
-            WHERE ESTADO = 'PENDIENTE'
-            ORDER BY FECHA_CREACION ASC";
+            SELECT * FROM (
+                SELECT ID, NOMBRE_ARCHIVO   AS NombreArchivo,
+                            CUENTA_CORREO   AS CuentaCorreo,
+                            ASUNTO_CORREO   AS AsuntoCorreo,
+                            REMITENTE_CORREO AS RemitenteCorreo,
+                            FECHA_CORREO    AS FechaCorreo,
+                            ESTADO,
+                            FECHA_CREACION  AS FechaCreacion
+                FROM  FH_LECTCORREOS_PDF_ADJUNTOS
+                WHERE ESTADO = 'PENDIENTE'
+                ORDER BY FECHA_CREACION ASC
+            ) WHERE ROWNUM <= 100";
 
         return await OracleRetry.EjecutarAsync(
             async () =>

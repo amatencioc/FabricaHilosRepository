@@ -30,9 +30,30 @@ Log.Logger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(Log.Logger);
 
+// ─── Excepciones no controladas a nivel de proceso ────────────
+AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+{
+    Log.Fatal(args.ExceptionObject as Exception,
+        "Excepción no controlada en el dominio de la aplicación. IsTerminating={IsTerminating}",
+        args.IsTerminating);
+    Log.CloseAndFlush();
+};
+
+TaskScheduler.UnobservedTaskException += (_, args) =>
+{
+    Log.Error(args.Exception,
+        "Excepción no observada en tarea. Se marca como observada para evitar cierre del proceso.");
+    args.SetObserved();
+};
+
 // ─── Windows Service ─────────────────────────────────────────
 builder.Services.AddWindowsService(options =>
     options.ServiceName = "FabricaHilos LecturaCorreos CDR");
+
+// Dar tiempo suficiente para que los workers cierren conexiones IMAP y completen escrituras en BD.
+// El valor por defecto (5s) es demasiado corto para operaciones de red en curso.
+builder.Services.Configure<HostOptions>(opts =>
+    opts.ShutdownTimeout = TimeSpan.FromSeconds(30));
 
 // ─── Configuración tipada ─────────────────────────────────────
 builder.Services.Configure<LecturaCorreosOptions>(
@@ -42,12 +63,8 @@ builder.Services.Configure<LecturaCorreosOptions>(
 builder.Services.AddHttpClient("OAuth2Token");
 builder.Services.AddHttpClient<ISunatService, SunatService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
-builder.Services.AddHttpClient<IPortalDescargaService, BizlinksPortalService>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(60);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-});
+// Portales de descarga: cada servicio crea su propio HttpClient con CookieContainer.
+// El orquestador enruta segun el tipo de correo (efacturacion.pe / bizlinks.la / asaduanas.com).
 
 // ─── Repositorios Oracle ──────────────────────────────────────
 builder.Services.AddTransient<ILecturaCorreosRepository, LecturaCorreosRepository>();
@@ -60,8 +77,11 @@ builder.Services.AddTransient<IImapConexionService, ImapConexionService>();
 builder.Services.AddTransient<ILectorAdjuntoXml, LectorAdjuntoXml>();
 builder.Services.AddTransient<ILectorAdjuntoPdf, LectorAdjuntoPdf>();
 builder.Services.AddTransient<ILectorAdjuntoZip, LectorAdjuntoZip>();
-// Portal de descarga (Bizlinks / JSF): crea su propio HttpClient con cookies por sesión.
-builder.Services.AddTransient<IPortalDescargaService, BizlinksPortalService>();
+// Portales de descarga por proveedor (efacturacion.pe, bizlinks.la, asaduanas.com/softpad)
+builder.Services.AddTransient<EfacturacionPortalService>();
+builder.Services.AddTransient<BizlinksPortalService>();
+builder.Services.AddTransient<AsaduanasPortalService>();
+builder.Services.AddTransient<IPortalDescargaService, PortalDescargaOrquestador>();
 // Orquestador de correo
 builder.Services.AddTransient<IEmailReaderService, ImapEmailReaderService>();
 builder.Services.AddTransient<IXmlParserService, UblXmlParserService>();
@@ -85,6 +105,7 @@ try
 {
     Log.Information("Iniciando FabricaHilos.LecturaCorreos...");
     var host = builder.Build();
+    ValidarConfiguracionAlIniciar(host.Services);
     await host.RunAsync();
 }
 catch (Exception ex)
@@ -94,5 +115,25 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+static void ValidarConfiguracionAlIniciar(IServiceProvider services)
+{
+    var config   = services.GetRequiredService<IConfiguration>();
+    var opciones = new LecturaCorreosOptions();
+    config.GetSection(LecturaCorreosOptions.SeccionConfig).Bind(opciones);
+
+    if (opciones.IntervaloMinutos <= 0)
+        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 LecturaCorreos:IntervaloMinutos={V} debe ser > 0.", opciones.IntervaloMinutos);
+    if (opciones.MaxCorreosPorCiclo <= 0)
+        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 LecturaCorreos:MaxCorreosPorCiclo={V} debe ser > 0.", opciones.MaxCorreosPorCiclo);
+    if (opciones.IntervaloConsultaMinutos <= 0)
+        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 LecturaCorreos:IntervaloConsultaMinutos={V} debe ser > 0.", opciones.IntervaloConsultaMinutos);
+    if (string.IsNullOrWhiteSpace(config.GetConnectionString("OracleConnection")))
+        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 Cadena de conexi\u00f3n 'OracleConnection' no configurada. El servicio no puede conectarse a BD.");
+    if (string.IsNullOrWhiteSpace(opciones.RutaArchivos))
+        Log.Warning("\u26a0\ufe0f LecturaCorreos:RutaArchivos no configurada \u2014 los documentos NO se guardar\u00e1n en disco.");
+    if (opciones.WorkerCorreosActivo && !opciones.TodasLasCuentas.Any())
+        Log.Warning("\u26a0\ufe0f WorkerCorreosActivo=true pero no hay cuentas activas configuradas \u2014 el worker de correos no procesar\u00e1 nada.");
 }
 

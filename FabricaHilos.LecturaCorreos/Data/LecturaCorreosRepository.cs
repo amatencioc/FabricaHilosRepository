@@ -80,6 +80,41 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
             _logger, nameof(ActualizarEstadoAsync));
     }
 
+    public async Task ActualizarEstadoConIncrementoAsync(
+        long id,
+        string estado,
+        string codigoSunat,
+        string mensajeSunat,
+        byte[]? cdrZip)
+    {
+        // UPDATE atómico: actualiza estado e incrementa INTENTOS en una sola sentencia
+        // para evitar la inconsistencia que ocurría con dos llamadas separadas.
+        const string sql = @"
+            UPDATE FH_LECTCORREOS_FACTURAS
+            SET ESTADO = :Estado,
+                CODIGO_RESPUESTA_SUNAT = :CodigoSunat,
+                MENSAJE_SUNAT = :MensajeSunat,
+                CDR_CONTENIDO = :CdrZip,
+                FECHA_CONSULTA_SUNAT = SYSDATE,
+                INTENTOS = INTENTOS + 1
+            WHERE ID = :Id";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new
+                {
+                    Id = id,
+                    Estado = estado,
+                    CodigoSunat = codigoSunat,
+                    MensajeSunat = mensajeSunat,
+                    CdrZip = cdrZip
+                });
+            },
+            _logger, nameof(ActualizarEstadoConIncrementoAsync));
+    }
+
     public async Task IncrementarIntentosAsync(long id)
     {
         const string sql = @"
@@ -113,6 +148,25 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
             _logger, nameof(GuardarErrorAsync));
     }
 
+    public async Task GuardarErrorConIncrementoAsync(long id, string mensajeError)
+    {
+        // UPDATE atómico: guarda el error e incrementa INTENTOS en una sola sentencia.
+        const string sql = @"
+            UPDATE FH_LECTCORREOS_FACTURAS
+            SET MENSAJE_ERROR = :MensajeError,
+                FECHA_CONSULTA_SUNAT = SYSDATE,
+                INTENTOS = INTENTOS + 1
+            WHERE ID = :Id";
+
+        await OracleRetry.EjecutarAsync(
+            async () =>
+            {
+                using var conn = CrearConexion();
+                await conn.ExecuteAsync(sql, new { Id = id, MensajeError = mensajeError });
+            },
+            _logger, nameof(GuardarErrorConIncrementoAsync));
+    }
+
     public async Task InsertarFacturaPendienteCdrAsync(FacturaCorreo factura)
     {
         const string sql = @"
@@ -120,10 +174,16 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
                 (RUC, TIPO_COMPROBANTE, SERIE, CORRELATIVO,
                  ESTADO, FECHA_CREACION, INTENTOS,
                  DOCUMENTO_ID, DOCUMENTO_REFERENCIA)
-            VALUES
-                (:Ruc, :TipoComprobante, :Serie, :Correlativo,
-                 :Estado, SYSDATE, 0,
-                 :DocumentoId, :DocumentoReferencia)";
+            SELECT
+                :Ruc, :TipoComprobante, :Serie, :Correlativo,
+                :Estado, SYSDATE, 0,
+                :DocumentoId, :DocumentoReferencia
+            FROM DUAL
+            WHERE NOT EXISTS (
+                SELECT 1 FROM FH_LECTCORREOS_FACTURAS
+                WHERE RUC = :Ruc AND SERIE = :Serie AND CORRELATIVO = :Correlativo
+                  AND ESTADO IN ('PENDIENTE_CDR', 'ACEPTADO_SUNAT', 'ACEPTADO_CORREO')
+            )";
 
         await OracleRetry.EjecutarAsync(
             async () =>

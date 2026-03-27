@@ -19,16 +19,21 @@ public class LogisticaRepository : ILogisticaRepository
     }
 
     // ── SP_INSERTAR_DOCUMENTO ─────────────────────────────────────────────────
-    public async Task<(long IdGenerado, int CodigoResultado, string MensajeResultado)>
+    public Task<(long IdGenerado, int CodigoResultado, string MensajeResultado)>
         InsertarDocumentoAsync(DocumentoXml doc)
+        => OracleRetry.EjecutarAsync(() => InsertarDocumentoAsyncCore(doc), _logger, nameof(InsertarDocumentoAsync));
+
+    private async Task<(long IdGenerado, int CodigoResultado, string MensajeResultado)>
+        InsertarDocumentoAsyncCore(DocumentoXml doc)
     {
         using var conn = new OracleConnection(_connStr);
         await conn.OpenAsync();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PKG_LC_LOGISTICA.SP_INSERTAR_DOCUMENTO";
-        cmd.CommandType = System.Data.CommandType.StoredProcedure;
-        cmd.BindByName  = true;
+        cmd.CommandText    = "PKG_LC_LOGISTICA.SP_INSERTAR_DOCUMENTO";
+        cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = 60;
 
         // ── IN ────────────────────────────────────────────────────────────────
         AddParam(cmd, "P_NOMBRE_ARCHIVO",          OracleDbType.Varchar2,  doc.NombreArchivo);
@@ -121,16 +126,21 @@ public class LogisticaRepository : ILogisticaRepository
     }
 
     // ── SP_INSERTAR_LINEA ─────────────────────────────────────────────────────
-    public async Task<(int CodigoResultado, string MensajeResultado)>
+    public Task<(int CodigoResultado, string MensajeResultado)>
         InsertarLineaAsync(long documentoId, LineaDocumento linea)
+        => OracleRetry.EjecutarAsync(() => InsertarLineaAsyncCore(documentoId, linea), _logger, nameof(InsertarLineaAsync));
+
+    private async Task<(int CodigoResultado, string MensajeResultado)>
+        InsertarLineaAsyncCore(long documentoId, LineaDocumento linea)
     {
         using var conn = new OracleConnection(_connStr);
         await conn.OpenAsync();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PKG_LC_LOGISTICA.SP_INSERTAR_LINEA";
-        cmd.CommandType = System.Data.CommandType.StoredProcedure;
-        cmd.BindByName  = true;
+        cmd.CommandText    = "PKG_LC_LOGISTICA.SP_INSERTAR_LINEA";
+        cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = 60;
 
         AddParam(cmd, "P_DOCUMENTO_ID",  OracleDbType.Decimal,  documentoId);
         AddParam(cmd, "P_NUMERO_LINEA",  OracleDbType.Int32,    linea.NumeroLinea);
@@ -166,16 +176,21 @@ public class LogisticaRepository : ILogisticaRepository
     }
 
     // ── SP_INSERTAR_CUOTA ─────────────────────────────────────────────────────
-    public async Task<(int CodigoResultado, string MensajeResultado)>
+    public Task<(int CodigoResultado, string MensajeResultado)>
         InsertarCuotaAsync(long documentoId, CuotaPago cuota)
+        => OracleRetry.EjecutarAsync(() => InsertarCuotaAsyncCore(documentoId, cuota), _logger, nameof(InsertarCuotaAsync));
+
+    private async Task<(int CodigoResultado, string MensajeResultado)>
+        InsertarCuotaAsyncCore(long documentoId, CuotaPago cuota)
     {
         using var conn = new OracleConnection(_connStr);
         await conn.OpenAsync();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PKG_LC_LOGISTICA.SP_INSERTAR_CUOTA";
-        cmd.CommandType = System.Data.CommandType.StoredProcedure;
-        cmd.BindByName  = true;
+        cmd.CommandText    = "PKG_LC_LOGISTICA.SP_INSERTAR_CUOTA";
+        cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+        cmd.BindByName     = true;
+        cmd.CommandTimeout = 60;
 
         AddParam(cmd, "P_DOCUMENTO_ID",    OracleDbType.Decimal,  documentoId);
         AddParam(cmd, "P_NUMERO_CUOTA",    OracleDbType.Varchar2, cuota.NumeroCuota);
@@ -209,9 +224,10 @@ public class LogisticaRepository : ILogisticaRepository
             await conn.OpenAsync();
 
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "PKG_LC_LOGISTICA.SP_REGISTRAR_ERROR";
-            cmd.CommandType = System.Data.CommandType.StoredProcedure;
-            cmd.BindByName  = true;
+            cmd.CommandText    = "PKG_LC_LOGISTICA.SP_REGISTRAR_ERROR";
+            cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+            cmd.BindByName     = true;
+            cmd.CommandTimeout = 60;
 
             AddParam(cmd, "P_NOMBRE_ARCHIVO",    OracleDbType.Varchar2, nombreArchivo);
             AddParam(cmd, "P_EXTENSION_ARCHIVO", OracleDbType.Varchar2, extension);
@@ -262,9 +278,10 @@ public class LogisticaRepository : ILogisticaRepository
             await conn.OpenAsync();
 
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "PKG_LC_LOGISTICA.SP_GUARDAR_PDF_ADJUNTO";
-            cmd.CommandType = System.Data.CommandType.StoredProcedure;
-            cmd.BindByName  = true;
+            cmd.CommandText    = "PKG_LC_LOGISTICA.SP_GUARDAR_PDF_ADJUNTO";
+            cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+            cmd.BindByName     = true;
+            cmd.CommandTimeout = 60;
 
             AddParam(cmd, "P_NOMBRE_ARCHIVO",    OracleDbType.Varchar2, pdf.NombreArchivo);
             AddParam(cmd, "P_CUENTA_CORREO",     OracleDbType.Varchar2, pdf.CuentaCorreo);
@@ -321,9 +338,10 @@ public class LogisticaRepository : ILogisticaRepository
             await conn.OpenAsync();
 
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "PKG_LC_LOGISTICA.SP_REGISTRAR_ARCHIVO";
-            cmd.CommandType = System.Data.CommandType.StoredProcedure;
-            cmd.BindByName  = true;
+            cmd.CommandText    = "PKG_LC_LOGISTICA.SP_REGISTRAR_ARCHIVO";
+            cmd.CommandType    = System.Data.CommandType.StoredProcedure;
+            cmd.BindByName     = true;
+            cmd.CommandTimeout = 60;
 
             AddParam(cmd, "P_DOCUMENTO_ID",   OracleDbType.Decimal,  documentoId.Value);
             AddParam(cmd, "P_TIPO_ARCHIVO",   OracleDbType.Varchar2, tipoArchivo);

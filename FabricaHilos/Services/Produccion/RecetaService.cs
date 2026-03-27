@@ -65,6 +65,8 @@ namespace FabricaHilos.Services.Produccion
         public string Turno { get; set; } = string.Empty;
         public string PasoManual { get; set; } = string.Empty;
         public bool TieneParos { get; set; }
+        public int     CantRollos { get; set; }
+        public decimal TotalNeto  { get; set; }
     }
 
     public class DetalleProductivoOracleDto

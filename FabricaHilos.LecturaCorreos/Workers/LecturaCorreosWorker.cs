@@ -25,6 +25,9 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     private readonly IArchivoDocumentoService        _archivoService;
     private readonly ILogger<LecturaCorreosSunatCdrWorker> _logger;
 
+    // Limita el número máximo de cuentas procesadas en paralelo (conexiones IMAP simultáneas).
+    private readonly SemaphoreSlim _semaforo;
+
     // Garantiza que la limpieza/señal inicial se ejecute solo una vez,
     // independientemente de cuántos ciclos complete el worker.
     private bool _limpiezaRealizada;
@@ -49,6 +52,9 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
         _circuitBreaker           = circuitBreaker;
         _archivoService           = archivoService;
         _logger                   = logger;
+        _semaforo                 = new SemaphoreSlim(
+            Math.Max(1, _opciones.MaxCuentasParalelo),
+            Math.Max(1, _opciones.MaxCuentasParalelo));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -77,58 +83,74 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Solo en el primer ciclo: limpiar BD (si aplica) y desbloquear SunatCdrWorker.
-            if (!_limpiezaRealizada)
-            {
-                if (_opciones.LimpiarBdAlIniciar)
-                    await LimpiarBdParaPruebasAsync(stoppingToken);
-                else
-                    _limpiezaSignal.Completar();
-                _limpiezaRealizada = true;
-            }
-
-            _logger.LogInformation("Iniciando ciclo de lectura de correos...");
-
-            var sw = Stopwatch.StartNew();
-
-            // Las cuentas activas y no suspendidas se procesan en paralelo.
-            var cuentasActivas = _opciones.TodasLasCuentas
-                .Where(c => c.Activa && !string.IsNullOrWhiteSpace(c.ImapHost) && !_circuitBreaker.EstaSuspendida(c.Nombre))
-                .ToList();
-
-            if (cuentasActivas.Count > 0)
-            {
-                try
-                {
-                    await Task.WhenAll(cuentasActivas.Select(c => ProcesarCuentaAsync(c, stoppingToken)));
-                }
-                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-                {
-                    _logger.LogError(ex, "Error inesperado en el procesamiento paralelo de cuentas.");
-                }
-            }
-            else
-                _logger.LogWarning("Ninguna cuenta activa disponible (todas suspendidas o desactivadas).");
-
-            sw.Stop();
-
-            var intervalo = TimeSpan.FromMinutes(_opciones.IntervaloMinutos);
-            if (sw.Elapsed > intervalo)
-                _logger.LogWarning(
-                    "⚠️ Ciclo tardó {Elapsed:F1} min — supera el intervalo configurado de {Intervalo} min. Considera reducir MaxCorreosPorCiclo o aumentar el intervalo.",
-                    sw.Elapsed.TotalMinutes, _opciones.IntervaloMinutos);
-            else
-                _logger.LogInformation(
-                    "Ciclo completado en {Elapsed:F1} min. Próximo ciclo en {Intervalo} min.",
-                    sw.Elapsed.TotalMinutes, _opciones.IntervaloMinutos);
-
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(_opciones.IntervaloMinutos), stoppingToken);
+                // Solo en el primer ciclo: limpiar BD (si aplica) y desbloquear SunatCdrWorker.
+                if (!_limpiezaRealizada)
+                {
+                    if (_opciones.LimpiarBdAlIniciar)
+                        await LimpiarBdParaPruebasAsync(stoppingToken);
+                    else
+                        _limpiezaSignal.Completar();
+                    _limpiezaRealizada = true;
+                }
+
+                _logger.LogInformation("Iniciando ciclo de lectura de correos...");
+
+                var sw = Stopwatch.StartNew();
+
+                // Las cuentas activas y no suspendidas se procesan en paralelo.
+                var cuentasActivas = _opciones.TodasLasCuentas
+                    .Where(c => c.Activa && !string.IsNullOrWhiteSpace(c.ImapHost) && !_circuitBreaker.EstaSuspendida(c.Nombre))
+                    .ToList();
+
+                if (cuentasActivas.Count > 0)
+                {
+                    var tareas = cuentasActivas.Select(c => ProcesarCuentaAsync(c, stoppingToken)).ToList();
+                    try
+                    {
+                        await Task.WhenAll(tareas);
+                    }
+                    catch when (!stoppingToken.IsCancellationRequested)
+                    {
+                        foreach (var t in tareas.Where(t => t.IsFaulted))
+                            foreach (var ex in t.Exception!.InnerExceptions)
+                                _logger.LogError(ex, "Error no controlado en procesamiento paralelo de cuenta.");
+                    }
+                }
+                else
+                    _logger.LogWarning("Ninguna cuenta activa disponible (todas suspendidas o desactivadas).");
+
+                sw.Stop();
+
+                var intervalo = TimeSpan.FromMinutes(_opciones.IntervaloMinutos);
+                if (sw.Elapsed > intervalo)
+                    _logger.LogWarning(
+                        "⚠️ Ciclo tardó {Elapsed:F1} min — supera el intervalo configurado de {Intervalo} min. Considera reducir MaxCorreosPorCiclo o aumentar el intervalo.",
+                        sw.Elapsed.TotalMinutes, _opciones.IntervaloMinutos);
+                else
+                    _logger.LogInformation(
+                        "Ciclo completado en {Elapsed:F1} min. Próximo ciclo en {Intervalo} min.",
+                        sw.Elapsed.TotalMinutes, _opciones.IntervaloMinutos);
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(_opciones.IntervaloMinutos), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "Error crítico inesperado en LecturaCorreosSunatCdrWorker. El worker reintentará en 60s.");
+                try { await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken); }
+                catch (OperationCanceledException) { break; }
             }
         }
     }
@@ -143,11 +165,21 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
     {
         if (ct.IsCancellationRequested) return;
 
-        _logger.LogInformation("[{Empresa}] Procesando cuenta: {Nombre} ({Proveedor})",
-            cuenta.NombreEmpresa, cuenta.Nombre, cuenta.Proveedor);
+        // Adquirir slot: si todos están ocupados, esperar hasta 5 min antes de omitir la cuenta.
+        var adquirido = await _semaforo.WaitAsync(TimeSpan.FromMinutes(5), ct);
+        if (!adquirido)
+        {
+            _logger.LogWarning(
+                "[{Empresa}] Cuenta '{Nombre}': timeout esperando slot de procesamiento ({Max} en paralelo). Se omite en este ciclo.",
+                cuenta.NombreEmpresa, cuenta.Nombre, _opciones.MaxCuentasParalelo);
+            return;
+        }
 
         try
         {
+            _logger.LogInformation("[{Empresa}] Procesando cuenta: {Nombre} ({Proveedor})",
+                cuenta.NombreEmpresa, cuenta.Nombre, cuenta.Proveedor);
+
             var adjuntos = await _emailReader.ObtenerAdjuntosAsync(
                 cuenta, _opciones.MaxCorreosPorCiclo, ct);
 
@@ -293,6 +325,10 @@ public class LecturaCorreosSunatCdrWorker : BackgroundService
             // Fallo IMAP tras agotar reintentos → abrir circuito si se repite.
             _circuitBreaker.RegistrarFallo(cuenta.Nombre);
             _logger.LogError(ex, "Error al procesar la cuenta '{Nombre}'. Circuit breaker registra el fallo.", cuenta.Nombre);
+        }
+        finally
+        {
+            _semaforo.Release();
         }
     }
 

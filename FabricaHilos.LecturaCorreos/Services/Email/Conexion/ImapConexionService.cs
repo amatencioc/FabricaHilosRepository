@@ -99,8 +99,9 @@ public class ImapConexionService : IImapConexionService
         if (!resp.IsSuccessStatusCode)
         {
             _logger.LogError(
-                "OAuth2 HTTP {Status} para cuenta '{Nombre}'. Respuesta: {Json}",
-                (int)resp.StatusCode, cuenta.Nombre, json);
+                "OAuth2 HTTP {Status} para cuenta '{Nombre}'. Respuesta (truncada): {Json}",
+                (int)resp.StatusCode, cuenta.Nombre,
+                json.Length > 500 ? json[..500] + "…" : json);
             throw new InvalidOperationException(
                 $"OAuth2 falló con HTTP {(int)resp.StatusCode} para cuenta '{cuenta.Nombre}'.");
         }

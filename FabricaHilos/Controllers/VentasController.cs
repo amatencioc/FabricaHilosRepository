@@ -109,12 +109,31 @@ namespace FabricaHilos.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CrearPedido(Pedido model)
         {
+            // NumeroPedido se genera server-side tras el INSERT para garantizar unicidad
+            // aunque múltiples usuarios creen pedidos simultáneamente.
+            ModelState.Remove(nameof(Pedido.NumeroPedido));
+            model.NumeroPedido = string.Empty;
+
             if (ModelState.IsValid)
             {
-                _context.Pedidos.Add(model);
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Pedido creado exitosamente.";
-                return RedirectToAction(nameof(Pedidos));
+                await using var tx = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    _context.Pedidos.Add(model);
+                    await _context.SaveChangesAsync(); // Obtiene el Id auto-generado
+
+                    model.NumeroPedido = $"PED-{DateTime.Now.Year}-{model.Id:D4}";
+                    await _context.SaveChangesAsync(); // Actualiza con el número definitivo
+
+                    await tx.CommitAsync();
+                    TempData["Success"] = "Pedido creado exitosamente.";
+                    return RedirectToAction(nameof(Pedidos));
+                }
+                catch
+                {
+                    await tx.RollbackAsync();
+                    TempData["Error"] = "Error al crear el pedido. Intente nuevamente.";
+                }
             }
             ViewBag.Clientes = await _context.Clientes.Where(c => c.Activo).OrderBy(c => c.Nombre).ToListAsync();
             return View(model);

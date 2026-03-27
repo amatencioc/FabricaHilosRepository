@@ -65,11 +65,14 @@ public sealed class CuentaCircuitBreaker : ICuentaCircuitBreaker
         if (nuevo.Fallos >= UmbralFallos && nuevo.SuspendidaHasta is null)
         {
             var hasta = DateTime.UtcNow.Add(TiempoSuspension);
-            // Solo el primer hilo que llegue aquí abre el circuito.
-            _estado.TryUpdate(cuentaNombre, nuevo with { SuspendidaHasta = hasta }, nuevo);
-            _logger.LogError(
-                "⚡ CIRCUIT BREAKER ABIERTO — cuenta '{Cuenta}' suspendida tras {N} fallos consecutivos. Se reactiva a las {Hasta:HH:mm:ss} UTC.",
-                cuentaNombre, UmbralFallos, hasta);
+            // TryUpdate garantiza que solo el primer hilo en llegar aquí abre el circuito
+            // y emite el log. Los demás hilos concurrentes verán un CAS fallido y no loguean.
+            if (_estado.TryUpdate(cuentaNombre, nuevo with { SuspendidaHasta = hasta }, nuevo))
+            {
+                _logger.LogError(
+                    "⚡ CIRCUIT BREAKER ABIERTO — cuenta '{Cuenta}' suspendida tras {N} fallos consecutivos. Se reactiva a las {Hasta:HH:mm:ss} UTC.",
+                    cuentaNombre, UmbralFallos, hasta);
+            }
         }
     }
 }

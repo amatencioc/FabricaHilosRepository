@@ -13,9 +13,29 @@ public interface ILecturaCorreosRepository
         string mensajeSunat,
         byte[]? cdrZip);
 
+    /// <summary>
+    /// Actualiza el estado y los campos CDR en un único UPDATE, incrementando
+    /// INTENTOS atómicamente. Evita la inconsistencia que ocurría cuando
+    /// <see cref="IncrementarIntentosAsync"/> y <see cref="ActualizarEstadoAsync"/>
+    /// se llamaban como dos operaciones separadas.
+    /// </summary>
+    Task ActualizarEstadoConIncrementoAsync(
+        long id,
+        string estado,
+        string codigoSunat,
+        string mensajeSunat,
+        byte[]? cdrZip);
+
     Task IncrementarIntentosAsync(long id);
 
     Task GuardarErrorAsync(long id, string mensajeError);
+
+    /// <summary>
+    /// Guarda el mensaje de error e incrementa INTENTOS en un único UPDATE atómico.
+    /// Usar en lugar de la combinación <see cref="IncrementarIntentosAsync"/> +
+    /// <see cref="GuardarErrorAsync"/> para evitar actualizaciones parciales.
+    /// </summary>
+    Task GuardarErrorConIncrementoAsync(long id, string mensajeError);
 
     Task InsertarFacturaPendienteCdrAsync(FacturaCorreo factura);
 

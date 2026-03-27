@@ -27,6 +27,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Password.RequireUppercase = true;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
+    // Protección contra fuerza bruta en login local (Identity)
+    options.Lockout.AllowedForNewUsers   = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(10);
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
@@ -144,10 +148,6 @@ static async Task InicializarBD(IServiceProvider services)
     try
     {
         await context.Database.MigrateAsync();
-
-        // Desactivar foreign keys en SQLite para evitar errores de constrains
-        await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF;");
-        logger.LogInformation("Foreign keys desactivadas en SQLite");
 
         // Crear roles
         string[] roles = { "Admin", "Gerencia", "Supervisor", "Trabajador" };
