@@ -68,13 +68,18 @@
                 @if (menus.Produccion)
                 {
                 <li>
-                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Produccion" || ViewContext.RouteData.Values["controller"]?.ToString() == "RegistroPreparatoria" ? "active" : "")">
+                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Produccion" || ViewContext.RouteData.Values["controller"]?.ToString() == "RegistroPreparatoria" || ViewContext.RouteData.Values["controller"]?.ToString() == "Autoconer" ? "active" : "")">
                         <i class="bi bi-gear-wide-connected"></i> Producción
                     </a>
                     <ul class="list-unstyled ps-3">
                         <li>
                             <a asp-controller="RegistroPreparatoria" asp-action="Index" class="sidebar-link sidebar-sublink">
                                 <i class="bi bi-clipboard-data"></i> Registro de Preparatoria
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ViewContext.RouteData.Values["controller"]?.ToString() == "Autoconer" ? "active" : "")">
+                                <i class="bi bi-speedometer2"></i> Control Autoconer
                             </a>
                         </li>
                     </ul>

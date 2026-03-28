@@ -19,6 +19,7 @@ namespace FabricaHilos.Data
         public DbSet<MateriaPrima> MateriasPrimas { get; set; }
         public DbSet<ProductoTerminado> ProductosTerminados { get; set; }
         public DbSet<OrdenProduccion> OrdenesProduccion { get; set; }
+        public DbSet<RegistroAutoconer> RegistrosAutoconer { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<Empleado> Empleados { get; set; }
@@ -51,6 +52,14 @@ namespace FabricaHilos.Data
             builder.Entity<OrdenProduccion>(entity =>
             {
                 entity.HasKey(e => e.Id);
+            });
+
+            // Configuración de RegistroAutoconer
+            builder.Entity<RegistroAutoconer>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.VelocidadMMin).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.PesoBruto).HasColumnType("decimal(18,2)");
             });
 
             // Configuración de Cliente

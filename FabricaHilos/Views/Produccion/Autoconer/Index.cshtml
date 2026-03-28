@@ -1,0 +1,223 @@
+@model IEnumerable<FabricaHilos.Services.Produccion.PreparatoriaListDto>
+@using FabricaHilos.Helpers
+
+@{
+    ViewData["Title"] = "Control Autoconer";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Control Autoconer</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Control Autoconer</h4>
+    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+    {
+        <a asp-action="Crear" class="btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo
+        </a>
+    }
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex gap-2 flex-wrap">
+            <input type="text" name="buscar" value="@ViewBag.Buscar" class="form-control form-control-sm"
+                   placeholder="Buscar por lote / material..." style="max-width: 250px;" />
+
+            @{
+                var estadosFiltro = ViewBag.EstadoFiltro as List<string> ?? new List<string> { "1" };
+            }
+            <div class="position-relative" id="divEstado">
+                <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center"
+                        id="btnEstado" style="min-width:150px; max-width:190px; cursor:pointer; user-select:none;">
+                    <span id="spanEstadoTexto" class="text-truncate"></span>
+                    <i class="bi bi-chevron-down ms-1" style="font-size:.7rem; flex-shrink:0;"></i>
+                </button>
+                <div id="panelEstado" class="border rounded bg-white shadow-sm py-1"
+                     style="display:none; position:absolute; z-index:1050; min-width:150px; top:100%; left:0; margin-top:2px;">
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        <input type="checkbox" name="estado" value="1" class="estado-chk form-check-input mt-0" @(estadosFiltro.Contains("1") ? "checked" : "") />
+                        En Proceso
+                    </label>
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        <input type="checkbox" name="estado" value="3" class="estado-chk form-check-input mt-0" @(estadosFiltro.Contains("3") ? "checked" : "") />
+                        Terminado
+                    </label>
+                    <label class="d-flex align-items-center gap-2 px-3 py-1 panel-estado-item" style="cursor:pointer; white-space:nowrap; margin-bottom:0;">
+                        <input type="checkbox" name="estado" value="9" class="estado-chk form-check-input mt-0" @(estadosFiltro.Contains("9") ? "checked" : "") />
+                        Anulado
+                    </label>
+                </div>
+            </div>
+            <input type="hidden" name="page" id="hiddenPage" value="@(ViewBag.Page ?? 1)" />
+            <button type="submit" class="btn btn-sm btn-outline-primary"
+                    onclick="document.getElementById('hiddenPage').value='1';">
+                <i class="bi bi-search"></i> Filtrar
+            </button>
+            @if (!string.IsNullOrEmpty(ViewBag.Buscar as string))
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                </a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Autoconer</th>
+                        <th>Receta</th>
+                        <th>Lote</th>
+                        <th>Material</th>
+                        <th>Título</th>
+                        <th>Fecha</th>
+                        <th>Turno</th>
+                        <th>Operario</th>
+                        <th>Estado</th>
+                        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                        {
+                            <th>Acciones</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@(string.IsNullOrEmpty(item.DescripcionMaquina) ? item.CodigoMaquina : item.DescripcionMaquina)</td>
+                                <td>@(string.IsNullOrEmpty(item.Receta) ? "-" : item.Receta)</td>
+                                <td>@(item.Lote ?? "-")</td>
+                                <td>@(item.Material ?? "-")</td>
+                                <td>@(string.IsNullOrEmpty(item.DescripcionTitulo) ? item.Titulo : item.DescripcionTitulo)</td>
+                                <td>@item.FechaInicio.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>@(item.Turno == null ? "-" : ProduccionLookups.GetTurno(item.Turno))</td>
+                                <td>@(string.IsNullOrEmpty(item.NombreOperario) ? item.CodigoOperario : item.NombreOperario)</td>
+                                <td>
+                                    @{
+                                        var estadoClass = item.Estado switch
+                                        {
+                                            "1" => new { Class = "bg-primary",   Icon = "bi-gear-fill",      Text = "En Proceso" },
+                                            "3" => new { Class = "bg-success",   Icon = "bi-check-circle",   Text = "Terminado" },
+                                            "9" => new { Class = "bg-danger",    Icon = "bi-x-circle",       Text = "Anulado" },
+                                            _   => new { Class = "bg-secondary", Icon = "bi-question-circle", Text = "Desconocido" }
+                                        };
+                                    }
+                                    <span class="badge @estadoClass.Class">
+                                        <i class="bi @estadoClass.Icon me-1"></i>@estadoClass.Text
+                                    </span>
+                                </td>
+                                @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+                                {
+                                    <td>
+                                        @if (item.LocalId.HasValue)
+                                        {
+                                            <a asp-action="Detalle" asp-route-id="@item.LocalId"
+                                               class="btn btn-sm btn-outline-secondary me-1" title="Ver Detalle">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            @if (item.Estado == "1")
+                                            {
+                                                <a asp-action="Editar" asp-route-id="@item.LocalId"
+                                                   asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                                   class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </a>
+                                                <form asp-action="Anular" asp-route-id="@item.LocalId"
+                                                      asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                                      method="post" class="d-inline"
+                                                      onsubmit="return confirm('¿Anular este registro Autoconer?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger me-1" title="Anular">
+                                                        <i class="bi bi-x-circle"></i>
+                                                    </button>
+                                                </form>
+                                            }
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox display-6 d-block mb-2"></i>
+                                No hay registros Autoconer para mostrar.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@{
+    int totalPages  = ViewBag.TotalPages ?? 1;
+    int currentPage = ViewBag.Page ?? 1;
+}
+@if (totalPages > 1)
+{
+    <nav class="mt-3" aria-label="Paginación">
+        <ul class="pagination pagination-sm justify-content-center">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <a class="page-link" href="?buscar=@ViewBag.Buscar&page=@(currentPage - 1)@(string.Join("", (ViewBag.EstadoFiltro as List<string> ?? new List<string>{"1"}).Select(e => "&estado=" + e)))">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            @for (int p = 1; p <= totalPages; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" href="?buscar=@ViewBag.Buscar&page=@p@(string.Join("", (ViewBag.EstadoFiltro as List<string> ?? new List<string>{"1"}).Select(e => "&estado=" + e)))">@p</a>
+                </li>
+            }
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <a class="page-link" href="?buscar=@ViewBag.Buscar&page=@(currentPage + 1)@(string.Join("", (ViewBag.EstadoFiltro as List<string> ?? new List<string>{"1"}).Select(e => "&estado=" + e)))">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+}
+
+@section Scripts {
+<script>
+    // Estado dropdown panel
+    const btnEstado    = document.getElementById('btnEstado');
+    const panelEstado  = document.getElementById('panelEstado');
+    const spanEstado   = document.getElementById('spanEstadoTexto');
+    const estadoChks   = document.querySelectorAll('.estado-chk');
+
+    function actualizarTextoEstado() {
+        const seleccionados = Array.from(estadoChks)
+            .filter(c => c.checked)
+            .map(c => c.closest('label').textContent.trim());
+        spanEstado.textContent = seleccionados.length === 0 ? 'Estado' : seleccionados.join(', ');
+    }
+
+    actualizarTextoEstado();
+
+    btnEstado.addEventListener('click', function (e) {
+        e.stopPropagation();
+        panelEstado.style.display = panelEstado.style.display === 'none' ? 'block' : 'none';
+    });
+
+    estadoChks.forEach(chk => chk.addEventListener('change', actualizarTextoEstado));
+
+    document.addEventListener('click', function (e) {
+        if (!document.getElementById('divEstado').contains(e.target)) {
+            panelEstado.style.display = 'none';
+        }
+    });
+</script>
+}
