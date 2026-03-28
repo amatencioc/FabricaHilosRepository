@@ -7,6 +7,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Views\DashboardSgc\**" />
+    <Compile Remove="Views\Produccion\RegistroParo\**" />
+    <Content Remove="Views\DashboardSgc\**" />
+    <Content Remove="Views\Produccion\RegistroParo\**" />
+    <EmbeddedResource Remove="Views\DashboardSgc\**" />
+    <EmbeddedResource Remove="Views\Produccion\RegistroParo\**" />
+    <None Remove="Views\DashboardSgc\**" />
+    <None Remove="Views\Produccion\RegistroParo\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -19,11 +30,6 @@
     </PackageReference>
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.100" />
     <PackageReference Include="QuestPDF" Version="2024.12.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Views\DashboardSgc\" />
-    <Folder Include="Views\Produccion\RegistroParo\" />
   </ItemGroup>
 
 </Project>

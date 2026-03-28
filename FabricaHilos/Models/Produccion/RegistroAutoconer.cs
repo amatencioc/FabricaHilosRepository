@@ -32,6 +32,10 @@ namespace FabricaHilos.Models.Produccion
         [StringLength(20)]
         public string? CodigoReceta { get; set; }
 
+        [Display(Name = "Nº Partida")]
+        [StringLength(50)]
+        public string? Guia { get; set; }
+
         [Required(ErrorMessage = "El lote es obligatorio.")]
         [Display(Name = "Lote / Partida")]
         [StringLength(50)]
@@ -42,17 +46,9 @@ namespace FabricaHilos.Models.Produccion
         [StringLength(100)]
         public string DescripcionMaterial { get; set; } = string.Empty;
 
-        [Display(Name = "Color")]
-        [StringLength(50)]
-        public string? Color { get; set; }
-
         [Display(Name = "V (m/min)")]
         [Range(0, double.MaxValue)]
         public decimal? VelocidadMMin { get; set; }
-
-        [Display(Name = "HI (Husos Inactivos)")]
-        [Range(0, int.MaxValue)]
-        public int? HusosInactivos { get; set; }
 
         [Display(Name = "H Inicio")]
         [DataType(DataType.DateTime)]
@@ -62,23 +58,20 @@ namespace FabricaHilos.Models.Produccion
         [DataType(DataType.DateTime)]
         public DateTime? HoraFinal { get; set; }
 
-        [Display(Name = "Bloque")]
-        public int? Bloque { get; set; }
-
         [Required(ErrorMessage = "El título es obligatorio.")]
         [Display(Name = "Título")]
         [StringLength(100)]
         public string Titulo { get; set; } = string.Empty;
 
-        [Display(Name = "P. Bruto")]
+        [Display(Name = "Conos Madejas")]
         [Range(0, double.MaxValue)]
         public decimal? PesoBruto { get; set; }
 
-        [Display(Name = "Q (Cantidad)")]
+        [Display(Name = "Kg x Unidad")]
         [Range(0, int.MaxValue)]
         public int? Cantidad { get; set; }
 
-        [Display(Name = "Puntaje")]
+        [Display(Name = "Peso Neto")]
         [Range(0, int.MaxValue)]
         public int? Puntaje { get; set; }
 
@@ -102,7 +95,7 @@ namespace FabricaHilos.Models.Produccion
         public bool Tramo6 { get; set; }
 
         [Display(Name = "Destino")]
-        [StringLength(10)]
+        [StringLength(20)]
         public string? Destino { get; set; }
 
         [Display(Name = "Cliente")]

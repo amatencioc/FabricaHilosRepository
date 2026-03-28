@@ -78,6 +78,12 @@
     background-color: var(--sidebar-sublink-hover-bg);
 }
 
+.sidebar-sublink.active {
+    background-color: rgba(255, 255, 255, 0.20);
+    color: var(--color-white);
+    font-weight: 600;
+}
+
 /* Header */
 header {
     min-height: 55px;

@@ -27,6 +27,10 @@
                     </div>
                 </div>
             </div>
+            @{
+                var ctrl = ViewContext.RouteData.Values["controller"]?.ToString();
+                var act  = ViewContext.RouteData.Values["action"]?.ToString();
+            }
             <ul class="list-unstyled p-2 sidebar-menu">
                 <!-- Dashboard -->
                 @if (menus.Dashboard)
@@ -47,16 +51,22 @@
                         <i class="bi bi-box-seam"></i> Inventario
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.InventarioMateriaPrima)
+                        {
                         <li>
-                            <a asp-controller="Inventario" asp-action="MateriaPrima" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Inventario" asp-action="MateriaPrima" class="sidebar-link sidebar-sublink @(ctrl == "Inventario" && act == "MateriaPrima" ? "active" : "")">
                                 <i class="bi bi-archive"></i> Materia Prima
                             </a>
                         </li>
+                        }
+                        @if (menus.InventarioProductoTerminado)
+                        {
                         <li>
-                            <a asp-controller="Inventario" asp-action="ProductoTerminado" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Inventario" asp-action="ProductoTerminado" class="sidebar-link sidebar-sublink @(ctrl == "Inventario" && act == "ProductoTerminado" ? "active" : "")">
                                 <i class="bi bi-boxes"></i> Producto Terminado
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -72,16 +82,22 @@
                         <i class="bi bi-gear-wide-connected"></i> Producción
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.ProduccionRegistroPreparatoria)
+                        {
                         <li>
-                            <a asp-controller="RegistroPreparatoria" asp-action="Index" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="RegistroPreparatoria" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "RegistroPreparatoria" ? "active" : "")">
                                 <i class="bi bi-clipboard-data"></i> Registro de Preparatoria
                             </a>
                         </li>
+                        }
+                        @if (menus.ProduccionAutoconer)
+                        {
                         <li>
-                            <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ViewContext.RouteData.Values["controller"]?.ToString() == "Autoconer" ? "active" : "")">
+                            <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" ? "active" : "")">
                                 <i class="bi bi-speedometer2"></i> Control Autoconer
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -92,16 +108,22 @@
                         <i class="bi bi-file-earmark-text"></i> SGC
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.SgcDashboard)
+                        {
                         <li>
-                            <a asp-controller="DashboardSgc" asp-action="Index" class="sidebar-link sidebar-sublink @(ViewContext.RouteData.Values["controller"]?.ToString() == "DashboardSgc" ? "active" : "")">
+                            <a asp-controller="DashboardSgc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardSgc" ? "active" : "")">
                                 <i class="bi bi-bar-chart-line me-2"></i>Dashboard SGC
                             </a>
                         </li>
+                        }
+                        @if (menus.SgcPedidos)
+                        {
                         <li>
-                            <a asp-controller="Sgc" asp-action="Pedidos" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Sgc" asp-action="Pedidos" class="sidebar-link sidebar-sublink @(ctrl == "Sgc" && act == "Pedidos" ? "active" : "")">
                                 <i class="bi bi-cart-check"></i> Pedidos
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -112,16 +134,22 @@
                         <i class="bi bi-receipt"></i> Facturación
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.FacturacionImportarFacturas)
+                        {
                         <li>
-                            <a asp-controller="Facturacion" asp-action="ImportarFacturas" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Facturacion" asp-action="ImportarFacturas" class="sidebar-link sidebar-sublink @(ctrl == "Facturacion" && act == "ImportarFacturas" ? "active" : "")">
                                 <i class="bi bi-file-earmark-arrow-up"></i> Importar Facturas
                             </a>
                         </li>
+                        }
+                        @if (menus.FacturacionListaDocumentos)
+                        {
                         <li>
-                            <a asp-controller="Facturacion" asp-action="ListaDocumentos" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Facturacion" asp-action="ListaDocumentos" class="sidebar-link sidebar-sublink @(ctrl == "Facturacion" && act == "ListaDocumentos" ? "active" : "")">
                                 <i class="bi bi-list-ul"></i> Lista de Documentos
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -133,16 +161,22 @@
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.VentasClientes)
+                        {
                         <li>
-                            <a asp-controller="Ventas" asp-action="Clientes" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Ventas" asp-action="Clientes" class="sidebar-link sidebar-sublink @(ctrl == "Ventas" && act == "Clientes" ? "active" : "")">
                                 <i class="bi bi-people"></i> Clientes
                             </a>
                         </li>
+                        }
+                        @if (menus.VentasPedidos)
+                        {
                         <li>
-                            <a asp-controller="Ventas" asp-action="Pedidos" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="Ventas" asp-action="Pedidos" class="sidebar-link sidebar-sublink @(ctrl == "Ventas" && act == "Pedidos" ? "active" : "")">
                                 <i class="bi bi-cart3"></i> Pedidos
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -156,16 +190,22 @@
                         <i class="bi bi-person-badge"></i> Recursos Humanos
                     </a>
                     <ul class="list-unstyled ps-3">
+                        @if (menus.RecursosHumanosEmpleados)
+                        {
                         <li>
-                            <a asp-controller="RecursosHumanos" asp-action="Empleados" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="RecursosHumanos" asp-action="Empleados" class="sidebar-link sidebar-sublink @(ctrl == "RecursosHumanos" && act == "Empleados" ? "active" : "")">
                                 <i class="bi bi-person-lines-fill"></i> Empleados
                             </a>
                         </li>
+                        }
+                        @if (menus.RecursosHumanosAsistencia)
+                        {
                         <li>
-                            <a asp-controller="RecursosHumanos" asp-action="Asistencia" class="sidebar-link sidebar-sublink">
+                            <a asp-controller="RecursosHumanos" asp-action="Asistencia" class="sidebar-link sidebar-sublink @(ctrl == "RecursosHumanos" && act == "Asistencia" ? "active" : "")">
                                 <i class="bi bi-calendar-check"></i> Asistencia
                             </a>
                         </li>
+                        }
                     </ul>
                 </li>
                 }
@@ -174,11 +214,14 @@
                 {
                     <!-- ADMINISTRACIÓN -->
                     <li class="sidebar-section">ADMINISTRACIÓN</li>
+                    @if (menus.AdministracionRegistrarUsuario)
+                    {
                     <li>
-                        <a asp-controller="Account" asp-action="Register" class="sidebar-link">
+                        <a asp-controller="Account" asp-action="Register" class="sidebar-link @(ctrl == "Account" && act == "Register" ? "active" : "")">
                             <i class="bi bi-person-plus"></i> Registrar Usuario
                         </a>
                     </li>
+                    }
                 }
             </ul>
         </nav>

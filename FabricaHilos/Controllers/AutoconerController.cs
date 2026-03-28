@@ -33,10 +33,12 @@ namespace FabricaHilos.Controllers
         {
             nameof(BuscarReceta),
             nameof(BuscarLote),
+            nameof(BuscarPartida),
             nameof(BuscarOperario),
             nameof(ObtenerMaquinasAutoconer),
             nameof(ObtenerTitulos),
             nameof(ObtenerHusosMaquina),
+            nameof(ObtenerDestinosAutoconer),
         };
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -152,7 +154,7 @@ namespace FabricaHilos.Controllers
 
         // GET: /Autoconer/Crear
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> Crear()
         {
             ViewBag.Titulos   = await _recetaService.ObtenerTitulosAsync();
@@ -162,7 +164,7 @@ namespace FabricaHilos.Controllers
 
         // POST: /Autoconer/Crear
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Crear(RegistroAutoconer model)
         {
@@ -197,9 +199,8 @@ namespace FabricaHilos.Controllers
 
                     _logger.LogInformation("Registro Autoconer guardado en SQLite con Id={Id}", model.Id);
 
-                    // Insertar en Oracle reutilizando InsertarPreparatoriaAsync con CodigoMaquina = "A"
-                    var ordenTemporal = MapearAOrdenProduccion(model);
-                    var insertadoEnOracle = await _recetaService.InsertarPreparatoriaAsync(ordenTemporal, User.Identity?.Name);
+                    // Insertar en Oracle con el método dedicado para Autoconer
+                    var insertadoEnOracle = await _recetaService.InsertarPreparatoriaAutoconerAsync(model, User.Identity?.Name);
 
                     if (insertadoEnOracle)
                     {
@@ -233,7 +234,7 @@ namespace FabricaHilos.Controllers
 
         // GET: /Autoconer/Editar/5
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> Editar(int id, string? returnUrl = null)
         {
             var registro = await _context.RegistrosAutoconer.FindAsync(id);
@@ -252,7 +253,7 @@ namespace FabricaHilos.Controllers
 
         // POST: /Autoconer/Editar/5
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Editar(int id, RegistroAutoconer model, string? returnUrl = null)
         {
@@ -283,12 +284,9 @@ namespace FabricaHilos.Controllers
                 registro.CodigoOperador     = model.CodigoOperador;
                 registro.Turno              = model.Turno;
                 registro.Fecha              = model.Fecha;
-                registro.Color              = model.Color;
                 registro.VelocidadMMin      = model.VelocidadMMin;
-                registro.HusosInactivos     = model.HusosInactivos;
                 registro.HoraInicio         = model.HoraInicio;
                 registro.HoraFinal          = model.HoraFinal;
-                registro.Bloque             = model.Bloque;
                 registro.PesoBruto          = model.PesoBruto;
                 registro.Cantidad           = model.Cantidad;
                 registro.Puntaje            = model.Puntaje;
@@ -298,6 +296,7 @@ namespace FabricaHilos.Controllers
                 registro.Tramo4             = model.Tramo4;
                 registro.Tramo5             = model.Tramo5;
                 registro.Tramo6             = model.Tramo6;
+                registro.Guia               = model.Guia;
                 registro.Destino            = model.Destino;
                 registro.Cliente            = model.Cliente;
                 registro.Reproceso          = model.Reproceso;
@@ -310,7 +309,7 @@ namespace FabricaHilos.Controllers
                     oldReceta, oldLote, "A", oldCodMaq, oldTitulo, oldFechaInicio,
                     registro.CodigoReceta, registro.Lote, "A", registro.NumeroAutoconer, registro.Titulo,
                     registro.CodigoOperador, registro.Turno, null, registro.Fecha,
-                    null, registro.HusosInactivos.HasValue ? (decimal?)registro.HusosInactivos.Value : null,
+                    null, null,
                     User.Identity?.Name, registro.VelocidadMMin, null);
 
                 TempData["Success"] = "Registro Autoconer actualizado correctamente.";
@@ -344,7 +343,7 @@ namespace FabricaHilos.Controllers
 
         // POST: /Autoconer/Anular/5
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Anular(int id, string? returnUrl = null)
         {
@@ -455,6 +454,38 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
+        public async Task<IActionResult> BuscarPartida(string guia)
+        {
+            if (string.IsNullOrWhiteSpace(guia))
+                return Json(new { success = false, message = "Guía requerida" });
+
+            try
+            {
+                var resultados = await _recetaService.BuscarPartidaPorGuiaAsync(guia);
+                if (resultados.Count == 0)
+                    return Json(new { success = false, message = "No se encontró la partida" });
+
+                if (resultados.Count == 1)
+                    return Json(new
+                    {
+                        success = true,
+                        data    = new { guia = resultados[0].Guia, lote = resultados[0].Lote, material = resultados[0].Material, titulo = resultados[0].Titulo }
+                    });
+
+                return Json(new
+                {
+                    success  = true,
+                    multiple = true,
+                    items    = resultados.Select(r => new { guia = r.Guia, lote = r.Lote, material = r.Material, titulo = r.Titulo, cliente = r.DescCliente })
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = $"Error: {ex.Message}" });
+            }
+        }
+
+        [HttpGet]
         public async Task<IActionResult> BuscarOperario(string codigo)
         {
             if (string.IsNullOrWhiteSpace(codigo))
@@ -501,7 +532,7 @@ namespace FabricaHilos.Controllers
         {
             try
             {
-                var titulos = await _recetaService.ObtenerTitulosAsync();
+                var titulos = await _recetaService.ObtenerTitulosAutoconerAsync();
                 return Json(new
                 {
                     success = true,
@@ -531,6 +562,24 @@ namespace FabricaHilos.Controllers
             }
         }
 
+        [HttpGet]
+        public async Task<IActionResult> ObtenerDestinosAutoconer()
+        {
+            try
+            {
+                var destinos = await _recetaService.ObtenerDestinosAutoconerAsync();
+                return Json(new
+                {
+                    success  = true,
+                    destinos = destinos.Select(d => new { codigo = d.Codigo, descripcion = d.Descripcion })
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = $"Error: {ex.Message}" });
+            }
+        }
+
         // ===================== Helpers =====================
 
         private async Task CargarViewBag()
@@ -538,27 +587,5 @@ namespace FabricaHilos.Controllers
             ViewBag.Titulos  = await _recetaService.ObtenerTitulosAsync();
             ViewBag.Maquinas = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
         }
-
-        /// <summary>
-        /// Mapea un RegistroAutoconer a una OrdenProduccion temporal para reutilizar InsertarPreparatoriaAsync.
-        /// CodigoMaquina se fija en "A" (Autoconer).
-        /// </summary>
-        private static OrdenProduccion MapearAOrdenProduccion(RegistroAutoconer r) => new()
-        {
-            CodigoReceta      = r.CodigoReceta,
-            Lote              = r.Lote,
-            DescripcionMaterial = r.DescripcionMaterial,
-            CodigoMaquina     = "A",
-            Maquina           = r.NumeroAutoconer,
-            Titulo            = r.Titulo,
-            FechaInicio       = r.Fecha,
-            EmpleadoId        = r.CodigoOperador,
-            Turno             = r.Turno,
-            Velocidad         = r.VelocidadMMin,
-            HorasInactivas    = r.HusosInactivos.HasValue ? (decimal?)r.HusosInactivos.Value : null,
-            FechaFin          = r.HoraFinal,
-            Estado            = EstadoOrden.EnProceso,
-            Cerrado           = false
-        };
     }
 }

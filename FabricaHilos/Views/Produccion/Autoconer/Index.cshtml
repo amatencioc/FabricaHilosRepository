@@ -12,12 +12,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="section-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Control Autoconer</h4>
-    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
-    {
-        <a asp-action="Crear" class="btn btn-success">
-            <i class="bi bi-plus-circle me-1"></i>Nuevo
-        </a>
-    }
+    <a asp-action="Crear" class="btn btn-success">
+        <i class="bi bi-plus-circle me-1"></i>Nuevo
+    </a>
 </div>
 
 <div class="card mb-3">
@@ -81,10 +78,7 @@
                         <th>Turno</th>
                         <th>Operario</th>
                         <th>Estado</th>
-                        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
-                        {
-                            <th>Acciones</th>
-                        }
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -115,35 +109,32 @@
                                         <i class="bi @estadoClass.Icon me-1"></i>@estadoClass.Text
                                     </span>
                                 </td>
-                                @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
-                                {
-                                    <td>
-                                        @if (item.LocalId.HasValue)
+                                <td>
+                                    @if (item.LocalId.HasValue)
+                                    {
+                                        <a asp-action="Detalle" asp-route-id="@item.LocalId"
+                                           class="btn btn-sm btn-outline-secondary me-1" title="Ver Detalle">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        @if (item.Estado == "1")
                                         {
-                                            <a asp-action="Detalle" asp-route-id="@item.LocalId"
-                                               class="btn btn-sm btn-outline-secondary me-1" title="Ver Detalle">
-                                                <i class="bi bi-eye"></i>
+                                            <a asp-action="Editar" asp-route-id="@item.LocalId"
+                                               asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                               class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                                                <i class="bi bi-pencil"></i>
                                             </a>
-                                            @if (item.Estado == "1")
-                                            {
-                                                <a asp-action="Editar" asp-route-id="@item.LocalId"
-                                                   asp-route-returnUrl="@ViewBag.ReturnUrl"
-                                                   class="btn btn-sm btn-outline-primary me-1" title="Editar">
-                                                    <i class="bi bi-pencil"></i>
-                                                </a>
-                                                <form asp-action="Anular" asp-route-id="@item.LocalId"
-                                                      asp-route-returnUrl="@ViewBag.ReturnUrl"
-                                                      method="post" class="d-inline"
-                                                      onsubmit="return confirm('¿Anular este registro Autoconer?');">
-                                                    @Html.AntiForgeryToken()
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger me-1" title="Anular">
-                                                        <i class="bi bi-x-circle"></i>
-                                                    </button>
-                                                </form>
-                                            }
+                                            <form asp-action="Anular" asp-route-id="@item.LocalId"
+                                                  asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                                  method="post" class="d-inline"
+                                                  onsubmit="return confirm('¿Anular este registro Autoconer?');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-danger me-1" title="Anular">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            </form>
                                         }
-                                    </td>
-                                }
+                                    }
+                                </td>
                             </tr>
                         }
                     }

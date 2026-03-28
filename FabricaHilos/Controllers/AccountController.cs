@@ -75,6 +75,11 @@ namespace FabricaHilos.Controllers
 
                 if (!string.IsNullOrEmpty(usuarioOracle.c_user))
                 {
+                    var adminUsers = _configuration.GetSection("AdminUsers").Get<string[]>()
+                                    ?? [];
+                    var esAdmin = adminUsers.Contains(usuario, StringComparer.OrdinalIgnoreCase);
+                    var rolCorrecto = esAdmin ? "Admin" : "Trabajador";
+
                     var userIdentity = await _userManager.FindByNameAsync(usuario);
 
                     if (userIdentity == null)
@@ -93,7 +98,7 @@ namespace FabricaHilos.Controllers
                         // las reglas de complejidad impidan guardar el usuario en la BD.
                         var createResult = await _userManager.CreateAsync(userIdentity);
                         if (createResult.Succeeded)
-                            await _userManager.AddToRoleAsync(userIdentity, "Admin");
+                            await _userManager.AddToRoleAsync(userIdentity, rolCorrecto);
                         else
                         {
                             _logger.LogWarning("No se pudo crear usuario Identity para {Usuario}: {Errores}",
@@ -124,10 +129,24 @@ namespace FabricaHilos.Controllers
                         if (needsUpdate)
                             await _userManager.UpdateAsync(userIdentity);
 
-                        if (!await _userManager.IsInRoleAsync(userIdentity, "Admin"))
+                        // Corregir rol si no coincide con lo esperado (ej: usuario que tenía
+                        // Admin por error y ahora debe ser Trabajador, o viceversa)
+                        var tieneAdmin      = await _userManager.IsInRoleAsync(userIdentity, "Admin");
+                        var tieneTrabajador = await _userManager.IsInRoleAsync(userIdentity, "Trabajador");
+
+                        if (esAdmin && !tieneAdmin)
                         {
-                            await _userManager.RemoveFromRoleAsync(userIdentity, "Trabajador");
+                            if (tieneTrabajador) await _userManager.RemoveFromRoleAsync(userIdentity, "Trabajador");
                             await _userManager.AddToRoleAsync(userIdentity, "Admin");
+                        }
+                        else if (!esAdmin && tieneAdmin)
+                        {
+                            await _userManager.RemoveFromRoleAsync(userIdentity, "Admin");
+                            if (!tieneTrabajador) await _userManager.AddToRoleAsync(userIdentity, "Trabajador");
+                        }
+                        else if (!esAdmin && !tieneTrabajador)
+                        {
+                            await _userManager.AddToRoleAsync(userIdentity, "Trabajador");
                         }
                     }
 

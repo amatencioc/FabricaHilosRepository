@@ -86,7 +86,7 @@
                 <div class="card-body p-4">
                     <div class="row g-3">
                         <!-- Receta -->
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Receta <span class="text-muted small">(opcional)</span></label>
                             <div class="input-group">
                                 <input asp-for="CodigoReceta" id="recetaInput" class="form-control"
@@ -99,7 +99,7 @@
                         </div>
 
                         <!-- Lote -->
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Lote / Partida <span class="text-danger">*</span></label>
                             <div class="input-group">
                                 <input asp-for="Lote" id="loteInput" class="form-control"
@@ -113,29 +113,17 @@
                         </div>
 
                         <!-- Material -->
-                        <div class="col-md-12">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Material <span class="text-danger">*</span></label>
                             <input asp-for="DescripcionMaterial" id="materialInput" class="form-control"
                                    readonly style="background-color: var(--color-bg-light);" />
                             <span asp-validation-for="DescripcionMaterial" class="text-danger small"></span>
                         </div>
 
-                        <!-- Color -->
+                        <!-- Nº Partida -->
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Color</label>
-                            <input asp-for="Color" class="form-control" placeholder="Ej: crudo" />
-                        </div>
-
-                        <!-- V (m/min) -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">V (m/min)</label>
-                            <input asp-for="VelocidadMMin" class="form-control" type="number" step="0.01" min="0" />
-                        </div>
-
-                        <!-- HI -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">HI (Husos Inactivos)</label>
-                            <input asp-for="HusosInactivos" class="form-control" type="number" step="1" min="0" />
+                            <label class="form-label fw-semibold">Nº Partida</label>
+                            <input asp-for="Guia" class="form-control" placeholder="Nº Partida" />
                         </div>
 
                         <!-- Título -->
@@ -154,49 +142,34 @@
                             <span asp-validation-for="Titulo" class="text-danger small"></span>
                         </div>
 
-                        <!-- H Inicio -->
+                        <!-- Fecha Inicio -->
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">H Inicio</label>
+                            <label class="form-label fw-semibold">Fecha Inicio</label>
                             <input asp-for="HoraInicio" class="form-control" type="datetime-local" />
                         </div>
 
-                        <!-- H Final -->
+                        <!-- Fecha Fin -->
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">H Final</label>
+                            <label class="form-label fw-semibold">Fecha Fin</label>
                             <input asp-for="HoraFinal" class="form-control" type="datetime-local" />
                         </div>
 
-                        <!-- Bloque -->
+                        <!-- V (m/min) -->
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Bloque</label>
-                            <input asp-for="Bloque" class="form-control" type="number" step="1" min="1" />
+                            <label class="form-label fw-semibold">V (m/min)</label>
+                            <input asp-for="VelocidadMMin" class="form-control" type="number" step="0.01" min="0" />
                         </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- ===== RESULTADOS ===== -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-success text-white fw-bold">
-                    <i class="bi bi-bar-chart-line me-2"></i>Resultados
-                </div>
-                <div class="card-body p-4">
-                    <div class="row g-3">
+                        <!-- Destino -->
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">P. Bruto</label>
-                            <input asp-for="PesoBruto" class="form-control" type="number" step="0.01" min="0" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Q (Cantidad)</label>
-                            <input asp-for="Cantidad" class="form-control" type="number" step="1" min="0" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Puntaje (PUNT)</label>
-                            <input asp-for="Puntaje" class="form-control" type="number" step="1" min="0" />
+                            <label class="form-label fw-semibold">Destino</label>
+                            <select asp-for="Destino" id="destinoSelect" class="form-select">
+                                <option value="@Model.Destino">@Model.Destino</option>
+                            </select>
                         </div>
 
                         <!-- Tramos -->
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <label class="form-label fw-semibold">Tramos</label>
                             <div class="d-flex gap-4 flex-wrap">
                                 <div class="form-check">
@@ -229,41 +202,25 @@
                 </div>
             </div>
 
-            <!-- ===== DESTINO ===== -->
+            <!-- ===== RESULTADOS ===== -->
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-success text-white fw-bold">
-                    <i class="bi bi-box-arrow-right me-2"></i>Destino y Observaciones
+                    <i class="bi bi-bar-chart-line me-2"></i>Resultados
                 </div>
                 <div class="card-body p-4">
                     <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Destino</label>
-                            <select asp-for="Destino" class="form-select">
-                                <option value="">Seleccione destino</option>
-                                <option value="CM">CM - Crudo Materiales</option>
-                                <option value="MM">MM - Melange Materiales</option>
-                                <option value="CV">CV - Crudo Venta</option>
-                                <option value="MV">MV - Melange Venta</option>
-                                <option value="COV">COV - Color Venta</option>
-                                <option value="VS">VS - Venta Servicio</option>
-                                <option value="T">T - Tintorería</option>
-                                <option value="S">S - Servicio</option>
-                            </select>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Conos Madejas</label>
+                            <input asp-for="Cantidad" id="conosMadejasInput" class="form-control" type="number" step="1" min="0" />
                         </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold">Cliente</label>
-                            <input asp-for="Cliente" class="form-control" placeholder="Nombre del cliente" />
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Kg x Unidad</label>
+                            <input asp-for="PesoBruto" id="kgUnidadInput" class="form-control" type="number" step="0.0001" min="0" />
                         </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <div class="form-check mb-2">
-                                <input asp-for="Reproceso" class="form-check-input" type="checkbox" />
-                                <label asp-for="Reproceso" class="form-check-label fw-semibold">Reproceso (R)</label>
-                            </div>
-                        </div>
-                        <div class="col-md-12">
-                            <label class="form-label fw-semibold">Motivo de Paralización</label>
-                            <input asp-for="MotivoParalizacion" class="form-control"
-                                   placeholder="Describa el motivo si aplica" />
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Peso Neto</label>
+                            <input id="pesoNetoDisplay" class="form-control" type="number" step="0.0001" readonly
+                                   style="background-color: var(--color-bg-light);" />
                         </div>
                     </div>
                 </div>
@@ -311,7 +268,34 @@
 
         cargarMaquinas();
 
-        // === Búsqueda de Receta ===
+        // === Cargar destinos Autoconer ===
+        async function cargarDestinos() {
+            const sel = document.getElementById('destinoSelect');
+            const valorActual = sel.value;
+            try {
+                const resp = await fetch('@Url.Action("ObtenerDestinosAutoconer", "Autoconer")');
+                const data = await resp.json();
+                if (data.success && data.destinos) {
+                    sel.innerHTML = '<option value="">Seleccione destino</option>';
+                    data.destinos.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value       = d.codigo;
+                        opt.textContent = d.codigo + ' - ' + d.descripcion;
+                        if (d.codigo === valorActual) opt.selected = true;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* mantener la opción actual */ }
+        }
+
+        cargarDestinos();
+
+        // === Calcular Peso Neto ===
+        function calcularPesoNeto() {
+            const conos  = parseFloat(document.getElementById('conosMadejasInput').value) || 0;
+            const kgUnit = parseFloat(document.getElementById('kgUnidadInput').value)     || 0;
+            document.getElementById('pesoNetoDisplay').value = (conos * kgUnit).toFixed(4);
+        }
         async function buscarReceta() {
             const codigo = document.getElementById('recetaInput').value.trim();
             const status = document.getElementById('recetaStatus');
@@ -381,7 +365,34 @@
             finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
         }
 
+        function ahoraLocal() {
+            const now = new Date();
+            return [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-')
+                 + 'T' + [String(now.getHours()).padStart(2,'0'), String(now.getMinutes()).padStart(2,'0')].join(':');
+        }
+
+        function validarFechas() {
+            const inicio = document.getElementById('HoraInicio').value;
+            const fin    = document.getElementById('HoraFinal').value;
+            if (inicio && fin) {
+                if (fin < inicio) {
+                    alert('La Fecha Fin no puede ser menor a la Fecha Inicio.');
+                    return false;
+                }
+                if (fin > ahoraLocal()) {
+                    alert('La Fecha Fin no puede ser mayor a la fecha actual del sistema.');
+                    return false;
+                }
+            }
+            return true;
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
+            // Valores por defecto para fechas
+            const ahora = ahoraLocal();
+            if (!document.getElementById('HoraInicio').value) document.getElementById('HoraInicio').value = ahora;
+            if (!document.getElementById('HoraFinal').value) document.getElementById('HoraFinal').value = ahora;
+
             document.getElementById('btnBuscarReceta').addEventListener('click', buscarReceta);
             document.getElementById('recetaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReceta(); } });
 
@@ -390,6 +401,16 @@
 
             document.getElementById('btnBuscarOperario').addEventListener('click', buscarOperario);
             document.getElementById('operarioInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOperario(); } });
+
+            // Validación al enviar
+            document.getElementById('formEditar').addEventListener('submit', function (e) {
+                if (!validarFechas()) e.preventDefault();
+            });
+
+            // Conos Madejas / Kg x Unidad → Peso Neto
+            document.getElementById('conosMadejasInput').addEventListener('input', calcularPesoNeto);
+            document.getElementById('kgUnidadInput').addEventListener('input', calcularPesoNeto);
+            calcularPesoNeto();
         });
     </script>
 }

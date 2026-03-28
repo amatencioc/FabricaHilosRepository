@@ -47,6 +47,22 @@ namespace FabricaHilos.Services.Produccion
         public string TextoCompleto => NombreCorto;
     }
 
+    public class DestinoDto
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+    }
+
+    public class PartidaDto
+    {
+        public string Guia { get; set; } = string.Empty;
+        public string Partida { get; set; } = string.Empty;
+        public string Material { get; set; } = string.Empty;
+        public string Lote { get; set; } = string.Empty;
+        public string DescCliente { get; set; } = string.Empty;
+        public string Titulo { get; set; } = string.Empty;
+    }
+
     public class PreparatoriaListDto
     {
         public int? LocalId { get; set; }
@@ -109,13 +125,17 @@ namespace FabricaHilos.Services.Produccion
     {
         Task<List<RecetaDto>> BuscarRecetaPorCodigoAsync(string codigo);
         Task<List<LoteDto>> BuscarLotePorCodigoAsync(string codigo);
+        Task<List<PartidaDto>> BuscarPartidaPorGuiaAsync(string guia);
         Task<List<MaquinaDto>> ObtenerTiposMaquinasAsync();
         Task<List<MaquinaIndividualDto>> ObtenerMaquinasPorTipoAsync(string tipoMaquina);
         Task<List<TituloDto>> ObtenerTitulosAsync();
+        Task<List<TituloDto>> ObtenerTitulosAutoconerAsync();
         Task<List<EmpleadoOracleDto>> ObtenerEmpleadosAsync();
         Task<List<EmpleadoOracleDto>> BuscarOperarioAsync(string codigo);
         Task<string> ObtenerNombreEmpleadoAsync(string codigo);
+        Task<List<DestinoDto>> ObtenerDestinosAutoconerAsync();
         Task<bool> InsertarPreparatoriaAsync(OrdenProduccion orden, string? adUser = null);
+        Task<bool> InsertarPreparatoriaAutoconerAsync(RegistroAutoconer registro, string? adUser = null);
         Task<decimal> ObtenerPesoTituloAsync(string titulo);
         Task<int> ObtenerHusosMaquinaAsync(string tpMaq, string codMaq);
         Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10);
@@ -323,6 +343,93 @@ namespace FabricaHilos.Services.Produccion
             }
         }
 
+        public async Task<List<PartidaDto>> BuscarPartidaPorGuiaAsync(string guia)
+        {
+            var connectionString = GetOracleConnectionString();
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                _logger.LogWarning("Oracle connection string not configured");
+                return new List<PartidaDto>();
+            }
+
+            _logger.LogInformation("Buscando partida con guia: {Guia}", guia);
+
+            const string query = @"
+                SELECT V.GUIA,
+                       V.PARTIDA,
+                       V.SOLO_MATERIAL||' ('||V.COLOR_CLI||')' MATERIAL,
+                       V.LOTE,
+                       C.NOMBRE DESC_CLIENTE,
+                       I.TITULO
+                FROM V_PARTIDA V,
+                     CLIENTES C,
+                     ITEMPED I
+                WHERE V.ESTADO = '0'
+                  AND ((V.ESTADO_PED = '5') OR (V.ESTADO_PED = '6' AND TRUNC(I.F_CIERRE) >= ADD_MONTHS(TRUNC(SYSDATE),-1)))
+                  AND C.COD_CLIENTE = V.COD_CLIENTE
+                  AND I.NUM_PED = V.NUM_PED
+                  AND I.NRO = V.NRO
+                  AND V.GUIA LIKE :guia1 || '%'
+                UNION
+                SELECT V.GUIA,
+                       V.PARTIDA,
+                       V.SOLO_MATERIAL||' ('||V.COLOR_CLI||')' MATERIAL,
+                       V.LOTE,
+                       C.NOMBRE DESC_CLIENTE,
+                       I.TITULO
+                FROM V_PARTIDA V,
+                     CLIENTES C,
+                     ITEMPED I
+                WHERE NVL(V.ESTADO,'0') = '7'
+                  AND V.ESTADO_PED IN ('5','6')
+                  AND TRUNC(I.F_CIERRE) >= ADD_MONTHS(TRUNC(SYSDATE),-2)
+                  AND C.COD_CLIENTE = V.COD_CLIENTE
+                  AND I.NUM_PED = V.NUM_PED
+                  AND I.NRO = V.NRO
+                  AND V.GUIA LIKE :guia2 || '%'
+                ORDER BY 2";
+
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+
+                using var command = new OracleCommand(query, connection);
+                command.Parameters.Add(new OracleParameter(":guia1", OracleDbType.Varchar2, guia, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":guia2", OracleDbType.Varchar2, guia, ParameterDirection.Input));
+
+                using var reader = await command.ExecuteReaderAsync();
+
+                var resultados = new List<PartidaDto>();
+                while (await reader.ReadAsync())
+                {
+                    resultados.Add(new PartidaDto
+                    {
+                        Guia       = reader["GUIA"]?.ToString() ?? string.Empty,
+                        Partida    = reader["PARTIDA"]?.ToString() ?? string.Empty,
+                        Material   = reader["MATERIAL"]?.ToString() ?? string.Empty,
+                        Lote       = reader["LOTE"]?.ToString() ?? string.Empty,
+                        DescCliente = reader["DESC_CLIENTE"]?.ToString() ?? string.Empty,
+                        Titulo     = reader["TITULO"]?.ToString() ?? string.Empty
+                    });
+                }
+
+                _logger.LogInformation("Se encontraron {Count} partida(s) para la guia: {Guia}", resultados.Count, guia);
+                return resultados;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al buscar partida: {Guia}. OracleError: {OracleError}", guia, oEx.Message);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al buscar partida en Oracle: {Guia}", guia);
+                throw;
+            }
+        }
+
         public async Task<List<MaquinaDto>> ObtenerTiposMaquinasAsync()
         {
             var connectionString = GetOracleConnectionString();
@@ -502,6 +609,57 @@ namespace FabricaHilos.Services.Produccion
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error general al obtener títulos en Oracle");
+                return new List<TituloDto>();
+            }
+        }
+
+        public async Task<List<TituloDto>> ObtenerTitulosAutoconerAsync()
+        {
+            var connectionString = GetOracleConnectionString();
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                _logger.LogWarning("Oracle connection string not configured");
+                return new List<TituloDto>();
+            }
+
+            _logger.LogInformation("Obteniendo títulos Autoconer desde H_TITULOS");
+
+            const string query = @"
+                SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
+                FROM H_TITULOS T
+                ORDER BY 1";
+
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+
+                using var command = new OracleCommand(query, connection);
+                using var reader = await command.ExecuteReaderAsync();
+
+                var titulos = new List<TituloDto>();
+                while (await reader.ReadAsync())
+                {
+                    titulos.Add(new TituloDto
+                    {
+                        Titulo = reader["TITULO"]?.ToString() ?? string.Empty,
+                        Descripcion = reader["DESC_TITULO"]?.ToString() ?? string.Empty
+                    });
+                }
+
+                _logger.LogInformation("Se obtuvieron {Count} títulos Autoconer", titulos.Count);
+                return titulos;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al obtener títulos Autoconer. OracleError: {OracleError}",
+                    oEx.Message);
+                return new List<TituloDto>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al obtener títulos Autoconer en Oracle");
                 return new List<TituloDto>();
             }
         }
@@ -838,6 +996,150 @@ namespace FabricaHilos.Services.Produccion
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error general al insertar preparatoria en Oracle");
+                return false;
+            }
+        }
+
+        public async Task<bool> InsertarPreparatoriaAutoconerAsync(RegistroAutoconer registro, string? adUser = null)
+        {
+            var connectionString = GetOracleConnectionString();
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                _logger.LogWarning("Oracle connection string not configured");
+                return false;
+            }
+
+            _logger.LogInformation("Insertando preparatoria Autoconer en H_RPRODUC: Lote={Lote}, Maquina={Maquina}",
+                registro.Lote, registro.NumeroAutoconer);
+
+            // TP_MAQ='A', ESTADO='1', HUSOS_INAC=0 y A_ADFECHA/A_MDFECHA=SYSDATE son literales en el SQL.
+            // HUSOS y HUSOS_ACT se consultan en H_MAQUINAS por la máquina seleccionada.
+            // KG_UNIDAD se calcula como PESO_NETO / UNIDADES cuando ambos están disponibles.
+            // GUIA = Nº Partida del formulario. PROCESO, VELOCIDAD2 y PROD_TEORICO → NULL.
+            const string query = @"
+                INSERT INTO H_RPRODUC (
+                    RECETA, LOTE, TP_MAQ, COD_MAQ, TITULO,
+                    FECHA_INI, FECHA_FIN,
+                    ESTADO,
+                    A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA,
+                    TURNO,
+                    PESO_NETO, UNIDADES,
+                    HUSOS, HUSOS_INAC, HUSOS_ACT, KG_UNIDAD,
+                    VELOCIDAD,
+                    GUIA, DESTINO, PROCESO,
+                    C_CODIGO, FECHA_TURNO,
+                    HUSOS_ACT_T1, HUSOS_ACT_T2, HUSOS_ACT_T3,
+                    HUSOS_ACT_T4, HUSOS_ACT_T5, HUSOS_ACT_T6,
+                    VELOCIDAD2, PROD_TEORICO
+                ) VALUES (
+                    :receta, :lote, 'A', :cod_maq, :titulo,
+                    :fecha_ini, :fecha_fin,
+                    '1',
+                    :a_aduser, SYSDATE, :a_mduser, SYSDATE,
+                    :turno,
+                    :peso_neto, :unidades,
+                    :husos, 0, :husos_act, :kg_unidad,
+                    :velocidad,
+                    :guia, :destino, NULL,
+                    :c_codigo, :fecha_turno,
+                    :husos_act_t1, :husos_act_t2, :husos_act_t3,
+                    :husos_act_t4, :husos_act_t5, :husos_act_t6,
+                    NULL, NULL
+                )";
+
+            try
+            {
+                _logger.LogDebug("Conectando a Oracle para insertar preparatoria Autoconer...");
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+
+                // ── HUSOS totales de la máquina (H_MAQUINAS) ─────────────────────────
+                // HUSOS_INAC = 0 por definición en AUTOCONER → HUSOS_ACT = HUSOS
+                int? husosMaquina = null;
+                const string queryHusos = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
+                using (var cmdHusos = new OracleCommand(queryHusos, connection))
+                {
+                    cmdHusos.Parameters.Add(new OracleParameter(":cod", OracleDbType.Varchar2, registro.NumeroAutoconer, ParameterDirection.Input));
+                    var resHusos = await cmdHusos.ExecuteScalarAsync();
+                    if (resHusos != null && resHusos != DBNull.Value)
+                        husosMaquina = Convert.ToInt32(resHusos);
+                }
+
+                // ── KG_UNIDAD = PesoBruto (Kg por unidad, directo del formulario) ─────────────────────
+                decimal? kgUnidad = registro.PesoBruto;
+                // ── PESO_NETO = UNIDADES × KG_UNIDAD ─────────────────────────────────
+                decimal? pesoNeto = (registro.Cantidad.HasValue && kgUnidad.HasValue)
+                    ? Math.Round(registro.Cantidad.Value * kgUnidad.Value, 4)
+                    : (decimal?)null;
+
+                using var command = new OracleCommand(query, connection);
+                command.BindByName = true;
+
+                // ── Identificación ────────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":receta",       OracleDbType.Varchar2) { Value = (object?)registro.CodigoReceta ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":lote",         OracleDbType.Varchar2,  registro.Lote,            ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":cod_maq",      OracleDbType.Varchar2,  registro.NumeroAutoconer, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":titulo",       OracleDbType.Varchar2,  registro.Titulo,          ParameterDirection.Input));
+
+                // ── Fechas ────────────────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date,      registro.Fecha,           ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":fecha_fin",    OracleDbType.Date)      { Value = registro.HoraFinal.HasValue ? (object)registro.HoraFinal.Value : DBNull.Value });
+
+                // ── Auditoría ─────────────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":a_aduser",     OracleDbType.Varchar2,  adUser ?? string.Empty,   ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":a_mduser",     OracleDbType.Varchar2,  adUser ?? string.Empty,   ParameterDirection.Input));
+
+                // ── Turno / Operario ──────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":turno",        OracleDbType.Varchar2,  registro.Turno,           ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":c_codigo",     OracleDbType.Varchar2,  registro.CodigoOperador,  ParameterDirection.Input));
+
+                // ── Producción ────────────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":peso_neto",    OracleDbType.Decimal)   { Value = pesoNeto.HasValue              ? (object)pesoNeto.Value              : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":unidades",     OracleDbType.Int32)     { Value = registro.Cantidad.HasValue     ? (object)registro.Cantidad.Value     : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":husos",        OracleDbType.Int32)     { Value = husosMaquina.HasValue          ? (object)husosMaquina.Value          : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":husos_act",    OracleDbType.Int32)     { Value = husosMaquina.HasValue          ? (object)husosMaquina.Value          : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":kg_unidad",    OracleDbType.Decimal)   { Value = kgUnidad.HasValue              ? (object)kgUnidad.Value              : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal)   { Value = registro.VelocidadMMin.HasValue ? (object)registro.VelocidadMMin.Value : DBNull.Value });
+
+                // ── Guia / Destino ────────────────────────────────────────────────────
+                command.Parameters.Add(new OracleParameter(":guia",         OracleDbType.Varchar2)  { Value = (object?)registro.Guia ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":destino",      OracleDbType.Varchar2)  { Value = (object?)registro.Destino ?? DBNull.Value });
+
+                // ── FECHA_TURNO (DATE): hora < 7 → día anterior; hora >= 7 → misma fecha ──
+                var fechaTurno = registro.Fecha.Hour < 7
+                    ? registro.Fecha.Date.AddDays(-1)
+                    : registro.Fecha.Date;
+                command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Date,      fechaTurno,               ParameterDirection.Input));
+
+                // ── Tramos → HUSOS_ACT_T1..T6 (bool → 1/0) ──────────────────────────
+                command.Parameters.Add(new OracleParameter(":husos_act_t1", OracleDbType.Int32,     registro.Tramo1 ? 10 : 0, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":husos_act_t2", OracleDbType.Int32,     registro.Tramo2 ? 10 : 0, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":husos_act_t3", OracleDbType.Int32,     registro.Tramo3 ? 10 : 0, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":husos_act_t4", OracleDbType.Int32,     registro.Tramo4 ? 10 : 0, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":husos_act_t5", OracleDbType.Int32,     registro.Tramo5 ? 10 : 0, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":husos_act_t6", OracleDbType.Int32,     registro.Tramo6 ? 10 : 0, ParameterDirection.Input));
+
+                _logger.LogDebug("Ejecutando INSERT Autoconer en H_RPRODUC...");
+                var rowsAffected = await command.ExecuteNonQueryAsync();
+
+                if (rowsAffected > 0)
+                {
+                    _logger.LogInformation("Preparatoria Autoconer insertada exitosamente en H_RPRODUC. Filas afectadas: {RowsAffected}", rowsAffected);
+                    return true;
+                }
+
+                _logger.LogWarning("No se insertó ningún registro Autoconer en H_RPRODUC");
+                return false;
+            }
+            catch (OracleException oEx)
+            {
+                _logger.LogError(oEx, "Error de Oracle al insertar preparatoria Autoconer. OracleError: {OracleError}", oEx.Message);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al insertar preparatoria Autoconer en Oracle");
                 return false;
             }
         }
@@ -1611,6 +1913,36 @@ namespace FabricaHilos.Services.Produccion
             {
                 _logger.LogError(ex, "Error general al obtener rollos BATAN. TpMaq={TpMaq}, CodMaq={CodMaq}", tpMaq, codMaq);
                 return new List<RolloDto>();
+            }
+        }
+
+        public async Task<List<DestinoDto>> ObtenerDestinosAutoconerAsync()
+        {
+            var connectionString = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connectionString)) return new List<DestinoDto>();
+
+            const string query = "SELECT CODIGO, DESCRIPCION FROM H_TPROD WHERE TABLA = '63' AND ESTADO <> '9' ORDER BY CODIGO";
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+                using var command = new OracleCommand(query, connection);
+                var result = new List<DestinoDto>();
+                using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DestinoDto
+                    {
+                        Codigo      = reader["CODIGO"]?.ToString()?.Trim()      ?? string.Empty,
+                        Descripcion = reader["DESCRIPCION"]?.ToString()?.Trim() ?? string.Empty
+                    });
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener destinos Autoconer desde H_TPROD");
+                return new List<DestinoDto>();
             }
         }
 

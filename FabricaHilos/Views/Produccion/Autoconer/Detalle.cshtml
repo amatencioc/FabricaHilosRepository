@@ -118,16 +118,8 @@
                 <div class="fw-semibold">@(Model.DescripcionMaterial ?? "-")</div>
             </div>
             <div class="col-md-3">
-                <div class="text-muted small">Color</div>
-                <div class="fw-semibold">@(Model.Color ?? "-")</div>
-            </div>
-            <div class="col-md-3">
                 <div class="text-muted small">V (m/min)</div>
                 <div class="fw-semibold">@(Model.VelocidadMMin?.ToString("0.00") ?? "-")</div>
-            </div>
-            <div class="col-md-3">
-                <div class="text-muted small">HI (Husos Inactivos)</div>
-                <div class="fw-semibold">@(Model.HusosInactivos?.ToString() ?? "-")</div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small">Título</div>
@@ -141,15 +133,11 @@
                 <div class="text-muted small">H Final</div>
                 <div class="fw-semibold">@(Model.HoraFinal?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
             </div>
-            <div class="col-md-3">
-                <div class="text-muted small">Bloque</div>
-                <div class="fw-semibold">@(Model.Bloque?.ToString() ?? "-")</div>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
-</div>
 
-<!-- ===== RESULTADOS ===== -->
+            <!-- ===== RESULTADOS ===== -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-success text-white fw-bold">
         <i class="bi bi-bar-chart-line me-2"></i>Resultados
@@ -228,13 +216,10 @@
     <a asp-action="Index" class="btn btn-outline-secondary px-4">
         <i class="bi bi-arrow-left me-1"></i>Volver
     </a>
-    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+    @if (Model.Estado == EstadoOrden.EnProceso)
     {
-        @if (Model.Estado == EstadoOrden.EnProceso)
-        {
-            <a asp-action="Editar" asp-route-id="@Model.Id" class="btn btn-success px-4">
-                <i class="bi bi-pencil me-1"></i>Editar
-            </a>
-        }
+        <a asp-action="Editar" asp-route-id="@Model.Id" class="btn btn-success px-4">
+            <i class="bi bi-pencil me-1"></i>Editar
+        </a>
     }
 </div>

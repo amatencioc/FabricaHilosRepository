@@ -230,7 +230,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> Crear()
         {
             ViewBag.Empleados = await _recetaService.ObtenerEmpleadosAsync();
@@ -240,7 +240,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Crear(OrdenProduccion model)
         {
@@ -327,7 +327,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> Editar(int id, string? returnUrl = null)
         {
             var orden = await _context.OrdenesProduccion.FindAsync(id);
@@ -345,7 +345,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Editar(int id, OrdenProduccion model, string? returnUrl = null)
         {
@@ -409,7 +409,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Anular(int id, string? returnUrl = null)
         {
@@ -479,7 +479,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CerrarPreparatoria(int id)
         {
@@ -542,7 +542,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> DetalleProduccion(int id, string? returnUrl = null)
         {
             var orden = await _context.OrdenesProduccion
@@ -559,7 +559,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DetalleProduccion(int id, int? rolloTacho, decimal? kgNeto, decimal? contadorFinal, int? nroParada, DateTime? fechaFin = null, string? returnUrl = null)
         {
@@ -637,7 +637,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> GetDetallePreparatoria(int id)
         {
             var orden = await _context.OrdenesProduccion.FindAsync(id);
@@ -734,7 +734,7 @@ namespace FabricaHilos.Controllers
         /// API para buscar receta en Oracle por código
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> BuscarReceta(string codigo)
         {
             if (string.IsNullOrWhiteSpace(codigo))
@@ -787,7 +787,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> BuscarLote(string codigo)
         {
             if (string.IsNullOrWhiteSpace(codigo))
@@ -840,7 +840,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> BuscarOperario(string codigo)
         {
             if (string.IsNullOrWhiteSpace(codigo))
@@ -869,7 +869,7 @@ namespace FabricaHilos.Controllers
         /// API para obtener máquinas por tipo desde Oracle
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> ObtenerMaquinasPorTipo(string tipoMaquina)
         {
             if (string.IsNullOrWhiteSpace(tipoMaquina))
@@ -906,7 +906,7 @@ namespace FabricaHilos.Controllers
         /// API para obtener el PESO de un título desde H_TITULOS (usado en cálculo de Kg Neto)
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> ObtenerPesoTitulo(string titulo)
         {
             try
@@ -928,7 +928,7 @@ namespace FabricaHilos.Controllers
         /// API para obtener los HUSOS de una máquina desde H_MAQUINAS (usado en cálculo de Kg Neto Pabileras)
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> ObtenerHusosMaquina(string tpMaq, string codMaq)
         {
             try
@@ -947,7 +947,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> GetMotivosParaModal()
         {
             try
@@ -963,7 +963,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> GetParosPorMaquina(string tpMaq, string codMaq, string? fechaTurno, [FromQuery] List<string>? turnos)
         {
             try
@@ -985,7 +985,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> GuardarParos([FromBody] GuardarParosRequest request)
         {
             var tieneNuevos    = request.Paros          != null && request.Paros.Count          > 0;
@@ -1025,7 +1025,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> EliminarParoBD([FromBody] EliminarParoBDRequest request)
         {
             if (string.IsNullOrEmpty(request.TpMaq) || string.IsNullOrEmpty(request.CodMaq) || string.IsNullOrEmpty(request.FechaIni))
@@ -1045,7 +1045,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> AgregarRollo([FromBody] AgregarRolloRequest request)
         {
             if (request == null || string.IsNullOrEmpty(request.TpMaq) || string.IsNullOrEmpty(request.CodMaq))
@@ -1073,7 +1073,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> GetRollosBatan(int id)
         {
             var orden = await _context.OrdenesProduccion.FindAsync(id);
@@ -1093,7 +1093,7 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia,Supervisor")]
+        [Authorize]
         public async Task<IActionResult> CerrarPreparatoriaBatan([FromBody] CerrarBatanRequest request)
         {
             var orden = await _context.OrdenesProduccion.FindAsync(request.Id);
