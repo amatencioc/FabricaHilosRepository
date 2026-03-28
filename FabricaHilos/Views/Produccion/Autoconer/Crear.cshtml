@@ -1,0 +1,563 @@
+@model FabricaHilos.Models.Produccion.RegistroAutoconer
+@using FabricaHilos.Models.Produccion
+
+@{
+    ViewData["Title"] = "Nuevo Registro Autoconer";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index">Control Autoconer</a></li>
+    <li class="breadcrumb-item active">Nuevo Registro</li>
+}
+
+<div class="d-flex align-items-center mb-4" style="border-bottom: 3px solid var(--color-secondary); padding-bottom: 10px;">
+    <i class="bi bi-speedometer2 fs-3 me-3 text-success"></i>
+    <h4 class="mb-0 fw-bold">Nuevo Registro Autoconer</h4>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-12">
+        <form asp-action="Crear" method="post" id="formCrear">
+            @Html.AntiForgeryToken()
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+            <!-- ===== CABECERA ===== -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-info-circle me-2"></i>Cabecera
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <!-- Autoconer N° -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Autoconer N° <span class="text-danger">*</span></label>
+                            <select asp-for="NumeroAutoconer" id="autoconerSelect" class="form-select">
+                                <option value="">Cargando...</option>
+                            </select>
+                            <span asp-validation-for="NumeroAutoconer" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Operador -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Operador N° <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" id="operarioInput" class="form-control"
+                                       placeholder="Últimos 4 dígitos" autocomplete="off" />
+                                <button type="button" id="btnBuscarOperario" class="btn btn-outline-secondary" title="Buscar operario">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <input asp-for="CodigoOperador" id="operadorHidden" type="hidden" />
+                            <span asp-validation-for="CodigoOperador" class="text-danger small"></span>
+                            <small id="operarioStatus" class="text-muted"></small>
+                            <small class="text-muted d-block">El prefijo 03 se agrega automáticamente.</small>
+                        </div>
+
+                        <!-- Fecha -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Fecha</label>
+                            <input type="text" id="fechaDisplay" class="form-control" readonly
+                                   style="background-color: var(--color-bg-light);" />
+                            <input asp-for="Fecha" id="fechaHidden" type="hidden" />
+                        </div>
+
+                        <!-- Turno -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Turno <span class="text-danger">*</span></label>
+                            <select asp-for="Turno" class="form-select">
+                                <option value="">Seleccione un turno</option>
+                                <option value="1">1er Turno</option>
+                                <option value="2">2do Turno</option>
+                                <option value="3">3er Turno</option>
+                                <option value="4">12 Hrs Dia</option>
+                                <option value="5">12 Hrs Noche</option>
+                            </select>
+                            <span asp-validation-for="Turno" class="text-danger small"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DATOS DE PRODUCCIÓN ===== -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-clipboard-data me-2"></i>Datos de Producción
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <!-- Receta (opcional) -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Receta <span class="text-muted small">(opcional)</span></label>
+                            <div class="input-group">
+                                <input asp-for="CodigoReceta" id="recetaInput" class="form-control"
+                                       placeholder="Código de receta" autocomplete="off" />
+                                <button type="button" id="btnBuscarReceta" class="btn btn-outline-secondary" title="Buscar receta">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <small id="recetaStatus" class="text-muted"></small>
+                        </div>
+
+                        <!-- Lote -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Lote / Partida <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input asp-for="Lote" id="loteInput" class="form-control"
+                                       placeholder="Código de lote" autocomplete="off" />
+                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Lote" class="text-danger small"></span>
+                            <small id="loteStatus" class="text-muted"></small>
+                        </div>
+
+                        <!-- Material -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Material <span class="text-danger">*</span></label>
+                            <input asp-for="DescripcionMaterial" id="materialInput" class="form-control"
+                                   placeholder="Se completará al buscar receta o lote" readonly
+                                   style="background-color: var(--color-bg-light);" />
+                            <span asp-validation-for="DescripcionMaterial" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Color -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Color</label>
+                            <input asp-for="Color" class="form-control" placeholder="Ej: crudo" />
+                        </div>
+
+                        <!-- V (m/min) -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">V (m/min)</label>
+                            <input asp-for="VelocidadMMin" class="form-control" type="number" step="0.01" min="0"
+                                   placeholder="Velocidad" />
+                        </div>
+
+                        <!-- HI -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">HI (Husos Inactivos)</label>
+                            <input asp-for="HusosInactivos" id="husosInput" class="form-control" type="number" step="1" min="0"
+                                   placeholder="0" />
+                        </div>
+
+                        <!-- Título -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Título <span class="text-danger">*</span></label>
+                            <select asp-for="Titulo" class="form-select">
+                                <option value="">Seleccione un título</option>
+                                @if (ViewBag.Titulos != null)
+                                {
+                                    @foreach (var titulo in ViewBag.Titulos)
+                                    {
+                                        <option value="@titulo.Titulo">@titulo.TextoCompleto</option>
+                                    }
+                                }
+                            </select>
+                            <span asp-validation-for="Titulo" class="text-danger small"></span>
+                        </div>
+
+                        <!-- H Inicio -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">H Inicio</label>
+                            <input asp-for="HoraInicio" class="form-control" type="datetime-local" />
+                        </div>
+
+                        <!-- H Final -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">H Final</label>
+                            <input asp-for="HoraFinal" class="form-control" type="datetime-local" />
+                        </div>
+
+                        <!-- Bloque -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Bloque</label>
+                            <input asp-for="Bloque" class="form-control" type="number" step="1" min="1"
+                                   placeholder="N° de bloque" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== RESULTADOS ===== -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-bar-chart-line me-2"></i>Resultados
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <!-- P. Bruto -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">P. Bruto (Peso Bruto)</label>
+                            <input asp-for="PesoBruto" class="form-control" type="number" step="0.01" min="0"
+                                   placeholder="0.00" />
+                        </div>
+
+                        <!-- Q -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Q (Cantidad)</label>
+                            <input asp-for="Cantidad" class="form-control" type="number" step="1" min="0"
+                                   placeholder="0" />
+                        </div>
+
+                        <!-- Puntaje -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Puntaje (PUNT)</label>
+                            <input asp-for="Puntaje" class="form-control" type="number" step="1" min="0"
+                                   placeholder="0" />
+                        </div>
+
+                        <!-- Tramos -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Tramos</label>
+                            <div class="d-flex gap-4 flex-wrap">
+                                @for (int i = 1; i <= 6; i++)
+                                {
+                                    <div class="form-check">
+                                        @if (i == 1)
+                                        {
+                                            <input asp-for="Tramo1" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo1" class="form-check-label fw-semibold">1</label>
+                                        }
+                                        else if (i == 2)
+                                        {
+                                            <input asp-for="Tramo2" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo2" class="form-check-label fw-semibold">2</label>
+                                        }
+                                        else if (i == 3)
+                                        {
+                                            <input asp-for="Tramo3" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo3" class="form-check-label fw-semibold">3</label>
+                                        }
+                                        else if (i == 4)
+                                        {
+                                            <input asp-for="Tramo4" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo4" class="form-check-label fw-semibold">4</label>
+                                        }
+                                        else if (i == 5)
+                                        {
+                                            <input asp-for="Tramo5" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo5" class="form-check-label fw-semibold">5</label>
+                                        }
+                                        else
+                                        {
+                                            <input asp-for="Tramo6" class="form-check-input" type="checkbox" />
+                                            <label asp-for="Tramo6" class="form-check-label fw-semibold">6</label>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DESTINO Y OBSERVACIONES ===== -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-box-arrow-right me-2"></i>Destino y Observaciones
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <!-- Destino -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Destino</label>
+                            <select asp-for="Destino" class="form-select">
+                                <option value="">Seleccione destino</option>
+                                <option value="CM">CM - Crudo Materiales</option>
+                                <option value="MM">MM - Melange Materiales</option>
+                                <option value="CV">CV - Crudo Venta</option>
+                                <option value="MV">MV - Melange Venta</option>
+                                <option value="COV">COV - Color Venta</option>
+                                <option value="VS">VS - Venta Servicio</option>
+                                <option value="T">T - Tintorería</option>
+                                <option value="S">S - Servicio</option>
+                            </select>
+                        </div>
+
+                        <!-- Cliente -->
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Cliente</label>
+                            <input asp-for="Cliente" class="form-control" placeholder="Nombre del cliente" />
+                        </div>
+
+                        <!-- Reproceso -->
+                        <div class="col-md-2 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input asp-for="Reproceso" class="form-check-input" type="checkbox" />
+                                <label asp-for="Reproceso" class="form-check-label fw-semibold">Reproceso (R)</label>
+                            </div>
+                        </div>
+
+                        <!-- Motivo Paralización -->
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Motivo de Paralización</label>
+                            <input asp-for="MotivoParalizacion" class="form-control"
+                                   placeholder="Describa el motivo si aplica" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Campos ocultos -->
+            <input type="hidden" asp-for="Estado" value="@EstadoOrden.EnProceso" />
+            <input type="hidden" asp-for="Cerrado" value="false" />
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="button" id="btnGuardar" class="btn btn-success px-4">
+                    <i class="bi bi-save me-2"></i>Guardar
+                </button>
+                <a asp-action="Index" class="btn btn-outline-secondary px-4">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal de Confirmación -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmarLabel">Confirmar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                ¿Está seguro que desea guardar el registro Autoconer?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnAceptarModal" class="btn btn-success">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // === Fecha en tiempo real ===
+        function formatearFecha() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm   = String(now.getMonth() + 1).padStart(2, '0');
+            const dd   = String(now.getDate()).padStart(2, '0');
+            const hh   = String(now.getHours()).padStart(2, '0');
+            const mi   = String(now.getMinutes()).padStart(2, '0');
+            const ss   = String(now.getSeconds()).padStart(2, '0');
+            return { iso: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`, display: `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}` };
+        }
+
+        function actualizarFecha() {
+            const f = formatearFecha();
+            document.getElementById('fechaHidden').value  = f.iso;
+            document.getElementById('fechaDisplay').value = f.display;
+        }
+
+        actualizarFecha();
+        setInterval(actualizarFecha, 1000);
+
+        // === Cargar máquinas Autoconer ===
+        async function cargarMaquinas() {
+            const sel = document.getElementById('autoconerSelect');
+            try {
+                const resp = await fetch('@Url.Action("ObtenerMaquinasAutoconer", "Autoconer")');
+                const data = await resp.json();
+                sel.innerHTML = '<option value="">Seleccione Autoconer</option>';
+                if (data.success && data.maquinas) {
+                    data.maquinas.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value       = m.codigo;
+                        opt.textContent = m.descripcion || m.codigo;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Error al cargar</option>';
+            }
+        }
+
+        cargarMaquinas();
+
+        // === Búsqueda de Receta ===
+        async function buscarReceta() {
+            const codigo = document.getElementById('recetaInput').value.trim();
+            const status = document.getElementById('recetaStatus');
+            const btn    = document.getElementById('btnBuscarReceta');
+            if (!codigo) { status.textContent = 'Ingrese un código'; status.className = 'text-danger small'; return; }
+
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarReceta", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('recetaInput').value   = result.data.numero;
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('materialInput').value = result.data.material;
+                    status.textContent = '✓ Receta encontrada'; status.className = 'text-success small';
+                    document.getElementById('loteStatus').textContent = '';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('recetaDropdownList', result.items.map(i => ({
+                        texto: i.numero + (i.material ? ' — ' + i.material : ''),
+                        accion: () => {
+                            document.getElementById('recetaInput').value   = i.numero;
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('materialInput').value = i.material;
+                            status.textContent = '✓ Receta seleccionada'; status.className = 'text-success small';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('recetaInput'));
+                    status.textContent = result.items.length + ' recetas encontradas.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrada'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        // === Búsqueda de Lote ===
+        async function buscarLote() {
+            const codigo = document.getElementById('loteInput').value.trim();
+            const status = document.getElementById('loteStatus');
+            const btn    = document.getElementById('btnBuscarLote');
+            if (!codigo) { status.textContent = 'Ingrese un código'; status.className = 'text-danger small'; return; }
+
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarLote", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('recetaInput').value   = '';
+                    document.getElementById('materialInput').value = result.data.material;
+                    status.textContent = '✓ Lote encontrado'; status.className = 'text-success small';
+                    document.getElementById('recetaStatus').textContent = '';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('loteDropdownList', result.items.map(i => ({
+                        texto: i.lote + (i.material ? ' — ' + i.material : ''),
+                        accion: () => {
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('recetaInput').value   = '';
+                            document.getElementById('materialInput').value = i.material;
+                            status.textContent = '✓ Lote seleccionado'; status.className = 'text-success small';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('loteInput'));
+                    status.textContent = result.items.length + ' lotes encontrados.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrado'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        // === Búsqueda de Operario ===
+        async function buscarOperario() {
+            const digitos = document.getElementById('operarioInput').value.trim();
+            const status  = document.getElementById('operarioStatus');
+            const btn     = document.getElementById('btnBuscarOperario');
+            if (!digitos) { status.textContent = 'Ingrese los últimos 4 dígitos'; status.className = 'text-danger small'; return; }
+
+            const codigo = '03' + digitos;
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarOperario", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.items && result.items.length === 1) {
+                    seleccionarOperario(result.items[0]);
+                } else if (result.success && result.items && result.items.length > 1) {
+                    mostrarLista('operarioDropdownList', result.items.map(i => ({
+                        texto: i.codigo + ' — ' + i.nombre,
+                        accion: () => seleccionarOperario(i)
+                    })), document.getElementById('operarioInput'));
+                    status.textContent = result.items.length + ' encontrados.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrado'); status.className = 'text-warning small';
+                    document.getElementById('operadorHidden').value = '';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        function seleccionarOperario(item) {
+            cerrarLista('operarioDropdownList');
+            document.getElementById('operarioInput').value  = item.nombre + ' (' + item.codigo + ')';
+            document.getElementById('operadorHidden').value = item.codigo;
+            const status = document.getElementById('operarioStatus');
+            status.textContent = '✓ Operario seleccionado'; status.className = 'text-success small';
+        }
+
+        // === Helpers ===
+        function realzarCampo(id) {
+            const el = document.getElementById(id);
+            el.style.backgroundColor = 'var(--color-success-light)';
+            setTimeout(() => { el.style.backgroundColor = 'var(--color-bg-light)'; }, 2000);
+        }
+
+        function cerrarLista(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function mostrarLista(listId, items, anchorEl) {
+            cerrarLista(listId);
+            const ul = document.createElement('ul');
+            ul.id        = listId;
+            ul.className = 'list-group mt-1 shadow-sm';
+            ul.style.cssText = 'max-height:200px;overflow-y:auto;cursor:pointer;position:relative;z-index:1000;';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.texto;
+                li.addEventListener('click', () => { cerrarLista(listId); item.accion(); });
+                ul.appendChild(li);
+            });
+            anchorEl.closest('.input-group, .col-md-6, .col-md-3').appendChild(ul);
+            const cerrar = e => {
+                if (!ul.contains(e.target) && e.target !== anchorEl) { cerrarLista(listId); document.removeEventListener('click', cerrar); }
+            };
+            setTimeout(() => document.addEventListener('click', cerrar), 0);
+        }
+
+        // === Eventos ===
+        document.addEventListener('DOMContentLoaded', function () {
+            // Receta
+            document.getElementById('btnBuscarReceta').addEventListener('click', buscarReceta);
+            document.getElementById('recetaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReceta(); } });
+            document.getElementById('recetaInput').addEventListener('input', () => { document.getElementById('recetaStatus').textContent = ''; cerrarLista('recetaDropdownList'); });
+
+            // Lote
+            document.getElementById('btnBuscarLote').addEventListener('click', buscarLote);
+            document.getElementById('loteInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarLote(); } });
+            document.getElementById('loteInput').addEventListener('input', () => { document.getElementById('loteStatus').textContent = ''; cerrarLista('loteDropdownList'); });
+
+            // Operario
+            document.getElementById('btnBuscarOperario').addEventListener('click', buscarOperario);
+            document.getElementById('operarioInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOperario(); } });
+            document.getElementById('operarioInput').addEventListener('input', () => {
+                document.getElementById('operarioStatus').textContent = '';
+                cerrarLista('operarioDropdownList');
+                document.getElementById('operadorHidden').value = '';
+            });
+
+            // Guardar con confirmación
+            document.getElementById('btnGuardar').addEventListener('click', function () {
+                const modal = new bootstrap.Modal(document.getElementById('modalConfirmar'));
+                modal.show();
+            });
+
+            document.getElementById('btnAceptarModal').addEventListener('click', function () {
+                bootstrap.Modal.getInstance(document.getElementById('modalConfirmar'))?.hide();
+                document.getElementById('formCrear').submit();
+            });
+        });
+    </script>
+}
