@@ -21,7 +21,7 @@ namespace FabricaHilos.Services.Sgc
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<List<DespachoListadoDto>> ObtenerListadoDespachosAsync(string? guia, string? pedido);
+        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
     }
 
     public class SgcService : ISgcService
@@ -1184,73 +1184,90 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== LISTADO DE DESPACHOS ==========
 
-        public async Task<List<DespachoListadoDto>> ObtenerListadoDespachosAsync(string? guia, string? pedido)
+        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
-            if (string.IsNullOrEmpty(connStr)) return [];
+            if (string.IsNullOrEmpty(connStr)) return ([], 0);
 
-            bool hasGuia   = !string.IsNullOrWhiteSpace(guia);
-            bool hasPedido = !string.IsNullOrWhiteSpace(pedido);
+            int startRow = (page - 1) * pageSize + 1;
+            int endRow   = page * pageSize;
 
-            string guiaFilter   = hasGuia   ? "\n      AND G.NUMERO = :guia" : string.Empty;
-            string pedidoFilter = hasPedido ? "\n      AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
+            bool hasGuia      = !string.IsNullOrWhiteSpace(guia);
+            bool hasPedido    = !string.IsNullOrWhiteSpace(pedido);
+            bool hasFactura   = !string.IsNullOrWhiteSpace(factura);
+            bool hasFechaIni  = fechaInicio.HasValue;
+            bool hasFechaFin  = fechaFin.HasValue;
+
+            string guiaFilter    = hasGuia    ? "\n                          AND G.NUMERO = :guia" : string.Empty;
+            string pedidoFilter  = hasPedido  ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
+            string facturaFilter = hasFactura ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
+
+            string fechaFilter = string.Empty;
+            if (hasFechaIni && hasFechaFin)
+                fechaFilter = "\n                          AND TRUNC(F.FECHA) BETWEEN TRUNC(:fechaInicio) AND TRUNC(:fechaFin)";
+            else if (hasFechaIni)
+                fechaFilter = "\n                          AND TRUNC(F.FECHA) >= TRUNC(:fechaInicio)";
+            else if (hasFechaFin)
+                fechaFilter = "\n                          AND TRUNC(F.FECHA) <= TRUNC(:fechaFin)";
 
             string sql = $@"
-                SELECT
-                    ROWNUM                AS CORRELATIVO,
-                    Q.""RAZON SOCIAL"",
-                    Q.""OC"",
-                    Q.""PEDIDO"",
-                    Q.""FACTURA"",
-                    Q.""FECHA.DOC"",
-                    Q.""ARTICULO"",
-                    Q.""CANTIDAD"",
-                    Q.""PRECIO"",
-                    Q.""GUIA"",
-                    Q.""OBS""
+                SELECT RN, TOTAL_COUNT,
+                       ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
+                       ""FECHA.DOC"", ""ARTICULO"", ""CANTIDAD"", ""PRECIO"",
+                       ""GUIA"", ""OBS""
                 FROM (
-                    SELECT
-                        P.NOMBRE                                               AS ""RAZON SOCIAL"",
-                        MAX(PK.NUM_ORDCOMPRA)                                  AS ""OC"",
-                        TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)          AS ""PEDIDO"",
-                        TRIM(F.SERIE) || '-' || TRIM(F.NUMERO)                AS ""FACTURA"",
-                        MAX(F.FECHA)                                           AS ""FECHA.DOC"",
-                        MAX(A.DESCRIPCION)                                     AS ""ARTICULO"",
-                        MAX(I.CANTIDAD)                                        AS ""CANTIDAD"",
-                        MAX(I.PRECIO)                                          AS ""PRECIO"",
-                        MAX(G.NUMERO)                                          AS ""GUIA"",
-                        I.DETALLE                                              AS ""OBS""
-                    FROM SIG.ARTICUL A
-                    INNER JOIN SIG.ITEMPED I
-                            ON I.COD_ART = A.COD_ART
-                    INNER JOIN SIG.PEDIDO P
-                            ON P.NUM_PED = I.NUM_PED
-                           AND P.SERIE   = I.SERIE
-                    INNER JOIN SIG.KARDEX_G G
-                            ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
-                           AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
-                           AND G.TIP_DOC_REF       = P.TIPO_DOCTO
-                    LEFT  JOIN SIG.DOCUVENT F
-                            ON F.TIPODOC        = G.TIP_REF
-                           AND TRIM(F.SERIE)    = TRIM(G.SER_REF)
-                           AND TRIM(F.NUMERO)   = TRIM(G.NRO_REF)
-                    LEFT  JOIN SIG.PACKING_G PK
-                            ON PK.NUM_PED = P.NUM_PED
-                    WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
-                      AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}
-                    GROUP BY
-                        P.NOMBRE,
-                        P.NUM_PED,
-                        I.NRO,
-                        TRIM(F.SERIE) || '-' || TRIM(F.NUMERO),
-                        I.DETALLE
-                    ORDER BY
-                        P.NOMBRE,
-                        P.NUM_PED,
-                        I.NRO
-                ) Q";
+                    SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
+                           COUNT(*) OVER() AS TOTAL_COUNT,
+                           Q.""RAZON SOCIAL"",
+                           Q.""OC"",
+                           Q.""PEDIDO"",
+                           Q.""FACTURA"",
+                           Q.""FECHA.DOC"",
+                           Q.""ARTICULO"",
+                           Q.""CANTIDAD"",
+                           Q.""PRECIO"",
+                           Q.""GUIA"",
+                           Q.""OBS""
+                    FROM (
+                        SELECT
+                            P.NOMBRE                                                AS ""RAZON SOCIAL"",
+                            MAX(PK.NUM_ORDCOMPRA)                                   AS ""OC"",
+                            TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)             AS ""PEDIDO"",
+                            MAX(TRIM(F.NUMERO))                                     AS ""FACTURA"",
+                            MAX(F.FECHA)                                            AS ""FECHA.DOC"",
+                            MAX(A.DESCRIPCION)                                      AS ""ARTICULO"",
+                            MAX(I.CANTIDAD)                                         AS ""CANTIDAD PEDIDO"",                            
+                            MAX(I.PRECIO)                                           AS ""PRECIO"",
+                            MAX(G.NUMERO)                                           AS ""GUIA"",
+                            MAX(I.DETALLE)                                          AS ""OBS""
+                        FROM SIG.ARTICUL A
+                        INNER JOIN SIG.ITEMPED I
+                                ON I.COD_ART = A.COD_ART
+                        INNER JOIN SIG.PEDIDO P
+                                ON P.NUM_PED = I.NUM_PED
+                               AND P.SERIE   = I.SERIE
+                        INNER JOIN SIG.KARDEX_G G
+                                ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                               AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                               AND G.TIP_DOC_REF       = P.TIPO_DOCTO
+                        LEFT  JOIN SIG.DOCUVENT F
+                                ON F.TIPODOC        = G.TIP_REF
+                               AND TRIM(F.SERIE)    = TRIM(G.SER_REF)
+                               AND TRIM(F.NUMERO)   = TRIM(G.NRO_REF)
+                        LEFT  JOIN SIG.PACKING_G PK
+                                ON PK.NUM_PED = P.NUM_PED
+                        WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
+                          AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}{facturaFilter}{fechaFilter}
+                        GROUP BY
+                            P.NOMBRE,
+                            P.NUM_PED,
+                            I.NRO
+                    ) Q
+                )
+                WHERE RN BETWEEN :startRow AND :endRow";
 
             var result = new List<DespachoListadoDto>();
+            int totalCount = 0;
             try
             {
                 using var conn = new OracleConnection(connStr);
@@ -1261,20 +1278,32 @@ namespace FabricaHilos.Services.Sgc
                 if (hasGuia)
                 {
                     if (!int.TryParse(guia!.Trim(), out int guiaInt))
-                        return result;
+                        return (result, 0);
                     cmd.Parameters.Add(new OracleParameter(":guia", OracleDbType.Int32, guiaInt, ParameterDirection.Input));
                 }
                 if (hasPedido)
                     cmd.Parameters.Add(new OracleParameter(":pedido", OracleDbType.Varchar2, pedido!.Trim(), ParameterDirection.Input));
+                if (hasFactura)
+                    cmd.Parameters.Add(new OracleParameter(":factura", OracleDbType.Varchar2, factura!.Trim(), ParameterDirection.Input));
+                if (hasFechaIni)
+                    cmd.Parameters.Add(new OracleParameter(":fechaInicio", OracleDbType.Date, fechaInicio!.Value.Date, ParameterDirection.Input));
+                if (hasFechaFin)
+                    cmd.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date, fechaFin!.Value.Date, ParameterDirection.Input));
+
+                cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));
+                cmd.Parameters.Add(new OracleParameter(":endRow", OracleDbType.Int32, endRow, ParameterDirection.Input));
 
                 using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
                     ?? throw new InvalidOperationException("OracleDataReader expected");
 
                 while (await reader.ReadAsync())
                 {
+                    if (result.Count == 0)
+                        totalCount = GetInt(reader, "TOTAL_COUNT");
+
                     result.Add(new DespachoListadoDto
                     {
-                        Correlativo = GetInt(reader, "CORRELATIVO"),
+                        Correlativo = GetInt(reader, "RN"),
                         RazonSocial = GetStr(reader, "RAZON SOCIAL"),
                         Oc          = GetStr(reader, "OC"),
                         Pedido      = GetStr(reader, "PEDIDO"),
@@ -1290,10 +1319,11 @@ namespace FabricaHilos.Services.Sgc
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido})", guia, pedido);
+                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido}, factura={Factura}, fechaInicio={FechaInicio}, fechaFin={FechaFin})",
+                    guia, pedido, factura, fechaInicio, fechaFin);
             }
 
-            return result;
+            return (result, totalCount);
         }
     }
 }

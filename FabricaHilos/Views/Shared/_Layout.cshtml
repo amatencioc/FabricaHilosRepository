@@ -124,6 +124,14 @@
                             </a>
                         </li>
                         }
+                        @if (menus.SgcDespachos)
+                        {
+                        <li>
+                            <a asp-controller="Sgc" asp-action="ListadoDespachos" class="sidebar-link sidebar-sublink @(ctrl == "Sgc" && act == "ListadoDespachos" ? "active" : "")">
+                                <i class="bi bi-truck"></i> Despachos
+                            </a>
+                        </li>
+                        }
                     </ul>
                 </li>
                 }

@@ -2,13 +2,21 @@
 
 @{
     ViewData["Title"] = "Listado de Despachos";
-    string? guia   = ViewBag.Guia   as string;
-    string? pedido = ViewBag.Pedido as string;
+    string? guia        = ViewBag.Guia        as string;
+    string? pedido      = ViewBag.Pedido      as string;
+    string? factura     = ViewBag.Factura     as string;
+    string? fechaInicio = ViewBag.FechaInicio as string;
+    string? fechaFin    = ViewBag.FechaFin    as string;
+    string? navToken    = ViewBag.NavToken    as string;
+    int page            = ViewBag.Page        ?? 1;
+    int pageSize        = ViewBag.PageSize    ?? 10;
+    int totalCount      = ViewBag.TotalCount  ?? 0;
+    int totalPages      = ViewBag.TotalPages  ?? 1;
 
     decimal sumCantidad = Model.Sum(x => x.Cantidad ?? 0m);
     decimal sumPrecio   = Model.Sum(x => x.Precio   ?? 0m);
 
-    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido }) ?? "#";
+    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, fechaInicio, fechaFin }) ?? "#";
 }
 
 @section Breadcrumb {
@@ -25,21 +33,52 @@
 
 <div class="card mb-3">
     <div class="card-body py-2">
-        <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
-            <input type="text" name="guia" value="@guia"
-                   class="form-control form-control-sm"
-                   placeholder="Nro. Guía"
-                   style="max-width: 150px;" />
-            <input type="text" name="pedido" value="@pedido"
-                   class="form-control form-control-sm"
-                   placeholder="Ej: 87110-4"
-                   style="max-width: 150px;" />
-            <button type="submit" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-search"></i> Buscar
-            </button>
-            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido))
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Nro. Guía</label>
+                <input type="text" name="guia" value="@guia"
+                       class="form-control form-control-sm"
+                       placeholder="Nro. Guía"
+                       style="width: 120px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Pedido</label>
+                <input type="text" name="pedido" value="@pedido"
+                       class="form-control form-control-sm"
+                       placeholder="Ej: 87110-4"
+                       style="width: 120px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Factura</label>
+                <input type="text" name="factura" value="@factura"
+                       class="form-control form-control-sm"
+                       placeholder="Nro. Factura"
+                       style="width: 120px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
+                <input type="date" name="fechaInicio" value="@fechaInicio"
+                       class="form-control form-control-sm"
+                       style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Fin</label>
+                <input type="date" name="fechaFin" value="@fechaFin"
+                       class="form-control form-control-sm"
+                       style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
             {
-                <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+                <div class="col-auto">
+                    <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-x-circle"></i> Limpiar
+                    </a>
+                </div>
             }
         </form>
     </div>
@@ -103,5 +142,83 @@
         </div>
     </div>
 </div>
+
+@if (totalPages > 1)
+{
+    <nav class="mt-3">
+        <ul class="pagination pagination-sm justify-content-center mb-0">
+            @if (page > 1)
+            {
+                <li class="page-item">
+                    <a class="page-link" asp-action="ListadoDespachos" asp-route-t="@navToken" asp-route-page="@(page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+            }
+            else
+            {
+                <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+            }
+
+            @{
+                int startPage = Math.Max(1, page - 2);
+                int endPage = Math.Min(totalPages, page + 2);
+
+                if (startPage > 1)
+                {
+                    <li class="page-item">
+                        <a class="page-link" asp-action="ListadoDespachos" asp-route-t="@navToken" asp-route-page="1">1</a>
+                    </li>
+                    if (startPage > 2)
+                    {
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    }
+                }
+
+                for (int i = startPage; i <= endPage; i++)
+                {
+                    if (i == page)
+                    {
+                        <li class="page-item active"><span class="page-link">@i</span></li>
+                    }
+                    else
+                    {
+                        <li class="page-item">
+                            <a class="page-link" asp-action="ListadoDespachos" asp-route-t="@navToken" asp-route-page="@i">@i</a>
+                        </li>
+                    }
+                }
+
+                if (endPage < totalPages)
+                {
+                    if (endPage < totalPages - 1)
+                    {
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    }
+                    <li class="page-item">
+                        <a class="page-link" asp-action="ListadoDespachos" asp-route-t="@navToken" asp-route-page="@totalPages">@totalPages</a>
+                    </li>
+                }
+            }
+
+            @if (page < totalPages)
+            {
+                <li class="page-item">
+                    <a class="page-link" asp-action="ListadoDespachos" asp-route-t="@navToken" asp-route-page="@(page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            }
+            else
+            {
+                <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+            }
+        </ul>
+    </nav>
+
+    <div class="text-center text-muted small mt-2">
+        Mostrando página @(page) de @(totalPages) (@(totalCount) registros totales)
+    </div>
+}
 
 @section Scripts { }

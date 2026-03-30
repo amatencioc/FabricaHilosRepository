@@ -547,18 +547,59 @@ namespace FabricaHilos.Controllers
         // ========== DESPACHOS: LISTADO ==========
 
         [HttpGet]
-        public async Task<IActionResult> ListadoDespachos(string? guia, string? pedido)
+        public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, string? factura = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, int page = 1)
         {
-            var items = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido);
-            ViewBag.Guia   = guia;
-            ViewBag.Pedido = pedido;
-            return View("Despachos/ListadoDespachos", items);
+            if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || fechaInicio.HasValue || fechaFin.HasValue))
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> {
+                    ["guia"]        = guia,
+                    ["pedido"]      = pedido,
+                    ["factura"]     = factura,
+                    ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                    ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+                });
+                return RedirectToAction(nameof(ListadoDespachos), new { t = token, page });
+            }
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                guia   = nav.GetValueOrDefault("guia")   ?? guia;
+                pedido = nav.GetValueOrDefault("pedido") ?? pedido;
+                factura = nav.GetValueOrDefault("factura") ?? factura;
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
+            }
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["guia"]        = guia,
+                ["pedido"]      = pedido,
+                ["factura"]     = factura,
+                ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+            });
+            ViewBag.NavToken = navToken;
+
+            const int pageSize = 10;
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, fechaInicio, fechaFin, page, pageSize);
+            if (!resultado.Items.Any() && page > 1)
+                return RedirectToAction(nameof(ListadoDespachos), new { t, page = 1 });
+
+            ViewBag.Guia        = guia;
+            ViewBag.Pedido      = pedido;
+            ViewBag.Factura     = factura;
+            ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
+            ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
+            ViewBag.Page        = page;
+            ViewBag.PageSize    = pageSize;
+            ViewBag.TotalCount  = resultado.TotalCount;
+            ViewBag.TotalPages  = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
+            return View("Despachos/ListadoDespachos", resultado.Items);
         }
 
         [HttpGet]
-        public async Task<IActionResult> ExportarDespachosExcel(string? guia, string? pedido)
+        public async Task<IActionResult> ExportarDespachosExcel(string? guia = null, string? pedido = null, string? factura = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
         {
-            var items = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido);
+            // Exportar todos los registros sin paginación (pageSize muy grande)
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, fechaInicio, fechaFin, 1, int.MaxValue);
+            var items = resultado.Items;
 
             using var workbook  = new ClosedXML.Excel.XLWorkbook();
             var ws = workbook.Worksheets.Add("Listado de Despachos");

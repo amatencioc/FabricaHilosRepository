@@ -32,6 +32,7 @@ public class MenuOptions
     // ── Submenús: SGC ─────────────────────────────────────────────────────
     public bool SgcDashboard { get; set; } = true;
     public bool SgcPedidos   { get; set; } = true;
+    public bool SgcDespachos { get; set; } = true;
 
     // ── Submenús: Facturación ─────────────────────────────────────────────
     public bool FacturacionImportarFacturas { get; set; } = true;
@@ -71,6 +72,7 @@ public class MenuOptions
 
         SgcDashboard = true,
         SgcPedidos   = true,
+        SgcDespachos = true,
 
         FacturacionImportarFacturas = true,
         FacturacionListaDocumentos  = true,
