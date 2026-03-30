@@ -18,9 +18,8 @@
 
 <div class="row justify-content-center">
     <div class="col-12">
-        <form asp-action="Editar" asp-route-id="@Model.Id" asp-route-returnUrl="@ViewBag.ReturnUrl" method="post" id="formEditar">
+        <form asp-action="Editar" method="post" id="formEditar">
             @Html.AntiForgeryToken()
-            <input type="hidden" asp-for="Id" />
             <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
 
             <!-- ===== CABECERA ===== -->
@@ -85,13 +84,26 @@
                 </div>
                 <div class="card-body p-4">
                     <div class="row g-3">
-                        <!-- Receta -->
+                        <!-- Nº Partida -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Nº Partida</label>
+                            <div class="input-group">
+                                <input asp-for="Guia" id="guiaInput" class="form-control"
+                                       placeholder="Nº Partida" autocomplete="off" />
+                                <button type="button" id="btnBuscarPartida" class="btn btn-outline-secondary" title="Buscar partida">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <small id="partidaStatus" class="text-muted"></small>
+                        </div>
+
+                        <!-- Receta (opcional) -->
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Receta <span class="text-muted small">(opcional)</span></label>
                             <div class="input-group">
                                 <input asp-for="CodigoReceta" id="recetaInput" class="form-control"
                                        placeholder="Código de receta" autocomplete="off" />
-                                <button type="button" id="btnBuscarReceta" class="btn btn-outline-secondary">
+                                <button type="button" id="btnBuscarReceta" class="btn btn-outline-secondary" title="Buscar receta">
                                     <i class="bi bi-search"></i>
                                 </button>
                             </div>
@@ -104,7 +116,7 @@
                             <div class="input-group">
                                 <input asp-for="Lote" id="loteInput" class="form-control"
                                        placeholder="Código de lote" autocomplete="off" />
-                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary">
+                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
                                     <i class="bi bi-search"></i>
                                 </button>
                             </div>
@@ -113,17 +125,12 @@
                         </div>
 
                         <!-- Material -->
-                        <div class="col-md-4">
+                        <div class="col-md-12">
                             <label class="form-label fw-semibold">Material <span class="text-danger">*</span></label>
                             <input asp-for="DescripcionMaterial" id="materialInput" class="form-control"
-                                   readonly style="background-color: var(--color-bg-light);" />
+                                   placeholder="Se completará al buscar Nº Partida, receta o lote" readonly
+                                   style="background-color: var(--color-bg-light);" />
                             <span asp-validation-for="DescripcionMaterial" class="text-danger small"></span>
-                        </div>
-
-                        <!-- Nº Partida -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Nº Partida</label>
-                            <input asp-for="Guia" class="form-control" placeholder="Nº Partida" />
                         </div>
 
                         <!-- Título -->
@@ -142,6 +149,13 @@
                             <span asp-validation-for="Titulo" class="text-danger small"></span>
                         </div>
 
+                        <!-- V (m/min) -->
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">V (m/min)</label>
+                            <input asp-for="VelocidadMMin" class="form-control" type="number" step="0.01" min="0"
+                                   placeholder="Velocidad" />
+                        </div>
+
                         <!-- Fecha Inicio -->
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Fecha Inicio</label>
@@ -154,14 +168,8 @@
                             <input asp-for="HoraFinal" class="form-control" type="datetime-local" />
                         </div>
 
-                        <!-- V (m/min) -->
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">V (m/min)</label>
-                            <input asp-for="VelocidadMMin" class="form-control" type="number" step="0.01" min="0" />
-                        </div>
-
                         <!-- Destino -->
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Destino</label>
                             <select asp-for="Destino" id="destinoSelect" class="form-select">
                                 <option value="@Model.Destino">@Model.Destino</option>
@@ -169,7 +177,7 @@
                         </div>
 
                         <!-- Tramos -->
-                        <div class="col-md-6">
+                        <div class="col-md-8">
                             <label class="form-label fw-semibold">Tramos</label>
                             <div class="d-flex gap-4 flex-wrap">
                                 <div class="form-check">
@@ -210,16 +218,16 @@
                 <div class="card-body p-4">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Conos Madejas</label>
+                            <label class="form-label fw-semibold">Conos o Rodetes</label>
                             <input asp-for="Cantidad" id="conosMadejasInput" class="form-control" type="number" step="1" min="0" />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Kg x Unidad</label>
-                            <input asp-for="PesoBruto" id="kgUnidadInput" class="form-control" type="number" step="0.0001" min="0" />
+                            <input asp-for="PesoBruto" id="kgUnidadInput" class="form-control" type="number" step="0.01" min="0" />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Peso Neto</label>
-                            <input id="pesoNetoDisplay" class="form-control" type="number" step="0.0001" readonly
+                            <input id="pesoNetoDisplay" class="form-control" type="number" step="0.01" readonly
                                    style="background-color: var(--color-bg-light);" />
                         </div>
                     </div>
@@ -290,11 +298,154 @@
 
         cargarDestinos();
 
+        let _titulosRestringidosHtml = '';
+
+        function cerrarLista(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function mostrarLista(listId, items, anchorEl) {
+            cerrarLista(listId);
+            const ul = document.createElement('ul');
+            ul.id        = listId;
+            ul.className = 'list-group mt-1 shadow-sm';
+            ul.style.cssText = 'max-height:200px;overflow-y:auto;cursor:pointer;position:relative;z-index:1000;';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.texto;
+                li.addEventListener('click', () => { cerrarLista(listId); item.accion(); });
+                ul.appendChild(li);
+            });
+            anchorEl.closest('.input-group, .col-md-6, .col-md-4, .col-md-3').appendChild(ul);
+            const cerrar = e => {
+                if (!ul.contains(e.target) && e.target !== anchorEl) { cerrarLista(listId); document.removeEventListener('click', cerrar); }
+            };
+            setTimeout(() => document.addEventListener('click', cerrar), 0);
+        }
+
+        function realzarCampo(id) {
+            const el = document.getElementById(id);
+            el.style.backgroundColor = 'var(--color-success-light)';
+            setTimeout(() => { el.style.backgroundColor = 'var(--color-bg-light)'; }, 2000);
+        }
+
+        function seleccionarTitulo(titulo, bloquear = false) {
+            const sel = document.getElementById('Titulo');
+            if (!sel) return;
+            if (titulo) {
+                const opt = Array.from(sel.options).find(o => o.value === titulo.trim());
+                if (opt) sel.value = opt.value;
+            }
+            if (bloquear) {
+                sel.style.pointerEvents    = 'none';
+                sel.style.opacity          = '0.65';
+                sel.style.backgroundColor  = 'var(--color-bg-light)';
+            } else {
+                sel.style.pointerEvents    = '';
+                sel.style.opacity          = '';
+                sel.style.backgroundColor  = '';
+            }
+        }
+
+        function bloquearCamposPartida(bloquear) {
+            ['recetaInput', 'btnBuscarReceta', 'loteInput', 'btnBuscarLote'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (bloquear) {
+                    el.style.pointerEvents   = 'none';
+                    el.style.opacity         = '0.65';
+                    if (el.tagName === 'INPUT') el.style.backgroundColor = 'var(--color-bg-light)';
+                } else {
+                    el.style.pointerEvents   = '';
+                    el.style.opacity         = '';
+                    el.style.backgroundColor = '';
+                }
+            });
+        }
+
+        async function cargarTitulosPartida() {
+            const sel = document.getElementById('Titulo');
+            if (!sel) return;
+            try {
+                const resp = await fetch('@Url.Action("ObtenerTitulos", "Autoconer")');
+                const data = await resp.json();
+                if (data.success && data.titulos) {
+                    sel.innerHTML = '<option value="">Seleccione un título</option>';
+                    data.titulos.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value       = t.codigo;
+                        opt.textContent = t.descripcion;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* mantener opciones actuales */ }
+        }
+
+        function restaurarTitulosRestringidos() {
+            const sel = document.getElementById('Titulo');
+            if (sel && _titulosRestringidosHtml) {
+                sel.innerHTML = _titulosRestringidosHtml;
+                sel.value = '';
+            }
+        }
+
+        async function buscarPartida() {
+            const guia   = document.getElementById('guiaInput').value.trim();
+            const status = document.getElementById('partidaStatus');
+            const btn    = document.getElementById('btnBuscarPartida');
+            if (!guia) { status.textContent = 'Ingrese un Nº Partida'; status.className = 'text-danger small'; return; }
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarPartida", "Autoconer")?guia=${encodeURIComponent(guia)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('guiaInput').value     = result.data.guia;
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('recetaInput').value   = '';
+                    await cargarTitulosPartida();
+                    seleccionarTitulo(result.data.titulo, true);
+                    bloquearCamposPartida(true);
+                    status.textContent = '✓ Partida encontrada'; status.className = 'text-success small';
+                    document.getElementById('loteStatus').textContent   = '';
+                    document.getElementById('recetaStatus').textContent = '';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('partidaDropdownList', result.items.map(i => ({
+                        texto: i.guia
+                            + (i.titulo  ? ' [' + i.titulo + ']' : '')
+                            + (i.lote    ? ' — Lote: ' + i.lote  : '')
+                            + (i.cliente ? ' | ' + i.cliente      : ''),
+                        accion: async () => {
+                            document.getElementById('guiaInput').value     = i.guia;
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('materialInput').value = i.material;
+                            document.getElementById('recetaInput').value   = '';
+                            await cargarTitulosPartida();
+                            seleccionarTitulo(i.titulo, true);
+                            bloquearCamposPartida(true);
+                            status.textContent = '✓ Partida seleccionada'; status.className = 'text-success small';
+                            document.getElementById('loteStatus').textContent   = '';
+                            document.getElementById('recetaStatus').textContent = '';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('guiaInput'));
+                    status.textContent = result.items.length + ' partidas encontradas.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrada'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
         // === Calcular Peso Neto ===
         function calcularPesoNeto() {
             const conos  = parseFloat(document.getElementById('conosMadejasInput').value) || 0;
             const kgUnit = parseFloat(document.getElementById('kgUnidadInput').value)     || 0;
-            document.getElementById('pesoNetoDisplay').value = (conos * kgUnit).toFixed(4);
+            document.getElementById('pesoNetoDisplay').value = (conos * kgUnit).toFixed(2);
         }
         async function buscarReceta() {
             const codigo = document.getElementById('recetaInput').value.trim();
@@ -388,10 +539,28 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            // Cache de títulos restringidos
+            const tituloSel = document.getElementById('Titulo');
+            if (tituloSel) _titulosRestringidosHtml = tituloSel.innerHTML;
+
             // Valores por defecto para fechas
             const ahora = ahoraLocal();
             if (!document.getElementById('HoraInicio').value) document.getElementById('HoraInicio').value = ahora;
             if (!document.getElementById('HoraFinal').value) document.getElementById('HoraFinal').value = ahora;
+
+            // Nº Partida
+            document.getElementById('btnBuscarPartida').addEventListener('click', buscarPartida);
+            document.getElementById('guiaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarPartida(); } });
+            document.getElementById('guiaInput').addEventListener('input', () => {
+                document.getElementById('partidaStatus').textContent = '';
+                cerrarLista('partidaDropdownList');
+                bloquearCamposPartida(false);
+                seleccionarTitulo(null, false);
+                restaurarTitulosRestringidos();
+                document.getElementById('loteInput').value      = '';
+                document.getElementById('materialInput').value  = '';
+                document.getElementById('loteStatus').textContent = '';
+            });
 
             document.getElementById('btnBuscarReceta').addEventListener('click', buscarReceta);
             document.getElementById('recetaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReceta(); } });

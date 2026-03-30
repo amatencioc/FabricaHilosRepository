@@ -60,7 +60,7 @@ namespace FabricaHilos.Controllers
         // GET: /Autoconer
         public async Task<IActionResult> Index(string? buscar, List<string>? estado, int page = 1)
         {
-            if (estado == null || estado.Count == 0) estado = new List<string> { "1" };
+            if (estado == null || estado.Count == 0) estado = new List<string> { "3" };
 
             const int pageSize = 10;
 
@@ -89,7 +89,20 @@ namespace FabricaHilos.Controllers
                 var locales = await _context.RegistrosAutoconer
                     .Where(r => (r.CodigoReceta != null && recetas.Contains(r.CodigoReceta))
                              || lotes.Contains(r.Lote))
-                    .Select(r => new { r.Id, r.CodigoReceta, r.Lote, r.Fecha })
+                    .Select(r => new { 
+                        r.Id, 
+                        r.CodigoReceta, 
+                        r.Lote, 
+                        r.Fecha, 
+                        r.DescripcionMaterial,
+                        r.Guia,
+                        r.Tramo1,
+                        r.Tramo2,
+                        r.Tramo3,
+                        r.Tramo4,
+                        r.Tramo5,
+                        r.Tramo6
+                    })
                     .ToListAsync();
 
                 foreach (var p in preparatorias)
@@ -97,16 +110,50 @@ namespace FabricaHilos.Controllers
                     var fechaStr = p.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss");
                     if (!string.IsNullOrEmpty(p.Receta))
                     {
-                        p.LocalId = locales.FirstOrDefault(l =>
+                        var local = locales.FirstOrDefault(l =>
                             l.CodigoReceta == p.Receta &&
-                            l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr)?.Id;
+                            l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
+                        if (local != null)
+                        {
+                            p.LocalId = local.Id;
+                            // Usar el material del registro local si existe
+                            if (!string.IsNullOrEmpty(local.DescripcionMaterial) && local.DescripcionMaterial != "-")
+                            {
+                                p.Material = local.DescripcionMaterial;
+                            }
+                            // Asignar Guía y Tramos desde el registro local
+                            p.Guia = local.Guia;
+                            p.Tramo1 = local.Tramo1;
+                            p.Tramo2 = local.Tramo2;
+                            p.Tramo3 = local.Tramo3;
+                            p.Tramo4 = local.Tramo4;
+                            p.Tramo5 = local.Tramo5;
+                            p.Tramo6 = local.Tramo6;
+                        }
                     }
                     else
                     {
-                        p.LocalId = locales.FirstOrDefault(l =>
+                        var local = locales.FirstOrDefault(l =>
                             (l.CodigoReceta == null || l.CodigoReceta == string.Empty) &&
                             l.Lote == p.Lote &&
-                            l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr)?.Id;
+                            l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
+                        if (local != null)
+                        {
+                            p.LocalId = local.Id;
+                            // Usar el material del registro local si existe
+                            if (!string.IsNullOrEmpty(local.DescripcionMaterial) && local.DescripcionMaterial != "-")
+                            {
+                                p.Material = local.DescripcionMaterial;
+                            }
+                            // Asignar Guía y Tramos desde el registro local
+                            p.Guia = local.Guia;
+                            p.Tramo1 = local.Tramo1;
+                            p.Tramo2 = local.Tramo2;
+                            p.Tramo3 = local.Tramo3;
+                            p.Tramo4 = local.Tramo4;
+                            p.Tramo5 = local.Tramo5;
+                            p.Tramo6 = local.Tramo6;
+                        }
                     }
                 }
 
@@ -115,6 +162,15 @@ namespace FabricaHilos.Controllers
                 {
                     try
                     {
+                        // Mapear estado de Oracle a estado local: "1" → EnProceso, "3" → Terminado, "9" → Anulado
+                        var estadoLocal = p.Estado switch
+                        {
+                            "1" => EstadoOrden.EnProceso,
+                            "3" => EstadoOrden.Terminado,
+                            "9" => EstadoOrden.Anulado,
+                            _   => EstadoOrden.EnProceso
+                        };
+
                         var nuevoReg = new RegistroAutoconer
                         {
                             CodigoReceta      = string.IsNullOrEmpty(p.Receta) ? null : p.Receta,
@@ -125,14 +181,14 @@ namespace FabricaHilos.Controllers
                             Fecha             = p.FechaInicio,
                             CodigoOperador    = string.IsNullOrEmpty(p.CodigoOperario) ? "-" : p.CodigoOperario,
                             Turno             = string.IsNullOrEmpty(p.Turno) ? "-" : p.Turno,
-                            Estado            = EstadoOrden.EnProceso,
-                            Cerrado           = false
+                            Estado            = estadoLocal,
+                            Cerrado           = p.Estado == "3" // Cerrado si está terminado
                         };
                         _context.RegistrosAutoconer.Add(nuevoReg);
                         await _context.SaveChangesAsync();
                         p.LocalId = nuevoReg.Id;
-                        _logger.LogInformation("Registro Autoconer local creado: Lote={Lote}, Fecha={Fecha}, Id={Id}",
-                            p.Lote, p.FechaInicio, nuevoReg.Id);
+                        _logger.LogInformation("Registro Autoconer local creado: Lote={Lote}, Fecha={Fecha}, Estado={Estado}, Id={Id}",
+                            p.Lote, p.FechaInicio, estadoLocal, nuevoReg.Id);
                     }
                     catch (Exception ex)
                     {
@@ -157,7 +213,7 @@ namespace FabricaHilos.Controllers
         [Authorize]
         public async Task<IActionResult> Crear()
         {
-            ViewBag.Titulos   = await _recetaService.ObtenerTitulosAsync();
+            ViewBag.Titulos   = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas  = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
             return View(new RegistroAutoconer());
         }
@@ -185,8 +241,8 @@ namespace FabricaHilos.Controllers
                         }
                     }
 
-                    model.Estado  = EstadoOrden.EnProceso;
-                    model.Cerrado = false;
+                    model.Estado  = EstadoOrden.Terminado;
+                    model.Cerrado = true;
 
                     if (model.Fecha == default || model.Fecha == DateTime.MinValue)
                         model.Fecha = DateTime.Now;
@@ -204,7 +260,27 @@ namespace FabricaHilos.Controllers
 
                     if (insertadoEnOracle)
                     {
-                        TempData["Success"] = "Registro Autoconer creado exitosamente y registrado en Oracle.";
+                        // Ejecutar SP_CALCULAR_PROD_ESP_TEO tras inserción exitosa en Oracle
+                        var spResult = await _recetaService.EjecutarSpCalcularProdTeoAsync(
+                            model.CodigoReceta, model.Lote, "A", model.NumeroAutoconer,
+                            model.Titulo, model.Fecha);
+
+                        if (!spResult.UpdateExitoso)
+                        {
+                            _logger.LogWarning("Autoconer {Id}: SP_CALCULAR_PROD_ESP_TEO falló tras INSERT.", model.Id);
+                            TempData["Success"] = "Registro Autoconer creado exitosamente, pero no se pudo calcular PROD_TEORICO.";
+                        }
+                        else if (spResult.Codigo != "0")
+                        {
+                            _logger.LogWarning("Autoconer {Id}: SP_CALCULAR_PROD_ESP_TEO devolvió código {Codigo}: {Mensaje}", model.Id, spResult.Codigo, spResult.Mensaje);
+                            TempData["Success"] = $"Registro Autoconer creado. Advertencia en cálculo: {spResult.Mensaje}";
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Autoconer {Id}: SP_CALCULAR_PROD_ESP_TEO ejecutado correctamente tras INSERT.", model.Id);
+                            TempData["Success"] = "Registro Autoconer creado exitosamente y registrado en Oracle.";
+                        }
+
                         _logger.LogInformation("Registro Autoconer {Id} creado y registrado en Oracle", model.Id);
                     }
                     else
@@ -232,113 +308,280 @@ namespace FabricaHilos.Controllers
             return View(model);
         }
 
-        // GET: /Autoconer/Editar/5
+        // GET: /Autoconer/Editar (Oracle keys)
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> Editar(int id, string? returnUrl = null)
+        public async Task<IActionResult> Editar(string? receta, string lote, string codMaq, string titulo, string fechaIni)
         {
-            var registro = await _context.RegistrosAutoconer.FindAsync(id);
-            if (registro == null)
+            _logger.LogInformation("╔═══════════════════════════════════════════════════════════════════════════════╗");
+            _logger.LogInformation("║ GET Editar - Parámetros Recibidos                                            ║");
+            _logger.LogInformation("╠═══════════════════════════════════════════════════════════════════════════════╣");
+            _logger.LogInformation("║ receta   = [{Receta}]", receta ?? "(null)");
+            _logger.LogInformation("║ lote     = [{Lote}]", lote);
+            _logger.LogInformation("║ codMaq   = [{CodMaq}]", codMaq);
+            _logger.LogInformation("║ titulo   = [{Titulo}]", titulo);
+            _logger.LogInformation("║ fechaIni = [{FechaIni}]", fechaIni);
+            _logger.LogInformation("╚═══════════════════════════════════════════════════════════════════════════════╝");
+
+            if (string.IsNullOrEmpty(lote) || string.IsNullOrEmpty(codMaq) || string.IsNullOrEmpty(titulo) || string.IsNullOrEmpty(fechaIni))
             {
-                TempData["Error"] = "Registro Autoconer no encontrado.";
+                TempData["Error"] = "Parámetros incompletos para editar el registro.";
                 return RedirectToAction(nameof(Index));
             }
 
-            ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(registro.CodigoOperador);
-            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAsync();
+            if (!DateTime.TryParse(fechaIni, out DateTime fecha))
+            {
+                TempData["Error"] = "Formato de fecha inválido.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var detalle = await _recetaService.ObtenerDetalleAutoconerAsync(receta, lote, codMaq, titulo, fecha);
+            if (detalle == null)
+            {
+                TempData["Error"] = "No se encontró el registro en Oracle.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Fallback automático: Si Material vacío, buscar por GUIA o LOTE
+            if (string.IsNullOrEmpty(detalle.DescripcionMaterial) || detalle.DescripcionMaterial == "-")
+            {
+                _logger.LogWarning("Material vacío, buscando automáticamente... Guia={Guia}, Lote={Lote}", 
+                    detalle.Guia ?? "(null)", detalle.Lote);
+
+                // Prioridad 1: Buscar por GUIA (Nº Partida)
+                if (!string.IsNullOrEmpty(detalle.Guia))
+                {
+                    var partidaResults = await _recetaService.BuscarPartidaPorGuiaAsync(detalle.Guia);
+                    if (partidaResults != null && partidaResults.Count > 0)
+                    {
+                        detalle.DescripcionMaterial = partidaResults[0].Material;
+                        _logger.LogInformation("✓ Material obtenido por GUIA: {Material}", detalle.DescripcionMaterial);
+                    }
+                }
+
+                // Prioridad 2: Buscar por LOTE (si GUIA falló o no existe)
+                if ((string.IsNullOrEmpty(detalle.DescripcionMaterial) || detalle.DescripcionMaterial == "-") 
+                    && !string.IsNullOrEmpty(detalle.Lote))
+                {
+                    var loteResults = await _recetaService.BuscarLotePorCodigoAsync(detalle.Lote);
+                    if (loteResults != null && loteResults.Count > 0)
+                    {
+                        detalle.DescripcionMaterial = loteResults[0].Material;
+                        _logger.LogInformation("✓ Material obtenido por LOTE: {Material}", detalle.DescripcionMaterial);
+                    }
+                }
+
+                // Si aún está vacío
+                if (string.IsNullOrEmpty(detalle.DescripcionMaterial) || detalle.DescripcionMaterial == "-")
+                {
+                    _logger.LogWarning("✗ No se pudo obtener Material para Lote={Lote}", detalle.Lote);
+                    detalle.DescripcionMaterial = "-";
+                }
+            }
+
+            // Convertir AutoconerDetalleOracleDto → RegistroAutoconer para edición
+            var registro = new RegistroAutoconer
+            {
+                CodigoReceta         = detalle.CodigoReceta,
+                Lote                 = detalle.Lote,
+                DescripcionMaterial  = detalle.DescripcionMaterial,
+                NumeroAutoconer      = detalle.NumeroAutoconer,
+                Titulo               = detalle.Titulo,
+                Fecha                = detalle.Fecha,
+                Turno                = detalle.Turno,
+                CodigoOperador       = detalle.CodigoOperador,
+                VelocidadMMin        = detalle.VelocidadMMin,
+                Cantidad             = detalle.Cantidad,
+                PesoBruto            = detalle.PesoBruto ?? 0m, // KG_UNIDAD en Oracle
+                Guia                 = detalle.Guia,
+                Destino              = detalle.Destino,
+                Tramo1               = detalle.Tramo1,
+                Tramo2               = detalle.Tramo2,
+                Tramo3               = detalle.Tramo3,
+                Tramo4               = detalle.Tramo4,
+                Tramo5               = detalle.Tramo5,
+                Tramo6               = detalle.Tramo6,
+                Estado               = EstadoOrden.Terminado, // Estado="3" → Terminado
+                Cerrado              = true
+            };
+
+            // Guardar valores antiguos para el POST
+            TempData["OldReceta"]   = detalle.CodigoReceta;
+            TempData["OldLote"]     = detalle.Lote;
+            TempData["OldCodMaq"]   = detalle.NumeroAutoconer;
+            TempData["OldTitulo"]   = detalle.Titulo;
+            TempData["OldFechaIni"] = detalle.Fecha.ToString("yyyy-MM-dd HH:mm:ss");
+
+            ViewBag.NombreOperario = detalle.NombreOperario ?? await _recetaService.ObtenerNombreEmpleadoAsync(registro.CodigoOperador);
+            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
-            ViewBag.ReturnUrl      = returnUrl;
+            ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
+
             return View(registro);
         }
 
-        // POST: /Autoconer/Editar/5
+        // POST: /Autoconer/Editar
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Editar(int id, RegistroAutoconer model, string? returnUrl = null)
+        public async Task<IActionResult> Editar(RegistroAutoconer model)
         {
-            if (id != model.Id) return BadRequest();
-
             if (ModelState.IsValid)
             {
-                var registro = await _context.RegistrosAutoconer.FindAsync(id);
-                if (registro == null)
+                // Recuperar valores antiguos de TempData (guardados en GET)
+                var oldReceta   = TempData["OldReceta"]?.ToString();
+                var oldLote     = TempData["OldLote"]?.ToString();
+                var oldCodMaq   = TempData["OldCodMaq"]?.ToString();
+                var oldTitulo   = TempData["OldTitulo"]?.ToString();
+                var oldFechaStr = TempData["OldFechaIni"]?.ToString();
+
+                if (string.IsNullOrEmpty(oldLote) || string.IsNullOrEmpty(oldCodMaq) || 
+                    string.IsNullOrEmpty(oldTitulo) || string.IsNullOrEmpty(oldFechaStr))
                 {
-                    TempData["Error"] = "Registro Autoconer no encontrado.";
+                    TempData["Error"] = "Sesión expirada. Por favor, vuelva a cargar el formulario de edición.";
                     return RedirectToAction(nameof(Index));
                 }
 
-                // Guardar valores originales para Oracle
-                var oldReceta       = registro.CodigoReceta;
-                var oldLote         = registro.Lote;
-                var oldCodMaq       = registro.NumeroAutoconer;
-                var oldTitulo       = registro.Titulo;
-                var oldFechaInicio  = registro.Fecha;
+                if (!DateTime.TryParse(oldFechaStr, out DateTime oldFecha))
+                {
+                    TempData["Error"] = "Fecha antigua inválida.";
+                    return RedirectToAction(nameof(Index));
+                }
 
-                // Actualizar campos
-                registro.CodigoReceta       = model.CodigoReceta;
-                registro.Lote               = model.Lote;
-                registro.DescripcionMaterial = model.DescripcionMaterial;
-                registro.NumeroAutoconer    = model.NumeroAutoconer;
-                registro.Titulo             = model.Titulo;
-                registro.CodigoOperador     = model.CodigoOperador;
-                registro.Turno              = model.Turno;
-                registro.Fecha              = model.Fecha;
-                registro.VelocidadMMin      = model.VelocidadMMin;
-                registro.HoraInicio         = model.HoraInicio;
-                registro.HoraFinal          = model.HoraFinal;
-                registro.PesoBruto          = model.PesoBruto;
-                registro.Cantidad           = model.Cantidad;
-                registro.Puntaje            = model.Puntaje;
-                registro.Tramo1             = model.Tramo1;
-                registro.Tramo2             = model.Tramo2;
-                registro.Tramo3             = model.Tramo3;
-                registro.Tramo4             = model.Tramo4;
-                registro.Tramo5             = model.Tramo5;
-                registro.Tramo6             = model.Tramo6;
-                registro.Guia               = model.Guia;
-                registro.Destino            = model.Destino;
-                registro.Cliente            = model.Cliente;
-                registro.Reproceso          = model.Reproceso;
-                registro.MotivoParalizacion = model.MotivoParalizacion;
+                // Crear registroAntiguo con los valores originales
+                var registroAntiguo = new RegistroAutoconer
+                {
+                    CodigoReceta    = oldReceta,
+                    Lote            = oldLote,
+                    NumeroAutoconer = oldCodMaq,
+                    Titulo          = oldTitulo,
+                    Fecha           = oldFecha
+                };
 
-                await _context.SaveChangesAsync();
+                // Asegurar estado correcto
+                model.Estado  = EstadoOrden.Terminado;
+                model.Cerrado = true;
 
-                // UPDATE en Oracle
-                var actualizadoEnOracle = await _recetaService.ActualizarPreparatoriaOracleAsync(
-                    oldReceta, oldLote, "A", oldCodMaq, oldTitulo, oldFechaInicio,
-                    registro.CodigoReceta, registro.Lote, "A", registro.NumeroAutoconer, registro.Titulo,
-                    registro.CodigoOperador, registro.Turno, null, registro.Fecha,
-                    null, null,
-                    User.Identity?.Name, registro.VelocidadMMin, null);
+                try
+                {
+                    // UPDATE en Oracle con método específico de Autoconer
+                    var actualizadoEnOracle = await _recetaService.ActualizarPreparatoriaAutoconerAsync(
+                        model, registroAntiguo, User.Identity?.Name);
 
-                TempData["Success"] = "Registro Autoconer actualizado correctamente.";
-                if (!actualizadoEnOracle)
-                    _logger.LogWarning("Registro Autoconer {Id} actualizado en SQLite pero falló en Oracle.", id);
+                    if (!actualizadoEnOracle)
+                    {
+                        _logger.LogWarning("Falló actualización en Oracle para Autoconer: Lote={Lote}, CodMaq={CodMaq}", model.Lote, model.NumeroAutoconer);
+                        TempData["Warning"] = "No se pudo actualizar el registro en Oracle. Verifique los logs.";
+                        return RedirectToAction(nameof(Index));
+                    }
 
-                return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                    // Ejecutar SP_CALCULAR_PROD_ESP_TEO tras actualización exitosa en Oracle
+                    var spResult = await _recetaService.EjecutarSpCalcularProdTeoAsync(
+                        model.CodigoReceta, model.Lote, "A", model.NumeroAutoconer,
+                        model.Titulo, model.Fecha);
+
+                    if (!spResult.UpdateExitoso)
+                    {
+                        _logger.LogWarning("Autoconer: SP_CALCULAR_PROD_ESP_TEO falló tras UPDATE. Lote={Lote}", model.Lote);
+                        TempData["Success"] = "Registro Autoconer actualizado, pero no se pudo calcular PROD_TEORICO.";
+                    }
+                    else if (spResult.Codigo != "0")
+                    {
+                        _logger.LogWarning("Autoconer: SP_CALCULAR_PROD_ESP_TEO devolvió código {Codigo}: {Mensaje}", spResult.Codigo, spResult.Mensaje);
+                        TempData["Success"] = $"Registro Autoconer actualizado. Advertencia en cálculo: {spResult.Mensaje}";
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Autoconer: SP_CALCULAR_PROD_ESP_TEO ejecutado correctamente tras UPDATE. Lote={Lote}", model.Lote);
+                        TempData["Success"] = "Registro Autoconer actualizado exitosamente en Oracle.";
+                    }
+
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error al actualizar Autoconer en Oracle: Lote={Lote}, CodMaq={CodMaq}", model.Lote, model.NumeroAutoconer);
+                    TempData["Error"] = $"Error al actualizar el registro: {ex.Message}";
+                }
+            }
+            else
+            {
+                _logger.LogWarning("ModelState inválido al editar Autoconer. Errores: {Errors}",
+                    string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
             }
 
             ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(model.CodigoOperador);
-            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAsync();
+            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
-            ViewBag.ReturnUrl      = returnUrl;
+            ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
             return View(model);
         }
 
-        // GET: /Autoconer/Detalle/5
+        // GET: /Autoconer/Detalle
         [HttpGet]
-        public async Task<IActionResult> Detalle(int id)
+        public async Task<IActionResult> Detalle(string? receta, string lote, string codMaq, string titulo, string fechaIni)
         {
-            var registro = await _context.RegistrosAutoconer.FindAsync(id);
-            if (registro == null)
+            // Logging de parámetros recibidos
+            _logger.LogInformation("╔═══════════════════════════════════════════════════════════════════════════════╗");
+            _logger.LogInformation("║ DETALLE AUTOCONER - Parámetros Recibidos                                     ║");
+            _logger.LogInformation("╠═══════════════════════════════════════════════════════════════════════════════╣");
+            _logger.LogInformation("║ receta:   [{Receta}]", receta ?? "(NULL)");
+            _logger.LogInformation("║ lote:     [{Lote}]", lote ?? "(NULL)");
+            _logger.LogInformation("║ codMaq:   [{CodMaq}]", codMaq ?? "(NULL)");
+            _logger.LogInformation("║ titulo:   [{Titulo}]", titulo ?? "(NULL)");
+            _logger.LogInformation("║ fechaIni: [{FechaIni}]", fechaIni ?? "(NULL)");
+            _logger.LogInformation("╚═══════════════════════════════════════════════════════════════════════════════╝");
+
+            // Validar parámetros requeridos
+            if (string.IsNullOrEmpty(lote) || string.IsNullOrEmpty(codMaq) || 
+                string.IsNullOrEmpty(titulo) || string.IsNullOrEmpty(fechaIni))
             {
-                TempData["Error"] = "Registro Autoconer no encontrado.";
+                _logger.LogWarning("Parámetros incompletos. lote={Lote}, codMaq={CodMaq}, titulo={Titulo}, fechaIni={FechaIni}",
+                    lote ?? "NULL", codMaq ?? "NULL", titulo ?? "NULL", fechaIni ?? "NULL");
+                TempData["Error"] = "Parámetros incompletos para buscar el registro.";
                 return RedirectToAction(nameof(Index));
             }
 
-            ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(registro.CodigoOperador);
-            return View(registro);
+            // Parsear la fecha
+            if (!DateTime.TryParse(fechaIni, out DateTime fecha))
+            {
+                _logger.LogWarning("Formato de fecha inválido: {FechaIni}", fechaIni);
+                TempData["Error"] = "Formato de fecha inválido.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            _logger.LogInformation("Fecha parseada exitosamente: {Fecha}", fecha.ToString("yyyy-MM-dd HH:mm:ss"));
+
+            // Consultar Oracle directamente usando los parámetros de la URL
+            var detalleOracle = await _recetaService.ObtenerDetalleAutoconerAsync(
+                receta,
+                lote,
+                codMaq,
+                titulo,
+                fecha);
+
+            if (detalleOracle == null)
+            {
+                _logger.LogWarning("╔═══════════════════════════════════════════════════════════════════════════════╗");
+                _logger.LogWarning("║ NO SE ENCONTRÓ REGISTRO EN ORACLE                                             ║");
+                _logger.LogWarning("╠═══════════════════════════════════════════════════════════════════════════════╣");
+                _logger.LogWarning("║ Receta:   [{Receta}]", receta ?? "(NULL)");
+                _logger.LogWarning("║ Lote:     [{Lote}]", lote);
+                _logger.LogWarning("║ CodMaq:   [{CodMaq}]", codMaq);
+                _logger.LogWarning("║ Titulo:   [{Titulo}]", titulo);
+                _logger.LogWarning("║ FechaIni: [{FechaIni}]", fecha.ToString("yyyy-MM-dd HH:mm:ss"));
+                _logger.LogWarning("╚═══════════════════════════════════════════════════════════════════════════════╝");
+                TempData["Error"] = "No se encontró el registro en Oracle. Los datos pueden estar desincronizados.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Las descripciones ya vienen desde Oracle en el DTO
+            ViewBag.NombreOperario = detalleOracle.NombreOperario;
+            ViewBag.DescripcionMaquina = detalleOracle.DescripcionMaquina;
+            ViewBag.DescripcionTitulo = detalleOracle.DescripcionTitulo;
+            ViewBag.DescripcionDestino = detalleOracle.DescripcionDestino;
+
+            return View(detalleOracle);
         }
 
         // POST: /Autoconer/Anular/5
@@ -584,7 +827,7 @@ namespace FabricaHilos.Controllers
 
         private async Task CargarViewBag()
         {
-            ViewBag.Titulos  = await _recetaService.ObtenerTitulosAsync();
+            ViewBag.Titulos  = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
         }
     }

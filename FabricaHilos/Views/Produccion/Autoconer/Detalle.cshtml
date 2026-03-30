@@ -1,4 +1,4 @@
-@model FabricaHilos.Models.Produccion.RegistroAutoconer
+@model FabricaHilos.Services.Produccion.AutoconerDetalleOracleDto
 @using FabricaHilos.Helpers
 @using FabricaHilos.Models.Produccion
 
@@ -14,16 +14,17 @@
 
 <div class="d-flex align-items-center mb-4" style="border-bottom: 3px solid var(--color-secondary); padding-bottom: 10px;">
     <i class="bi bi-eye fs-3 me-3 text-success"></i>
-    <h4 class="mb-0 fw-bold">Detalle Registro Autoconer #@Model.Id</h4>
+    <h4 class="mb-0 fw-bold">Detalle de Registro</h4>
 </div>
 
 @{
+    // Estado viene de Oracle como string: "1"=EnProceso, "3"=Terminado, "9"=Anulado
     var estadoBadge = Model.Estado switch
     {
-        EstadoOrden.EnProceso => new { Clase = "bg-primary",   Texto = "En Proceso",  Icono = "bi-gear-fill" },
-        EstadoOrden.Terminado => new { Clase = "bg-success",   Texto = "Terminado",   Icono = "bi-check-circle" },
-        EstadoOrden.Anulado   => new { Clase = "bg-danger",    Texto = "Anulado",     Icono = "bi-x-circle" },
-        _                     => new { Clase = "bg-secondary", Texto = "Desconocido", Icono = "bi-question-circle" }
+        "1" => new { Clase = "bg-primary",   Texto = "En Proceso",  Icono = "bi-gear-fill" },
+        "3" => new { Clase = "bg-success",   Texto = "Terminado",   Icono = "bi-check-circle" },
+        "9" => new { Clase = "bg-danger",    Texto = "Anulado",     Icono = "bi-x-circle" },
+        _   => new { Clase = "bg-secondary", Texto = "Desconocido", Icono = "bi-question-circle" }
     };
 
     var tramosMarcados = new List<int>();
@@ -33,19 +34,6 @@
     if (Model.Tramo4) tramosMarcados.Add(4);
     if (Model.Tramo5) tramosMarcados.Add(5);
     if (Model.Tramo6) tramosMarcados.Add(6);
-
-    var destinoDescripcion = Model.Destino switch
-    {
-        "CM"  => "CM - Crudo Materiales",
-        "MM"  => "MM - Melange Materiales",
-        "CV"  => "CV - Crudo Venta",
-        "MV"  => "MV - Melange Venta",
-        "COV" => "COV - Color Venta",
-        "VS"  => "VS - Venta Servicio",
-        "T"   => "T - Tintorería",
-        "S"   => "S - Servicio",
-        _     => Model.Destino ?? "-"
-    };
 }
 
 <!-- Estado actual -->
@@ -53,7 +41,7 @@
     <span class="badge @estadoBadge.Clase fs-6 px-3 py-2">
         <i class="bi @estadoBadge.Icono me-2"></i>@estadoBadge.Texto
     </span>
-    @if (Model.Cerrado)
+    @if (Model.Estado == "3")
     {
         <span class="badge bg-secondary fs-6 px-3 py-2 ms-2">
             <i class="bi bi-lock-fill me-1"></i>Cerrado
@@ -70,7 +58,16 @@
         <div class="row g-3">
             <div class="col-md-3">
                 <div class="text-muted small">Autoconer N°</div>
-                <div class="fw-semibold">@(Model.NumeroAutoconer ?? "-")</div>
+                <div class="fw-semibold">
+                    @if (!string.IsNullOrEmpty(ViewBag.DescripcionMaquina as string))
+                    {
+                        <span>@ViewBag.DescripcionMaquina</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.NumeroAutoconer ?? "-")</span>
+                    }
+                </div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small">Operador</div>
@@ -105,58 +102,61 @@
     </div>
     <div class="card-body p-4">
         <div class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-4">
+                <div class="text-muted small">Nº Partida</div>
+                <div class="fw-semibold">@(Model.Guia ?? "-")</div>
+            </div>
+            <div class="col-md-4">
                 <div class="text-muted small">Receta</div>
                 <div class="fw-semibold">@(Model.CodigoReceta ?? "-")</div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <div class="text-muted small">Lote / Partida</div>
                 <div class="fw-semibold">@(Model.Lote ?? "-")</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-12">
                 <div class="text-muted small">Material</div>
                 <div class="fw-semibold">@(Model.DescripcionMaterial ?? "-")</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Título</div>
+                <div class="fw-semibold">
+                    @if (!string.IsNullOrEmpty(ViewBag.DescripcionTitulo as string))
+                    {
+                        <span>@ViewBag.DescripcionTitulo</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.Titulo ?? "-")</span>
+                    }
+                </div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small">V (m/min)</div>
                 <div class="fw-semibold">@(Model.VelocidadMMin?.ToString("0.00") ?? "-")</div>
             </div>
             <div class="col-md-3">
-                <div class="text-muted small">Título</div>
-                <div class="fw-semibold">@(Model.Titulo ?? "-")</div>
-            </div>
-            <div class="col-md-3">
                 <div class="text-muted small">H Inicio</div>
-                <div class="fw-semibold">@(Model.HoraInicio?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                <div class="fw-semibold">@(string.IsNullOrEmpty(Model.HoraInicio) ? "-" : Model.HoraInicio)</div>
             </div>
             <div class="col-md-3">
                 <div class="text-muted small">H Final</div>
-                <div class="fw-semibold">@(Model.HoraFinal?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
+                <div class="fw-semibold">@(string.IsNullOrEmpty(Model.HoraFinal) ? "-" : Model.HoraFinal)</div>
             </div>
-                    </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Destino</div>
+                <div class="fw-semibold">
+                    @if (!string.IsNullOrEmpty(ViewBag.DescripcionDestino as string))
+                    {
+                        <span>@ViewBag.DescripcionDestino</span>
+                    }
+                    else
+                    {
+                        <span>@(Model.Destino ?? "-")</span>
+                    }
                 </div>
             </div>
-
-            <!-- ===== RESULTADOS ===== -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-success text-white fw-bold">
-        <i class="bi bi-bar-chart-line me-2"></i>Resultados
-    </div>
-    <div class="card-body p-4">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <div class="text-muted small">P. Bruto (Peso Bruto)</div>
-                <div class="fw-semibold">@(Model.PesoBruto?.ToString("0.00") ?? "-")</div>
-            </div>
-            <div class="col-md-3">
-                <div class="text-muted small">Q (Cantidad)</div>
-                <div class="fw-semibold">@(Model.Cantidad?.ToString() ?? "-")</div>
-            </div>
-            <div class="col-md-3">
-                <div class="text-muted small">Puntaje (PUNT)</div>
-                <div class="fw-semibold">@(Model.Puntaje?.ToString() ?? "-")</div>
-            </div>
-            <div class="col-md-12">
+            <div class="col-md-8">
                 <div class="text-muted small">Tramos</div>
                 <div class="d-flex gap-2 flex-wrap mt-1">
                     @for (int i = 1; i <= 6; i++)
@@ -176,37 +176,24 @@
     </div>
 </div>
 
-<!-- ===== DESTINO Y OBSERVACIONES ===== -->
+<!-- ===== RESULTADOS ===== -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-success text-white fw-bold">
-        <i class="bi bi-box-arrow-right me-2"></i>Destino y Observaciones
+        <i class="bi bi-bar-chart-line me-2"></i>Resultados
     </div>
     <div class="card-body p-4">
         <div class="row g-3">
-            <div class="col-md-3">
-                <div class="text-muted small">Destino</div>
-                <div class="fw-semibold">@destinoDescripcion</div>
+            <div class="col-md-4">
+                <div class="text-muted small">Conos o Rodetes</div>
+                <div class="fw-semibold">@(Model.Cantidad?.ToString() ?? "-")</div>
             </div>
-            <div class="col-md-5">
-                <div class="text-muted small">Cliente</div>
-                <div class="fw-semibold">@(Model.Cliente ?? "-")</div>
+            <div class="col-md-4">
+                <div class="text-muted small">Kg x Unidad</div>
+                <div class="fw-semibold">@(Model.PesoBruto?.ToString("0.00") ?? "-")</div>
             </div>
-            <div class="col-md-2">
-                <div class="text-muted small">Reproceso (R)</div>
-                <div class="fw-semibold">
-                    @if (Model.Reproceso)
-                    {
-                        <span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat me-1"></i>Sí</span>
-                    }
-                    else
-                    {
-                        <span class="text-muted">No</span>
-                    }
-                </div>
-            </div>
-            <div class="col-md-12">
-                <div class="text-muted small">Motivo de Paralización</div>
-                <div class="fw-semibold">@(Model.MotivoParalizacion ?? "-")</div>
+            <div class="col-md-4">
+                <div class="text-muted small">Peso Neto</div>
+                <div class="fw-semibold">@(Model.Puntaje?.ToString("0.00") ?? "-")</div>
             </div>
         </div>
     </div>
@@ -216,10 +203,16 @@
     <a asp-action="Index" class="btn btn-outline-secondary px-4">
         <i class="bi bi-arrow-left me-1"></i>Volver
     </a>
-    @if (Model.Estado == EstadoOrden.EnProceso)
+    @if (Model.Estado == "3")
     {
-        <a asp-action="Editar" asp-route-id="@Model.Id" class="btn btn-success px-4">
-            <i class="bi bi-pencil me-1"></i>Editar
+        <a asp-action="Editar" 
+           asp-route-receta="@Model.CodigoReceta" 
+           asp-route-lote="@Model.Lote" 
+           asp-route-codMaq="@Model.NumeroAutoconer" 
+           asp-route-titulo="@Model.Titulo" 
+           asp-route-fechaIni="@Model.Fecha.ToString("yyyy-MM-dd HH:mm:ss")"
+           class="btn btn-warning px-4">
+            <i class="bi bi-pencil-square me-1"></i>Editar
         </a>
     }
 </div>
