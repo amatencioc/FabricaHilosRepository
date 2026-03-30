@@ -1,0 +1,107 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.DespachoListadoDto>
+
+@{
+    ViewData["Title"] = "Listado de Despachos";
+    string? guia   = ViewBag.Guia   as string;
+    string? pedido = ViewBag.Pedido as string;
+
+    decimal sumCantidad = Model.Sum(x => x.Cantidad ?? 0m);
+    decimal sumPrecio   = Model.Sum(x => x.Precio   ?? 0m);
+
+    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido }) ?? "#";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item active">Listado de Despachos</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-truck me-2"></i>Listado de Despachos</h4>
+    <a href="@excelUrl" class="btn btn-success btn-sm">
+        <i class="bi bi-file-earmark-excel me-1"></i>Exportar a Excel
+    </a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="text" name="guia" value="@guia"
+                   class="form-control form-control-sm"
+                   placeholder="Nro. Guía"
+                   style="max-width: 150px;" />
+            <input type="text" name="pedido" value="@pedido"
+                   class="form-control form-control-sm"
+                   placeholder="Ej: 87110-4"
+                   style="max-width: 150px;" />
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-search"></i> Buscar
+            </button>
+            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido))
+            {
+                <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+            }
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center">#</th>
+                        <th>RAZON SOCIAL</th>
+                        <th class="text-center">OC</th>
+                        <th class="text-center">PEDIDO</th>
+                        <th class="text-center">FACTURA</th>
+                        <th class="text-center">FECHA.DOC</th>
+                        <th>ARTICULO</th>
+                        <th class="text-end">CANTIDAD</th>
+                        <th class="text-end">PRECIO</th>
+                        <th class="text-center">GUIA</th>
+                        <th>OBS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="text-center">@item.Correlativo</td>
+                            <td>@(item.RazonSocial ?? "-")</td>
+                            <td class="text-center">@(item.Oc ?? "-")</td>
+                            <td class="text-center">@(item.Pedido ?? "-")</td>
+                            <td class="text-center" style="background-color: #ffff00;">@(item.Factura ?? "-")</td>
+                            <td class="text-center">@(item.FechaDoc.HasValue ? item.FechaDoc.Value.ToString("dd/MM/yyyy") : "-")</td>
+                            <td>@(item.Articulo ?? "-")</td>
+                            <td class="text-end">@(item.Cantidad.HasValue ? item.Cantidad.Value.ToString("N2") : "-")</td>
+                            <td class="text-end">@(item.Precio.HasValue ? item.Precio.Value.ToString("N2") : "-")</td>
+                            <td class="text-center">@(item.Guia.HasValue ? item.Guia.Value.ToString() : "-")</td>
+                            <td>@(item.Obs ?? "-")</td>
+                        </tr>
+                    }
+                    @if (Model.Any())
+                    {
+                        <tr class="table-secondary fw-semibold border-top">
+                            <td colspan="7" class="text-end pe-3">Totales:</td>
+                            <td class="text-end">@sumCantidad.ToString("N2")</td>
+                            <td class="text-end">@sumPrecio.ToString("N2")</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox me-2"></i>No se encontraron registros.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts { }
