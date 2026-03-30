@@ -1213,7 +1213,7 @@ namespace FabricaHilos.Services.Sgc
             string sql = $@"
                 SELECT RN, TOTAL_COUNT,
                        ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
-                       ""FECHA.DOC"", ""ARTICULO"", ""CANTIDAD"", ""PRECIO"",
+                       ""FECHA.DOC"", ""ARTICULO"", ""CANTIDAD"", ""CANT_FACTURADA"", ""PRECIO"",
                        ""GUIA"", ""OBS""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
@@ -1225,6 +1225,7 @@ namespace FabricaHilos.Services.Sgc
                            Q.""FECHA.DOC"",
                            Q.""ARTICULO"",
                            Q.""CANTIDAD"",
+                           Q.""CANT_FACTURADA"",
                            Q.""PRECIO"",
                            Q.""GUIA"",
                            Q.""OBS""
@@ -1236,7 +1237,8 @@ namespace FabricaHilos.Services.Sgc
                             MAX(TRIM(F.NUMERO))                                     AS ""FACTURA"",
                             MAX(F.FECHA)                                            AS ""FECHA.DOC"",
                             MAX(A.DESCRIPCION)                                      AS ""ARTICULO"",
-                            MAX(I.CANTIDAD)                                         AS ""CANTIDAD PEDIDO"",                            
+                            MAX(I.CANTIDAD)                                         AS ""CANTIDAD"",
+                            MAX(ID.CANTIDAD)                                        AS ""CANT_FACTURADA"",
                             MAX(I.PRECIO)                                           AS ""PRECIO"",
                             MAX(G.NUMERO)                                           AS ""GUIA"",
                             MAX(I.DETALLE)                                          AS ""OBS""
@@ -1254,6 +1256,11 @@ namespace FabricaHilos.Services.Sgc
                                 ON F.TIPODOC        = G.TIP_REF
                                AND TRIM(F.SERIE)    = TRIM(G.SER_REF)
                                AND TRIM(F.NUMERO)   = TRIM(G.NRO_REF)
+                        LEFT  JOIN SIG.ITEMDOCU ID
+                                ON ID.TIPODOC       = F.TIPODOC
+                               AND TRIM(ID.SERIE)   = TRIM(F.SERIE)
+                               AND TRIM(ID.NUMERO)  = TRIM(F.NUMERO)
+                               AND ID.COD_ART       = I.COD_ART
                         LEFT  JOIN SIG.PACKING_G PK
                                 ON PK.NUM_PED = P.NUM_PED
                         WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
@@ -1310,8 +1317,9 @@ namespace FabricaHilos.Services.Sgc
                         Factura     = GetStr(reader, "FACTURA"),
                         FechaDoc    = GetDt(reader, "FECHA.DOC"),
                         Articulo    = GetStr(reader, "ARTICULO"),
-                        Cantidad    = GetDec(reader, "CANTIDAD"),
-                        Precio      = GetDec(reader, "PRECIO"),
+                        Cantidad      = GetDec(reader, "CANTIDAD"),
+                        CantFacturada = GetDec(reader, "CANT_FACTURADA"),
+                        Precio        = GetDec(reader, "PRECIO"),
                         Guia        = GetNullInt(reader, "GUIA"),
                         Obs         = GetStr(reader, "OBS")
                     });
