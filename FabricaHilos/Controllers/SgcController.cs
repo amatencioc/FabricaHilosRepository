@@ -605,7 +605,7 @@ namespace FabricaHilos.Controllers
             var ws = workbook.Worksheets.Add("Listado de Despachos");
 
             // Headers
-            string[] headers = { "#", "RAZON SOCIAL", "OC", "PEDIDO", "FACTURA", "FECHA.DOC", "ARTICULO", "CANTIDAD", "PRECIO", "GUIA", "OBS" };
+            string[] headers = { "#", "RAZON SOCIAL", "OC", "PEDIDO", "FACTURA", "FECHA.DOC", "ARTICULO", "CANTIDAD", "CANT_FACTURADA", "PRECIO", "GUIA", "OBS" };
             for (int i = 0; i < headers.Length; i++)
             {
                 var cell = ws.Cell(1, i + 1);
@@ -625,10 +625,11 @@ namespace FabricaHilos.Controllers
                 ws.Cell(row, 5).Value  = d.Factura     ?? string.Empty;
                 ws.Cell(row, 6).Value  = d.FechaDoc.HasValue ? d.FechaDoc.Value.ToString("dd/MM/yyyy") : string.Empty;
                 ws.Cell(row, 7).Value  = d.Articulo    ?? string.Empty;
-                ws.Cell(row, 8).Value  = (double)(d.Cantidad ?? 0m);
-                ws.Cell(row, 9).Value  = (double)(d.Precio   ?? 0m);
-                ws.Cell(row, 10).Value = d.Guia;
-                ws.Cell(row, 11).Value = d.Obs          ?? string.Empty;
+                ws.Cell(row, 8).Value  = (double)(d.Cantidad      ?? 0m);
+                ws.Cell(row, 9).Value  = (double)(d.CantFacturada ?? 0m);
+                ws.Cell(row, 10).Value = (double)(d.Precio        ?? 0m);
+                ws.Cell(row, 11).Value = d.Guia;
+                ws.Cell(row, 12).Value = d.Obs          ?? string.Empty;
 
                 // Highlight FACTURA column in yellow
                 ws.Cell(row, 5).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.Yellow;
