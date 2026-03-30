@@ -92,7 +92,7 @@ namespace FabricaHilos.Controllers
             ViewBag.TieneFiltroPedido = tieneFiltroPedido;
             ViewBag.SumTotalPedido   = resultado.SumTotalPedido;
             ViewBag.SumTotalDespacho = resultado.SumTotalDespacho;
-            return View(resultado.Items);
+            return View("Pedidos/Pedidos", resultado.Items);
         }
 
         // ========== DETALLE DE PEDIDO (ITEMPED) ==========
@@ -137,7 +137,7 @@ namespace FabricaHilos.Controllers
             ViewBag.SumPrecio       = resultado.SumPrecio;
             ViewBag.SumCantDespacho = resultado.SumCantDespacho;
             ViewBag.SumDifDespacho  = resultado.SumDifDespacho;
-            return View(resultado.Items);
+            return View("Pedidos/DetallePedido", resultado.Items);
         }
 
         // ========== GUÍAS (KARDEX_G) ==========
@@ -177,7 +177,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PageSize   = pageSize;
             ViewBag.TotalCount = resultado.TotalCount;
             ViewBag.TotalPages = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            return View(resultado.Items);
+            return View("Pedidos/Guias", resultado.Items);
         }
 
         // ========== DETALLE DE GUÍA (KARDEX_D) ==========
@@ -228,7 +228,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PageSize   = pageSize;
             ViewBag.TotalCount = resultado.TotalCount;
             ViewBag.TotalPages = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            return View(resultado.Items);
+            return View("Pedidos/DetalleGuia", resultado.Items);
         }
 
         // ========== FACTURAS (DOCUVENT) ==========
@@ -322,7 +322,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PageSize      = pageSize;
             ViewBag.TotalCount    = resultado.TotalCount;
             ViewBag.TotalPages    = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            return View(resultado.Items);
+            return View("Pedidos/Facturas", resultado.Items);
         }
 
         // ========== DETALLE DE FACTURA (ITEMDOCU) ==========
@@ -379,7 +379,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PageSize      = pageSize;
             ViewBag.TotalCount    = resultado.TotalCount;
             ViewBag.TotalPages    = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            return View(resultado.Items);
+            return View("Pedidos/DetalleFactura", resultado.Items);
         }
 
         // ========== PACKING (PACKING_G) ==========
@@ -422,7 +422,7 @@ namespace FabricaHilos.Controllers
             ViewBag.PageSize     = pageSize;
             ViewBag.TotalCount   = resultado.TotalCount;
             ViewBag.TotalPages   = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
-            return View(resultado.Items);
+            return View("Pedidos/Packing", resultado.Items);
         }
 
         // ========== PDF DOWNLOADS ==========
