@@ -544,6 +544,64 @@ namespace FabricaHilos.Controllers
 
         // ── Helpers ──────────────────────────────────────────────────────────────
 
+        // ========== DESPACHOS: LISTADO ==========
+
+        [HttpGet]
+        public async Task<IActionResult> ListadoDespachos(string? guia, string? pedido)
+        {
+            var items = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido);
+            ViewBag.Guia   = guia;
+            ViewBag.Pedido = pedido;
+            return View("Despachos/ListadoDespachos", items);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportarDespachosExcel(string? guia, string? pedido)
+        {
+            var items = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido);
+
+            using var workbook  = new ClosedXML.Excel.XLWorkbook();
+            var ws = workbook.Worksheets.Add("Listado de Despachos");
+
+            // Headers
+            string[] headers = { "#", "RAZON SOCIAL", "OC", "PEDIDO", "FACTURA", "FECHA.DOC", "ARTICULO", "CANTIDAD", "PRECIO", "GUIA", "OBS" };
+            for (int i = 0; i < headers.Length; i++)
+            {
+                var cell = ws.Cell(1, i + 1);
+                cell.Value = headers[i];
+                cell.Style.Font.Bold = true;
+                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+            }
+
+            // Data rows
+            int row = 2;
+            foreach (var d in items)
+            {
+                ws.Cell(row, 1).Value  = d.Correlativo;
+                ws.Cell(row, 2).Value  = d.RazonSocial ?? string.Empty;
+                ws.Cell(row, 3).Value  = d.Oc          ?? string.Empty;
+                ws.Cell(row, 4).Value  = d.Pedido      ?? string.Empty;
+                ws.Cell(row, 5).Value  = d.Factura     ?? string.Empty;
+                ws.Cell(row, 6).Value  = d.FechaDoc.HasValue ? d.FechaDoc.Value.ToString("dd/MM/yyyy") : string.Empty;
+                ws.Cell(row, 7).Value  = d.Articulo    ?? string.Empty;
+                ws.Cell(row, 8).Value  = (double)(d.Cantidad ?? 0m);
+                ws.Cell(row, 9).Value  = (double)(d.Precio   ?? 0m);
+                ws.Cell(row, 10).Value = d.Guia;
+                ws.Cell(row, 11).Value = d.Obs          ?? string.Empty;
+
+                // Highlight FACTURA column in yellow
+                ws.Cell(row, 5).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.Yellow;
+                row++;
+            }
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new System.IO.MemoryStream();
+            workbook.SaveAs(ms);
+            var fileName = $"ListadoDespachos_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
         private void EnsureNetworkShare(string filePath)
         {
             var username = _configuration["NetworkShare:Username"];

@@ -9,7 +9,7 @@
 <h4 class="section-title"><i class="bi bi-file-earmark-text me-2"></i>Módulo SGC – Seguimiento Comercial</h4>
 
 <div class="row g-4">
-    <div class="col-md-12">
+    <div class="col-md-6">
         <div class="card card-dashboard h-100">
             <div class="card-body text-center p-5">
                 <i class="bi bi-cart-check display-4 text-primary mb-3"></i>
@@ -17,6 +17,18 @@
                 <p class="text-muted">Consulta de pedidos, guías, facturas y sus detalles.</p>
                 <a asp-controller="Sgc" asp-action="Pedidos" class="btn btn-primary">
                     <i class="bi bi-arrow-right me-1"></i>Ir a Pedidos
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-dashboard h-100">
+            <div class="card-body text-center p-5">
+                <i class="bi bi-truck display-4 text-success mb-3"></i>
+                <h5 class="fw-bold">Despachos</h5>
+                <p class="text-muted">Reporte de listado de despachos con filtros por guía y pedido.</p>
+                <a asp-controller="Sgc" asp-action="ListadoDespachos" class="btn btn-success">
+                    <i class="bi bi-arrow-right me-1"></i>Listado de Despachos
                 </a>
             </div>
         </div>

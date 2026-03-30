@@ -21,6 +21,7 @@ namespace FabricaHilos.Services.Sgc
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
+        Task<List<DespachoListadoDto>> ObtenerListadoDespachosAsync(string? guia, string? pedido);
     }
 
     public class SgcService : ISgcService
@@ -1179,6 +1180,120 @@ namespace FabricaHilos.Services.Sgc
             }
 
             return dto;
+        }
+
+        // ========== LISTADO DE DESPACHOS ==========
+
+        public async Task<List<DespachoListadoDto>> ObtenerListadoDespachosAsync(string? guia, string? pedido)
+        {
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return [];
+
+            bool hasGuia   = !string.IsNullOrWhiteSpace(guia);
+            bool hasPedido = !string.IsNullOrWhiteSpace(pedido);
+
+            string guiaFilter   = hasGuia   ? "\n      AND G.NUMERO = :guia" : string.Empty;
+            string pedidoFilter = hasPedido ? "\n      AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
+
+            string sql = $@"
+                SELECT
+                    ROWNUM                AS CORRELATIVO,
+                    Q.""RAZON SOCIAL"",
+                    Q.""OC"",
+                    Q.""PEDIDO"",
+                    Q.""FACTURA"",
+                    Q.""FECHA.DOC"",
+                    Q.""ARTICULO"",
+                    Q.""CANTIDAD"",
+                    Q.""PRECIO"",
+                    Q.""GUIA"",
+                    Q.""OBS""
+                FROM (
+                    SELECT
+                        P.NOMBRE                                               AS ""RAZON SOCIAL"",
+                        MAX(PK.NUM_ORDCOMPRA)                                  AS ""OC"",
+                        TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)          AS ""PEDIDO"",
+                        TRIM(F.SERIE) || '-' || TRIM(F.NUMERO)                AS ""FACTURA"",
+                        MAX(F.FECHA)                                           AS ""FECHA.DOC"",
+                        MAX(A.DESCRIPCION)                                     AS ""ARTICULO"",
+                        MAX(I.CANTIDAD)                                        AS ""CANTIDAD"",
+                        MAX(I.PRECIO)                                          AS ""PRECIO"",
+                        MAX(G.NUMERO)                                          AS ""GUIA"",
+                        I.DETALLE                                              AS ""OBS""
+                    FROM SIG.ARTICUL A
+                    INNER JOIN SIG.ITEMPED I
+                            ON I.COD_ART = A.COD_ART
+                    INNER JOIN SIG.PEDIDO P
+                            ON P.NUM_PED = I.NUM_PED
+                           AND P.SERIE   = I.SERIE
+                    INNER JOIN SIG.KARDEX_G G
+                            ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                           AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                           AND G.TIP_DOC_REF       = P.TIPO_DOCTO
+                    LEFT  JOIN SIG.DOCUVENT F
+                            ON F.TIPODOC        = G.TIP_REF
+                           AND TRIM(F.SERIE)    = TRIM(G.SER_REF)
+                           AND TRIM(F.NUMERO)   = TRIM(G.NRO_REF)
+                    LEFT  JOIN SIG.PACKING_G PK
+                            ON PK.NUM_PED = P.NUM_PED
+                    WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
+                      AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}
+                    GROUP BY
+                        P.NOMBRE,
+                        P.NUM_PED,
+                        I.NRO,
+                        TRIM(F.SERIE) || '-' || TRIM(F.NUMERO),
+                        I.DETALLE
+                    ORDER BY
+                        P.NOMBRE,
+                        P.NUM_PED,
+                        I.NRO
+                ) Q";
+
+            var result = new List<DespachoListadoDto>();
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.BindByName = true;
+
+                if (hasGuia)
+                {
+                    if (!int.TryParse(guia!.Trim(), out int guiaInt))
+                        return result;
+                    cmd.Parameters.Add(new OracleParameter(":guia", OracleDbType.Int32, guiaInt, ParameterDirection.Input));
+                }
+                if (hasPedido)
+                    cmd.Parameters.Add(new OracleParameter(":pedido", OracleDbType.Varchar2, pedido!.Trim(), ParameterDirection.Input));
+
+                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                    ?? throw new InvalidOperationException("OracleDataReader expected");
+
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DespachoListadoDto
+                    {
+                        Correlativo = GetInt(reader, "CORRELATIVO"),
+                        RazonSocial = GetStr(reader, "RAZON SOCIAL"),
+                        Oc          = GetStr(reader, "OC"),
+                        Pedido      = GetStr(reader, "PEDIDO"),
+                        Factura     = GetStr(reader, "FACTURA"),
+                        FechaDoc    = GetDt(reader, "FECHA.DOC"),
+                        Articulo    = GetStr(reader, "ARTICULO"),
+                        Cantidad    = GetDec(reader, "CANTIDAD"),
+                        Precio      = GetDec(reader, "PRECIO"),
+                        Guia        = GetNullInt(reader, "GUIA"),
+                        Obs         = GetStr(reader, "OBS")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido})", guia, pedido);
+            }
+
+            return result;
         }
     }
 }
