@@ -1213,7 +1213,7 @@ namespace FabricaHilos.Services.Sgc
             string sql = $@"
                 SELECT RN, TOTAL_COUNT,
                        ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
-                       ""FECHA.DOC"", ""ARTICULO"", ""CANTIDAD"", ""CANT_FACTURADA"", ""PRECIO"",
+                       ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
                        ""GUIA"", ""OBS""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
@@ -1224,7 +1224,7 @@ namespace FabricaHilos.Services.Sgc
                            Q.""FACTURA"",
                            Q.""FECHA.DOC"",
                            Q.""ARTICULO"",
-                           Q.""CANTIDAD"",
+                           Q.""CANT_PEDIDO"",
                            Q.""CANT_FACTURADA"",
                            Q.""PRECIO"",
                            Q.""GUIA"",
@@ -1237,7 +1237,7 @@ namespace FabricaHilos.Services.Sgc
                             MAX(TRIM(F.NUMERO))                                     AS ""FACTURA"",
                             MAX(F.FECHA)                                            AS ""FECHA.DOC"",
                             MAX(A.DESCRIPCION)                                      AS ""ARTICULO"",
-                            MAX(I.CANTIDAD)                                         AS ""CANTIDAD"",
+                            MAX(I.CANTIDAD)                                         AS ""CANT_PEDIDO"",
                             MAX(ID.CANTIDAD)                                        AS ""CANT_FACTURADA"",
                             MAX(I.PRECIO)                                           AS ""PRECIO"",
                             MAX(G.NUMERO)                                           AS ""GUIA"",
@@ -1310,18 +1310,18 @@ namespace FabricaHilos.Services.Sgc
 
                     result.Add(new DespachoListadoDto
                     {
-                        Correlativo = GetInt(reader, "RN"),
-                        RazonSocial = GetStr(reader, "RAZON SOCIAL"),
-                        Oc          = GetStr(reader, "OC"),
-                        Pedido      = GetStr(reader, "PEDIDO"),
-                        Factura     = GetStr(reader, "FACTURA"),
-                        FechaDoc    = GetDt(reader, "FECHA.DOC"),
-                        Articulo    = GetStr(reader, "ARTICULO"),
-                        Cantidad      = GetDec(reader, "CANTIDAD"),
+                        Correlativo   = GetInt(reader, "RN"),
+                        RazonSocial   = GetStr(reader, "RAZON SOCIAL"),
+                        Oc            = GetStr(reader, "OC"),
+                        Pedido        = GetStr(reader, "PEDIDO"),
+                        Factura       = GetStr(reader, "FACTURA"),
+                        FechaDoc      = GetDt(reader, "FECHA.DOC"),
+                        Articulo      = GetStr(reader, "ARTICULO"),
+                        Cantidad      = GetDec(reader, "CANT_PEDIDO"),
                         CantFacturada = GetDec(reader, "CANT_FACTURADA"),
                         Precio        = GetDec(reader, "PRECIO"),
-                        Guia        = GetNullInt(reader, "GUIA"),
-                        Obs         = GetStr(reader, "OBS")
+                        Guia          = GetNullInt(reader, "GUIA"),
+                        Obs           = GetStr(reader, "OBS")
                     });
                 }
             }
