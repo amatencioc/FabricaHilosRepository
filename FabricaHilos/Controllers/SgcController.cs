@@ -547,14 +547,19 @@ namespace FabricaHilos.Controllers
         // ========== DESPACHOS: LISTADO ==========
 
         [HttpGet]
-        public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, string? factura = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, int page = 1)
+        public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, int page = 1)
         {
-            if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || fechaInicio.HasValue || fechaFin.HasValue))
+            // Valor por defecto para Razón Social
+            if (string.IsNullOrWhiteSpace(razonSocial) && string.IsNullOrEmpty(t))
+                razonSocial = "ART ATLAS S.R.L.";
+
+            if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || razonSocial != null || fechaInicio.HasValue || fechaFin.HasValue))
             {
                 var token = _navToken.Protect(new Dictionary<string, string?> {
                     ["guia"]        = guia,
                     ["pedido"]      = pedido,
                     ["factura"]     = factura,
+                    ["razonSocial"] = razonSocial,
                     ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
                     ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
                 });
@@ -562,9 +567,10 @@ namespace FabricaHilos.Controllers
             }
             if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
             {
-                guia   = nav.GetValueOrDefault("guia")   ?? guia;
-                pedido = nav.GetValueOrDefault("pedido") ?? pedido;
-                factura = nav.GetValueOrDefault("factura") ?? factura;
+                guia        = nav.GetValueOrDefault("guia")        ?? guia;
+                pedido      = nav.GetValueOrDefault("pedido")      ?? pedido;
+                factura     = nav.GetValueOrDefault("factura")     ?? factura;
+                razonSocial = nav.GetValueOrDefault("razonSocial") ?? razonSocial;
                 if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
                 if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
             }
@@ -572,19 +578,21 @@ namespace FabricaHilos.Controllers
                 ["guia"]        = guia,
                 ["pedido"]      = pedido,
                 ["factura"]     = factura,
+                ["razonSocial"] = razonSocial,
                 ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
                 ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
             });
             ViewBag.NavToken = navToken;
 
             const int pageSize = 10;
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, fechaInicio, fechaFin, page, pageSize);
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, page, pageSize);
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(ListadoDespachos), new { t, page = 1 });
 
             ViewBag.Guia        = guia;
             ViewBag.Pedido      = pedido;
             ViewBag.Factura     = factura;
+            ViewBag.RazonSocial = razonSocial;
             ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
             ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
             ViewBag.Page        = page;
@@ -595,10 +603,10 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> ExportarDespachosExcel(string? guia = null, string? pedido = null, string? factura = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
+        public async Task<IActionResult> ExportarDespachosExcel(string? guia = null, string? pedido = null, string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
         {
             // Exportar todos los registros sin paginación (pageSize muy grande)
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, fechaInicio, fechaFin, 1, int.MaxValue);
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, 1, int.MaxValue);
             var items = resultado.Items;
 
             using var workbook  = new ClosedXML.Excel.XLWorkbook();

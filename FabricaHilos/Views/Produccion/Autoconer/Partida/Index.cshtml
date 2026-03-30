@@ -93,12 +93,12 @@
                                 <td>
                                     @{
                                         var tramos = new List<int>();
-                                        if (item.Tramo1) tramos.Add(1);
-                                        if (item.Tramo2) tramos.Add(2);
-                                        if (item.Tramo3) tramos.Add(3);
-                                        if (item.Tramo4) tramos.Add(4);
-                                        if (item.Tramo5) tramos.Add(5);
-                                        if (item.Tramo6) tramos.Add(6);
+                                        if (item.Tramo1.HasValue && item.Tramo1.Value > 0) tramos.Add(1);
+                                        if (item.Tramo2.HasValue && item.Tramo2.Value > 0) tramos.Add(2);
+                                        if (item.Tramo3.HasValue && item.Tramo3.Value > 0) tramos.Add(3);
+                                        if (item.Tramo4.HasValue && item.Tramo4.Value > 0) tramos.Add(4);
+                                        if (item.Tramo5.HasValue && item.Tramo5.Value > 0) tramos.Add(5);
+                                        if (item.Tramo6.HasValue && item.Tramo6.Value > 0) tramos.Add(6);
                                         var tramosTexto = tramos.Any() ? string.Join(", ", tramos) : "-";
                                     }
                                     <span class="small">@tramosTexto</span>

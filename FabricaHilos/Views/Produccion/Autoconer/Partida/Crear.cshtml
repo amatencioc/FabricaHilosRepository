@@ -86,7 +86,21 @@
                 </div>
                 <div class="card-body p-4">
                     <div class="row g-3">
-                        <!-- Fila 1: Nº Partida | Receta | Lote -->
+                        <!-- Fila 1: Lote → Nº Partida → Receta -->
+                        <!-- Lote -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Lote / Partida <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input asp-for="Lote" id="loteInput" class="form-control"
+                                       placeholder="Código de lote" autocomplete="off" />
+                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Lote" class="text-danger small"></span>
+                            <small id="loteStatus" class="text-muted"></small>
+                        </div>
+
                         <!-- Nº Partida -->
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Nº Partida</label>
@@ -111,20 +125,6 @@
                                 </button>
                             </div>
                             <small id="recetaStatus" class="text-muted"></small>
-                        </div>
-
-                        <!-- Lote -->
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Lote / Partida <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input asp-for="Lote" id="loteInput" class="form-control"
-                                       placeholder="Código de lote" autocomplete="off" />
-                                <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
-                                    <i class="bi bi-search"></i>
-                                </button>
-                            </div>
-                            <span asp-validation-for="Lote" class="text-danger small"></span>
-                            <small id="loteStatus" class="text-muted"></small>
                         </div>
 
                         <!-- Material -->
@@ -182,30 +182,30 @@
                         <!-- Tramos -->
                         <div class="col-md-8">
                             <label class="form-label fw-semibold">Tramos</label>
-                            <div class="d-flex gap-4 flex-wrap">
-                                <div class="form-check">
-                                    <input asp-for="Tramo1" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo1" class="form-check-label fw-semibold">1</label>
+                            <div class="d-flex gap-2 align-items-end">
+                                <div>
+                                    <label class="form-label small mb-1">T1</label>
+                                    <input asp-for="Tramo1" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
-                                <div class="form-check">
-                                    <input asp-for="Tramo2" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo2" class="form-check-label fw-semibold">2</label>
+                                <div>
+                                    <label class="form-label small mb-1">T2</label>
+                                    <input asp-for="Tramo2" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
-                                <div class="form-check">
-                                    <input asp-for="Tramo3" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo3" class="form-check-label fw-semibold">3</label>
+                                <div>
+                                    <label class="form-label small mb-1">T3</label>
+                                    <input asp-for="Tramo3" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
-                                <div class="form-check">
-                                    <input asp-for="Tramo4" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo4" class="form-check-label fw-semibold">4</label>
+                                <div>
+                                    <label class="form-label small mb-1">T4</label>
+                                    <input asp-for="Tramo4" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
-                                <div class="form-check">
-                                    <input asp-for="Tramo5" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo5" class="form-check-label fw-semibold">5</label>
+                                <div>
+                                    <label class="form-label small mb-1">T5</label>
+                                    <input asp-for="Tramo5" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
-                                <div class="form-check">
-                                    <input asp-for="Tramo6" class="form-check-input" type="checkbox" />
-                                    <label asp-for="Tramo6" class="form-check-label fw-semibold">6</label>
+                                <div>
+                                    <label class="form-label small mb-1">T6</label>
+                                    <input asp-for="Tramo6" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
                                 </div>
                             </div>
                         </div>
@@ -237,8 +237,8 @@
                         <!-- Peso Neto -->
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Peso Neto</label>
-                            <input id="pesoNetoDisplay" class="form-control" type="number" step="0.01" readonly
-                                   placeholder="0.00" style="background-color: var(--color-bg-light);" />
+                            <input id="pesoNetoDisplay" class="form-control" type="number" step="0.01"
+                                   placeholder="0.00" />
                         </div>
                     </div>
                 </div>
@@ -462,8 +462,7 @@
                     realzarCampo('materialInput');
                 } else if (result.success && result.multiple) {
                     mostrarLista('partidaDropdownList', result.items.map(i => ({
-                        texto: i.guia
-                            + (i.titulo  ? ' [' + i.titulo + ']' : '')
+                        texto: i.partida + ' [' + i.guia + ']'
                             + (i.lote    ? ' — Lote: ' + i.lote  : '')
                             + (i.cliente ? ' | ' + i.cliente      : ''),
                         accion: async () => {

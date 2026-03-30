@@ -5,6 +5,7 @@
     string? guia        = ViewBag.Guia        as string;
     string? pedido      = ViewBag.Pedido      as string;
     string? factura     = ViewBag.Factura     as string;
+    string? razonSocial = ViewBag.RazonSocial as string;
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
     string? navToken    = ViewBag.NavToken    as string;
@@ -17,7 +18,7 @@
     decimal sumCantFacturada = Model.Sum(x => x.CantFacturada ?? 0m);
     decimal sumPrecio        = Model.Sum(x => x.Precio        ?? 0m);
 
-    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, fechaInicio, fechaFin }) ?? "#";
+    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin }) ?? "#";
 }
 
 @section Breadcrumb {
@@ -40,21 +41,28 @@
                 <input type="text" name="guia" value="@guia"
                        class="form-control form-control-sm"
                        placeholder="Nro. Guía"
-                       style="width: 120px;" />
+                       style="width: 110px;" />
             </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Pedido</label>
                 <input type="text" name="pedido" value="@pedido"
                        class="form-control form-control-sm"
                        placeholder="Ej: 87110-4"
-                       style="width: 120px;" />
+                       style="width: 110px;" />
             </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Factura</label>
                 <input type="text" name="factura" value="@factura"
                        class="form-control form-control-sm"
                        placeholder="Nro. Factura"
-                       style="width: 120px;" />
+                       style="width: 110px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">RUC / Razón Social</label>
+                <input type="text" name="razonSocial" value="@razonSocial"
+                       class="form-control form-control-sm"
+                       placeholder="RUC o Razón Social"
+                       style="width: 200px;" />
             </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
@@ -73,7 +81,7 @@
                     <i class="bi bi-search"></i> Buscar
                 </button>
             </div>
-            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
+            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(razonSocial) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
             {
                 <div class="col-auto">
                     <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">

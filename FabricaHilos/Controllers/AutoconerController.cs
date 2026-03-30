@@ -205,17 +205,17 @@ namespace FabricaHilos.Controllers
             ViewBag.TotalCount  = resultado.TotalCount;
             ViewBag.TotalPages  = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
 
-            return View(preparatorias);
+            return View("Partida/Index", preparatorias);
         }
 
-        // GET: /Autoconer/Crear
+        // GET: /Autoconer/Partida/Crear
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> Crear()
         {
             ViewBag.Titulos   = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas  = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
-            return View(new RegistroAutoconer());
+            return View("Partida/Crear", new RegistroAutoconer());
         }
 
         // POST: /Autoconer/Crear
@@ -305,10 +305,10 @@ namespace FabricaHilos.Controllers
             }
 
             await CargarViewBag();
-            return View(model);
+            return View("Partida/Crear", model);
         }
 
-        // GET: /Autoconer/Editar (Oracle keys)
+        // GET: /Autoconer/Partida/Editar (Oracle keys)
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> Editar(string? receta, string lote, string codMaq, string titulo, string fechaIni)
@@ -417,10 +417,10 @@ namespace FabricaHilos.Controllers
             ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
             ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
 
-            return View(registro);
+            return View("Partida/Editar", registro);
         }
 
-        // POST: /Autoconer/Editar
+        // POST: /Autoconer/Partida/Editar
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
@@ -514,10 +514,10 @@ namespace FabricaHilos.Controllers
             ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
             ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
-            return View(model);
+            return View("Partida/Editar", model);
         }
 
-        // GET: /Autoconer/Detalle
+        // GET: /Autoconer/Partida/Detalle
         [HttpGet]
         public async Task<IActionResult> Detalle(string? receta, string lote, string codMaq, string titulo, string fechaIni)
         {
@@ -581,7 +581,7 @@ namespace FabricaHilos.Controllers
             ViewBag.DescripcionTitulo = detalleOracle.DescripcionTitulo;
             ViewBag.DescripcionDestino = detalleOracle.DescripcionDestino;
 
-            return View(detalleOracle);
+            return View("Partida/Detalle", detalleOracle);
         }
 
         // POST: /Autoconer/Anular/5
@@ -712,14 +712,14 @@ namespace FabricaHilos.Controllers
                     return Json(new
                     {
                         success = true,
-                        data    = new { guia = resultados[0].Guia, lote = resultados[0].Lote, material = resultados[0].Material, titulo = resultados[0].Titulo }
+                        data    = new { partida = resultados[0].Partida, guia = resultados[0].Guia, lote = resultados[0].Lote, material = resultados[0].Material, titulo = resultados[0].Titulo }
                     });
 
                 return Json(new
                 {
                     success  = true,
                     multiple = true,
-                    items    = resultados.Select(r => new { guia = r.Guia, lote = r.Lote, material = r.Material, titulo = r.Titulo, cliente = r.DescCliente })
+                    items    = resultados.Select(r => new { partida = r.Partida, guia = r.Guia, lote = r.Lote, material = r.Material, titulo = r.Titulo, cliente = r.DescCliente })
                 });
             }
             catch (Exception ex)

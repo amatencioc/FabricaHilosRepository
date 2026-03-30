@@ -93,9 +93,16 @@
                         @if (menus.ProduccionAutoconer)
                         {
                         <li>
-                            <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" ? "active" : "")">
+                            <a class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" ? "active" : "")" data-bs-toggle="collapse" href="#submenuAutoconer" role="button" aria-expanded="@(ctrl == "Autoconer" ? "true" : "false")" aria-controls="submenuAutoconer">
                                 <i class="bi bi-speedometer2"></i> Control Autoconer
                             </a>
+                            <ul class="collapse @(ctrl == "Autoconer" ? "show" : "") list-unstyled ps-3" id="submenuAutoconer">
+                                <li>
+                                    <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" && (act == "Index" || act == "Crear" || act == "Editar" || act == "Detalle") ? "active" : "")">
+                                        <i class="bi bi-folder"></i> por Partida
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                         }
                     </ul>

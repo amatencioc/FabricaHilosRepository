@@ -36,6 +36,10 @@ namespace FabricaHilos.Models.Produccion
         [StringLength(50)]
         public string? Guia { get; set; }
 
+        [Display(Name = "Proceso")]
+        [StringLength(50)]
+        public string? Proceso { get; set; }
+
         [Required(ErrorMessage = "El lote es obligatorio.")]
         [Display(Name = "Lote / Partida")]
         [StringLength(50)]
@@ -77,22 +81,28 @@ namespace FabricaHilos.Models.Produccion
 
         // Tramos 1-6
         [Display(Name = "Tramo 1")]
-        public bool Tramo1 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo1 { get; set; }
 
         [Display(Name = "Tramo 2")]
-        public bool Tramo2 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo2 { get; set; }
 
         [Display(Name = "Tramo 3")]
-        public bool Tramo3 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo3 { get; set; }
 
         [Display(Name = "Tramo 4")]
-        public bool Tramo4 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo4 { get; set; }
 
         [Display(Name = "Tramo 5")]
-        public bool Tramo5 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo5 { get; set; }
 
         [Display(Name = "Tramo 6")]
-        public bool Tramo6 { get; set; }
+        [Range(0, 99, ErrorMessage = "El valor debe estar entre 0 y 99")]
+        public int? Tramo6 { get; set; }
 
         [Display(Name = "Destino")]
         [StringLength(20)]

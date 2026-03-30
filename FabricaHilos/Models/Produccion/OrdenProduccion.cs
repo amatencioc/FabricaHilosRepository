@@ -69,6 +69,10 @@ namespace FabricaHilos.Models.Produccion
         [StringLength(100)]
         public string? PasoManuar { get; set; }
 
+        [Display(Name = "Proceso")]
+        [StringLength(50)]
+        public string? Proceso { get; set; }
+
         [Display(Name = "Cerrado")]
         public bool Cerrado { get; set; } = false;
 

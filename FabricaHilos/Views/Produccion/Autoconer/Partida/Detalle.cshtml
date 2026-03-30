@@ -28,12 +28,12 @@
     };
 
     var tramosMarcados = new List<int>();
-    if (Model.Tramo1) tramosMarcados.Add(1);
-    if (Model.Tramo2) tramosMarcados.Add(2);
-    if (Model.Tramo3) tramosMarcados.Add(3);
-    if (Model.Tramo4) tramosMarcados.Add(4);
-    if (Model.Tramo5) tramosMarcados.Add(5);
-    if (Model.Tramo6) tramosMarcados.Add(6);
+    if (Model.Tramo1.HasValue && Model.Tramo1.Value > 0) tramosMarcados.Add(1);
+    if (Model.Tramo2.HasValue && Model.Tramo2.Value > 0) tramosMarcados.Add(2);
+    if (Model.Tramo3.HasValue && Model.Tramo3.Value > 0) tramosMarcados.Add(3);
+    if (Model.Tramo4.HasValue && Model.Tramo4.Value > 0) tramosMarcados.Add(4);
+    if (Model.Tramo5.HasValue && Model.Tramo5.Value > 0) tramosMarcados.Add(5);
+    if (Model.Tramo6.HasValue && Model.Tramo6.Value > 0) tramosMarcados.Add(6);
 }
 
 <!-- Estado actual -->
@@ -136,12 +136,12 @@
                 <div class="fw-semibold">@(Model.VelocidadMMin?.ToString("0.00") ?? "-")</div>
             </div>
             <div class="col-md-3">
-                <div class="text-muted small">H Inicio</div>
-                <div class="fw-semibold">@(string.IsNullOrEmpty(Model.HoraInicio) ? "-" : Model.HoraInicio)</div>
+                <div class="text-muted small">Fecha Inicio</div>
+                <div class="fw-semibold">@(Model.FechaInicio?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
             </div>
             <div class="col-md-3">
-                <div class="text-muted small">H Final</div>
-                <div class="fw-semibold">@(string.IsNullOrEmpty(Model.HoraFinal) ? "-" : Model.HoraFinal)</div>
+                <div class="text-muted small">Fecha Fin</div>
+                <div class="fw-semibold">@(Model.FechaFinal?.ToString("dd/MM/yyyy HH:mm") ?? "-")</div>
             </div>
             <div class="col-md-4">
                 <div class="text-muted small">Destino</div>

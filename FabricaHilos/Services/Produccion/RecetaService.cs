@@ -10,6 +10,7 @@ namespace FabricaHilos.Services.Produccion
         public string Numero { get; set; } = string.Empty;
         public string Material { get; set; } = string.Empty;
         public string Lote { get; set; } = string.Empty;
+        public string Proceso { get; set; } = string.Empty;
     }
 
     public class LoteDto
@@ -17,6 +18,7 @@ namespace FabricaHilos.Services.Produccion
         public string Lote { get; set; } = string.Empty;
         public string Receta { get; set; } = string.Empty;
         public string Material { get; set; } = string.Empty;
+        public string Proceso { get; set; } = string.Empty;
     }
 
     public class MaquinaDto
@@ -61,6 +63,8 @@ namespace FabricaHilos.Services.Produccion
         public string Lote { get; set; } = string.Empty;
         public string DescCliente { get; set; } = string.Empty;
         public string Titulo { get; set; } = string.Empty;
+        public string Proceso { get; set; } = string.Empty;
+        public string TextoCompleto => $"{Partida} [{Guia}] — Lote: {Lote} | {DescCliente}";
     }
 
     public class PreparatoriaListDto
@@ -85,12 +89,12 @@ namespace FabricaHilos.Services.Produccion
         public decimal TotalNeto  { get; set; }
         // Campos adicionales de registros locales
         public string? Guia { get; set; }
-        public bool Tramo1 { get; set; }
-        public bool Tramo2 { get; set; }
-        public bool Tramo3 { get; set; }
-        public bool Tramo4 { get; set; }
-        public bool Tramo5 { get; set; }
-        public bool Tramo6 { get; set; }
+        public int? Tramo1 { get; set; }
+        public int? Tramo2 { get; set; }
+        public int? Tramo3 { get; set; }
+        public int? Tramo4 { get; set; }
+        public int? Tramo5 { get; set; }
+        public int? Tramo6 { get; set; }
     }
 
     public class DetalleProductivoOracleDto
@@ -145,20 +149,21 @@ namespace FabricaHilos.Services.Produccion
         public string? NombreOperario { get; set; }
         public string Turno { get; set; } = string.Empty;
         public decimal? VelocidadMMin { get; set; }
-        public string? HoraInicio { get; set; }
-        public string? HoraFinal { get; set; }
+        public DateTime? FechaInicio { get; set; }
+        public DateTime? FechaFinal { get; set; }
         public decimal? PesoBruto { get; set; }
         public int? Cantidad { get; set; }
         public decimal? Puntaje { get; set; }
         public string? Guia { get; set; }
         public string? Destino { get; set; }
         public string? DescripcionDestino { get; set; }
-        public bool Tramo1 { get; set; }
-        public bool Tramo2 { get; set; }
-        public bool Tramo3 { get; set; }
-        public bool Tramo4 { get; set; }
-        public bool Tramo5 { get; set; }
-        public bool Tramo6 { get; set; }
+        public string? Proceso { get; set; }
+        public int? Tramo1 { get; set; }
+        public int? Tramo2 { get; set; }
+        public int? Tramo3 { get; set; }
+        public int? Tramo4 { get; set; }
+        public int? Tramo5 { get; set; }
+        public int? Tramo6 { get; set; }
         public string? Cliente { get; set; }
         public string? Reproceso { get; set; }
         public string? MotivoParalizacion { get; set; }
@@ -190,7 +195,7 @@ namespace FabricaHilos.Services.Produccion
             string? oldReceta, string? oldLote, string? oldTpMaq, string? oldCodMaq, string? oldTitulo, DateTime fechaIni,
             string? newReceta, string? newLote, string? newTpMaq, string? newCodMaq, string? newTitulo,
             string? cCodigo, string? turno, string? pasoManuar, DateTime newFechaIni,
-            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null);
+            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null, string? proceso = null);
         Task<bool> ActualizarPreparatoriaAutoconerAsync(RegistroAutoconer registro, RegistroAutoconer registroAntiguo, string? mdUser = null);
         Task<GuardarCerrarResultado> GuardarYCerrarDetalleProduccionAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni,
@@ -259,7 +264,8 @@ namespace FabricaHilos.Services.Produccion
                 SELECT 
                     G.NUMERO AS NUMERO_RECETA,
                     F.ABREVIADO||' '||P.ABREVIADO||' '||V.ABREVIADO||' ('||I.COLOR_DET||')' AS DESCRIPCION_MATERIAL,
-                    G.LOTE AS CODIGO_LOTE
+                    G.LOTE AS CODIGO_LOTE,
+                    G.PROCESO
                 FROM H_RECETA_G G,
                      H_FIBRA F,
                      H_PROCESOS P,
@@ -301,7 +307,8 @@ namespace FabricaHilos.Services.Produccion
                     {
                         Numero = reader["NUMERO_RECETA"]?.ToString() ?? string.Empty,
                         Material = reader["DESCRIPCION_MATERIAL"]?.ToString() ?? string.Empty,
-                        Lote = reader["CODIGO_LOTE"]?.ToString() ?? string.Empty
+                        Lote = reader["CODIGO_LOTE"]?.ToString() ?? string.Empty,
+                        Proceso = reader["PROCESO"]?.ToString() ?? string.Empty
                     });
                 }
 
@@ -337,7 +344,8 @@ namespace FabricaHilos.Services.Produccion
                 SELECT 
                     R.LOTE AS CODIGO_LOTE,
                     NULL AS NUMERO_RECETA,
-                    F.ABREVIADO||' '||P.ABREVIADO||' '||V.ABREVIADO AS DESCRIPCION_MATERIAL
+                    F.ABREVIADO||' '||P.ABREVIADO||' '||V.ABREVIADO AS DESCRIPCION_MATERIAL,
+                    R.PROCESO
                 FROM H_RUTA_LOTE_G R,
                      H_FIBRA F,
                      H_PROCESOS P,
@@ -370,7 +378,8 @@ namespace FabricaHilos.Services.Produccion
                     {
                         Lote = reader["CODIGO_LOTE"]?.ToString() ?? string.Empty,
                         Receta = reader["NUMERO_RECETA"]?.ToString() ?? string.Empty,
-                        Material = reader["DESCRIPCION_MATERIAL"]?.ToString() ?? string.Empty
+                        Material = reader["DESCRIPCION_MATERIAL"]?.ToString() ?? string.Empty,
+                        Proceso = reader["PROCESO"]?.ToString() ?? string.Empty
                     });
                 }
 
@@ -400,7 +409,7 @@ namespace FabricaHilos.Services.Produccion
                 return new List<PartidaDto>();
             }
 
-            _logger.LogInformation("Buscando partida con guia: {Guia}", guia);
+            _logger.LogInformation("Buscando partida por código de partida: {Guia}", guia);
 
             const string query = @"
                 SELECT V.GUIA,
@@ -408,7 +417,8 @@ namespace FabricaHilos.Services.Produccion
                        V.SOLO_MATERIAL||' ('||V.COLOR_CLI||')' MATERIAL,
                        V.LOTE,
                        C.NOMBRE DESC_CLIENTE,
-                       I.TITULO
+                       I.TITULO,
+                       V.PROCESO
                 FROM V_PARTIDA V,
                      CLIENTES C,
                      ITEMPED I
@@ -417,14 +427,15 @@ namespace FabricaHilos.Services.Produccion
                   AND C.COD_CLIENTE = V.COD_CLIENTE
                   AND I.NUM_PED = V.NUM_PED
                   AND I.NRO = V.NRO
-                  AND V.GUIA LIKE :guia1 || '%'
+                  AND V.PARTIDA LIKE :partida1 || '%'
                 UNION
                 SELECT V.GUIA,
                        V.PARTIDA,
                        V.SOLO_MATERIAL||' ('||V.COLOR_CLI||')' MATERIAL,
                        V.LOTE,
                        C.NOMBRE DESC_CLIENTE,
-                       I.TITULO
+                       I.TITULO,
+                       V.PROCESO
                 FROM V_PARTIDA V,
                      CLIENTES C,
                      ITEMPED I
@@ -434,7 +445,7 @@ namespace FabricaHilos.Services.Produccion
                   AND C.COD_CLIENTE = V.COD_CLIENTE
                   AND I.NUM_PED = V.NUM_PED
                   AND I.NRO = V.NRO
-                  AND V.GUIA LIKE :guia2 || '%'
+                  AND V.PARTIDA LIKE :partida2 || '%'
                 ORDER BY 2";
 
             try
@@ -443,8 +454,8 @@ namespace FabricaHilos.Services.Produccion
                 await connection.OpenAsync();
 
                 using var command = new OracleCommand(query, connection);
-                command.Parameters.Add(new OracleParameter(":guia1", OracleDbType.Varchar2, guia, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":guia2", OracleDbType.Varchar2, guia, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":partida1", OracleDbType.Varchar2, guia, ParameterDirection.Input));
+                command.Parameters.Add(new OracleParameter(":partida2", OracleDbType.Varchar2, guia, ParameterDirection.Input));
 
                 using var reader = await command.ExecuteReaderAsync();
 
@@ -458,11 +469,12 @@ namespace FabricaHilos.Services.Produccion
                         Material   = reader["MATERIAL"]?.ToString() ?? string.Empty,
                         Lote       = reader["LOTE"]?.ToString() ?? string.Empty,
                         DescCliente = reader["DESC_CLIENTE"]?.ToString() ?? string.Empty,
-                        Titulo     = reader["TITULO"]?.ToString() ?? string.Empty
+                        Titulo     = reader["TITULO"]?.ToString() ?? string.Empty,
+                        Proceso    = reader["PROCESO"]?.ToString() ?? string.Empty
                     });
                 }
 
-                _logger.LogInformation("Se encontraron {Count} partida(s) para la guia: {Guia}", resultados.Count, guia);
+                _logger.LogInformation("Se encontraron {Count} partida(s) para guia/partida: {Guia}", resultados.Count, guia);
                 return resultados;
             }
             catch (OracleException oEx)
@@ -675,6 +687,19 @@ namespace FabricaHilos.Services.Produccion
             const string query = @"
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
                 FROM H_TITULOS T
+                WHERE T.TITULO BETWEEN '001' AND '249'
+                UNION
+                SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
+                FROM H_TITULOS T
+                WHERE T.TITULO BETWEEN '433' AND '434'
+                UNION
+                SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
+                FROM H_TITULOS T
+                WHERE T.TITULO BETWEEN '620' AND '624'
+                UNION
+                SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
+                FROM H_TITULOS T
+                WHERE T.TITULO BETWEEN '629' AND '632'
                 ORDER BY 1";
 
             try
@@ -961,29 +986,33 @@ namespace FabricaHilos.Services.Produccion
                     HUSOS_INAC,
                     CONTADOR_INI,
                     FECHA_TURNO,
-                         VELOCIDAD,
-                         METRAJE,
-                         A_ADUSER,
-                         A_MDUSER
-                    ) VALUES (
-                        :receta,
-                        :lote,
-                        :tp_maq,
-                        :cod_maq,
-                        :titulo,
-                        :fecha_ini,
-                        :estado,
-                        :c_codigo,
-                        :turno,
-                        :paso_manuar,
-                        :husos_inac,
-                        :contador_ini,
-                        :fecha_turno,
-                        :velocidad,
-                        :metraje,
-                        :a_aduser,
-                         :a_mduser
-                    )";
+                    VELOCIDAD,
+                    METRAJE,
+                    PROCESO,
+                    A_ADUSER,
+                    A_MDUSER,
+                    IND_SISTEMA
+                ) VALUES (
+                    :receta,
+                    :lote,
+                    :tp_maq,
+                    :cod_maq,
+                    :titulo,
+                    :fecha_ini,
+                    :estado,
+                    :c_codigo,
+                    :turno,
+                    :paso_manuar,
+                    :husos_inac,
+                    :contador_ini,
+                    :fecha_turno,
+                    :velocidad,
+                    :metraje,
+                    :proceso,
+                    :a_aduser,
+                    :a_mduser,
+                    'W'
+                )";
 
             try
             {
@@ -1017,6 +1046,7 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Varchar2, fechaTurno.ToString("dd/MM/yyyy"), ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal) { Value = orden.Velocidad.HasValue ? (object)orden.Velocidad.Value : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal) { Value = orden.Metraje.HasValue  ? (object)orden.Metraje.Value  : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":proceso",     OracleDbType.Varchar2) { Value = (object?)orden.Proceso ?? DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":a_aduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":a_mduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));
 
@@ -1063,7 +1093,7 @@ namespace FabricaHilos.Services.Produccion
             // TP_MAQ='A', ESTADO='3', HUSOS_INAC=0 y A_ADFECHA/A_MDFECHA=SYSDATE son literales en el SQL.
             // HUSOS y HUSOS_ACT se consultan en H_MAQUINAS por la máquina seleccionada.
             // KG_UNIDAD se calcula como PESO_NETO / UNIDADES cuando ambos están disponibles.
-            // GUIA = Nº Partida del formulario. PROCESO, VELOCIDAD2 y PROD_TEORICO → NULL.
+            // GUIA = Nº Partida del formulario. PROCESO se obtiene de la búsqueda de partida. VELOCIDAD2 y PROD_TEORICO → NULL.
             const string query = @"
                 INSERT INTO H_RPRODUC (
                     RECETA, LOTE, TP_MAQ, COD_MAQ, TITULO,
@@ -1078,7 +1108,8 @@ namespace FabricaHilos.Services.Produccion
                     C_CODIGO, FECHA_TURNO,
                     HUSOS_ACT_T1, HUSOS_ACT_T2, HUSOS_ACT_T3,
                     HUSOS_ACT_T4, HUSOS_ACT_T5, HUSOS_ACT_T6,
-                    VELOCIDAD2, PROD_TEORICO
+                    VELOCIDAD2, PROD_TEORICO,
+                    IND_SISTEMA
                 ) VALUES (
                     :receta, :lote, 'A', :cod_maq, :titulo,
                     :fecha_ini, :fecha_fin,
@@ -1088,11 +1119,12 @@ namespace FabricaHilos.Services.Produccion
                     :peso_neto, :unidades,
                     :husos, 0, :husos_act, :kg_unidad,
                     :velocidad,
-                    :guia, :destino, NULL,
+                    :guia, :destino, :proceso,
                     :c_codigo, :fecha_turno,
                     :husos_act_t1, :husos_act_t2, :husos_act_t3,
                     :husos_act_t4, :husos_act_t5, :husos_act_t6,
-                    NULL, NULL
+                    NULL, NULL,
+                    'W'
                 )";
 
             try
@@ -1130,7 +1162,9 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":titulo",       OracleDbType.Varchar2,  registro.Titulo,          ParameterDirection.Input));
 
                 // ── Fechas ────────────────────────────────────────────────────────────
-                command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date,      registro.Fecha,           ParameterDirection.Input));
+                // FECHA_INI: Usar HoraInicio si está disponible, sino usar Fecha
+                var fechaInicio = registro.HoraInicio ?? registro.Fecha;
+                command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date,      fechaInicio,              ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":fecha_fin",    OracleDbType.Date)      { Value = registro.HoraFinal.HasValue ? (object)registro.HoraFinal.Value : DBNull.Value });
 
                 // ── Auditoría ─────────────────────────────────────────────────────────
@@ -1149,23 +1183,26 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":kg_unidad",    OracleDbType.Decimal)   { Value = kgUnidad.HasValue              ? (object)kgUnidad.Value              : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal)   { Value = registro.VelocidadMMin.HasValue ? (object)registro.VelocidadMMin.Value : DBNull.Value });
 
-                // ── Guia / Destino ────────────────────────────────────────────────────
+                // ── Guia / Destino / Proceso ──────────────────────────────────────────
                 command.Parameters.Add(new OracleParameter(":guia",         OracleDbType.Varchar2)  { Value = (object?)registro.Guia ?? DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":destino",      OracleDbType.Varchar2)  { Value = (object?)registro.Destino ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":proceso",      OracleDbType.Varchar2)  { Value = (object?)registro.Proceso ?? DBNull.Value });
 
                 // ── FECHA_TURNO (DATE): hora < 7 → día anterior; hora >= 7 → misma fecha ──
-                var fechaTurno = registro.Fecha.Hour < 7
-                    ? registro.Fecha.Date.AddDays(-1)
-                    : registro.Fecha.Date;
+                // Usar HoraInicio si está disponible, sino usar Fecha
+                var fechaParaTurno = registro.HoraInicio ?? registro.Fecha;
+                var fechaTurno = fechaParaTurno.Hour < 7
+                    ? fechaParaTurno.Date.AddDays(-1)
+                    : fechaParaTurno.Date;
                 command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Date,      fechaTurno,               ParameterDirection.Input));
 
-                // ── Tramos → HUSOS_ACT_T1..T6 (bool → 1/0) ──────────────────────────
-                command.Parameters.Add(new OracleParameter(":husos_act_t1", OracleDbType.Int32,     registro.Tramo1 ? 10 : 0, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":husos_act_t2", OracleDbType.Int32,     registro.Tramo2 ? 10 : 0, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":husos_act_t3", OracleDbType.Int32,     registro.Tramo3 ? 10 : 0, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":husos_act_t4", OracleDbType.Int32,     registro.Tramo4 ? 10 : 0, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":husos_act_t5", OracleDbType.Int32,     registro.Tramo5 ? 10 : 0, ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":husos_act_t6", OracleDbType.Int32,     registro.Tramo6 ? 10 : 0, ParameterDirection.Input));
+                // ── Tramos → HUSOS_ACT_T1..T6 (valores numéricos directos) ──────────────────────────
+                command.Parameters.Add(new OracleParameter(":husos_act_t1", OracleDbType.Int32) { Value = registro.Tramo1 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t2", OracleDbType.Int32) { Value = registro.Tramo2 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t3", OracleDbType.Int32) { Value = registro.Tramo3 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t4", OracleDbType.Int32) { Value = registro.Tramo4 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t5", OracleDbType.Int32) { Value = registro.Tramo5 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t6", OracleDbType.Int32) { Value = registro.Tramo6 ?? 0 });
 
                 _logger.LogInformation("╔═══════════════════════════════════════════════════════════════════════════════╗");
                 _logger.LogInformation("║ INSERT AUTOCONER H_RPRODUC - Parámetros                                       ║");
@@ -1175,7 +1212,11 @@ namespace FabricaHilos.Services.Produccion
                 _logger.LogInformation("║ TP_MAQ:        [A]");
                 _logger.LogInformation("║ COD_MAQ:       [{CodMaq}]", registro.NumeroAutoconer);
                 _logger.LogInformation("║ TITULO:        [{Titulo}]", registro.Titulo);
-                _logger.LogInformation("║ FECHA_INI:     [{FechaIni}]", registro.Fecha.ToString("yyyy-MM-dd HH:mm:ss"));
+                _logger.LogInformation("║ FECHA_INI:     [{FechaIni}] (usando HoraInicio={HoraInicio} o Fecha={Fecha})", 
+                    fechaInicio.ToString("yyyy-MM-dd HH:mm:ss"), 
+                    registro.HoraInicio?.ToString("yyyy-MM-dd HH:mm:ss") ?? "(NULL)", 
+                    registro.Fecha.ToString("yyyy-MM-dd HH:mm:ss"));
+                _logger.LogInformation("║ FECHA_FIN:     [{FechaFin}]", registro.HoraFinal?.ToString("yyyy-MM-dd HH:mm:ss") ?? "(NULL)");
                 _logger.LogInformation("║ TURNO:         [{Turno}]", registro.Turno);
                 _logger.LogInformation("║ PESO_NETO:     [{PesoNeto}]", pesoNeto?.ToString("0.0000") ?? "(NULL)");
                 _logger.LogInformation("║ UNIDADES:      [{Unidades}]", registro.Cantidad?.ToString() ?? "(NULL)");
@@ -1183,12 +1224,12 @@ namespace FabricaHilos.Services.Produccion
                 _logger.LogInformation("║ VELOCIDAD:     [{Velocidad}]", registro.VelocidadMMin?.ToString("0.00") ?? "(NULL)");
                 _logger.LogInformation("║ HUSOS:         [{Husos}]", husosMaquina?.ToString() ?? "(NULL)");
                 _logger.LogInformation("║ HUSOS_ACT:     [{HusosAct}]", husosMaquina?.ToString() ?? "(NULL)");
-                _logger.LogInformation("║ HUSOS_ACT_T1:  [{T1}]", registro.Tramo1 ? "10" : "0");
-                _logger.LogInformation("║ HUSOS_ACT_T2:  [{T2}]", registro.Tramo2 ? "10" : "0");
-                _logger.LogInformation("║ HUSOS_ACT_T3:  [{T3}]", registro.Tramo3 ? "10" : "0");
-                _logger.LogInformation("║ HUSOS_ACT_T4:  [{T4}]", registro.Tramo4 ? "10" : "0");
-                _logger.LogInformation("║ HUSOS_ACT_T5:  [{T5}]", registro.Tramo5 ? "10" : "0");
-                _logger.LogInformation("║ HUSOS_ACT_T6:  [{T6}]", registro.Tramo6 ? "10" : "0");
+                _logger.LogInformation("║ HUSOS_ACT_T1:  [{T1}]", registro.Tramo1?.ToString() ?? "0");
+                _logger.LogInformation("║ HUSOS_ACT_T2:  [{T2}]", registro.Tramo2?.ToString() ?? "0");
+                _logger.LogInformation("║ HUSOS_ACT_T3:  [{T3}]", registro.Tramo3?.ToString() ?? "0");
+                _logger.LogInformation("║ HUSOS_ACT_T4:  [{T4}]", registro.Tramo4?.ToString() ?? "0");
+                _logger.LogInformation("║ HUSOS_ACT_T5:  [{T5}]", registro.Tramo5?.ToString() ?? "0");
+                _logger.LogInformation("║ HUSOS_ACT_T6:  [{T6}]", registro.Tramo6?.ToString() ?? "0");
                 _logger.LogInformation("║ GUIA:          [{Guia}]", registro.Guia ?? "(NULL)");
                 _logger.LogInformation("║ DESTINO:       [{Destino}]", registro.Destino ?? "(NULL)");
                 _logger.LogInformation("╚═══════════════════════════════════════════════════════════════════════════════╝");
@@ -1537,7 +1578,7 @@ namespace FabricaHilos.Services.Produccion
             string? oldReceta, string? oldLote, string? oldTpMaq, string? oldCodMaq, string? oldTitulo, DateTime fechaIni,
             string? newReceta, string? newLote, string? newTpMaq, string? newCodMaq, string? newTitulo,
             string? cCodigo, string? turno, string? pasoManuar, DateTime newFechaIni,
-            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null)
+            decimal? contadorInicial = null, decimal? husosInactivas = null, string? mdUser = null, decimal? velocidad = null, decimal? metraje = null, string? proceso = null)
         {
             var connectionString = GetOracleConnectionString();
 
@@ -1572,6 +1613,7 @@ namespace FabricaHilos.Services.Produccion
                     A_MDUSER     = :mdUser,
                     VELOCIDAD    = :velocidad,
                     METRAJE      = :metraje,
+                    PROCESO      = :proceso,
                     FECHA_INI    = TO_DATE(:newFechaIni, 'YYYY-MM-DD HH24:MI:SS'){extraSetActualizar}
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:oldReceta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:oldLote)
@@ -1603,6 +1645,7 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":mdUser",      OracleDbType.Varchar2) { Value = Str(mdUser) });
                 command.Parameters.Add(new OracleParameter(":velocidad",   OracleDbType.Decimal)  { Value = velocidad.HasValue ? (object)velocidad.Value : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal)  { Value = metraje.HasValue   ? (object)metraje.Value   : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":proceso",     OracleDbType.Varchar2) { Value = Str(proceso) });
                 command.Parameters.Add(new OracleParameter(":newFechaIni", OracleDbType.Varchar2) { Value = newFechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
                 // FECHA_TURNO
                 var fechaTurno = newFechaIni.Hour < 7
@@ -2191,6 +2234,7 @@ namespace FabricaHilos.Services.Produccion
                     VELOCIDAD    = :velocidad,
                     GUIA         = :guia,
                     DESTINO      = :destino,
+                    PROCESO      = :proceso,
                     C_CODIGO     = :c_codigo,
                     FECHA_TURNO  = :fecha_turno,
                     HUSOS_ACT_T1 = :husos_act_t1,
@@ -2239,7 +2283,9 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":lote",         OracleDbType.Varchar2) { Value = registro.Lote });
                 command.Parameters.Add(new OracleParameter(":cod_maq",      OracleDbType.Varchar2) { Value = registro.NumeroAutoconer });
                 command.Parameters.Add(new OracleParameter(":titulo",       OracleDbType.Varchar2) { Value = registro.Titulo });
-                command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date)      { Value = registro.Fecha });
+                // FECHA_INI: Usar HoraInicio si está disponible, sino usar Fecha
+                var fechaInicio = registro.HoraInicio ?? registro.Fecha;
+                command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date)      { Value = fechaInicio });
                 command.Parameters.Add(new OracleParameter(":fecha_fin",    OracleDbType.Date)      { Value = registro.HoraFinal.HasValue ? (object)registro.HoraFinal.Value : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":turno",        OracleDbType.Varchar2) { Value = registro.Turno });
                 command.Parameters.Add(new OracleParameter(":peso_neto",    OracleDbType.Decimal)  { Value = pesoNeto.HasValue ? (object)pesoNeto.Value : DBNull.Value });
@@ -2250,21 +2296,24 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal)  { Value = registro.VelocidadMMin.HasValue ? (object)registro.VelocidadMMin.Value : DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":guia",         OracleDbType.Varchar2) { Value = (object?)registro.Guia ?? DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":destino",      OracleDbType.Varchar2) { Value = (object?)registro.Destino ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":proceso",      OracleDbType.Varchar2) { Value = (object?)registro.Proceso ?? DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":c_codigo",     OracleDbType.Varchar2) { Value = registro.CodigoOperador });
 
                 // FECHA_TURNO
-                var fechaTurno = registro.Fecha.Hour < 7
-                    ? registro.Fecha.Date.AddDays(-1)
-                    : registro.Fecha.Date;
+                // Usar HoraInicio si está disponible, sino usar Fecha
+                var fechaParaTurno = registro.HoraInicio ?? registro.Fecha;
+                var fechaTurno = fechaParaTurno.Hour < 7
+                    ? fechaParaTurno.Date.AddDays(-1)
+                    : fechaParaTurno.Date;
                 command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Date) { Value = fechaTurno });
 
-                // Tramos → HUSOS_ACT_T1..T6
-                command.Parameters.Add(new OracleParameter(":husos_act_t1", OracleDbType.Int32) { Value = registro.Tramo1 ? 10 : 0 });
-                command.Parameters.Add(new OracleParameter(":husos_act_t2", OracleDbType.Int32) { Value = registro.Tramo2 ? 10 : 0 });
-                command.Parameters.Add(new OracleParameter(":husos_act_t3", OracleDbType.Int32) { Value = registro.Tramo3 ? 10 : 0 });
-                command.Parameters.Add(new OracleParameter(":husos_act_t4", OracleDbType.Int32) { Value = registro.Tramo4 ? 10 : 0 });
-                command.Parameters.Add(new OracleParameter(":husos_act_t5", OracleDbType.Int32) { Value = registro.Tramo5 ? 10 : 0 });
-                command.Parameters.Add(new OracleParameter(":husos_act_t6", OracleDbType.Int32) { Value = registro.Tramo6 ? 10 : 0 });
+                // Tramos → HUSOS_ACT_T1..T6 (valores numéricos directos)
+                command.Parameters.Add(new OracleParameter(":husos_act_t1", OracleDbType.Int32) { Value = registro.Tramo1 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t2", OracleDbType.Int32) { Value = registro.Tramo2 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t3", OracleDbType.Int32) { Value = registro.Tramo3 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t4", OracleDbType.Int32) { Value = registro.Tramo4 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t5", OracleDbType.Int32) { Value = registro.Tramo5 ?? 0 });
+                command.Parameters.Add(new OracleParameter(":husos_act_t6", OracleDbType.Int32) { Value = registro.Tramo6 ?? 0 });
 
                 // Auditoría
                 command.Parameters.Add(new OracleParameter(":a_mduser", OracleDbType.Varchar2) { Value = mdUser ?? string.Empty });
@@ -2333,8 +2382,6 @@ namespace FabricaHilos.Services.Produccion
                     T.DESCRIPCION AS DESC_TITULO,
                     R.FECHA_INI,
                     R.FECHA_FIN,
-                    TO_CHAR(R.FECHA_INI, 'HH24:MI') AS HORA_INICIO,
-                    TO_CHAR(R.FECHA_FIN, 'HH24:MI') AS HORA_FINAL,
                     R.ESTADO,
                     R.C_CODIGO,
                     P.NOMBRE_CORTO,
@@ -2346,6 +2393,7 @@ namespace FabricaHilos.Services.Produccion
                     R.GUIA,
                     R.DESTINO,
                     D.DESCRIPCION AS DESC_DESTINO,
+                    R.PROCESO,
                     R.HUSOS_ACT_T1,
                     R.HUSOS_ACT_T2,
                     R.HUSOS_ACT_T3,
@@ -2461,8 +2509,8 @@ namespace FabricaHilos.Services.Produccion
                     DescripcionTitulo = Txt(reader, "DESC_TITULO"),
                     Fecha = Dt(reader, "FECHA_INI") ?? DateTime.MinValue,
                     FechaFin = Dt(reader, "FECHA_FIN"),
-                    HoraInicio = Txt(reader, "HORA_INICIO"),
-                    HoraFinal = Txt(reader, "HORA_FINAL"),
+                    FechaInicio = Dt(reader, "FECHA_INI"),
+                    FechaFinal = Dt(reader, "FECHA_FIN"),
                     Estado = Txt(reader, "ESTADO") ?? string.Empty,
                     CodigoOperador = Txt(reader, "C_CODIGO") ?? string.Empty,
                     NombreOperario = Txt(reader, "NOMBRE_CORTO"),
@@ -2474,12 +2522,13 @@ namespace FabricaHilos.Services.Produccion
                     Guia = Txt(reader, "GUIA"),
                     Destino = Txt(reader, "DESTINO"),
                     DescripcionDestino = Txt(reader, "DESC_DESTINO"),
-                    Tramo1 = Bool(reader, "HUSOS_ACT_T1"),
-                    Tramo2 = Bool(reader, "HUSOS_ACT_T2"),
-                    Tramo3 = Bool(reader, "HUSOS_ACT_T3"),
-                    Tramo4 = Bool(reader, "HUSOS_ACT_T4"),
-                    Tramo5 = Bool(reader, "HUSOS_ACT_T5"),
-                    Tramo6 = Bool(reader, "HUSOS_ACT_T6"),
+                    Proceso = Txt(reader, "PROCESO"),
+                    Tramo1 = Int(reader, "HUSOS_ACT_T1"),
+                    Tramo2 = Int(reader, "HUSOS_ACT_T2"),
+                    Tramo3 = Int(reader, "HUSOS_ACT_T3"),
+                    Tramo4 = Int(reader, "HUSOS_ACT_T4"),
+                    Tramo5 = Int(reader, "HUSOS_ACT_T5"),
+                    Tramo6 = Int(reader, "HUSOS_ACT_T6"),
                     DescripcionMaterial = Txt(reader, "DESCRIPCION_MATERIAL") ?? "-"
                 };
 
@@ -2490,8 +2539,8 @@ namespace FabricaHilos.Services.Produccion
                 _logger.LogInformation("║ Receta:   [{Receta}]", detalle.CodigoReceta ?? "(NULL)");
                 _logger.LogInformation("║ Estado:   [{Estado}]", detalle.Estado);
                 _logger.LogInformation("║ Material: [{Material}]", detalle.DescripcionMaterial);
-                _logger.LogInformation("║ HoraIni:  [{HoraIni}]", detalle.HoraInicio ?? "(NULL)");
-                _logger.LogInformation("║ HoraFin:  [{HoraFin}]", detalle.HoraFinal ?? "(NULL)");
+                _logger.LogInformation("║ FechaInicio: [{FechaInicio}]", detalle.FechaInicio?.ToString("yyyy-MM-dd HH:mm:ss") ?? "(NULL)");
+                _logger.LogInformation("║ FechaFinal:  [{FechaFinal}]", detalle.FechaFinal?.ToString("yyyy-MM-dd HH:mm:ss") ?? "(NULL)");
                 _logger.LogInformation("║ PesoBruto: [{PesoBruto}]", detalle.PesoBruto?.ToString("0.00") ?? "(NULL)");
                 _logger.LogInformation("║ PesoNeto:  [{PesoNeto}]", detalle.Puntaje?.ToString("0.00") ?? "(NULL)");
                 _logger.LogInformation("║ Cantidad:  [{Cantidad}]", detalle.Cantidad?.ToString() ?? "(NULL)");

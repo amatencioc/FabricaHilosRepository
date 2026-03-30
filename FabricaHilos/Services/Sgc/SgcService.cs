@@ -21,7 +21,7 @@ namespace FabricaHilos.Services.Sgc
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
+        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
     }
 
     public class SgcService : ISgcService
@@ -1184,7 +1184,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== LISTADO DE DESPACHOS ==========
 
-        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
+        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return ([], 0);
@@ -1192,15 +1192,17 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            bool hasGuia      = !string.IsNullOrWhiteSpace(guia);
-            bool hasPedido    = !string.IsNullOrWhiteSpace(pedido);
-            bool hasFactura   = !string.IsNullOrWhiteSpace(factura);
-            bool hasFechaIni  = fechaInicio.HasValue;
-            bool hasFechaFin  = fechaFin.HasValue;
+            bool hasGuia        = !string.IsNullOrWhiteSpace(guia);
+            bool hasPedido      = !string.IsNullOrWhiteSpace(pedido);
+            bool hasFactura     = !string.IsNullOrWhiteSpace(factura);
+            bool hasRazonSocial = !string.IsNullOrWhiteSpace(razonSocial);
+            bool hasFechaIni    = fechaInicio.HasValue;
+            bool hasFechaFin    = fechaFin.HasValue;
 
-            string guiaFilter    = hasGuia    ? "\n                          AND G.NUMERO = :guia" : string.Empty;
-            string pedidoFilter  = hasPedido  ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
-            string facturaFilter = hasFactura ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
+            string guiaFilter       = hasGuia        ? "\n                          AND G.NUMERO = :guia" : string.Empty;
+            string pedidoFilter     = hasPedido      ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
+            string facturaFilter    = hasFactura     ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
+            string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(P.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(P.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1264,7 +1266,7 @@ namespace FabricaHilos.Services.Sgc
                         LEFT  JOIN SIG.PACKING_G PK
                                 ON PK.NUM_PED = P.NUM_PED
                         WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
-                          AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}{facturaFilter}{fechaFilter}
+                          AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
                             P.NOMBRE,
                             P.NUM_PED,
@@ -1292,6 +1294,8 @@ namespace FabricaHilos.Services.Sgc
                     cmd.Parameters.Add(new OracleParameter(":pedido", OracleDbType.Varchar2, pedido!.Trim(), ParameterDirection.Input));
                 if (hasFactura)
                     cmd.Parameters.Add(new OracleParameter(":factura", OracleDbType.Varchar2, factura!.Trim(), ParameterDirection.Input));
+                if (hasRazonSocial)
+                    cmd.Parameters.Add(new OracleParameter(":razonSocial", OracleDbType.Varchar2, razonSocial!.Trim(), ParameterDirection.Input));
                 if (hasFechaIni)
                     cmd.Parameters.Add(new OracleParameter(":fechaInicio", OracleDbType.Date, fechaInicio!.Value.Date, ParameterDirection.Input));
                 if (hasFechaFin)
@@ -1327,8 +1331,8 @@ namespace FabricaHilos.Services.Sgc
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido}, factura={Factura}, fechaInicio={FechaInicio}, fechaFin={FechaFin})",
-                    guia, pedido, factura, fechaInicio, fechaFin);
+                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido}, factura={Factura}, razonSocial={RazonSocial}, fechaInicio={FechaInicio}, fechaFin={FechaFin})",
+                    guia, pedido, factura, razonSocial, fechaInicio, fechaFin);
             }
 
             return (result, totalCount);
