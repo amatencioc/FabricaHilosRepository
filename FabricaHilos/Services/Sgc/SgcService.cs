@@ -21,7 +21,7 @@ namespace FabricaHilos.Services.Sgc
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10);
+        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10);
     }
 
     public class SgcService : ISgcService
@@ -1184,7 +1184,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== LISTADO DE DESPACHOS ==========
 
-        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, int page = 1, int pageSize = 10)
+        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return ([], 0);
@@ -1198,11 +1198,21 @@ namespace FabricaHilos.Services.Sgc
             bool hasRazonSocial = !string.IsNullOrWhiteSpace(razonSocial);
             bool hasFechaIni    = fechaInicio.HasValue;
             bool hasFechaFin    = fechaFin.HasValue;
+            bool hasGots        = gots.HasValue && gots.Value;
+            bool hasOcs         = ocs.HasValue && ocs.Value;
 
             string guiaFilter       = hasGuia        ? "\n                          AND G.NUMERO = :guia" : string.Empty;
             string pedidoFilter     = hasPedido      ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
             string facturaFilter    = hasFactura     ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
-            string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(P.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(P.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
+            string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(F.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(F.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
+
+            string certFilter = string.Empty;
+            if (hasGots && hasOcs)
+                certFilter = "\n                          AND (UPPER(ID.COD_ART) LIKE '%CERTGOTS%' OR UPPER(ID.COD_ART) LIKE '%CERTOCS%')";
+            else if (hasGots)
+                certFilter = "\n                          AND UPPER(ID.COD_ART) LIKE '%CERTGOTS%'";
+            else if (hasOcs)
+                certFilter = "\n                          AND UPPER(ID.COD_ART) LIKE '%CERTOCS%'";
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1216,7 +1226,8 @@ namespace FabricaHilos.Services.Sgc
                 SELECT RN, TOTAL_COUNT,
                        ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
                        ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
-                       ""GUIA"", ""OBS""
+                       ""GUIA"", ""OBS"",
+                       ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
@@ -1230,47 +1241,59 @@ namespace FabricaHilos.Services.Sgc
                            Q.""CANT_FACTURADA"",
                            Q.""PRECIO"",
                            Q.""GUIA"",
-                           Q.""OBS""
+                           Q.""OBS"",
+                           Q.""FACTURA_TIPO"",
+                           Q.""FACTURA_SERIE"",
+                           Q.""GUIA_COD_ALM"",
+                           Q.""GUIA_TP_TRANSAC"",
+                           Q.""GUIA_SERIE""
                     FROM (
                         SELECT
-                            P.NOMBRE                                                AS ""RAZON SOCIAL"",
-                            MAX(PK.NUM_ORDCOMPRA)                                   AS ""OC"",
-                            TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)             AS ""PEDIDO"",
-                            MAX(TRIM(F.NUMERO))                                     AS ""FACTURA"",
-                            MAX(F.FECHA)                                            AS ""FECHA.DOC"",
+                            F.NOMBRE                                                AS ""RAZON SOCIAL"",
+                            MAX(P.NUMERO_REF)                                   AS ""OC"",
+                            MAX(CASE WHEN P.NUM_PED IS NOT NULL THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) END) AS ""PEDIDO"",
+                            TRIM(F.NUMERO)                                          AS ""FACTURA"",
+                            F.FECHA                                                 AS ""FECHA.DOC"",
                             MAX(A.DESCRIPCION)                                      AS ""ARTICULO"",
                             MAX(I.CANTIDAD)                                         AS ""CANT_PEDIDO"",
                             MAX(ID.CANTIDAD)                                        AS ""CANT_FACTURADA"",
                             MAX(I.PRECIO)                                           AS ""PRECIO"",
                             MAX(G.NUMERO)                                           AS ""GUIA"",
-                            MAX(I.DETALLE)                                          AS ""OBS""
-                        FROM SIG.ARTICUL A
-                        INNER JOIN SIG.ITEMPED I
-                                ON I.COD_ART = A.COD_ART
-                        INNER JOIN SIG.PEDIDO P
-                                ON P.NUM_PED = I.NUM_PED
-                               AND P.SERIE   = I.SERIE
-                        INNER JOIN SIG.KARDEX_G G
-                                ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
-                               AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
-                               AND G.TIP_DOC_REF       = P.TIPO_DOCTO
-                        LEFT  JOIN SIG.DOCUVENT F
-                                ON F.TIPODOC        = G.TIP_REF
-                               AND TRIM(F.SERIE)    = TRIM(G.SER_REF)
-                               AND TRIM(F.NUMERO)   = TRIM(G.NRO_REF)
-                        LEFT  JOIN SIG.ITEMDOCU ID
+                            MAX(I.DETALLE)                                          AS ""OBS"",
+                            F.TIPODOC                                               AS ""FACTURA_TIPO"",
+                            TRIM(F.SERIE)                                           AS ""FACTURA_SERIE"",
+                            MAX(G.COD_ALM)                                          AS ""GUIA_COD_ALM"",
+                            MAX(G.TP_TRANSAC)                                       AS ""GUIA_TP_TRANSAC"",
+                            MAX(G.SERIE)                                            AS ""GUIA_SERIE""
+                        FROM SIG.DOCUVENT F
+                        INNER JOIN SIG.ITEMDOCU ID
                                 ON ID.TIPODOC       = F.TIPODOC
                                AND TRIM(ID.SERIE)   = TRIM(F.SERIE)
                                AND TRIM(ID.NUMERO)  = TRIM(F.NUMERO)
-                               AND ID.COD_ART       = I.COD_ART
+                        INNER JOIN SIG.ARTICUL A
+                                ON A.COD_ART = ID.COD_ART
+                        LEFT  JOIN SIG.KARDEX_G G
+                                ON G.TIP_REF        = F.TIPODOC
+                               AND TRIM(G.SER_REF)  = TRIM(F.SERIE)
+                               AND TRIM(G.NRO_REF)  = TRIM(F.NUMERO)
+                        LEFT  JOIN SIG.PEDIDO P
+                                ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                               AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                               AND G.TIP_DOC_REF       = P.TIPO_DOCTO
+                               AND P.ESTADO <> '9'
+                        LEFT  JOIN SIG.ITEMPED I
+                                ON I.NUM_PED = P.NUM_PED
+                               AND I.SERIE   = P.SERIE
+                               AND I.COD_ART = ID.COD_ART
                         LEFT  JOIN SIG.PACKING_G PK
                                 ON PK.NUM_PED = P.NUM_PED
-                        WHERE (INSTR(LOWER(A.FIBRA), 't') > 0 OR INSTR(A.FIBRA, '1') > 0)
-                          AND P.ESTADO <> '9'{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
+                        WHERE 1=1{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}{certFilter}
                         GROUP BY
-                            P.NOMBRE,
-                            P.NUM_PED,
-                            I.NRO
+                            F.TIPODOC,
+                            F.SERIE,
+                            F.NUMERO,
+                            F.NOMBRE,
+                            F.FECHA
                     ) Q
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -1325,7 +1348,12 @@ namespace FabricaHilos.Services.Sgc
                         CantFacturada = GetDec(reader, "CANT_FACTURADA"),
                         Precio        = GetDec(reader, "PRECIO"),
                         Guia          = GetNullInt(reader, "GUIA"),
-                        Obs           = GetStr(reader, "OBS")
+                        Obs           = GetStr(reader, "OBS"),
+                        FacturaTipo   = GetStr(reader, "FACTURA_TIPO"),
+                        FacturaSerie  = GetStr(reader, "FACTURA_SERIE"),
+                        GuiaCodAlm    = GetStr(reader, "GUIA_COD_ALM"),
+                        GuiaTpTransac = GetStr(reader, "GUIA_TP_TRANSAC"),
+                        GuiaSerie     = GetNullInt(reader, "GUIA_SERIE")
                     });
                 }
             }

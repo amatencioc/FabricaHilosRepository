@@ -8,6 +8,8 @@
     string? razonSocial = ViewBag.RazonSocial as string;
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
+    bool gots           = ViewBag.Gots        ?? false;
+    bool ocs            = ViewBag.Ocs         ?? false;
     string? navToken    = ViewBag.NavToken    as string;
     int page            = ViewBag.Page        ?? 1;
     int pageSize        = ViewBag.PageSize    ?? 10;
@@ -18,7 +20,7 @@
     decimal sumCantFacturada = Model.Sum(x => x.CantFacturada ?? 0m);
     decimal sumPrecio        = Model.Sum(x => x.Precio        ?? 0m);
 
-    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin }) ?? "#";
+    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs }) ?? "#";
 }
 
 @section Breadcrumb {
@@ -77,11 +79,23 @@
                        style="width: 145px;" />
             </div>
             <div class="col-auto">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="gots" value="true" id="checkGots" @(gots ? "checked" : "") />
+                    <label class="form-check-label" for="checkGots">GOTS</label>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="ocs" value="true" id="checkOcs" @(ocs ? "checked" : "") />
+                    <label class="form-check-label" for="checkOcs">OCS</label>
+                </div>
+            </div>
+            <div class="col-auto">
                 <button type="submit" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-search"></i> Buscar
                 </button>
             </div>
-            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(razonSocial) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
+            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(razonSocial) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin) || gots || ocs)
             {
                 <div class="col-auto">
                     <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">
@@ -109,7 +123,7 @@
                         <th class="text-end">CANTIDAD</th>
                         <th class="text-end">CANT. FACT.</th>
                         <th class="text-end">PRECIO</th>
-                        <th class="text-center">GUIA</th>
+                        <th class="text-center" style="width: 120px;">GUIA</th>
                         <th>OBS</th>
                     </tr>
                 </thead>
@@ -121,13 +135,44 @@
                             <td>@(item.RazonSocial ?? "-")</td>
                             <td class="text-center">@(item.Oc ?? "-")</td>
                             <td class="text-center">@(item.Pedido ?? "-")</td>
-                            <td class="text-center" style="background-color: #ffff00;">@(item.Factura ?? "-")</td>
+                            <td class="text-start" style="background-color: #e3f2fd;">
+                                @if (!string.IsNullOrEmpty(item.Factura) && !string.IsNullOrEmpty(item.FacturaTipo) && !string.IsNullOrEmpty(item.FacturaSerie))
+                                {
+                                    <a asp-controller="Sgc"
+                                       asp-action="DescargarFacturaPdf"
+                                       asp-route-tipo="@item.FacturaTipo"
+                                       asp-route-serie="@item.FacturaSerie"
+                                       asp-route-numero="@item.Factura"
+                                       onclick="descargarPdf(event, this)"
+                                       class="text-danger me-2"
+                                       title="Descargar PDF de Factura">
+                                        <i class="bi bi-file-earmark-pdf-fill" style="font-size: 1.1rem;"></i>
+                                    </a>
+                                }
+                                @item.Factura
+                            </td>
                             <td class="text-center">@(item.FechaDoc.HasValue ? item.FechaDoc.Value.ToString("dd/MM/yyyy") : "-")</td>
                             <td>@(item.Articulo ?? "-")</td>
                             <td class="text-end">@(item.Cantidad.HasValue ? item.Cantidad.Value.ToString("N2") : "-")</td>
                             <td class="text-end">@(item.CantFacturada.HasValue ? item.CantFacturada.Value.ToString("N2") : "-")</td>
                             <td class="text-end">@(item.Precio.HasValue ? item.Precio.Value.ToString("N2") : "-")</td>
-                            <td class="text-center">@(item.Guia.HasValue ? item.Guia.Value.ToString() : "-")</td>
+                            <td class="text-start" style="width: 120px;">
+                                @if (item.Guia.HasValue && !string.IsNullOrEmpty(item.GuiaCodAlm) && !string.IsNullOrEmpty(item.GuiaTpTransac) && item.GuiaSerie.HasValue)
+                                {
+                                    <a asp-controller="Sgc"
+                                       asp-action="DescargarGuiaPdf"
+                                       asp-route-codAlm="@item.GuiaCodAlm"
+                                       asp-route-tpTransac="@item.GuiaTpTransac"
+                                       asp-route-serie="@item.GuiaSerie"
+                                       asp-route-numero="@item.Guia"
+                                       onclick="descargarPdf(event, this)"
+                                       class="text-danger me-2"
+                                       title="Descargar PDF de Guía">
+                                        <i class="bi bi-file-earmark-pdf-fill" style="font-size: 1.1rem;"></i>
+                                    </a>
+                                }
+                                @(item.Guia.HasValue ? item.Guia.Value.ToString() : string.Empty)
+                            </td>
                             <td>@(item.Obs ?? "-")</td>
                         </tr>
                     }
@@ -233,4 +278,59 @@
     </div>
 }
 
-@section Scripts { }
+<!-- Modal para mensajes de PDF -->
+<div class="modal fade" id="pdfModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div id="pdfModalHeader" class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i id="pdfModalIcono" class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="pdfModalTitulo">Advertencia</span>
+                </h5>
+                <button id="pdfModalCloseBtn" type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="pdfModalMensaje" class="mb-0" style="white-space: pre-line;"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    async function descargarPdf(event, anchor) {
+        event.preventDefault();
+        try {
+            const resp = await fetch(anchor.href, { credentials: 'include' });
+            const ct = resp.headers.get('Content-Type') ?? '';
+            if (ct.includes('application/json')) {
+                const data = await resp.json();
+                mostrarPdfModal(data.tipo, data.mensaje);
+            } else {
+                const blob = await resp.blob();
+                const url  = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+            }
+        } catch {
+            mostrarPdfModal('Error', 'Ocurrió un error inesperado al obtener el PDF.');
+        }
+    }
+
+    function mostrarPdfModal(tipo, mensaje) {
+        const esError = tipo === 'Error';
+        document.getElementById('pdfModalHeader').className =
+            'modal-header ' + (esError ? 'bg-danger text-white' : 'bg-warning text-dark');
+        const closeBtn = document.getElementById('pdfModalCloseBtn');
+        closeBtn.className = 'btn-close' + (esError ? ' btn-close-white' : '');
+        document.getElementById('pdfModalIcono').className =
+            'bi me-2 ' + (esError ? 'bi-x-circle-fill' : 'bi-exclamation-triangle-fill');
+        document.getElementById('pdfModalTitulo').textContent = tipo;
+        document.getElementById('pdfModalMensaje').textContent = mensaje;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('pdfModal')).show();
+    }
+</script>
+}

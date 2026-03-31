@@ -14,5 +14,12 @@ namespace FabricaHilos.Models.Sgc
         public decimal? Precio { get; set; }
         public int? Guia { get; set; }
         public string? Obs { get; set; }
+
+        // Datos adicionales para descarga de PDF
+        public string? FacturaTipo { get; set; }
+        public string? FacturaSerie { get; set; }
+        public string? GuiaCodAlm { get; set; }
+        public string? GuiaTpTransac { get; set; }
+        public int? GuiaSerie { get; set; }
     }
 }
