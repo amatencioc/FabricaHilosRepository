@@ -77,6 +77,7 @@ public class MenuService : IMenuService
             Ventas          = Menu(global.Ventas,          "Ventas"),
             RecursosHumanos = Menu(global.RecursosHumanos, "RecursosHumanos"),
             Administracion  = Menu(global.Administracion,  "Administracion"),
+            Seguridad       = Menu(global.Seguridad,       "Seguridad"),
 
             // ── Submenús: Inventario ──────────────────────────────────────
             InventarioMateriaPrima      = SubMenu(global.InventarioMateriaPrima,      "Inventario", "Inventario.MateriaPrima"),
@@ -104,6 +105,9 @@ public class MenuService : IMenuService
 
             // ── Submenús: Administración ──────────────────────────────────
             AdministracionRegistrarUsuario = SubMenu(global.AdministracionRegistrarUsuario, "Administracion", "Administracion.RegistrarUsuario"),
+
+            // ── Submenús: Seguridad ───────────────────────────────────────
+            SeguridadSubirFoto = SubMenu(global.SeguridadSubirFoto, "Seguridad", "Seguridad.SubirFoto"),
         };
     }
 

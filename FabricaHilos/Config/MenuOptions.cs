@@ -20,6 +20,7 @@ public class MenuOptions
     public bool Ventas           { get; set; } = false;
     public bool RecursosHumanos  { get; set; } = false;
     public bool Administracion   { get; set; } = false;
+    public bool Seguridad        { get; set; } = false;
 
     // ── Submenús: Inventario ──────────────────────────────────────────────
     public bool InventarioMateriaPrima      { get; set; } = true;
@@ -49,6 +50,9 @@ public class MenuOptions
     // ── Submenús: Administración ──────────────────────────────────────────
     public bool AdministracionRegistrarUsuario { get; set; } = true;
 
+    // ── Submenús: Seguridad ───────────────────────────────────────────────
+    public bool SeguridadSubirFoto { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -63,6 +67,7 @@ public class MenuOptions
         Ventas           = true,
         RecursosHumanos  = true,
         Administracion   = true,
+        Seguridad        = true,
 
         InventarioMateriaPrima         = true,
         InventarioProductoTerminado    = true,
@@ -84,6 +89,8 @@ public class MenuOptions
         RecursosHumanosAsistencia = true,
 
         AdministracionRegistrarUsuario = true,
+
+        SeguridadSubirFoto = true,
     };
 }
 

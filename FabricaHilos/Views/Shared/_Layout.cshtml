@@ -238,6 +238,20 @@
                     </li>
                     }
                 }
+
+                @if (menus.Seguridad)
+                {
+                    <!-- SEGURIDAD -->
+                    <li class="sidebar-section">SEGURIDAD</li>
+                    @if (menus.SeguridadSubirFoto)
+                    {
+                    <li>
+                        <a asp-controller="Seguridad" asp-action="SubirFoto" class="sidebar-link @(ctrl == "Seguridad" && act == "SubirFoto" ? "active" : "")">
+                            <i class="bi bi-shield-lock"></i> Subir Foto
+                        </a>
+                    </li>
+                    }
+                }
             </ul>
         </nav>
 
