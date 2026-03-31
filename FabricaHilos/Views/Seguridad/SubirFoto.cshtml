@@ -1,0 +1,89 @@
+@model FabricaHilos.Models.Seguridad.FotoSeguridadViewModel
+
+@{
+    ViewData["Title"] = "Subir Foto de Seguridad";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Seguridad</li>
+    <li class="breadcrumb-item active">Subir Foto</li>
+}
+
+<h4 class="section-title"><i class="bi bi-shield-lock me-2"></i>Subir Foto de Seguridad</h4>
+
+@if (ViewBag.Mensaje != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i>@ViewBag.Mensaje
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+@if (ViewBag.Error != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>@ViewBag.Error
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-camera me-2"></i>Seleccionar o tomar foto</h6>
+            </div>
+            <div class="card-body">
+                <form asp-action="SubirFoto" asp-controller="Seguridad" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label asp-for="Foto" class="form-label fw-semibold"></label>
+                        <input asp-for="Foto"
+                               type="file"
+                               class="form-control"
+                               accept="image/*"
+                               capture="environment"
+                               id="inputFoto" />
+                        <div class="form-text text-muted">
+                            Formatos permitidos: JPG, JPEG, PNG, WebP. La imagen se optimizará automáticamente.
+                        </div>
+                        <span asp-validation-for="Foto" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Vista previa de la imagen seleccionada -->
+                    <div id="previewContainer" class="mb-3 text-center d-none">
+                        <img id="previewImg" src="#" alt="Vista previa" class="img-fluid rounded shadow-sm" style="max-height: 300px;" />
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-cloud-upload me-2"></i>Subir Foto
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // Muestra vista previa de la imagen seleccionada
+        document.getElementById('inputFoto').addEventListener('change', function () {
+            const file = this.files[0];
+            const container = document.getElementById('previewContainer');
+            const img = document.getElementById('previewImg');
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    img.src = e.target.result;
+                    container.classList.remove('d-none');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                container.classList.add('d-none');
+            }
+        });
+    </script>
+}
