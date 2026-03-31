@@ -18,7 +18,7 @@ Sistema ASP.NET Core MVC para la gestión de producción, inventario, ventas, fa
 Copia el archivo de ejemplo y completa los valores reales:
 
 ```bash
-cp FabricaHilos/appsettings.Example.json FabricaHilos/appsettings.json
+cp FabricaHilos/appsettings-template.json FabricaHilos/appsettings.json
 ```
 
 El archivo `appsettings.json` está excluido del control de versiones (`.gitignore`) porque contiene cadenas de conexión y rutas sensibles.
