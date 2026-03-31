@@ -172,15 +172,18 @@
                         </div>
 
                         <!-- Destino -->
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Destino</label>
                             <select asp-for="Destino" id="destinoSelect" class="form-select">
                                 <option value="">Cargando...</option>
                             </select>
                         </div>
 
+                        <!-- Campo PROCESO oculto (se completa automáticamente desde búsquedas) -->
+                        <input type="hidden" asp-for="Proceso" id="Proceso" />
+
                         <!-- Tramos -->
-                        <div class="col-md-8">
+                        <div class="col-md-9">
                             <label class="form-label fw-semibold">Tramos</label>
                             <div class="d-flex gap-2 align-items-end">
                                 <div>
@@ -452,6 +455,7 @@
                     document.getElementById('guiaInput').value     = result.data.guia;
                     document.getElementById('loteInput').value     = result.data.lote;
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('Proceso').value       = result.data.proceso || '';
                     document.getElementById('recetaInput').value   = '';
                     await cargarTitulosPartida();
                     seleccionarTitulo(result.data.titulo, true);
@@ -469,6 +473,7 @@
                             document.getElementById('guiaInput').value     = i.guia;
                             document.getElementById('loteInput').value     = i.lote;
                             document.getElementById('materialInput').value = i.material;
+                            document.getElementById('Proceso').value       = i.proceso || '';
                             document.getElementById('recetaInput').value   = '';
                             await cargarTitulosPartida();
                             seleccionarTitulo(i.titulo, true);
@@ -503,6 +508,7 @@
                     document.getElementById('recetaInput').value   = result.data.numero;
                     document.getElementById('loteInput').value     = result.data.lote;
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('Proceso').value       = result.data.proceso || '';
                     restaurarTitulosRestringidos();
                     bloquearCamposPartida(false);
                     seleccionarTitulo(null, false);
@@ -516,6 +522,7 @@
                             document.getElementById('recetaInput').value   = i.numero;
                             document.getElementById('loteInput').value     = i.lote;
                             document.getElementById('materialInput').value = i.material;
+                            document.getElementById('Proceso').value       = i.proceso || '';
                             restaurarTitulosRestringidos();
                             bloquearCamposPartida(false);
                             seleccionarTitulo(null, false);
@@ -549,6 +556,7 @@
                     document.getElementById('recetaInput').value   = '';
                     document.getElementById('guiaInput').value     = '';
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('Proceso').value       = result.data.proceso || '';
                     document.getElementById('recetaStatus').textContent  = '';
                     document.getElementById('partidaStatus').textContent = '';
                     restaurarTitulosRestringidos();
@@ -564,6 +572,7 @@
                             document.getElementById('recetaInput').value   = '';
                             document.getElementById('guiaInput').value     = '';
                             document.getElementById('materialInput').value = i.material;
+                            document.getElementById('Proceso').value       = i.proceso || '';
                             document.getElementById('recetaStatus').textContent  = '';
                             document.getElementById('partidaStatus').textContent = '';
                             restaurarTitulosRestringidos();

@@ -1232,6 +1232,7 @@ namespace FabricaHilos.Services.Produccion
                 _logger.LogInformation("║ HUSOS_ACT_T6:  [{T6}]", registro.Tramo6?.ToString() ?? "0");
                 _logger.LogInformation("║ GUIA:          [{Guia}]", registro.Guia ?? "(NULL)");
                 _logger.LogInformation("║ DESTINO:       [{Destino}]", registro.Destino ?? "(NULL)");
+                _logger.LogInformation("║ PROCESO:       [{Proceso}]", registro.Proceso ?? "(NULL)");
                 _logger.LogInformation("╚═══════════════════════════════════════════════════════════════════════════════╝");
 
                 _logger.LogDebug("Ejecutando INSERT Autoconer en H_RPRODUC...");
@@ -1299,9 +1300,12 @@ namespace FabricaHilos.Services.Produccion
             var innerLightQuery = @"
                 SELECT R.RECETA, R.LOTE, R.TP_MAQ, R.COD_MAQ, R.TITULO,
                        R.FECHA_INI, R.ESTADO, R.C_CODIGO, R.TURNO, R.PASO_MANUAR,
+                       R.GUIA,
                        M.DESC_MAQ,
                        T.DESCRIPCION  AS DESC_TITULO,
-                       P.NOMBRE_CORTO AS NOMBRE_OPERARIO
+                       P.NOMBRE_CORTO AS NOMBRE_OPERARIO,
+                       R.HUSOS_ACT_T1, R.HUSOS_ACT_T2, R.HUSOS_ACT_T3,
+                       R.HUSOS_ACT_T4, R.HUSOS_ACT_T5, R.HUSOS_ACT_T6
                 FROM H_RPRODUC R
                 LEFT JOIN V_MAQUINA  M ON M.COD_MAQ  = R.COD_MAQ  AND M.AREA = '01'
                 LEFT JOIN H_TITULOS  T ON T.TITULO   = R.TITULO
@@ -1321,7 +1325,10 @@ namespace FabricaHilos.Services.Produccion
                     SELECT /*+ MATERIALIZE */
                            p_.RECETA, p_.LOTE, p_.TP_MAQ, p_.COD_MAQ, p_.TITULO,
                            p_.FECHA_INI, p_.ESTADO, p_.C_CODIGO, p_.TURNO, p_.PASO_MANUAR,
-                           p_.DESC_MAQ, p_.DESC_TITULO, p_.NOMBRE_OPERARIO
+                           p_.GUIA,
+                           p_.DESC_MAQ, p_.DESC_TITULO, p_.NOMBRE_OPERARIO,
+                           p_.HUSOS_ACT_T1, p_.HUSOS_ACT_T2, p_.HUSOS_ACT_T3,
+                           p_.HUSOS_ACT_T4, p_.HUSOS_ACT_T5, p_.HUSOS_ACT_T6
                     FROM (
                         SELECT t_.*, ROWNUM AS RN_
                         FROM ({innerLightQuery}) t_
@@ -1332,7 +1339,9 @@ namespace FabricaHilos.Services.Produccion
                 SELECT
                     p.RECETA, p.LOTE, p.TP_MAQ, p.COD_MAQ, p.TITULO,
                     p.FECHA_INI, p.ESTADO, p.C_CODIGO, p.TURNO, p.PASO_MANUAR,
+                    p.GUIA,
                     p.DESC_MAQ, p.DESC_TITULO, p.NOMBRE_OPERARIO,
+                    p.HUSOS_ACT_T1, p.HUSOS_ACT_T2, p.HUSOS_ACT_T3, p.HUSOS_ACT_T4, p.HUSOS_ACT_T5, p.HUSOS_ACT_T6,
                     CASE
                         WHEN p.RECETA IS NOT NULL THEN
                             (SELECT F2.ABREVIADO||' '||P2.ABREVIADO||' '||V2.ABREVIADO||' ('||I2.COLOR_DET||')'
@@ -1433,7 +1442,14 @@ namespace FabricaHilos.Services.Produccion
                             CodigoOperario     = reader["C_CODIGO"]?.ToString()?.Trim()         ?? string.Empty,
                             NombreOperario     = reader["NOMBRE_OPERARIO"]?.ToString()?.Trim()  ?? string.Empty,
                             Turno              = reader["TURNO"]?.ToString()?.Trim()             ?? string.Empty,
-                            PasoManual         = reader["PASO_MANUAR"]?.ToString()?.Trim()      ?? string.Empty
+                            PasoManual         = reader["PASO_MANUAR"]?.ToString()?.Trim()      ?? string.Empty,
+                            Guia               = reader["GUIA"]?.ToString()?.Trim()              ?? null,
+                            Tramo1             = reader["HUSOS_ACT_T1"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T1"]) : (int?)null,
+                            Tramo2             = reader["HUSOS_ACT_T2"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T2"]) : (int?)null,
+                            Tramo3             = reader["HUSOS_ACT_T3"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T3"]) : (int?)null,
+                            Tramo4             = reader["HUSOS_ACT_T4"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T4"]) : (int?)null,
+                            Tramo5             = reader["HUSOS_ACT_T5"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T5"]) : (int?)null,
+                            Tramo6             = reader["HUSOS_ACT_T6"] != DBNull.Value ? Convert.ToInt32(reader["HUSOS_ACT_T6"]) : (int?)null
                         });
                     }
                 }

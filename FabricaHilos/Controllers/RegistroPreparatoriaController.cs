@@ -765,7 +765,8 @@ namespace FabricaHilos.Controllers
                         {
                             numero = receta.Numero,
                             lote = receta.Lote,
-                            material = receta.Material
+                            material = receta.Material,
+                            proceso = receta.Proceso
                         }
                     });
                 }
@@ -776,7 +777,7 @@ namespace FabricaHilos.Controllers
                 {
                     success = true,
                     multiple = true,
-                    items = recetas.Select(r => new { numero = r.Numero, lote = r.Lote, material = r.Material })
+                    items = recetas.Select(r => new { numero = r.Numero, lote = r.Lote, material = r.Material, proceso = r.Proceso })
                 });
             }
             catch (Exception ex)
@@ -818,7 +819,8 @@ namespace FabricaHilos.Controllers
                         {
                             lote = lote.Lote,
                             receta = lote.Receta,
-                            material = lote.Material
+                            material = lote.Material,
+                            proceso = lote.Proceso
                         }
                     });
                 }
@@ -829,7 +831,7 @@ namespace FabricaHilos.Controllers
                 {
                     success = true,
                     multiple = true,
-                    items = lotes.Select(l => new { lote = l.Lote, receta = l.Receta, material = l.Material })
+                    items = lotes.Select(l => new { lote = l.Lote, receta = l.Receta, material = l.Material, proceso = l.Proceso })
                 });
             }
             catch (Exception ex)

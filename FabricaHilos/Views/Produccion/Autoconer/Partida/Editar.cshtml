@@ -233,6 +233,9 @@
                 </div>
             </div>
 
+            <!-- Campos ocultos -->
+            <input type="hidden" asp-for="Proceso" id="Proceso" />
+
             <div class="mt-4 d-flex gap-2">
                 <button type="submit" class="btn btn-success px-4">
                     <i class="bi bi-save me-2"></i>Guardar Cambios
@@ -404,6 +407,7 @@
                     document.getElementById('guiaInput').value     = result.data.guia;
                     document.getElementById('loteInput').value     = result.data.lote;
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('procesoHidden').value = result.data.proceso || '';
                     document.getElementById('recetaInput').value   = '';
                     await cargarTitulosPartida();
                     seleccionarTitulo(result.data.titulo, true);
@@ -421,6 +425,7 @@
                             document.getElementById('guiaInput').value     = i.guia;
                             document.getElementById('loteInput').value     = i.lote;
                             document.getElementById('materialInput').value = i.material;
+                            document.getElementById('procesoHidden').value = i.proceso || '';
                             document.getElementById('recetaInput').value   = '';
                             await cargarTitulosPartida();
                             seleccionarTitulo(i.titulo, true);
@@ -459,6 +464,7 @@
                     document.getElementById('recetaInput').value   = result.data.numero;
                     document.getElementById('loteInput').value     = result.data.lote;
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('procesoHidden').value = result.data.proceso || '';
                     status.textContent = '✓ Receta encontrada'; status.className = 'text-success small';
                 } else {
                     status.textContent = '✗ ' + (result.message || 'No encontrada'); status.className = 'text-warning small';
@@ -482,6 +488,7 @@
                     document.getElementById('loteInput').value     = result.data.lote;
                     document.getElementById('recetaInput').value   = '';
                     document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('Proceso').value = result.data.proceso || '';
                     status.textContent = '✓ Lote encontrado'; status.className = 'text-success small';
                 } else {
                     status.textContent = '✗ ' + (result.message || 'No encontrado'); status.className = 'text-warning small';
@@ -541,10 +548,18 @@
             const tituloSel = document.getElementById('Titulo');
             if (tituloSel) _titulosRestringidosHtml = tituloSel.innerHTML;
 
-            // Valores por defecto para fechas
-            const ahora = ahoraLocal();
-            if (!document.getElementById('HoraInicio').value) document.getElementById('HoraInicio').value = ahora;
-            if (!document.getElementById('HoraFinal').value) document.getElementById('HoraFinal').value = ahora;
+            // Valores por defecto para fechas SOLO si están vacíos o son inválidos
+            // En modo edición, los valores ya vienen del servidor
+            const horaInicioInput = document.getElementById('HoraInicio');
+            const horaFinalInput = document.getElementById('HoraFinal');
+
+            // Solo asignar fecha actual si el campo está completamente vacío
+            if (horaInicioInput && !horaInicioInput.value) {
+                horaInicioInput.value = ahoraLocal();
+            }
+            if (horaFinalInput && !horaFinalInput.value) {
+                horaFinalInput.value = ahoraLocal();
+            }
 
             // Nº Partida
             document.getElementById('btnBuscarPartida').addEventListener('click', buscarPartida);

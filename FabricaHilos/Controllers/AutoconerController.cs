@@ -116,19 +116,25 @@ namespace FabricaHilos.Controllers
                         if (local != null)
                         {
                             p.LocalId = local.Id;
-                            // Usar el material del registro local si existe
-                            if (!string.IsNullOrEmpty(local.DescripcionMaterial) && local.DescripcionMaterial != "-")
+                            // PRIORIDAD ORACLE: Solo usar material local si Oracle no tiene dato
+                            if ((string.IsNullOrEmpty(p.Material) || p.Material == "-") &&
+                                !string.IsNullOrEmpty(local.DescripcionMaterial) && 
+                                local.DescripcionMaterial != "-")
                             {
                                 p.Material = local.DescripcionMaterial;
                             }
-                            // Asignar Guía y Tramos desde el registro local
-                            p.Guia = local.Guia;
-                            p.Tramo1 = local.Tramo1;
-                            p.Tramo2 = local.Tramo2;
-                            p.Tramo3 = local.Tramo3;
-                            p.Tramo4 = local.Tramo4;
-                            p.Tramo5 = local.Tramo5;
-                            p.Tramo6 = local.Tramo6;
+                            // PRIORIDAD ORACLE: Solo usar Guía local si Oracle no tiene dato
+                            if (string.IsNullOrEmpty(p.Guia) && !string.IsNullOrEmpty(local.Guia))
+                            {
+                                p.Guia = local.Guia;
+                            }
+                            // PRIORIDAD ORACLE: Solo usar Tramos locales si Oracle tiene 0
+                            if (p.Tramo1 == 0 && local.Tramo1 > 0) p.Tramo1 = local.Tramo1;
+                            if (p.Tramo2 == 0 && local.Tramo2 > 0) p.Tramo2 = local.Tramo2;
+                            if (p.Tramo3 == 0 && local.Tramo3 > 0) p.Tramo3 = local.Tramo3;
+                            if (p.Tramo4 == 0 && local.Tramo4 > 0) p.Tramo4 = local.Tramo4;
+                            if (p.Tramo5 == 0 && local.Tramo5 > 0) p.Tramo5 = local.Tramo5;
+                            if (p.Tramo6 == 0 && local.Tramo6 > 0) p.Tramo6 = local.Tramo6;
                         }
                     }
                     else
@@ -140,19 +146,25 @@ namespace FabricaHilos.Controllers
                         if (local != null)
                         {
                             p.LocalId = local.Id;
-                            // Usar el material del registro local si existe
-                            if (!string.IsNullOrEmpty(local.DescripcionMaterial) && local.DescripcionMaterial != "-")
+                            // PRIORIDAD ORACLE: Solo usar material local si Oracle no tiene dato
+                            if ((string.IsNullOrEmpty(p.Material) || p.Material == "-") &&
+                                !string.IsNullOrEmpty(local.DescripcionMaterial) && 
+                                local.DescripcionMaterial != "-")
                             {
                                 p.Material = local.DescripcionMaterial;
                             }
-                            // Asignar Guía y Tramos desde el registro local
-                            p.Guia = local.Guia;
-                            p.Tramo1 = local.Tramo1;
-                            p.Tramo2 = local.Tramo2;
-                            p.Tramo3 = local.Tramo3;
-                            p.Tramo4 = local.Tramo4;
-                            p.Tramo5 = local.Tramo5;
-                            p.Tramo6 = local.Tramo6;
+                            // PRIORIDAD ORACLE: Solo usar Guía local si Oracle no tiene dato
+                            if (string.IsNullOrEmpty(p.Guia) && !string.IsNullOrEmpty(local.Guia))
+                            {
+                                p.Guia = local.Guia;
+                            }
+                            // PRIORIDAD ORACLE: Solo usar Tramos locales si Oracle tiene 0
+                            if (p.Tramo1 == 0 && local.Tramo1 > 0) p.Tramo1 = local.Tramo1;
+                            if (p.Tramo2 == 0 && local.Tramo2 > 0) p.Tramo2 = local.Tramo2;
+                            if (p.Tramo3 == 0 && local.Tramo3 > 0) p.Tramo3 = local.Tramo3;
+                            if (p.Tramo4 == 0 && local.Tramo4 > 0) p.Tramo4 = local.Tramo4;
+                            if (p.Tramo5 == 0 && local.Tramo5 > 0) p.Tramo5 = local.Tramo5;
+                            if (p.Tramo6 == 0 && local.Tramo6 > 0) p.Tramo6 = local.Tramo6;
                         }
                     }
                 }
@@ -182,13 +194,21 @@ namespace FabricaHilos.Controllers
                             CodigoOperador    = string.IsNullOrEmpty(p.CodigoOperario) ? "-" : p.CodigoOperario,
                             Turno             = string.IsNullOrEmpty(p.Turno) ? "-" : p.Turno,
                             Estado            = estadoLocal,
-                            Cerrado           = p.Estado == "3" // Cerrado si está terminado
+                            Cerrado           = p.Estado == "3", // Cerrado si está terminado
+                            Guia              = p.Guia,
+                            Tramo1            = p.Tramo1,
+                            Tramo2            = p.Tramo2,
+                            Tramo3            = p.Tramo3,
+                            Tramo4            = p.Tramo4,
+                            Tramo5            = p.Tramo5,
+                            Tramo6            = p.Tramo6
                         };
                         _context.RegistrosAutoconer.Add(nuevoReg);
                         await _context.SaveChangesAsync();
                         p.LocalId = nuevoReg.Id;
-                        _logger.LogInformation("Registro Autoconer local creado: Lote={Lote}, Fecha={Fecha}, Estado={Estado}, Id={Id}",
-                            p.Lote, p.FechaInicio, estadoLocal, nuevoReg.Id);
+                        _logger.LogInformation("Registro Autoconer local creado: Lote={Lote}, Fecha={Fecha}, Estado={Estado}, Id={Id}, Guia={Guia}, Tramos=T1:{T1},T2:{T2},T3:{T3},T4:{T4},T5:{T5},T6:{T6}",
+                            p.Lote, p.FechaInicio, estadoLocal, nuevoReg.Id, p.Guia ?? "(null)", 
+                            p.Tramo1, p.Tramo2, p.Tramo3, p.Tramo4, p.Tramo5, p.Tramo6);
                     }
                     catch (Exception ex)
                     {
@@ -263,7 +283,7 @@ namespace FabricaHilos.Controllers
                         // Ejecutar SP_CALCULAR_PROD_ESP_TEO tras inserción exitosa en Oracle
                         var spResult = await _recetaService.EjecutarSpCalcularProdTeoAsync(
                             model.CodigoReceta, model.Lote, "A", model.NumeroAutoconer,
-                            model.Titulo, model.Fecha);
+                            model.Titulo, model.HoraInicio ?? model.Fecha);
 
                         if (!spResult.UpdateExitoso)
                         {
@@ -391,10 +411,13 @@ namespace FabricaHilos.Controllers
                 Turno                = detalle.Turno,
                 CodigoOperador       = detalle.CodigoOperador,
                 VelocidadMMin        = detalle.VelocidadMMin,
+                HoraInicio           = detalle.FechaInicio,
+                HoraFinal            = detalle.FechaFinal,
                 Cantidad             = detalle.Cantidad,
                 PesoBruto            = detalle.PesoBruto ?? 0m, // KG_UNIDAD en Oracle
                 Guia                 = detalle.Guia,
                 Destino              = detalle.Destino,
+                Proceso              = detalle.Proceso,
                 Tramo1               = detalle.Tramo1,
                 Tramo2               = detalle.Tramo2,
                 Tramo3               = detalle.Tramo3,
@@ -478,7 +501,7 @@ namespace FabricaHilos.Controllers
                     // Ejecutar SP_CALCULAR_PROD_ESP_TEO tras actualización exitosa en Oracle
                     var spResult = await _recetaService.EjecutarSpCalcularProdTeoAsync(
                         model.CodigoReceta, model.Lote, "A", model.NumeroAutoconer,
-                        model.Titulo, model.Fecha);
+                        model.Titulo, model.HoraInicio ?? model.Fecha);
 
                     if (!spResult.UpdateExitoso)
                     {
@@ -648,14 +671,14 @@ namespace FabricaHilos.Controllers
                     return Json(new
                     {
                         success = true,
-                        data    = new { numero = resultados[0].Numero, lote = resultados[0].Lote, material = resultados[0].Material }
+                        data    = new { numero = resultados[0].Numero, lote = resultados[0].Lote, material = resultados[0].Material, proceso = resultados[0].Proceso }
                     });
 
                 return Json(new
                 {
                     success  = true,
                     multiple = true,
-                    items    = resultados.Select(r => new { numero = r.Numero, lote = r.Lote, material = r.Material })
+                    items    = resultados.Select(r => new { numero = r.Numero, lote = r.Lote, material = r.Material, proceso = r.Proceso })
                 });
             }
             catch (Exception ex)
@@ -680,14 +703,14 @@ namespace FabricaHilos.Controllers
                     return Json(new
                     {
                         success = true,
-                        data    = new { lote = resultados[0].Lote, receta = resultados[0].Receta, material = resultados[0].Material }
+                        data    = new { lote = resultados[0].Lote, receta = resultados[0].Receta, material = resultados[0].Material, proceso = resultados[0].Proceso }
                     });
 
                 return Json(new
                 {
                     success  = true,
                     multiple = true,
-                    items    = resultados.Select(r => new { lote = r.Lote, receta = r.Receta, material = r.Material })
+                    items    = resultados.Select(r => new { lote = r.Lote, receta = r.Receta, material = r.Material, proceso = r.Proceso })
                 });
             }
             catch (Exception ex)
@@ -712,14 +735,14 @@ namespace FabricaHilos.Controllers
                     return Json(new
                     {
                         success = true,
-                        data    = new { partida = resultados[0].Partida, guia = resultados[0].Guia, lote = resultados[0].Lote, material = resultados[0].Material, titulo = resultados[0].Titulo }
+                        data    = new { partida = resultados[0].Partida, guia = resultados[0].Guia, lote = resultados[0].Lote, material = resultados[0].Material, titulo = resultados[0].Titulo, proceso = resultados[0].Proceso }
                     });
 
                 return Json(new
                 {
                     success  = true,
                     multiple = true,
-                    items    = resultados.Select(r => new { partida = r.Partida, guia = r.Guia, lote = r.Lote, material = r.Material, titulo = r.Titulo, cliente = r.DescCliente })
+                    items    = resultados.Select(r => new { partida = r.Partida, guia = r.Guia, lote = r.Lote, material = r.Material, titulo = r.Titulo, cliente = r.DescCliente, proceso = r.Proceso })
                 });
             }
             catch (Exception ex)

@@ -191,6 +191,9 @@
                         </div>
                     </div>
 
+                    <!-- Campo oculto para Proceso -->
+                    <input type="hidden" asp-for="Proceso" id="Proceso" />
+
                     <div class="mt-4 d-flex gap-2">
                         <button type="button" id="btnGuardar" class="btn btn-primary px-4">
                             <i class="bi bi-save me-2"></i>Guardar
@@ -274,6 +277,7 @@
                     recetaInput.value = result.data.numero;
                     loteInput.value = result.data.lote;
                     materialInput.value = result.data.material;
+                    document.getElementById('Proceso').value = result.data.proceso || '';
                     statusElement.textContent = '\u2713 Receta encontrada';
                     statusElement.className = 'text-success small';
                     document.getElementById('loteStatus').textContent = '';
@@ -349,6 +353,7 @@
             recetaInput.value = item.numero;
             loteInput.value = item.lote;
             materialInput.value = item.material;
+            document.getElementById('Proceso').value = item.proceso || '';
 
             statusElement.textContent = '\u2713 Receta seleccionada';
             statusElement.className = 'text-success small';
@@ -408,6 +413,7 @@
             loteInput.value = item.lote;
             recetaInput.value = '';
             materialInput.value = item.material;
+            document.getElementById('Proceso').value = item.proceso || '';
 
             statusElement.textContent = '\u2713 Lote seleccionado';
             statusElement.className = 'text-success small';
@@ -445,6 +451,7 @@
                     loteInput.value = result.data.lote;
                     recetaInput.value = '';
                     materialInput.value = result.data.material;
+                    document.getElementById('Proceso').value = result.data.proceso || '';
                     statusElement.textContent = '\u2713 Lote encontrado';
                     statusElement.className = 'text-success small';
                     document.getElementById('recetaStatus').textContent = '';
@@ -619,7 +626,7 @@
 
         // Establecer fecha inicial al cargar la página (con la fecha actual del registro)
         document.addEventListener('DOMContentLoaded', function() {
-            const campoFecha = document.getElementById('fechaInicio');
+            const campoFecha = document.getElementById('FechaInicio'); // Corregido: id con mayúscula
             if (campoFecha && campoFecha.value) {
                 // Si ya tiene una fecha, mantenerla pero en formato datetime-local con segundos
                 const fechaExistente = new Date(campoFecha.value);

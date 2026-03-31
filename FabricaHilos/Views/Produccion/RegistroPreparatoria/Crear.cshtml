@@ -172,6 +172,7 @@
                     <input type="hidden" asp-for="FechaInicio" id="fechaInicioHidden" />
                     <input type="hidden" asp-for="Estado" value="@EstadoOrden.EnProceso" />
                     <input type="hidden" asp-for="Cerrado" value="false" />
+                    <input type="hidden" asp-for="Proceso" id="Proceso" />
 
                     <div class="mt-4 d-flex gap-2">
                         <button type="button" id="btnGuardar" class="btn btn-primary px-4">
@@ -257,6 +258,7 @@
                     recetaInput.value = result.data.numero;
                     loteInput.value = result.data.lote;
                     materialInput.value = result.data.material;
+                    document.getElementById('Proceso').value = result.data.proceso || '';
 
                     statusElement.textContent = '✓ Receta encontrada';
                     statusElement.className = 'text-success small';
@@ -341,6 +343,7 @@
             recetaInput.value = item.numero;
             loteInput.value = item.lote;
             materialInput.value = item.material;
+            document.getElementById('Proceso').value = item.proceso || '';
 
             statusElement.textContent = '\u2713 Receta seleccionada';
             statusElement.className = 'text-success small';
@@ -400,6 +403,7 @@
             loteInput.value = item.lote;
             recetaInput.value = '';
             materialInput.value = item.material;
+            document.getElementById('Proceso').value = item.proceso || '';
 
             statusElement.textContent = '\u2713 Lote seleccionado';
             statusElement.className = 'text-success small';
@@ -443,6 +447,7 @@
                     recetaInput.value = '';
 
                     materialInput.value = result.data.material;
+                    document.getElementById('Proceso').value = result.data.proceso || '';
 
                     statusElement.textContent = '✓ Lote encontrado';
                     statusElement.className = 'text-success small';
