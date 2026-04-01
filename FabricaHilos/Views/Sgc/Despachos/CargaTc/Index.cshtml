@@ -156,9 +156,19 @@
                                             </td>
                                             <td class="text-center">
                                                 <a href="@Url.Action("Detalle", new { numReq = req.NumReq, t = navToken })" 
-                                                   class="btn btn-sm btn-primary" title="Ver detalle">
+                                                   class="btn btn-sm btn-primary me-1" title="Ver detalle">
                                                     <i class="bi bi-eye-fill"></i>
                                                 </a>
+                                                
+                                                @if (!string.IsNullOrEmpty(req.NumCer))
+                                                {
+                                                    <button type="button" 
+                                                            class="btn btn-sm btn-success btn-enviar-facturacion" 
+                                                            data-numreq="@req.NumReq"
+                                                            title="Enviar a Facturación">
+                                                        <i class="bi bi-send-fill"></i>
+                                                    </button>
+                                                }
                                             </td>
                                         </tr>
                                     }
@@ -213,7 +223,129 @@
                     window.location.href = url;
                 }
             });
+
+            // Botón "Enviar a Facturación"
+            $('.btn-enviar-facturacion').click(function(e) {
+                e.stopPropagation();
+                const numReq = $(this).data('numreq');
+                mostrarModalEnvioFacturacion(numReq);
+            });
         });
+
+        function mostrarModalEnvioFacturacion(numReq) {
+            Swal.fire({
+                title: 'Enviar a Facturación',
+                html: `
+                    <div class="text-start">
+                        <p class="mb-3">Ingrese el correo electrónico del destinatario:</p>
+                        <div class="mb-3">
+                            <label for="correoDestinatario" class="form-label">Correo Destinatario <span class="text-danger">*</span></label>
+                            <input type="email" 
+                                   class="form-control" 
+                                   id="correoDestinatario" 
+                                   placeholder="facturacion@colonial.com.pe"
+                                   required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="nombreDestinatario" class="form-label">Nombre Destinatario (opcional)</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="nombreDestinatario" 
+                                   placeholder="Equipo de Facturación">
+                        </div>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-send-fill me-1"></i>Enviar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#6c757d',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const correo = document.getElementById('correoDestinatario').value;
+                    const nombre = document.getElementById('nombreDestinatario').value;
+
+                    if (!correo) {
+                        Swal.showValidationMessage('Por favor ingrese el correo destinatario');
+                        return false;
+                    }
+
+                    // Validar formato de correo
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(correo)) {
+                        Swal.showValidationMessage('Por favor ingrese un correo válido');
+                        return false;
+                    }
+
+                    return { correo, nombre };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    enviarAFacturacion(numReq, result.value.correo, result.value.nombre);
+                }
+            });
+        }
+
+        function enviarAFacturacion(numReq, correoDestinatario, nombreDestinatario) {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Enviando notificación...',
+                html: 'Por favor espere',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            // Realizar la petición AJAX
+            $.ajax({
+                url: '@Url.Action("EnviarAFacturacion", "CargaTc")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    numReq: numReq,
+                    correoDestinatario: correoDestinatario,
+                    nombreDestinatario: nombreDestinatario || 'Equipo de Facturación'
+                }),
+                success: function(response) {
+                    Swal.close();
+                    
+                    if (response.tipo === 'Exito') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Enviado',
+                            text: response.mensaje,
+                            confirmButtonColor: '#198754'
+                        });
+                    } else if (response.tipo === 'Advertencia') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Advertencia',
+                            text: response.mensaje,
+                            confirmButtonColor: '#ffc107'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: response.mensaje,
+                            confirmButtonColor: '#dc3545'
+                        });
+                    }
+                },
+                error: function(xhr, status, error) {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Error al enviar la notificación: ' + error,
+                        confirmButtonColor: '#dc3545'
+                    });
+                }
+            });
+        }
     </script>
 }
 

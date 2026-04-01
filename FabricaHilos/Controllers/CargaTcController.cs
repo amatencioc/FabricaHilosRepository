@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
+using FabricaHilos.Notificaciones.Abstractions;
+using FabricaHilos.Notificaciones.Models.Payloads;
 
 namespace FabricaHilos.Controllers
 {
@@ -13,12 +15,18 @@ namespace FabricaHilos.Controllers
         private readonly ICargaTcService _cargaTcService;
         private readonly ILogger<CargaTcController> _logger;
         private readonly INavTokenService _navToken;
+        private readonly IEmailNotificacionService _emailNotificacionService;
 
-        public CargaTcController(ICargaTcService cargaTcService, ILogger<CargaTcController> logger, INavTokenService navToken)
+        public CargaTcController(
+            ICargaTcService cargaTcService, 
+            ILogger<CargaTcController> logger, 
+            INavTokenService navToken,
+            IEmailNotificacionService emailNotificacionService)
         {
             _cargaTcService = cargaTcService;
             _logger = logger;
             _navToken = navToken;
+            _emailNotificacionService = emailNotificacionService;
         }
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -286,6 +294,93 @@ namespace FabricaHilos.Controllers
             {
                 _logger.LogError(ex, "Error al descargar PDF para NUM_REQ {NumReq}", numReq);
                 return Json(new { tipo = "Error", mensaje = $"Error al descargar PDF: {ex.Message}" });
+            }
+        }
+
+        // ========== ENVIAR A FACTURACIÓN ==========
+
+        [HttpPost]
+        public async Task<IActionResult> EnviarAFacturacion([FromBody] EnviarAFacturacionDto modelo)
+        {
+            try
+            {
+                // Validar que se proporcione el correo destinatario
+                if (string.IsNullOrWhiteSpace(modelo.CorreoDestinatario))
+                {
+                    return Json(new { tipo = "Advertencia", mensaje = "Debe proporcionar un correo destinatario." });
+                }
+
+                // Obtener el requerimiento
+                var requerimiento = await _cargaTcService.ObtenerRequerimientoAsync(modelo.NumReq);
+                if (requerimiento == null)
+                {
+                    return Json(new { tipo = "Error", mensaje = "No se encontró el requerimiento especificado." });
+                }
+
+                // Validar que el certificado esté cargado
+                if (string.IsNullOrEmpty(requerimiento.NumCer))
+                {
+                    return Json(new { tipo = "Advertencia", mensaje = "El requerimiento no tiene certificado asignado. Por favor, cargue el certificado primero." });
+                }
+
+                // Obtener los detalles (documentos asociados)
+                var detalles = await _cargaTcService.ObtenerDetalleRequerimientoAsync(modelo.NumReq);
+                var documentosAsociados = detalles.Any()
+                    ? string.Join(", ", detalles.Select(d => $"{d.TipoDoc}-{d.Serie}-{d.Numero}"))
+                    : "Sin documentos asociados";
+
+                // Determinar el tipo de certificado
+                var tipoCertificado = requerimiento.CodArt switch
+                {
+                    "CERTGOTS" => "GOTS (Global Organic Textile Standard)",
+                    "CERTOCS" => "OCS (Organic Content Standard)",
+                    _ => requerimiento.CodArt ?? "No especificado"
+                };
+
+                // Crear el payload para la notificación
+                var payload = new EnvioCertificadoFacturacionPayload
+                {
+                    CorreoDestinatario = modelo.CorreoDestinatario,
+                    NombreDestinatario = modelo.NombreDestinatario ?? "Equipo de Facturación",
+                    NumeroRequerimiento = requerimiento.NumReq.ToString(),
+                    FechaRequerimiento = requerimiento.Fecha?.ToString("dd/MM/yyyy") ?? "Sin fecha",
+                    NumeroCertificado = requerimiento.NumCer,
+                    TipoCertificado = tipoCertificado,
+                    RazonSocialCliente = requerimiento.RazonSocial ?? "No especificado",
+                    RucCliente = requerimiento.Ruc ?? "No especificado",
+                    DocumentosAsociados = documentosAsociados
+                };
+
+                // Enviar la notificación
+                var resultado = await _emailNotificacionService.EnviarAsync(payload);
+
+                if (resultado.Exitoso)
+                {
+                    _logger.LogInformation("Notificación enviada correctamente a {Correo} para NUM_REQ {NumReq}", 
+                        modelo.CorreoDestinatario, modelo.NumReq);
+
+                    return Json(new 
+                    { 
+                        tipo = "Exito", 
+                        mensaje = $"Notificación enviada correctamente a {modelo.CorreoDestinatario}"
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("Error al enviar notificación a {Correo} para NUM_REQ {NumReq}: {Error}", 
+                        modelo.CorreoDestinatario, modelo.NumReq, resultado.Error);
+
+                    return Json(new 
+                    { 
+                        tipo = "Error", 
+                        mensaje = $"Error al enviar notificación: {resultado.Error}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar notificación a facturación para NUM_REQ {NumReq}", modelo.NumReq);
+                return Json(new { tipo = "Error", mensaje = $"Error al enviar notificación: {ex.Message}" });
             }
         }
     }

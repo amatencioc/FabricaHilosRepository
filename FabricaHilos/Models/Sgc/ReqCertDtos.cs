@@ -56,4 +56,14 @@ namespace FabricaHilos.Models.Sgc
         public string? Ruc { get; set; }
         public string? RazonSocial { get; set; }
     }
+
+    /// <summary>
+    /// DTO para enviar certificado a facturación
+    /// </summary>
+    public class EnviarAFacturacionDto
+    {
+        public int NumReq { get; set; }
+        public required string CorreoDestinatario { get; set; }
+        public string? NombreDestinatario { get; set; }
+    }
 }
