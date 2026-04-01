@@ -23,6 +23,73 @@
     string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs }) ?? "#";
 }
 
+@section Styles {
+<style>
+    /* Estilos para checkboxes de facturas ya enviadas a TC */
+    .checkbox-enviado-tc {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .checkbox-enviado-tc:checked {
+        background-color: #6c757d !important;
+        border-color: #6c757d !important;
+    }
+
+    /* Estilos para filas de facturas enviadas a TC */
+    .fila-enviada-tc {
+        cursor: help !important;
+    }
+
+    .fila-enviada-tc:hover {
+        background-color: #e9ecef !important;
+    }
+
+    /* Estilos para botones de copiar */
+    .btn-copiar-codigo {
+        display: inline-block;
+        padding: 2px 6px;
+        margin-left: 5px;
+        font-size: 0.75rem;
+        color: #6c757d;
+        background-color: transparent;
+        border: 1px solid #dee2e6;
+        border-radius: 3px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        vertical-align: middle;
+    }
+
+    .btn-copiar-codigo:hover {
+        color: #fff;
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+
+    .btn-copiar-codigo:active {
+        transform: scale(0.95);
+    }
+
+    .btn-copiar-codigo.copiado {
+        color: #fff;
+        background-color: #198754;
+        border-color: #198754;
+    }
+
+    /* Estilos para tooltips interactivos */
+    .tooltip-inner {
+        min-width: 250px !important;
+        max-width: 500px !important;
+        text-align: left !important;
+        padding: 10px 12px !important;
+    }
+
+    .tooltip.show {
+        pointer-events: auto !important;
+    }
+</style>
+}
+
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
     <li class="breadcrumb-item active">Listado de Despachos</li>
@@ -30,9 +97,17 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="section-title mb-0"><i class="bi bi-truck me-2"></i>Listado de Despachos</h4>
-    <a href="@excelUrl" class="btn btn-success btn-sm">
-        <i class="bi bi-file-earmark-excel me-1"></i>Exportar a Excel
-    </a>
+    <div class="d-flex gap-2">
+        <button id="btnAgruparFacturas" class="btn btn-primary btn-sm" onclick="agruparFacturas()" disabled>
+            <i class="bi bi-collection me-1"></i>Agrupar Facturas para Enviar a TC (<span id="contadorFacturas">0</span>/10)
+        </button>
+        <button id="btnLimpiarSeleccion" class="btn btn-outline-danger btn-sm" onclick="limpiarTodasLasSelecciones()" style="display: none;">
+            <i class="bi bi-trash me-1"></i>Limpiar Selección
+        </button>
+        <a href="@excelUrl" class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i>Exportar a Excel
+        </a>
+    </div>
 </div>
 
 <div class="card mb-3">
@@ -113,6 +188,9 @@
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
+                        <th class="text-center" style="width: 40px;">
+                            <input type="checkbox" id="checkboxSelectAll" class="form-check-input" onchange="toggleSelectAll(this)" />
+                        </th>
                         <th class="text-center">#</th>
                         <th>RAZON SOCIAL</th>
                         <th class="text-center">OC</th>
@@ -130,7 +208,36 @@
                 <tbody>
                     @foreach (var item in Model)
                     {
-                        <tr>
+                        var estiloFila = item.EnviadoATC ? "background-color: #f5f5f5;" : "";
+
+                        // Construir tooltip con NUM_REQ y NUM_CER (si existe)
+                        var tituloTooltip = "";
+                        if (item.EnviadoATC)
+                        {
+                            tituloTooltip = $"Número de requerimiento: {item.NumReqTC}";
+                            if (!string.IsNullOrEmpty(item.NumCer))
+                            {
+                                tituloTooltip += $"&#10;Número de Certificado: {item.NumCer}";
+                            }
+                        }
+
+                        <tr style="@estiloFila" 
+                            @Html.Raw(item.EnviadoATC ? $"data-bs-toggle=\"tooltip\" data-bs-placement=\"top\" data-bs-html=\"true\" data-bs-sanitize=\"false\" data-num-req=\"{item.NumReqTC}\" data-num-cer=\"{item.NumCer}\" class=\"fila-enviada-tc\"" : "")>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(item.Factura) && !string.IsNullOrEmpty(item.FacturaTipo) && !string.IsNullOrEmpty(item.FacturaSerie))
+                                {
+                                    <input type="checkbox" 
+                                           class="form-check-input checkbox-factura @(item.EnviadoATC ? "checkbox-enviado-tc" : "")" 
+                                           data-tipo="@item.FacturaTipo"
+                                           data-serie="@item.FacturaSerie"
+                                           data-numero="@item.Factura"
+                                           data-razon-social="@item.RazonSocial"
+                                           data-fecha="@(item.FechaDoc.HasValue ? item.FechaDoc.Value.ToString("dd/MM/yyyy") : "")"
+                                           data-cod-cliente="@item.CodCliente"
+                                           @(item.EnviadoATC ? "checked disabled" : "")
+                                           onchange="actualizarContadorFacturas()" />
+                                }
+                            </td>
                             <td class="text-center">@item.Correlativo</td>
                             <td>@(item.RazonSocial ?? "-")</td>
                             <td class="text-center">@(item.Oc ?? "-")</td>
@@ -179,6 +286,7 @@
                     @if (Model.Any())
                     {
                         <tr class="table-secondary fw-semibold border-top">
+                            <td></td>
                             <td colspan="7" class="text-end pe-3">Totales:</td>
                             <td class="text-end">@sumCantidad.ToString("N2")</td>
                             <td class="text-end">@sumCantFacturada.ToString("N2")</td>
@@ -189,7 +297,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">
+                            <td colspan="13" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron registros.
                             </td>
                         </tr>
@@ -299,8 +407,494 @@
     </div>
 </div>
 
+<!-- Modal para Facturas Agrupadas -->
+<div class="modal fade" id="modalFacturasAgrupadas" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-collection-fill me-2"></i>Facturas Agrupadas para TC
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Total de facturas seleccionadas:</strong> <span id="totalFacturasModal">0</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Tipo</th>
+                                <th>Serie</th>
+                                <th>Número</th>
+                                <th>Razón Social</th>
+                                <th>Fecha</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaFacturasAgrupadas">
+                            <!-- Se llenará dinámicamente con JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Cerrar
+                </button>
+                <button type="button" class="btn btn-success" onclick="confirmarEnvioTC()">
+                    <i class="bi bi-send-fill me-1"></i>Confirmar Envío a TC
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Éxito - Requerimiento Generado -->
+<div class="modal fade" id="modalExitoTC" tabindex="-1" aria-labelledby="modalExitoTCLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-success">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalExitoTCLabel">
+                    <i class="bi bi-check-circle-fill me-2"></i>Requerimiento de certificado generado exitosamente
+                </h5>
+            </div>
+            <div class="modal-body text-center py-4">
+                <div class="mb-4">
+                    <i class="bi bi-file-earmark-check text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-success mb-3">
+                    <strong>Número de Requerimiento:</strong>
+                </h4>
+                <div class="display-4 text-primary fw-bold mb-3" id="numReqGenerado">-</div>
+                <hr>
+                <p class="text-muted mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Total de facturas procesadas: <strong id="totalFacturasProcesadas">0</strong>
+                </p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-success btn-lg px-5" onclick="cerrarModalExitoYLimpiar()">
+                    <i class="bi bi-check-lg me-2"></i>Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
+    // ═══════════════════════════════════════════════════════════════════════
+    // GESTIÓN DE AGRUPACIÓN DE FACTURAS PARA TC CON PERSISTENCIA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const MAX_FACTURAS = 10;
+    const STORAGE_KEY = 'facturasSeleccionadas';
+
+    /**
+     * Obtener facturas seleccionadas del sessionStorage
+     */
+    function obtenerFacturasGuardadas() {
+        const data = sessionStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : {};
+    }
+
+    /**
+     * Guardar facturas seleccionadas en sessionStorage
+     */
+    function guardarFacturasSeleccionadas(facturas) {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(facturas));
+    }
+
+    /**
+     * Generar llave única para cada factura
+     */
+    function generarLlaveFactura(tipo, serie, numero) {
+        return `${tipo}-${serie}-${numero}`;
+    }
+
+    /**
+     * Restaurar checkboxes marcados desde sessionStorage al cargar la página
+     */
+    function restaurarSeleccionesGuardadas() {
+        const facturasGuardadas = obtenerFacturasGuardadas();
+        const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+
+        checkboxes.forEach(cb => {
+            const tipo = cb.getAttribute('data-tipo');
+            const serie = cb.getAttribute('data-serie');
+            const numero = cb.getAttribute('data-numero');
+            const llave = generarLlaveFactura(tipo, serie, numero);
+
+            if (facturasGuardadas[llave]) {
+                cb.checked = true;
+            }
+        });
+
+        actualizarContadorFacturas();
+    }
+
+    /**
+     * Actualizar contador de facturas seleccionadas y validar límite (GLOBAL)
+     */
+    function actualizarContadorFacturas() {
+        const facturasGuardadas = obtenerFacturasGuardadas();
+        const totalGuardadas = Object.keys(facturasGuardadas).length;
+
+        // Sincronizar checkboxes de la página actual con sessionStorage (SOLO los que NO están enviados a TC)
+        const checkboxesPaginaActual = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+        checkboxesPaginaActual.forEach(cb => {
+            const tipo = cb.getAttribute('data-tipo');
+            const serie = cb.getAttribute('data-serie');
+            const numero = cb.getAttribute('data-numero');
+            const razonSocial = cb.getAttribute('data-razon-social');
+            const fecha = cb.getAttribute('data-fecha');
+            const codCliente = cb.getAttribute('data-cod-cliente');
+            const llave = generarLlaveFactura(tipo, serie, numero);
+
+            if (cb.checked) {
+                // Agregar al storage
+                facturasGuardadas[llave] = {
+                    tipo: tipo,
+                    serie: serie,
+                    numero: numero,
+                    razonSocial: razonSocial,
+                    fecha: fecha,
+                    codCliente: codCliente
+                };
+            } else {
+                // Remover del storage
+                delete facturasGuardadas[llave];
+            }
+        });
+
+        // Guardar cambios
+        guardarFacturasSeleccionadas(facturasGuardadas);
+
+        // Recalcular total
+        const totalSeleccionadas = Object.keys(facturasGuardadas).length;
+
+        // Actualizar UI
+        const btn = document.getElementById('btnAgruparFacturas');
+        const btnLimpiar = document.getElementById('btnLimpiarSeleccion');
+        const span = document.getElementById('contadorFacturas');
+
+        span.textContent = totalSeleccionadas;
+        btn.disabled = totalSeleccionadas === 0;
+        btnLimpiar.style.display = totalSeleccionadas > 0 ? 'inline-block' : 'none';
+
+        // Validar límite: deshabilitar checkboxes no marcados si se alcanza el máximo (EXCLUYENDO los ya enviados a TC)
+        const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+        checkboxes.forEach(cb => {
+            const tipo = cb.getAttribute('data-tipo');
+            const serie = cb.getAttribute('data-serie');
+            const numero = cb.getAttribute('data-numero');
+            const llave = generarLlaveFactura(tipo, serie, numero);
+
+            if (!cb.checked && totalSeleccionadas >= MAX_FACTURAS) {
+                cb.disabled = true;
+            } else if (cb.disabled && totalSeleccionadas < MAX_FACTURAS) {
+                cb.disabled = false;
+            }
+        });
+
+        // Actualizar estado del checkbox "Seleccionar todo" (EXCLUYENDO los ya enviados a TC)
+        const checkAll = document.getElementById('checkboxSelectAll');
+        const checkboxesPagina = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc):not(:disabled)');
+        const checkboxesMarcados = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc):checked');
+
+        if (checkboxesPagina.length > 0) {
+            checkAll.checked = checkboxesMarcados.length === checkboxesPagina.length;
+            checkAll.indeterminate = checkboxesMarcados.length > 0 && checkboxesMarcados.length < checkboxesPagina.length;
+        }
+
+        // Deshabilitar "Seleccionar todo" si se alcanza el límite
+        checkAll.disabled = totalSeleccionadas >= MAX_FACTURAS;
+    }
+
+    /**
+     * Seleccionar/Deseleccionar todos los checkboxes de la página actual (con validación de límite global)
+     */
+    function toggleSelectAll(checkbox) {
+        const facturasGuardadas = obtenerFacturasGuardadas();
+        const totalGuardadas = Object.keys(facturasGuardadas).length;
+
+        if (checkbox.checked) {
+            // Seleccionar solo hasta el máximo permitido considerando todas las páginas (EXCLUYENDO los ya enviados a TC)
+            const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc):not(:checked):not(:disabled)');
+            let seleccionados = totalGuardadas;
+
+            for (const cb of checkboxes) {
+                if (seleccionados < MAX_FACTURAS) {
+                    cb.checked = true;
+                    seleccionados++;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // Deseleccionar todos de la página actual (EXCLUYENDO los ya enviados a TC)
+            const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+            });
+        }
+        actualizarContadorFacturas();
+    }
+
+    /**
+     * Limpiar todas las selecciones (de todas las páginas)
+     */
+    function limpiarTodasLasSelecciones(solicitarConfirmacion = true) {
+        if (solicitarConfirmacion && !confirm('¿Desea limpiar todas las facturas seleccionadas de todas las páginas?')) {
+            return;
+        }
+
+        // Limpiar sessionStorage
+        sessionStorage.removeItem(STORAGE_KEY);
+
+        // Desmarcar checkboxes de la página actual (SOLO los que NO están enviados a TC)
+        const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            cb.disabled = false;
+        });
+
+        // Actualizar UI
+        actualizarContadorFacturas();
+    }
+
+    /**
+     * Abrir modal con facturas agrupadas (de todas las páginas)
+     */
+    function agruparFacturas() {
+        const facturasGuardadas = obtenerFacturasGuardadas();
+        const facturasArray = Object.values(facturasGuardadas);
+
+        if (facturasArray.length === 0) {
+            alert('No hay facturas seleccionadas.');
+            return;
+        }
+
+        // Actualizar contador en el modal
+        document.getElementById('totalFacturasModal').textContent = facturasArray.length;
+
+        // Llenar tabla en el modal
+        const tbody = document.getElementById('tablaFacturasAgrupadas');
+        tbody.innerHTML = '';
+
+        facturasArray.forEach((f, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold">${index + 1}</td>
+                <td><span class="badge bg-secondary">${f.tipo}</span></td>
+                <td><span class="badge bg-info">${f.serie}</span></td>
+                <td class="fw-semibold">${f.numero}</td>
+                <td>${f.razonSocial || '-'}</td>
+                <td class="text-muted small">${f.fecha || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('modalFacturasAgrupadas'));
+        modal.show();
+    }
+
+    /**
+     * Confirmar envío a TC
+     */
+    async function confirmarEnvioTC() {
+        const facturasGuardadas = obtenerFacturasGuardadas();
+        const facturasArray = Object.values(facturasGuardadas);
+
+        if (facturasArray.length === 0) {
+            alert('No hay facturas seleccionadas.');
+            return;
+        }
+
+        // Preparar datos para enviar al backend
+        const datosParaEnviar = facturasArray.map(f => ({
+            tipo: f.tipo,
+            serie: f.serie,
+            numero: f.numero,
+            codCliente: f.codCliente
+        }));
+
+        try {
+            // Mostrar indicador de carga
+            const btnConfirmar = event.target;
+            const textoOriginal = btnConfirmar.innerHTML;
+            btnConfirmar.disabled = true;
+            btnConfirmar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Procesando...';
+
+            // Enviar al backend
+            const response = await fetch('@Url.Action("EnviarFacturasTC", "Sgc")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(datosParaEnviar)
+            });
+
+            const result = await response.json();
+
+            // Restaurar botón
+            btnConfirmar.disabled = false;
+            btnConfirmar.innerHTML = textoOriginal;
+
+            // Cerrar modal actual
+            bootstrap.Modal.getInstance(document.getElementById('modalFacturasAgrupadas')).hide();
+
+            if (result.success) {
+                // Mostrar modal de éxito con el número de requerimiento
+                mostrarModalExitoTC(result.numReq, facturasArray.length);
+            } else {
+                // Mostrar mensaje de error
+                alert('Error: ' + result.mensaje);
+            }
+        } catch (error) {
+            console.error('Error al enviar facturas a TC:', error);
+            alert('Ocurrió un error al procesar la solicitud. Por favor, intente nuevamente.');
+
+            // Restaurar botón en caso de error
+            const btnConfirmar = event.target;
+            btnConfirmar.disabled = false;
+            btnConfirmar.innerHTML = '<i class="bi bi-send-fill me-1"></i>Confirmar Envío a TC';
+        }
+    }
+
+    /**
+     * Mostrar modal de éxito con el número de requerimiento
+     */
+    function mostrarModalExitoTC(numReq, totalFacturas) {
+        // Actualizar contenido del modal
+        document.getElementById('numReqGenerado').textContent = numReq;
+        document.getElementById('totalFacturasProcesadas').textContent = totalFacturas;
+
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('modalExitoTC'));
+        modal.show();
+    }
+
+    /**
+     * Cerrar modal de éxito y limpiar todas las selecciones automáticamente
+     */
+    function cerrarModalExitoYLimpiar() {
+        // Cerrar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('modalExitoTC'));
+        if (modal) {
+            modal.hide();
+        }
+
+        // Limpiar todas las selecciones SIN pedir confirmación
+        limpiarTodasLasSelecciones(false);
+
+        // Esperar a que se cierre el modal y luego recargar la página
+        setTimeout(function() {
+            // Recargar la página para traer los datos actualizados de Oracle
+            window.location.reload();
+        }, 300);
+    }
+
+    /**
+     * Inicializar tooltips al cargar la página
+     */
+    window.addEventListener('load', function() {
+        restaurarSeleccionesGuardadas();
+
+        // Inicializar tooltips usando clase específica
+        const filasEnviadas = document.querySelectorAll('tr.fila-enviada-tc');
+        console.log('=== DEBUG TOOLTIPS ===');
+        console.log('Filas enviadas a TC encontradas:', filasEnviadas.length);
+        console.log('Bootstrap disponible:', typeof bootstrap !== 'undefined');
+
+        filasEnviadas.forEach(function(fila, index) {
+            // Leer atributos data directamente (SIN usar el atributo title)
+            const numReqAttr = fila.getAttribute('data-num-req');
+            const numCerAttr = fila.getAttribute('data-num-cer');
+
+            console.log(`Fila ${index + 1} - NUM_REQ:`, numReqAttr, '- NUM_CER:', numCerAttr);
+
+            if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+                try {
+                    // Construir el contenido del tooltip desde cero usando los atributos
+                    let contenidoTooltip = '<div style="text-align: left;">';
+
+                    // Agregar NUM_REQ (sin botón de copiar por ahora)
+                    if (numReqAttr && numReqAttr !== 'null' && numReqAttr !== '') {
+                        contenidoTooltip += '<div style="margin-bottom: 8px;">';
+                        contenidoTooltip += '<strong>Número de requerimiento:</strong> ';
+                        contenidoTooltip += numReqAttr;
+                        contenidoTooltip += '</div>';
+                    }
+
+                    // Agregar NUM_CER (si existe, sin botón de copiar por ahora)
+                    if (numCerAttr && numCerAttr !== 'null' && numCerAttr !== '' && numCerAttr !== 'undefined') {
+                        contenidoTooltip += '<div>';
+                        contenidoTooltip += '<strong>Número de Certificado:</strong><br>';
+                        contenidoTooltip += numCerAttr;
+                        contenidoTooltip += '</div>';
+                    }
+
+                    contenidoTooltip += '</div>';
+
+                    console.log(`Tooltip ${index + 1} contenido HTML:`, contenidoTooltip);
+
+                    // Crear tooltip usando la opción 'title' con el HTML construido
+                    new bootstrap.Tooltip(fila, {
+                        trigger: 'hover',
+                        placement: 'top',
+                        container: 'body',
+                        html: true,
+                        title: contenidoTooltip,
+                        sanitize: false
+                    });
+                    console.log(`✅ Tooltip ${index + 1} inicializado correctamente`);
+                } catch (error) {
+                    console.error(`❌ Error al crear tooltip ${index + 1}:`, error);
+                }
+            } else {
+                console.warn(`⚠️ Fila ${index + 1} - Bootstrap no disponible`);
+            }
+        });
+
+        if (filasEnviadas.length === 0) {
+            console.log('ℹ️ No hay filas enviadas a TC en esta página');
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FUNCIÓN PARA COPIAR CÓDIGO AL PORTAPAPELES
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Copiar código al portapapeles y mostrar feedback visual
+     */
+    function copiarCodigo(codigo, boton) {
+        navigator.clipboard.writeText(codigo).then(function() {
+            // Cambiar icono y estilo temporalmente
+            const iconoOriginal = boton.innerHTML;
+            boton.innerHTML = '<i class="bi bi-check-lg"></i>';
+            boton.classList.add('copiado');
+
+            // Restaurar después de 1.5 segundos
+            setTimeout(function() {
+                boton.innerHTML = iconoOriginal;
+                boton.classList.remove('copiado');
+            }, 1500);
+        }).catch(function(err) {
+            console.error('Error al copiar:', err);
+            alert('No se pudo copiar el código');
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // GESTIÓN DE DESCARGA DE PDF (código existente)
+    // ═══════════════════════════════════════════════════════════════════════
+
     async function descargarPdf(event, anchor) {
         event.preventDefault();
         try {

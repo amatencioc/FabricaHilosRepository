@@ -22,6 +22,7 @@ namespace FabricaHilos.Services.Sgc
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
         Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10);
+        Task<int> GuardarRequerimientoCertificadoAsync(List<FacturaTcDto> facturas);
     }
 
     public class SgcService : ISgcService
@@ -1227,7 +1228,9 @@ namespace FabricaHilos.Services.Sgc
                        ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
                        ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
                        ""GUIA"", ""OBS"",
-                       ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE""
+                       ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE"",
+                       ""COD_CLIENTE"",
+                       ""ENVIADO_A_TC"", ""NUM_REQ_TC"", ""NUM_CER""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
@@ -1246,7 +1249,11 @@ namespace FabricaHilos.Services.Sgc
                            Q.""FACTURA_SERIE"",
                            Q.""GUIA_COD_ALM"",
                            Q.""GUIA_TP_TRANSAC"",
-                           Q.""GUIA_SERIE""
+                           Q.""GUIA_SERIE"",
+                           Q.""COD_CLIENTE"",
+                           Q.""ENVIADO_A_TC"",
+                           Q.""NUM_REQ_TC"",
+                           Q.""NUM_CER""
                     FROM (
                         SELECT
                             F.NOMBRE                                                AS ""RAZON SOCIAL"",
@@ -1264,7 +1271,11 @@ namespace FabricaHilos.Services.Sgc
                             TRIM(F.SERIE)                                           AS ""FACTURA_SERIE"",
                             MAX(G.COD_ALM)                                          AS ""GUIA_COD_ALM"",
                             MAX(G.TP_TRANSAC)                                       AS ""GUIA_TP_TRANSAC"",
-                            MAX(G.SERIE)                                            AS ""GUIA_SERIE""
+                            MAX(G.SERIE)                                            AS ""GUIA_SERIE"",
+                            F.COD_CLIENTE                                           AS ""COD_CLIENTE"",
+                            CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
+                            MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
+                            MAX(RC.NUM_CER)                                         AS ""NUM_CER""
                         FROM SIG.DOCUVENT F
                         INNER JOIN SIG.ITEMDOCU ID
                                 ON ID.TIPODOC       = F.TIPODOC
@@ -1287,13 +1298,20 @@ namespace FabricaHilos.Services.Sgc
                                AND I.COD_ART = ID.COD_ART
                         LEFT  JOIN SIG.PACKING_G PK
                                 ON PK.NUM_PED = P.NUM_PED
+                        LEFT  JOIN SIG.REQ_CERT_D RD
+                                ON RD.TIPODOC = F.TIPODOC
+                               AND TRIM(RD.SERIE) = TRIM(F.SERIE)
+                               AND RD.NUMERO = TO_NUMBER(TRIM(F.NUMERO))
+                        LEFT  JOIN SIG.REQ_CERT RC
+                                ON RC.NUM_REQ = RD.NUM_REQ
                         WHERE 1=1{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}{certFilter}
                         GROUP BY
                             F.TIPODOC,
                             F.SERIE,
                             F.NUMERO,
                             F.NOMBRE,
-                            F.FECHA
+                            F.FECHA,
+                            F.COD_CLIENTE
                     ) Q
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -1353,7 +1371,11 @@ namespace FabricaHilos.Services.Sgc
                         FacturaSerie  = GetStr(reader, "FACTURA_SERIE"),
                         GuiaCodAlm    = GetStr(reader, "GUIA_COD_ALM"),
                         GuiaTpTransac = GetStr(reader, "GUIA_TP_TRANSAC"),
-                        GuiaSerie     = GetNullInt(reader, "GUIA_SERIE")
+                        GuiaSerie     = GetNullInt(reader, "GUIA_SERIE"),
+                        CodCliente    = GetStr(reader, "COD_CLIENTE"),
+                        EnviadoATC    = GetInt(reader, "ENVIADO_A_TC") == 1,
+                        NumReqTC      = GetNullInt(reader, "NUM_REQ_TC"),
+                        NumCer        = GetStr(reader, "NUM_CER")
                     });
                 }
             }
@@ -1364,6 +1386,103 @@ namespace FabricaHilos.Services.Sgc
             }
 
             return (result, totalCount);
+        }
+
+        public async Task<int> GuardarRequerimientoCertificadoAsync(List<FacturaTcDto> facturas)
+        {
+            if (facturas == null || !facturas.Any())
+                throw new ArgumentException("La lista de facturas no puede estar vacía.");
+
+            // Obtener el usuario logueado
+            string? adUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
+            if (string.IsNullOrEmpty(adUser))
+            {
+                _logger.LogWarning("No se pudo obtener el usuario logueado para registrar en REQ_CER");
+                adUser = "SISTEMA"; // Usuario por defecto si no hay sesión
+            }
+
+            string connStr = GetOracleConnectionString();
+            int numReq = 0;
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var transaction = conn.BeginTransaction();
+
+                try
+                {
+                    // 1. Obtener el siguiente número de requerimiento usando la secuencia
+                    string sqlNumReq = "SELECT SIG.SEQ_REQ_CERT.NEXTVAL FROM DUAL";
+
+                    using (var cmdNumReq = new OracleCommand(sqlNumReq, conn))
+                    {
+                        cmdNumReq.Transaction = transaction;
+                        var result = await cmdNumReq.ExecuteScalarAsync();
+                        numReq = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
+                    }
+
+                    // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE de la lista)
+                    string codCliente = facturas.First().CodCliente;
+                    string sqlReqCer = @"
+                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, A_ADUSER, A_ADFECHA)
+                        VALUES (:numReq, SYSDATE, :codCliente, :adUser, SYSDATE)";
+
+                    using (var cmdReqCer = new OracleCommand(sqlReqCer, conn))
+                    {
+                        cmdReqCer.Transaction = transaction;
+                        cmdReqCer.BindByName = true;
+                        cmdReqCer.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
+                        cmdReqCer.Parameters.Add(new OracleParameter(":codCliente", OracleDbType.Varchar2, codCliente, ParameterDirection.Input));
+                        cmdReqCer.Parameters.Add(new OracleParameter(":adUser", OracleDbType.Varchar2, adUser, ParameterDirection.Input));
+                        await cmdReqCer.ExecuteNonQueryAsync();
+                    }
+
+                    // 3. Insertar en REQ_CER_D (todas las facturas)
+                    string sqlReqCerD = @"
+                        INSERT INTO SIG.REQ_CERT_D (NUM_REQ, TIPODOC, SERIE, NUMERO, A_ADUSER, A_ADFECHA)
+                        VALUES (:numReq, :tipodoc, :serie, :numero, :adUser, SYSDATE)";
+
+                    foreach (var factura in facturas)
+                    {
+                        using var cmdReqCerD = new OracleCommand(sqlReqCerD, conn);
+                        cmdReqCerD.Transaction = transaction;
+                        cmdReqCerD.BindByName = true;
+                        cmdReqCerD.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
+                        cmdReqCerD.Parameters.Add(new OracleParameter(":tipodoc", OracleDbType.Varchar2, factura.Tipo, ParameterDirection.Input));
+                        cmdReqCerD.Parameters.Add(new OracleParameter(":serie", OracleDbType.Varchar2, factura.Serie, ParameterDirection.Input));
+                        cmdReqCerD.Parameters.Add(new OracleParameter(":adUser", OracleDbType.Varchar2, adUser, ParameterDirection.Input));
+
+                        // Convertir número a INT si es posible, sino dejarlo como string
+                        if (int.TryParse(factura.Numero, out int numeroInt))
+                        {
+                            cmdReqCerD.Parameters.Add(new OracleParameter(":numero", OracleDbType.Int32, numeroInt, ParameterDirection.Input));
+                        }
+                        else
+                        {
+                            throw new ArgumentException($"El número de factura '{factura.Numero}' no es válido.");
+                        }
+
+                        await cmdReqCerD.ExecuteNonQueryAsync();
+                    }
+
+                    // Commit de la transacción
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation("Requerimiento de certificado NUM_REQ={NumReq} guardado exitosamente con {Count} facturas por usuario {Usuario}", numReq, facturas.Count, adUser);
+                    return numReq;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al guardar requerimiento de certificado con {Count} facturas", facturas?.Count ?? 0);
+                throw;
+            }
         }
     }
 }

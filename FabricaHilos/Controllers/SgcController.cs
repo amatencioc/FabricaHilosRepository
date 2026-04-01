@@ -660,6 +660,38 @@ namespace FabricaHilos.Controllers
             return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> EnviarFacturasTC([FromBody] List<FacturaTcDto> facturas)
+        {
+            try
+            {
+                if (facturas == null || !facturas.Any())
+                {
+                    return Json(new { success = false, mensaje = "No se recibieron facturas para procesar." });
+                }
+
+                if (facturas.Count > 10)
+                {
+                    return Json(new { success = false, mensaje = "No se pueden enviar más de 10 facturas a la vez." });
+                }
+
+                // Guardar en REQ_CER y REQ_CER_D
+                int numReq = await _sgcService.GuardarRequerimientoCertificadoAsync(facturas);
+
+                return Json(new
+                {
+                    success = true,
+                    numReq = numReq,
+                    mensaje = $"Requerimiento de certificado generado exitosamente.\n\nNúmero de Requerimiento: {numReq}\nTotal de facturas: {facturas.Count}"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar facturas a TC");
+                return Json(new { success = false, mensaje = $"Error al procesar el envío: {ex.Message}" });
+            }
+        }
+
         private void EnsureNetworkShare(string filePath)
         {
             var username = _configuration["NetworkShare:Username"];

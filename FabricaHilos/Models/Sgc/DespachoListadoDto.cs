@@ -21,5 +21,13 @@ namespace FabricaHilos.Models.Sgc
         public string? GuiaCodAlm { get; set; }
         public string? GuiaTpTransac { get; set; }
         public int? GuiaSerie { get; set; }
+
+        // Código de cliente para envío a TC
+        public string? CodCliente { get; set; }
+
+        // Información de factura ya enviada a TC
+        public bool EnviadoATC { get; set; }
+        public int? NumReqTC { get; set; }
+        public string? NumCer { get; set; }
     }
 }
