@@ -272,7 +272,7 @@
                     }
 
                     // Validar formato de correo
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    const emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
                     if (!emailRegex.test(correo)) {
                         Swal.showValidationMessage('Por favor ingrese un correo válido');
                         return false;

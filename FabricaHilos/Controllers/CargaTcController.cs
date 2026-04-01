@@ -354,7 +354,7 @@ namespace FabricaHilos.Controllers
                 // Enviar la notificación
                 var resultado = await _emailNotificacionService.EnviarAsync(payload);
 
-                if (resultado.Exitoso)
+                if (resultado)
                 {
                     _logger.LogInformation("Notificación enviada correctamente a {Correo} para NUM_REQ {NumReq}", 
                         modelo.CorreoDestinatario, modelo.NumReq);
@@ -367,13 +367,13 @@ namespace FabricaHilos.Controllers
                 }
                 else
                 {
-                    _logger.LogWarning("Error al enviar notificación a {Correo} para NUM_REQ {NumReq}: {Error}", 
-                        modelo.CorreoDestinatario, modelo.NumReq, resultado.Error);
+                    _logger.LogWarning("Error al enviar notificación a {Correo} para NUM_REQ {NumReq}", 
+                        modelo.CorreoDestinatario, modelo.NumReq);
 
                     return Json(new 
                     { 
                         tipo = "Error", 
-                        mensaje = $"Error al enviar notificación: {resultado.Error}"
+                        mensaje = "Error al enviar notificación. Por favor, revise la configuración del servidor SMTP."
                     });
                 }
             }
