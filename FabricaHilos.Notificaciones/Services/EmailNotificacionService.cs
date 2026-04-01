@@ -54,17 +54,21 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
             await smtp.SendAsync(mensaje, ct);
             await smtp.DisconnectAsync(quit: true, ct);
 
+            // Sanitize email for logging to prevent log forging
+            var sanitizedEmail = payload.CorreoDestinatario.Replace("\r", "").Replace("\n", "");
             _logger.LogInformation(
                 "[Notificaciones] Correo {Tipo} enviado correctamente a {Destinatario}",
-                payload.Tipo, payload.CorreoDestinatario);
+                payload.Tipo, sanitizedEmail);
 
             return true;
         }
         catch (Exception ex)
         {
+            // Sanitize email for logging to prevent log forging
+            var sanitizedEmail = payload.CorreoDestinatario.Replace("\r", "").Replace("\n", "");
             _logger.LogError(ex,
                 "[Notificaciones] Error al enviar correo {Tipo} a {Destinatario}",
-                payload.Tipo, payload.CorreoDestinatario);
+                payload.Tipo, sanitizedEmail);
             return false;
         }
     }

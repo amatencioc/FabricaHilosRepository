@@ -300,6 +300,7 @@ namespace FabricaHilos.Controllers
         // ========== ENVIAR A FACTURACIÓN ==========
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> EnviarAFacturacion([FromBody] EnviarAFacturacionDto modelo)
         {
             try
@@ -356,8 +357,10 @@ namespace FabricaHilos.Controllers
 
                 if (resultado)
                 {
+                    // Sanitize email for logging to prevent log forging
+                    var sanitizedEmail = modelo.CorreoDestinatario.Replace("\r", "").Replace("\n", "");
                     _logger.LogInformation("Notificación enviada correctamente a {Correo} para NUM_REQ {NumReq}", 
-                        modelo.CorreoDestinatario, modelo.NumReq);
+                        sanitizedEmail, modelo.NumReq);
 
                     return Json(new 
                     { 
@@ -367,8 +370,10 @@ namespace FabricaHilos.Controllers
                 }
                 else
                 {
+                    // Sanitize email for logging to prevent log forging
+                    var sanitizedEmail = modelo.CorreoDestinatario.Replace("\r", "").Replace("\n", "");
                     _logger.LogWarning("Error al enviar notificación a {Correo} para NUM_REQ {NumReq}", 
-                        modelo.CorreoDestinatario, modelo.NumReq);
+                        sanitizedEmail, modelo.NumReq);
 
                     return Json(new 
                     { 
