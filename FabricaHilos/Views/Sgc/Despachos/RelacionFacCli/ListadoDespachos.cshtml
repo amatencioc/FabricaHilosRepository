@@ -541,6 +541,29 @@
      * Handler para cambios en los checkboxes de filtro GOTS/OCS
      */
     function handleFiltroChange() {
+        const gotsChecked = document.getElementById('checkGots')?.checked || false;
+        const ocsChecked = document.getElementById('checkOcs')?.checked || false;
+
+        // Si ambos están desmarcados, limpiar todas las selecciones de la página actual
+        if (!gotsChecked && !ocsChecked) {
+            // Desmarcar todos los checkboxes de facturas (SOLO los que NO están enviados a TC)
+            const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+            });
+
+            // Desmarcar el checkbox "Seleccionar todo"
+            const checkAll = document.getElementById('checkboxSelectAll');
+            if (checkAll) {
+                checkAll.checked = false;
+                checkAll.indeterminate = false;
+            }
+
+            // Actualizar el contador y el estado de los checkboxes
+            actualizarContadorFacturas();
+        }
+
+        // Actualizar estado habilitado/deshabilitado de checkboxes
         initCheckboxState();
     }
 

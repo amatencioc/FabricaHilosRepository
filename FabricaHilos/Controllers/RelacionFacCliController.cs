@@ -71,8 +71,13 @@ namespace FabricaHilos.Controllers
             }
 
             const int pageSize = 10;
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, page, pageSize);
-            
+
+            // Decidir qué método llamar según si hay filtro de certificados
+            var usarFiltroCertificado = (gots.HasValue && gots.Value) || (ocs.HasValue && ocs.Value);
+            var resultado = usarFiltroCertificado
+                ? await _sgcService.ObtenerListadoDespachosCertificadosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, page, pageSize)
+                : await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, page, pageSize);
+
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(ListadoDespachos), new { t, page = 1 });
 
@@ -98,8 +103,11 @@ namespace FabricaHilos.Controllers
             string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, 
             bool? gots = null, bool? ocs = null)
         {
-            // Exportar todos los registros sin paginación
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, 1, int.MaxValue);
+            // Decidir qué método llamar según si hay filtro de certificados
+            var usarFiltroCertificado = (gots.HasValue && gots.Value) || (ocs.HasValue && ocs.Value);
+            var resultado = usarFiltroCertificado
+                ? await _sgcService.ObtenerListadoDespachosCertificadosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, 1, int.MaxValue)
+                : await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, 1, int.MaxValue);
             var items = resultado.Items;
 
             using var workbook  = new ClosedXML.Excel.XLWorkbook();
