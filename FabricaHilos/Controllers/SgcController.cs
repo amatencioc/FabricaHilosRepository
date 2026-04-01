@@ -18,10 +18,11 @@ namespace FabricaHilos.Controllers
             private readonly ISalidaInternaPdfService _salidaInternaPdf;
             private readonly IWebHostEnvironment _env;
             private readonly INavTokenService _navToken;
+            private readonly IMenuService _menuService;
 
             public SgcController(ISgcService sgcService, ILogger<SgcController> logger,
                 IConfiguration configuration, ISalidaInternaPdfService salidaInternaPdf,
-                IWebHostEnvironment env, INavTokenService navToken)
+                IWebHostEnvironment env, INavTokenService navToken, IMenuService menuService)
             {
                 _sgcService       = sgcService;
                 _logger           = logger;
@@ -29,6 +30,7 @@ namespace FabricaHilos.Controllers
                 _env              = env;
                 _configuration    = configuration;
                 _navToken         = navToken;
+                _menuService      = menuService;
             }
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -47,7 +49,72 @@ namespace FabricaHilos.Controllers
 
         public IActionResult Index()
         {
-            return View();
+            var menus = _menuService.GetMenusActuales();
+            var modulos = new List<SgcModuloDto>();
+
+            // Dashboard SGC
+            if (menus.SgcDashboard)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Dashboard SGC",
+                    Descripcion = "Panel de control y métricas del módulo SGC.",
+                    Icono = "bi-speedometer2",
+                    ColorClase = "text-info",
+                    Controller = "Sgc",
+                    Action = "DashboardSgc"
+                });
+            }
+
+            // Pedidos
+            if (menus.SgcPedidos)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Pedidos",
+                    Descripcion = "Consulta de pedidos, guías, facturas y sus detalles.",
+                    Icono = "bi-cart-check",
+                    ColorClase = "text-primary",
+                    Controller = "Sgc",
+                    Action = "Pedidos"
+                });
+            }
+
+            // Despachos (con submenús)
+            if (menus.SgcDespachos)
+            {
+                var moduloDespachos = new SgcModuloDto
+                {
+                    Nombre = "Despachos",
+                    Descripcion = "Gestión de despachos, relación factura-cliente y certificados TC.",
+                    Icono = "bi-truck",
+                    ColorClase = "text-success"
+                };
+
+                // SubMenú: Relación Factura-Cliente
+                moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre = "Relación Factura-Cliente",
+                    Descripcion = "Listado de despachos con filtros por guía y pedido.",
+                    Icono = "bi-file-earmark-text",
+                    Controller = "RelacionFacCli",
+                    Action = "ListadoDespachos"
+                });
+
+                // SubMenú: Cargar TC
+                moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre = "Cargar TC",
+                    Descripcion = "Gestión de requerimientos de certificados.",
+                    Icono = "bi-file-earmark-arrow-up",
+                    Controller = "CargaTc",
+                    Action = "Index"
+                });
+
+                modulos.Add(moduloDespachos);
+            }
+
+            return View(modulos);
         }
 
         // ========== PEDIDOS (ESTADO <> '9') ==========
@@ -545,7 +612,10 @@ namespace FabricaHilos.Controllers
         // ── Helpers ──────────────────────────────────────────────────────────────
 
         // ========== DESPACHOS: LISTADO ==========
+        // NOTA: Estos métodos fueron movidos a RelacionFacCliController
+        // Los dejamos comentados para referencia
 
+        /*
         [HttpGet]
         public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool? gots = null, bool? ocs = null, int page = 1)
         {
@@ -609,7 +679,9 @@ namespace FabricaHilos.Controllers
             ViewBag.TotalPages  = resultado.TotalCount == 0 ? 1 : (int)Math.Ceiling((double)resultado.TotalCount / pageSize);
             return View("Despachos/ListadoDespachos", resultado.Items);
         }
+        */
 
+        /*
         [HttpGet]
         public async Task<IActionResult> ExportarDespachosExcel(string? guia = null, string? pedido = null, string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool? gots = null, bool? ocs = null)
         {
@@ -659,7 +731,9 @@ namespace FabricaHilos.Controllers
             var fileName = $"ListadoDespachos_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
             return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
+        */
 
+        /*
         [HttpPost]
         public async Task<IActionResult> EnviarFacturasTC([FromBody] List<FacturaTcDto> facturas)
         {
@@ -691,6 +765,7 @@ namespace FabricaHilos.Controllers
                 return Json(new { success = false, mensaje = $"Error al procesar el envío: {ex.Message}" });
             }
         }
+        */
 
         private void EnsureNetworkShare(string filePath)
         {

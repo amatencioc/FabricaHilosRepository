@@ -1422,11 +1422,12 @@ namespace FabricaHilos.Services.Sgc
                         numReq = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
                     }
 
-                    // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE de la lista)
+                    // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE y COD_ART de la lista)
                     string codCliente = facturas.First().CodCliente;
+                    string codArt = facturas.First().CodArt;
                     string sqlReqCer = @"
-                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, A_ADUSER, A_ADFECHA)
-                        VALUES (:numReq, SYSDATE, :codCliente, :adUser, SYSDATE)";
+                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, ESTADO, A_ADUSER, A_ADFECHA)
+                        VALUES (:numReq, SYSDATE, :codCliente, :codArt, 1, :adUser, SYSDATE)";
 
                     using (var cmdReqCer = new OracleCommand(sqlReqCer, conn))
                     {
@@ -1434,6 +1435,7 @@ namespace FabricaHilos.Services.Sgc
                         cmdReqCer.BindByName = true;
                         cmdReqCer.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codCliente", OracleDbType.Varchar2, codCliente, ParameterDirection.Input));
+                        cmdReqCer.Parameters.Add(new OracleParameter(":codArt", OracleDbType.Varchar2, codArt, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":adUser", OracleDbType.Varchar2, adUser, ParameterDirection.Input));
                         await cmdReqCer.ExecuteNonQueryAsync();
                     }

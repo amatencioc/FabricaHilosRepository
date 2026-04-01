@@ -1,5 +1,40 @@
+@model List<FabricaHilos.Models.Sgc.SgcModuloDto>
+
 @{
     ViewData["Title"] = "SGC";
+}
+
+@section Styles {
+<style>
+    .card-dashboard {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .card-dashboard:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .submodulo-card {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 8px;
+        transition: all 0.2s;
+    }
+
+    .submodulo-card:hover {
+        background-color: #e9ecef;
+        transform: translateX(5px);
+    }
+</style>
 }
 
 @section Breadcrumb {
@@ -8,29 +43,67 @@
 
 <h4 class="section-title"><i class="bi bi-file-earmark-text me-2"></i>Módulo SGC – Seguimiento Comercial</h4>
 
-<div class="row g-4">
-    <div class="col-md-6">
-        <div class="card card-dashboard h-100">
-            <div class="card-body text-center p-5">
-                <i class="bi bi-cart-check display-4 text-primary mb-3"></i>
-                <h5 class="fw-bold">Pedidos</h5>
-                <p class="text-muted">Consulta de pedidos, guías, facturas y sus detalles.</p>
-                <a asp-controller="Sgc" asp-action="Pedidos" class="btn btn-primary">
-                    <i class="bi bi-arrow-right me-1"></i>Ir a Pedidos
-                </a>
+@if (Model.Any())
+{
+    <div class="row g-4">
+        @foreach (var modulo in Model)
+        {
+            <div class="col-md-6">
+                <div class="card card-dashboard h-100">
+                    <div class="card-body text-center p-5">
+                        <i class="bi @modulo.Icono display-4 @modulo.ColorClase mb-3"></i>
+                        <h5 class="fw-bold">@modulo.Nombre</h5>
+                        <p class="text-muted">@modulo.Descripcion</p>
+
+                        @if (modulo.TieneSubModulos)
+                        {
+                            <!-- Módulo con Submenús -->
+                            <div class="d-grid gap-2 mt-3">
+                                @foreach (var submodulo in modulo.SubModulos)
+                                {
+                                    <a asp-controller="@submodulo.Controller" asp-action="@submodulo.Action" 
+                                       class="btn btn-outline-secondary btn-sm text-start">
+                                        <i class="bi @submodulo.Icono me-2"></i>
+                                        <strong>@submodulo.Nombre</strong>
+                                        <br />
+                                        <small class="text-muted">@submodulo.Descripcion</small>
+                                    </a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Módulo sin Submenús -->
+                            <a asp-controller="@modulo.Controller" asp-action="@modulo.Action" 
+                               class="btn btn-@GetButtonColor(modulo.ColorClase)">
+                                <i class="bi bi-arrow-right me-1"></i>Ir a @modulo.Nombre
+                            </a>
+                        }
+                    </div>
+                </div>
             </div>
-        </div>
+        }
     </div>
-    <div class="col-md-6">
-        <div class="card card-dashboard h-100">
-            <div class="card-body text-center p-5">
-                <i class="bi bi-truck display-4 text-success mb-3"></i>
-                <h5 class="fw-bold">Despachos</h5>
-                <p class="text-muted">Reporte de listado de despachos con filtros por guía y pedido.</p>
-                <a asp-controller="Sgc" asp-action="ListadoDespachos" class="btn btn-success">
-                    <i class="bi bi-arrow-right me-1"></i>Listado de Despachos
-                </a>
-            </div>
-        </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No hay módulos disponibles para mostrar. Contacte al administrador.
     </div>
-</div>
+}
+
+@functions {
+    string GetButtonColor(string colorClase)
+    {
+        return colorClase switch
+        {
+            "text-primary" => "primary",
+            "text-success" => "success",
+            "text-info" => "info",
+            "text-warning" => "warning",
+            "text-danger" => "danger",
+            _ => "secondary"
+        };
+    }
+}

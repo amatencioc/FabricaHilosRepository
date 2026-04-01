@@ -6,5 +6,6 @@ namespace FabricaHilos.Models.Sgc
         public string Serie { get; set; } = string.Empty;
         public string Numero { get; set; } = string.Empty;
         public string CodCliente { get; set; } = string.Empty;
+        public string CodArt { get; set; } = string.Empty;
     }
 }

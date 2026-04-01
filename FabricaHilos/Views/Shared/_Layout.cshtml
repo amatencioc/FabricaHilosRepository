@@ -134,9 +134,24 @@
                         @if (menus.SgcDespachos)
                         {
                         <li>
-                            <a asp-controller="Sgc" asp-action="ListadoDespachos" class="sidebar-link sidebar-sublink @(ctrl == "Sgc" && act == "ListadoDespachos" ? "active" : "")">
+                            <a class="sidebar-link sidebar-sublink @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")" 
+                               data-bs-toggle="collapse" href="#submenuDespachos" role="button" 
+                               aria-expanded="@(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "true" : "false")" 
+                               aria-controls="submenuDespachos">
                                 <i class="bi bi-truck"></i> Despachos
                             </a>
+                            <ul class="collapse @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "show" : "") list-unstyled ps-3" id="submenuDespachos">
+                                <li>
+                                    <a asp-controller="RelacionFacCli" asp-action="ListadoDespachos" class="sidebar-link sidebar-sublink @(ctrl == "RelacionFacCli" ? "active" : "")">
+                                        <i class="bi bi-file-earmark-text"></i> Relación Factura-Cliente
+                                    </a>
+                                </li>
+                                <li>
+                                    <a asp-controller="CargaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTc" ? "active" : "")">
+                                        <i class="bi bi-file-earmark-arrow-up"></i> Cargar TC
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                         }
                     </ul>

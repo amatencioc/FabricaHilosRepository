@@ -79,6 +79,7 @@ builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<IDashboardSgcService, DashboardSgcService>();
+builder.Services.AddScoped<ICargaTcService, CargaTcService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();

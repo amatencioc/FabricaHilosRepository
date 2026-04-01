@@ -1,7 +1,7 @@
 @model IEnumerable<FabricaHilos.Models.Sgc.DespachoListadoDto>
 
 @{
-    ViewData["Title"] = "Listado de Despachos";
+    ViewData["Title"] = "Relación Factura-Cliente";
     string? guia        = ViewBag.Guia        as string;
     string? pedido      = ViewBag.Pedido      as string;
     string? factura     = ViewBag.Factura     as string;
@@ -20,7 +20,7 @@
     decimal sumCantFacturada = Model.Sum(x => x.CantFacturada ?? 0m);
     decimal sumPrecio        = Model.Sum(x => x.Precio        ?? 0m);
 
-    string excelUrl = Url.Action("ExportarDespachosExcel", "Sgc", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs }) ?? "#";
+    string excelUrl = Url.Action("ExportarDespachosExcel", "RelacionFacCli", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs }) ?? "#";
 }
 
 @section Styles {
@@ -92,11 +92,12 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item active">Listado de Despachos</li>
+    <li class="breadcrumb-item">Despachos</li>
+    <li class="breadcrumb-item active">Relación Factura-Cliente</li>
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="section-title mb-0"><i class="bi bi-truck me-2"></i>Listado de Despachos</h4>
+    <h4 class="section-title mb-0"><i class="bi bi-truck me-2"></i>Relación Factura-Cliente</h4>
     <div class="d-flex gap-2">
         <button id="btnAgruparFacturas" class="btn btn-primary btn-sm" onclick="agruparFacturas()" disabled>
             <i class="bi bi-collection me-1"></i>Agrupar Facturas para Enviar a TC (<span id="contadorFacturas">0</span>/10)
@@ -155,13 +156,13 @@
             </div>
             <div class="col-auto">
                 <div class="form-check mt-4">
-                    <input class="form-check-input" type="checkbox" name="gots" value="true" id="checkGots" @(gots ? "checked" : "") />
+                    <input class="form-check-input" type="checkbox" name="gots" value="true" id="checkGots" @(gots ? "checked" : "") onchange="handleFiltroChange()" />
                     <label class="form-check-label" for="checkGots">GOTS</label>
                 </div>
             </div>
             <div class="col-auto">
                 <div class="form-check mt-4">
-                    <input class="form-check-input" type="checkbox" name="ocs" value="true" id="checkOcs" @(ocs ? "checked" : "") />
+                    <input class="form-check-input" type="checkbox" name="ocs" value="true" id="checkOcs" @(ocs ? "checked" : "") onchange="handleFiltroChange()" />
                     <label class="form-check-label" for="checkOcs">OCS</label>
                 </div>
             </div>
@@ -193,7 +194,7 @@
                         </th>
                         <th class="text-center">#</th>
                         <th>RAZON SOCIAL</th>
-                        <th class="text-center">OC</th>
+                        <th>OC</th>
                         <th class="text-center">PEDIDO</th>
                         <th class="text-center">FACTURA</th>
                         <th class="text-center">FECHA.DOC</th>
@@ -234,13 +235,13 @@
                                            data-razon-social="@item.RazonSocial"
                                            data-fecha="@(item.FechaDoc.HasValue ? item.FechaDoc.Value.ToString("dd/MM/yyyy") : "")"
                                            data-cod-cliente="@item.CodCliente"
-                                           @(item.EnviadoATC ? "checked disabled" : "")
+                                           @(item.EnviadoATC ? "checked disabled" : (!gots && !ocs ? "disabled" : ""))
                                            onchange="actualizarContadorFacturas()" />
                                 }
                             </td>
                             <td class="text-center">@item.Correlativo</td>
                             <td>@(item.RazonSocial ?? "-")</td>
-                            <td class="text-center">@(item.Oc ?? "-")</td>
+                            <td>@(item.Oc ?? "-")</td>
                             <td class="text-center">@(item.Pedido ?? "-")</td>
                             <td class="text-start" style="background-color: #e3f2fd;">
                                 @if (!string.IsNullOrEmpty(item.Factura) && !string.IsNullOrEmpty(item.FacturaTipo) && !string.IsNullOrEmpty(item.FacturaSerie))
@@ -516,6 +517,34 @@
     }
 
     /**
+     * Controlar estado habilitado/deshabilitado de checkboxes de facturas
+     */
+    function initCheckboxState() {
+        const gotsChecked = document.getElementById('checkGots')?.checked || false;
+        const ocsChecked = document.getElementById('checkOcs')?.checked || false;
+        const shouldEnable = gotsChecked || ocsChecked;
+
+        // Habilitar/deshabilitar checkboxes de facturas (excepto los ya enviados a TC)
+        const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
+        checkboxes.forEach(cb => {
+            cb.disabled = !shouldEnable;
+        });
+
+        // También habilitar/deshabilitar el checkbox "Seleccionar todo"
+        const checkAll = document.getElementById('checkboxSelectAll');
+        if (checkAll) {
+            checkAll.disabled = !shouldEnable;
+        }
+    }
+
+    /**
+     * Handler para cambios en los checkboxes de filtro GOTS/OCS
+     */
+    function handleFiltroChange() {
+        initCheckboxState();
+    }
+
+    /**
      * Restaurar checkboxes marcados desde sessionStorage al cargar la página
      */
     function restaurarSeleccionesGuardadas() {
@@ -555,6 +584,23 @@
             const llave = generarLlaveFactura(tipo, serie, numero);
 
             if (cb.checked) {
+                // Determinar COD_ART basado en los checkboxes de filtro GOTS/OCS
+                const gotsChecked = document.getElementById('checkGots')?.checked || false;
+                const ocsChecked = document.getElementById('checkOcs')?.checked || false;
+
+                let codArt = '';
+                if (gotsChecked && !ocsChecked) {
+                    codArt = 'CERTGOTS';
+                } else if (ocsChecked && !gotsChecked) {
+                    codArt = 'CERTOCS';
+                } else if (gotsChecked && ocsChecked) {
+                    // Si ambos están marcados, usar CERTGOTS por defecto (o mostrar alerta)
+                    codArt = 'CERTGOTS';
+                } else {
+                    // Si ninguno está marcado, usar CERTGOTS por defecto
+                    codArt = 'CERTGOTS';
+                }
+
                 // Agregar al storage
                 facturasGuardadas[llave] = {
                     tipo: tipo,
@@ -562,7 +608,8 @@
                     numero: numero,
                     razonSocial: razonSocial,
                     fecha: fecha,
-                    codCliente: codCliente
+                    codCliente: codCliente,
+                    codArt: codArt
                 };
             } else {
                 // Remover del storage
@@ -586,6 +633,10 @@
         btnLimpiar.style.display = totalSeleccionadas > 0 ? 'inline-block' : 'none';
 
         // Validar límite: deshabilitar checkboxes no marcados si se alcanza el máximo (EXCLUYENDO los ya enviados a TC)
+        const gotsChecked = document.getElementById('checkGots')?.checked || false;
+        const ocsChecked = document.getElementById('checkOcs')?.checked || false;
+        const filtrosActivos = gotsChecked || ocsChecked;
+
         const checkboxes = document.querySelectorAll('.checkbox-factura:not(.checkbox-enviado-tc)');
         checkboxes.forEach(cb => {
             const tipo = cb.getAttribute('data-tipo');
@@ -593,9 +644,12 @@
             const numero = cb.getAttribute('data-numero');
             const llave = generarLlaveFactura(tipo, serie, numero);
 
-            if (!cb.checked && totalSeleccionadas >= MAX_FACTURAS) {
+            // Deshabilitar si no hay filtros activos O si se alcanzó el máximo
+            if (!filtrosActivos) {
                 cb.disabled = true;
-            } else if (cb.disabled && totalSeleccionadas < MAX_FACTURAS) {
+            } else if (!cb.checked && totalSeleccionadas >= MAX_FACTURAS) {
+                cb.disabled = true;
+            } else if (cb.disabled && totalSeleccionadas < MAX_FACTURAS && filtrosActivos) {
                 cb.disabled = false;
             }
         });
@@ -610,8 +664,8 @@
             checkAll.indeterminate = checkboxesMarcados.length > 0 && checkboxesMarcados.length < checkboxesPagina.length;
         }
 
-        // Deshabilitar "Seleccionar todo" si se alcanza el límite
-        checkAll.disabled = totalSeleccionadas >= MAX_FACTURAS;
+        // Deshabilitar "Seleccionar todo" si no hay filtros activos O si se alcanza el límite
+        checkAll.disabled = !filtrosActivos || totalSeleccionadas >= MAX_FACTURAS;
     }
 
     /**
@@ -715,13 +769,36 @@
             return;
         }
 
+        // Validar que al menos uno de los checkboxes GOTS o OCS esté marcado
+        const gotsChecked = document.getElementById('checkGots')?.checked || false;
+        const ocsChecked = document.getElementById('checkOcs')?.checked || false;
+
+        if (!gotsChecked && !ocsChecked) {
+            // Mostrar modal de advertencia
+            mostrarModalPdf(
+                'Advertencia',
+                'No se ha especificado el tipo de certificado.\n\nPor favor, marque al menos uno de los filtros: GOTS o OCS.',
+                'warning'
+            );
+            return;
+        }
+
         // Preparar datos para enviar al backend
         const datosParaEnviar = facturasArray.map(f => ({
             tipo: f.tipo,
             serie: f.serie,
             numero: f.numero,
-            codCliente: f.codCliente
+            codCliente: f.codCliente,
+            codArt: f.codArt
         }));
+
+        // DEBUG: Verificar datos antes de enviar
+        console.log('===== DEBUG ENVÍO A TC =====');
+        console.log('Total facturas:', datosParaEnviar.length);
+        console.log('Datos completos:', JSON.stringify(datosParaEnviar, null, 2));
+        datosParaEnviar.forEach((f, i) => {
+            console.log(`Factura ${i + 1}: TIPO='${f.tipo}' SERIE='${f.serie}' NUMERO='${f.numero}' COD_ART='${f.codArt}'`);
+        });
 
         try {
             // Mostrar indicador de carga
@@ -731,7 +808,7 @@
             btnConfirmar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Procesando...';
 
             // Enviar al backend
-            const response = await fetch('@Url.Action("EnviarFacturasTC", "Sgc")', {
+            const response = await fetch('@Url.Action("EnviarFacturasTC", "RelacionFacCli")', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -748,12 +825,12 @@
             // Cerrar modal actual
             bootstrap.Modal.getInstance(document.getElementById('modalFacturasAgrupadas')).hide();
 
-            if (result.success) {
+            if (result.tipo === 'Exito') {
                 // Mostrar modal de éxito con el número de requerimiento
                 mostrarModalExitoTC(result.numReq, facturasArray.length);
             } else {
-                // Mostrar mensaje de error
-                alert('Error: ' + result.mensaje);
+                // Mostrar mensaje de error o advertencia
+                alert(result.tipo + ': ' + result.mensaje);
             }
         } catch (error) {
             console.error('Error al enviar facturas a TC:', error);
@@ -803,6 +880,9 @@
      * Inicializar tooltips al cargar la página
      */
     window.addEventListener('load', function() {
+        // Inicializar estado de checkboxes según filtros
+        initCheckboxState();
+
         restaurarSeleccionesGuardadas();
 
         // Inicializar tooltips usando clase específica
