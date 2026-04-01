@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
+using FabricaHilos.Notificaciones.Abstractions;
+using FabricaHilos.Notificaciones.Models.Payloads;
 
 namespace FabricaHilos.Controllers
 {
@@ -13,12 +15,21 @@ namespace FabricaHilos.Controllers
         private readonly ICargaTcService _cargaTcService;
         private readonly ILogger<CargaTcController> _logger;
         private readonly INavTokenService _navToken;
+        private readonly IEmailNotificacionService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public CargaTcController(ICargaTcService cargaTcService, ILogger<CargaTcController> logger, INavTokenService navToken)
+        public CargaTcController(
+            ICargaTcService cargaTcService, 
+            ILogger<CargaTcController> logger, 
+            INavTokenService navToken,
+            IEmailNotificacionService emailService,
+            IConfiguration configuration)
         {
             _cargaTcService = cargaTcService;
             _logger = logger;
             _navToken = navToken;
+            _emailService = emailService;
+            _configuration = configuration;
         }
 
         public override void OnActionExecuting(ActionExecutingContext context)
@@ -178,11 +189,11 @@ namespace FabricaHilos.Controllers
 
                 if (actualizado)
                 {
+                    TempData["Success"] = "Certificado y PDF cargados correctamente.";
                     return Json(new
                     {
                         tipo = "Exito",
-                        mensaje = $"PDF guardado correctamente en: {rutaPdf}",
-                        ruta = rutaPdf
+                        redirectUrl = Url.Action("Detalle", new { numReq, t = Request.Query["t"].ToString() })
                     });
                 }
                 else
@@ -286,6 +297,88 @@ namespace FabricaHilos.Controllers
             {
                 _logger.LogError(ex, "Error al descargar PDF para NUM_REQ {NumReq}", numReq);
                 return Json(new { tipo = "Error", mensaje = $"Error al descargar PDF: {ex.Message}" });
+            }
+        }
+
+        // ========== ENVIAR A FACTURACIÓN ==========
+
+        [HttpPost]
+        public async Task<IActionResult> EnviarAFacturacion(int numReq)
+        {
+            try
+            {
+                var requerimiento = await _cargaTcService.ObtenerRequerimientoAsync(numReq);
+                if (requerimiento == null)
+                {
+                    return Json(new { success = false, message = "No se encontró el requerimiento especificado." });
+                }
+
+                if (string.IsNullOrEmpty(requerimiento.NumCer))
+                {
+                    return Json(new { success = false, message = "El requerimiento no tiene certificado asignado." });
+                }
+
+                if (string.IsNullOrEmpty(requerimiento.CodArt))
+                {
+                    return Json(new { success = false, message = "El requerimiento no tiene código de artículo." });
+                }
+
+                if (string.IsNullOrEmpty(requerimiento.CodVende))
+                {
+                    return Json(new { success = false, message = "El requerimiento no tiene código de vendedor." });
+                }
+
+                _logger.LogInformation("Enviando certificado {NumCer} del requerimiento {NumReq} a Facturación", 
+                    requerimiento.NumCer, numReq);
+
+                var (nroLista, importe) = await _cargaTcService.ObtenerDatosListaPreciosAsync(requerimiento.CodArt);
+                var (nombreVendedor, emailVendedor) = await _cargaTcService.ObtenerDatosVendedorAsync(requerimiento.CodVende);
+
+                var detalles = await _cargaTcService.ObtenerDetalleRequerimientoAsync(numReq);
+                var totalFacturas = detalles.Count;
+
+                var tipoCertificado = requerimiento.CodArt.Replace("CERT", "");
+
+                // Convertir código de moneda a texto
+                string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
+
+                var destinatarioFacturacion = _configuration["CorreoFacturacion"] ?? "iramirez@colonial.com.pe";
+                var correoVendedorConfig = _configuration["CorreoVendedor"] ?? "vmatencio@colonial.com.pe";
+
+                var payload = new EnvioCertificadoFacturacionPayload
+                {
+                    CorreoDestinatario = destinatarioFacturacion,
+                    NombreDestinatario = "Facturación",
+                    NumRequerimiento = requerimiento.NumReq.ToString(),
+                    FechaRequerimiento = requerimiento.Fecha?.ToString("dd/MM/yyyy") ?? "N/A",
+                    TipoCertificado = tipoCertificado,
+                    NumCertificado = requerimiento.NumCer,
+                    CodCliente = requerimiento.Ruc ?? requerimiento.CodCliente ?? "N/A",
+                    NombreCliente = requerimiento.RazonSocial ?? "N/A",
+                    CodVendedor = requerimiento.CodVende ?? "N/A",
+                    NombreVendedor = correoVendedorConfig,
+                    Moneda = monedaTexto,
+                    Importe = importe?.ToString("N2") ?? "0.00",
+                    TotalFacturas = totalFacturas.ToString()
+                };
+
+                await _emailService.EnviarAsync(payload);
+
+                _logger.LogInformation("Notificación de certificado enviada a {Email} para REQ {NumReq}", 
+                    destinatarioFacturacion, numReq);
+
+                TempData["Success"] = $"El certificado {requerimiento.NumCer} ha sido enviado a Facturación correctamente.";
+
+                return Json(new 
+                { 
+                    success = true, 
+                    redirectUrl = Url.Action("Index", new { t = Request.Query["t"].ToString() })
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al enviar certificado a Facturación para NUM_REQ {NumReq}", numReq);
+                return Json(new { success = false, message = $"Error al enviar a Facturación: {ex.Message}" });
             }
         }
     }

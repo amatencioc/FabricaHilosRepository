@@ -6,150 +6,149 @@
     string? navToken = ViewBag.NavToken as string;
 }
 
-<div class="container-fluid mt-4">
-    <div class="row">
-        <div class="col-12">
-            <!-- Botón Volver -->
-            <a href="@Url.Action("Index", new { t = navToken })" class="btn btn-secondary mb-3">
-                <i class="fas fa-arrow-left me-1"></i>Volver al Listado
-            </a>
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item">Despachos</li>
+    <li class="breadcrumb-item"><a asp-action="Index" asp-route-t="@navToken">Cargar TC</a></li>
+    <li class="breadcrumb-item active">Detalle #@requerimiento.NumReq</li>
+}
 
-            <!-- Información del Requerimiento -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Información del Requerimiento #@requerimiento.NumReq
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Nº Requerimiento:</strong> @requerimiento.NumReq</p>
-                            <p><strong>Fecha:</strong> @requerimiento.Fecha?.ToString("dd/MM/yyyy HH:mm")</p>
-                            <p><strong>RUC:</strong> @requerimiento.Ruc</p>
-                            <p><strong>Cliente:</strong> @requerimiento.RazonSocial</p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Nº Certificado:</strong> 
-                                @if (!string.IsNullOrEmpty(requerimiento.NumCer))
-                                {
-                                    <span class="badge bg-success">@requerimiento.NumCer</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-secondary">Sin certificado</span>
-                                }
-                            </p>
-                            <p><strong>Documento:</strong> 
-                                @if (!string.IsNullOrEmpty(requerimiento.TipoDoc))
-                                {
-                                    <span>@requerimiento.TipoDoc-@requerimiento.Serie-@requerimiento.Numero</span>
-                                }
-                                else
-                                {
-                                    <span class="text-muted">No asignado</span>
-                                }
-                            </p>
-                        </div>
-                    </div>
-                </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Detalle del Requerimiento #@requerimiento.NumReq
+    </h4>
+    <a href="@Url.Action("Index", new { t = navToken })" class="btn btn-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Información del Requerimiento -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            Información del Requerimiento
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Nº Requerimiento:</strong> @requerimiento.NumReq</p>
+                <p><strong>Fecha:</strong> @requerimiento.Fecha?.ToString("dd/MM/yyyy HH:mm")</p>
+                <p><strong>RUC:</strong> @requerimiento.Ruc</p>
+                <p><strong>Cliente:</strong> @requerimiento.RazonSocial</p>
             </div>
-
-            <!-- Formulario para Cargar Certificado -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">
-                        <i class="bi bi-upload me-2"></i>
-                        Cargar Certificado y PDF
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <form id="formCertificado" enctype="multipart/form-data">
-                        <input type="hidden" id="numReq" name="numReq" value="@requerimiento.NumReq" />
-
-                        <div class="row g-3">
-                            <div class="col-md-12">
-                                <label for="numCer" class="form-label">Nº Certificado <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="numCer" name="numCer" value="@requerimiento.NumCer" placeholder="Requerido" required>
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-9">
-                                <label for="archivo" class="form-label">Archivo PDF del Certificado <span class="text-danger">*</span></label>
-                                <input type="file" class="form-control" id="archivo" name="archivo" accept=".pdf" required>
-                                <small class="text-muted">Debe cargar el archivo PDF del certificado</small>
-                            </div>
-                            <div class="col-md-3 d-flex align-items-end">
-                                <button type="button" id="btnGuardar" class="btn btn-success w-100">
-                                    <i class="bi bi-save me-1"></i>Guardar
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Documentos Asociados -->
-            <div class="card shadow-sm">
-                <div class="card-header bg-secondary text-white">
-                    <h5 class="mb-0">
-                        <i class="bi bi-file-earmark-text me-2"></i>
-                        Documentos Asociados al Requerimiento
-                    </h5>
-                </div>
-                <div class="card-body">
-                    @if (Model.Any())
+            <div class="col-md-6">
+                <p><strong>Nº Certificado:</strong> 
+                    @if (!string.IsNullOrEmpty(requerimiento.NumCer))
                     {
-                        <div class="table-responsive">
-                            <table class="table table-hover table-striped align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Tipo Doc.</th>
-                                        <th>Serie</th>
-                                        <th>Número</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var detalle in Model)
-                                    {
-                                        <tr>
-                                            <td>@detalle.TipoDoc</td>
-                                            <td>@detalle.Serie</td>
-                                            <td>@detalle.Numero</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
+                        <span class="badge bg-success">@requerimiento.NumCer</span>
                     }
                     else
                     {
-                        <div class="alert alert-warning text-center">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            No se encontraron documentos asociados a este requerimiento.
-                        </div>
+                        <span class="badge bg-secondary">Sin certificado</span>
                     }
-                </div>
+                </p>
+                <p><strong>Documento:</strong> 
+                    @if (!string.IsNullOrEmpty(requerimiento.TipoDoc))
+                    {
+                        <span>@requerimiento.TipoDoc-@requerimiento.Serie-@requerimiento.Numero</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">No asignado</span>
+                    }
+                </p>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Formulario para Cargar Certificado -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-upload me-2"></i>
+            Cargar Certificado y PDF
+        </h6>
+    </div>
+    <div class="card-body">
+        <form id="formCertificado" enctype="multipart/form-data">
+            @Html.AntiForgeryToken()
+            <input type="hidden" id="numReq" name="numReq" value="@requerimiento.NumReq" />
+
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label for="numCer" class="form-label">Nº Certificado <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="numCer" name="numCer" value="@requerimiento.NumCer" placeholder="Requerido" required>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-2">
+                <div class="col-md-9">
+                    <label for="archivo" class="form-label">Archivo PDF del Certificado <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="archivo" name="archivo" accept=".pdf" required>
+                    <small class="text-muted">Debe cargar el archivo PDF del certificado</small>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="button" id="btnGuardar" class="btn btn-success w-100">
+                        <i class="bi bi-save me-1"></i>Guardar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Documentos Asociados -->
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i>
+            Documentos Asociados al Requerimiento
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        @if (Model.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-corporate table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo Doc.</th>
+                            <th>Serie</th>
+                            <th>Número</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var detalle in Model)
+                        {
+                            <tr>
+                                <td>@detalle.TipoDoc</td>
+                                <td>@detalle.Serie</td>
+                                <td>@detalle.Numero</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="card-body">
+                <div class="alert alert-warning text-center mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No se encontraron documentos asociados a este requerimiento.
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
 @section Scripts {
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
         $(document).ready(function () {
-            // Configurar toastr
-            toastr.options = {
-                "closeButton": true,
-                "progressBar": true,
-                "positionClass": "toast-top-right",
-                "timeOut": "3000"
-            };
-
             // Botón único para guardar (con o sin PDF)
             $('#btnGuardar').click(function () {
                 const numReq = $('#numReq').val();
@@ -158,13 +157,13 @@
 
                 // Validar que Nº Certificado sea obligatorio
                 if (!numCer) {
-                    toastr.error('El Nº Certificado es obligatorio.');
+                    alert('El Nº Certificado es obligatorio.');
                     return;
                 }
 
                 // Validar que el archivo PDF sea obligatorio
                 if (!archivo) {
-                    toastr.error('Debe adjuntar el archivo PDF del certificado.');
+                    alert('Debe adjuntar el archivo PDF del certificado.');
                     return;
                 }
 
@@ -173,6 +172,7 @@
                 formData.append('numReq', numReq);
                 formData.append('archivo', archivo);
                 formData.append('numCer', numCer);
+                formData.append('__RequestVerificationToken', $('input[name=\"__RequestVerificationToken\"]').val());
 
                 $.ajax({
                     url: '@Url.Action("CargarPdf", "CargaTc")',
@@ -181,25 +181,22 @@
                     processData: false,
                     contentType: false,
                     beforeSend: function () {
-                        $('#btnGuardar').prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Guardando...');
+                        $('#btnGuardar').prop('disabled', true).html('<i class=\"spinner-border spinner-border-sm me-1\"></i>Guardando...');
                     },
                     success: function (response) {
                         if (response.tipo === 'Exito') {
-                            toastr.success(response.mensaje);
-                            setTimeout(function () {
-                                location.reload();
-                            }, 1500);
+                            window.location.href = response.redirectUrl;
                         } else if (response.tipo === 'Advertencia') {
-                            toastr.warning(response.mensaje);
+                            alert(response.mensaje);
+                            $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
                         } else {
-                            toastr.error(response.mensaje);
+                            alert(response.mensaje);
+                            $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
                         }
                     },
                     error: function () {
-                        toastr.error('Error al procesar la solicitud');
-                    },
-                    complete: function () {
-                        $('#btnGuardar').prop('disabled', false).html('<i class="bi bi-save me-1"></i>Guardar');
+                        alert('Error al procesar la solicitud');
+                        $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
                     }
                 });
             });

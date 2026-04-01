@@ -12,6 +12,8 @@ namespace FabricaHilos.Services.Sgc
         Task<ClienteDto?> ObtenerClientePorCodigoAsync(string codCliente);
         Task<bool> ActualizarCertificadoAsync(ActualizarCertificadoDto modelo, string usuario);
         Task<string> GenerarRutaPdfCertificado(string ruc, string numCer);
+        Task<(string? NroLista, decimal? Importe)> ObtenerDatosListaPreciosAsync(string codArt);
+        Task<(string? Nombre, string? Email)> ObtenerDatosVendedorAsync(string codVende);
     }
 
     public class CargaTcService : ICargaTcService
@@ -77,14 +79,14 @@ namespace FabricaHilos.Services.Sgc
 
                 string sql = $@"
                     SELECT RN, TOTAL_COUNT,
-                           NUM_REQ, FECHA, NUM_CER, COD_CLIENTE, COD_ART,
+                           NUM_REQ, FECHA, NUM_CER, COD_CLIENTE, COD_ART, COD_VENDE,
                            TIPODOC, SERIE, NUMERO,
                            A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA,
                            RAZON_SOCIAL, RUC
                     FROM (
                         SELECT ROW_NUMBER() OVER (ORDER BY Q.NUM_REQ ASC) AS RN,
                                COUNT(*) OVER() AS TOTAL_COUNT,
-                               Q.NUM_REQ, Q.FECHA, Q.NUM_CER, Q.COD_CLIENTE, Q.COD_ART,
+                               Q.NUM_REQ, Q.FECHA, Q.NUM_CER, Q.COD_CLIENTE, Q.COD_ART, Q.COD_VENDE,
                                Q.TIPODOC, Q.SERIE, Q.NUMERO,
                                Q.A_ADUSER, Q.A_ADFECHA, Q.A_MDUSER, Q.A_MDFECHA,
                                Q.RAZON_SOCIAL, Q.RUC
@@ -95,6 +97,7 @@ namespace FabricaHilos.Services.Sgc
                                 rc.NUM_CER,
                                 rc.COD_CLIENTE,
                                 rc.COD_ART,
+                                rc.COD_VENDE,
                                 rc.TIPODOC,
                                 rc.SERIE,
                                 rc.NUMERO,
@@ -139,6 +142,7 @@ namespace FabricaHilos.Services.Sgc
                         NumCer = reader["NUM_CER"] == DBNull.Value ? null : reader["NUM_CER"]?.ToString(),
                         CodCliente = reader["COD_CLIENTE"] == DBNull.Value ? null : reader["COD_CLIENTE"]?.ToString(),
                         CodArt = reader["COD_ART"] == DBNull.Value ? null : reader["COD_ART"]?.ToString(),
+                        CodVende = reader["COD_VENDE"] == DBNull.Value ? null : reader["COD_VENDE"]?.ToString(),
                         TipoDoc = reader["TIPODOC"] == DBNull.Value ? null : reader["TIPODOC"]?.ToString(),
                         Serie = reader["SERIE"] == DBNull.Value ? null : reader["SERIE"]?.ToString(),
                         Numero = reader["NUMERO"] == DBNull.Value ? null : reader["NUMERO"]?.ToString(),
@@ -174,6 +178,7 @@ namespace FabricaHilos.Services.Sgc
                         rc.NUM_CER,
                         rc.COD_CLIENTE,
                         rc.COD_ART,
+                        rc.COD_VENDE,
                         rc.TIPODOC,
                         rc.SERIE,
                         rc.NUMERO,
@@ -200,6 +205,7 @@ namespace FabricaHilos.Services.Sgc
                         NumCer = reader.IsDBNull("NUM_CER") ? null : reader.GetString("NUM_CER"),
                         CodCliente = reader.IsDBNull("COD_CLIENTE") ? null : reader.GetString("COD_CLIENTE"),
                         CodArt = reader.IsDBNull("COD_ART") ? null : reader.GetString("COD_ART"),
+                        CodVende = reader.IsDBNull("COD_VENDE") ? null : reader.GetString("COD_VENDE"),
                         TipoDoc = reader.IsDBNull("TIPODOC") ? null : reader.GetString("TIPODOC"),
                         Serie = reader.IsDBNull("SERIE") ? null : reader.GetString("SERIE"),
                         Numero = reader.IsDBNull("NUMERO") ? null : reader.GetString("NUMERO"),
@@ -357,6 +363,83 @@ namespace FabricaHilos.Services.Sgc
             var rutaCompleta = Path.Combine(rutaCarpeta, nombreArchivo);
 
             return rutaCompleta;
+        }
+
+        public async Task<(string? NroLista, decimal? Importe)> ObtenerDatosListaPreciosAsync(string codArt)
+        {
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                var sql = @"
+                    SELECT NRO_LISTA, IMPORTE
+                    FROM SIG.LISPRED
+                    WHERE COD_ART = :CodArt
+                    AND ROWNUM = 1";
+
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.Parameters.Add(new OracleParameter("CodArt", codArt));
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var nroLista = reader.IsDBNull(reader.GetOrdinal("NRO_LISTA")) 
+                        ? null 
+                        : reader.GetString(reader.GetOrdinal("NRO_LISTA"));
+
+                    var importe = reader.IsDBNull(reader.GetOrdinal("IMPORTE")) 
+                        ? (decimal?)null 
+                        : reader.GetDecimal(reader.GetOrdinal("IMPORTE"));
+
+                    return (nroLista, importe);
+                }
+
+                return (null, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener datos de lista de precios para COD_ART {CodArt}", codArt);
+                return (null, null);
+            }
+        }
+
+        public async Task<(string? Nombre, string? Email)> ObtenerDatosVendedorAsync(string codVende)
+        {
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                var sql = @"
+                    SELECT C_NOMBRE, C_EMAIL
+                    FROM SIG.CS_USER
+                    WHERE COD_ASESOR = :CodVende";
+
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.Parameters.Add(new OracleParameter("CodVende", codVende));
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    var nombre = reader.IsDBNull(reader.GetOrdinal("C_NOMBRE")) 
+                        ? null 
+                        : reader.GetString(reader.GetOrdinal("C_NOMBRE"));
+
+                    var email = reader.IsDBNull(reader.GetOrdinal("C_EMAIL")) 
+                        ? null 
+                        : reader.GetString(reader.GetOrdinal("C_EMAIL"));
+
+                    return (nombre, email);
+                }
+
+                return (null, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener datos del vendedor con COD_VENDE {CodVende}", codVende);
+                return (null, null);
+            }
         }
     }
 }

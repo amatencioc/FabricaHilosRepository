@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>FabricaHilos.Notificaciones</RootNamespace>
@@ -10,9 +10,9 @@
   <ItemGroup>
     <PackageReference Include="MailKit"  Version="4.9.0" />
     <PackageReference Include="MimeKit"  Version="4.15.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions"  Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"            Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions"  Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"            Version="8.0.0" />
   </ItemGroup>
 
   <!-- Los templates HTML y sus assets se embeben en el .dll — no dependen de rutas físicas -->

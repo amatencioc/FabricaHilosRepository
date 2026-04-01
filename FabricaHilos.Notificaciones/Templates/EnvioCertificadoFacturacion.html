@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Requerimiento de Emisión de Factura</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #F4F6F5; color: #1A1A1E; margin: 0; padding: 0; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .info-table th { background-color: #1B4D3E; color: #ffffff; text-align: left; padding: 10px 14px; font-weight: 600; }
+    .info-table td { padding: 10px 14px; border: 1px solid #CBD2D9; color: #3D4451; background-color: #ffffff; }
+    .info-table tr:nth-child(even) td { background-color: #E8EDEB; }
+    .highlight { background-color: #C8A951; color: #1A1A1E; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+    @media only screen and (max-width: 640px) {
+      .email-outer { padding: 16px 8px !important; }
+      .email-wrapper { width: 100% !important; }
+      .email-body-td { padding: 24px 20px !important; }
+      .header-td { padding: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#F4F6F5;">
+
+  <!-- OUTER WRAPPER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" class="email-outer"
+         style="background-color:#F4F6F5; padding:32px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- EMAIL CARD -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" class="email-wrapper"
+               style="max-width:640px; width:640px; background-color:#ffffff;
+                      border-radius:8px; overflow:hidden;
+                      box-shadow:0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);">
+
+          <!-- ===== HEADER ===== -->
+          <tr>
+            <td bgcolor="#1B4D3E" align="center" class="header-td"
+                style="background-color:#1B4D3E; padding:28px 36px; text-align:center;">
+              <img src="{{Asset:logo_colo.png}}"
+                   alt="La Colonial Fábrica de Hilos S.A."
+                   width="auto" height="56"
+                   style="display:block; height:56px; margin:0 auto 14px; border:0;" />
+              <h1 style="color:#C8A951; font-size:20px; font-weight:700;
+                         letter-spacing:0.5px; margin:0;
+                         font-family:Arial, Helvetica, sans-serif;">
+                &#128220; Requerimiento de Emisión de Factura
+              </h1>
+              <p style="color:rgba(255,255,255,0.82); font-size:13px; margin-top:6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Certificado {{TipoCertificado}} listo para facturación
+              </p>
+            </td>
+          </tr>
+
+          <!-- ===== BANDA DORADA ===== -->
+          <tr>
+            <td bgcolor="#C8A951" height="4"
+                style="background-color:#C8A951; height:4px;
+                       line-height:4px; font-size:1px; mso-line-height-rule:exactly;">
+              &nbsp;
+            </td>
+          </tr>
+
+          <!-- ===== CUERPO ===== -->
+          <tr>
+            <td class="email-body-td"
+                style="padding:32px 36px; background-color:#ffffff;">
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Estimado equipo de <strong style="color:#1A1A1E;">Facturación</strong>,
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Se ha generado un nuevo <strong style="color:#1A1A1E;">requerimiento de certificado {{TipoCertificado}}</strong> 
+                que requiere la emisión de la factura correspondiente. A continuación se detallan los datos del requerimiento:
+              </p>
+
+              <!-- ALERTA DESTACADA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:16px 0;">
+                <tr>
+                  <td bgcolor="#E8F4FD"
+                      style="background-color:#E8F4FD;
+                             border-left:5px solid #0066CC;
+                             padding:14px 18px; border-radius:4px;">
+                    <p style="margin:0; font-size:14px; color:#003D7A;
+                               line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
+                      &#128220; <strong>Número de Requerimiento:</strong> <span class="highlight" style="background-color:#C8A951; color:#1A1A1E; padding:2px 8px; border-radius:3px; font-weight:600;">{{NumRequerimiento}}</span><br/>
+                      &#128467; <strong>Certificado:</strong> {{NumCertificado}}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- TABLA DE INFORMACIÓN DEL REQUERIMIENTO -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Información del Requerimiento
+              </p>
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Tipo de Certificado</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;"><strong>{{TipoCertificado}}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Número de Certificado</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{NumCertificado}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Fecha de Requerimiento</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{FechaRequerimiento}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">RUC</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{CodCliente}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Nombre de Cliente</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{NombreCliente}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Total de Facturas</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{TotalFacturas}}</td>
+                </tr>
+              </table>
+
+              <!-- TABLA DE INFORMACIÓN DEL VENDEDOR -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Información del Vendedor
+              </p>
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Nombre del Vendedor</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{NombreVendedor}}</td>
+                </tr>
+              </table>
+
+              <!-- TABLA DE INFORMACIÓN DE PRECIO -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Información de Facturación
+              </p>
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Moneda</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{Moneda}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Importe</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;"><strong>{{Importe}}</strong></td>
+                </tr>
+              </table>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Por favor, proceder con la <strong>emisión de la factura correspondiente</strong> 
+                para el cliente indicado. El certificado {{TipoCertificado}} ya ha sido validado y cargado en el sistema.
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0; font-family:Arial, Helvetica, sans-serif;">
+                Si tiene alguna consulta o requiere información adicional, 
+                no dude en contactar al vendedor asignado o al área de SGC.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ===== FOOTER ===== -->
+          <tr>
+            <td bgcolor="#E8EDEB"
+                style="background-color:#E8EDEB; padding:20px 36px; border-top:1px solid #CBD2D9;">
+              <p style="font-size:12px; color:#6B7280; text-align:center; margin:0 0 6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                <strong>La Colonial Fábrica de Hilos S.A.</strong>
+              </p>
+              <p style="font-size:11px; color:#9CA3AF; text-align:center; margin:0;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Este correo fue generado automáticamente. Por favor, no responder directamente a este mensaje.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- FIN EMAIL CARD -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- FIN OUTER WRAPPER -->
+
+</body>
+</html>

@@ -1426,7 +1426,7 @@ namespace FabricaHilos.Services.Sgc
                        ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
                        ""GUIA"", ""OBS"",
                        ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE"",
-                       ""COD_CLIENTE"",
+                       ""COD_CLIENTE"", ""COD_VENDE"",
                        ""ENVIADO_A_TC"", ""NUM_REQ_TC"", ""NUM_CER""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
@@ -1448,6 +1448,7 @@ namespace FabricaHilos.Services.Sgc
                            Q.""GUIA_TP_TRANSAC"",
                            Q.""GUIA_SERIE"",
                            Q.""COD_CLIENTE"",
+                           Q.""COD_VENDE"",
                            Q.""ENVIADO_A_TC"",
                            Q.""NUM_REQ_TC"",
                            Q.""NUM_CER""
@@ -1470,6 +1471,7 @@ namespace FabricaHilos.Services.Sgc
                             MAX(G.TP_TRANSAC)                                       AS ""GUIA_TP_TRANSAC"",
                             MAX(G.SERIE)                                            AS ""GUIA_SERIE"",
                             F.COD_CLIENTE                                           AS ""COD_CLIENTE"",
+                            F.COD_VENDE                                             AS ""COD_VENDE"",
                             CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
                             MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
                             MAX(RC.NUM_CER)                                         AS ""NUM_CER""
@@ -1509,7 +1511,8 @@ namespace FabricaHilos.Services.Sgc
                             F.NUMERO,
                             F.NOMBRE,
                             F.FECHA,
-                            F.COD_CLIENTE
+                            F.COD_CLIENTE,
+                            F.COD_VENDE
                     ) Q
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -1571,6 +1574,7 @@ namespace FabricaHilos.Services.Sgc
                         GuiaTpTransac = GetStr(reader, "GUIA_TP_TRANSAC"),
                         GuiaSerie     = GetNullInt(reader, "GUIA_SERIE"),
                         CodCliente    = GetStr(reader, "COD_CLIENTE"),
+                        CodVende      = GetStr(reader, "COD_VENDE"),
                         EnviadoATC    = GetInt(reader, "ENVIADO_A_TC") == 1,
                         NumReqTC      = GetNullInt(reader, "NUM_REQ_TC"),
                         NumCer        = GetStr(reader, "NUM_CER")
@@ -1620,12 +1624,13 @@ namespace FabricaHilos.Services.Sgc
                         numReq = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
                     }
 
-                    // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE y COD_ART de la lista)
+                    // 2. Insertar en REQ_CER (usamos el primer COD_CLIENTE, COD_ART y COD_VENDE de la lista)
                     string codCliente = facturas.First().CodCliente;
                     string codArt = facturas.First().CodArt;
+                    string codVende = facturas.First().CodVende;
                     string sqlReqCer = @"
-                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, ESTADO, A_ADUSER, A_ADFECHA)
-                        VALUES (:numReq, SYSDATE, :codCliente, :codArt, 1, :adUser, SYSDATE)";
+                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, COD_VENDE, ESTADO, A_ADUSER, A_ADFECHA)
+                        VALUES (:numReq, SYSDATE, :codCliente, :codArt, :codVende, 1, :adUser, SYSDATE)";
 
                     using (var cmdReqCer = new OracleCommand(sqlReqCer, conn))
                     {
@@ -1634,6 +1639,7 @@ namespace FabricaHilos.Services.Sgc
                         cmdReqCer.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codCliente", OracleDbType.Varchar2, codCliente, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":codArt", OracleDbType.Varchar2, codArt, ParameterDirection.Input));
+                        cmdReqCer.Parameters.Add(new OracleParameter(":codVende", OracleDbType.Varchar2, codVende, ParameterDirection.Input));
                         cmdReqCer.Parameters.Add(new OracleParameter(":adUser", OracleDbType.Varchar2, adUser, ParameterDirection.Input));
                         await cmdReqCer.ExecuteNonQueryAsync();
                     }

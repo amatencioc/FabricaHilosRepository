@@ -78,6 +78,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
         {
             TipoNotificacion.DocumentoLimbo =>
                 "⚠️ Documento pendiente de validación — Acción requerida",
+            TipoNotificacion.EnvioCertificadoFacturacion =>
+                "📄 Requerimiento de emisión de Factura — Certificado listo",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

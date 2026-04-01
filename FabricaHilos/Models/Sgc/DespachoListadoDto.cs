@@ -29,5 +29,8 @@ namespace FabricaHilos.Models.Sgc
         public bool EnviadoATC { get; set; }
         public int? NumReqTC { get; set; }
         public string? NumCer { get; set; }
+
+        // Código de vendedor
+        public string? CodVende { get; set; }
     }
 }

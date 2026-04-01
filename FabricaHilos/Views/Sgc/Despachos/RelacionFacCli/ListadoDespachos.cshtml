@@ -235,6 +235,7 @@
                                            data-razon-social="@item.RazonSocial"
                                            data-fecha="@(item.FechaDoc.HasValue ? item.FechaDoc.Value.ToString("dd/MM/yyyy") : "")"
                                            data-cod-cliente="@item.CodCliente"
+                                           data-cod-vende="@item.CodVende"
                                            @(item.EnviadoATC ? "checked disabled" : (!gots && !ocs ? "disabled" : ""))
                                            onchange="actualizarContadorFacturas()" />
                                 }
@@ -604,6 +605,7 @@
             const razonSocial = cb.getAttribute('data-razon-social');
             const fecha = cb.getAttribute('data-fecha');
             const codCliente = cb.getAttribute('data-cod-cliente');
+            const codVende = cb.getAttribute('data-cod-vende');
             const llave = generarLlaveFactura(tipo, serie, numero);
 
             if (cb.checked) {
@@ -632,6 +634,7 @@
                     razonSocial: razonSocial,
                     fecha: fecha,
                     codCliente: codCliente,
+                    codVende: codVende,
                     codArt: codArt
                 };
             } else {
@@ -812,6 +815,7 @@
             serie: f.serie,
             numero: f.numero,
             codCliente: f.codCliente,
+            codVende: f.codVende,
             codArt: f.codArt
         }));
 

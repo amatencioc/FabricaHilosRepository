@@ -11,6 +11,9 @@ public enum TipoNotificacion
     /// <summary>Notifica al remitente que su PDF no tiene XML válido o tipo no registrado.</summary>
     DocumentoLimbo,
 
+    /// <summary>Notifica a facturación sobre un requerimiento de certificado listo para facturar.</summary>
+    EnvioCertificadoFacturacion,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

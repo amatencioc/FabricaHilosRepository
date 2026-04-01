@@ -11,6 +11,7 @@ using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.Sgc;
 using QuestPDF.Infrastructure;
 using FabricaHilos.Config;
+using FabricaHilos.Notificaciones.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +84,9 @@ builder.Services.AddScoped<ICargaTcService, CargaTcService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
+
+// Registrar servicios de notificaciones
+builder.Services.AddNotificaciones(builder.Configuration);
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;

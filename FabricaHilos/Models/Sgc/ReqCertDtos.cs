@@ -10,6 +10,7 @@ namespace FabricaHilos.Models.Sgc
         public string? NumCer { get; set; }
         public string? CodCliente { get; set; }
         public string? CodArt { get; set; }
+        public string? CodVende { get; set; }
         public string? TipoDoc { get; set; }
         public string? Serie { get; set; }
         public string? Numero { get; set; }
