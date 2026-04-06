@@ -187,23 +187,15 @@
                 @if (menus.Ventas)
                 {
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" || ViewContext.RouteData.Values["controller"]?.ToString() == "ConsultaTc" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
-                        @if (menus.VentasClientes)
+                        @if (menus.VentasConsultaTC)
                         {
                         <li>
-                            <a asp-controller="Ventas" asp-action="Clientes" class="sidebar-link sidebar-sublink @(ctrl == "Ventas" && act == "Clientes" ? "active" : "")">
-                                <i class="bi bi-people"></i> Clientes
-                            </a>
-                        </li>
-                        }
-                        @if (menus.VentasPedidos)
-                        {
-                        <li>
-                            <a asp-controller="Ventas" asp-action="Pedidos" class="sidebar-link sidebar-sublink @(ctrl == "Ventas" && act == "Pedidos" ? "active" : "")">
-                                <i class="bi bi-cart3"></i> Pedidos
+                            <a asp-controller="ConsultaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "ConsultaTc" ? "active" : "")">
+                                <i class="bi bi-file-earmark-text"></i> Consulta TC
                             </a>
                         </li>
                         }

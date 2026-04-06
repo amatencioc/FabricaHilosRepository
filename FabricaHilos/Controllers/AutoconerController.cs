@@ -853,5 +853,110 @@ namespace FabricaHilos.Controllers
             ViewBag.Titulos  = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
         }
+
+        // ===================== POR CANILLAS =====================
+
+        // GET: /Autoconer/PorCanillas
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> PorCanillas()
+        {
+            ViewBag.Titulos   = await _recetaService.ObtenerTitulosAutoconerAsync();
+            ViewBag.Maquinas  = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
+            ViewBag.Destinos  = await _recetaService.ObtenerDestinosAutoconerAsync();
+            return View("Canillas/Index");
+        }
+
+        // POST: /Autoconer/GuardarCanillas
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GuardarCanillas([FromBody] List<RegistroAutoconer> registros)
+        {
+            if (registros == null || registros.Count == 0)
+            {
+                return Json(new { success = false, message = "No se recibieron registros para guardar." });
+            }
+
+            var errores = new List<string>();
+            var guardados = 0;
+
+            try
+            {
+                foreach (var registro in registros)
+                {
+                    try
+                    {
+                        // Validar que la máquina no tenga una preparatoria en proceso
+                        if (!string.IsNullOrEmpty(registro.NumeroAutoconer))
+                        {
+                            var enProceso = await _recetaService.TieneMaquinaEnProcesoAsync("A", registro.NumeroAutoconer);
+                            if (enProceso)
+                            {
+                                errores.Add($"La máquina {registro.NumeroAutoconer} ya tiene un registro en proceso.");
+                                continue;
+                            }
+                        }
+
+                        registro.Estado  = EstadoOrden.Terminado;
+                        registro.Cerrado = true;
+
+                        if (registro.Fecha == default || registro.Fecha == DateTime.MinValue)
+                            registro.Fecha = DateTime.Now;
+
+                        // Guardar en SQLite
+                        _context.RegistrosAutoconer.Add(registro);
+                        await _context.SaveChangesAsync();
+
+                        // Insertar en Oracle
+                        var insertadoEnOracle = await _recetaService.InsertarPreparatoriaAutoconerAsync(registro, User.Identity?.Name);
+
+                        if (insertadoEnOracle)
+                        {
+                            // Ejecutar SP_CALCULAR_PROD_ESP_TEO
+                            var spResult = await _recetaService.EjecutarSpCalcularProdTeoAsync(
+                                registro.CodigoReceta, registro.Lote, "A", registro.NumeroAutoconer,
+                                registro.Titulo, registro.HoraInicio ?? registro.Fecha);
+
+                            if (!spResult.UpdateExitoso || spResult.Codigo != "0")
+                            {
+                                _logger.LogWarning("Autoconer {Id}: SP_CALCULAR_PROD_ESP_TEO falló o devolvió código {Codigo}", 
+                                    registro.Id, spResult.Codigo);
+                            }
+
+                            guardados++;
+                        }
+                        else
+                        {
+                            errores.Add($"Registro para máquina {registro.NumeroAutoconer} no se pudo guardar en Oracle.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al guardar registro Autoconer para máquina {Maquina}", registro.NumeroAutoconer);
+                        errores.Add($"Error en máquina {registro.NumeroAutoconer}: {ex.Message}");
+                    }
+                }
+
+                var mensaje = $"Se guardaron {guardados} de {registros.Count} registros.";
+                if (errores.Count > 0)
+                {
+                    mensaje += $" Errores: {string.Join(", ", errores)}";
+                }
+
+                return Json(new { 
+                    success = guardados > 0, 
+                    message = mensaje,
+                    guardados = guardados,
+                    total = registros.Count,
+                    errores = errores
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error general al guardar registros de canillas");
+                return Json(new { success = false, message = $"Error: {ex.Message}" });
+            }
+        }
     }
 }

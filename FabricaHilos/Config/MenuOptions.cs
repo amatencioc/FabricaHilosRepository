@@ -29,19 +29,22 @@ public class MenuOptions
     // ── Submenús: Producción ──────────────────────────────────────────────
     public bool ProduccionRegistroPreparatoria { get; set; } = true;
     public bool ProduccionAutoconer            { get; set; } = true;
+    public bool ProduccionAutoconerPorPartida  { get; set; } = true;
+    public bool ProduccionAutoconerPorCanillas { get; set; } = true;
 
     // ── Submenús: SGC ─────────────────────────────────────────────────────
     public bool SgcDashboard { get; set; } = true;
     public bool SgcPedidos   { get; set; } = true;
     public bool SgcDespachos { get; set; } = true;
+    public bool SgcDespachosRelacionFacCli { get; set; } = true;
+    public bool SgcDespachosCargarTC { get; set; } = true;
 
     // ── Submenús: Facturación ─────────────────────────────────────────────
     public bool FacturacionImportarFacturas { get; set; } = true;
     public bool FacturacionListaDocumentos  { get; set; } = true;
 
     // ── Submenús: Ventas ──────────────────────────────────────────────────
-    public bool VentasClientes { get; set; } = true;
-    public bool VentasPedidos  { get; set; } = true;
+    public bool VentasConsultaTC { get; set; } = true;
 
     // ── Submenús: Recursos Humanos ────────────────────────────────────────
     public bool RecursosHumanosEmpleados  { get; set; } = true;
@@ -74,16 +77,19 @@ public class MenuOptions
 
         ProduccionRegistroPreparatoria = true,
         ProduccionAutoconer            = true,
+        ProduccionAutoconerPorPartida  = true,
+        ProduccionAutoconerPorCanillas = true,
 
         SgcDashboard = true,
         SgcPedidos   = true,
         SgcDespachos = true,
+        SgcDespachosRelacionFacCli = true,
+        SgcDespachosCargarTC = true,
 
         FacturacionImportarFacturas = true,
         FacturacionListaDocumentos  = true,
 
-        VentasClientes = true,
-        VentasPedidos  = true,
+        VentasConsultaTC = true,
 
         RecursosHumanosEmpleados  = true,
         RecursosHumanosAsistencia = true,

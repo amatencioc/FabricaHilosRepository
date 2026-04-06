@@ -1,0 +1,176 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.ReqCertDDto>
+
+@{
+    ViewData["Title"] = "Detalle de Requerimiento TC - Consulta";
+    var requerimiento = ViewBag.Requerimiento as FabricaHilos.Models.Sgc.ReqCertDto;
+    string? navToken = ViewBag.NavToken as string;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">VENTAS</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index" asp-route-t="@navToken">Consulta TC</a></li>
+    <li class="breadcrumb-item active">Detalle #@requerimiento.NumReq</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Detalle del Requerimiento #@requerimiento.NumReq
+    </h4>
+    <a href="@Url.Action("Index", new { t = navToken })" class="btn btn-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Información del Requerimiento -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            Información del Requerimiento
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Nº Requerimiento:</strong> @requerimiento.NumReq</p>
+                <p><strong>Fecha:</strong> @requerimiento.Fecha?.ToString("dd/MM/yyyy HH:mm")</p>
+                <p><strong>RUC:</strong> @requerimiento.Ruc</p>
+                <p><strong>Cliente:</strong> @requerimiento.RazonSocial</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Tipo de Certificado:</strong> 
+                    @if (!string.IsNullOrEmpty(requerimiento.CodArt))
+                    {
+                        if (requerimiento.CodArt == "CERTGOTS")
+                        {
+                            <span class="badge bg-success">GOTS</span>
+                        }
+                        else if (requerimiento.CodArt == "CERTOCS")
+                        {
+                            <span class="badge bg-info">OCS</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">@requerimiento.CodArt</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </p>
+                <p><strong>Nº Certificado:</strong> 
+                    @if (!string.IsNullOrEmpty(requerimiento.NumCer))
+                    {
+                        <a href="@Url.Action("VisualizarPdf", "ConsultaTc", new { numReq = requerimiento.NumReq })" 
+                           target="_blank" 
+                           class="me-2" 
+                           title="Visualizar certificado PDF">
+                            <i class="bi bi-file-pdf-fill text-danger" style="font-size: 1.2rem;"></i>
+                        </a>
+                        <span class="badge bg-success">@requerimiento.NumCer</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Sin certificado</span>
+                    }
+                </p>
+                <p><strong>Documento:</strong> 
+                    @if (!string.IsNullOrEmpty(requerimiento.TipoDoc))
+                    {
+                        <span>@requerimiento.TipoDoc-@requerimiento.Serie-@requerimiento.Numero</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">No asignado</span>
+                    }
+                </p>
+                <p><strong>Estado:</strong> 
+                    @if (requerimiento.Estado == 2)
+                    {
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle-fill me-1"></i>Enviado a Facturación
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-warning text-dark">
+                            <i class="bi bi-clock me-1"></i>Pendiente
+                        </span>
+                    }
+                </p>
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="row">
+            <div class="col-md-12">
+                <p class="mb-0"><strong>Usuario Creación:</strong> 
+                    @if (requerimiento.AAduser != null)
+                    {
+                        <span>@requerimiento.AAduser (@requerimiento.AAdfecha?.ToString("dd/MM/yyyy HH:mm"))</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </p>
+                @if (requerimiento.AMduser != null)
+                {
+                    <p class="mb-0"><strong>Usuario Modificación:</strong> @requerimiento.AMduser (@requerimiento.AMdfecha?.ToString("dd/MM/yyyy HH:mm"))</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Documentos Asociados -->
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i>
+            Documentos Asociados al Requerimiento
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        @if (Model.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-corporate table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>Tipo Doc.</th>
+                            <th>Serie</th>
+                            <th>Número</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            int contador = 0;
+                        }
+                        @foreach (var detalle in Model)
+                        {
+                            contador++;
+                            <tr>
+                                <td class="text-center">@contador</td>
+                                <td>@detalle.TipoDoc</td>
+                                <td>@detalle.Serie</td>
+                                <td>@detalle.Numero</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="card-body">
+                <div class="alert alert-warning text-center mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No se encontraron documentos asociados a este requerimiento.
+                </div>
+            </div>
+        }
+    </div>
+</div>

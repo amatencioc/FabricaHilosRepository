@@ -1,0 +1,1018 @@
+@using FabricaHilos.Models.Produccion
+
+@{
+    ViewData["Title"] = "Control Autoconer - Por Canillas";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Control Autoconer - Por Canillas</li>
+}
+
+<div class="d-flex align-items-center mb-4" style="border-bottom: 3px solid var(--color-secondary); padding-bottom: 10px;">
+    <i class="bi bi-list-ul fs-3 me-3 text-success"></i>
+    <h4 class="mb-0 fw-bold">Control Autoconer - Por Canillas</h4>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        @Html.AntiForgeryToken()
+
+        <!-- ===== FORMULARIO PARA AGREGAR REGISTROS ===== -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-success text-white fw-bold">
+                <i class="bi bi-plus-circle me-2"></i>Agregar Registro
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <!-- Fila 1: Autoconer, Operador, Fecha, Turno -->
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Autoconer N° <span class="text-danger">*</span></label>
+                        <select id="autoconerSelect" class="form-select">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Operador N° <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="text" id="operarioInput" class="form-control"
+                                   placeholder="Últimos 4 dígitos" autocomplete="off" />
+                            <button type="button" id="btnBuscarOperario" class="btn btn-outline-secondary" title="Buscar operario">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                        <input id="operadorHidden" type="hidden" />
+                        <small id="operarioStatus" class="text-muted"></small>
+                        <small class="text-muted d-block">El prefijo 03 se agrega automáticamente.</small>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Fecha</label>
+                        <input type="text" id="fechaDisplay" class="form-control" readonly
+                               style="background-color: var(--color-bg-light);" />
+                        <input id="fechaHidden" type="hidden" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Turno <span class="text-danger">*</span></label>
+                        <select id="turnoSelect" class="form-select">
+                            <option value="">Seleccione un turno</option>
+                            <option value="1">1er Turno</option>
+                            <option value="2">2do Turno</option>
+                            <option value="3">3er Turno</option>
+                            <option value="4">12 Hrs Dia</option>
+                            <option value="5">12 Hrs Noche</option>
+                        </select>
+                    </div>
+
+                    <!-- Fila 2: Lote, Nº Partida, Receta -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Lote / Partida <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input id="loteInput" class="form-control"
+                                   placeholder="Código de lote" autocomplete="off" />
+                            <button type="button" id="btnBuscarLote" class="btn btn-outline-secondary" title="Buscar lote">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                        <small id="loteStatus" class="text-muted"></small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Nº Partida</label>
+                        <div class="input-group">
+                            <input id="guiaInput" class="form-control"
+                                   placeholder="Nº Partida" autocomplete="off" />
+                            <button type="button" id="btnBuscarPartida" class="btn btn-outline-secondary" title="Buscar partida">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                        <small id="partidaStatus" class="text-muted"></small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Receta <span class="text-muted small">(opcional)</span></label>
+                        <div class="input-group">
+                            <input id="recetaInput" class="form-control"
+                                   placeholder="Código de receta" autocomplete="off" />
+                            <button type="button" id="btnBuscarReceta" class="btn btn-outline-secondary" title="Buscar receta">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                        <small id="recetaStatus" class="text-muted"></small>
+                    </div>
+
+                    <!-- Fila 3: Material -->
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold">Material <span class="text-danger">*</span></label>
+                        <input id="materialInput" class="form-control"
+                               placeholder="Se completará al buscar Nº Partida, receta o lote" readonly
+                               style="background-color: var(--color-bg-light);" />
+                    </div>
+
+                    <!-- Fila 4: Título, V, Fecha Inicio, Fecha Fin -->
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Título <span class="text-danger">*</span></label>
+                        <select id="tituloSelect" class="form-select">
+                            <option value="">Seleccione un título</option>
+                            @if (ViewBag.Titulos != null)
+                            {
+                                @foreach (var titulo in ViewBag.Titulos)
+                                {
+                                    <option value="@titulo.Titulo">@titulo.TextoCompleto</option>
+                                }
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">V (m/min)</label>
+                        <input id="velocidadInput" class="form-control" type="number" step="0.01" min="0"
+                               placeholder="Velocidad" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Fecha Inicio</label>
+                        <input id="horaInicioInput" class="form-control" type="datetime-local" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Fecha Fin</label>
+                        <input id="horaFinalInput" class="form-control" type="datetime-local" />
+                    </div>
+
+                    <!-- Fila 5: Destino, Tramos -->
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Destino</label>
+                        <select id="destinoSelect" class="form-select">
+                            <option value="">Cargando...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-9">
+                        <label class="form-label fw-semibold">Tramos</label>
+                        <div class="d-flex gap-2 align-items-end">
+                            <div>
+                                <label class="form-label small mb-1">T1</label>
+                                <input id="tramo1Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">T2</label>
+                                <input id="tramo2Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">T3</label>
+                                <input id="tramo3Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">T4</label>
+                                <input id="tramo4Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">T5</label>
+                                <input id="tramo5Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">T6</label>
+                                <input id="tramo6Input" class="form-control text-center" type="number" min="0" max="99" style="width: 60px;" placeholder="0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fila 6: Conos, Kg x Unidad, Peso Neto -->
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Conos o Rodetes</label>
+                        <input id="cantidadInput" class="form-control" type="number" step="1" min="0"
+                               placeholder="0" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Kg x Unidad</label>
+                        <input id="pesoBrutoInput" class="form-control" type="number" step="0.01" min="0"
+                               placeholder="0.00" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Peso Neto</label>
+                        <input id="pesoNetoDisplay" class="form-control" type="number" step="0.01" min="0"
+                               placeholder="0.00" />
+                    </div>
+
+                    <!-- Campo oculto para proceso -->
+                    <input type="hidden" id="procesoHidden" />
+                </div>
+
+                <div class="mt-4 d-flex gap-2">
+                    <button type="button" id="btnAgregar" class="btn btn-primary px-4">
+                        <i class="bi bi-plus-circle me-2"></i>Agregar a la Lista
+                    </button>
+                    <button type="button" id="btnLimpiar" class="btn btn-outline-secondary px-4">
+                        <i class="bi bi-x-circle me-2"></i>Limpiar Formulario
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== LISTA DE REGISTROS ===== -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-success text-white fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-check me-2"></i>Registros Agregados</span>
+                <span id="contadorRegistros" class="badge bg-light text-dark">0 registros</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="tablaRegistros">
+                        <thead>
+                            <tr>
+                                <th>Autoconer</th>
+                                <th>Operador</th>
+                                <th>Lote</th>
+                                <th>Material</th>
+                                <th>Título</th>
+                                <th>Tramos</th>
+                                <th>Cantidad</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaRegistros">
+                            <tr id="mensajeVacio">
+                                <td colspan="8" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox display-6 d-block mb-2"></i>
+                                    No hay registros agregados. Use el formulario de arriba para agregar registros.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== BOTONES DE ACCIÓN ===== -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body d-flex gap-2">
+                <button type="button" id="btnGuardarTodos" class="btn btn-success px-4" disabled>
+                    <i class="bi bi-save me-2"></i>Guardar Todos los Registros
+                </button>
+                <button type="button" id="btnLimpiarLista" class="btn btn-outline-danger px-4" disabled>
+                    <i class="bi bi-trash me-2"></i>Limpiar Lista
+                </button>
+                <a asp-controller="Produccion" asp-action="Index" class="btn btn-outline-secondary px-4">Volver</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación para Limpiar Lista -->
+<div class="modal fade" id="modalLimpiarLista" tabindex="-1" aria-labelledby="modalLimpiarListaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="modalLimpiarListaLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Confirmar Limpieza
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">¿Está seguro de limpiar todos los registros de la lista?</p>
+                <p class="text-muted small mt-2 mb-0">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarLimpiar" class="btn btn-danger">
+                    <i class="bi bi-trash me-1"></i>Limpiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación para Eliminar Registro -->
+<div class="modal fade" id="modalEliminarRegistro" tabindex="-1" aria-labelledby="modalEliminarRegistroLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarRegistroLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Confirmar Eliminación
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">¿Está seguro de eliminar este registro de la lista?</p>
+                <p class="text-muted small mt-2 mb-0">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarEliminar" class="btn btn-danger">
+                    <i class="bi bi-trash me-1"></i>Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // === Variables globales ===
+        let registros = [];
+        let _titulosRestringidosHtml = '';
+        let indexAEliminar = -1;
+
+        // === Fecha en tiempo real ===
+        function formatearFecha() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm   = String(now.getMonth() + 1).padStart(2, '0');
+            const dd   = String(now.getDate()).padStart(2, '0');
+            const hh   = String(now.getHours()).padStart(2, '0');
+            const mi   = String(now.getMinutes()).padStart(2, '0');
+            const ss   = String(now.getSeconds()).padStart(2, '0');
+            return { iso: `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`, display: `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}` };
+        }
+
+        function actualizarFecha() {
+            const f = formatearFecha();
+            document.getElementById('fechaHidden').value  = f.iso;
+            document.getElementById('fechaDisplay').value = f.display;
+        }
+
+        actualizarFecha();
+        setInterval(actualizarFecha, 1000);
+
+        function ahoraLocal() {
+            const now = new Date();
+            return [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-')
+                 + 'T' + [String(now.getHours()).padStart(2,'0'), String(now.getMinutes()).padStart(2,'0')].join(':');
+        }
+
+        // === Cargar máquinas Autoconer ===
+        async function cargarMaquinas() {
+            const sel = document.getElementById('autoconerSelect');
+            try {
+                const resp = await fetch('@Url.Action("ObtenerMaquinasAutoconer", "Autoconer")');
+                const data = await resp.json();
+                sel.innerHTML = '<option value="">Seleccione Autoconer</option>';
+                if (data.success && data.maquinas) {
+                    data.maquinas.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value       = m.codigo;
+                        opt.textContent = m.descripcion || m.codigo;
+                        opt.setAttribute('data-descripcion', m.descripcion || m.codigo);
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Error al cargar</option>';
+            }
+        }
+
+        // === Cargar destinos Autoconer ===
+        async function cargarDestinos() {
+            const sel = document.getElementById('destinoSelect');
+            try {
+                const resp = await fetch('@Url.Action("ObtenerDestinosAutoconer", "Autoconer")');
+                const data = await resp.json();
+                sel.innerHTML = '<option value="">Seleccione destino</option>';
+                if (data.success && data.destinos) {
+                    data.destinos.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value       = d.codigo;
+                        opt.textContent = d.codigo + ' - ' + d.descripcion;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                sel.innerHTML = '<option value="">Error al cargar</option>';
+            }
+        }
+
+        cargarMaquinas();
+        cargarDestinos();
+
+        // === Calcular Peso Neto (solo si el usuario no ha ingresado un valor manual) ===
+        let pesoNetoManual = false;
+
+        function calcularPesoNeto() {
+            // Solo calcular automáticamente si el usuario no ha editado manualmente el peso neto
+            if (!pesoNetoManual) {
+                const cantidad  = parseFloat(document.getElementById('cantidadInput').value) || 0;
+                const pesoBruto = parseFloat(document.getElementById('pesoBrutoInput').value) || 0;
+                document.getElementById('pesoNetoDisplay').value = (cantidad * pesoBruto).toFixed(2);
+            }
+        }
+
+        // Detectar cuando el usuario edita manualmente el peso neto
+        document.getElementById('pesoNetoDisplay').addEventListener('input', function() {
+            pesoNetoManual = true;
+        });
+
+        // Resetear el flag si el usuario borra el peso neto
+        document.getElementById('pesoNetoDisplay').addEventListener('blur', function() {
+            if (!this.value) {
+                pesoNetoManual = false;
+                calcularPesoNeto();
+            }
+        });
+
+        document.getElementById('cantidadInput').addEventListener('input', calcularPesoNeto);
+        document.getElementById('pesoBrutoInput').addEventListener('input', calcularPesoNeto);
+
+        // === Búsqueda de Operario ===
+        async function buscarOperario() {
+            const digitos = document.getElementById('operarioInput').value.trim();
+            const status  = document.getElementById('operarioStatus');
+            const btn     = document.getElementById('btnBuscarOperario');
+            if (!digitos) { status.textContent = 'Ingrese los últimos 4 dígitos'; status.className = 'text-danger small'; return; }
+
+            const codigo = '03' + digitos;
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarOperario", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.items && result.items.length === 1) {
+                    seleccionarOperario(result.items[0]);
+                } else if (result.success && result.items && result.items.length > 1) {
+                    mostrarLista('operarioDropdownList', result.items.map(i => ({
+                        texto: i.codigo + ' — ' + i.nombre,
+                        accion: () => seleccionarOperario(i)
+                    })), document.getElementById('operarioInput'));
+                    status.textContent = result.items.length + ' encontrados.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrado'); status.className = 'text-warning small';
+                    document.getElementById('operadorHidden').value = '';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        function seleccionarOperario(item) {
+            cerrarLista('operarioDropdownList');
+            document.getElementById('operarioInput').value  = item.nombre + ' (' + item.codigo + ')';
+            document.getElementById('operadorHidden').value = item.codigo;
+            const status = document.getElementById('operarioStatus');
+            status.textContent = '✓ Operario seleccionado'; status.className = 'text-success small';
+        }
+
+        // === Búsqueda de Partida, Receta, Lote (igual que en Crear.cshtml) ===
+        function seleccionarTitulo(titulo, bloquear = false) {
+            const sel = document.getElementById('tituloSelect');
+            if (!sel) return;
+            if (titulo) {
+                const opt = Array.from(sel.options).find(o => o.value === titulo.trim());
+                if (opt) sel.value = opt.value;
+            }
+            if (bloquear) {
+                sel.style.pointerEvents    = 'none';
+                sel.style.opacity          = '0.65';
+                sel.style.backgroundColor  = 'var(--color-bg-light)';
+            } else {
+                sel.style.pointerEvents    = '';
+                sel.style.opacity          = '';
+                sel.style.backgroundColor  = '';
+            }
+        }
+
+        function bloquearCamposPartida(bloquear) {
+            ['recetaInput', 'btnBuscarReceta', 'loteInput', 'btnBuscarLote'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (bloquear) {
+                    el.style.pointerEvents   = 'none';
+                    el.style.opacity         = '0.65';
+                    if (el.tagName === 'INPUT') el.style.backgroundColor = 'var(--color-bg-light)';
+                } else {
+                    el.style.pointerEvents   = '';
+                    el.style.opacity         = '';
+                    el.style.backgroundColor = '';
+                }
+            });
+        }
+
+        async function cargarTitulosPartida() {
+            const sel = document.getElementById('tituloSelect');
+            if (!sel) return;
+            try {
+                const resp = await fetch('@Url.Action("ObtenerTitulos", "Autoconer")');
+                const data = await resp.json();
+                if (data.success && data.titulos) {
+                    sel.innerHTML = '<option value="">Seleccione un título</option>';
+                    data.titulos.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value       = t.codigo;
+                        opt.textContent = t.descripcion;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { /* mantener opciones actuales */ }
+        }
+
+        function restaurarTitulosRestringidos() {
+            const sel = document.getElementById('tituloSelect');
+            if (sel && _titulosRestringidosHtml) {
+                sel.innerHTML = _titulosRestringidosHtml;
+                sel.value = '';
+            }
+        }
+
+        async function buscarPartida() {
+            const guia   = document.getElementById('guiaInput').value.trim();
+            const status = document.getElementById('partidaStatus');
+            const btn    = document.getElementById('btnBuscarPartida');
+            if (!guia) { status.textContent = 'Ingrese un Nº Partida'; status.className = 'text-danger small'; return; }
+
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarPartida", "Autoconer")?guia=${encodeURIComponent(guia)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('guiaInput').value     = result.data.guia;
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('procesoHidden').value = result.data.proceso || '';
+                    document.getElementById('recetaInput').value   = '';
+                    await cargarTitulosPartida();
+                    seleccionarTitulo(result.data.titulo, true);
+                    bloquearCamposPartida(true);
+                    status.textContent = '✓ Partida encontrada'; status.className = 'text-success small';
+                    document.getElementById('loteStatus').textContent    = '';
+                    document.getElementById('recetaStatus').textContent  = '';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('partidaDropdownList', result.items.map(i => ({
+                        texto: i.partida + ' [' + i.guia + ']'
+                            + (i.lote    ? ' — Lote: ' + i.lote  : '')
+                            + (i.cliente ? ' | ' + i.cliente      : ''),
+                        accion: async () => {
+                            document.getElementById('guiaInput').value     = i.guia;
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('materialInput').value = i.material;
+                            document.getElementById('procesoHidden').value = i.proceso || '';
+                            document.getElementById('recetaInput').value   = '';
+                            await cargarTitulosPartida();
+                            seleccionarTitulo(i.titulo, true);
+                            bloquearCamposPartida(true);
+                            status.textContent = '✓ Partida seleccionada'; status.className = 'text-success small';
+                            document.getElementById('loteStatus').textContent   = '';
+                            document.getElementById('recetaStatus').textContent = '';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('guiaInput'));
+                    status.textContent = result.items.length + ' partidas encontradas.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrada'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        async function buscarReceta() {
+            const codigo = document.getElementById('recetaInput').value.trim();
+            const status = document.getElementById('recetaStatus');
+            const btn    = document.getElementById('btnBuscarReceta');
+            if (!codigo) { status.textContent = 'Ingrese un código'; status.className = 'text-danger small'; return; }
+
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarReceta", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('recetaInput').value   = result.data.numero;
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('procesoHidden').value = result.data.proceso || '';
+                    restaurarTitulosRestringidos();
+                    bloquearCamposPartida(false);
+                    seleccionarTitulo(null, false);
+                    status.textContent = '✓ Receta encontrada'; status.className = 'text-success small';
+                    document.getElementById('loteStatus').textContent = '';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('recetaDropdownList', result.items.map(i => ({
+                        texto: i.numero + (i.material ? ' — ' + i.material : ''),
+                        accion: () => {
+                            document.getElementById('recetaInput').value   = i.numero;
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('materialInput').value = i.material;
+                            document.getElementById('procesoHidden').value = i.proceso || '';
+                            restaurarTitulosRestringidos();
+                            bloquearCamposPartida(false);
+                            seleccionarTitulo(null, false);
+                            status.textContent = '✓ Receta seleccionada'; status.className = 'text-success small';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('recetaInput'));
+                    status.textContent = result.items.length + ' recetas encontradas.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrada'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        async function buscarLote() {
+            const codigo = document.getElementById('loteInput').value.trim();
+            const status = document.getElementById('loteStatus');
+            const btn    = document.getElementById('btnBuscarLote');
+            if (!codigo) { status.textContent = 'Ingrese un código'; status.className = 'text-danger small'; return; }
+
+            btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+            status.textContent = 'Buscando...'; status.className = 'text-info small';
+
+            try {
+                const resp   = await fetch(`@Url.Action("BuscarLote", "Autoconer")?codigo=${encodeURIComponent(codigo)}`);
+                const result = await resp.json();
+                if (result.success && result.data) {
+                    document.getElementById('loteInput').value     = result.data.lote;
+                    document.getElementById('recetaInput').value   = '';
+                    document.getElementById('guiaInput').value     = '';
+                    document.getElementById('materialInput').value = result.data.material;
+                    document.getElementById('procesoHidden').value = result.data.proceso || '';
+                    document.getElementById('recetaStatus').textContent  = '';
+                    document.getElementById('partidaStatus').textContent = '';
+                    restaurarTitulosRestringidos();
+                    bloquearCamposPartida(false);
+                    seleccionarTitulo(null, false);
+                    status.textContent = '✓ Lote encontrado'; status.className = 'text-success small';
+                    realzarCampo('materialInput');
+                } else if (result.success && result.multiple) {
+                    mostrarLista('loteDropdownList', result.items.map(i => ({
+                        texto: i.lote + (i.material ? ' — ' + i.material : ''),
+                        accion: () => {
+                            document.getElementById('loteInput').value     = i.lote;
+                            document.getElementById('recetaInput').value   = '';
+                            document.getElementById('guiaInput').value     = '';
+                            document.getElementById('materialInput').value = i.material;
+                            document.getElementById('procesoHidden').value = i.proceso || '';
+                            document.getElementById('recetaStatus').textContent  = '';
+                            document.getElementById('partidaStatus').textContent = '';
+                            restaurarTitulosRestringidos();
+                            bloquearCamposPartida(false);
+                            seleccionarTitulo(null, false);
+                            status.textContent = '✓ Lote seleccionado'; status.className = 'text-success small';
+                            realzarCampo('materialInput');
+                        }
+                    })), document.getElementById('loteInput'));
+                    status.textContent = result.items.length + ' lotes encontrados.'; status.className = 'text-info small';
+                } else {
+                    status.textContent = '✗ ' + (result.message || 'No encontrado'); status.className = 'text-warning small';
+                }
+            } catch { status.textContent = '✗ Error al buscar'; status.className = 'text-danger small'; }
+            finally   { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search"></i>'; }
+        }
+
+        // === Helpers ===
+        function realzarCampo(id) {
+            const el = document.getElementById(id);
+            el.style.backgroundColor = 'var(--color-success-light)';
+            setTimeout(() => { el.style.backgroundColor = 'var(--color-bg-light)'; }, 2000);
+        }
+
+        function cerrarLista(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function mostrarLista(listId, items, anchorEl) {
+            cerrarLista(listId);
+            const ul = document.createElement('ul');
+            ul.id        = listId;
+            ul.className = 'list-group mt-1 shadow-sm';
+            ul.style.cssText = 'max-height:200px;overflow-y:auto;cursor:pointer;position:relative;z-index:1000;';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.textContent = item.texto;
+                li.addEventListener('click', () => { cerrarLista(listId); item.accion(); });
+                ul.appendChild(li);
+            });
+            anchorEl.closest('.input-group, .col-md-6, .col-md-4, .col-md-3').appendChild(ul);
+            const cerrar = e => {
+                if (!ul.contains(e.target) && e.target !== anchorEl) { cerrarLista(listId); document.removeEventListener('click', cerrar); }
+            };
+            setTimeout(() => document.addEventListener('click', cerrar), 0);
+        }
+
+        // === Agregar registro a la lista ===
+        function validarFormulario() {
+            const errores = [];
+
+            if (!document.getElementById('autoconerSelect').value) errores.push('Autoconer N°');
+            if (!document.getElementById('operadorHidden').value) errores.push('Operador N°');
+            if (!document.getElementById('turnoSelect').value) errores.push('Turno');
+            if (!document.getElementById('loteInput').value) errores.push('Lote / Partida');
+            if (!document.getElementById('materialInput').value) errores.push('Material');
+            if (!document.getElementById('tituloSelect').value) errores.push('Título');
+
+            if (errores.length > 0) {
+                alert('Los siguientes campos son obligatorios:\\n\\n' + errores.join('\\n'));
+                return false;
+            }
+
+            return true;
+        }
+
+        function agregarRegistro() {
+            if (!validarFormulario()) return;
+
+            const autoconerSelect = document.getElementById('autoconerSelect');
+            const operarioInput = document.getElementById('operarioInput');
+            const tituloSelect = document.getElementById('tituloSelect');
+
+            const registro = {
+                NumeroAutoconer: autoconerSelect.value,
+                NumeroAutoconerDesc: autoconerSelect.options[autoconerSelect.selectedIndex].getAttribute('data-descripcion'),
+                CodigoOperador: document.getElementById('operadorHidden').value,
+                CodigoOperadorDesc: operarioInput.value,
+                Fecha: document.getElementById('fechaHidden').value,
+                Turno: document.getElementById('turnoSelect').value,
+                CodigoReceta: document.getElementById('recetaInput').value || null,
+                Guia: document.getElementById('guiaInput').value || null,
+                Lote: document.getElementById('loteInput').value,
+                DescripcionMaterial: document.getElementById('materialInput').value,
+                Titulo: tituloSelect.value,
+                TituloDesc: tituloSelect.options[tituloSelect.selectedIndex].text,
+                VelocidadMMin: parseFloat(document.getElementById('velocidadInput').value) || null,
+                HoraInicio: document.getElementById('horaInicioInput').value || null,
+                HoraFinal: document.getElementById('horaFinalInput').value || null,
+                Destino: document.getElementById('destinoSelect').value || null,
+                Proceso: document.getElementById('procesoHidden').value || null,
+                Tramo1: parseInt(document.getElementById('tramo1Input').value) || null,
+                Tramo2: parseInt(document.getElementById('tramo2Input').value) || null,
+                Tramo3: parseInt(document.getElementById('tramo3Input').value) || null,
+                Tramo4: parseInt(document.getElementById('tramo4Input').value) || null,
+                Tramo5: parseInt(document.getElementById('tramo5Input').value) || null,
+                Tramo6: parseInt(document.getElementById('tramo6Input').value) || null,
+                Cantidad: parseInt(document.getElementById('cantidadInput').value) || null,
+                PesoBruto: parseFloat(document.getElementById('pesoBrutoInput').value) || null,
+                Puntaje: parseFloat(document.getElementById('pesoNetoDisplay').value) || null,
+                Estado: 3, // Terminado
+                Cerrado: true
+            };
+
+            registros.push(registro);
+            actualizarTabla();
+            limpiarFormulario();
+        }
+
+        function actualizarTabla() {
+            const tbody = document.getElementById('listaRegistros');
+            tbody.innerHTML = '';
+
+            if (registros.length === 0) {
+                tbody.innerHTML = `
+                    <tr id="mensajeVacio">
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox display-6 d-block mb-2"></i>
+                            No hay registros agregados. Use el formulario de arriba para agregar registros.
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('btnGuardarTodos').disabled = true;
+                document.getElementById('btnLimpiarLista').disabled = true;
+            } else {
+                registros.forEach((reg, index) => {
+                    const tramos = [];
+                    if (reg.Tramo1 > 0) tramos.push('T1:' + reg.Tramo1);
+                    if (reg.Tramo2 > 0) tramos.push('T2:' + reg.Tramo2);
+                    if (reg.Tramo3 > 0) tramos.push('T3:' + reg.Tramo3);
+                    if (reg.Tramo4 > 0) tramos.push('T4:' + reg.Tramo4);
+                    if (reg.Tramo5 > 0) tramos.push('T5:' + reg.Tramo5);
+                    if (reg.Tramo6 > 0) tramos.push('T6:' + reg.Tramo6);
+                    const tramosTexto = tramos.length > 0 ? tramos.join(', ') : '-';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${reg.NumeroAutoconerDesc || reg.NumeroAutoconer}</td>
+                        <td><small>${reg.CodigoOperadorDesc}</small></td>
+                        <td><small>${reg.Lote}</small></td>
+                        <td><small>${reg.DescripcionMaterial}</small></td>
+                        <td><small>${reg.TituloDesc || reg.Titulo}</small></td>
+                        <td><small>${tramosTexto}</small></td>
+                        <td><small>${reg.Cantidad || '-'}</small></td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarRegistro(${index})" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarRegistro(${index})" title="Eliminar">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                // Botón "Guardar Todos" permanece siempre bloqueado
+                document.getElementById('btnGuardarTodos').disabled = true;
+                document.getElementById('btnLimpiarLista').disabled = false;
+            }
+
+            document.getElementById('contadorRegistros').textContent = `${registros.length} registro${registros.length !== 1 ? 's' : ''}`;
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('autoconerSelect').value = '';
+            document.getElementById('operarioInput').value = '';
+            document.getElementById('operadorHidden').value = '';
+            document.getElementById('turnoSelect').value = '';
+            document.getElementById('recetaInput').value = '';
+            document.getElementById('guiaInput').value = '';
+            document.getElementById('loteInput').value = '';
+            document.getElementById('materialInput').value = '';
+            document.getElementById('tituloSelect').value = '';
+            document.getElementById('velocidadInput').value = '';
+            document.getElementById('horaInicioInput').value = ahoraLocal();
+            document.getElementById('horaFinalInput').value = ahoraLocal();
+            document.getElementById('destinoSelect').value = '';
+            document.getElementById('procesoHidden').value = '';
+            document.getElementById('tramo1Input').value = '';
+            document.getElementById('tramo2Input').value = '';
+            document.getElementById('tramo3Input').value = '';
+            document.getElementById('tramo4Input').value = '';
+            document.getElementById('tramo5Input').value = '';
+            document.getElementById('tramo6Input').value = '';
+            document.getElementById('cantidadInput').value = '';
+            document.getElementById('pesoBrutoInput').value = '';
+            document.getElementById('pesoNetoDisplay').value = '';
+
+            // Resetear flag de peso neto manual
+            pesoNetoManual = false;
+
+            // Limpiar estados
+            document.getElementById('operarioStatus').textContent = '';
+            document.getElementById('recetaStatus').textContent = '';
+            document.getElementById('loteStatus').textContent = '';
+            document.getElementById('partidaStatus').textContent = '';
+
+            // Restaurar estados de bloqueo
+            bloquearCamposPartida(false);
+            seleccionarTitulo(null, false);
+            restaurarTitulosRestringidos();
+        }
+
+        window.editarRegistro = function(index) {
+            const reg = registros[index];
+            
+            document.getElementById('autoconerSelect').value = reg.NumeroAutoconer;
+            document.getElementById('operarioInput').value = reg.CodigoOperadorDesc;
+            document.getElementById('operadorHidden').value = reg.CodigoOperador;
+            document.getElementById('turnoSelect').value = reg.Turno;
+            document.getElementById('recetaInput').value = reg.CodigoReceta || '';
+            document.getElementById('guiaInput').value = reg.Guia || '';
+            document.getElementById('loteInput').value = reg.Lote;
+            document.getElementById('materialInput').value = reg.DescripcionMaterial;
+            document.getElementById('tituloSelect').value = reg.Titulo;
+            document.getElementById('velocidadInput').value = reg.VelocidadMMin || '';
+            document.getElementById('horaInicioInput').value = reg.HoraInicio || '';
+            document.getElementById('horaFinalInput').value = reg.HoraFinal || '';
+            document.getElementById('destinoSelect').value = reg.Destino || '';
+            document.getElementById('procesoHidden').value = reg.Proceso || '';
+            document.getElementById('tramo1Input').value = reg.Tramo1 || '';
+            document.getElementById('tramo2Input').value = reg.Tramo2 || '';
+            document.getElementById('tramo3Input').value = reg.Tramo3 || '';
+            document.getElementById('tramo4Input').value = reg.Tramo4 || '';
+            document.getElementById('tramo5Input').value = reg.Tramo5 || '';
+            document.getElementById('tramo6Input').value = reg.Tramo6 || '';
+            document.getElementById('cantidadInput').value = reg.Cantidad || '';
+            document.getElementById('pesoBrutoInput').value = reg.PesoBruto || '';
+            document.getElementById('pesoNetoDisplay').value = reg.Puntaje || '';
+
+            // Si tiene un peso neto guardado, marcarlo como manual
+            if (reg.Puntaje) {
+                pesoNetoManual = true;
+            } else {
+                pesoNetoManual = false;
+                calcularPesoNeto();
+            }
+
+            // Eliminar el registro de la lista
+            registros.splice(index, 1);
+            actualizarTabla();
+        };
+
+        window.eliminarRegistro = function(index) {
+            indexAEliminar = index;
+            const modal = new bootstrap.Modal(document.getElementById('modalEliminarRegistro'));
+            modal.show();
+        };
+
+        function limpiarLista() {
+            // Mostrar modal de confirmación
+            const modal = new bootstrap.Modal(document.getElementById('modalLimpiarLista'));
+            modal.show();
+        }
+
+        async function guardarTodos() {
+            if (registros.length === 0) {
+                alert('No hay registros para guardar.');
+                return;
+            }
+
+            if (!confirm(`¿Está seguro de guardar ${registros.length} registro(s)?`)) {
+                return;
+            }
+
+            const btnGuardar = document.getElementById('btnGuardarTodos');
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando...';
+
+            try {
+                const response = await fetch('@Url.Action("GuardarCanillas", "Autoconer")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                    },
+                    body: JSON.stringify(registros)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(result.message);
+                    registros = [];
+                    actualizarTabla();
+                    window.location.href = '@Url.Action("Index", "Autoconer")';
+                } else {
+                    alert('Error al guardar: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error al guardar los registros: ' + error.message);
+            } finally {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = '<i class="bi bi-save me-2"></i>Guardar Todos los Registros';
+            }
+        }
+
+        // === Eventos ===
+        document.addEventListener('DOMContentLoaded', function () {
+            // Cache de títulos restringidos
+            const tituloSel = document.getElementById('tituloSelect');
+            if (tituloSel) _titulosRestringidosHtml = tituloSel.innerHTML;
+
+            // Valores por defecto para fechas
+            const ahora = ahoraLocal();
+            document.getElementById('horaInicioInput').value = ahora;
+            document.getElementById('horaFinalInput').value = ahora;
+
+            // Eventos de búsqueda
+            document.getElementById('btnBuscarPartida').addEventListener('click', buscarPartida);
+            document.getElementById('guiaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarPartida(); } });
+            document.getElementById('guiaInput').addEventListener('input', () => {
+                document.getElementById('partidaStatus').textContent = '';
+                cerrarLista('partidaDropdownList');
+                bloquearCamposPartida(false);
+                seleccionarTitulo(null, false);
+                restaurarTitulosRestringidos();
+            });
+
+            document.getElementById('btnBuscarReceta').addEventListener('click', buscarReceta);
+            document.getElementById('recetaInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarReceta(); } });
+            document.getElementById('recetaInput').addEventListener('input', () => { document.getElementById('recetaStatus').textContent = ''; cerrarLista('recetaDropdownList'); });
+
+            document.getElementById('btnBuscarLote').addEventListener('click', buscarLote);
+            document.getElementById('loteInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarLote(); } });
+            document.getElementById('loteInput').addEventListener('input', () => { document.getElementById('loteStatus').textContent = ''; cerrarLista('loteDropdownList'); });
+
+            document.getElementById('btnBuscarOperario').addEventListener('click', buscarOperario);
+            document.getElementById('operarioInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOperario(); } });
+            document.getElementById('operarioInput').addEventListener('input', () => {
+                document.getElementById('operarioStatus').textContent = '';
+                cerrarLista('operarioDropdownList');
+                document.getElementById('operadorHidden').value = '';
+            });
+
+            // Eventos de botones
+            document.getElementById('btnAgregar').addEventListener('click', agregarRegistro);
+            document.getElementById('btnLimpiar').addEventListener('click', limpiarFormulario);
+            document.getElementById('btnLimpiarLista').addEventListener('click', limpiarLista);
+            document.getElementById('btnGuardarTodos').addEventListener('click', guardarTodos);
+
+            // Evento para confirmar limpieza de lista
+            document.getElementById('btnConfirmarLimpiar').addEventListener('click', function() {
+                registros = [];
+                actualizarTabla();
+                // Cerrar el modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modalLimpiarLista'));
+                modal.hide();
+            });
+
+            // Evento para confirmar eliminación de registro individual
+            document.getElementById('btnConfirmarEliminar').addEventListener('click', function() {
+                if (indexAEliminar >= 0) {
+                    registros.splice(indexAEliminar, 1);
+                    actualizarTabla();
+                    indexAEliminar = -1;
+                }
+                // Cerrar el modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modalEliminarRegistro'));
+                modal.hide();
+            });
+        });
+    </script>
+}

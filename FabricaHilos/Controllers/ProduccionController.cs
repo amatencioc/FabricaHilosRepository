@@ -35,7 +35,7 @@ namespace FabricaHilos.Controllers
 
             if (menus.ProduccionAutoconer)
             {
-                modulos.Add(new SgcModuloDto
+                var autoconerModulo = new SgcModuloDto
                 {
                     Nombre = "Control Autoconer",
                     Descripcion = "Control de producción de máquinas Autoconer, registro de tramos, destinos y reprocesos.",
@@ -43,7 +43,34 @@ namespace FabricaHilos.Controllers
                     ColorClase = "text-success",
                     Controller = "Autoconer",
                     Action = "Index"
-                });
+                };
+
+                // Agregar submenús si están habilitados
+                if (menus.ProduccionAutoconerPorPartida)
+                {
+                    autoconerModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Por Partida",
+                        Descripcion = "Registro individual por partida",
+                        Icono = "bi-folder",
+                        Controller = "Autoconer",
+                        Action = "Index"
+                    });
+                }
+
+                if (menus.ProduccionAutoconerPorCanillas)
+                {
+                    autoconerModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Por Canillas",
+                        Descripcion = "Registro agrupado por canillas",
+                        Icono = "bi-list-ul",
+                        Controller = "Autoconer",
+                        Action = "PorCanillas"
+                    });
+                }
+
+                modulos.Add(autoconerModulo);
             }
 
             return View(modulos);

@@ -1,0 +1,209 @@
+@model IEnumerable<FabricaHilos.Models.Sgc.ReqCertDto>
+
+@{
+    ViewData["Title"] = "Consulta TC - Requerimientos de Certificados";
+    string? buscar      = ViewBag.Buscar      as string;
+    string? fechaInicio = ViewBag.FechaInicio as string;
+    string? fechaFin    = ViewBag.FechaFin    as string;
+    string? navToken    = ViewBag.NavToken    as string;
+    int page            = ViewBag.Page        ?? 1;
+    int pageSize        = ViewBag.PageSize    ?? 10;
+    int totalCount      = ViewBag.TotalCount  ?? 0;
+    int totalPages      = ViewBag.TotalPages  ?? 1;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">VENTAS</a></li>
+    <li class="breadcrumb-item active">Consulta TC</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Consulta TC - Requerimientos de Certificados
+    </h4>
+    <span class="badge bg-primary">Total: @totalCount registros</span>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap">
+            <input type="text" name="buscar" value="@buscar" class="form-control form-control-sm" placeholder="Buscar (NUM_CER, Razón Social, RUC)..." style="max-width: 300px;" />
+            <input type="date" name="fechaInicio" value="@fechaInicio" class="form-control form-control-sm" style="max-width: 180px;" />
+            <input type="date" name="fechaFin" value="@fechaFin" class="form-control form-control-sm" style="max-width: 180px;" />
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-search me-1"></i>Filtrar
+            </button>
+            @if (!string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                </a>
+            }
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de Requerimientos -->
+@if (Model.Any())
+{
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-corporate table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>Nº Req.</th>
+                            <th>Fecha</th>
+                            <th>Tipo de Certificado</th>
+                            <th>Nº Certificado</th>
+                            <th>Razón Social</th>
+                            <th>RUC</th>
+                            <th>Documento</th>
+                            <th>Usuario</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            int contador = (page - 1) * pageSize;
+                        }
+                        @foreach (var req in Model)
+                        {
+                            contador++;
+                            <tr class="cursor-pointer" data-numreq="@req.NumReq">
+                                <td class="text-center">@contador</td>
+                                <td><strong>@req.NumReq</strong></td>
+                                <td>@req.Fecha?.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(req.CodArt))
+                                    {
+                                        if (req.CodArt == "CERTGOTS")
+                                        {
+                                            <span class="badge bg-success">GOTS</span>
+                                        }
+                                        else if (req.CodArt == "CERTOCS")
+                                        {
+                                            <span class="badge bg-info">OCS</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">@req.CodArt</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @{
+                                        bool hayCertificado = !string.IsNullOrEmpty(req.NumCer);
+                                    }
+
+                                    @if (hayCertificado)
+                                    {
+                                        <a href="@Url.Action("VisualizarPdf", "ConsultaTc", new { numReq = req.NumReq })" 
+                                           target="_blank" 
+                                           class="me-2" 
+                                           title="Visualizar certificado PDF">
+                                            <i class="bi bi-file-pdf-fill text-danger" style="font-size: 1.2rem;"></i>
+                                        </a>
+                                        <span class="badge bg-success">@req.NumCer</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Sin certificado</span>
+                                    }
+                                </td>
+                                <td>@req.RazonSocial</td>
+                                <td>@req.Ruc</td>
+                                <td>
+                                    @{
+                                        bool hayDocumento = !string.IsNullOrEmpty(req.TipoDoc) && 
+                                                            !string.IsNullOrEmpty(req.Serie) && 
+                                                            !string.IsNullOrEmpty(req.Numero);
+                                    }
+
+                                    @if (hayDocumento)
+                                    {
+                                        <span>@req.TipoDoc-@req.Serie-@req.Numero</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        @if (req.AMduser != null)
+                                        {
+                                            <span>Mod: @req.AMduser (@req.AMdfecha?.ToString("dd/MM/yyyy"))</span>
+                                        }
+                                        else if (req.AAduser != null)
+                                        {
+                                            <span>Cre: @req.AAduser (@req.AAdfecha?.ToString("dd/MM/yyyy"))</span>
+                                        }
+                                    </small>
+                                </td>
+                                <td class="text-center">
+                                    <a href="@Url.Action("Detalle", new { numReq = req.NumReq, t = navToken })" 
+                                       class="btn btn-sm btn-primary" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="Ver detalle">
+                                        <i class="bi bi-eye-fill"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paginación -->
+    @if (totalPages > 1)
+    {
+        <nav aria-label="Navegación de páginas" class="mt-3">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page == 1 ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = page - 1 })">Anterior</a>
+                </li>
+
+                @for (int i = Math.Max(1, page - 2); i <= Math.Min(totalPages, page + 2); i++)
+                {
+                    <li class="page-item @(i == page ? "active" : "")">
+                        <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = i })">@i</a>
+                    </li>
+                }
+
+                <li class="page-item @(page == totalPages ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { t = navToken, page = page + 1 })">Siguiente</a>
+                </li>
+            </ul>
+        </nav>
+    }
+}
+else
+{
+    <div class="alert alert-info text-center">
+        <i class="bi bi-info-circle me-2"></i>
+        No se encontraron requerimientos con los filtros especificados.
+    </div>
+}
+
+@section Scripts {
+    <script>
+        // Inicializar tooltips de Bootstrap
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+    </script>
+}

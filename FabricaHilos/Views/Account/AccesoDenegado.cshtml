@@ -1,12 +1,46 @@
 @{
     ViewData["Title"] = "Acceso Denegado";
+    var usuario = Context.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "Usuario";
 }
 
-<div class="text-center py-5">
-    <i class="bi bi-shield-x display-1 text-danger"></i>
-    <h2 class="mt-3">Acceso Denegado</h2>
-    <p class="text-muted">No tienes permiso para acceder a esta sección.</p>
-    <a asp-controller="Home" asp-action="Index" class="btn btn-primary">
-        <i class="bi bi-house me-1"></i>Volver al Dashboard
-    </a>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white text-center">
+                    <i class="bi bi-shield-x display-4"></i>
+                    <h2 class="mt-3 mb-0">Acceso Denegado</h2>
+                </div>
+                <div class="card-body text-center py-5">
+                    <div class="alert alert-warning mb-4">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Usuario:</strong> @usuario
+                    </div>
+                    <p class="lead text-muted mb-4">
+                        No tienes permisos para acceder a este recurso.
+                    </p>
+                    <div class="alert alert-light border">
+                        <p class="mb-0">
+                            <i class="bi bi-info-circle-fill text-info me-2"></i>
+                            Tu perfil de usuario no tiene los permisos necesarios para acceder a este módulo o funcionalidad.
+                        </p>
+                    </div>
+                    <hr class="my-4">
+                    <p class="text-muted small mb-4">
+                        Si consideras que deberías tener acceso, contacta al administrador del sistema para verificar tus permisos.
+                    </p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a asp-controller="Home" asp-action="Index" class="btn btn-primary">
+                            <i class="bi bi-house me-1"></i>Volver al Dashboard
+                        </a>
+                        <form asp-action="Logout" asp-controller="Account" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-outline-secondary">
+                                <i class="bi bi-box-arrow-right me-1"></i>Cerrar Sesión
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

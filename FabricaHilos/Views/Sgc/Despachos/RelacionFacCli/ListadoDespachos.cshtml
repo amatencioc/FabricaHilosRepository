@@ -503,6 +503,30 @@
     </div>
 </div>
 
+<!-- Modal de Confirmación para Limpiar Selección -->
+<div class="modal fade" id="modalLimpiarSeleccion" tabindex="-1" aria-labelledby="modalLimpiarSeleccionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="modalLimpiarSeleccionLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Confirmar Limpieza
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">¿Desea limpiar todas las facturas seleccionadas de todas las páginas?</p>
+                <p class="text-muted small mt-2 mb-0">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarLimpiarSeleccion" class="btn btn-danger">
+                    <i class="bi bi-trash me-1"></i>Limpiar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Éxito - Requerimiento Generado -->
 <div class="modal fade" id="modalExitoTC" tabindex="-1" aria-labelledby="modalExitoTCLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
@@ -777,7 +801,16 @@
      * Limpiar todas las selecciones (de todas las páginas)
      */
     function limpiarTodasLasSelecciones(solicitarConfirmacion = true) {
-        if (solicitarConfirmacion && !confirm('¿Desea limpiar todas las facturas seleccionadas de todas las páginas?')) {
+        if (solicitarConfirmacion) {
+            // Ocultar overlay de carga antes de mostrar el modal
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
+
+            // Mostrar modal de confirmación
+            const modal = new bootstrap.Modal(document.getElementById('modalLimpiarSeleccion'));
+            modal.show();
             return;
         }
 
@@ -803,7 +836,12 @@
         const facturasArray = Object.values(facturasGuardadas);
 
         if (facturasArray.length === 0) {
-            alert('No hay facturas seleccionadas.');
+            // Ocultar overlay y mostrar advertencia
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
+            mostrarPdfModal('Advertencia', 'No hay facturas seleccionadas.');
             return;
         }
 
@@ -827,6 +865,12 @@
             tbody.appendChild(tr);
         });
 
+        // Ocultar overlay de carga antes de mostrar el modal
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('show');
+        }
+
         // Mostrar modal
         const modal = new bootstrap.Modal(document.getElementById('modalFacturasAgrupadas'));
         modal.show();
@@ -840,7 +884,12 @@
         const facturasArray = Object.values(facturasGuardadas);
 
         if (facturasArray.length === 0) {
-            alert('No hay facturas seleccionadas.');
+            // Ocultar overlay y mostrar advertencia
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
+            mostrarPdfModal('Advertencia', 'No hay facturas seleccionadas.');
             return;
         }
 
@@ -849,11 +898,14 @@
         const ocsChecked = document.getElementById('checkOcs')?.checked || false;
 
         if (!gotsChecked && !ocsChecked) {
-            // Mostrar modal de advertencia
-            mostrarModalPdf(
+            // Ocultar overlay y mostrar modal de advertencia
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
+            mostrarPdfModal(
                 'Advertencia',
-                'No se ha especificado el tipo de certificado.\n\nPor favor, marque al menos uno de los filtros: GOTS o OCS.',
-                'warning'
+                'No se ha especificado el tipo de certificado.\n\nPor favor, marque al menos uno de los filtros: GOTS o OCS.'
             );
             return;
         }
@@ -905,12 +957,22 @@
                 // Mostrar modal de éxito con el número de requerimiento
                 mostrarModalExitoTC(result.numReq, facturasArray.length);
             } else {
-                // Mostrar mensaje de error o advertencia
-                alert(result.tipo + ': ' + result.mensaje);
+                // Ocultar overlay y mostrar mensaje de error o advertencia usando modal
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                if (loadingOverlay) {
+                    loadingOverlay.classList.remove('show');
+                }
+                mostrarPdfModal(result.tipo, result.mensaje);
             }
         } catch (error) {
             console.error('Error al enviar facturas a TC:', error);
-            alert('Ocurrió un error al procesar la solicitud. Por favor, intente nuevamente.');
+
+            // Ocultar overlay y mostrar error usando modal
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
+            mostrarPdfModal('Error', 'Ocurrió un error al procesar la solicitud. Por favor, intente nuevamente.');
 
             // Restaurar botón en caso de error
             const btnConfirmar = event.target;
@@ -923,6 +985,12 @@
      * Mostrar modal de éxito con el número de requerimiento
      */
     function mostrarModalExitoTC(numReq, totalFacturas) {
+        // Ocultar overlay de carga antes de mostrar el modal
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('show');
+        }
+
         // Actualizar contenido del modal
         document.getElementById('numReqGenerado').textContent = numReq;
         document.getElementById('totalFacturasProcesadas').textContent = totalFacturas;
@@ -1053,6 +1121,13 @@
 
     async function descargarPdf(event, anchor) {
         event.preventDefault();
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        // Ocultar overlay inmediatamente si está visible (por si se activó antes)
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('show');
+        }
+
         try {
             const resp = await fetch(anchor.href, { credentials: 'include' });
             const ct = resp.headers.get('Content-Type') ?? '';
@@ -1067,10 +1142,21 @@
             }
         } catch {
             mostrarPdfModal('Error', 'Ocurrió un error inesperado al obtener el PDF.');
+        } finally {
+            // Asegurar que el overlay esté oculto al finalizar
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('show');
+            }
         }
     }
 
     function mostrarPdfModal(tipo, mensaje) {
+        // Ocultar el overlay de carga antes de mostrar el modal
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('show');
+        }
+
         const esError = tipo === 'Error';
         document.getElementById('pdfModalHeader').className =
             'modal-header ' + (esError ? 'bg-danger text-white' : 'bg-warning text-dark');
@@ -1101,6 +1187,21 @@
 
                 // El formulario se enviará normalmente (no prevenimos default)
                 // El overlay se ocultará cuando la página se recargue con los resultados
+            });
+        }
+
+        // Evento para confirmar limpieza de selección
+        const btnConfirmarLimpiarSeleccion = document.getElementById('btnConfirmarLimpiarSeleccion');
+        if (btnConfirmarLimpiarSeleccion) {
+            btnConfirmarLimpiarSeleccion.addEventListener('click', function() {
+                // Llamar la función sin solicitar confirmación (ya fue confirmado en el modal)
+                limpiarTodasLasSelecciones(false);
+
+                // Cerrar el modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modalLimpiarSeleccion'));
+                if (modal) {
+                    modal.hide();
+                }
             });
         }
     });

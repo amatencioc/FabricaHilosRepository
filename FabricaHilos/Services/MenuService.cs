@@ -30,9 +30,13 @@ public class MenuService : IMenuService
         var global = _globalMenus.Value;
         var user   = _httpContextAccessor.HttpContext?.User;
         var username = user?.Identity?.Name;
+        var oracleUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
 
         if (string.IsNullOrEmpty(username))
             return global;
+
+        // Verificar si el usuario tiene acceso al módulo VENTAS
+        bool tieneAccesoVentas = TieneAccesoVentas(oracleUser ?? username);
 
         var allowed = _config.GetSection($"UserMenus:{username}").Get<string[]>();
 
@@ -41,16 +45,91 @@ public class MenuService : IMenuService
         // a usuarios que deberían estar restringidos).
         if (allowed == null || allowed.Length == 0)
         {
-            // Sin UserMenus: Admin ve todo; cualquier otro ve el global
-            if (user!.IsInRole("Admin"))
-                return MenuOptions.Todo();
+            // Caso especial: Usuarios de VENTAS (COSTOS2 o VENT...)
+            // Solo deben ver el módulo VENTAS, independientemente de su rol
+            if (tieneAccesoVentas)
+            {
+                return new MenuOptions
+                {
+                    Dashboard = false,
+                    Inventario = false,
+                    Produccion = false,
+                    Sgc = false,
+                    Facturacion = false,
+                    Ventas = true,
+                    RecursosHumanos = false,
+                    Administracion = false,
+                    Seguridad = false,
+                    InventarioMateriaPrima = false,
+                    InventarioProductoTerminado = false,
+                    ProduccionRegistroPreparatoria = false,
+                    ProduccionAutoconer = false,
+                    ProduccionAutoconerPorPartida = false,
+                    ProduccionAutoconerPorCanillas = false,
+                    SgcDashboard = false,
+                    SgcPedidos = false,
+                    SgcDespachos = false,
+                    SgcDespachosRelacionFacCli = false,
+                    SgcDespachosCargarTC = false,
+                    FacturacionImportarFacturas = false,
+                    FacturacionListaDocumentos = false,
+                    VentasConsultaTC = true,
+                    RecursosHumanosEmpleados = false,
+                    RecursosHumanosAsistencia = false,
+                    AdministracionRegistrarUsuario = false,
+                    SeguridadSubirFoto = false
+                };
+            }
 
-            return global;
+            // Sin UserMenus: Admin ve todo
+            if (user!.IsInRole("Admin"))
+            {
+                return MenuOptions.Todo();
+            }
+
+            // Otros usuarios sin UserMenus ven el menú global (sin Ventas)
+            var menusGlobal = new MenuOptions
+            {
+                Dashboard = global.Dashboard,
+                Inventario = global.Inventario,
+                Produccion = global.Produccion,
+                Sgc = global.Sgc,
+                Facturacion = global.Facturacion,
+                Ventas = false,
+                RecursosHumanos = global.RecursosHumanos,
+                Administracion = global.Administracion,
+                Seguridad = global.Seguridad,
+                InventarioMateriaPrima = global.InventarioMateriaPrima,
+                InventarioProductoTerminado = global.InventarioProductoTerminado,
+                ProduccionRegistroPreparatoria = global.ProduccionRegistroPreparatoria,
+                ProduccionAutoconer = global.ProduccionAutoconer,
+                ProduccionAutoconerPorPartida = global.ProduccionAutoconerPorPartida,
+                ProduccionAutoconerPorCanillas = global.ProduccionAutoconerPorCanillas,
+                SgcDashboard = global.SgcDashboard,
+                SgcPedidos = global.SgcPedidos,
+                SgcDespachos = global.SgcDespachos,
+                SgcDespachosRelacionFacCli = global.SgcDespachosRelacionFacCli,
+                SgcDespachosCargarTC = global.SgcDespachosCargarTC,
+                FacturacionImportarFacturas = global.FacturacionImportarFacturas,
+                FacturacionListaDocumentos = global.FacturacionListaDocumentos,
+                VentasConsultaTC = false,
+                RecursosHumanosEmpleados = global.RecursosHumanosEmpleados,
+                RecursosHumanosAsistencia = global.RecursosHumanosAsistencia,
+                AdministracionRegistrarUsuario = global.AdministracionRegistrarUsuario,
+                SeguridadSubirFoto = global.SeguridadSubirFoto
+            };
+            return menusGlobal;
         }
 
         // Menú principal visible si el global lo habilita Y el usuario lo tiene en su lista
-        bool Menu(bool globalEnabled, string key) =>
-            globalEnabled && allowed.Contains(key, StringComparer.OrdinalIgnoreCase);
+        bool Menu(bool globalEnabled, string key)
+        {
+            // Aplicar restricción especial para VENTAS
+            if (key == "Ventas" && !tieneAccesoVentas)
+                return false;
+
+            return globalEnabled && allowed.Contains(key, StringComparer.OrdinalIgnoreCase);
+        }
 
         // Submenú visible si:
         //   1. El global lo habilita
@@ -86,18 +165,22 @@ public class MenuService : IMenuService
             // ── Submenús: Producción ──────────────────────────────────────
             ProduccionRegistroPreparatoria = SubMenu(global.ProduccionRegistroPreparatoria, "Produccion", "Produccion.RegistroPreparatoria"),
             ProduccionAutoconer            = SubMenu(global.ProduccionAutoconer,            "Produccion", "Produccion.Autoconer"),
+            ProduccionAutoconerPorPartida  = SubMenu(global.ProduccionAutoconerPorPartida,  "Produccion", "Produccion.Autoconer.PorPartida"),
+            ProduccionAutoconerPorCanillas = SubMenu(global.ProduccionAutoconerPorCanillas, "Produccion", "Produccion.Autoconer.PorCanillas"),
 
             // ── Submenús: SGC ─────────────────────────────────────────────
             SgcDashboard = SubMenu(global.SgcDashboard, "Sgc", "Sgc.Dashboard"),
             SgcPedidos   = SubMenu(global.SgcPedidos,   "Sgc", "Sgc.Pedidos"),
+            SgcDespachos = SubMenu(global.SgcDespachos, "Sgc", "Sgc.Despachos"),
+            SgcDespachosRelacionFacCli = SubMenu(global.SgcDespachosRelacionFacCli, "Sgc", "Sgc.Despachos.RelacionFacCli"),
+            SgcDespachosCargarTC = SubMenu(global.SgcDespachosCargarTC, "Sgc", "Sgc.Despachos.CargarTC"),
 
             // ── Submenús: Facturación ─────────────────────────────────────
             FacturacionImportarFacturas = SubMenu(global.FacturacionImportarFacturas, "Facturacion", "Facturacion.ImportarFacturas"),
             FacturacionListaDocumentos  = SubMenu(global.FacturacionListaDocumentos,  "Facturacion", "Facturacion.ListaDocumentos"),
 
             // ── Submenús: Ventas ──────────────────────────────────────────
-            VentasClientes = SubMenu(global.VentasClientes, "Ventas", "Ventas.Clientes"),
-            VentasPedidos  = SubMenu(global.VentasPedidos,  "Ventas", "Ventas.Pedidos"),
+            VentasConsultaTC = SubMenu(global.VentasConsultaTC, "Ventas", "Ventas.ConsultaTC"),
 
             // ── Submenús: Recursos Humanos ────────────────────────────────
             RecursosHumanosEmpleados  = SubMenu(global.RecursosHumanosEmpleados,  "RecursosHumanos", "RecursosHumanos.Empleados"),
@@ -123,5 +206,20 @@ public class MenuService : IMenuService
         if (menus.Inventario)       return ("Inventario",           "Index");
         if (menus.RecursosHumanos)  return ("RecursosHumanos",      "Index");
         return ("RegistroPreparatoria", "Index");
+    }
+
+    /// <summary>
+    /// Verifica si el usuario tiene acceso al módulo VENTAS.
+    /// Solo permite acceso a:
+    /// - Usuario específico: COSTOS2
+    /// - Usuarios que comiencen con: VENT (ejemplo: VENT001, VENTADMIN, etc.)
+    /// </summary>
+    private bool TieneAccesoVentas(string usuario)
+    {
+        if (string.IsNullOrEmpty(usuario))
+            return false;
+
+        var usuarioUpper = usuario.ToUpperInvariant();
+        return usuarioUpper == "COSTOS2" || usuarioUpper.StartsWith("VENT");
     }
 }
