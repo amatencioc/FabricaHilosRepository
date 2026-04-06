@@ -14,6 +14,8 @@ namespace FabricaHilos.Services.Sgc
         Task<string> GenerarRutaPdfCertificado(string ruc, string numCer);
         Task<(string? NroLista, decimal? Importe)> ObtenerDatosListaPreciosAsync(string codArt);
         Task<(string? Nombre, string? Email)> ObtenerDatosVendedorAsync(string codVende);
+        Task<int> RegistrarVFactautAsync(int numReq, string codArt, string usuario);
+        Task<bool> ActualizarEstadoReqCertAsync(int numReq, int estado, string usuario);
     }
 
     public class CargaTcService : ICargaTcService
@@ -45,6 +47,41 @@ namespace FabricaHilos.Services.Sgc
                 return csBuilder.ConnectionString;
             }
             return baseConnStr;
+        }
+
+        private static int? SafeGetInt32(OracleDataReader reader, string columnName)
+        {
+            var ordinal = reader.GetOrdinal(columnName);
+
+            if (reader.IsDBNull(ordinal))
+                return null;
+
+            try
+            {
+                // Intenta obtenerlo como decimal primero (el tipo más común en Oracle para NUMBER)
+                return Convert.ToInt32(reader.GetDecimal(ordinal));
+            }
+            catch
+            {
+                try
+                {
+                    // Si falla, intenta obtenerlo directamente como int
+                    return reader.GetInt32(ordinal);
+                }
+                catch
+                {
+                    try
+                    {
+                        // Como último recurso, intenta convertir desde string
+                        var value = reader.GetValue(ordinal);
+                        return Convert.ToInt32(value);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+            }
         }
 
         public async Task<(List<ReqCertDto> Items, int TotalCount)> ObtenerRequerimientosAsync(
@@ -80,14 +117,14 @@ namespace FabricaHilos.Services.Sgc
                 string sql = $@"
                     SELECT RN, TOTAL_COUNT,
                            NUM_REQ, FECHA, NUM_CER, COD_CLIENTE, COD_ART, COD_VENDE,
-                           TIPODOC, SERIE, NUMERO,
+                           TIPODOC, SERIE, NUMERO, ESTADO,
                            A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA,
                            RAZON_SOCIAL, RUC
                     FROM (
                         SELECT ROW_NUMBER() OVER (ORDER BY Q.NUM_REQ ASC) AS RN,
                                COUNT(*) OVER() AS TOTAL_COUNT,
                                Q.NUM_REQ, Q.FECHA, Q.NUM_CER, Q.COD_CLIENTE, Q.COD_ART, Q.COD_VENDE,
-                               Q.TIPODOC, Q.SERIE, Q.NUMERO,
+                               Q.TIPODOC, Q.SERIE, Q.NUMERO, Q.ESTADO,
                                Q.A_ADUSER, Q.A_ADFECHA, Q.A_MDUSER, Q.A_MDFECHA,
                                Q.RAZON_SOCIAL, Q.RUC
                         FROM (
@@ -101,6 +138,7 @@ namespace FabricaHilos.Services.Sgc
                                 rc.TIPODOC,
                                 rc.SERIE,
                                 rc.NUMERO,
+                                rc.ESTADO,
                                 rc.A_ADUSER,
                                 rc.A_ADFECHA,
                                 rc.A_MDUSER,
@@ -146,6 +184,7 @@ namespace FabricaHilos.Services.Sgc
                         TipoDoc = reader["TIPODOC"] == DBNull.Value ? null : reader["TIPODOC"]?.ToString(),
                         Serie = reader["SERIE"] == DBNull.Value ? null : reader["SERIE"]?.ToString(),
                         Numero = reader["NUMERO"] == DBNull.Value ? null : reader["NUMERO"]?.ToString(),
+                        Estado = SafeGetInt32(reader, "ESTADO"),
                         AAduser = reader["A_ADUSER"] == DBNull.Value ? null : reader["A_ADUSER"]?.ToString(),
                         AAdfecha = reader["A_ADFECHA"] == DBNull.Value ? null : Convert.ToDateTime(reader["A_ADFECHA"]),
                         AMduser = reader["A_MDUSER"] == DBNull.Value ? null : reader["A_MDUSER"]?.ToString(),
@@ -182,6 +221,7 @@ namespace FabricaHilos.Services.Sgc
                         rc.TIPODOC,
                         rc.SERIE,
                         rc.NUMERO,
+                        rc.ESTADO,
                         rc.A_ADUSER,
                         rc.A_ADFECHA,
                         rc.A_MDUSER,
@@ -198,23 +238,26 @@ namespace FabricaHilos.Services.Sgc
                 using var reader = await cmd.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {
+                    var oracleReader = reader as OracleDataReader ?? throw new InvalidOperationException("OracleDataReader expected");
+
                     return new ReqCertDto
                     {
-                        NumReq = reader.GetInt32("NUM_REQ"),
-                        Fecha = reader.IsDBNull("FECHA") ? null : reader.GetDateTime("FECHA"),
-                        NumCer = reader.IsDBNull("NUM_CER") ? null : reader.GetString("NUM_CER"),
-                        CodCliente = reader.IsDBNull("COD_CLIENTE") ? null : reader.GetString("COD_CLIENTE"),
-                        CodArt = reader.IsDBNull("COD_ART") ? null : reader.GetString("COD_ART"),
-                        CodVende = reader.IsDBNull("COD_VENDE") ? null : reader.GetString("COD_VENDE"),
-                        TipoDoc = reader.IsDBNull("TIPODOC") ? null : reader.GetString("TIPODOC"),
-                        Serie = reader.IsDBNull("SERIE") ? null : reader.GetString("SERIE"),
-                        Numero = reader.IsDBNull("NUMERO") ? null : reader.GetString("NUMERO"),
-                        AAduser = reader.IsDBNull("A_ADUSER") ? null : reader.GetString("A_ADUSER"),
-                        AAdfecha = reader.IsDBNull("A_ADFECHA") ? null : reader.GetDateTime("A_ADFECHA"),
-                        AMduser = reader.IsDBNull("A_MDUSER") ? null : reader.GetString("A_MDUSER"),
-                        AMdfecha = reader.IsDBNull("A_MDFECHA") ? null : reader.GetDateTime("A_MDFECHA"),
-                        RazonSocial = reader.IsDBNull("RAZON_SOCIAL") ? null : reader.GetString("RAZON_SOCIAL"),
-                        Ruc = reader.IsDBNull("RUC") ? null : reader.GetString("RUC")
+                        NumReq = oracleReader.GetInt32("NUM_REQ"),
+                        Fecha = oracleReader.IsDBNull("FECHA") ? null : oracleReader.GetDateTime("FECHA"),
+                        NumCer = oracleReader.IsDBNull("NUM_CER") ? null : oracleReader.GetString("NUM_CER"),
+                        CodCliente = oracleReader.IsDBNull("COD_CLIENTE") ? null : oracleReader.GetString("COD_CLIENTE"),
+                        CodArt = oracleReader.IsDBNull("COD_ART") ? null : oracleReader.GetString("COD_ART"),
+                        CodVende = oracleReader.IsDBNull("COD_VENDE") ? null : oracleReader.GetString("COD_VENDE"),
+                        TipoDoc = oracleReader.IsDBNull("TIPODOC") ? null : oracleReader.GetString("TIPODOC"),
+                        Serie = oracleReader.IsDBNull("SERIE") ? null : oracleReader.GetString("SERIE"),
+                        Numero = oracleReader.IsDBNull("NUMERO") ? null : oracleReader.GetString("NUMERO"),
+                        Estado = SafeGetInt32(oracleReader, "ESTADO"),
+                        AAduser = oracleReader.IsDBNull("A_ADUSER") ? null : oracleReader.GetString("A_ADUSER"),
+                        AAdfecha = oracleReader.IsDBNull("A_ADFECHA") ? null : oracleReader.GetDateTime("A_ADFECHA"),
+                        AMduser = oracleReader.IsDBNull("A_MDUSER") ? null : oracleReader.GetString("A_MDUSER"),
+                        AMdfecha = oracleReader.IsDBNull("A_MDFECHA") ? null : oracleReader.GetDateTime("A_MDFECHA"),
+                        RazonSocial = oracleReader.IsDBNull("RAZON_SOCIAL") ? null : oracleReader.GetString("RAZON_SOCIAL"),
+                        Ruc = oracleReader.IsDBNull("RUC") ? null : oracleReader.GetString("RUC")
                     };
                 }
             }
@@ -345,6 +388,25 @@ namespace FabricaHilos.Services.Sgc
             var rutaBase = _configuration["RutaCertificados"] ?? @"\\10.0.7.14\6-20100096260\Certificados";
             var año = DateTime.Now.Year.ToString();
 
+            // Autenticarse en el recurso de red antes de crear directorios
+            var username = _configuration["NetworkShare:Username"];
+            var password = _configuration["NetworkShare:Password"];
+            var domain = _configuration["NetworkShare:Domain"];
+
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    FabricaHilos.Helpers.NetworkShareHelper.Connect(rutaBase, username, password, domain);
+                    _logger.LogInformation("Autenticación exitosa en el recurso de red para crear carpetas");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al autenticarse en el recurso de red");
+                throw new InvalidOperationException($"No se pudo conectar al recurso de red: {ex.Message}", ex);
+            }
+
             // Crear estructura de carpetas: RutaBase\RUC\AÑO
             var rutaCarpeta = Path.Combine(rutaBase, ruc, año);
 
@@ -439,6 +501,107 @@ namespace FabricaHilos.Services.Sgc
             {
                 _logger.LogError(ex, "Error al obtener datos del vendedor con COD_VENDE {CodVende}", codVende);
                 return (null, null);
+            }
+        }
+
+        public async Task<int> RegistrarVFactautAsync(int numReq, string codArt, string usuario)
+        {
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                using var transaction = conn.BeginTransaction();
+
+                try
+                {
+                    int nuevoNumero;
+
+                    var sqlMax = @"
+                        SELECT NVL(MAX(NUMERO), 0) + 1 AS NUEVO_NUMERO
+                        FROM SIG.V_FACTAUT
+                        WHERE TIPO = 'FA' AND SERIE = 1";
+
+                    using (var cmdMax = new OracleCommand(sqlMax, conn))
+                    {
+                        cmdMax.Transaction = transaction;
+                        var result = await cmdMax.ExecuteScalarAsync();
+                        nuevoNumero = Convert.ToInt32(result);
+                    }
+
+                    string tipoCertificado = codArt.Length > 4 ? codArt.Substring(4) : codArt;
+                    string concepto = $"REQ. EMISION. FACT. {tipoCertificado}";
+
+                    var sqlInsert = @"
+                        INSERT INTO SIG.V_FACTAUT 
+                        (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
+                        VALUES 
+                        ('FA', 1, :Numero, :Concepto, 'GC', :NumReq, 9, :Usuario, SYSDATE)";
+
+                    using (var cmdInsert = new OracleCommand(sqlInsert, conn))
+                    {
+                        cmdInsert.Transaction = transaction;
+                        cmdInsert.Parameters.Add(new OracleParameter("Numero", nuevoNumero));
+                        cmdInsert.Parameters.Add(new OracleParameter("Concepto", concepto));
+                        cmdInsert.Parameters.Add(new OracleParameter("NumReq", numReq));
+                        cmdInsert.Parameters.Add(new OracleParameter("Usuario", usuario));
+
+                        await cmdInsert.ExecuteNonQueryAsync();
+                    }
+
+                    transaction.Commit();
+
+                    _logger.LogInformation("Registro V_FACTAUT creado exitosamente: TIPO=FA, SERIE=1, NUMERO={Numero}, NRO_REF={NumReq}, TIP_DIREF=GC, ESTADO=9 (PRUEBAS)", nuevoNumero, numReq);
+
+                    return nuevoNumero;
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al registrar V_FACTAUT para NUM_REQ {NumReq}", numReq);
+                throw;
+            }
+        }
+
+        public async Task<bool> ActualizarEstadoReqCertAsync(int numReq, int estado, string usuario)
+        {
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                var sql = @"
+                    UPDATE SIG.REQ_CERT
+                    SET ESTADO = :Estado,
+                        A_MDUSER = :Usuario,
+                        A_MDFECHA = SYSDATE
+                    WHERE NUM_REQ = :NumReq";
+
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.Parameters.Add(new OracleParameter("Estado", estado));
+                cmd.Parameters.Add(new OracleParameter("Usuario", usuario));
+                cmd.Parameters.Add(new OracleParameter("NumReq", numReq));
+
+                int rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                if (rowsAffected > 0)
+                {
+                    _logger.LogInformation("Estado de REQ_CERT actualizado: NUM_REQ={NumReq}, ESTADO={Estado}", numReq, estado);
+                    return true;
+                }
+
+                _logger.LogWarning("No se encontró requerimiento REQ_CERT con NUM_REQ={NumReq}", numReq);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al actualizar estado de REQ_CERT para NUM_REQ {NumReq}", numReq);
+                return false;
             }
         }
     }

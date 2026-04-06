@@ -6,6 +6,51 @@
     string? navToken = ViewBag.NavToken as string;
 }
 
+@section Styles {
+<style>
+    /* Overlay de carga */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+
+    .loading-overlay.show {
+        display: flex;
+    }
+
+    .loading-spinner {
+        width: 4rem;
+        height: 4rem;
+        border: 0.4rem solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spinner-rotate 0.8s linear infinite;
+    }
+
+    @@keyframes spinner-rotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 500;
+        margin-top: 1.5rem;
+        text-align: center;
+    }
+</style>
+}
+
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
     <li class="breadcrumb-item">Despachos</li>
@@ -146,60 +191,80 @@
     </div>
 </div>
 
+<!-- Overlay de carga -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">
+        <i class="bi bi-hourglass-split me-2"></i>Guardando certificado y PDF, por favor espere...
+    </div>
+</div>
+
 @section Scripts {
     <script>
-        $(document).ready(function () {
-            // Botón único para guardar (con o sin PDF)
-            $('#btnGuardar').click(function () {
-                const numReq = $('#numReq').val();
-                const numCer = $('#numCer').val().trim();
-                const archivo = $('#archivo')[0].files[0];
+        // Usar vanilla JavaScript para evitar problemas con jQuery
+        document.addEventListener('DOMContentLoaded', function () {
+            const btnGuardar = document.getElementById('btnGuardar');
+            const loadingOverlay = document.getElementById('loadingOverlay');
 
-                // Validar que Nº Certificado sea obligatorio
-                if (!numCer) {
-                    alert('El Nº Certificado es obligatorio.');
-                    return;
-                }
+            if (btnGuardar) {
+                btnGuardar.addEventListener('click', function () {
+                    const numReq = document.getElementById('numReq').value;
+                    const numCer = document.getElementById('numCer').value.trim();
+                    const archivoInput = document.getElementById('archivo');
+                    const archivo = archivoInput.files[0];
 
-                // Validar que el archivo PDF sea obligatorio
-                if (!archivo) {
-                    alert('Debe adjuntar el archivo PDF del certificado.');
-                    return;
-                }
-
-                // Cargar PDF + actualizar datos
-                const formData = new FormData();
-                formData.append('numReq', numReq);
-                formData.append('archivo', archivo);
-                formData.append('numCer', numCer);
-                formData.append('__RequestVerificationToken', $('input[name=\"__RequestVerificationToken\"]').val());
-
-                $.ajax({
-                    url: '@Url.Action("CargarPdf", "CargaTc")',
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    beforeSend: function () {
-                        $('#btnGuardar').prop('disabled', true).html('<i class=\"spinner-border spinner-border-sm me-1\"></i>Guardando...');
-                    },
-                    success: function (response) {
-                        if (response.tipo === 'Exito') {
-                            window.location.href = response.redirectUrl;
-                        } else if (response.tipo === 'Advertencia') {
-                            alert(response.mensaje);
-                            $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
-                        } else {
-                            alert(response.mensaje);
-                            $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
-                        }
-                    },
-                    error: function () {
-                        alert('Error al procesar la solicitud');
-                        $('#btnGuardar').prop('disabled', false).html('<i class=\"bi bi-save me-1\"></i>Guardar');
+                    // Validar que Nº Certificado sea obligatorio
+                    if (!numCer) {
+                        alert('El Nº Certificado es obligatorio.');
+                        return;
                     }
+
+                    // Validar que el archivo PDF sea obligatorio
+                    if (!archivo) {
+                        alert('Debe adjuntar el archivo PDF del certificado.');
+                        return;
+                    }
+
+                    // Mostrar overlay de carga LOCAL (para este caso específico)
+                    loadingOverlay.classList.add('show');
+
+                    // Cargar PDF + actualizar datos
+                    const formData = new FormData();
+                    formData.append('numReq', numReq);
+                    formData.append('archivo', archivo);
+                    formData.append('numCer', numCer);
+
+                    const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (tokenInput) {
+                        formData.append('__RequestVerificationToken', tokenInput.value);
+                    }
+
+                    // Usar noLoading: true para evitar el overlay global
+                    fetch('@Url.Action("CargarPdf", "CargaTc")', {
+                        method: 'POST',
+                        body: formData,
+                        noLoading: true  // No usar overlay global
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        loadingOverlay.classList.remove('show');
+
+                        if (data.tipo === 'Exito') {
+                            // El overlay global se mostrará automáticamente en la navegación
+                            window.location.href = data.redirectUrl;
+                        } else if (data.tipo === 'Advertencia') {
+                            alert(data.mensaje);
+                        } else {
+                            alert(data.mensaje || 'Error al guardar el certificado');
+                        }
+                    })
+                    .catch(error => {
+                        loadingOverlay.classList.remove('show');
+                        console.error('Error:', error);
+                        alert('Error al procesar la solicitud. Por favor, intente nuevamente.');
+                    });
                 });
-            });
+            }
         });
     </script>
 }

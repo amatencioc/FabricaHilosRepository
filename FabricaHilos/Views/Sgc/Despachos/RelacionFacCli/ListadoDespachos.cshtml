@@ -87,6 +87,47 @@
     .tooltip.show {
         pointer-events: auto !important;
     }
+
+    /* Overlay de carga para bloquear la pantalla */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+
+    .loading-overlay.show {
+        display: flex;
+    }
+
+    .loading-spinner {
+        width: 4rem;
+        height: 4rem;
+        border: 0.4rem solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spinner-rotate 0.8s linear infinite;
+    }
+
+    @@keyframes spinner-rotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 500;
+        margin-top: 1.5rem;
+        text-align: center;
+    }
 </style>
 }
 
@@ -113,7 +154,7 @@
 
 <div class="card mb-3">
     <div class="card-body py-2">
-        <form method="get" class="row g-2 align-items-end">
+        <form id="formBusqueda" method="get" class="row g-2 align-items-end" data-no-loading>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Nro. Guía</label>
                 <input type="text" name="guia" value="@guia"
@@ -406,6 +447,14 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Overlay de carga -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">
+        <i class="bi bi-hourglass-split me-2"></i>Cargando datos, por favor espere...
     </div>
 </div>
 
@@ -1033,5 +1082,27 @@
         document.getElementById('pdfModalMensaje').textContent = mensaje;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('pdfModal')).show();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // OVERLAY DE CARGA PARA FORMULARIO DE BÚSQUEDA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Mostrar overlay de carga cuando se envíe el formulario de búsqueda
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+        const formBusqueda = document.getElementById('formBusqueda');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        if (formBusqueda && loadingOverlay) {
+            formBusqueda.addEventListener('submit', function(e) {
+                // Mostrar el overlay de carga
+                loadingOverlay.classList.add('show');
+
+                // El formulario se enviará normalmente (no prevenimos default)
+                // El overlay se ocultará cuando la página se recargue con los resultados
+            });
+        }
+    });
 </script>
 }

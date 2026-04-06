@@ -338,6 +338,15 @@ else
     @RenderBody()
 }
 
+<!-- Overlay de Carga Global -->
+<div id="globalLoadingOverlay" class="global-loading-overlay">
+    <div class="global-loading-spinner"></div>
+    <div class="global-loading-text">
+        <i class="bi bi-hourglass-split me-2"></i><span id="loadingMessage">Cargando...</span>
+    </div>
+    <div class="global-loading-subtext">Por favor espere</div>
+</div>
+
 <script src="~/lib/jquery/dist/jquery.min.js" asp-append-version="true"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
 <script src="~/lib/chart.js/dist/chart.umd.min.js" asp-append-version="true"></script>

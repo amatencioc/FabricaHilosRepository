@@ -150,17 +150,36 @@
                                                             </td>
                                                             <td class="text-center">
                                                                 <a href="@Url.Action("Detalle", new { numReq = req.NumReq, t = navToken })" 
-                                                                   class="btn btn-sm btn-primary me-1" title="Ver detalle">
+                                                                   class="btn btn-sm btn-primary me-1" 
+                                                                   data-bs-toggle="tooltip" 
+                                                                   data-bs-placement="top" 
+                                                                   title="Ver detalle">
                                                                     <i class="bi bi-eye-fill"></i>
                                                                 </a>
                                                                 @if (!string.IsNullOrEmpty(req.NumCer))
                                                                 {
-                                                                    <button type="button" 
-                                                                            class="btn btn-sm btn-success" 
-                                                                            title="Enviar a Facturación"
-                                                                            onclick="enviarAFacturacion(@req.NumReq, '@req.NumCer')">
-                                                                        <i class="bi bi-send-fill"></i>
-                                                                    </button>
+                                                                    if (req.Estado == 2)
+                                                                    {
+                                                                        <button type="button" 
+                                                                                class="btn btn-sm btn-secondary" 
+                                                                                data-bs-toggle="tooltip" 
+                                                                                data-bs-placement="top" 
+                                                                                title="Correo a facturación enviado"
+                                                                                disabled>
+                                                                            <i class="bi bi-check-circle-fill"></i>
+                                                                        </button>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <button type="button" 
+                                                                                class="btn btn-sm btn-success" 
+                                                                                data-bs-toggle="tooltip" 
+                                                                                data-bs-placement="top" 
+                                                                                title="Enviar a Facturación"
+                                                                                onclick="enviarAFacturacion(@req.NumReq, '@req.NumCer')">
+                                                                            <i class="bi bi-send-fill"></i>
+                                                                        </button>
+                                                                    }
                                                                 }
                                                             </td>
                                                         </tr>
@@ -230,6 +249,12 @@
                                 @section Scripts {
     <script>
         $(document).ready(function () {
+            // Inicializar tooltips de Bootstrap
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
             // Click en la fila para ir al detalle
             $('tr.cursor-pointer').click(function (e) {
                 if (!$(e.target).closest('button, a').length) {

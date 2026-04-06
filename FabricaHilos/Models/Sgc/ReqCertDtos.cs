@@ -14,6 +14,7 @@ namespace FabricaHilos.Models.Sgc
         public string? TipoDoc { get; set; }
         public string? Serie { get; set; }
         public string? Numero { get; set; }
+        public int? Estado { get; set; }
         public string? AAduser { get; set; }
         public DateTime? AAdfecha { get; set; }
         public string? AMduser { get; set; }

@@ -166,6 +166,26 @@ namespace FabricaHilos.Controllers
                     return Json(new { tipo = "Advertencia", mensaje = "Debe ingresar el Nº Certificado para cargar el PDF." });
                 }
 
+                // Autenticarse en el recurso de red antes de cualquier operación
+                var rutaBase = _configuration["RutaCertificados"] ?? @"\\10.0.7.14\6-20100096260\Certificados";
+                var username = _configuration["NetworkShare:Username"];
+                var password = _configuration["NetworkShare:Password"];
+                var domain = _configuration["NetworkShare:Domain"];
+
+                try
+                {
+                    if (OperatingSystem.IsWindows())
+                    {
+                        FabricaHilos.Helpers.NetworkShareHelper.Connect(rutaBase, username, password, domain);
+                        _logger.LogInformation("Autenticación exitosa en el recurso de red: {RutaBase}", rutaBase);
+                    }
+                }
+                catch (Exception exAuth)
+                {
+                    _logger.LogError(exAuth, "Error al autenticarse en el recurso de red");
+                    return Json(new { tipo = "Error", mensaje = $"Error al conectar con el recurso de red: {exAuth.Message}" });
+                }
+
                 // Generar ruta del PDF
                 var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(cliente.Ruc, numCer);
 
@@ -218,40 +238,57 @@ namespace FabricaHilos.Controllers
                 var requerimiento = await _cargaTcService.ObtenerRequerimientoAsync(numReq);
                 if (requerimiento == null)
                 {
-                    return NotFound("No se encontró el requerimiento.");
+                    _logger.LogWarning("No se encontró el requerimiento NUM_REQ={NumReq}", numReq);
+                    return Content("<html><body><h3>No se encontró el requerimiento.</h3></body></html>", "text/html");
                 }
 
-                if (string.IsNullOrEmpty(requerimiento.NumCer) || string.IsNullOrEmpty(requerimiento.CodCliente))
+                if (string.IsNullOrEmpty(requerimiento.NumCer))
                 {
-                    return NotFound("El requerimiento no tiene certificado cargado.");
+                    _logger.LogWarning("El requerimiento NUM_REQ={NumReq} no tiene certificado cargado", numReq);
+                    return Content("<html><body><h3>El requerimiento no tiene certificado cargado.</h3></body></html>", "text/html");
                 }
 
-                // Obtener el RUC del cliente
-                var cliente = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
-                if (cliente == null || string.IsNullOrEmpty(cliente.Ruc))
+                // Intentar obtener el RUC directamente del requerimiento primero
+                string? ruc = requerimiento.Ruc;
+
+                // Si no tiene RUC directo, intentar obtenerlo del cliente
+                if (string.IsNullOrEmpty(ruc) && !string.IsNullOrEmpty(requerimiento.CodCliente))
                 {
-                    return NotFound("No se encontró el RUC del cliente.");
+                    var cliente = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
+                    ruc = cliente?.Ruc;
+                }
+
+                if (string.IsNullOrEmpty(ruc))
+                {
+                    _logger.LogWarning("No se encontró el RUC para NUM_REQ={NumReq}, CodCliente={CodCliente}", 
+                        numReq, requerimiento.CodCliente);
+                    return Content("<html><body><h3>No se encontró el RUC del cliente.</h3></body></html>", "text/html");
                 }
 
                 // Generar ruta del PDF
-                var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(cliente.Ruc, requerimiento.NumCer);
+                var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(ruc, requerimiento.NumCer);
+
+                _logger.LogInformation("Intentando cargar PDF desde: {RutaPdf}", rutaPdf);
 
                 if (!System.IO.File.Exists(rutaPdf))
                 {
-                    return NotFound($"No se encontró el PDF en: {rutaPdf}");
+                    _logger.LogWarning("No se encontró el archivo PDF en: {RutaPdf}", rutaPdf);
+                    return Content($"<html><body><h3>No se encontró el PDF</h3><p>Ruta: {rutaPdf}</p></body></html>", "text/html");
                 }
 
                 var pdfBytes = await System.IO.File.ReadAllBytesAsync(rutaPdf);
                 var nombreArchivo = Path.GetFileName(rutaPdf);
 
+                _logger.LogInformation("PDF cargado exitosamente: {NombreArchivo}, Tamaño: {Size} bytes", nombreArchivo, pdfBytes.Length);
+
                 // Content-Disposition: inline para visualizar en el navegador
-                Response.Headers.Add("Content-Disposition", $"inline; filename=\"{nombreArchivo}\"");
+                Response.Headers.Append("Content-Disposition", $"inline; filename=\"{nombreArchivo}\"");
                 return File(pdfBytes, "application/pdf");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al visualizar PDF para NUM_REQ {NumReq}", numReq);
-                return StatusCode(500, "Error al cargar el PDF");
+                return Content($"<html><body><h3>Error al cargar el PDF</h3><p>{ex.Message}</p><pre>{ex.StackTrace}</pre></body></html>", "text/html");
             }
         }
 
@@ -268,20 +305,28 @@ namespace FabricaHilos.Controllers
                     return Json(new { tipo = "Error", mensaje = "No se encontró el requerimiento." });
                 }
 
-                if (string.IsNullOrEmpty(requerimiento.NumCer) || string.IsNullOrEmpty(requerimiento.CodCliente))
+                if (string.IsNullOrEmpty(requerimiento.NumCer))
                 {
                     return Json(new { tipo = "Advertencia", mensaje = "El requerimiento no tiene certificado cargado." });
                 }
 
-                // Obtener el RUC del cliente
-                var cliente = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
-                if (cliente == null || string.IsNullOrEmpty(cliente.Ruc))
+                // Intentar obtener el RUC directamente del requerimiento primero
+                string? ruc = requerimiento.Ruc;
+
+                // Si no tiene RUC directo, intentar obtenerlo del cliente
+                if (string.IsNullOrEmpty(ruc) && !string.IsNullOrEmpty(requerimiento.CodCliente))
+                {
+                    var cliente = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
+                    ruc = cliente?.Ruc;
+                }
+
+                if (string.IsNullOrEmpty(ruc))
                 {
                     return Json(new { tipo = "Error", mensaje = "No se encontró el RUC del cliente." });
                 }
 
                 // Generar ruta del PDF
-                var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(cliente.Ruc, requerimiento.NumCer);
+                var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(ruc, requerimiento.NumCer);
 
                 if (!System.IO.File.Exists(rutaPdf))
                 {
@@ -305,6 +350,9 @@ namespace FabricaHilos.Controllers
         [HttpPost]
         public async Task<IActionResult> EnviarAFacturacion(int numReq)
         {
+            int? numeroVFactaut = null;
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SYSTEM";
+
             try
             {
                 var requerimiento = await _cargaTcService.ObtenerRequerimientoAsync(numReq);
@@ -328,9 +376,22 @@ namespace FabricaHilos.Controllers
                     return Json(new { success = false, message = "El requerimiento no tiene código de vendedor." });
                 }
 
-                _logger.LogInformation("Enviando certificado {NumCer} del requerimiento {NumReq} a Facturación", 
-                    requerimiento.NumCer, numReq);
+                _logger.LogInformation("Iniciando proceso de envío a Facturación - REQ {NumReq}, Certificado {NumCer}", 
+                    numReq, requerimiento.NumCer);
 
+                // PASO 1: Registrar en V_FACTAUT antes de enviar el correo
+                try
+                {
+                    numeroVFactaut = await _cargaTcService.RegistrarVFactautAsync(numReq, requerimiento.CodArt, usuario);
+                    _logger.LogInformation("Registro V_FACTAUT creado exitosamente con NUMERO={Numero}", numeroVFactaut);
+                }
+                catch (Exception exVFactaut)
+                {
+                    _logger.LogError(exVFactaut, "Error al registrar en V_FACTAUT para REQ {NumReq}", numReq);
+                    return Json(new { success = false, message = $"Error al registrar documento: {exVFactaut.Message}" });
+                }
+
+                // PASO 2: Preparar y enviar el correo
                 var (nroLista, importe) = await _cargaTcService.ObtenerDatosListaPreciosAsync(requerimiento.CodArt);
                 var (nombreVendedor, emailVendedor) = await _cargaTcService.ObtenerDatosVendedorAsync(requerimiento.CodVende);
 
@@ -338,8 +399,6 @@ namespace FabricaHilos.Controllers
                 var totalFacturas = detalles.Count;
 
                 var tipoCertificado = requerimiento.CodArt.Replace("CERT", "");
-
-                // Convertir código de moneda a texto
                 string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
 
                 var destinatarioFacturacion = _configuration["CorreoFacturacion"] ?? "iramirez@colonial.com.pe";
@@ -362,10 +421,29 @@ namespace FabricaHilos.Controllers
                     TotalFacturas = totalFacturas.ToString()
                 };
 
-                await _emailService.EnviarAsync(payload);
+                try
+                {
+                    await _emailService.EnviarAsync(payload);
+                    _logger.LogInformation("Correo enviado exitosamente a {Email} para REQ {NumReq}", 
+                        destinatarioFacturacion, numReq);
+                }
+                catch (Exception exEmail)
+                {
+                    _logger.LogError(exEmail, "Error al enviar correo para REQ {NumReq}", numReq);
+                    return Json(new { success = false, message = $"Error al enviar correo de notificación: {exEmail.Message}" });
+                }
 
-                _logger.LogInformation("Notificación de certificado enviada a {Email} para REQ {NumReq}", 
-                    destinatarioFacturacion, numReq);
+                // PASO 3: Actualizar ESTADO en REQ_CERT después de envío exitoso del correo
+                var estadoActualizado = await _cargaTcService.ActualizarEstadoReqCertAsync(numReq, 2, usuario);
+
+                if (estadoActualizado)
+                {
+                    _logger.LogInformation("Estado de REQ_CERT actualizado a 2 para NUM_REQ={NumReq}", numReq);
+                }
+                else
+                {
+                    _logger.LogWarning("No se pudo actualizar el estado de REQ_CERT para NUM_REQ={NumReq}", numReq);
+                }
 
                 TempData["Success"] = $"El certificado {requerimiento.NumCer} ha sido enviado a Facturación correctamente.";
 
@@ -377,7 +455,7 @@ namespace FabricaHilos.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al enviar certificado a Facturación para NUM_REQ {NumReq}", numReq);
+                _logger.LogError(ex, "Error general al enviar certificado a Facturación para NUM_REQ {NumReq}", numReq);
                 return Json(new { success = false, message = $"Error al enviar a Facturación: {ex.Message}" });
             }
         }

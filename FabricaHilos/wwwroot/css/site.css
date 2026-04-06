@@ -161,3 +161,53 @@ header {
     width: 0;
     overflow: hidden;
 }
+
+/* =============================================
+   OVERLAY DE CARGA GLOBAL
+   ============================================= */
+.global-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 99999;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.global-loading-overlay.show {
+    display: flex;
+}
+
+.global-loading-spinner {
+    width: 4rem;
+    height: 4rem;
+    border: 0.4rem solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: global-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes global-spinner-rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.global-loading-text {
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.global-loading-subtext {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    text-align: center;
+}
