@@ -402,7 +402,6 @@ namespace FabricaHilos.Controllers
                 string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
 
                 var destinatarioFacturacion = _configuration["CorreoFacturacion"] ?? "iramirez@colonial.com.pe";
-                var correoVendedorConfig = _configuration["CorreoVendedor"] ?? "vmatencio@colonial.com.pe";
 
                 var payload = new EnvioCertificadoFacturacionPayload
                 {
@@ -415,7 +414,7 @@ namespace FabricaHilos.Controllers
                     CodCliente = requerimiento.Ruc ?? requerimiento.CodCliente ?? "N/A",
                     NombreCliente = requerimiento.RazonSocial ?? "N/A",
                     CodVendedor = requerimiento.CodVende ?? "N/A",
-                    NombreVendedor = correoVendedorConfig,
+                    NombreVendedor = nombreVendedor ?? "N/A",
                     Moneda = monedaTexto,
                     Importe = importe?.ToString("N2") ?? "0.00",
                     TotalFacturas = totalFacturas.ToString()

@@ -536,7 +536,7 @@ namespace FabricaHilos.Services.Sgc
                         INSERT INTO SIG.V_FACTAUT 
                         (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES 
-                        ('FA', 1, :Numero, :Concepto, 'GC', :NumReq, 9, :Usuario, SYSDATE)";
+                        ('FA', 1, :Numero, :Concepto, 'GC', :NumReq, 0, :Usuario, SYSDATE)";
 
                     using (var cmdInsert = new OracleCommand(sqlInsert, conn))
                     {
@@ -551,7 +551,7 @@ namespace FabricaHilos.Services.Sgc
 
                     transaction.Commit();
 
-                    _logger.LogInformation("Registro V_FACTAUT creado exitosamente: TIPO=FA, SERIE=1, NUMERO={Numero}, NRO_REF={NumReq}, TIP_DIREF=GC, ESTADO=9 (PRUEBAS)", nuevoNumero, numReq);
+                    _logger.LogInformation("Registro V_FACTAUT creado exitosamente: TIPO=FA, SERIE=1, NUMERO={Numero}, NRO_REF={NumReq}, TIP_DIREF=GC, ESTADO=0", nuevoNumero, numReq);
 
                     return nuevoNumero;
                 }
