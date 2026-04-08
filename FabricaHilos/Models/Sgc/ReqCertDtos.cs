@@ -58,4 +58,22 @@ namespace FabricaHilos.Models.Sgc
         public string? Ruc { get; set; }
         public string? RazonSocial { get; set; }
     }
+
+    /// <summary>
+    /// DTO para partidas asociadas a un requerimiento de certificado
+    /// </summary>
+    public class ReqCertPartidaDto
+    {
+        public string? Partida { get; set; }
+        public int? Item { get; set; }
+        public string PartidaItem => Item.HasValue ? $"{Partida}-{Item}" : Partida ?? string.Empty;
+    }
+
+    /// <summary>
+    /// DTO para órdenes de compra asociadas a un requerimiento de certificado
+    /// </summary>
+    public class ReqCertOrdenCompraDto
+    {
+        public string? OrdenCompra { get; set; }
+    }
 }

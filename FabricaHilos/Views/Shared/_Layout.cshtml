@@ -250,14 +250,21 @@
                 {
                     <!-- SEGURIDAD -->
                     <li class="sidebar-section">SEGURIDAD</li>
-                    @if (menus.SeguridadSubirFoto)
-                    {
                     <li>
-                        <a asp-controller="Seguridad" asp-action="Index" class="sidebar-link @(ctrl == "Seguridad" ? "active" : "")">
-                            <i class="bi bi-shield-check"></i> Inspecciones
+                        <a asp-controller="Inspeccion" asp-action="Index" class="sidebar-link @(ctrl == "Inspeccion" ? "active" : "")">
+                            <i class="bi bi-shield-check"></i> Seguridad
                         </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.SeguridadInspecciones)
+                            {
+                            <li>
+                                <a asp-controller="Inspeccion" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Inspeccion" ? "active" : "")">
+                                    <i class="bi bi-clipboard-check"></i> Inspecciones
+                                </a>
+                            </li>
+                            }
+                        </ul>
                     </li>
-                    }
                 }
             </ul>
         </nav>

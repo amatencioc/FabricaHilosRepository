@@ -41,8 +41,10 @@ namespace FabricaHilos.Controllers
                 // Si la sesión Oracle también está activa, redirigir a la app directamente
                 if (!string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
                 {
-                    var (ctrl, act) = _menuService.GetLanding();
-                    return RedirectToAction(act, ctrl);
+                    var (ctrl, act, area) = _menuService.GetLanding();
+                    return area != null 
+                        ? RedirectToAction(act, ctrl, new { area }) 
+                        : RedirectToAction(act, ctrl);
                 }
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
@@ -159,8 +161,10 @@ namespace FabricaHilos.Controllers
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    var (ctrl, act) = _menuService.GetLanding();
-                    return RedirectToAction(act, ctrl);
+                    var (ctrl, act, area) = _menuService.GetLanding();
+                    return area != null 
+                        ? RedirectToAction(act, ctrl, new { area }) 
+                        : RedirectToAction(act, ctrl);
                 }
 
                 // 2. Validar contra Identity local
@@ -169,8 +173,10 @@ namespace FabricaHilos.Controllers
                 {
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    var (ctrl, act) = _menuService.GetLanding();
-                    return RedirectToAction(act, ctrl);
+                    var (ctrl, act, area) = _menuService.GetLanding();
+                    return area != null 
+                        ? RedirectToAction(act, ctrl, new { area }) 
+                        : RedirectToAction(act, ctrl);
                 }
 
                 if (resultado.IsLockedOut)

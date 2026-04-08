@@ -16,6 +16,8 @@ namespace FabricaHilos.Services.Sgc
         Task<(string? Nombre, string? Email)> ObtenerDatosVendedorAsync(string codVende);
         Task<int> RegistrarVFactautAsync(int numReq, string codArt, string usuario);
         Task<bool> ActualizarEstadoReqCertAsync(int numReq, int estado, string usuario);
+        Task<List<ReqCertPartidaDto>> ObtenerPartidasPorRequerimientoAsync(int numReq);
+        Task<List<ReqCertOrdenCompraDto>> ObtenerOrdenesCompraPorRequerimientoAsync(int numReq);
     }
 
     public class CargaTcService : ICargaTcService
@@ -566,6 +568,129 @@ namespace FabricaHilos.Services.Sgc
                 _logger.LogError(ex, "Error al registrar V_FACTAUT para NUM_REQ {NumReq}", numReq);
                 throw;
             }
+        }
+
+        public async Task<List<ReqCertPartidaDto>> ObtenerPartidasPorRequerimientoAsync(int numReq)
+        {
+            var partidas = new List<ReqCertPartidaDto>();
+
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                var sql = @"
+                    SELECT DISTINCT 
+                        CASE 
+                            WHEN P.NUM_PED IS NOT NULL AND I.NRO IS NOT NULL 
+                            THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)
+                            ELSE NULL 
+                        END AS PEDIDO
+                    FROM SIG.REQ_CERT_D rcd
+                    INNER JOIN SIG.DOCUVENT F
+                        ON F.TIPODOC = rcd.TIPODOC
+                        AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
+                        AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
+                    LEFT JOIN SIG.KARDEX_G G
+                        ON G.TIP_REF = F.TIPODOC
+                        AND TRIM(G.SER_REF) = TRIM(F.SERIE)
+                        AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
+                    LEFT JOIN SIG.PEDIDO P
+                        ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                        AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                        AND G.TIP_DOC_REF = P.TIPO_DOCTO
+                        AND P.ESTADO <> '9'
+                    LEFT JOIN SIG.ITEMDOCU ID
+                        ON ID.TIPODOC = F.TIPODOC
+                        AND TRIM(ID.SERIE) = TRIM(F.SERIE)
+                        AND TRIM(ID.NUMERO) = TRIM(F.NUMERO)
+                    LEFT JOIN SIG.ITEMPED I
+                        ON I.NUM_PED = P.NUM_PED
+                        AND I.SERIE = P.SERIE
+                        AND I.COD_ART = ID.COD_ART
+                    WHERE rcd.NUM_REQ = :NumReq
+                        AND P.NUM_PED IS NOT NULL
+                        AND I.NRO IS NOT NULL
+                    ORDER BY P.NUM_PED, I.NRO";
+
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.Parameters.Add(new OracleParameter("NumReq", numReq));
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var pedido = reader.IsDBNull("PEDIDO") ? null : reader.GetString("PEDIDO");
+                    if (!string.IsNullOrWhiteSpace(pedido))
+                    {
+                        partidas.Add(new ReqCertPartidaDto
+                        {
+                            Partida = pedido,
+                            Item = null
+                        });
+                    }
+                }
+
+                _logger.LogInformation("Se obtuvieron {Count} partidas (pedidos) para NUM_REQ={NumReq}", partidas.Count, numReq);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener partidas (pedidos) para NUM_REQ {NumReq}", numReq);
+            }
+
+            return partidas;
+        }
+
+        public async Task<List<ReqCertOrdenCompraDto>> ObtenerOrdenesCompraPorRequerimientoAsync(int numReq)
+        {
+            var ordenesCompra = new List<ReqCertOrdenCompraDto>();
+
+            try
+            {
+                using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                var sql = @"
+                    SELECT DISTINCT 
+                        P.NUMERO_REF AS ORDEN_COMPRA
+                    FROM SIG.REQ_CERT_D rcd
+                    INNER JOIN SIG.DOCUVENT F
+                        ON F.TIPODOC = rcd.TIPODOC
+                        AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
+                        AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
+                    LEFT JOIN SIG.KARDEX_G G
+                        ON G.TIP_REF = F.TIPODOC
+                        AND TRIM(G.SER_REF) = TRIM(F.SERIE)
+                        AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
+                    LEFT JOIN SIG.PEDIDO P
+                        ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                        AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                        AND G.TIP_DOC_REF = P.TIPO_DOCTO
+                        AND P.ESTADO <> '9'
+                    WHERE rcd.NUM_REQ = :NumReq
+                        AND P.NUMERO_REF IS NOT NULL
+                    ORDER BY P.NUMERO_REF";
+
+                using var cmd = new OracleCommand(sql, conn);
+                cmd.Parameters.Add(new OracleParameter("NumReq", numReq));
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var oc = reader.IsDBNull("ORDEN_COMPRA") ? null : reader.GetString("ORDEN_COMPRA");
+                    if (!string.IsNullOrWhiteSpace(oc))
+                    {
+                        ordenesCompra.Add(new ReqCertOrdenCompraDto { OrdenCompra = oc });
+                    }
+                }
+
+                _logger.LogInformation("Se obtuvieron {Count} órdenes de compra para NUM_REQ={NumReq}", ordenesCompra.Count, numReq);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener órdenes de compra para NUM_REQ {NumReq}", numReq);
+            }
+
+            return ordenesCompra;
         }
 
         public async Task<bool> ActualizarEstadoReqCertAsync(int numReq, int estado, string usuario)

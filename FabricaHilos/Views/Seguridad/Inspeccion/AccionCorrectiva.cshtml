@@ -1,8 +1,8 @@
-@model FabricaHilos.Models.Seguridad.AccionCorrectivaViewModel
+@model FabricaHilos.Models.Seguridad.Inspeccion.AccionCorrectivaViewModel
 
 @{
     ViewData["Title"] = "Acción Correctiva";
-    var inspeccion = ViewBag.Inspeccion as FabricaHilos.Services.Seguridad.InspeccionListDto;
+    var inspeccion = ViewBag.Inspeccion as FabricaHilos.Services.Seguridad.Inspeccion.InspeccionListDto;
 }
 
 @section Breadcrumb {
@@ -11,47 +11,11 @@
 }
 
 <style>
-    .info-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 0.5rem;
-        padding: 1.25rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .info-item {
-        margin-bottom: 0.75rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid rgba(255,255,255,0.2);
-    }
-    .info-item:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-    }
-    .info-label {
-        font-size: 0.85rem;
-        opacity: 0.9;
-        font-weight: 500;
-    }
-    .info-value {
-        font-size: 1rem;
-        font-weight: 600;
-    }
-    .success-alert {
-        background: #d4edda;
-        border-left: 4px solid #28a745;
-        padding: 0.75rem 1rem;
-        border-radius: 0.25rem;
-        margin-bottom: 1rem;
-    }
-    .form-group-mobile {
-        margin-bottom: 1.25rem;
-    }
     .preview-container {
-        border: 2px dashed #dee2e6;
+        border: 2px dashed var(--color-border, #dee2e6);
         border-radius: 0.5rem;
         padding: 1rem;
-        background: #f8f9fa;
+        background: var(--color-bg-light, #f8f9fa);
         min-height: 200px;
         display: flex;
         align-items: center;
@@ -63,176 +27,133 @@
     }
 </style>
 
-<div class="container-fluid px-2 px-md-4">
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-3 d-none d-md-flex">
-        <h5 class="mb-0">
-            <i class="bi bi-file-earmark-check me-2"></i>Acción Correctiva
-        </h5>
-        <a asp-action="Index" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Volver
-        </a>
-    </div>
+<h4 class="section-title"><i class="bi bi-file-earmark-check me-2"></i>Acción Correctiva</h4>
 
-    <!-- Header móvil -->
-    <div class="d-md-none mb-3">
-        <a asp-action="Index" class="btn btn-sm btn-outline-secondary mb-2">
-            <i class="bi bi-arrow-left"></i> Volver
-        </a>
-        <h5><i class="bi bi-file-earmark-check me-2"></i>Acción Correctiva</h5>
-    </div>
-
-    @if (inspeccion != null)
-    {
-        <!-- Información de la inspección -->
-        <div class="info-card">
-            <h6 class="mb-3">
-                <i class="bi bi-info-circle me-2"></i>Información de la Inspección
-            </h6>
-
-            <div class="info-item">
-                <div class="info-label">N° Inspección</div>
-                <div class="info-value">
-                    <span class="badge bg-light text-primary fs-6">@inspeccion.Numero</span>
-                </div>
-            </div>
-
-            <div class="row">
-                <div class="col-12 col-md-6">
-                    <div class="info-item">
-                        <div class="info-label">Fecha</div>
-                        <div class="info-value">
-                            <i class="bi bi-calendar3"></i> @inspeccion.Fecha.ToString("dd/MM/yyyy HH:mm")
-                        </div>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="info-item">
-                        <div class="info-label">Tipo</div>
-                        <div class="info-value">
-                            @if (inspeccion.Tipo == "P")
+@if (inspeccion != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <!-- Información de la inspección -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-body p-4">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="bi bi-info-circle me-2"></i>Inspección N° @inspeccion.Numero
+                    </h6>
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted" style="width:140px;">Fecha</td>
+                                <td class="fw-semibold">@inspeccion.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Tipo</td>
+                                <td>
+                                    @if (inspeccion.Tipo == "P")
+                                    {
+                                        <span class="badge bg-info">Planeada</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">No Planeada</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Centro de Costo</td>
+                                <td>@inspeccion.NombreCentroCosto</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Resp. Inspección</td>
+                                <td>@inspeccion.NombreRespInspeccion</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Resp. Área</td>
+                                <td>@inspeccion.NombreRespArea</td>
+                            </tr>
+                            @if (!string.IsNullOrEmpty(inspeccion.UbicaFotoH))
                             {
-                                <span>📋 Planeada</span>
+                                <tr>
+                                    <td class="text-muted">Hallazgo</td>
+                                    <td>
+                                        @inspeccion.UbicaFotoH
+                                        <small class="text-muted ms-2">(@inspeccion.FechaFotoH?.ToString("dd/MM/yyyy"))</small>
+                                    </td>
+                                </tr>
                             }
-                            else
-                            {
-                                <span>⚡ No Planeada</span>
-                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Formulario -->
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form asp-action="AccionCorrectiva" asp-controller="Inspeccion" asp-route-numero="@inspeccion.Numero" method="post" enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label asp-for="UbicacionFoto" class="form-label fw-semibold">
+                                    Ubicación de la Acción Correctiva
+                                </label>
+                                <input asp-for="UbicacionFoto" 
+                                       type="text" 
+                                       class="form-control" 
+                                       placeholder="Ej: Se corrigió en Área de Producción" 
+                                       maxlength="100" 
+                                       required />
+                                <span asp-validation-for="UbicacionFoto" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">
+                                    Foto de Evidencia
+                                </label>
+                                <input asp-for="Foto" type="file" accept="image/*" id="foto" class="d-none" required />
+                                <input type="file" accept="image/*" capture="environment" id="cameraInput" class="d-none" />
+                                <div class="d-flex gap-2 mb-2">
+                                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('cameraInput').click()">
+                                        <i class="bi bi-camera-fill me-1"></i>Tomar Foto
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('foto').click()">
+                                        <i class="bi bi-image me-1"></i>Elegir Archivo
+                                    </button>
+                                </div>
+                                <small id="fotoNombre" class="text-muted"></small>
+                                <div class="form-text">JPG, JPEG, PNG o WebP. La imagen se optimizará automáticamente.</div>
+                                <span asp-validation-for="Foto" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-12">
+                                <div id="previewContainer" class="preview-container d-none">
+                                    <img id="previewImg" src="#" alt="Vista previa" class="img-fluid rounded" style="max-height: 300px;" />
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="info-item">
-                <div class="info-label">Centro de Costo</div>
-                <div class="info-value">@inspeccion.CentroCosto - @inspeccion.NombreCentroCosto</div>
-            </div>
-
-            <div class="row">
-                <div class="col-12 col-md-6">
-                    <div class="info-item">
-                        <div class="info-label">Resp. Inspección</div>
-                        <div class="info-value">@inspeccion.NombreRespInspeccion</div>
-                    </div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="info-item">
-                        <div class="info-label">Resp. Área</div>
-                        <div class="info-value">@inspeccion.NombreRespArea</div>
-                    </div>
-                </div>
-            </div>
-
-            @if (!string.IsNullOrEmpty(inspeccion.UbicaFotoH))
-            {
-                <div class="success-alert">
-                    <i class="bi bi-camera-fill me-2"></i>
-                    <strong>Hallazgo:</strong> @inspeccion.UbicaFotoH
-                    <br/>
-                    <small>Registrado: @inspeccion.FechaFotoH?.ToString("dd/MM/yyyy")</small>
-                </div>
-            }
-        </div>
-
-        <!-- Formulario de Acción Correctiva -->
-        <div class="card shadow-sm">
-            <div class="card-header bg-success text-white">
-                <h6 class="mb-0">
-                    <i class="bi bi-camera me-2"></i>Registrar Acción Correctiva
-                </h6>
-            </div>
-            <div class="card-body p-3 p-md-4">
-                <div class="alert alert-info">
-                    <i class="bi bi-lightbulb me-2"></i>
-                    <strong>Importante:</strong> Suba una foto que evidencie la acción correctiva realizada.
-                </div>
-
-                <form asp-action="AccionCorrectiva" asp-controller="Seguridad" method="post" enctype="multipart/form-data">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="numero" value="@inspeccion.Numero" />
-
-                    <!-- Ubicación de Acción Correctiva -->
-                    <div class="form-group-mobile">
-                        <label asp-for="UbicacionFoto" class="form-label fw-semibold">
-                            <i class="bi bi-geo-alt"></i> Ubicación de la Acción Correctiva
-                        </label>
-                        <input asp-for="UbicacionFoto" 
-                               type="text" 
-                               class="form-control form-control-lg" 
-                               placeholder="Ej: Se corrigió en Área de Producción" 
-                               maxlength="100" 
-                               required />
-                        <div class="form-text">
-                            Describa dónde o cómo se realizó la corrección (máx. 100 caracteres)
+                        <div class="mt-4 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i>Registrar Acción Correctiva
+                            </button>
+                            <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
                         </div>
-                        <span asp-validation-for="UbicacionFoto" class="text-danger small"></span>
-                    </div>
-
-                    <!-- Foto de Acción Correctiva -->
-                    <div class="form-group-mobile">
-                        <label asp-for="Foto" class="form-label fw-semibold">
-                            <i class="bi bi-camera"></i> Foto de Evidencia
-                        </label>
-                        <input asp-for="Foto"
-                               type="file" 
-                               class="form-control form-control-lg" 
-                               accept="image/*" 
-                               id="foto"
-                               required />
-                        <div class="form-text">
-                            JPG, JPEG, PNG o WebP. La imagen se optimizará automáticamente.
-                        </div>
-                        <span asp-validation-for="Foto" class="text-danger small"></span>
-                    </div>
-
-                    <!-- Vista previa -->
-                    <div id="previewContainer" class="preview-container d-none">
-                        <img id="previewImg" src="#" alt="Vista previa" class="img-fluid rounded" style="max-height: 400px;" />
-                    </div>
-
-                    <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-cloud-upload me-2"></i>Registrar Acción Correctiva
-                        </button>
-                        <a asp-action="Index" class="btn btn-outline-secondary">
-                            <i class="bi bi-x-circle me-1"></i>Cancelar
-                        </a>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
-    }
-</div>
+    </div>
+}
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
-        document.getElementById('foto').addEventListener('change', function () {
-            const file = this.files[0];
+        function mostrarPreview(file) {
             const container = document.getElementById('previewContainer');
             const img = document.getElementById('previewImg');
+            const nombre = document.getElementById('fotoNombre');
 
             if (file && file.type.startsWith('image/')) {
+                nombre.textContent = file.name;
                 const reader = new FileReader();
                 reader.onload = function (e) {
                     img.src = e.target.result;
@@ -243,7 +164,24 @@
             } else {
                 container.classList.add('d-none');
                 container.classList.remove('has-image');
+                nombre.textContent = '';
             }
+        }
+
+        // Cámara → copiar archivo al input del formulario + preview
+        document.getElementById('cameraInput').addEventListener('change', function () {
+            const file = this.files[0];
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                document.getElementById('foto').files = dt.files;
+                mostrarPreview(file);
+            }
+        });
+
+        // Galería/archivo → preview directo
+        document.getElementById('foto').addEventListener('change', function () {
+            mostrarPreview(this.files[0]);
         });
     </script>
 }

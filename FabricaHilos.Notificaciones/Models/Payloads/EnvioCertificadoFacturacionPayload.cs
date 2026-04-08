@@ -12,6 +12,7 @@ public class EnvioCertificadoFacturacionPayload : INotificacionPayload
     public TipoNotificacion Tipo               => TipoNotificacion.EnvioCertificadoFacturacion;
     public required string  CorreoDestinatario { get; set; }
     public required string  NombreDestinatario { get; set; }
+    public string? CorreoCopia { get; set; }
 
     public required string NumRequerimiento     { get; set; }
     public required string FechaRequerimiento   { get; set; }
@@ -24,6 +25,8 @@ public class EnvioCertificadoFacturacionPayload : INotificacionPayload
     public required string Moneda               { get; set; }
     public required string Importe              { get; set; }
     public required string TotalFacturas        { get; set; }
+    public string? Partidas                     { get; set; }
+    public string? OrdenesCompra                { get; set; }
 
     public Dictionary<string, string> ObtenerReemplazos() => new()
     {
@@ -38,5 +41,7 @@ public class EnvioCertificadoFacturacionPayload : INotificacionPayload
         { "Moneda",             Moneda             },
         { "Importe",            Importe            },
         { "TotalFacturas",      TotalFacturas      },
+        { "Partidas",           Partidas ?? "No disponible"        },
+        { "OrdenesCompra",      OrdenesCompra ?? "No disponible"   },
     };
 }

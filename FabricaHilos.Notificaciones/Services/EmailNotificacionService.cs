@@ -37,6 +37,14 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
             var mensaje = new MimeMessage();
             mensaje.From.Add(new MailboxAddress(_settings.NombreEnvio, _settings.UsuarioEnvio));
             mensaje.To.Add(new MailboxAddress(payload.NombreDestinatario, payload.CorreoDestinatario));
+
+            // Agregar CC si está disponible (solo para EnvioCertificadoFacturacionPayload)
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.EnvioCertificadoFacturacionPayload certPayload 
+                && !string.IsNullOrEmpty(certPayload.CorreoCopia))
+            {
+                mensaje.Cc.Add(new MailboxAddress("Copia", certPayload.CorreoCopia));
+            }
+
             mensaje.Subject = ObtenerAsunto(payload);
 
             var builder = new BodyBuilder { HtmlBody = htmlBody };

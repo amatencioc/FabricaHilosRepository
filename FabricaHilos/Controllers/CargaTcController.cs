@@ -398,15 +398,30 @@ namespace FabricaHilos.Controllers
                 var detalles = await _cargaTcService.ObtenerDetalleRequerimientoAsync(numReq);
                 var totalFacturas = detalles.Count;
 
+                // Obtener partidas y órdenes de compra
+                var partidas = await _cargaTcService.ObtenerPartidasPorRequerimientoAsync(numReq);
+                var ordenesCompra = await _cargaTcService.ObtenerOrdenesCompraPorRequerimientoAsync(numReq);
+
+                // Formatear partidas y OC para el correo
+                string partidasTexto = partidas.Any() 
+                    ? string.Join("\n", partidas.Select(p => p.PartidaItem)) 
+                    : "No disponible";
+
+                string ordenesCompraTexto = ordenesCompra.Any() 
+                    ? string.Join("\n", ordenesCompra.Select(oc => oc.OrdenCompra)) 
+                    : "No disponible";
+
                 var tipoCertificado = requerimiento.CodArt.Replace("CERT", "");
                 string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
 
                 var destinatarioFacturacion = _configuration["CorreoFacturacion"] ?? "iramirez@colonial.com.pe";
+                var copiaFacturacion = _configuration["CorreoFacturacionCopia"];
 
                 var payload = new EnvioCertificadoFacturacionPayload
                 {
                     CorreoDestinatario = destinatarioFacturacion,
                     NombreDestinatario = "Facturación",
+                    CorreoCopia = copiaFacturacion,
                     NumRequerimiento = requerimiento.NumReq.ToString(),
                     FechaRequerimiento = requerimiento.Fecha?.ToString("dd/MM/yyyy") ?? "N/A",
                     TipoCertificado = tipoCertificado,
@@ -417,7 +432,9 @@ namespace FabricaHilos.Controllers
                     NombreVendedor = nombreVendedor ?? "N/A",
                     Moneda = monedaTexto,
                     Importe = importe?.ToString("N2") ?? "0.00",
-                    TotalFacturas = totalFacturas.ToString()
+                    TotalFacturas = totalFacturas.ToString(),
+                    Partidas = partidasTexto,
+                    OrdenesCompra = ordenesCompraTexto
                 };
 
                 try

@@ -6,7 +6,7 @@ namespace FabricaHilos.Services;
 public interface IMenuService
 {
     MenuOptions GetMenusActuales();
-    (string controller, string action) GetLanding();
+    (string controller, string action, string? area) GetLanding();
 }
 
 public class MenuService : IMenuService
@@ -77,7 +77,7 @@ public class MenuService : IMenuService
                     RecursosHumanosEmpleados = false,
                     RecursosHumanosAsistencia = false,
                     AdministracionRegistrarUsuario = false,
-                    SeguridadSubirFoto = false
+                    SeguridadInspecciones = false
                 };
             }
 
@@ -116,7 +116,7 @@ public class MenuService : IMenuService
                 RecursosHumanosEmpleados = global.RecursosHumanosEmpleados,
                 RecursosHumanosAsistencia = global.RecursosHumanosAsistencia,
                 AdministracionRegistrarUsuario = global.AdministracionRegistrarUsuario,
-                SeguridadSubirFoto = global.SeguridadSubirFoto
+                SeguridadInspecciones = global.SeguridadInspecciones
             };
             return menusGlobal;
         }
@@ -190,23 +190,23 @@ public class MenuService : IMenuService
             AdministracionRegistrarUsuario = SubMenu(global.AdministracionRegistrarUsuario, "Administracion", "Administracion.RegistrarUsuario"),
 
             // ── Submenús: Seguridad ───────────────────────────────────────
-            SeguridadSubirFoto = SubMenu(global.SeguridadSubirFoto, "Seguridad", "Seguridad.SubirFoto"),
+            SeguridadInspecciones = SubMenu(global.SeguridadInspecciones, "Seguridad", "Seguridad.Inspeccion"),
         };
     }
 
-    public (string controller, string action) GetLanding()
+    public (string controller, string action, string? area) GetLanding()
     {
         var menus = GetMenusActuales();
 
-        if (menus.Dashboard)        return ("Home",       "Index");
-        if (menus.Produccion)       return ("Produccion", "Index");
-        if (menus.Sgc)              return ("Sgc",        "Index");
-        if (menus.Facturacion)      return ("Facturacion",          "Index");
-        if (menus.Ventas)           return ("Ventas",               "Index");
-        if (menus.Inventario)       return ("Inventario",           "Index");
-        if (menus.RecursosHumanos)  return ("RecursosHumanos",      "Index");
-        if (menus.Seguridad)        return ("Seguridad",            "Index");
-        return ("RegistroPreparatoria", "Index");
+        if (menus.Dashboard)        return ("Home",       "Index", null);
+        if (menus.Produccion)       return ("Produccion", "Index", null);
+        if (menus.Sgc)              return ("Sgc",        "Index", null);
+        if (menus.Facturacion)      return ("Facturacion",          "Index", null);
+        if (menus.Ventas)           return ("Ventas",               "Index", null);
+        if (menus.Inventario)       return ("Inventario",           "Index", null);
+        if (menus.RecursosHumanos)  return ("RecursosHumanos",      "Index", null);
+        if (menus.Seguridad)        return ("Inspeccion",           "Index", null);
+        return ("RegistroPreparatoria", "Index", null);
     }
 
     /// <summary>
