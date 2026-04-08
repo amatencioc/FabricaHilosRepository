@@ -1013,6 +1013,12 @@
         // Limpiar todas las selecciones SIN pedir confirmación
         limpiarTodasLasSelecciones(false);
 
+        // Mostrar overlay de carga antes de recargar
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.classList.add('show');
+        }
+
         // Esperar a que se cierre el modal y luego recargar la página
         setTimeout(function() {
             // Recargar la página para traer los datos actualizados de Oracle

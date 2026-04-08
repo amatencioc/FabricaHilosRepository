@@ -253,8 +253,8 @@
                     @if (menus.SeguridadSubirFoto)
                     {
                     <li>
-                        <a asp-controller="Seguridad" asp-action="SubirFoto" class="sidebar-link @(ctrl == "Seguridad" && act == "SubirFoto" ? "active" : "")">
-                            <i class="bi bi-shield-lock"></i> Subir Foto
+                        <a asp-controller="Seguridad" asp-action="Index" class="sidebar-link @(ctrl == "Seguridad" ? "active" : "")">
+                            <i class="bi bi-shield-check"></i> Inspecciones
                         </a>
                     </li>
                     }

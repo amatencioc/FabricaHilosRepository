@@ -1,0 +1,62 @@
+-- Script para crear la tabla SI_INSPECCION
+-- Módulo de Seguridad - Sistema de Inspecciones
+
+-- Crear la tabla SI_INSPECCION
+CREATE TABLE SI_INSPECCION (
+    NUMERO NUMBER(10) NOT NULL,
+    CCOSTO VARCHAR2(10) NOT NULL,
+    RESP_INSPECCION VARCHAR2(10) NOT NULL,
+    RESP_AREA VARCHAR2(10) NOT NULL,
+    TIPO VARCHAR2(2) NOT NULL CHECK (TIPO IN ('P', 'NP')),  -- P=Planeada, NP=No Planeada
+    FECHA DATE DEFAULT SYSDATE NOT NULL,
+    ESTADO CHAR(1) DEFAULT '1' NOT NULL CHECK (ESTADO IN ('1', '2', '3')),  -- 1=H, 2=AC, 3=Cerrado
+    RUTA_FOTO_H VARCHAR2(500),
+    FCH_FOTO_H DATE,
+    UBICA_FOTO_H VARCHAR2(100),
+    RUTA_FOTO_AC VARCHAR2(500),
+    FCH_FOTO_AC DATE,
+    UBICA_FOTO_AC VARCHAR2(100),
+    CONSTRAINT PK_SI_INSPECCION PRIMARY KEY (NUMERO)
+);
+
+-- Crear índices para mejorar el rendimiento
+CREATE INDEX IDX_SI_INSP_CCOSTO ON SI_INSPECCION(CCOSTO);
+CREATE INDEX IDX_SI_INSP_FECHA ON SI_INSPECCION(FECHA DESC);
+CREATE INDEX IDX_SI_INSP_TIPO ON SI_INSPECCION(TIPO);
+CREATE INDEX IDX_SI_INSP_ESTADO ON SI_INSPECCION(ESTADO);
+
+-- Comentarios de tabla y columnas para documentación
+COMMENT ON TABLE SI_INSPECCION IS 'Tabla de inspecciones de seguridad';
+COMMENT ON COLUMN SI_INSPECCION.NUMERO IS 'Número correlativo de la inspección';
+COMMENT ON COLUMN SI_INSPECCION.CCOSTO IS 'Centro de costo donde se realiza la inspección';
+COMMENT ON COLUMN SI_INSPECCION.RESP_INSPECCION IS 'Código del responsable de la inspección';
+COMMENT ON COLUMN SI_INSPECCION.RESP_AREA IS 'Código del responsable del área';
+COMMENT ON COLUMN SI_INSPECCION.TIPO IS 'Tipo de inspección: P=Planeada, NP=No Planeada';
+COMMENT ON COLUMN SI_INSPECCION.FECHA IS 'Fecha de la inspección';
+COMMENT ON COLUMN SI_INSPECCION.ESTADO IS 'Estado: 1=Solo Hallazgo, 2=Con Acción Correctiva, 3=Cerrado';
+COMMENT ON COLUMN SI_INSPECCION.RUTA_FOTO_H IS 'Ruta de la foto del hallazgo';
+COMMENT ON COLUMN SI_INSPECCION.FCH_FOTO_H IS 'Fecha de la foto del hallazgo';
+COMMENT ON COLUMN SI_INSPECCION.UBICA_FOTO_H IS 'Ubicación/descripción del hallazgo';
+COMMENT ON COLUMN SI_INSPECCION.RUTA_FOTO_AC IS 'Ruta de la foto de la acción correctiva';
+COMMENT ON COLUMN SI_INSPECCION.FCH_FOTO_AC IS 'Fecha de la foto de la acción correctiva';
+COMMENT ON COLUMN SI_INSPECCION.UBICA_FOTO_AC IS 'Ubicación/descripción de la acción correctiva';
+
+-- Otorgar permisos al esquema VICMATE
+GRANT SELECT, INSERT, UPDATE, DELETE ON SI_INSPECCION TO VICMATE;
+
+-- Script para insertar datos de prueba (opcional - comentado)
+/*
+INSERT INTO SI_INSPECCION (
+    NUMERO, CCOSTO, RESP_INSPECCION, RESP_AREA, TIPO, FECHA, ESTADO
+) VALUES (
+    1, '01', '210820', '210820', 'P', SYSDATE, '1'
+);
+
+INSERT INTO SI_INSPECCION (
+    NUMERO, CCOSTO, RESP_INSPECCION, RESP_AREA, TIPO, FECHA, ESTADO
+) VALUES (
+    2, '02', '137945', '137945', 'NP', SYSDATE, '1'
+);
+
+COMMIT;
+*/

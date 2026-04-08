@@ -205,6 +205,7 @@ public class MenuService : IMenuService
         if (menus.Ventas)           return ("Ventas",               "Index");
         if (menus.Inventario)       return ("Inventario",           "Index");
         if (menus.RecursosHumanos)  return ("RecursosHumanos",      "Index");
+        if (menus.Seguridad)        return ("Seguridad",            "Index");
         return ("RegistroPreparatoria", "Index");
     }
 

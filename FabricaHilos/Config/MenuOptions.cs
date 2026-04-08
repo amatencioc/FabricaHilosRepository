@@ -54,7 +54,7 @@ public class MenuOptions
     public bool AdministracionRegistrarUsuario { get; set; } = true;
 
     // ── Submenús: Seguridad ───────────────────────────────────────────────
-    public bool SeguridadSubirFoto { get; set; } = true;
+    public bool SeguridadInspecciones { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -96,7 +96,7 @@ public class MenuOptions
 
         AdministracionRegistrarUsuario = true,
 
-        SeguridadSubirFoto = true,
+        SeguridadInspecciones = true,
     };
 }
 

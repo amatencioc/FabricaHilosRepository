@@ -3,7 +3,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 
-namespace FabricaHilos.Services.Seguridad
+namespace FabricaHilos.Services.Seguridad.Inspeccion
 {
     public class ProcesadorImagenSeguridad
     {
@@ -18,9 +18,12 @@ namespace FabricaHilos.Services.Seguridad
 
         /// <summary>
         /// Valida, redimensiona (máx. 1600 px de lado), comprime a JPEG 75 % y guarda la imagen
-        /// en la ruta de red configurada. Devuelve el nombre de archivo generado.
+        /// en la ruta de red configurada con el nombre especificado.
         /// </summary>
-        public async Task<string> GuardarYOptimizarImagenAsync(IFormFile archivo)
+        /// <param name="archivo">Archivo de imagen a procesar</param>
+        /// <param name="nombreArchivo">Nombre personalizado del archivo (ej: "123-H.jpg")</param>
+        /// <returns>Nombre del archivo guardado</returns>
+        public async Task<string> GuardarYOptimizarImagenAsync(IFormFile archivo, string nombreArchivo)
         {
             if (archivo == null || archivo.Length == 0)
                 throw new ArgumentException("No se recibió ningún archivo.");
@@ -46,8 +49,12 @@ namespace FabricaHilos.Services.Seguridad
                 }));
             }
 
-            // Nombre único con extensión .jpg
-            var nombreArchivo = $"{Guid.NewGuid():N}.jpg";
+            // Asegurar que el nombre tiene extensión .jpg
+            if (!nombreArchivo.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+            {
+                nombreArchivo = Path.ChangeExtension(nombreArchivo, "jpg");
+            }
+
             var rutaDestino = Path.Combine(_rutaSeguridad, nombreArchivo);
 
             var encoder = new JpegEncoder { Quality = calidad };

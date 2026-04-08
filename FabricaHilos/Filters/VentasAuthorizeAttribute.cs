@@ -5,7 +5,8 @@ namespace FabricaHilos.Filters
 {
     /// <summary>
     /// Filtro de autorización personalizado para el módulo VENTAS.
-    /// Solo permite acceso a:
+    /// Permite acceso a:
+    /// - Usuarios administradores (rol Admin)
     /// - Usuario específico: COSTOS2
     /// - Usuarios que comiencen con: VENT (ejemplo: VENT001, VENTADMIN, etc.)
     /// </summary>
@@ -18,6 +19,12 @@ namespace FabricaHilos.Filters
             {
                 context.Result = new RedirectToActionResult("Login", "Account", null);
                 return;
+            }
+
+            // Verificar si el usuario es administrador (tiene rol Admin)
+            if (context.HttpContext.User.IsInRole("Admin"))
+            {
+                return; // Los administradores tienen acceso total
             }
 
             // Obtener nombre de usuario desde la sesión de Oracle (más confiable)
