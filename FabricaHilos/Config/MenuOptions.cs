@@ -13,18 +13,11 @@ public class MenuOptions
 
     // ── Menús principales ─────────────────────────────────────────────────
     public bool Dashboard        { get; set; } = false;
-    public bool Inventario       { get; set; } = false;
     public bool Produccion       { get; set; } = true;
     public bool Sgc              { get; set; } = true;
     public bool Facturacion      { get; set; } = true;
     public bool Ventas           { get; set; } = false;
-    public bool RecursosHumanos  { get; set; } = false;
-    public bool Administracion   { get; set; } = false;
     public bool Seguridad        { get; set; } = false;
-
-    // ── Submenús: Inventario ──────────────────────────────────────────────
-    public bool InventarioMateriaPrima      { get; set; } = true;
-    public bool InventarioProductoTerminado { get; set; } = true;
 
     // ── Submenús: Producción ──────────────────────────────────────────────
     public bool ProduccionRegistroPreparatoria { get; set; } = true;
@@ -46,13 +39,6 @@ public class MenuOptions
     // ── Submenús: Ventas ──────────────────────────────────────────────────
     public bool VentasConsultaTC { get; set; } = true;
 
-    // ── Submenús: Recursos Humanos ────────────────────────────────────────
-    public bool RecursosHumanosEmpleados  { get; set; } = true;
-    public bool RecursosHumanosAsistencia { get; set; } = true;
-
-    // ── Submenús: Administración ──────────────────────────────────────────
-    public bool AdministracionRegistrarUsuario { get; set; } = true;
-
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
 
@@ -63,17 +49,11 @@ public class MenuOptions
     public static MenuOptions Todo() => new()
     {
         Dashboard        = true,
-        Inventario       = true,
         Produccion       = true,
         Sgc              = true,
         Facturacion      = true,
         Ventas           = true,
-        RecursosHumanos  = true,
-        Administracion   = true,
         Seguridad        = true,
-
-        InventarioMateriaPrima         = true,
-        InventarioProductoTerminado    = true,
 
         ProduccionRegistroPreparatoria = true,
         ProduccionAutoconer            = true,
@@ -90,11 +70,6 @@ public class MenuOptions
         FacturacionListaDocumentos  = true,
 
         VentasConsultaTC = true,
-
-        RecursosHumanosEmpleados  = true,
-        RecursosHumanosAsistencia = true,
-
-        AdministracionRegistrarUsuario = true,
 
         SeguridadInspecciones = true,
     };

@@ -33,7 +33,6 @@ namespace FabricaHilos.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var totalProductos = await _context.ProductosTerminados.CountAsync();
             var ordenesActivas = await _context.OrdenesProduccion
                 .Where(o => o.Estado == Models.Produccion.EstadoOrden.EnProceso)
                 .CountAsync();
@@ -41,14 +40,9 @@ namespace FabricaHilos.Controllers
                 .Where(p => p.Fecha.Month == DateTime.Now.Month && p.Fecha.Year == DateTime.Now.Year)
                 .Select(p => (double)p.Total)
                 .SumAsync());
-            var totalEmpleados = await _context.Empleados.Where(e => e.Activo).CountAsync();
-            var stockBajo = await _context.MateriasPrimas.Where(m => m.CantidadDisponible < m.StockMinimo).CountAsync();
 
-            ViewBag.TotalProductos = totalProductos;
             ViewBag.OrdenesActivas = ordenesActivas;
             ViewBag.VentasMes = ventasMes;
-            ViewBag.TotalEmpleados = totalEmpleados;
-            ViewBag.StockBajo = stockBajo;
 
             return View();
         }

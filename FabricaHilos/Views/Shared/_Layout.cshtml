@@ -36,38 +36,9 @@
                 @if (menus.Dashboard)
                 {
                 <li>
-                    <a asp-controller="Home" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")">
+                    <a asp-controller="Home" asp-action="Index" class="sidebar-link @(ctrl == "Home" ? "active" : "")">
                         <i class="bi bi-speedometer2"></i> Dashboard
                     </a>
-                </li>
-                }
-
-                <!-- INVENTARIO -->
-                @if (menus.Inventario)
-                {
-                <li class="sidebar-section">INVENTARIO</li>
-                <li>
-                    <a asp-controller="Inventario" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" ? "active" : "")">
-                        <i class="bi bi-box-seam"></i> Inventario
-                    </a>
-                    <ul class="list-unstyled ps-3">
-                        @if (menus.InventarioMateriaPrima)
-                        {
-                        <li>
-                            <a asp-controller="Inventario" asp-action="MateriaPrima" class="sidebar-link sidebar-sublink @(ctrl == "Inventario" && act == "MateriaPrima" ? "active" : "")">
-                                <i class="bi bi-archive"></i> Materia Prima
-                            </a>
-                        </li>
-                        }
-                        @if (menus.InventarioProductoTerminado)
-                        {
-                        <li>
-                            <a asp-controller="Inventario" asp-action="ProductoTerminado" class="sidebar-link sidebar-sublink @(ctrl == "Inventario" && act == "ProductoTerminado" ? "active" : "")">
-                                <i class="bi bi-boxes"></i> Producto Terminado
-                            </a>
-                        </li>
-                        }
-                    </ul>
                 </li>
                 }
 
@@ -78,7 +49,7 @@
                 @if (menus.Produccion)
                 {
                 <li>
-                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Produccion" || ViewContext.RouteData.Values["controller"]?.ToString() == "RegistroPreparatoria" || ViewContext.RouteData.Values["controller"]?.ToString() == "Autoconer" ? "active" : "")">
+                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ctrl == "Produccion" || ctrl == "RegistroPreparatoria" || ctrl == "Autoconer" ? "active" : "")">
                         <i class="bi bi-gear-wide-connected"></i> Producción
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -102,6 +73,11 @@
                                         <i class="bi bi-folder"></i> por Partida
                                     </a>
                                 </li>
+                                <li>
+                                    <a asp-controller="Autoconer" asp-action="PorCanillas" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" && act == "PorCanillas" ? "active" : "")">
+                                        <i class="bi bi-list-columns"></i> por Canillas
+                                    </a>
+                                </li>
                             </ul>
                         </li>
                         }
@@ -111,7 +87,7 @@
                 @if (menus.Sgc)
                 {
                 <li>
-                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sgc" ? "active" : "")">
+                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "DashboardSgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -160,7 +136,7 @@
                 @if (menus.Facturacion)
                 {
                 <li>
-                    <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" ? "active" : "")">
+                    <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ctrl == "Facturacion" ? "active" : "")">
                         <i class="bi bi-receipt"></i> Facturación
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -187,7 +163,7 @@
                 @if (menus.Ventas)
                 {
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Ventas" || ViewContext.RouteData.Values["controller"]?.ToString() == "ConsultaTc" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -203,55 +179,12 @@
                 </li>
                 }
 
-                <!-- PERSONAL -->
-                @if (menus.RecursosHumanos)
-                {
-                <li class="sidebar-section">PERSONAL</li>
-                <li>
-                    <a asp-controller="RecursosHumanos" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "RecursosHumanos" ? "active" : "")">
-                        <i class="bi bi-person-badge"></i> Recursos Humanos
-                    </a>
-                    <ul class="list-unstyled ps-3">
-                        @if (menus.RecursosHumanosEmpleados)
-                        {
-                        <li>
-                            <a asp-controller="RecursosHumanos" asp-action="Empleados" class="sidebar-link sidebar-sublink @(ctrl == "RecursosHumanos" && act == "Empleados" ? "active" : "")">
-                                <i class="bi bi-person-lines-fill"></i> Empleados
-                            </a>
-                        </li>
-                        }
-                        @if (menus.RecursosHumanosAsistencia)
-                        {
-                        <li>
-                            <a asp-controller="RecursosHumanos" asp-action="Asistencia" class="sidebar-link sidebar-sublink @(ctrl == "RecursosHumanos" && act == "Asistencia" ? "active" : "")">
-                                <i class="bi bi-calendar-check"></i> Asistencia
-                            </a>
-                        </li>
-                        }
-                    </ul>
-                </li>
-                }
-
-                @if (menus.Administracion && (User.IsInRole("Admin") || User.IsInRole("Gerencia")))
-                {
-                    <!-- ADMINISTRACIÓN -->
-                    <li class="sidebar-section">ADMINISTRACIÓN</li>
-                    @if (menus.AdministracionRegistrarUsuario)
-                    {
-                    <li>
-                        <a asp-controller="Account" asp-action="Register" class="sidebar-link @(ctrl == "Account" && act == "Register" ? "active" : "")">
-                            <i class="bi bi-person-plus"></i> Registrar Usuario
-                        </a>
-                    </li>
-                    }
-                }
-
                 @if (menus.Seguridad)
                 {
                     <!-- SEGURIDAD -->
                     <li class="sidebar-section">SEGURIDAD</li>
                     <li>
-                        <a asp-controller="Inspeccion" asp-action="Index" class="sidebar-link @(ctrl == "Inspeccion" ? "active" : "")">
+                        <a asp-controller="Seguridad" asp-action="Index" class="sidebar-link @(ctrl == "Seguridad" || ctrl == "Inspeccion" ? "active" : "")">
                             <i class="bi bi-shield-check"></i> Seguridad
                         </a>
                         <ul class="list-unstyled ps-3">

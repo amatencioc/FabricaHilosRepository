@@ -50,9 +50,12 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         /// Lanza InvalidOperationException si NRODOC está bloqueada por otra sesión.
         /// </summary>
         Task<int> RegistrarHallazgoAsync(InspeccionRegistroDto inspeccion, string usuario);
-        Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? buscar = null, string? tipo = null);
+        Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null);
         Task<InspeccionListDto?> ObtenerInspeccionPorNumeroAsync(int numero);
         Task RegistrarAccionCorrectivaAsync(int numero, string rutaFoto, string ubicaFoto, string usuario);
+        Task AnularInspeccionAsync(int numero, string usuario);
+        Task ActualizarFotoAsync(int numero, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario);
+        Task ActualizarHallazgoAsync(int numero, string ccosto, string tipo, string respInspeccion, string respArea, string usuario);
     }
 
     public class InspeccionRegistroDto
@@ -189,7 +192,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             return resultado;
         }
 
-        public async Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? buscar = null, string? tipo = null)
+        public async Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null)
         {
             var resultado = new List<InspeccionListDto>();
 
@@ -217,14 +220,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 LEFT JOIN V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
                 WHERE 1=1";
 
-            if (!string.IsNullOrWhiteSpace(buscar))
-            {
-                query += " AND (UPPER(i.CCOSTO) LIKE '%' || :buscar || '%' OR UPPER(c.NOMBRE) LIKE '%' || :buscar || '%')";
-            }
-
             if (!string.IsNullOrWhiteSpace(tipo))
             {
                 query += " AND i.TIPO = :tipo";
+            }
+
+            if (!string.IsNullOrWhiteSpace(estado))
+            {
+                query += " AND i.ESTADO = :estado";
             }
 
             query += " ORDER BY i.NUMERO DESC";
@@ -236,14 +239,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
                 using var command = new OracleCommand(query, connection);
 
-                if (!string.IsNullOrWhiteSpace(buscar))
-                {
-                    command.Parameters.Add("buscar", OracleDbType.Varchar2).Value = buscar.ToUpperInvariant();
-                }
-
                 if (!string.IsNullOrWhiteSpace(tipo))
                 {
                     command.Parameters.Add("tipo", OracleDbType.Varchar2).Value = tipo;
+                }
+
+                if (!string.IsNullOrWhiteSpace(estado))
+                {
+                    command.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
                 }
 
                 using var reader = await command.ExecuteReaderAsync();
@@ -482,44 +485,344 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
         public async Task RegistrarAccionCorrectivaAsync(int numero, string rutaFoto, string ubicaFoto, string usuario)
         {
-            const string query = @"
-                UPDATE SI_INSPECCION
-                SET RUTA_FOTO_AC = :pRutaFoto,
-                    FCH_FOTO_AC = SYSDATE,
-                    UBICA_FOTO_AC = :pUbicaFoto,
-                    A_MDUSER = :pUsuario,
-                    A_MDFECHA = SYSDATE
-                WHERE NUMERO = :pNumero";
-
             var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            _logger.LogWarning("▶▶ SVC RegistrarAC: Abriendo conexión Oracle...");
+            using var connection = new OracleConnection(_connectionString);
+            await connection.OpenAsync();
+            _logger.LogWarning("▶▶ SVC RegistrarAC: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
+
+            using var transaction = connection.BeginTransaction();
+            _logger.LogWarning("▶▶ SVC RegistrarAC: Transacción iniciada ({Ms}ms)", sw.ElapsedMilliseconds);
 
             try
             {
-                // Construir ruta completa con nombre de archivo y extensión
+                // 1. Bloquear el registro de inspección y verificar estado y acción correctiva
+                const string querySelect = @"
+                    SELECT RUTA_FOTO_AC, ESTADO 
+                    FROM SI_INSPECCION 
+                    WHERE NUMERO = :pNumero 
+                    FOR UPDATE NOWAIT";
+
+                string? rutaFotoActual;
+                string? estadoActual;
+
+                _logger.LogWarning("▶▶ SVC RegistrarAC: SELECT FOR UPDATE NOWAIT Num={Num}...", numero);
+                using (var cmdSelect = new OracleCommand(querySelect, connection))
+                {
+                    cmdSelect.Transaction = transaction;
+                    cmdSelect.CommandTimeout = CmdTimeoutSec;
+                    cmdSelect.BindByName = true;
+                    cmdSelect.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+
+                    using var reader = await cmdSelect.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                    {
+                        throw new InvalidOperationException($"No se encontró el hallazgo con número {numero}.");
+                    }
+
+                    rutaFotoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    estadoActual = reader.IsDBNull(1) ? null : reader.GetString(1);
+                }
+
+                _logger.LogWarning("▶▶ SVC RegistrarAC: Registro bloqueado. RUTA_FOTO_AC actual={Ruta}, ESTADO={Estado} ({Ms}ms)", 
+                    rutaFotoActual ?? "NULL", estadoActual ?? "NULL", sw.ElapsedMilliseconds);
+
+                // 2. Verificar que no esté anulado
+                if (estadoActual == "9")
+                {
+                    throw new InvalidOperationException(
+                        $"El hallazgo #{numero} está anulado y no se puede registrar una acción correctiva.");
+                }
+
+                // 3. Verificar que no tenga ya una acción correctiva registrada
+                if (!string.IsNullOrEmpty(rutaFotoActual))
+                {
+                    _logger.LogWarning("▶▶ SVC RegistrarAC: El hallazgo {Num} YA TIENE acción correctiva registrada ({Ms}ms)", 
+                        numero, sw.ElapsedMilliseconds);
+                    throw new InvalidOperationException(
+                        $"El hallazgo #{numero} ya tiene una acción correctiva registrada. " +
+                        "No se puede sobrescribir.");
+                }
+
+                // 4. Construir ruta completa con nombre de archivo y extensión
                 var nombreArchivo = $"{numero}-AC.jpg";
                 var rutaFotoCompleta = Path.Combine(rutaFoto, nombreArchivo);
                 _logger.LogWarning("▶▶ SVC RegistrarAC: Ruta foto completa={Ruta}", rutaFotoCompleta);
 
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Abriendo conexión Oracle...");
-                using var connection = new OracleConnection(_connectionString);
-                await connection.OpenAsync();
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
-
-                using var command = new OracleCommand(query, connection);
-                command.BindByName = true;
-                command.CommandTimeout = CmdTimeoutSec;
-                command.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
-                command.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = ubicaFoto;
-                command.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
-                command.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                // 5. Actualizar con la acción correctiva
+                const string queryUpdate = @"
+                    UPDATE SI_INSPECCION
+                    SET RUTA_FOTO_AC = :pRutaFoto,
+                        FCH_FOTO_AC = SYSDATE,
+                        UBICA_FOTO_AC = :pUbicaFoto,
+                        ESTADO = '6',
+                        A_MDUSER = :pUsuario,
+                        A_MDFECHA = SYSDATE
+                    WHERE NUMERO = :pNumero";
 
                 _logger.LogWarning("▶▶ SVC RegistrarAC: Ejecutando UPDATE SI_INSPECCION Num={Num}...", numero);
-                await command.ExecuteNonQueryAsync();
-                _logger.LogWarning("▶▶ SVC RegistrarAC: UPDATE OK ({Ms}ms)", sw.ElapsedMilliseconds);
+                using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
+                {
+                    cmdUpdate.Transaction = transaction;
+                    cmdUpdate.CommandTimeout = CmdTimeoutSec;
+                    cmdUpdate.BindByName = true;
+                    cmdUpdate.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
+                    cmdUpdate.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = ubicaFoto;
+                    cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+
+                    var filasActualizadas = await cmdUpdate.ExecuteNonQueryAsync();
+                    _logger.LogWarning("▶▶ SVC RegistrarAC: UPDATE OK, filas={Filas} ({Ms}ms)", 
+                        filasActualizadas, sw.ElapsedMilliseconds);
+                }
+
+                // 6. Commit
+                _logger.LogWarning("▶▶ SVC RegistrarAC: Commit...");
+                await transaction.CommitAsync();
+                _logger.LogWarning("▶▶ SVC RegistrarAC: ✅ Commit OK. Acción correctiva registrada para hallazgo #{Num} ({Ms}ms)", 
+                    numero, sw.ElapsedMilliseconds);
+            }
+            catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+            {
+                _logger.LogWarning("▶▶ SVC RegistrarAC: Registro BLOQUEADO por otra sesión ({Ms}ms)", sw.ElapsedMilliseconds);
+                try { await transaction.RollbackAsync(); }
+                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC RegistrarAC: ERROR en Rollback (lock)"); }
+                throw new InvalidOperationException(
+                    $"El hallazgo #{numero} está siendo actualizado por otro usuario en este momento. " +
+                    "Por favor, intente nuevamente en unos segundos.", oraEx);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "▶▶ SVC RegistrarAC: ERROR ({Ms}ms)", sw.ElapsedMilliseconds);
+                _logger.LogError(ex, "▶▶ SVC RegistrarAC: ERROR — Rollback ({Ms}ms)", sw.ElapsedMilliseconds);
+                try { await transaction.RollbackAsync(); }
+                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC RegistrarAC: ERROR en Rollback"); }
+                throw;
+            }
+        }
+
+        public async Task AnularInspeccionAsync(int numero, string usuario)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            _logger.LogWarning("▶▶ SVC Anular: Abriendo conexión Oracle...");
+            using var connection = new OracleConnection(_connectionString);
+            await connection.OpenAsync();
+            _logger.LogWarning("▶▶ SVC Anular: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
+
+            using var transaction = connection.BeginTransaction();
+            _logger.LogWarning("▶▶ SVC Anular: Transacción iniciada ({Ms}ms)", sw.ElapsedMilliseconds);
+
+            try
+            {
+                // 1. Bloquear el registro y verificar estado actual
+                const string querySelect = @"
+                    SELECT ESTADO 
+                    FROM SI_INSPECCION 
+                    WHERE NUMERO = :pNumero 
+                    FOR UPDATE NOWAIT";
+
+                string? estadoActual;
+
+                _logger.LogWarning("▶▶ SVC Anular: SELECT FOR UPDATE NOWAIT Num={Num}...", numero);
+                using (var cmdSelect = new OracleCommand(querySelect, connection))
+                {
+                    cmdSelect.Transaction = transaction;
+                    cmdSelect.CommandTimeout = CmdTimeoutSec;
+                    cmdSelect.BindByName = true;
+                    cmdSelect.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+
+                    using var reader = await cmdSelect.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                    {
+                        throw new InvalidOperationException($"No se encontró la inspección con número {numero}.");
+                    }
+
+                    estadoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
+                }
+
+                _logger.LogWarning("▶▶ SVC Anular: Estado actual={Estado} ({Ms}ms)", estadoActual ?? "NULL", sw.ElapsedMilliseconds);
+
+                if (estadoActual == "9")
+                {
+                    throw new InvalidOperationException($"La inspección #{numero} ya se encuentra anulada.");
+                }
+
+                // 2. Actualizar estado a 9 (Anulado)
+                const string queryUpdate = @"
+                    UPDATE SI_INSPECCION
+                    SET ESTADO = '9',
+                        A_MDUSER = :pUsuario,
+                        A_MDFECHA = SYSDATE
+                    WHERE NUMERO = :pNumero";
+
+                _logger.LogWarning("▶▶ SVC Anular: Ejecutando UPDATE ESTADO='9' Num={Num}...", numero);
+                using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
+                {
+                    cmdUpdate.Transaction = transaction;
+                    cmdUpdate.CommandTimeout = CmdTimeoutSec;
+                    cmdUpdate.BindByName = true;
+                    cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+
+                    var filasActualizadas = await cmdUpdate.ExecuteNonQueryAsync();
+                    _logger.LogWarning("▶▶ SVC Anular: UPDATE OK, filas={Filas} ({Ms}ms)", filasActualizadas, sw.ElapsedMilliseconds);
+                }
+
+                // 3. Commit
+                _logger.LogWarning("▶▶ SVC Anular: Commit...");
+                await transaction.CommitAsync();
+                _logger.LogWarning("▶▶ SVC Anular: ✅ Commit OK. Inspección #{Num} anulada ({Ms}ms)", numero, sw.ElapsedMilliseconds);
+            }
+            catch (OracleException oraEx) when (oraEx.Number == 54)
+            {
+                _logger.LogWarning("▶▶ SVC Anular: Registro BLOQUEADO por otra sesión ({Ms}ms)", sw.ElapsedMilliseconds);
+                try { await transaction.RollbackAsync(); }
+                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC Anular: ERROR en Rollback (lock)"); }
+                throw new InvalidOperationException(
+                    $"La inspección #{numero} está siendo modificada por otro usuario. Intente nuevamente.", oraEx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "▶▶ SVC Anular: ERROR — Rollback ({Ms}ms)", sw.ElapsedMilliseconds);
+                try { await transaction.RollbackAsync(); }
+                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC Anular: ERROR en Rollback"); }
+                throw;
+            }
+        }
+
+        public async Task ActualizarFotoAsync(int numero, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogWarning("▶▶ SVC ActualizarFoto: tipo={Tipo}, Num={Num}...", tipoFoto, numero);
+
+            using var connection = new OracleConnection(_connectionString);
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                const string queryLock = "SELECT ESTADO FROM SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                string? estado;
+                using (var cmdLock = new OracleCommand(queryLock, connection))
+                {
+                    cmdLock.Transaction = transaction;
+                    cmdLock.CommandTimeout = CmdTimeoutSec;
+                    cmdLock.BindByName = true;
+                    cmdLock.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    var result = await cmdLock.ExecuteScalarAsync();
+                    if (result == null || result == DBNull.Value)
+                        throw new InvalidOperationException($"No se encontró la inspección #{numero}.");
+                    estado = result.ToString();
+                }
+
+                if (estado == "9")
+                    throw new InvalidOperationException($"La inspección #{numero} está anulada y no se pueden editar sus fotos.");
+
+                string query;
+                if (tipoFoto == "H")
+                {
+                    query = rutaFotoCompleta != null
+                        ? "UPDATE SI_INSPECCION SET UBICA_FOTO_H = :pUbica, RUTA_FOTO_H = :pRuta, FCH_FOTO_H = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero"
+                        : "UPDATE SI_INSPECCION SET UBICA_FOTO_H = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                }
+                else
+                {
+                    query = rutaFotoCompleta != null
+                        ? "UPDATE SI_INSPECCION SET UBICA_FOTO_AC = :pUbica, RUTA_FOTO_AC = :pRuta, FCH_FOTO_AC = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero"
+                        : "UPDATE SI_INSPECCION SET UBICA_FOTO_AC = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                }
+
+                using (var cmdUpdate = new OracleCommand(query, connection))
+                {
+                    cmdUpdate.Transaction = transaction;
+                    cmdUpdate.CommandTimeout = CmdTimeoutSec;
+                    cmdUpdate.BindByName = true;
+                    cmdUpdate.Parameters.Add("pUbica", OracleDbType.Varchar2).Value = ubicaFoto;
+                    if (rutaFotoCompleta != null)
+                        cmdUpdate.Parameters.Add("pRuta", OracleDbType.Varchar2).Value = rutaFotoCompleta;
+                    cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    await cmdUpdate.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogWarning("▶▶ SVC ActualizarFoto: ✅ OK ({Ms}ms)", sw.ElapsedMilliseconds);
+            }
+            catch (OracleException oraEx) when (oraEx.Number == 54)
+            {
+                try { await transaction.RollbackAsync(); } catch { }
+                throw new InvalidOperationException($"La inspección #{numero} está siendo modificada por otro usuario.", oraEx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "▶▶ SVC ActualizarFoto: ERROR");
+                try { await transaction.RollbackAsync(); } catch { }
+                throw;
+            }
+        }
+
+        public async Task ActualizarHallazgoAsync(int numero, string ccosto, string tipo, string respInspeccion, string respArea, string usuario)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogWarning("▶▶ SVC ActualizarHallazgo: Num={Num}...", numero);
+
+            using var connection = new OracleConnection(_connectionString);
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                const string queryLock = "SELECT ESTADO FROM SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                string? estado;
+                using (var cmdLock = new OracleCommand(queryLock, connection))
+                {
+                    cmdLock.Transaction = transaction;
+                    cmdLock.CommandTimeout = CmdTimeoutSec;
+                    cmdLock.BindByName = true;
+                    cmdLock.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    using var reader = await cmdLock.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                        throw new InvalidOperationException($"No se encontró la inspección #{numero}.");
+                    estado = reader.IsDBNull(0) ? null : reader.GetString(0);
+                }
+
+                if (estado == "9")
+                    throw new InvalidOperationException($"La inspección #{numero} está anulada y no se puede editar.");
+
+                const string queryUpdate = @"
+                    UPDATE SI_INSPECCION
+                    SET CCOSTO = :pCcosto, TIPO = :pTipo,
+                        RESP_INSPECCION = :pRespInspeccion, RESP_AREA = :pRespArea,
+                        A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE
+                    WHERE NUMERO = :pNumero";
+
+                using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
+                {
+                    cmdUpdate.Transaction = transaction;
+                    cmdUpdate.CommandTimeout = CmdTimeoutSec;
+                    cmdUpdate.BindByName = true;
+                    cmdUpdate.Parameters.Add("pCcosto", OracleDbType.Varchar2).Value = ccosto;
+                    cmdUpdate.Parameters.Add("pTipo", OracleDbType.Varchar2).Value = tipo;
+                    cmdUpdate.Parameters.Add("pRespInspeccion", OracleDbType.Varchar2).Value = respInspeccion;
+                    cmdUpdate.Parameters.Add("pRespArea", OracleDbType.Varchar2).Value = respArea;
+                    cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    await cmdUpdate.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogWarning("▶▶ SVC ActualizarHallazgo: ✅ OK #{Num} ({Ms}ms)", numero, sw.ElapsedMilliseconds);
+            }
+            catch (OracleException oraEx) when (oraEx.Number == 54)
+            {
+                try { await transaction.RollbackAsync(); } catch { }
+                throw new InvalidOperationException($"La inspección #{numero} está siendo modificada por otro usuario.", oraEx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "▶▶ SVC ActualizarHallazgo: ERROR");
+                try { await transaction.RollbackAsync(); } catch { }
                 throw;
             }
         }

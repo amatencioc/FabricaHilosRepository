@@ -3,17 +3,40 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Data;
 using FabricaHilos.Models;
-using FabricaHilos.Models.Inventario;
 using FabricaHilos.Models.Ventas;
-using FabricaHilos.Models.RecursosHumanos;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.Sgc;
 using QuestPDF.Infrastructure;
 using FabricaHilos.Config;
 using FabricaHilos.Notificaciones.Extensions;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERILOG: Configurar logging estructurado con persistencia en archivos
+// ══════════════════════════════════════════════════════════════════════════════
+// Crear carpeta de logs relativa al directorio de despliegue (funciona en cualquier unidad/ruta)
+var logPath = Path.Combine(AppContext.BaseDirectory, "Logs", "log-.txt");
+var logDirectory = Path.GetDirectoryName(logPath);
+if (!string.IsNullOrEmpty(logDirectory) && !Directory.Exists(logDirectory))
+{
+    Directory.CreateDirectory(logDirectory);
+}
+
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: logPath,
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"
+    ));
+
 
 // Configurar EF Core con SQLite
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -116,6 +139,15 @@ builder.Services.Configure<MenuOptions>(
 
 var app = builder.Build();
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SERILOG: Logging de requests HTTP (opcional, para diagnóstico de rendimiento)
+// ══════════════════════════════════════════════════════════════════════════════
+app.UseSerilogRequestLogging(options =>
+{
+    // Personalizar el log de cada request HTTP
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} respondió {StatusCode} en {Elapsed:0.0000} ms";
+});
+
 // Inicializar base de datos y seed data
 using (var scope = app.Services.CreateScope())
 {
@@ -141,7 +173,23 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Landing}/{id?}");
 
-app.Run();
+// ══════════════════════════════════════════════════════════════════════════════
+// SERILOG: Asegurar que todos los logs se escriban antes de terminar la app
+// ══════════════════════════════════════════════════════════════════════════════
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "La aplicación terminó inesperadamente");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush(); // Cierra Serilog y escribe todos los logs pendientes
+}
+
 
 // Método de inicialización de datos
 static async Task InicializarBD(IServiceProvider services)
@@ -194,32 +242,6 @@ static async Task InicializarBD(IServiceProvider services)
                     logger.LogInformation("Usuario '{Rol}' creado: {Email}", u.Rol, u.Email);
                 }
             }
-        }
-
-        // Seed de materias primas
-        if (!context.MateriasPrimas.Any())
-        {
-            context.MateriasPrimas.AddRange(
-                new MateriaPrima { Nombre = "Algodón Pima", Tipo = "Fibra Natural", UnidadMedida = "kg", CantidadDisponible = 500, StockMinimo = 100, Proveedor = "Textiles del Norte SAC", FechaUltimoIngreso = DateTime.Now.AddDays(-5) },
-                new MateriaPrima { Nombre = "Poliéster Reciclado", Tipo = "Fibra Sintética", UnidadMedida = "kg", CantidadDisponible = 300, StockMinimo = 150, Proveedor = "Industrias Químicas Lima", FechaUltimoIngreso = DateTime.Now.AddDays(-10) },
-                new MateriaPrima { Nombre = "Nylon 66", Tipo = "Fibra Sintética", UnidadMedida = "kg", CantidadDisponible = 80, StockMinimo = 100, Proveedor = "Importadora Textil SRL", FechaUltimoIngreso = DateTime.Now.AddDays(-15) },
-                new MateriaPrima { Nombre = "Lana Merino", Tipo = "Fibra Natural", UnidadMedida = "kg", CantidadDisponible = 200, StockMinimo = 50, Proveedor = "Ganadería Andina EIRL", FechaUltimoIngreso = DateTime.Now.AddDays(-3) },
-                new MateriaPrima { Nombre = "Colorante Azul Naval", Tipo = "Colorante", UnidadMedida = "lt", CantidadDisponible = 40, StockMinimo = 20, Proveedor = "QuimiColor SAC", FechaUltimoIngreso = DateTime.Now.AddDays(-7) }
-            );
-            await context.SaveChangesAsync();
-            logger.LogInformation("Materias primas de prueba creadas");
-        }
-
-        // Seed de empleados
-        if (!context.Empleados.Any())
-        {
-            context.Empleados.AddRange(
-                new Empleado { NombreCompleto = "Carlos Ramírez Torres", Dni = "45678901", Cargo = "Supervisor de Producción", Area = "Producción", FechaIngreso = new DateTime(2020, 3, 15), Salario = 3500, Activo = true, Telefono = "987654321" },
-                new Empleado { NombreCompleto = "María Quispe Huanca", Dni = "34567890", Cargo = "Operaria de Hilandería", Area = "Producción", FechaIngreso = new DateTime(2019, 6, 1), Salario = 1800, Activo = true, Telefono = "976543210" },
-                new Empleado { NombreCompleto = "Jorge Mendoza Cano", Dni = "56789012", Cargo = "Jefe de Ventas", Area = "Ventas", FechaIngreso = new DateTime(2021, 1, 10), Salario = 4200, Activo = true, Telefono = "965432109" }
-            );
-            await context.SaveChangesAsync();
-            logger.LogInformation("Empleados de prueba creados");
         }
 
         // Seed de clientes

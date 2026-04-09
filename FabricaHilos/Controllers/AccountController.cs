@@ -206,51 +206,6 @@ namespace FabricaHilos.Controllers
             return RedirectToAction("Login");
         }
 
-        [HttpGet]
-        [Authorize(Roles = "Admin,Gerencia")]
-        public async Task<IActionResult> Register()
-        {
-            ViewBag.Roles = await _roleManager.Roles.ToListAsync();
-            return View();
-        }
-
-        [HttpPost]
-        [Authorize(Roles = "Admin,Gerencia")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Register(string nombreCompleto, string email, string password, string rol)
-        {
-            if (string.IsNullOrEmpty(nombreCompleto) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
-            {
-                ModelState.AddModelError(string.Empty, "Todos los campos son obligatorios.");
-                ViewBag.Roles = await _roleManager.Roles.ToListAsync();
-                return View();
-            }
-
-            var usuario = new ApplicationUser
-            {
-                UserName = email,
-                Email = email,
-                NombreCompleto = nombreCompleto,
-                EmailConfirmed = true
-            };
-
-            var resultado = await _userManager.CreateAsync(usuario, password);
-            if (resultado.Succeeded)
-            {
-                if (!string.IsNullOrEmpty(rol) && await _roleManager.RoleExistsAsync(rol))
-                    await _userManager.AddToRoleAsync(usuario, rol);
-
-                TempData["Success"] = $"Usuario {email} creado exitosamente.";
-                return RedirectToAction("Index", "Home");
-            }
-
-            foreach (var error in resultado.Errors)
-                ModelState.AddModelError(string.Empty, error.Description);
-
-            ViewBag.Roles = await _roleManager.Roles.ToListAsync();
-            return View();
-        }
-
         public IActionResult AccesoDenegado()
         {
             return View();

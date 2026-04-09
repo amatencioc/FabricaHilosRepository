@@ -361,22 +361,62 @@ namespace FabricaHilos.Services.Sgc
             {
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
+                using var transaction = conn.BeginTransaction();
 
-                var sql = @"
-                    UPDATE SIG.REQ_CERT 
-                    SET 
-                        NUM_CER = :NumCer,
-                        A_MDUSER = :Usuario,
-                        A_MDFECHA = SYSDATE
-                    WHERE NUM_REQ = :NumReq";
+                try
+                {
+                    // 1. Bloquear el registro antes de actualizar (FOR UPDATE NOWAIT)
+                    const string querySel = "SELECT NUM_CER FROM SIG.REQ_CERT WHERE NUM_REQ = :NumReq FOR UPDATE NOWAIT";
 
-                using var cmd = new OracleCommand(sql, conn);
-                cmd.Parameters.Add(new OracleParameter("NumCer", modelo.NumCer));
-                cmd.Parameters.Add(new OracleParameter("Usuario", usuario));
-                cmd.Parameters.Add(new OracleParameter("NumReq", modelo.NumReq));
+                    using (var cmdSel = new OracleCommand(querySel, conn))
+                    {
+                        cmdSel.Transaction = transaction;
+                        cmdSel.Parameters.Add(new OracleParameter("NumReq", modelo.NumReq));
 
-                var rowsAffected = await cmd.ExecuteNonQueryAsync();
-                return rowsAffected > 0;
+                        using var reader = await cmdSel.ExecuteReaderAsync();
+                        if (!await reader.ReadAsync())
+                        {
+                            _logger.LogWarning("No se encontró el registro NUM_REQ={NumReq} a actualizar", modelo.NumReq);
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+                    }
+
+                    _logger.LogDebug("Registro NUM_REQ={NumReq} bloqueado correctamente", modelo.NumReq);
+
+                    // 2. Ejecutar el UPDATE
+                    var sql = @"
+                        UPDATE SIG.REQ_CERT 
+                        SET 
+                            NUM_CER = :NumCer,
+                            A_MDUSER = :Usuario,
+                            A_MDFECHA = SYSDATE
+                        WHERE NUM_REQ = :NumReq";
+
+                    using var cmd = new OracleCommand(sql, conn);
+                    cmd.Transaction = transaction;
+                    cmd.Parameters.Add(new OracleParameter("NumCer", modelo.NumCer));
+                    cmd.Parameters.Add(new OracleParameter("Usuario", usuario));
+                    cmd.Parameters.Add(new OracleParameter("NumReq", modelo.NumReq));
+
+                    var rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                    // 3. COMMIT de la transacción
+                    await transaction.CommitAsync();
+                    _logger.LogInformation("✅ Certificado actualizado correctamente. NUM_REQ={NumReq}, Filas={Rows}", modelo.NumReq, rowsAffected);
+                    return rowsAffected > 0;
+                }
+                catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy
+                {
+                    _logger.LogWarning("El certificado NUM_REQ={NumReq} está siendo modificado por otro usuario. Intente nuevamente.", modelo.NumReq);
+                    await transaction.RollbackAsync();
+                    return false;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
             catch (Exception ex)
             {

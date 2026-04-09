@@ -52,16 +52,11 @@ public class MenuService : IMenuService
                 return new MenuOptions
                 {
                     Dashboard = false,
-                    Inventario = false,
                     Produccion = false,
                     Sgc = false,
                     Facturacion = false,
                     Ventas = true,
-                    RecursosHumanos = false,
-                    Administracion = false,
                     Seguridad = false,
-                    InventarioMateriaPrima = false,
-                    InventarioProductoTerminado = false,
                     ProduccionRegistroPreparatoria = false,
                     ProduccionAutoconer = false,
                     ProduccionAutoconerPorPartida = false,
@@ -74,33 +69,25 @@ public class MenuService : IMenuService
                     FacturacionImportarFacturas = false,
                     FacturacionListaDocumentos = false,
                     VentasConsultaTC = true,
-                    RecursosHumanosEmpleados = false,
-                    RecursosHumanosAsistencia = false,
-                    AdministracionRegistrarUsuario = false,
                     SeguridadInspecciones = false
                 };
             }
 
-            // Sin UserMenus: Admin ve todo
+            // Sin UserMenus: Admin respeta la configuración global
             if (user!.IsInRole("Admin"))
             {
-                return MenuOptions.Todo();
+                return global;
             }
 
             // Otros usuarios sin UserMenus ven el menú global (sin Ventas)
             var menusGlobal = new MenuOptions
             {
                 Dashboard = global.Dashboard,
-                Inventario = global.Inventario,
                 Produccion = global.Produccion,
                 Sgc = global.Sgc,
                 Facturacion = global.Facturacion,
                 Ventas = false,
-                RecursosHumanos = global.RecursosHumanos,
-                Administracion = global.Administracion,
                 Seguridad = global.Seguridad,
-                InventarioMateriaPrima = global.InventarioMateriaPrima,
-                InventarioProductoTerminado = global.InventarioProductoTerminado,
                 ProduccionRegistroPreparatoria = global.ProduccionRegistroPreparatoria,
                 ProduccionAutoconer = global.ProduccionAutoconer,
                 ProduccionAutoconerPorPartida = global.ProduccionAutoconerPorPartida,
@@ -113,9 +100,6 @@ public class MenuService : IMenuService
                 FacturacionImportarFacturas = global.FacturacionImportarFacturas,
                 FacturacionListaDocumentos = global.FacturacionListaDocumentos,
                 VentasConsultaTC = false,
-                RecursosHumanosEmpleados = global.RecursosHumanosEmpleados,
-                RecursosHumanosAsistencia = global.RecursosHumanosAsistencia,
-                AdministracionRegistrarUsuario = global.AdministracionRegistrarUsuario,
                 SeguridadInspecciones = global.SeguridadInspecciones
             };
             return menusGlobal;
@@ -149,18 +133,11 @@ public class MenuService : IMenuService
         {
             // ── Menús principales ─────────────────────────────────────────
             Dashboard       = Menu(global.Dashboard,       "Dashboard"),
-            Inventario      = Menu(global.Inventario,      "Inventario"),
             Produccion      = Menu(global.Produccion,      "Produccion"),
             Sgc             = Menu(global.Sgc,             "Sgc"),
             Facturacion     = Menu(global.Facturacion,     "Facturacion"),
             Ventas          = Menu(global.Ventas,          "Ventas"),
-            RecursosHumanos = Menu(global.RecursosHumanos, "RecursosHumanos"),
-            Administracion  = Menu(global.Administracion,  "Administracion"),
             Seguridad       = Menu(global.Seguridad,       "Seguridad"),
-
-            // ── Submenús: Inventario ──────────────────────────────────────
-            InventarioMateriaPrima      = SubMenu(global.InventarioMateriaPrima,      "Inventario", "Inventario.MateriaPrima"),
-            InventarioProductoTerminado = SubMenu(global.InventarioProductoTerminado, "Inventario", "Inventario.ProductoTerminado"),
 
             // ── Submenús: Producción ──────────────────────────────────────
             ProduccionRegistroPreparatoria = SubMenu(global.ProduccionRegistroPreparatoria, "Produccion", "Produccion.RegistroPreparatoria"),
@@ -182,13 +159,6 @@ public class MenuService : IMenuService
             // ── Submenús: Ventas ──────────────────────────────────────────
             VentasConsultaTC = SubMenu(global.VentasConsultaTC, "Ventas", "Ventas.ConsultaTC"),
 
-            // ── Submenús: Recursos Humanos ────────────────────────────────
-            RecursosHumanosEmpleados  = SubMenu(global.RecursosHumanosEmpleados,  "RecursosHumanos", "RecursosHumanos.Empleados"),
-            RecursosHumanosAsistencia = SubMenu(global.RecursosHumanosAsistencia, "RecursosHumanos", "RecursosHumanos.Asistencia"),
-
-            // ── Submenús: Administración ──────────────────────────────────
-            AdministracionRegistrarUsuario = SubMenu(global.AdministracionRegistrarUsuario, "Administracion", "Administracion.RegistrarUsuario"),
-
             // ── Submenús: Seguridad ───────────────────────────────────────
             SeguridadInspecciones = SubMenu(global.SeguridadInspecciones, "Seguridad", "Seguridad.Inspeccion"),
         };
@@ -203,8 +173,6 @@ public class MenuService : IMenuService
         if (menus.Sgc)              return ("Sgc",        "Index", null);
         if (menus.Facturacion)      return ("Facturacion",          "Index", null);
         if (menus.Ventas)           return ("Ventas",               "Index", null);
-        if (menus.Inventario)       return ("Inventario",           "Index", null);
-        if (menus.RecursosHumanos)  return ("RecursosHumanos",      "Index", null);
         if (menus.Seguridad)        return ("Inspeccion",           "Index", null);
         return ("RegistroPreparatoria", "Index", null);
     }

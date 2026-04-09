@@ -42,4 +42,23 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         [Display(Name = "Foto de Acción Correctiva")]
         public IFormFile Foto { get; set; } = null!;
     }
+
+    public class EditarHallazgoViewModel
+    {
+        [Required(ErrorMessage = "Debe seleccionar un responsable de área.")]
+        [Display(Name = "Responsable de Área")]
+        public string ResponsableArea { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Debe seleccionar un responsable de inspección.")]
+        [Display(Name = "Responsable de Inspección")]
+        public string ResponsableInspeccion { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Debe seleccionar un centro de costo.")]
+        [Display(Name = "Centro de Costo")]
+        public string CentroCosto { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Debe seleccionar el tipo de inspección.")]
+        [Display(Name = "Tipo de Inspección")]
+        public string TipoInspeccion { get; set; } = string.Empty;
+    }
 }

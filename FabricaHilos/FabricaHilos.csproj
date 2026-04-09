@@ -8,14 +8,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\RecursosHumanos\**" />
     <Compile Remove="Views\DashboardSgc\**" />
+    <Compile Remove="Views\Inventario\**" />
     <Compile Remove="Views\Produccion\RegistroParo\**" />
+    <Compile Remove="Views\RecursosHumanos\**" />
+    <Content Remove="Models\RecursosHumanos\**" />
     <Content Remove="Views\DashboardSgc\**" />
+    <Content Remove="Views\Inventario\**" />
     <Content Remove="Views\Produccion\RegistroParo\**" />
+    <Content Remove="Views\RecursosHumanos\**" />
+    <EmbeddedResource Remove="Models\RecursosHumanos\**" />
     <EmbeddedResource Remove="Views\DashboardSgc\**" />
+    <EmbeddedResource Remove="Views\Inventario\**" />
     <EmbeddedResource Remove="Views\Produccion\RegistroParo\**" />
+    <EmbeddedResource Remove="Views\RecursosHumanos\**" />
+    <None Remove="Models\RecursosHumanos\**" />
     <None Remove="Views\DashboardSgc\**" />
+    <None Remove="Views\Inventario\**" />
     <None Remove="Views\Produccion\RegistroParo\**" />
+    <None Remove="Views\RecursosHumanos\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,6 +44,8 @@
     </PackageReference>
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.100" />
     <PackageReference Include="QuestPDF" Version="2024.12.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 

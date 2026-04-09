@@ -53,6 +53,11 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             using var image = await Image.LoadAsync(imagenStream);
             _logger?.LogWarning("▶▶ IMG: Imagen cargada {W}x{H} ({Ms}ms)", image.Width, image.Height, sw.ElapsedMilliseconds);
 
+            // Aplicar rotación real de píxeles según metadata EXIF y eliminar la etiqueta Orientation.
+            // Oracle Forms no interpreta EXIF, así que sin esto las fotos de celular se ven giradas.
+            image.Mutate(x => x.AutoOrient());
+            _logger?.LogWarning("▶▶ IMG: AutoOrient aplicado {W}x{H} ({Ms}ms)", image.Width, image.Height, sw.ElapsedMilliseconds);
+
             // Redimensionar manteniendo relación de aspecto si supera el máximo
             if (image.Width > maxLado || image.Height > maxLado)
             {

@@ -47,6 +47,26 @@
         font-size: 0.875rem;
         font-weight: 500;
     }
+    /* Indicador de estado por fila */
+    tr.estado-registrado td:first-child { box-shadow: inset 4px 0 0 #198754; }
+    tr.estado-cerrado td:first-child    { box-shadow: inset 4px 0 0 #fd7e14; }
+    tr.estado-anulado td:first-child    { box-shadow: inset 4px 0 0 #dc3545; }
+    tr.estado-anulado                   { opacity: 0.6; }
+    .estado-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: middle;
+    }
+    .estado-dot.registrado { background-color: #198754; }
+    .estado-dot.cerrado    { background-color: #fd7e14; }
+    .estado-dot.anulado    { background-color: #dc3545; }
+    /* Mobile cards por estado */
+    .mobile-card.card-registrado { border-left-color: #198754; }
+    .mobile-card.card-cerrado    { border-left-color: #fd7e14; }
+    .mobile-card.card-anulado    { border-left-color: #dc3545; opacity: 0.7; }
 </style>
 
 <div class="container-fluid px-2 px-md-4">
@@ -59,11 +79,6 @@
     <!-- Filtros -->
     <div class="filter-panel">
         <form method="get" class="row g-2">
-            <div class="col-12 col-md-6">
-                <input type="text" name="buscar" value="@ViewBag.Buscar" 
-                       class="form-control" 
-                       placeholder="Buscar por centro de costo o nombre..." />
-            </div>
             <div class="col-12 col-md-4">
                 <select name="tipo" class="form-select">
                     <option value="">Todos los tipos</option>
@@ -71,13 +86,21 @@
                     <option value="N" selected="@(ViewBag.TipoFiltro == "N")">⚡ No Planeada</option>
                 </select>
             </div>
-            <div class="col-12 col-md-2">
+            <div class="col-12 col-md-4">
+                <select name="estado" class="form-select">
+                    <option value="">Todos los estados</option>
+                    <option value="1" selected="@(ViewBag.EstadoFiltro == "1")">✅ Registrado</option>
+                    <option value="6" selected="@(ViewBag.EstadoFiltro == "6")">🔒 Cerrado</option>
+                    <option value="9" selected="@(ViewBag.EstadoFiltro == "9")">❌ Anulado</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-search"></i> Filtrar
                 </button>
             </div>
         </form>
-        @if (!string.IsNullOrEmpty(ViewBag.Buscar as string) || !string.IsNullOrEmpty(ViewBag.TipoFiltro as string))
+        @if (!string.IsNullOrEmpty(ViewBag.TipoFiltro as string) || !string.IsNullOrEmpty(ViewBag.EstadoFiltro as string))
         {
             <div class="mt-2">
                 <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
@@ -93,11 +116,11 @@
         {
             foreach (var item in Model)
             {
-                <div class="card mobile-card">
+                <div class="card mobile-card @(item.Estado == "1" ? "card-registrado" : item.Estado == "6" ? "card-cerrado" : item.Estado == "9" ? "card-anulado" : "")">
                     <div class="mobile-card-header">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold">
-                                <i class="bi bi-hash"></i>@item.Numero
+                                <span class="estado-dot @(item.Estado == "1" ? "registrado" : item.Estado == "6" ? "cerrado" : item.Estado == "9" ? "anulado" : "")"></span><i class="bi bi-hash"></i>@item.Numero
                             </span>
                             <span>
                                 @if (item.Tipo == "P")
@@ -136,40 +159,90 @@
 
                         <div class="row g-2 mb-3">
                             <div class="col-6 text-center">
-                                <div class="info-badge @(string.IsNullOrEmpty(item.UbicaFotoH) ? "bg-light" : "bg-success text-white")">
-                                    <i class="bi bi-@(string.IsNullOrEmpty(item.UbicaFotoH) ? "x-circle" : "camera-fill")"></i>
-                                    Hallazgo (H)
-                                </div>
                                 @if (!string.IsNullOrEmpty(item.UbicaFotoH))
                                 {
+                                    @if (item.Estado != "9")
+                                    {
+                                        <a href="#" class="btn-editar-foto text-decoration-none"
+                                           data-numero="@item.Numero" data-tipo="H"
+                                           data-ubicacion="@item.UbicaFotoH">
+                                            <div class="info-badge bg-success text-white">
+                                                <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> H
+                                            </div>
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <div class="info-badge bg-secondary text-white">
+                                            <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> H
+                                        </div>
+                                    }
                                     <div><small class="text-muted">@item.FechaFotoH?.ToString("dd/MM/yy")</small></div>
+                                }
+                                else
+                                {
+                                    <div class="info-badge bg-light">
+                                        <i class="bi bi-dash"></i> H
+                                    </div>
                                 }
                             </div>
                             <div class="col-6 text-center">
-                                <div class="info-badge @(item.TieneAccionCorrectiva ? "bg-success text-white" : "bg-light")">
-                                    <i class="bi bi-@(item.TieneAccionCorrectiva ? "check-circle-fill" : "clock")"></i>
-                                    AC
-                                </div>
                                 @if (item.TieneAccionCorrectiva)
                                 {
+                                    @if (item.Estado != "9")
+                                    {
+                                        <a href="#" class="btn-editar-foto text-decoration-none"
+                                           data-numero="@item.Numero" data-tipo="AC"
+                                           data-ubicacion="@item.UbicaFotoAc">
+                                            <div class="info-badge bg-success text-white">
+                                                <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> AC
+                                            </div>
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <div class="info-badge bg-secondary text-white">
+                                            <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> AC
+                                        </div>
+                                    }
                                     <div><small class="text-muted">@item.FechaFotoAc?.ToString("dd/MM/yy")</small></div>
+                                }
+                                else
+                                {
+                                    <div class="info-badge bg-light">
+                                        <i class="bi bi-dash"></i> AC
+                                    </div>
                                 }
                             </div>
                         </div>
 
-                        @if (!item.TieneAccionCorrectiva)
-                        {
-                            <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero" 
-                               class="btn btn-primary btn-sm w-100">
-                                <i class="bi bi-file-earmark-plus"></i> Agregar Acción Correctiva
-                            </a>
-                        }
-                        else
-                        {
-                            <div class="text-center text-success">
-                                <i class="bi bi-check-circle-fill"></i> <strong>Completado</strong>
-                            </div>
-                        }
+                        <div class="d-flex gap-2 justify-content-center">
+                            @if (!item.TieneAccionCorrectiva && item.Estado != "9")
+                            {
+                                <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero"
+                                   class="btn btn-sm btn-outline-primary" title="Agregar AC">
+                                    <i class="bi bi-file-earmark-plus"></i>
+                                </a>
+                            }
+                            @if (item.Estado != "9")
+                            {
+                                <a asp-action="Editar" asp-route-numero="@item.Numero"
+                                   class="btn btn-sm btn-outline-secondary" title="Editar">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-info btn-ver"
+                                    data-numero="@item.Numero" title="Ver">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            @if (item.Estado != "9")
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-anular"
+                                        data-numero="@item.Numero" title="Anular">
+                                    <i class="bi bi-x-octagon"></i>
+                                </button>
+                            }
+                        </div>
                     </div>
                 </div>
             }
@@ -207,8 +280,10 @@
                             {
                                 foreach (var item in Model)
                                 {
-                                    <tr>
-                                        <td class="fw-semibold">@item.Numero</td>
+                                    <tr class="@(item.Estado == "1" ? "estado-registrado" : item.Estado == "6" ? "estado-cerrado" : item.Estado == "9" ? "estado-anulado" : "")">
+                                        <td class="fw-semibold">
+                                            <span class="estado-dot @(item.Estado == "1" ? "registrado" : item.Estado == "6" ? "cerrado" : item.Estado == "9" ? "anulado" : "")" title="@(item.Estado == "1" ? "Registrado" : item.Estado == "6" ? "Cerrado" : item.Estado == "9" ? "Anulado" : "")"></span>@item.Numero
+                                        </td>
                                         <td>@item.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
                                         <td>
                                             @if (item.Tipo == "P")
@@ -226,37 +301,77 @@
                                         <td class="text-center">
                                             @if (!string.IsNullOrEmpty(item.UbicaFotoH))
                                             {
-                                                <i class="bi bi-camera-fill text-success"></i>
+                                                @if (item.Estado != "9")
+                                                {
+                                                    <a href="#" class="btn-editar-foto text-decoration-none"
+                                                       data-numero="@item.Numero" data-tipo="H"
+                                                       data-ubicacion="@item.UbicaFotoH"
+                                                       title="Editar hallazgo - foto y ubicación">
+                                                        <i class="bi bi-camera-fill text-secondary me-1"></i><i class="bi bi-check-circle-fill text-success"></i>
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-check-circle-fill text-muted"></i>
+                                                }
                                                 <div><small class="text-muted">@item.FechaFotoH?.ToString("dd/MM/yy")</small></div>
                                             }
                                             else
                                             {
-                                                <i class="bi bi-x-circle text-muted"></i>
+                                                <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-dash text-muted"></i>
                                             }
                                         </td>
                                         <td class="text-center">
                                             @if (item.TieneAccionCorrectiva)
                                             {
-                                                <i class="bi bi-check-circle-fill text-success"></i>
+                                                @if (item.Estado != "9")
+                                                {
+                                                    <a href="#" class="btn-editar-foto text-decoration-none"
+                                                       data-numero="@item.Numero" data-tipo="AC"
+                                                       data-ubicacion="@item.UbicaFotoAc"
+                                                       title="Editar acción correctiva - foto y ubicación">
+                                                        <i class="bi bi-camera-fill text-secondary me-1"></i><i class="bi bi-check-circle-fill text-success"></i>
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-check-circle-fill text-muted"></i>
+                                                }
                                                 <div><small class="text-muted">@item.FechaFotoAc?.ToString("dd/MM/yy")</small></div>
                                             }
                                             else
                                             {
-                                                <span class="badge bg-secondary">Pendiente</span>
+                                                <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-dash text-muted"></i>
                                             }
                                         </td>
                                         <td>
-                                            @if (!item.TieneAccionCorrectiva)
-                                            {
-                                                <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero" 
-                                                   class="btn btn-sm btn-outline-primary">
-                                                    <i class="bi bi-file-earmark-plus"></i> AC
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-success"><i class="bi bi-check-lg"></i></span>
-                                            }
+                                            <div class="d-flex gap-1">
+                                                @if (!item.TieneAccionCorrectiva && item.Estado != "9")
+                                                {
+                                                    <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero"
+                                                       class="btn btn-sm btn-outline-primary" title="Agregar AC">
+                                                        <i class="bi bi-file-earmark-plus"></i>
+                                                    </a>
+                                                }
+                                                @if (item.Estado != "9")
+                                                {
+                                                    <a asp-action="Editar" asp-route-numero="@item.Numero"
+                                                       class="btn btn-sm btn-outline-secondary" title="Editar Hallazgo">
+                                                        <i class="bi bi-pencil-square"></i>
+                                                    </a>
+                                                }
+                                                <button type="button" class="btn btn-sm btn-outline-info btn-ver"
+                                                        data-numero="@item.Numero" title="Ver Detalle">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                @if (item.Estado != "9")
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-danger btn-anular"
+                                                            data-numero="@item.Numero" title="Anular">
+                                                        <i class="bi bi-x-octagon"></i>
+                                                    </button>
+                                                }
+                                            </div>
                                         </td>
                                     </tr>
                                 }
@@ -295,3 +410,193 @@
         </small>
     </div>
 </div>
+
+<!-- Modal Editar Foto (H o AC) -->
+<div class="modal fade" id="modalEditarFoto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalEditarFotoLabel">Editar Foto</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form asp-action="ActualizarFoto" asp-controller="Inspeccion" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="numero" id="efNumero" />
+                <input type="hidden" name="tipoFoto" id="efTipoFoto" />
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ubicación</label>
+                        <input type="text" name="ubicacion" id="efUbicacion" class="form-control" maxlength="100" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Foto</label>
+                        <input type="file" name="foto" id="efFoto" accept="image/*" class="form-control" />
+                        <input type="file" accept="image/*" capture="environment" id="efCamera" class="d-none" />
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="document.getElementById('efCamera').click()">
+                                <i class="bi bi-camera-fill me-1"></i>Tomar Foto
+                            </button>
+                        </div>
+                        <div class="form-text">Deje vacío para mantener la foto actual.</div>
+                    </div>
+                    <div id="efPreviewContainer" class="d-none text-center">
+                        <img id="efPreviewImg" src="#" alt="Vista previa" class="img-fluid rounded" style="max-height:200px;" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Anular -->
+<div class="modal fade" id="modalAnular" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Anulación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Está seguro de que desea <strong>anular</strong> la inspección N° <strong id="anularNumero"></strong>?</p>
+                <p class="text-danger mb-0"><small><i class="bi bi-info-circle me-1"></i>Esta acción no se puede deshacer.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formAnular" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-x-octagon me-1"></i>Sí, Anular
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ver Detalle -->
+<div class="modal fade" id="modalVer" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-eye me-2"></i>Detalle de Inspección N° <span id="verNumero"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="verBody">
+                <div class="text-center py-4"><div class="spinner-border"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const basePath = '@Url.Action("Index", "Inspeccion")'.replace(/\/Index$/i, '').replace(/\/$/, '');
+
+        // ===== Editar Foto (H o AC) =====
+        document.querySelectorAll('.btn-editar-foto').forEach(el => {
+            el.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.getElementById('efNumero').value = this.dataset.numero;
+                document.getElementById('efTipoFoto').value = this.dataset.tipo;
+                document.getElementById('efUbicacion').value = this.dataset.ubicacion || '';
+                document.getElementById('efFoto').value = '';
+                document.getElementById('efPreviewContainer').classList.add('d-none');
+                document.getElementById('modalEditarFotoLabel').textContent =
+                    this.dataset.tipo === 'H' ? 'Editar Hallazgo - Foto y Ubicación' : 'Editar Acción Correctiva - Foto y Ubicación';
+                new bootstrap.Modal(document.getElementById('modalEditarFoto')).show();
+            });
+        });
+
+        // ===== Anular =====
+        document.querySelectorAll('.btn-anular').forEach(el => {
+            el.addEventListener('click', function () {
+                document.getElementById('anularNumero').textContent = this.dataset.numero;
+                document.getElementById('formAnular').action = basePath + '/Anular/' + this.dataset.numero;
+                new bootstrap.Modal(document.getElementById('modalAnular')).show();
+            });
+        });
+
+        // ===== Ver Detalle =====
+        document.querySelectorAll('.btn-ver').forEach(el => {
+            el.addEventListener('click', async function () {
+                const numero = this.dataset.numero;
+                const modal = new bootstrap.Modal(document.getElementById('modalVer'));
+                document.getElementById('verNumero').textContent = numero;
+                document.getElementById('verBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div></div>';
+                modal.show();
+                try {
+                    const resp = await fetch(basePath + '/Detalle/' + numero);
+                    if (!resp.ok) throw new Error('Error');
+                    const d = await resp.json();
+                    const estadoMap = { '1': '<span class="badge bg-success">Registrado</span>', '6': '<span class="badge bg-info">Cerrado</span>', '9': '<span class="badge bg-danger">Anulado</span>' };
+                    const tipoLabel = d.tipo === 'P' ? '<span class="badge bg-info">Planeada</span>' : '<span class="badge bg-warning">No Planeada</span>';
+                    const imgUrl = (t) => basePath + '/Imagen/' + numero + '/' + t;
+                    let html = `
+                        <h6 class="fw-semibold"><i class="bi bi-info-circle me-2"></i>Datos de la Inspección</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr><td class="text-muted" style="width:160px">N°</td><td class="fw-semibold">${d.numero}</td></tr>
+                            <tr><td class="text-muted">Fecha</td><td>${d.fecha}</td></tr>
+                            <tr><td class="text-muted">Tipo</td><td>${tipoLabel}</td></tr>
+                            <tr><td class="text-muted">Estado</td><td>${estadoMap[d.estado] || d.estado}</td></tr>
+                            <tr><td class="text-muted">Centro de Costo</td><td>${d.nombreCentroCosto}</td></tr>
+                            <tr><td class="text-muted">Resp. Inspección</td><td>${d.nombreRespInspeccion}</td></tr>
+                            <tr><td class="text-muted">Resp. Área</td><td>${d.nombreRespArea}</td></tr>
+                        </table>
+                        <hr/>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <h6 class="fw-semibold"><i class="bi bi-camera-fill me-2"></i>Hallazgo (H)</h6>`;
+                    if (d.ubicaFotoH) {
+                        html += `<p><strong>Ubicación:</strong> ${d.ubicaFotoH}</p>
+                                 <p><strong>Fecha:</strong> ${d.fechaFotoH || '-'}</p>
+                                 <img src="${imgUrl('H')}" class="img-fluid rounded border" alt="Foto Hallazgo"
+                                      onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
+                    } else {
+                        html += '<p class="text-muted">Sin hallazgo registrado</p>';
+                    }
+                    html += `</div><div class="col-md-6 mb-3">
+                                <h6 class="fw-semibold"><i class="bi bi-check-circle-fill me-2"></i>Acción Correctiva (AC)</h6>`;
+                    if (d.ubicaFotoAc) {
+                        html += `<p><strong>Ubicación:</strong> ${d.ubicaFotoAc}</p>
+                                 <p><strong>Fecha:</strong> ${d.fechaFotoAc || '-'}</p>
+                                 <img src="${imgUrl('AC')}" class="img-fluid rounded border" alt="Foto AC"
+                                      onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
+                    } else {
+                        html += '<p class="text-muted">Sin acción correctiva</p>';
+                    }
+                    html += '</div></div>';
+                    document.getElementById('verBody').innerHTML = html;
+                } catch (e) {
+                    document.getElementById('verBody').innerHTML = '<div class="alert alert-danger">Error al cargar los datos.</div>';
+                }
+            });
+        });
+
+        // ===== Preview de foto en modal editar =====
+        function efPreview(file) {
+            const container = document.getElementById('efPreviewContainer');
+            const img = document.getElementById('efPreviewImg');
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = e => { img.src = e.target.result; container.classList.remove('d-none'); };
+                reader.readAsDataURL(file);
+            } else {
+                container.classList.add('d-none');
+            }
+        }
+
+        document.getElementById('efFoto').addEventListener('change', function () { efPreview(this.files[0]); });
+        document.getElementById('efCamera').addEventListener('change', function () {
+            const file = this.files[0];
+            if (file) {
+                const dt = new DataTransfer(); dt.items.add(file);
+                document.getElementById('efFoto').files = dt.files;
+                efPreview(file);
+            }
+        });
+    </script>
+}

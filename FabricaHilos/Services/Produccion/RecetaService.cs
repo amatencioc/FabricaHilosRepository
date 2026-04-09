@@ -1544,39 +1544,108 @@ namespace FabricaHilos.Services.Produccion
             _logger.LogInformation("Anulando preparatoria en Oracle: Receta={Receta}, Lote={Lote}, TpMaq={TpMaq}, CodMaq={CodMaq}, Titulo={Titulo}, FechaIni={FechaIni}",
                 receta, lote, tpMaq, codMaq, titulo, fechaIni);
 
-            // TO_CHAR a nivel de segundos: FECHA_INI fue insertada con el mismo DateTime.Now
-            // de la app (ya no usa SYSDATE), por lo que los valores coincidirán exactamente.
-            const string query = @"
-                UPDATE H_RPRODUC SET ESTADO = '9',
-                                    FECHA_FIN = :fechaFin
-                WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:receta), ' ')
-                  AND TRIM(LOTE)                                    = TRIM(:lote)
-                  AND TRIM(TP_MAQ)                                  = TRIM(:tpMaq)
-                  AND TRIM(COD_MAQ)                                 = TRIM(:codMaq)
-                  AND TRIM(TITULO)                                  = TRIM(:titulo)
-                  AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
-                  AND ESTADO = '1'";
-
             try
             {
                 using var connection = new OracleConnection(connectionString);
                 await connection.OpenAsync();
+                using var transaction = connection.BeginTransaction();
 
-                using var command = new OracleCommand(query, connection);
+                try
+                {
+                    // 1. Bloquear el registro y verificar que esté en estado '1' (activo)
+                    const string querySelect = @"
+                        SELECT ESTADO 
+                        FROM H_RPRODUC
+                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
+                          AND TRIM(LOTE) = TRIM(:lote)
+                          AND TRIM(TP_MAQ) = TRIM(:tpMaq)
+                          AND TRIM(COD_MAQ) = TRIM(:codMaq)
+                          AND TRIM(TITULO) = TRIM(:titulo)
+                          AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
+                        FOR UPDATE NOWAIT";
 
-                static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
+                    string? estadoActual;
+                    using (var cmdSelect = new OracleCommand(querySelect, connection))
+                    {
+                        cmdSelect.Transaction = transaction;
+                        cmdSelect.BindByName = true;
 
-                command.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date) { Value = DateTime.Now });
-                command.Parameters.Add(new OracleParameter(":receta",  OracleDbType.Varchar2) { Value = Str(receta) });
-                command.Parameters.Add(new OracleParameter(":lote",    OracleDbType.Varchar2) { Value = Str(lote) });
-                command.Parameters.Add(new OracleParameter(":tpMaq",   OracleDbType.Varchar2) { Value = Str(tpMaq) });
-                command.Parameters.Add(new OracleParameter(":codMaq",  OracleDbType.Varchar2) { Value = Str(codMaq) });
-                command.Parameters.Add(new OracleParameter(":titulo",  OracleDbType.Varchar2) { Value = Str(titulo) });
-                command.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+                        static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
 
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                _logger.LogInformation("Preparatoria anulada en Oracle. Filas afectadas: {Rows}", rowsAffected);
-                return rowsAffected > 0;
+                        cmdSelect.Parameters.Add(new OracleParameter(":receta", OracleDbType.Varchar2) { Value = Str(receta) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":lote", OracleDbType.Varchar2) { Value = Str(lote) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":tpMaq", OracleDbType.Varchar2) { Value = Str(tpMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":codMaq", OracleDbType.Varchar2) { Value = Str(codMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":titulo", OracleDbType.Varchar2) { Value = Str(titulo) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+
+                        using var reader = await cmdSelect.ExecuteReaderAsync();
+                        if (!await reader.ReadAsync())
+                        {
+                            _logger.LogWarning("No se encontró la preparatoria a anular");
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+
+                        estadoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    }
+
+                    _logger.LogDebug("Preparatoria bloqueada. Estado actual={Estado}", estadoActual);
+
+                    // 2. Verificar que esté en estado '1' (activo) para poder anular
+                    if (estadoActual != "1")
+                    {
+                        _logger.LogWarning("La preparatoria no está en estado activo (ESTADO={Estado}). No se puede anular.", estadoActual);
+                        await transaction.RollbackAsync();
+                        return false;
+                    }
+
+                    // 3. Actualizar a ESTADO='9' (anulado)
+                    const string queryUpdate = @"
+                        UPDATE H_RPRODUC 
+                        SET ESTADO = '9',
+                            FECHA_FIN = :fechaFin
+                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
+                          AND TRIM(LOTE) = TRIM(:lote)
+                          AND TRIM(TP_MAQ) = TRIM(:tpMaq)
+                          AND TRIM(COD_MAQ) = TRIM(:codMaq)
+                          AND TRIM(TITULO) = TRIM(:titulo)
+                          AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni";
+
+                    using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
+                    {
+                        cmdUpdate.Transaction = transaction;
+                        cmdUpdate.BindByName = true;
+
+                        static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
+
+                        cmdUpdate.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date) { Value = DateTime.Now });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":receta", OracleDbType.Varchar2) { Value = Str(receta) });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":lote", OracleDbType.Varchar2) { Value = Str(lote) });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":tpMaq", OracleDbType.Varchar2) { Value = Str(tpMaq) });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":codMaq", OracleDbType.Varchar2) { Value = Str(codMaq) });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":titulo", OracleDbType.Varchar2) { Value = Str(titulo) });
+                        cmdUpdate.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+
+                        var rowsAffected = await cmdUpdate.ExecuteNonQueryAsync();
+                        _logger.LogDebug("UPDATE ejecutado. Filas afectadas={Rows}", rowsAffected);
+                    }
+
+                    await transaction.CommitAsync();
+                    _logger.LogInformation("✅ Preparatoria anulada correctamente en Oracle");
+                    return true;
+                }
+                catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+                {
+                    _logger.LogWarning("La preparatoria está siendo modificada por otro usuario. Intente nuevamente.");
+                    await transaction.RollbackAsync();
+                    return false;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
             catch (OracleException oEx)
             {
@@ -1639,17 +1708,69 @@ namespace FabricaHilos.Services.Produccion
                   AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
                          AND ESTADO  = '1'";
 
-                  try
-                  {
-                      using var connection = new OracleConnection(connectionString);
-                      await connection.OpenAsync();
+            try
+            {
+                using var connection = new OracleConnection(connectionString);
+                await connection.OpenAsync();
+                using var transaction = connection.BeginTransaction();
 
-                      using var command = new OracleCommand(query, connection);
-                      command.BindByName = true;
+                // Helper para manejar strings nullables
+                static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
 
-                      static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
+                try
+                {
+                    // 1. Bloquear el registro antes de actualizar
+                    const string querySelect = @"
+                        SELECT ESTADO 
+                        FROM H_RPRODUC
+                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:oldReceta), ' ')
+                          AND TRIM(LOTE) = TRIM(:oldLote)
+                          AND TRIM(TP_MAQ) = TRIM(:oldTpMaq)
+                          AND TRIM(COD_MAQ) = TRIM(:oldCodMaq)
+                          AND TRIM(TITULO) = TRIM(:oldTitulo)
+                          AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
+                        FOR UPDATE NOWAIT";
 
-                // SET
+                    string? estadoActual;
+                    using (var cmdSelect = new OracleCommand(querySelect, connection))
+                    {
+                        cmdSelect.Transaction = transaction;
+                        cmdSelect.BindByName = true;
+
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldReceta", OracleDbType.Varchar2) { Value = Str(oldReceta) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldLote", OracleDbType.Varchar2) { Value = Str(oldLote) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldTpMaq", OracleDbType.Varchar2) { Value = Str(oldTpMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldCodMaq", OracleDbType.Varchar2) { Value = Str(oldCodMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldTitulo", OracleDbType.Varchar2) { Value = Str(oldTitulo) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+
+                        using var reader = await cmdSelect.ExecuteReaderAsync();
+                        if (!await reader.ReadAsync())
+                        {
+                            _logger.LogWarning("No se encontró la preparatoria a actualizar");
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+
+                        estadoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    }
+
+                    _logger.LogDebug("Preparatoria bloqueada. Estado={Estado}", estadoActual);
+
+                    // Verificar que esté en estado '1' (activo)
+                    if (estadoActual != "1")
+                    {
+                        _logger.LogWarning("La preparatoria no está en estado activo (ESTADO={Estado}). No se puede actualizar.", estadoActual);
+                        await transaction.RollbackAsync();
+                        return false;
+                    }
+
+                    // 2. Actualizar los campos
+                    using var command = new OracleCommand(query, connection);
+                    command.Transaction = transaction;
+                    command.BindByName = true;
+
+                    // SET
                 command.Parameters.Add(new OracleParameter(":newReceta",   OracleDbType.Varchar2) { Value = Str(newReceta) });
                 command.Parameters.Add(new OracleParameter(":newLote",     OracleDbType.Varchar2) { Value = Str(newLote) });
                 command.Parameters.Add(new OracleParameter(":newTpMaq",    OracleDbType.Varchar2) { Value = Str(newTpMaq) });
@@ -1679,23 +1800,38 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":oldTpMaq",    OracleDbType.Varchar2) { Value = Str(oldTpMaq) });
                 command.Parameters.Add(new OracleParameter(":oldCodMaq",   OracleDbType.Varchar2) { Value = Str(oldCodMaq) });
                 command.Parameters.Add(new OracleParameter(":oldTitulo",   OracleDbType.Varchar2) { Value = Str(oldTitulo) });
-                command.Parameters.Add(new OracleParameter(":fechaIni",    OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+                            command.Parameters.Add(new OracleParameter(":fechaIni",    OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
 
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                _logger.LogInformation("Preparatoria actualizada en Oracle. Filas afectadas: {Rows}", rowsAffected);
-                return rowsAffected > 0;
-            }
-            catch (OracleException oEx)
-            {
-                _logger.LogError(oEx, "Error de Oracle al actualizar preparatoria. OracleError: {OracleError}", oEx.Message);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error general al actualizar preparatoria en Oracle");
-                return false;
-            }
-        }
+                            var rowsAffected = await command.ExecuteNonQueryAsync();
+                            _logger.LogDebug("UPDATE ejecutado. Filas afectadas={Rows}", rowsAffected);
+
+                            await transaction.CommitAsync();
+                            _logger.LogInformation("✅ Preparatoria actualizada correctamente en Oracle");
+                            return true;
+                        }
+                        catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+                        {
+                            _logger.LogWarning("La preparatoria está siendo modificada por otro usuario. Intente nuevamente.");
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+                        catch
+                        {
+                            await transaction.RollbackAsync();
+                            throw;
+                        }
+                    }
+                    catch (OracleException oEx)
+                    {
+                        _logger.LogError(oEx, "Error de Oracle al actualizar preparatoria. OracleError: {OracleError}", oEx.Message);
+                        return false;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error general al actualizar preparatoria en Oracle");
+                        return false;
+                    }
+                }
 
         public async Task<GuardarCerrarResultado> GuardarYCerrarDetalleProduccionAsync(
             string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni,
@@ -1732,116 +1868,183 @@ namespace FabricaHilos.Services.Produccion
             {
                 using var connection = new OracleConnection(connectionString);
                 await connection.OpenAsync();
+                using var transaction = connection.BeginTransaction();
 
-                using var command = new OracleCommand(query, connection);
-                command.BindByName = true;
-
-                static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
-                static object Dec(decimal? v) => v.HasValue ? (object)v.Value : DBNull.Value;
-                static object Int(int? v) => v.HasValue ? (object)v.Value : DBNull.Value;
-
-                command.Parameters.Add(new OracleParameter(":velocidad", OracleDbType.Decimal)    { Value = Dec(velocidad) });
-                command.Parameters.Add(new OracleParameter(":unidades",  OracleDbType.Int32)      { Value = Int(rolloTacho) });
-                command.Parameters.Add(new OracleParameter(":kgPeso",    OracleDbType.Decimal)    { Value = Dec(kgNeto) });
-                command.Parameters.Add(new OracleParameter(":fechaFin",  OracleDbType.Date)       { Value = fechaFin ?? DateTime.Now });
-                command.Parameters.Add(new OracleParameter(":receta",    OracleDbType.Varchar2)   { Value = Str(receta) });
-                command.Parameters.Add(new OracleParameter(":lote",      OracleDbType.Varchar2)   { Value = Str(lote) });
-                command.Parameters.Add(new OracleParameter(":tpMaq",     OracleDbType.Varchar2)   { Value = Str(tpMaq) });
-                command.Parameters.Add(new OracleParameter(":codMaq",    OracleDbType.Varchar2)   { Value = Str(codMaq) });
-                command.Parameters.Add(new OracleParameter(":titulo",    OracleDbType.Varchar2)   { Value = Str(titulo) });
-                command.Parameters.Add(new OracleParameter(":fechaIni",  OracleDbType.Varchar2)   { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
-                if (tpMaq == "P")
+                try
                 {
-                    command.Parameters.Add(new OracleParameter(":parada",      OracleDbType.Int32)   { Value = nroParada.HasValue     ? (object)nroParada.Value     : DBNull.Value });
-                    command.Parameters.Add(new OracleParameter(":contadorFin", OracleDbType.Decimal) { Value = contadorFinal.HasValue ? (object)contadorFinal.Value : DBNull.Value });
-                }
+                    static object Str(string? v) => string.IsNullOrEmpty(v) ? DBNull.Value : (object)v;
+                    static object Dec(decimal? v) => v.HasValue ? (object)v.Value : DBNull.Value;
+                    static object Int(int? v) => v.HasValue ? (object)v.Value : DBNull.Value;
 
-                _logger.LogInformation(
-                    "GuardarYCerrar WHERE params: receta=[{Receta}] lote=[{Lote}] tpMaq=[{TpMaq}] codMaq=[{CodMaq}] titulo=[{Titulo}] fechaIni=[{FechaIni}]",
-                    receta, lote, tpMaq, codMaq, titulo, fechaIni.ToString("yyyy-MM-dd HH:mm:ss"));
+                    _logger.LogInformation(
+                        "GuardarYCerrar WHERE params: receta=[{Receta}] lote=[{Lote}] tpMaq=[{TpMaq}] codMaq=[{CodMaq}] titulo=[{Titulo}] fechaIni=[{FechaIni}]",
+                        receta, lote, tpMaq, codMaq, titulo, fechaIni.ToString("yyyy-MM-dd HH:mm:ss"));
 
-                // Diagnóstico: obtener FECHA_INI y ESTADO reales en Oracle antes del UPDATE
-                const string diagSql = @"
-                    SELECT fecha_ini_str, estado
-                    FROM (
-                        SELECT TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') AS fecha_ini_str,
-                               ESTADO
-                        FROM H_RPRODUC
-                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:dReceta), ' ')
-                          AND TRIM(LOTE)    = TRIM(:dLote)
-                          AND TRIM(TP_MAQ)  = TRIM(:dTpMaq)
-                          AND TRIM(COD_MAQ) = TRIM(:dCodMaq)
-                          AND TRIM(TITULO)  = TRIM(:dTitulo)
-                        ORDER BY FECHA_INI DESC
-                    )
-                    WHERE ROWNUM <= 5";
-                using (var diagCmd = new OracleCommand(diagSql, connection))
-                {
-                    diagCmd.Parameters.Add(new OracleParameter(":dReceta",  OracleDbType.Varchar2) { Value = Str(receta) });
-                    diagCmd.Parameters.Add(new OracleParameter(":dLote",    OracleDbType.Varchar2) { Value = Str(lote) });
-                    diagCmd.Parameters.Add(new OracleParameter(":dTpMaq",   OracleDbType.Varchar2) { Value = Str(tpMaq) });
-                    diagCmd.Parameters.Add(new OracleParameter(":dCodMaq",  OracleDbType.Varchar2) { Value = Str(codMaq) });
-                    diagCmd.Parameters.Add(new OracleParameter(":dTitulo",  OracleDbType.Varchar2) { Value = Str(titulo) });
-                    using var diagReader = await diagCmd.ExecuteReaderAsync();
-                    var diagFound = false;
-                    while (await diagReader.ReadAsync())
+                    // Diagnóstico: obtener FECHA_INI y ESTADO reales en Oracle antes del bloqueo
+                    const string diagSql = @"
+                        SELECT fecha_ini_str, estado
+                        FROM (
+                            SELECT TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') AS fecha_ini_str,
+                                   ESTADO
+                            FROM H_RPRODUC
+                            WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:dReceta), ' ')
+                              AND TRIM(LOTE)    = TRIM(:dLote)
+                              AND TRIM(TP_MAQ)  = TRIM(:dTpMaq)
+                              AND TRIM(COD_MAQ) = TRIM(:dCodMaq)
+                              AND TRIM(TITULO)  = TRIM(:dTitulo)
+                            ORDER BY FECHA_INI DESC
+                        )
+                        WHERE ROWNUM <= 5";
+                    using (var diagCmd = new OracleCommand(diagSql, connection))
                     {
-                        diagFound = true;
-                        var fechaOra  = diagReader.IsDBNull(diagReader.GetOrdinal("fecha_ini_str")) ? "(null)" : diagReader.GetString(diagReader.GetOrdinal("fecha_ini_str"));
-                        var estadoOra = diagReader.IsDBNull(diagReader.GetOrdinal("estado"))        ? "(null)" : diagReader.GetString(diagReader.GetOrdinal("estado"));
-                        _logger.LogInformation(
-                            "DIAG H_RPRODUC: FECHA_INI_Oracle=[{FechaOra}] ESTADO=[{EstadoOra}] | SQLite envía FechaIni=[{FechaSQLite}] | ¿Coinciden? {Match}",
-                            fechaOra,
-                            estadoOra,
-                            fechaIni.ToString("yyyy-MM-dd HH:mm:ss"),
-                            (fechaOra == fechaIni.ToString("yyyy-MM-dd HH:mm:ss")).ToString());
+                        diagCmd.Transaction = transaction;
+                        diagCmd.BindByName = true;
+                        diagCmd.Parameters.Add(new OracleParameter(":dReceta",  OracleDbType.Varchar2) { Value = Str(receta) });
+                        diagCmd.Parameters.Add(new OracleParameter(":dLote",    OracleDbType.Varchar2) { Value = Str(lote) });
+                        diagCmd.Parameters.Add(new OracleParameter(":dTpMaq",   OracleDbType.Varchar2) { Value = Str(tpMaq) });
+                        diagCmd.Parameters.Add(new OracleParameter(":dCodMaq",  OracleDbType.Varchar2) { Value = Str(codMaq) });
+                        diagCmd.Parameters.Add(new OracleParameter(":dTitulo",  OracleDbType.Varchar2) { Value = Str(titulo) });
+                        using var diagReader = await diagCmd.ExecuteReaderAsync();
+                        var diagFound = false;
+                        while (await diagReader.ReadAsync())
+                        {
+                            diagFound = true;
+                            var fechaOra  = diagReader.IsDBNull(diagReader.GetOrdinal("fecha_ini_str")) ? "(null)" : diagReader.GetString(diagReader.GetOrdinal("fecha_ini_str"));
+                            var estadoOra = diagReader.IsDBNull(diagReader.GetOrdinal("estado"))        ? "(null)" : diagReader.GetString(diagReader.GetOrdinal("estado"));
+                            _logger.LogInformation(
+                                "DIAG H_RPRODUC: FECHA_INI_Oracle=[{FechaOra}] ESTADO=[{EstadoOra}] | SQLite envía FechaIni=[{FechaSQLite}] | ¿Coinciden? {Match}",
+                                fechaOra,
+                                estadoOra,
+                                fechaIni.ToString("yyyy-MM-dd HH:mm:ss"),
+                                (fechaOra == fechaIni.ToString("yyyy-MM-dd HH:mm:ss")).ToString());
+                        }
+                        if (!diagFound)
+                            _logger.LogWarning("DIAG H_RPRODUC: ninguna fila encontrada para lote=[{Lote}] tpMaq=[{TpMaq}] codMaq=[{CodMaq}] titulo=[{Titulo}] (sin filtro de fecha/estado)",
+                                lote, tpMaq, codMaq, titulo);
                     }
-                    if (!diagFound)
-                        _logger.LogWarning("DIAG H_RPRODUC: ninguna fila encontrada para lote=[{Lote}] tpMaq=[{TpMaq}] codMaq=[{CodMaq}] titulo=[{Titulo}] (sin filtro de fecha/estado)",
-                            lote, tpMaq, codMaq, titulo);
+
+                    // 1. Bloquear el registro y verificar que esté en estado '1' (activo)
+                    const string querySelect = @"
+                        SELECT ESTADO
+                        FROM H_RPRODUC
+                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
+                          AND TRIM(LOTE) = TRIM(:lote)
+                          AND TRIM(TP_MAQ) = TRIM(:tpMaq)
+                          AND TRIM(COD_MAQ) = TRIM(:codMaq)
+                          AND TRIM(TITULO) = TRIM(:titulo)
+                          AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
+                        FOR UPDATE NOWAIT";
+
+                    string? estadoActual;
+                    using (var cmdSelect = new OracleCommand(querySelect, connection))
+                    {
+                        cmdSelect.Transaction = transaction;
+                        cmdSelect.BindByName = true;
+
+                        cmdSelect.Parameters.Add(new OracleParameter(":receta", OracleDbType.Varchar2) { Value = Str(receta) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":lote", OracleDbType.Varchar2) { Value = Str(lote) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":tpMaq", OracleDbType.Varchar2) { Value = Str(tpMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":codMaq", OracleDbType.Varchar2) { Value = Str(codMaq) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":titulo", OracleDbType.Varchar2) { Value = Str(titulo) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":fechaIni", OracleDbType.Varchar2) { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+
+                        using var reader = await cmdSelect.ExecuteReaderAsync();
+                        if (!await reader.ReadAsync())
+                        {
+                            _logger.LogWarning("No se encontró la preparatoria a cerrar");
+                            await transaction.RollbackAsync();
+                            return new GuardarCerrarResultado { UpdateExitoso = false };
+                        }
+
+                        estadoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
+                    }
+
+                    _logger.LogDebug("Preparatoria bloqueada. Estado actual={Estado}", estadoActual);
+
+                    // 2. Verificar que esté en estado '1' (activo) para poder cerrar
+                    if (estadoActual != "1")
+                    {
+                        _logger.LogWarning("La preparatoria no está en estado activo (ESTADO={Estado}). No se puede cerrar.", estadoActual);
+                        await transaction.RollbackAsync();
+                        return new GuardarCerrarResultado { UpdateExitoso = false };
+                    }
+
+                    // 3. Ejecutar el UPDATE principal
+                    using var command = new OracleCommand(query, connection);
+                    command.Transaction = transaction;
+                    command.BindByName = true;
+
+                    command.Parameters.Add(new OracleParameter(":velocidad", OracleDbType.Decimal)    { Value = Dec(velocidad) });
+                    command.Parameters.Add(new OracleParameter(":unidades",  OracleDbType.Int32)      { Value = Int(rolloTacho) });
+                    command.Parameters.Add(new OracleParameter(":kgPeso",    OracleDbType.Decimal)    { Value = Dec(kgNeto) });
+                    command.Parameters.Add(new OracleParameter(":fechaFin",  OracleDbType.Date)       { Value = fechaFin ?? DateTime.Now });
+                    command.Parameters.Add(new OracleParameter(":receta",    OracleDbType.Varchar2)   { Value = Str(receta) });
+                    command.Parameters.Add(new OracleParameter(":lote",      OracleDbType.Varchar2)   { Value = Str(lote) });
+                    command.Parameters.Add(new OracleParameter(":tpMaq",     OracleDbType.Varchar2)   { Value = Str(tpMaq) });
+                    command.Parameters.Add(new OracleParameter(":codMaq",    OracleDbType.Varchar2)   { Value = Str(codMaq) });
+                    command.Parameters.Add(new OracleParameter(":titulo",    OracleDbType.Varchar2)   { Value = Str(titulo) });
+                    command.Parameters.Add(new OracleParameter(":fechaIni",  OracleDbType.Varchar2)   { Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+                    if (tpMaq == "P")
+                    {
+                        command.Parameters.Add(new OracleParameter(":parada",      OracleDbType.Int32)   { Value = nroParada.HasValue     ? (object)nroParada.Value     : DBNull.Value });
+                        command.Parameters.Add(new OracleParameter(":contadorFin", OracleDbType.Decimal) { Value = contadorFinal.HasValue ? (object)contadorFinal.Value : DBNull.Value });
+                    }
+
+                        var rowsAffected = await command.ExecuteNonQueryAsync();
+                        _logger.LogDebug("UPDATE ejecutado. Filas afectadas={Rows}", rowsAffected);
+
+                        // 4. Ejecutar SP_CALCULAR_PROD_ESP_TEO tras el UPDATE exitoso
+                        using var procCommand = new OracleCommand("SIG.PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
+                        procCommand.Transaction = transaction;
+                        procCommand.CommandType = CommandType.StoredProcedure;
+                        procCommand.BindByName  = true;
+
+                        procCommand.Parameters.Add(new OracleParameter("pi_receta",    OracleDbType.Varchar2, 200) { Direction = ParameterDirection.Input,  Value = Str(receta) });
+                        procCommand.Parameters.Add(new OracleParameter("pi_lote",      OracleDbType.Varchar2, 200) { Direction = ParameterDirection.Input,  Value = Str(lote) });
+                        procCommand.Parameters.Add(new OracleParameter("pi_tp_maq",    OracleDbType.Varchar2, 10)  { Direction = ParameterDirection.Input,  Value = Str(tpMaq) });
+                        procCommand.Parameters.Add(new OracleParameter("pi_cod_maq",   OracleDbType.Varchar2, 20)  { Direction = ParameterDirection.Input,  Value = Str(codMaq) });
+                        procCommand.Parameters.Add(new OracleParameter("pi_titulo",    OracleDbType.Varchar2, 20)  { Direction = ParameterDirection.Input,  Value = Str(titulo) });
+                        procCommand.Parameters.Add(new OracleParameter("pi_fecha_ini", OracleDbType.Varchar2, 30)  { Direction = ParameterDirection.Input,  Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
+                        var poResultado = new OracleParameter("po_resultado", OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+                        procCommand.Parameters.Add(poResultado);
+
+                        await procCommand.ExecuteNonQueryAsync();
+
+                        var resultadoStr = poResultado.Value?.ToString() ?? "0|";
+                        var sepIdx  = resultadoStr.IndexOf('|');
+                        var codigo  = sepIdx > 0  ? resultadoStr[..sepIdx]       : "0";
+                        var mensaje = sepIdx >= 0 ? resultadoStr[(sepIdx + 1)..] : string.Empty;
+
+                        _logger.LogInformation("SP_CALCULAR_PROD_ESP_TEO resultado: Codigo={Codigo}, Mensaje={Mensaje}", codigo, mensaje);
+
+                        // 5. COMMIT de toda la transacción (UPDATE + stored procedure)
+                        await transaction.CommitAsync();
+                        _logger.LogInformation("✅ Preparatoria cerrada correctamente en Oracle. Filas afectadas={Rows}", rowsAffected);
+
+                        return new GuardarCerrarResultado { UpdateExitoso = true, Codigo = codigo, Mensaje = mensaje };
+                    }
+                    catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+                    {
+                        _logger.LogWarning("La preparatoria está siendo modificada por otro usuario. Intente nuevamente.");
+                        await transaction.RollbackAsync();
+                        return new GuardarCerrarResultado { UpdateExitoso = false };
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
-
-                var rowsAffected = await command.ExecuteNonQueryAsync();
-                _logger.LogInformation("GuardarYCerrar: filas afectadas en H_RPRODUC = {Rows}", rowsAffected);
-
-                if (rowsAffected <= 0)
+                catch (OracleException oEx)
+                {
+                    _logger.LogError(oEx, "Error de Oracle en GuardarYCerrarDetalleProduccion. OracleError: {OracleError}", oEx.Message);
                     return new GuardarCerrarResultado { UpdateExitoso = false };
-
-                // Ejecutar SP_CALCULAR_PROD_ESP_TEO tras el UPDATE exitoso
-                using var procCommand = new OracleCommand("SIG.PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
-                procCommand.CommandType = CommandType.StoredProcedure;
-                procCommand.BindByName  = true;
-
-                procCommand.Parameters.Add(new OracleParameter("pi_receta",    OracleDbType.Varchar2, 200) { Direction = ParameterDirection.Input,  Value = Str(receta) });
-                procCommand.Parameters.Add(new OracleParameter("pi_lote",      OracleDbType.Varchar2, 200) { Direction = ParameterDirection.Input,  Value = Str(lote) });
-                procCommand.Parameters.Add(new OracleParameter("pi_tp_maq",    OracleDbType.Varchar2, 10)  { Direction = ParameterDirection.Input,  Value = Str(tpMaq) });
-                procCommand.Parameters.Add(new OracleParameter("pi_cod_maq",   OracleDbType.Varchar2, 20)  { Direction = ParameterDirection.Input,  Value = Str(codMaq) });
-                procCommand.Parameters.Add(new OracleParameter("pi_titulo",    OracleDbType.Varchar2, 20)  { Direction = ParameterDirection.Input,  Value = Str(titulo) });
-                procCommand.Parameters.Add(new OracleParameter("pi_fecha_ini", OracleDbType.Varchar2, 30)  { Direction = ParameterDirection.Input,  Value = fechaIni.ToString("yyyy-MM-dd HH:mm:ss") });
-                var poResultado = new OracleParameter("po_resultado", OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
-                procCommand.Parameters.Add(poResultado);
-
-                await procCommand.ExecuteNonQueryAsync();
-
-                var resultadoStr = poResultado.Value?.ToString() ?? "0|";
-                var sepIdx  = resultadoStr.IndexOf('|');
-                var codigo  = sepIdx > 0  ? resultadoStr[..sepIdx]       : "0";
-                var mensaje = sepIdx >= 0 ? resultadoStr[(sepIdx + 1)..] : string.Empty;
-
-                _logger.LogInformation("SP_CALCULAR_PROD_ESP_TEO resultado: Codigo={Codigo}, Mensaje={Mensaje}", codigo, mensaje);
-
-                return new GuardarCerrarResultado { UpdateExitoso = true, Codigo = codigo, Mensaje = mensaje };
-            }
-            catch (OracleException oEx)
-            {
-                _logger.LogError(oEx, "Error de Oracle en GuardarYCerrarDetalleProduccion. OracleError: {OracleError}", oEx.Message);
-                return new GuardarCerrarResultado { UpdateExitoso = false };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error general en GuardarYCerrarDetalleProduccion");
-                return new GuardarCerrarResultado { UpdateExitoso = false };
-            }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error general en GuardarYCerrarDetalleProduccion");
+                    return new GuardarCerrarResultado { UpdateExitoso = false };
+                }
         }
 
         public async Task<DetalleProductivoOracleDto?> ObtenerDetalleProductivoOracleAsync(
@@ -2273,46 +2476,89 @@ namespace FabricaHilos.Services.Produccion
                 _logger.LogDebug("Conectando a Oracle para actualizar preparatoria Autoconer...");
                 using var connection = new OracleConnection(connectionString);
                 await connection.OpenAsync();
+                using var transaction = connection.BeginTransaction();
 
-                // Obtener HUSOS de la máquina
-                int? husosMaquina = null;
-                const string queryHusos = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
-                using (var cmdHusos = new OracleCommand(queryHusos, connection))
+                try
                 {
-                    cmdHusos.Parameters.Add(new OracleParameter(":cod", OracleDbType.Varchar2, registro.NumeroAutoconer, ParameterDirection.Input));
-                    var resHusos = await cmdHusos.ExecuteScalarAsync();
-                    if (resHusos != null && resHusos != DBNull.Value)
-                        husosMaquina = Convert.ToInt32(resHusos);
-                }
+                    // Helper para manejar nullables
+                    static object Nul(object? v) => v ?? DBNull.Value;
 
-                // Calcular KG_UNIDAD y PESO_NETO
-                decimal? kgUnidad = registro.PesoBruto;
-                decimal? pesoNeto = (registro.Cantidad.HasValue && kgUnidad.HasValue)
-                    ? Math.Round(registro.Cantidad.Value * kgUnidad.Value, 4)
-                    : (decimal?)null;
+                    // 1. Obtener HUSOS de la máquina
+                    int? husosMaquina = null;
+                    const string queryHusos = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
+                    using (var cmdHusos = new OracleCommand(queryHusos, connection))
+                    {
+                        cmdHusos.Transaction = transaction;
+                        cmdHusos.Parameters.Add(new OracleParameter(":cod", OracleDbType.Varchar2, registro.NumeroAutoconer, ParameterDirection.Input));
+                        var resHusos = await cmdHusos.ExecuteScalarAsync();
+                        if (resHusos != null && resHusos != DBNull.Value)
+                            husosMaquina = Convert.ToInt32(resHusos);
+                    }
 
-                using var command = new OracleCommand(query, connection);
+                    // 2. Bloquear el registro antes de actualizar (FOR UPDATE NOWAIT)
+                    const string querySelect = @"
+                        SELECT ESTADO
+                        FROM H_RPRODUC
+                        WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:oldReceta), ' ')
+                          AND TRIM(LOTE) = TRIM(:oldLote)
+                          AND TRIM(TP_MAQ) = 'A'
+                          AND TRIM(COD_MAQ) = TRIM(:oldCodMaq)
+                          AND TRIM(TITULO) = TRIM(:oldTitulo)
+                          AND TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :oldFechaIni
+                        FOR UPDATE NOWAIT";
+
+                    using (var cmdSelect = new OracleCommand(querySelect, connection))
+                    {
+                        cmdSelect.Transaction = transaction;
+                        cmdSelect.BindByName = true;
+
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldReceta", OracleDbType.Varchar2) { Value = Nul(registroAntiguo.CodigoReceta) });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldLote", OracleDbType.Varchar2) { Value = registroAntiguo.Lote });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldCodMaq", OracleDbType.Varchar2) { Value = registroAntiguo.NumeroAutoconer });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldTitulo", OracleDbType.Varchar2) { Value = registroAntiguo.Titulo });
+                        cmdSelect.Parameters.Add(new OracleParameter(":oldFechaIni", OracleDbType.Varchar2) { Value = registroAntiguo.Fecha.ToString("yyyy-MM-dd HH:mm:ss") });
+
+                        using var reader = await cmdSelect.ExecuteReaderAsync();
+                        if (!await reader.ReadAsync())
+                        {
+                            _logger.LogWarning("No se encontró la preparatoria Autoconer a actualizar");
+                            await transaction.RollbackAsync();
+                            return false;
+                        }
+                    }
+
+                    _logger.LogDebug("Preparatoria Autoconer bloqueada correctamente");
+
+                    // 3. Calcular KG_UNIDAD y PESO_NETO
+                    decimal? kgUnidad = registro.PesoBruto;
+                    decimal? pesoNeto = (registro.Cantidad.HasValue && kgUnidad.HasValue)
+                        ? Math.Round(registro.Cantidad.Value * kgUnidad.Value, 4)
+                        : (decimal?)null;
+
+                    // 4. Ejecutar el UPDATE principal
+                    using var command = new OracleCommand(query, connection);
+                    command.Transaction = transaction;
                 command.BindByName = true;
 
                 // Parámetros SET (nuevos valores)
-                command.Parameters.Add(new OracleParameter(":receta",       OracleDbType.Varchar2) { Value = (object?)registro.CodigoReceta ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":receta",       OracleDbType.Varchar2) { Value = Nul(registro.CodigoReceta) });
                 command.Parameters.Add(new OracleParameter(":lote",         OracleDbType.Varchar2) { Value = registro.Lote });
                 command.Parameters.Add(new OracleParameter(":cod_maq",      OracleDbType.Varchar2) { Value = registro.NumeroAutoconer });
                 command.Parameters.Add(new OracleParameter(":titulo",       OracleDbType.Varchar2) { Value = registro.Titulo });
                 // FECHA_INI: Usar HoraInicio si está disponible, sino usar Fecha
                 var fechaInicio = registro.HoraInicio ?? registro.Fecha;
                 command.Parameters.Add(new OracleParameter(":fecha_ini",    OracleDbType.Date)      { Value = fechaInicio });
-                command.Parameters.Add(new OracleParameter(":fecha_fin",    OracleDbType.Date)      { Value = registro.HoraFinal.HasValue ? (object)registro.HoraFinal.Value : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":fecha_fin",    OracleDbType.Date)      { Value = Nul(registro.HoraFinal) });
                 command.Parameters.Add(new OracleParameter(":turno",        OracleDbType.Varchar2) { Value = registro.Turno });
-                command.Parameters.Add(new OracleParameter(":peso_neto",    OracleDbType.Decimal)  { Value = pesoNeto.HasValue ? (object)pesoNeto.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":unidades",     OracleDbType.Int32)     { Value = registro.Cantidad.HasValue ? (object)registro.Cantidad.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":husos",        OracleDbType.Int32)     { Value = husosMaquina.HasValue ? (object)husosMaquina.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":husos_act",    OracleDbType.Int32)     { Value = husosMaquina.HasValue ? (object)husosMaquina.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":kg_unidad",    OracleDbType.Decimal)  { Value = kgUnidad.HasValue ? (object)kgUnidad.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal)  { Value = registro.VelocidadMMin.HasValue ? (object)registro.VelocidadMMin.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":guia",         OracleDbType.Varchar2) { Value = (object?)registro.Guia ?? DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":destino",      OracleDbType.Varchar2) { Value = (object?)registro.Destino ?? DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":proceso",      OracleDbType.Varchar2) { Value = (object?)registro.Proceso ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":peso_neto",    OracleDbType.Decimal)  { Value = Nul(pesoNeto) });
+                command.Parameters.Add(new OracleParameter(":unidades",     OracleDbType.Int32)     { Value = Nul(registro.Cantidad) });
+                command.Parameters.Add(new OracleParameter(":husos",        OracleDbType.Int32)     { Value = Nul(husosMaquina) });
+                command.Parameters.Add(new OracleParameter(":husos_act",    OracleDbType.Int32)     { Value = Nul(husosMaquina) });
+                command.Parameters.Add(new OracleParameter(":kg_unidad",    OracleDbType.Decimal)  { Value = Nul(kgUnidad) });
+                command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal)  { Value = Nul(registro.VelocidadMMin) });
+                command.Parameters.Add(new OracleParameter(":guia",         OracleDbType.Varchar2) { Value = Nul(registro.Guia) });
+                command.Parameters.Add(new OracleParameter(":destino",      OracleDbType.Varchar2) { Value = Nul(registro.Destino) });
+                command.Parameters.Add(new OracleParameter(":proceso",      OracleDbType.Varchar2) { Value = Nul(registro.Proceso) });
                 command.Parameters.Add(new OracleParameter(":c_codigo",     OracleDbType.Varchar2) { Value = registro.CodigoOperador });
 
                 // FECHA_TURNO
@@ -2335,34 +2581,43 @@ namespace FabricaHilos.Services.Produccion
                 command.Parameters.Add(new OracleParameter(":a_mduser", OracleDbType.Varchar2) { Value = mdUser ?? string.Empty });
 
                 // Parámetros WHERE (valores antiguos para localizar el registro)
-                command.Parameters.Add(new OracleParameter(":oldReceta",   OracleDbType.Varchar2) { Value = (object?)registroAntiguo.CodigoReceta ?? DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":oldReceta",   OracleDbType.Varchar2) { Value = Nul(registroAntiguo.CodigoReceta) });
                 command.Parameters.Add(new OracleParameter(":oldLote",     OracleDbType.Varchar2) { Value = registroAntiguo.Lote });
                 command.Parameters.Add(new OracleParameter(":oldCodMaq",   OracleDbType.Varchar2) { Value = registroAntiguo.NumeroAutoconer });
                 command.Parameters.Add(new OracleParameter(":oldTitulo",   OracleDbType.Varchar2) { Value = registroAntiguo.Titulo });
                 command.Parameters.Add(new OracleParameter(":oldFechaIni", OracleDbType.Varchar2) { Value = registroAntiguo.Fecha.ToString("yyyy-MM-dd HH:mm:ss") });
 
-                _logger.LogDebug("Ejecutando UPDATE Autoconer en H_RPRODUC...");
-                var rowsAffected = await command.ExecuteNonQueryAsync();
+                        _logger.LogDebug("Ejecutando UPDATE Autoconer en H_RPRODUC...");
+                        var rowsAffected = await command.ExecuteNonQueryAsync();
+                        _logger.LogDebug("UPDATE ejecutado. Filas afectadas={Rows}", rowsAffected);
 
-                if (rowsAffected > 0)
-                {
-                    _logger.LogInformation("Preparatoria Autoconer actualizada exitosamente en H_RPRODUC. Filas afectadas: {RowsAffected}", rowsAffected);
-                    return true;
+                        // 5. COMMIT de la transacción
+                        await transaction.CommitAsync();
+                        _logger.LogInformation("✅ Preparatoria Autoconer actualizada correctamente en Oracle. Filas afectadas={RowsAffected}", rowsAffected);
+                        return rowsAffected > 0;
+                    }
+                    catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+                    {
+                        _logger.LogWarning("La preparatoria Autoconer está siendo modificada por otro usuario. Intente nuevamente.");
+                        await transaction.RollbackAsync();
+                        return false;
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
-
-                _logger.LogWarning("No se actualizó ningún registro Autoconer en H_RPRODUC");
-                return false;
-            }
-            catch (OracleException oEx)
-            {
-                _logger.LogError(oEx, "Error de Oracle al actualizar preparatoria Autoconer. OracleError: {OracleError}", oEx.Message);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error general al actualizar preparatoria Autoconer en Oracle");
-                return false;
-            }
+                catch (OracleException oEx)
+                {
+                    _logger.LogError(oEx, "Error de Oracle al actualizar preparatoria Autoconer. OracleError: {OracleError}", oEx.Message);
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error general al actualizar preparatoria Autoconer en Oracle");
+                    return false;
+                }
         }
 
         public async Task<AutoconerDetalleOracleDto?> ObtenerDetalleAutoconerAsync(

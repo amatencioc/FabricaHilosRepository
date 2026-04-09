@@ -1,18 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using FabricaHilos.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 
 namespace FabricaHilos.Controllers
 {
     [Authorize]
-    [VentasAuthorize]
-    public class VentasController : Controller
+    public class SeguridadController : Controller
     {
         private readonly IMenuService _menuService;
 
-        public VentasController(IMenuService menuService)
+        public SeguridadController(IMenuService menuService)
         {
             _menuService = menuService;
         }
@@ -22,15 +20,15 @@ namespace FabricaHilos.Controllers
             var menus = _menuService.GetMenusActuales();
             var modulos = new List<SgcModuloDto>();
 
-            if (menus.VentasConsultaTC)
+            if (menus.SeguridadInspecciones)
             {
                 modulos.Add(new SgcModuloDto
                 {
-                    Nombre = "Consulta TC",
-                    Descripcion = "Gestión y consulta de requerimientos de certificados de origen.",
-                    Icono = "bi-file-earmark-text",
-                    ColorClase = "text-primary",
-                    Controller = "ConsultaTc",
+                    Nombre = "Inspecciones",
+                    Descripcion = "Registro y seguimiento de inspecciones de seguridad, hallazgos y acciones correctivas.",
+                    Icono = "bi-clipboard-check",
+                    ColorClase = "text-warning",
+                    Controller = "Inspeccion",
                     Action = "Index"
                 });
             }

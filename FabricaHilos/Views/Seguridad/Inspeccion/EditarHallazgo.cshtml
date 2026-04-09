@@ -1,0 +1,202 @@
+@model FabricaHilos.Models.Seguridad.Inspeccion.EditarHallazgoViewModel
+@using FabricaHilos.Services.Seguridad.Inspeccion
+
+@{
+    ViewData["Title"] = "Editar Hallazgo";
+    var numero = ViewBag.Numero as int? ?? 0;
+
+    var listaRA  = ViewBag.ResponsablesAreaList as List<ResponsableDto> ?? new();
+    var listaCC  = ViewBag.CentrosCostoList     as List<CentroCostoDto> ?? new();
+
+    var textoRespArea    = listaRA.FirstOrDefault(r => r.Codigo       == Model?.ResponsableArea)?.TextoCompleto ?? "";
+    var textoCentroCosto = listaCC.FirstOrDefault(c => c.CentroCosto == Model?.CentroCosto)?.TextoCompleto     ?? "";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-action="Index">Seguridad</a></li>
+    <li class="breadcrumb-item active">Editar Hallazgo</li>
+}
+
+<h4 class="section-title"><i class="bi bi-pencil-square me-2"></i>Editar Hallazgo N° @numero</h4>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <form asp-action="Editar" asp-controller="Inspeccion" asp-route-numero="@numero" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <div class="col-md-6 position-relative">
+                            <label class="form-label fw-semibold">
+                                Responsable de Área <span class="text-danger">*</span>
+                            </label>
+                            <input type="hidden" asp-for="ResponsableArea" id="respAreaCodigo" />
+                            <div class="input-group">
+                                <input type="text"
+                                       id="respAreaBuscar"
+                                       class="form-control"
+                                       placeholder="Buscar por código o nombre..."
+                                       autocomplete="off"
+                                       value="@textoRespArea" />
+                                <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('respAreaBuscar','respAreaCodigo','respAreaStatus')">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <small id="respAreaStatus" class="text-muted"></small>
+                            <ul id="respAreaResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
+                            <span asp-validation-for="ResponsableArea" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="ResponsableInspeccion" class="form-label fw-semibold">
+                                Responsable de Inspección
+                            </label>
+                            <select asp-for="ResponsableInspeccion"
+                                    class="form-select"
+                                    asp-items="@ViewBag.ResponsablesInspeccion">
+                                <option value="">-- Seleccione --</option>
+                            </select>
+                            <span asp-validation-for="ResponsableInspeccion" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6 position-relative">
+                            <label class="form-label fw-semibold">
+                                Centro de Costo <span class="text-danger">*</span>
+                            </label>
+                            <input type="hidden" asp-for="CentroCosto" id="ccostoCodigo" />
+                            <div class="input-group">
+                                <input type="text"
+                                       id="ccostoBuscar"
+                                       class="form-control"
+                                       placeholder="Buscar por código o nombre..."
+                                       autocomplete="off"
+                                       value="@textoCentroCosto" />
+                                <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('ccostoBuscar','ccostoCodigo','ccostoStatus')">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <small id="ccostoStatus" class="text-muted"></small>
+                            <ul id="ccostoResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
+                            <span asp-validation-for="CentroCosto" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="TipoInspeccion" class="form-label fw-semibold">
+                                Tipo de Inspección
+                            </label>
+                            <select asp-for="TipoInspeccion"
+                                    class="form-select"
+                                    asp-items="@ViewBag.TiposInspeccion">
+                                <option value="">-- Seleccione --</option>
+                            </select>
+                            <span asp-validation-for="TipoInspeccion" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Guardar Cambios
+                        </button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        // ===== Buscador genérico =====
+        function initBuscador(inputId, codigoId, statusId, resultadosId, urlBuscar) {
+            const input      = document.getElementById(inputId);
+            const codigoHid  = document.getElementById(codigoId);
+            const status     = document.getElementById(statusId);
+            const resultados = document.getElementById(resultadosId);
+            let debounceTimer;
+
+            async function buscar(q) {
+                const resp = await fetch(`${urlBuscar}?q=${encodeURIComponent(q ?? '')}`);
+                return await resp.json();
+            }
+
+            function mostrarResultados(data) {
+                resultados.innerHTML = '';
+                if (data.length === 0) {
+                    status.textContent = 'Sin resultados';
+                    status.className   = 'small text-warning';
+                    resultados.classList.add('d-none');
+                    return;
+                }
+                data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-action py-2';
+                    li.style.cursor = 'pointer';
+                    li.innerHTML = `<span class="fw-semibold text-primary me-1">${item.codigo}</span><span class="text-muted">—</span> ${item.nombre}`;
+                    li.addEventListener('mousedown', e => e.preventDefault());
+                    li.addEventListener('click', () => {
+                        codigoHid.value    = item.codigo;
+                        input.value        = item.texto;
+                        status.textContent = '✓ Seleccionado';
+                        status.className   = 'small text-success';
+                        resultados.classList.add('d-none');
+                    });
+                    resultados.appendChild(li);
+                });
+                resultados.classList.remove('d-none');
+            }
+
+            input.addEventListener('focus', async function () {
+                if (!resultados.classList.contains('d-none')) return;
+                status.textContent = 'Cargando...';
+                status.className   = 'small text-info';
+                try {
+                    const data = await buscar(this.value.trim());
+                    status.textContent = data.length > 0 ? `${data.length} resultado(s) — escriba para filtrar` : '';
+                    status.className   = 'small text-muted';
+                    mostrarResultados(data);
+                } catch {
+                    status.textContent = 'Error al cargar';
+                    status.className   = 'small text-danger';
+                }
+            });
+
+            input.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                codigoHid.value = '';
+                const q = this.value.trim();
+                debounceTimer = setTimeout(async () => {
+                    try {
+                        const data = await buscar(q);
+                        status.textContent = `${data.length} resultado(s)`;
+                        status.className   = 'small text-muted';
+                        mostrarResultados(data);
+                    } catch {
+                        status.textContent = 'Error al buscar';
+                        status.className   = 'small text-danger';
+                    }
+                }, 250);
+            });
+
+            input.addEventListener('blur', () => {
+                setTimeout(() => resultados.classList.add('d-none'), 150);
+            });
+        }
+
+        function limpiarBuscador(inputId, codigoId, statusId) {
+            document.getElementById(inputId).value  = '';
+            document.getElementById(codigoId).value = '';
+            document.getElementById(statusId).textContent = '';
+            document.getElementById(inputId.replace('Buscar', 'Resultados'))?.classList.add('d-none');
+        }
+
+        // Inicializar buscadores
+        const baseUrl = '@Url.Action("BuscarResponsable", "Inspeccion")'.split('?')[0];
+        const ccUrl   = '@Url.Action("BuscarCentroCosto", "Inspeccion")'.split('?')[0];
+
+        initBuscador('respAreaBuscar', 'respAreaCodigo', 'respAreaStatus', 'respAreaResultados', baseUrl);
+        initBuscador('ccostoBuscar',   'ccostoCodigo',   'ccostoStatus',   'ccostoResultados',   ccUrl);
+    </script>
+}
