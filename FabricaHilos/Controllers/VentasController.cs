@@ -35,6 +35,19 @@ namespace FabricaHilos.Controllers
                 });
             }
 
+            if (menus.VentasIndicadoresComerciales)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Indicadores Comerciales",
+                    Descripcion = "Dashboard de indicadores: importe, KG y clientes por asesor y mes.",
+                    Icono = "bi-bar-chart-line",
+                    ColorClase = "text-success",
+                    Controller = "IndicadoresComerciales",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
     }

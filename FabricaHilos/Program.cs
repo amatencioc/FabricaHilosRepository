@@ -7,6 +7,7 @@ using FabricaHilos.Models.Ventas;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.Sgc;
+using FabricaHilos.Services.Ventas;
 using QuestPDF.Infrastructure;
 using FabricaHilos.Config;
 using FabricaHilos.Notificaciones.Extensions;
@@ -104,6 +105,7 @@ builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<IDashboardSgcService, DashboardSgcService>();
 builder.Services.AddScoped<ICargaTcService, CargaTcService>();
+builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<FabricaHilos.Services.Seguridad.Inspeccion.IInspeccionService, FabricaHilos.Services.Seguridad.Inspeccion.InspeccionService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
@@ -131,6 +133,8 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/Produccion/{1}/{0}.cshtml");
         // Permite que Views/Sgc/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/Sgc/{1}/{0}.cshtml");
+        // Permite que Views/Ventas/{Controller}/{Action}.cshtml sea encontrado automáticamente
+        options.ViewLocationFormats.Add("/Views/Ventas/{1}/{0}.cshtml");
     });
 
 // Visibilidad de menús del sidebar (configurable en appsettings.json)

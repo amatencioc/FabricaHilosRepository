@@ -163,7 +163,7 @@
                 @if (menus.Ventas)
                 {
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -172,6 +172,14 @@
                         <li>
                             <a asp-controller="ConsultaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "ConsultaTc" ? "active" : "")">
                                 <i class="bi bi-file-earmark-text"></i> Consulta TC
+                            </a>
+                        </li>
+                        }
+                        @if (menus.VentasIndicadoresComerciales)
+                        {
+                        <li>
+                            <a asp-controller="IndicadoresComerciales" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "IndicadoresComerciales" ? "active" : "")">
+                                <i class="bi bi-bar-chart-line"></i> Indicadores Comerciales
                             </a>
                         </li>
                         }

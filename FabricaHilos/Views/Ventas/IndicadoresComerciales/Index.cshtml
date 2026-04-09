@@ -1,0 +1,675 @@
+@{
+    ViewData["Title"] = "Indicadores Comerciales";
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .chart-spinner {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+    .detail-table thead th {
+        background: #1B4D3E;
+        color: #fff;
+        font-weight: 600;
+        font-size: .82rem;
+        white-space: nowrap;
+    }
+    .detail-table td { font-size: .83rem; vertical-align: middle; }
+    #detallePanel {
+        display: none;
+    }
+    .kpi-card {
+        border-radius: 12px;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(0,0,0,.18);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .kpi-card .kpi-icon { font-size: 2.4rem; opacity: .85; }
+    .kpi-card .kpi-label { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
+    .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-sub   { font-size: .75rem; opacity: .8; margin-top: 2px; }
+    .bg-kpi-1 { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
+    .bg-kpi-2 { background: linear-gradient(135deg, #1565C0, #1e88e5); }
+    .bg-kpi-3 { background: linear-gradient(135deg, #e65100, #fb8c00); }
+    .year-check-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .5rem;
+        margin-top: .6rem;
+        padding-top: .6rem;
+        border-top: 1px solid #e9ecef;
+    }
+    .year-check-bar .form-check-input:checked {
+        background-color: #1B4D3E;
+        border-color: #1B4D3E;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Indicadores Comerciales</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Moneda</label>
+            <select id="moneda" class="form-select form-select-sm" style="min-width:110px">
+                <option value="D" selected>Dólares (USD)</option>
+                <option value="S">Soles (PEN)</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+    <div class="year-check-bar" id="yearCheckBar"></div>
+</div>
+
+<!-- ── KPI Resumen ────────────────────────────────────── -->
+<div class="row g-3 mb-3" id="kpiRow">
+    <div class="col-sm-6 col-xl-4">
+        <div class="kpi-card bg-kpi-1">
+            <i class="bi bi-currency-dollar kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Importe Total</div>
+                <div class="kpi-value" id="kpiImporteTotal">—</div>
+                <div class="kpi-sub">en el período</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="kpi-card bg-kpi-2">
+            <i class="bi bi-box-seam kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total KG</div>
+                <div class="kpi-value" id="kpiTotalKg">—</div>
+                <div class="kpi-sub">kilogramos vendidos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-4">
+        <div class="kpi-card bg-kpi-3">
+            <i class="bi bi-people kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total Clientes</div>
+                <div class="kpi-value" id="kpiTotalClientes">—</div>
+                <div class="kpi-sub">clientes únicos</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 1: Importe por Asesor / Mes ────────────── -->
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Importe por Asesor / Mes</div>
+<p class="report-desc">Barras agrupadas que muestran el <strong>importe neto</strong> (sin conceptos inafectos a comisiones) facturado por cada asesor comercial en cada mes. Haga <strong>clic en una barra</strong> para ver el detalle de clientes con su importe. Validar contra el reporte <strong>VESTVEND</strong>.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerImporte" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Importe por Asesor x Mes</div>
+            <div class="card-body" style="height:340px"><canvas id="chartImporte"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 1.1: Detalle de Importe por Cliente (drill-down) ── -->
+<div id="detalleImportePanel" style="display:none">
+    <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle de Importe — <span id="detalleImporteTitulo"></span></div>
+    <p class="report-desc">Importe neto de cada cliente del asesor seleccionado en el mes indicado.</p>
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetalleImporte" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Clientes del Asesor — Importe</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleImporte()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cód. Cliente</th>
+                                <th>RUC</th>
+                                <th>Razón Social</th>
+                                <th class="text-end">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleImporte"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 2: Cantidad KG por Asesor / Mes ───────── -->
+<div class="section-title"><i class="bi bi-box-seam me-1"></i>Cantidad (KG) por Asesor / Mes</div>
+<p class="report-desc">Barras agrupadas con la <strong>cantidad en kilogramos</strong> vendida por cada asesor. Validar contra el reporte <strong>VCOMPCLMC</strong> (suma de totales por asesor).</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerKg" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Cantidad KG por Asesor x Mes</div>
+            <div class="card-body" style="height:340px"><canvas id="chartKg"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 3: Nro Clientes por Asesor / Mes ─────── -->
+<div class="section-title"><i class="bi bi-people me-1"></i>Nro. de Clientes por Asesor / Mes</div>
+<p class="report-desc">Barras agrupadas con el <strong>número de clientes únicos</strong> atendidos por cada asesor en cada mes. Haga <strong>clic en una barra</strong> para ver el detalle de los clientes que componen ese conteo.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerClientes" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Nro. Clientes por Asesor x Mes</div>
+            <div class="card-body" style="height:340px"><canvas id="chartClientes"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 3.1: Detalle de Clientes (drill-down) ── -->
+<div id="detallePanel">
+    <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle de Clientes — <span id="detalleTitulo"></span></div>
+    <p class="report-desc">Razón social de cada cliente que compone el conteo del asesor seleccionado en el mes indicado.</p>
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetalle" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Clientes del Asesor</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalle()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cód. Cliente</th>
+                                <th>RUC</th>
+                                <th>Razón Social</th>
+                                <th class="text-end">Cantidad KG</th>
+                                <th class="text-end">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalle"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    /* ── Formato de números ─────────────────────────── */
+    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmt  = n => fmtPE.format(n ?? 0);
+    const fmtMil = n => {
+        n = n ?? 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return fmt(n);
+    };
+
+    /* ── Paleta de colores ──────────────────────────── */
+    const COLORS = [
+        '#1B4D3E', '#1565C0', '#2e7d32', '#e65100', '#6a1b9a',
+        '#00838f', '#c62828', '#4e342e', '#37474f', '#f9a825',
+        '#00695c', '#ad1457', '#283593', '#ef6c00', '#2e7d5e'
+    ];
+    const YEAR_COLORS = ['#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f','#c62828'];
+    const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+    /* ── Instancias de charts ──────────────────────── */
+    const charts = {};
+    function destroyChart(key) {
+        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+    }
+
+    /* ── Spinner helpers ───────────────────────────── */
+    function showSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+    function hideSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    /* ── Años: generar checkboxes ─────────────────── */
+    function buildYearCheckboxes() {
+        const bar = document.getElementById('yearCheckBar');
+        const currentYear = new Date().getFullYear();
+        let html = '<span class="small fw-semibold text-muted me-1"><i class="bi bi-calendar3 me-1"></i>Comparar Años:</span>';
+        for (let y = currentYear; y >= currentYear - 5; y--) {
+            const chk = y === currentYear ? 'checked' : '';
+            html += '<div class="form-check form-check-inline mb-0">'
+                  + '<input class="form-check-input" type="checkbox" id="year' + y + '" value="' + y + '" ' + chk + ' onchange="onYearsChanged()">'
+                  + '<label class="form-check-label small" for="year' + y + '">' + y + '</label></div>';
+        }
+        bar.innerHTML = html;
+    }
+
+    function getSelectedYears() {
+        return Array.from(document.querySelectorAll('#yearCheckBar input:checked')).map(c => parseInt(c.value)).sort();
+    }
+
+    function isComparisonMode() { return getSelectedYears().length >= 2; }
+
+    window.onYearsChanged = function () {
+        const years = getSelectedYears();
+        const fi = document.getElementById('fechaInicio');
+        const ff = document.getElementById('fechaFin');
+        if (years.length === 0) { fi.disabled = false; ff.disabled = false; return; }
+        const hoy = new Date();
+        if (years.length === 1) {
+            const y = years[0];
+            fi.value = y + '-01-01';
+            ff.value = y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31';
+            fi.disabled = false; ff.disabled = false;
+            return;
+        }
+        const minY = Math.min(...years), maxY = Math.max(...years);
+        fi.value = minY + '-01-01';
+        ff.value = maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31';
+        fi.disabled = true; ff.disabled = true;
+    };
+
+    /* ── Fechas por defecto (1° enero del año actual → hoy) ── */
+    function setDefaultDates() {
+        const hoy = new Date();
+        const ini = new Date(hoy.getFullYear(), 0, 1);
+        const toISO = d => d.toISOString().slice(0, 10);
+        document.getElementById('fechaInicio').value = toISO(ini);
+        document.getElementById('fechaFin').value    = toISO(hoy);
+    }
+
+    /* ── Parámetros del query string ────────────────── */
+    function buildParams() {
+        const fi  = document.getElementById('fechaInicio').value;
+        const ff  = document.getElementById('fechaFin').value;
+        const mon = document.getElementById('moneda').value;
+        const p   = new URLSearchParams();
+        if (fi)  p.set('fechaInicio', fi);
+        if (ff)  p.set('fechaFin',    ff);
+        if (mon) p.set('moneda',      mon);
+        return p;
+    }
+
+    /* ── Fetch genérico ─────────────────────────────── */
+    async function apiFetch(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    }
+
+    /* ═════════════════════════════════════════════════
+       Función auxiliar: pivotear datos planos
+       [{ asesor, mes, valor }] → { meses, asesores, matrix }
+       ═════════════════════════════════════════════════ */
+    function pivot(data, valorKey) {
+        const mesesSet   = [...new Set(data.map(d => d.mes))].sort();
+        const asesoresSet = [...new Set(data.map(d => d.asesor))].sort();
+        const map = {};
+        data.forEach(d => { map[d.asesor + '|' + d.mes] = d[valorKey]; });
+        return { meses: mesesSet, asesores: asesoresSet, map };
+    }
+
+    /* ═════════════════════════════════════════════════
+       Pivotear por año (modo comparativo)
+       Agrega valores por año+mes (mes numérico 01‑12)
+       ═════════════════════════════════════════════════ */
+    function pivotByYear(data, valorKey) {
+        const selYears = getSelectedYears().map(String);
+        const monthsSet = [...new Set(data.map(d => d.mes.substring(5,7)))].sort();
+        const map = {};
+        data.forEach(d => {
+            const yr = d.mes.substring(0,4);
+            if (!selYears.includes(yr)) return;
+            const mo = d.mes.substring(5,7);
+            const k  = yr + '|' + mo;
+            map[k] = (map[k] || 0) + (d[valorKey] ?? 0);
+        });
+        return { months: monthsSet, years: selYears.sort(), map };
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 1: Importe por Asesor x Mes
+       ═════════════════════════════════════════════════ */
+    let importeData = [];
+    function renderImporte(data) {
+        destroyChart('importe');
+        importeData = data;
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+        document.getElementById('kpiImporteTotal').textContent = monLabel + ' ' + fmtMil(total);
+
+        let labels, datasets;
+        const comp = isComparisonMode();
+        if (comp) {
+            const p = pivotByYear(data, 'importe');
+            labels = p.months.map(m => MONTH_NAMES[parseInt(m)-1] || m);
+            datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
+        } else {
+            const p = pivot(data, 'importe');
+            labels = p.meses;
+            datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
+        }
+
+        charts['importe'] = new Chart(document.getElementById('chartImporte').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                onClick: comp ? undefined : handleImporteClick,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } }
+                },
+                scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 2: Cantidad KG por Asesor x Mes
+       ═════════════════════════════════════════════════ */
+    function renderKg(data) {
+        destroyChart('kg');
+        const total = data.reduce((s, d) => s + (d.cantidadKg ?? 0), 0);
+        document.getElementById('kpiTotalKg').textContent = fmtMil(total);
+
+        let labels, datasets;
+        if (isComparisonMode()) {
+            const p = pivotByYear(data, 'cantidadKg');
+            labels = p.months.map(m => MONTH_NAMES[parseInt(m)-1] || m);
+            datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
+        } else {
+            const p = pivot(data, 'cantidadKg');
+            labels = p.meses;
+            datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
+        }
+
+        charts['kg'] = new Chart(document.getElementById('chartKg').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmt(c.raw) + ' KG' } }
+                },
+                scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 3: Nro Clientes por Asesor x Mes
+       (click en barra → drill-down Query 3.1)
+       ═════════════════════════════════════════════════ */
+    let clientesData = [];
+    function renderClientes(data) {
+        destroyChart('clientes');
+        clientesData = data;
+        const totalClientes = data.reduce((s, d) => s + (d.nroClientes ?? 0), 0);
+        document.getElementById('kpiTotalClientes').textContent = totalClientes.toLocaleString('es-PE');
+
+        let labels, datasets;
+        const comp = isComparisonMode();
+        if (comp) {
+            const p = pivotByYear(data, 'nroClientes');
+            labels = p.months.map(m => MONTH_NAMES[parseInt(m)-1] || m);
+            datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
+        } else {
+            const p = pivot(data, 'nroClientes');
+            labels = p.meses;
+            datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
+        }
+
+        charts['clientes'] = new Chart(document.getElementById('chartClientes').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                onClick: comp ? undefined : handleClienteClick,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.raw + ' clientes' } }
+                },
+                scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+            }
+        });
+    }
+
+    /* ── Click handler → drill-down Clientes ────────── */
+    function handleClienteClick(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        const el  = elements[0];
+        const ds  = charts['clientes'].data.datasets[el.datasetIndex];
+        const mes = charts['clientes'].data.labels[el.index];
+        const asesor = ds.label;
+        cargarDetalle(asesor, mes);
+    }
+
+    /* ── Click handler → drill-down Importe ───────── */
+    function handleImporteClick(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        const el  = elements[0];
+        const ds  = charts['importe'].data.datasets[el.datasetIndex];
+        const mes = charts['importe'].data.labels[el.index];
+        const asesor = ds.label;
+        cargarDetalleImporte(asesor, mes);
+    }
+
+    /* ── Cargar detalle importe vía AJAX ───────────── */
+    async function cargarDetalleImporte(asesor, mes) {
+        const panel = document.getElementById('detalleImportePanel');
+        panel.style.display = 'block';
+        document.getElementById('detalleImporteTitulo').textContent = asesor + ' — ' + mes;
+        showSpin('spinnerDetalleImporte');
+
+        const p = buildParams();
+        p.set('asesor', asesor);
+        p.set('mes', mes);
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        try {
+            const raw = await apiFetch('@Url.Action("DatosDetalleImporte")?' + p);
+            const data = raw.filter(d => (d.importe ?? 0) !== 0);
+            const tbody = document.getElementById('tablaDetalleImporte');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>';
+            } else {
+                let totalImporte = 0;
+                data.forEach((d, i) => {
+                    totalImporte += (d.importe ?? 0);
+                    tbody.innerHTML += `<tr>
+                        <td>${i + 1}</td>
+                        <td>${d.codCliente ?? ''}</td>
+                        <td>${d.ruc ?? ''}</td>
+                        <td>${d.razonSocial ?? ''}</td>
+                        <td class="text-end">${monLabel} ${fmt(d.importe)}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML += `<tr style="background:#f0f4f0; font-weight:700; border-top:2px solid #1B4D3E">
+                    <td colspan="4" class="text-end">TOTAL</td>
+                    <td class="text-end">${monLabel} ${fmt(totalImporte)}</td>
+                </tr>`;
+            }
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+            console.error('Error cargando detalle importe:', err);
+        } finally {
+            hideSpin('spinnerDetalleImporte');
+        }
+    }
+
+    /* ── Cerrar panel detalle importe ─────────────── */
+    window.cerrarDetalleImporte = function () {
+        document.getElementById('detalleImportePanel').style.display = 'none';
+    };
+
+    /* ── Cargar detalle clientes vía AJAX ─────────── */
+    async function cargarDetalle(asesor, mes) {
+        const panel = document.getElementById('detallePanel');
+        panel.style.display = 'block';
+        document.getElementById('detalleTitulo').textContent = asesor + ' — ' + mes;
+        showSpin('spinnerDetalle');
+
+        const p = buildParams();
+        p.set('asesor', asesor);
+        p.set('mes', mes);
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        try {
+            const data = await apiFetch('@Url.Action("DatosDetalleClientes")?' + p);
+            const tbody = document.getElementById('tablaDetalle');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos</td></tr>';
+            } else {
+                let totalKg = 0, totalImp = 0;
+                data.forEach((d, i) => {
+                    totalKg  += (d.cantidadKg ?? 0);
+                    totalImp += (d.importe ?? 0);
+                    tbody.innerHTML += `<tr>
+                        <td>${i + 1}</td>
+                        <td>${d.codCliente ?? ''}</td>
+                        <td>${d.ruc ?? ''}</td>
+                        <td>${d.razonSocial ?? ''}</td>
+                        <td class="text-end">${fmt(d.cantidadKg)}</td>
+                        <td class="text-end">${monLabel} ${fmt(d.importe)}</td>
+                    </tr>`;
+                });
+                tbody.innerHTML += `<tr style="background:#f0f4f0; font-weight:700; border-top:2px solid #1B4D3E">
+                    <td colspan="4" class="text-end">TOTAL</td>
+                    <td class="text-end">${fmt(totalKg)}</td>
+                    <td class="text-end">${monLabel} ${fmt(totalImp)}</td>
+                </tr>`;
+            }
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+            console.error('Error cargando detalle:', err);
+        } finally {
+            hideSpin('spinnerDetalle');
+        }
+    }
+
+    /* ── Cerrar panel detalle ─────────────────────── */
+    window.cerrarDetalle = function () {
+        document.getElementById('detallePanel').style.display = 'none';
+    };
+
+    /* ═════════════════════════════════════════════════
+       CARGAR TODOS LOS DATOS
+       ═════════════════════════════════════════════════ */
+    window.loadAll = async function () {
+        cerrarDetalle();
+        cerrarDetalleImporte();
+        const p = buildParams();
+
+        // Importe
+        showSpin('spinnerImporte');
+        try { renderImporte(await apiFetch('@Url.Action("DatosImportePorAsesor")?' + p)); }
+        catch (e) { console.error(e); }
+        finally { hideSpin('spinnerImporte'); }
+
+        // Cantidad KG
+        showSpin('spinnerKg');
+        try { renderKg(await apiFetch('@Url.Action("DatosCantidadKgPorAsesor")?' + p)); }
+        catch (e) { console.error(e); }
+        finally { hideSpin('spinnerKg'); }
+
+        // Nro Clientes
+        showSpin('spinnerClientes');
+        try { renderClientes(await apiFetch('@Url.Action("DatosNroClientesPorAsesor")?' + p)); }
+        catch (e) { console.error(e); }
+        finally { hideSpin('spinnerClientes'); }
+    };
+
+    /* ── Limpiar filtros ──────────────────────────── */
+    window.clearFilters = function () {
+        document.getElementById('moneda').value = 'D';
+        const curYear = new Date().getFullYear();
+        document.querySelectorAll('#yearCheckBar input').forEach(cb => { cb.checked = parseInt(cb.value) === curYear; });
+        document.getElementById('fechaInicio').disabled = false;
+        document.getElementById('fechaFin').disabled = false;
+        setDefaultDates();
+        loadAll();
+    };
+
+    /* ── Inicio ───────────────────────────────────── */
+    buildYearCheckboxes();
+    setDefaultDates();
+    loadAll();
+})();
+</script>
+}

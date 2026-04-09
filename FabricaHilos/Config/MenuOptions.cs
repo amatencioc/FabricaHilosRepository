@@ -38,6 +38,7 @@ public class MenuOptions
 
     // ── Submenús: Ventas ──────────────────────────────────────────────────
     public bool VentasConsultaTC { get; set; } = true;
+    public bool VentasIndicadoresComerciales { get; set; } = true;
 
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
@@ -70,6 +71,7 @@ public class MenuOptions
         FacturacionListaDocumentos  = true,
 
         VentasConsultaTC = true,
+        VentasIndicadoresComerciales = true,
 
         SeguridadInspecciones = true,
     };
