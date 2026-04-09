@@ -190,7 +190,6 @@
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Cód. Cliente</th>
                                 <th>RUC</th>
                                 <th>Razón Social</th>
                                 <th class="text-end">Importe</th>
@@ -249,7 +248,6 @@
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Cód. Cliente</th>
                                 <th>RUC</th>
                                 <th>Razón Social</th>
                                 <th class="text-end">Cantidad KG</th>
@@ -544,21 +542,20 @@
             tbody.innerHTML = '';
 
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>';
             } else {
                 let totalImporte = 0;
                 data.forEach((d, i) => {
                     totalImporte += (d.importe ?? 0);
                     tbody.innerHTML += `<tr>
                         <td>${i + 1}</td>
-                        <td>${d.codCliente ?? ''}</td>
                         <td>${d.ruc ?? ''}</td>
                         <td>${d.razonSocial ?? ''}</td>
                         <td class="text-end">${monLabel} ${fmt(d.importe)}</td>
                     </tr>`;
                 });
                 tbody.innerHTML += `<tr style="background:#f0f4f0; font-weight:700; border-top:2px solid #1B4D3E">
-                    <td colspan="4" class="text-end">TOTAL</td>
+                    <td colspan="3" class="text-end">TOTAL</td>
                     <td class="text-end">${monLabel} ${fmt(totalImporte)}</td>
                 </tr>`;
             }
@@ -594,7 +591,7 @@
             tbody.innerHTML = '';
 
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>';
             } else {
                 let totalKg = 0, totalImp = 0;
                 data.forEach((d, i) => {
@@ -602,7 +599,6 @@
                     totalImp += (d.importe ?? 0);
                     tbody.innerHTML += `<tr>
                         <td>${i + 1}</td>
-                        <td>${d.codCliente ?? ''}</td>
                         <td>${d.ruc ?? ''}</td>
                         <td>${d.razonSocial ?? ''}</td>
                         <td class="text-end">${fmt(d.cantidadKg)}</td>
@@ -610,7 +606,7 @@
                     </tr>`;
                 });
                 tbody.innerHTML += `<tr style="background:#f0f4f0; font-weight:700; border-top:2px solid #1B4D3E">
-                    <td colspan="4" class="text-end">TOTAL</td>
+                    <td colspan="3" class="text-end">TOTAL</td>
                     <td class="text-end">${fmt(totalKg)}</td>
                     <td class="text-end">${monLabel} ${fmt(totalImp)}</td>
                 </tr>`;
