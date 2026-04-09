@@ -286,6 +286,20 @@
     const YEAR_COLORS = ['#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f','#c62828'];
     const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+    /* ── Convertir "2026/01" → "Ene 2026" ──────────── */
+    function mesLabel(m) {
+        const parts = m.split('/');
+        if (parts.length === 2) {
+            const idx = parseInt(parts[1]) - 1;
+            return MONTH_NAMES[idx] + ' ' + parts[0];
+        }
+        return m;
+    }
+
+    /* ── Meses originales para drill-down ────────────── */
+    let importeMeses  = [];
+    let clientesMeses = [];
+
     /* ── Instancias de charts ──────────────────────── */
     const charts = {};
     function destroyChart(key) {
@@ -412,7 +426,8 @@
             datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
         } else {
             const p = pivot(data, 'importe');
-            labels = p.meses;
+            importeMeses = p.meses;
+            labels = p.meses.map(mesLabel);
             datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
         }
 
@@ -446,7 +461,7 @@
             datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
         } else {
             const p = pivot(data, 'cantidadKg');
-            labels = p.meses;
+            labels = p.meses.map(mesLabel);
             datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
         }
 
@@ -483,7 +498,8 @@
             datasets = p.years.map((y,i) => ({ label: y, data: p.months.map(m => p.map[y+'|'+m] ?? 0), backgroundColor: YEAR_COLORS[i%YEAR_COLORS.length], borderRadius: 4 }));
         } else {
             const p = pivot(data, 'nroClientes');
-            labels = p.meses;
+            clientesMeses = p.meses;
+            labels = p.meses.map(mesLabel);
             datasets = p.asesores.map((a,i) => ({ label: a ?? 'Sin Asesor', data: p.meses.map(m => p.map[a+'|'+m] ?? 0), backgroundColor: COLORS[i%COLORS.length], borderRadius: 4 }));
         }
 
@@ -507,7 +523,7 @@
         if (!elements || elements.length === 0) return;
         const el  = elements[0];
         const ds  = charts['clientes'].data.datasets[el.datasetIndex];
-        const mes = charts['clientes'].data.labels[el.index];
+        const mes = clientesMeses[el.index];
         const asesor = ds.label;
         cargarDetalle(asesor, mes);
     }
@@ -517,7 +533,7 @@
         if (!elements || elements.length === 0) return;
         const el  = elements[0];
         const ds  = charts['importe'].data.datasets[el.datasetIndex];
-        const mes = charts['importe'].data.labels[el.index];
+        const mes = importeMeses[el.index];
         const asesor = ds.label;
         cargarDetalleImporte(asesor, mes);
     }
