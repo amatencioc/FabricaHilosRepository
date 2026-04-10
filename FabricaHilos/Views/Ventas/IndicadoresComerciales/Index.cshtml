@@ -152,15 +152,15 @@
             <div>
                 <div class="kpi-label">Total Clientes</div>
                 <div class="kpi-value" id="kpiTotalClientes">—</div>
-                <div class="kpi-sub">clientes únicos</div>
+                <div class="kpi-sub">conteos por asesor/mes</div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- ── Sección 1: Importe por Asesor / Mes ────────────── -->
-<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Importe por Asesor / Mes</div>
-<p class="report-desc">Barras agrupadas que muestran el <strong>importe neto</strong> (sin conceptos inafectos a comisiones) facturado por cada asesor comercial en cada mes. Haga <strong>clic en una barra</strong> para ver el detalle de clientes con su importe. Validar contra el reporte <strong>VESTVEND</strong>.</p>
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>¿Cuánto vendió cada asesor por mes?</div>
+<p class="report-desc">Muestra el <strong>monto total facturado</strong> por cada asesor comercial en cada mes, descontando conceptos que no generan comisión (inafectos). Cada color representa a un asesor diferente. <strong>Haga clic en cualquier barra</strong> para ver a qué clientes le vendió ese asesor en ese mes.</p>
 <div class="row g-3 mb-3">
     <div class="col-12">
         <div class="card chart-card position-relative">
@@ -174,7 +174,7 @@
 <!-- ── Sección 1.1: Detalle de Importe por Cliente (drill-down) ── -->
 <div id="detalleImportePanel" style="display:none">
     <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle de Importe — <span id="detalleImporteTitulo"></span></div>
-    <p class="report-desc">Importe neto de cada cliente del asesor seleccionado en el mes indicado.</p>
+    <p class="report-desc">Lista de todos los clientes a los que el asesor seleccionado le facturó en el mes elegido, ordenados de mayor a menor importe. Permite ver <strong>quiénes son los clientes más importantes</strong> de cada vendedor.</p>
     <div class="row g-3 mb-4">
         <div class="col-12">
             <div class="card chart-card position-relative">
@@ -204,8 +204,8 @@
 </div>
 
 <!-- ── Sección 2: Cantidad KG por Asesor / Mes ───────── -->
-<div class="section-title"><i class="bi bi-box-seam me-1"></i>Cantidad (KG) por Asesor / Mes</div>
-<p class="report-desc">Barras agrupadas con la <strong>cantidad en kilogramos</strong> vendida por cada asesor. Validar contra el reporte <strong>VCOMPCLMC</strong> (suma de totales por asesor).</p>
+<div class="section-title"><i class="bi bi-box-seam me-1"></i>¿Cuántos kilogramos vendió cada asesor por mes?</div>
+<p class="report-desc">Muestra la <strong>cantidad de producto en kilogramos</strong> que vendió cada asesor mes a mes. Solo incluye artículos de tipo hilo/textil. Sirve para evaluar el <strong>volumen físico de ventas</strong> independientemente del precio.</p>
 <div class="row g-3 mb-3">
     <div class="col-12">
         <div class="card chart-card position-relative">
@@ -217,8 +217,8 @@
 </div>
 
 <!-- ── Sección 3: Nro Clientes por Asesor / Mes ─────── -->
-<div class="section-title"><i class="bi bi-people me-1"></i>Nro. de Clientes por Asesor / Mes</div>
-<p class="report-desc">Barras agrupadas con el <strong>número de clientes únicos</strong> atendidos por cada asesor en cada mes. Haga <strong>clic en una barra</strong> para ver el detalle de los clientes que componen ese conteo.</p>
+<div class="section-title"><i class="bi bi-people me-1"></i>¿A cuántos clientes atendió cada asesor por mes?</div>
+<p class="report-desc">Muestra la <strong>cantidad de clientes diferentes</strong> que compraron a cada asesor en cada mes. Permite ver qué tan amplia es la cartera activa de cada vendedor. <strong>Haga clic en cualquier barra</strong> para ver la lista completa de esos clientes con sus montos y kilogramos.</p>
 <div class="row g-3 mb-3">
     <div class="col-12">
         <div class="card chart-card position-relative">
@@ -232,7 +232,7 @@
 <!-- ── Sección 3.1: Detalle de Clientes (drill-down) ── -->
 <div id="detallePanel">
     <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle de Clientes — <span id="detalleTitulo"></span></div>
-    <p class="report-desc">Razón social de cada cliente que compone el conteo del asesor seleccionado en el mes indicado.</p>
+    <p class="report-desc">Lista completa de los clientes que le compraron al asesor seleccionado en el mes elegido, con el <strong>detalle de kilogramos e importe</strong> de cada uno. Permite identificar <strong>clientes clave y concentración de ventas</strong>.</p>
     <div class="row g-3 mb-4">
         <div class="col-12">
             <div class="card chart-card position-relative">
@@ -262,10 +262,58 @@
     </div>
 </div>
 
+<!-- ── Sección 4: Ranking y Participación por Asesor ── -->
+<div class="section-title"><i class="bi bi-trophy me-1"></i>¿Quién vendió más y qué porcentaje representa?</div>
+<p class="report-desc">A la <strong>izquierda</strong>: ranking que ordena a los asesores del que menos vendió al que más vendió en todo el período. A la <strong>derecha</strong>: gráfico circular que muestra qué porcentaje del total de ventas representa cada asesor. Ideal para identificar rápidamente <strong>quién lidera las ventas</strong> y cómo se reparte el esfuerzo comercial.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Ranking de Asesores (Importe Total)</div>
+            <div class="card-body" style="height:340px"><canvas id="chartRanking"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Participación por Asesor (%)</div>
+            <div class="card-body" style="height:340px"><canvas id="chartParticipacion"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 5: Tendencia Mensual del Importe ────── -->
+<div class="section-title"><i class="bi bi-graph-up me-1"></i>¿Cómo evolucionan las ventas mes a mes?</div>
+<p class="report-desc">Línea que muestra el <strong>total facturado cada mes</strong> sumando las ventas de todos los asesores. Permite ver de un vistazo si las ventas están <strong>creciendo, cayendo o se mantienen estables</strong>. Los picos indican meses fuertes y los valles, meses flojos.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Importe Total por Mes</div>
+            <div class="card-body" style="height:300px"><canvas id="chartTendencia"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 6: Ticket Promedio & Precio por KG ──── -->
+<div class="section-title"><i class="bi bi-cash-coin me-1"></i>¿Qué tan rentable es la venta de cada asesor?</div>
+<p class="report-desc"><strong>Barras azules (Ticket Promedio)</strong>: cuánto factura en promedio cada asesor <strong>por cliente</strong> — un ticket alto significa que vende montos grandes por cliente. <strong>Línea naranja (Precio/KG)</strong>: a cuánto vende <strong>cada kilogramo</strong> en promedio — un precio alto indica que vende productos de mayor valor. Ambos indicadores ayudan a medir la <strong>calidad y rentabilidad</strong> de cada vendedor.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Ticket Promedio por Cliente & Precio Promedio por KG</div>
+            <div class="card-body" style="height:340px"><canvas id="chartTicket"></canvas></div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
 <script>
 (function () {
     'use strict';
+
+    /* ── Registrar plugin datalabels globalmente ────── */
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
 
     /* ── Formato de números ─────────────────────────── */
     const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
@@ -309,6 +357,24 @@
     /* ── Spinner helpers ───────────────────────────── */
     function showSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
     function hideSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    /* ── Toast de notificación ──────────────────────── */
+    function showToast(msg, type) {
+        type = type || 'danger';
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
+        toast.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
+        toast.innerHTML = msg + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
+        container.appendChild(toast);
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 6000);
+    }
 
     /* ── Años: generar checkboxes ─────────────────── */
     function buildYearCheckboxes() {
@@ -439,7 +505,14 @@
                 onClick: comp ? undefined : handleImporteClick,
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } }
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 9, weight: '600' },
+                        color: '#333',
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
                 },
                 scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
             }
@@ -449,8 +522,10 @@
     /* ═════════════════════════════════════════════════
        CHART 2: Cantidad KG por Asesor x Mes
        ═════════════════════════════════════════════════ */
+    let kgData = [];
     function renderKg(data) {
         destroyChart('kg');
+        kgData = data;
         const total = data.reduce((s, d) => s + (d.cantidadKg ?? 0), 0);
         document.getElementById('kpiTotalKg').textContent = fmtMil(total);
 
@@ -472,7 +547,14 @@
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmt(c.raw) + ' KG' } }
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmt(c.raw) + ' KG' } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 9, weight: '600' },
+                        color: '#333',
+                        formatter: function(v) { return fmtMil(v) + ' KG'; }
+                    }
                 },
                 scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
             }
@@ -511,7 +593,14 @@
                 onClick: comp ? undefined : handleClienteClick,
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.raw + ' clientes' } }
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.raw + ' clientes' } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 10, weight: '600' },
+                        color: '#333',
+                        formatter: function(v) { return v; }
+                    }
                 },
                 scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
             }
@@ -578,6 +667,7 @@
             panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (err) {
             console.error('Error cargando detalle importe:', err);
+            showToast('Error al cargar el detalle de importe. Intente nuevamente.', 'danger');
         } finally {
             hideSpin('spinnerDetalleImporte');
         }
@@ -630,6 +720,7 @@
             panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (err) {
             console.error('Error cargando detalle:', err);
+            showToast('Error al cargar el detalle de clientes. Intente nuevamente.', 'danger');
         } finally {
             hideSpin('spinnerDetalle');
         }
@@ -641,6 +732,226 @@
     };
 
     /* ═════════════════════════════════════════════════
+       GRÁFICOS DE RESUMEN (calculados client-side)
+       ═════════════════════════════════════════════════ */
+
+    /* ── Ranking de Asesores (horizontal bar) ─────── */
+    function renderRanking() {
+        destroyChart('ranking');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const map = {};
+        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
+            .sort((a, b) => a.total - b.total);
+
+        charts['ranking'] = new Chart(document.getElementById('chartRanking').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    label: 'Importe Total',
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'right',
+                        font: { size: 10, weight: '600' },
+                        color: '#333',
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
+                },
+                layout: { padding: { right: 80 } },
+                scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ── Participación por Asesor (doughnut) ──────── */
+    function renderParticipacion() {
+        destroyChart('participacion');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const map = {};
+        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
+            .sort((a, b) => b.total - a.total);
+        const gran = sorted.reduce((s, r) => s + r.total, 0);
+
+        charts['participacion'] = new Chart(document.getElementById('chartParticipacion').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: c => {
+                                const pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
+                                return c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: function(ctx) {
+                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
+                            return total > 0 && (ctx.dataset.data[ctx.dataIndex] / total * 100) >= 5;
+                        },
+                        color: '#fff',
+                        font: { size: 11, weight: 'bold' },
+                        formatter: function(v, ctx) {
+                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
+                            return total > 0 ? (v / total * 100).toFixed(1) + '%' : '';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ── Tendencia Mensual (line + area) ──────────── */
+    function renderTendencia() {
+        destroyChart('tendencia');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const map = {};
+        importeData.forEach(d => { map[d.mes] = (map[d.mes] || 0) + (d.importe ?? 0); });
+        const sorted = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+        const labels = sorted.map(([m]) => mesLabel(m));
+        const values = sorted.map(([, v]) => v);
+
+        charts['tendencia'] = new Chart(document.getElementById('chartTendencia').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Importe Total',
+                    data: values,
+                    borderColor: '#1B4D3E',
+                    backgroundColor: 'rgba(27, 77, 62, 0.15)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#1B4D3E',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { top: 30 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        display: true,
+                        anchor: 'end', align: 'top',
+                        clamp: true,
+                        font: { size: 10, weight: '600' },
+                        color: '#1B4D3E',
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
+                },
+                scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ── Ticket Promedio & Precio/KG (mixed) ──────── */
+    function renderTicketPrecio() {
+        destroyChart('ticket');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const imp = {}, kg = {}, cli = {};
+        importeData.forEach(d =>  { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
+        kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
+        clientesData.forEach(d => { cli[d.asesor] = (cli[d.asesor] || 0) + (d.nroClientes ?? 0); });
+
+        const asesores = [...new Set([...Object.keys(imp), ...Object.keys(kg), ...Object.keys(cli)])].sort();
+        const tickets = asesores.map(a => cli[a] > 0 ? imp[a] / cli[a] : 0);
+        const precios = asesores.map(a => kg[a]  > 0 ? imp[a] / kg[a]  : 0);
+
+        charts['ticket'] = new Chart(document.getElementById('chartTicket').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: asesores.map(a => a ?? 'Sin Asesor'),
+                datasets: [
+                    {
+                        label: 'Ticket Promedio (Importe/Cliente)',
+                        data: tickets,
+                        backgroundColor: '#1565C0',
+                        borderRadius: 4,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Precio/KG (Importe/KG)',
+                        data: precios,
+                        type: 'line',
+                        borderColor: '#e65100',
+                        backgroundColor: '#e65100',
+                        pointRadius: 5,
+                        pointBackgroundColor: '#e65100',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: 'y1',
+                        datalabels: {
+                            backgroundColor: 'rgba(255,255,255,.85)',
+                            borderColor: '#e65100',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                            font: { size: 10, weight: '700' }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 9, weight: '600' },
+                        color: function(ctx) { return ctx.datasetIndex === 0 ? '#1565C0' : '#e65100'; },
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
+                },
+                scales: {
+                    y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Ticket Promedio' },  ticks: { callback: v => fmtMil(v) } },
+                    y1: { beginAtZero: true, position: 'right', title: { display: true, text: 'Precio / KG' }, ticks: { callback: v => fmtMil(v) }, grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+    }
+
+    /* ── Render todos los gráficos de resumen ─────── */
+    function renderResumen() {
+        if (importeData.length === 0) return;
+        renderRanking();
+        renderParticipacion();
+        renderTendencia();
+        if (kgData.length > 0 && clientesData.length > 0) renderTicketPrecio();
+    }
+
+    /* ═════════════════════════════════════════════════
        CARGAR TODOS LOS DATOS
        ═════════════════════════════════════════════════ */
     window.loadAll = async function () {
@@ -648,23 +959,36 @@
         cerrarDetalleImporte();
         const p = buildParams();
 
-        // Importe
         showSpin('spinnerImporte');
-        try { renderImporte(await apiFetch('@Url.Action("DatosImportePorAsesor")?' + p)); }
-        catch (e) { console.error(e); }
-        finally { hideSpin('spinnerImporte'); }
-
-        // Cantidad KG
         showSpin('spinnerKg');
-        try { renderKg(await apiFetch('@Url.Action("DatosCantidadKgPorAsesor")?' + p)); }
-        catch (e) { console.error(e); }
-        finally { hideSpin('spinnerKg'); }
-
-        // Nro Clientes
         showSpin('spinnerClientes');
-        try { renderClientes(await apiFetch('@Url.Action("DatosNroClientesPorAsesor")?' + p)); }
-        catch (e) { console.error(e); }
-        finally { hideSpin('spinnerClientes'); }
+
+        const errors = [];
+
+        const [impRes, kgRes, cliRes] = await Promise.allSettled([
+            apiFetch('@Url.Action("DatosImportePorAsesor")?' + p),
+            apiFetch('@Url.Action("DatosCantidadKgPorAsesor")?' + p),
+            apiFetch('@Url.Action("DatosNroClientesPorAsesor")?' + p)
+        ]);
+
+        if (impRes.status === 'fulfilled') { renderImporte(impRes.value); }
+        else { console.error(impRes.reason); errors.push('Importe'); }
+        hideSpin('spinnerImporte');
+
+        if (kgRes.status === 'fulfilled') { renderKg(kgRes.value); }
+        else { console.error(kgRes.reason); errors.push('Cantidad KG'); }
+        hideSpin('spinnerKg');
+
+        if (cliRes.status === 'fulfilled') { renderClientes(cliRes.value); }
+        else { console.error(cliRes.reason); errors.push('Nro Clientes'); }
+        hideSpin('spinnerClientes');
+
+        if (errors.length > 0) {
+            showToast('Error al cargar: ' + errors.join(', ') + '. Verifique su conexión.', 'danger');
+        }
+
+        // Gráficos de resumen (calculados client-side)
+        renderResumen();
     };
 
     /* ── Limpiar filtros ──────────────────────────── */

@@ -1487,7 +1487,8 @@ namespace FabricaHilos.Services.Produccion
                 UPDATE H_RPRODUC SET ESTADO = '3',
                                     FECHA_FIN = :fechaFin,
                                     A_MDUSER  = :mdUser,
-                                    A_MDFECHA = :mdFecha
+                                    A_MDFECHA = :mdFecha,
+                                    IND_SISTEMA = 'W'
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:receta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:lote)
                   AND TRIM(TP_MAQ)                                  = TRIM(:tpMaq)
@@ -1604,7 +1605,8 @@ namespace FabricaHilos.Services.Produccion
                     const string queryUpdate = @"
                         UPDATE H_RPRODUC 
                         SET ESTADO = '9',
-                            FECHA_FIN = :fechaFin
+                            FECHA_FIN = :fechaFin,
+                            IND_SISTEMA = 'W'
                         WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
                           AND TRIM(LOTE) = TRIM(:lote)
                           AND TRIM(TP_MAQ) = TRIM(:tpMaq)
@@ -1699,7 +1701,8 @@ namespace FabricaHilos.Services.Produccion
                     VELOCIDAD    = :velocidad,
                     METRAJE      = :metraje,
                     PROCESO      = :proceso,
-                    FECHA_INI    = TO_DATE(:newFechaIni, 'YYYY-MM-DD HH24:MI:SS'){extraSetActualizar}
+                    FECHA_INI    = TO_DATE(:newFechaIni, 'YYYY-MM-DD HH24:MI:SS'),
+                    IND_SISTEMA  = 'W'{extraSetActualizar}
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:oldReceta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:oldLote)
                   AND TRIM(TP_MAQ)                                  = TRIM(:oldTpMaq)
@@ -1855,7 +1858,8 @@ namespace FabricaHilos.Services.Produccion
                     UNIDADES  = :unidades,
                     PESO_NETO = :kgPeso,
                     ESTADO    = '3',
-                    FECHA_FIN = :fechaFin{extraSetDetalle}
+                    FECHA_FIN = :fechaFin,
+                    IND_SISTEMA = 'W'{extraSetDetalle}
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:receta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:lote)
                   AND TRIM(TP_MAQ)                                  = TRIM(:tpMaq)
@@ -2463,7 +2467,8 @@ namespace FabricaHilos.Services.Produccion
                     HUSOS_ACT_T5 = :husos_act_t5,
                     HUSOS_ACT_T6 = :husos_act_t6,
                     A_MDUSER     = :a_mduser,
-                    A_MDFECHA    = SYSDATE
+                    A_MDFECHA    = SYSDATE,
+                    IND_SISTEMA  = 'W'
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:oldReceta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:oldLote)
                   AND TRIM(TP_MAQ)                                  = 'A'

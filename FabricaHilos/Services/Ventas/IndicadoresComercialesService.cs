@@ -70,8 +70,8 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                                DOLARES_SINANT)) MONTO
           FROM V_DOCUVEN A, TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO(+) = 29
-           AND T.CODIGO(+) = A.VENDEDOR
+           AND T.TIPO = 29
+           AND T.CODIGO = A.VENDEDOR
          GROUP BY A.VENDEDOR,
                   T.DESCRIPCION,
                   TO_CHAR(A.FECHA, 'YYYY/MM')) A,
@@ -84,7 +84,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                                  ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / D.IMPORT_CAM, 2)))) MONTO
+                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
           FROM DOCUVENT D, ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
@@ -154,8 +154,8 @@ SELECT A.ASESOR,
                                DOLARES_SINANT)) MONTO
           FROM V_DOCUVEN A, TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO(+) = 29
-           AND T.CODIGO(+) = A.VENDEDOR
+           AND T.TIPO = 29
+           AND T.CODIGO = A.VENDEDOR
            AND T.DESCRIPCION = :P_ASESOR
            AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
          GROUP BY A.VENDEDOR,
@@ -172,7 +172,7 @@ SELECT A.ASESOR,
                                  ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / D.IMPORT_CAM, 2)))) MONTO
+                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
           FROM DOCUVENT D, ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
@@ -373,8 +373,8 @@ SELECT V.ASESOR,
                                DOLARES_SINANT)) MONTO
           FROM V_DOCUVEN A, TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO(+)   = 29
-           AND T.CODIGO(+) = A.VENDEDOR
+           AND T.TIPO   = 29
+           AND T.CODIGO = A.VENDEDOR
            AND T.DESCRIPCION = :P_ASESOR
            AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
          GROUP BY A.VENDEDOR,
@@ -391,7 +391,7 @@ SELECT V.ASESOR,
                                  ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / D.IMPORT_CAM, 2)))) MONTO
+                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
           FROM DOCUVENT D, ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
