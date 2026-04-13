@@ -1,3 +1,4 @@
+using FabricaHilos.Filters;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Seguridad.Inspeccion;
 using FabricaHilos.Services.Seguridad.Inspeccion;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 namespace FabricaHilos.Controllers.Seguridad
 {
     [Authorize]
+    [AccesoExternoPermitido]
     [Route("Seguridad/Inspeccion")]
     public class InspeccionController : Controller
     {
