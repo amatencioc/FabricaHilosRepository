@@ -300,6 +300,7 @@
                                        asp-route-serie="@item.FacturaSerie"
                                        asp-route-numero="@item.Factura"
                                        onclick="descargarPdf(event, this)"
+                                       data-no-loading
                                        class="text-danger me-2"
                                        title="Descargar PDF de Factura">
                                         <i class="bi bi-file-earmark-pdf-fill" style="font-size: 1.1rem;"></i>
@@ -322,6 +323,7 @@
                                        asp-route-serie="@item.GuiaSerie"
                                        asp-route-numero="@item.Guia"
                                        onclick="descargarPdf(event, this)"
+                                       data-no-loading
                                        class="text-danger me-2"
                                        title="Descargar PDF de Guía">
                                         <i class="bi bi-file-earmark-pdf-fill" style="font-size: 1.1rem;"></i>
@@ -1134,14 +1136,14 @@
     async function descargarPdf(event, anchor) {
         event.preventDefault();
         const loadingOverlay = document.getElementById('loadingOverlay');
+        const globalOverlay = document.getElementById('globalLoadingOverlay');
 
-        // Ocultar overlay inmediatamente si está visible (por si se activó antes)
-        if (loadingOverlay) {
-            loadingOverlay.classList.remove('show');
-        }
+        // Ocultar overlays inmediatamente si están visibles (por si se activaron antes)
+        if (loadingOverlay) loadingOverlay.classList.remove('show');
+        if (globalOverlay) { globalOverlay.classList.remove('show'); GlobalLoading.activeRequests = 0; }
 
         try {
-            const resp = await fetch(anchor.href, { credentials: 'include' });
+            const resp = await fetch(anchor.href, { credentials: 'include', noLoading: true });
             const ct = resp.headers.get('Content-Type') ?? '';
             if (ct.includes('application/json')) {
                 const data = await resp.json();
@@ -1155,10 +1157,9 @@
         } catch {
             mostrarPdfModal('Error', 'Ocurrió un error inesperado al obtener el PDF.');
         } finally {
-            // Asegurar que el overlay esté oculto al finalizar
-            if (loadingOverlay) {
-                loadingOverlay.classList.remove('show');
-            }
+            // Asegurar que los overlays estén ocultos al finalizar
+            if (loadingOverlay) loadingOverlay.classList.remove('show');
+            if (globalOverlay) { globalOverlay.classList.remove('show'); GlobalLoading.activeRequests = 0; }
         }
     }
 

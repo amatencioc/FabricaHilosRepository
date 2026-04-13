@@ -22,7 +22,6 @@ namespace FabricaHilos.Services.Sgc
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
         Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10);
-        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosCertificadosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10);
         Task<int> GuardarRequerimientoCertificadoAsync(List<FacturaTcDto> facturas);
     }
 
@@ -1200,201 +1199,6 @@ namespace FabricaHilos.Services.Sgc
             bool hasRazonSocial = !string.IsNullOrWhiteSpace(razonSocial);
             bool hasFechaIni    = fechaInicio.HasValue;
             bool hasFechaFin    = fechaFin.HasValue;
-
-            string guiaFilter       = hasGuia        ? "\n                          AND G.NUMERO = :guia" : string.Empty;
-            string pedidoFilter     = hasPedido      ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
-            string facturaFilter    = hasFactura     ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
-            string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(F.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(F.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
-
-            string fechaFilter = string.Empty;
-            if (hasFechaIni && hasFechaFin)
-                fechaFilter = "\n                          AND TRUNC(F.FECHA) BETWEEN TRUNC(:fechaInicio) AND TRUNC(:fechaFin)";
-            else if (hasFechaIni)
-                fechaFilter = "\n                          AND TRUNC(F.FECHA) >= TRUNC(:fechaInicio)";
-            else if (hasFechaFin)
-                fechaFilter = "\n                          AND TRUNC(F.FECHA) <= TRUNC(:fechaFin)";
-
-            string sql = $@"
-                SELECT RN, TOTAL_COUNT,
-                       ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
-                       ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
-                       ""GUIA"", ""OBS"",
-                       ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE"",
-                       ""COD_CLIENTE"",
-                       ""ENVIADO_A_TC"", ""NUM_REQ_TC"", ""NUM_CER""
-                FROM (
-                    SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
-                           COUNT(*) OVER() AS TOTAL_COUNT,
-                           Q.""RAZON SOCIAL"",
-                           Q.""OC"",
-                           Q.""PEDIDO"",
-                           Q.""FACTURA"",
-                           Q.""FECHA.DOC"",
-                           Q.""ARTICULO"",
-                           Q.""CANT_PEDIDO"",
-                           Q.""CANT_FACTURADA"",
-                           Q.""PRECIO"",
-                           Q.""GUIA"",
-                           Q.""OBS"",
-                           Q.""FACTURA_TIPO"",
-                           Q.""FACTURA_SERIE"",
-                           Q.""GUIA_COD_ALM"",
-                           Q.""GUIA_TP_TRANSAC"",
-                           Q.""GUIA_SERIE"",
-                           Q.""COD_CLIENTE"",
-                           Q.""ENVIADO_A_TC"",
-                           Q.""NUM_REQ_TC"",
-                           Q.""NUM_CER""
-                    FROM (
-                        SELECT
-                            F.NOMBRE                                                AS ""RAZON SOCIAL"",
-                            MAX(P.NUMERO_REF)                                   AS ""OC"",
-                            MAX(CASE WHEN P.NUM_PED IS NOT NULL THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) END) AS ""PEDIDO"",
-                            TRIM(F.NUMERO)                                          AS ""FACTURA"",
-                            F.FECHA                                                 AS ""FECHA.DOC"",
-                            MAX(A.DESCRIPCION)                                      AS ""ARTICULO"",
-                            MAX(I.CANTIDAD)                                         AS ""CANT_PEDIDO"",
-                            MAX(ID.CANTIDAD)                                        AS ""CANT_FACTURADA"",
-                            MAX(I.PRECIO)                                           AS ""PRECIO"",
-                            MAX(G.NUMERO)                                           AS ""GUIA"",
-                            MAX(I.DETALLE)                                          AS ""OBS"",
-                            F.TIPODOC                                               AS ""FACTURA_TIPO"",
-                            TRIM(F.SERIE)                                           AS ""FACTURA_SERIE"",
-                            MAX(G.COD_ALM)                                          AS ""GUIA_COD_ALM"",
-                            MAX(G.TP_TRANSAC)                                       AS ""GUIA_TP_TRANSAC"",
-                            MAX(G.SERIE)                                            AS ""GUIA_SERIE"",
-                            F.COD_CLIENTE                                           AS ""COD_CLIENTE"",
-                            CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
-                            MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
-                            MAX(RC.NUM_CER)                                         AS ""NUM_CER""
-                        FROM SIG.DOCUVENT F
-                        INNER JOIN SIG.ITEMDOCU ID
-                                ON ID.TIPODOC       = F.TIPODOC
-                               AND TRIM(ID.SERIE)   = TRIM(F.SERIE)
-                               AND TRIM(ID.NUMERO)  = TRIM(F.NUMERO)
-                        INNER JOIN SIG.ARTICUL A
-                                ON A.COD_ART = ID.COD_ART
-                        LEFT  JOIN SIG.KARDEX_G G
-                                ON G.TIP_REF        = F.TIPODOC
-                               AND TRIM(G.SER_REF)  = TRIM(F.SERIE)
-                               AND TRIM(G.NRO_REF)  = TRIM(F.NUMERO)
-                        LEFT  JOIN SIG.PEDIDO P
-                                ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
-                               AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
-                               AND G.TIP_DOC_REF       = P.TIPO_DOCTO
-                               AND P.ESTADO <> '9'
-                        LEFT  JOIN SIG.ITEMPED I
-                                ON I.NUM_PED = P.NUM_PED
-                               AND I.SERIE   = P.SERIE
-                               AND I.COD_ART = ID.COD_ART
-                        LEFT  JOIN SIG.PACKING_G PK
-                                ON PK.NUM_PED = P.NUM_PED
-                        LEFT  JOIN SIG.REQ_CERT_D RD
-                                ON RD.TIPODOC = F.TIPODOC
-                               AND TRIM(RD.SERIE) = TRIM(F.SERIE)
-                               AND RD.NUMERO = TO_NUMBER(TRIM(F.NUMERO))
-                        LEFT  JOIN SIG.REQ_CERT RC
-                                ON RC.NUM_REQ = RD.NUM_REQ
-                        WHERE 1=1{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
-                        GROUP BY
-                            F.TIPODOC,
-                            F.SERIE,
-                            F.NUMERO,
-                            F.NOMBRE,
-                            F.FECHA,
-                            F.COD_CLIENTE
-                    ) Q
-                )
-                WHERE RN BETWEEN :startRow AND :endRow";
-
-            var result = new List<DespachoListadoDto>();
-            int totalCount = 0;
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn);
-                cmd.BindByName = true;
-
-                if (hasGuia)
-                {
-                    if (!int.TryParse(guia!.Trim(), out int guiaInt))
-                        return (result, 0);
-                    cmd.Parameters.Add(new OracleParameter(":guia", OracleDbType.Int32, guiaInt, ParameterDirection.Input));
-                }
-                if (hasPedido)
-                    cmd.Parameters.Add(new OracleParameter(":pedido", OracleDbType.Varchar2, pedido!.Trim(), ParameterDirection.Input));
-                if (hasFactura)
-                    cmd.Parameters.Add(new OracleParameter(":factura", OracleDbType.Varchar2, factura!.Trim(), ParameterDirection.Input));
-                if (hasRazonSocial)
-                    cmd.Parameters.Add(new OracleParameter(":razonSocial", OracleDbType.Varchar2, razonSocial!.Trim(), ParameterDirection.Input));
-                if (hasFechaIni)
-                    cmd.Parameters.Add(new OracleParameter(":fechaInicio", OracleDbType.Date, fechaInicio!.Value.Date, ParameterDirection.Input));
-                if (hasFechaFin)
-                    cmd.Parameters.Add(new OracleParameter(":fechaFin", OracleDbType.Date, fechaFin!.Value.Date, ParameterDirection.Input));
-
-                cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));
-                cmd.Parameters.Add(new OracleParameter(":endRow", OracleDbType.Int32, endRow, ParameterDirection.Input));
-
-                using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
-                    ?? throw new InvalidOperationException("OracleDataReader expected");
-
-                while (await reader.ReadAsync())
-                {
-                    if (result.Count == 0)
-                        totalCount = GetInt(reader, "TOTAL_COUNT");
-
-                    result.Add(new DespachoListadoDto
-                    {
-                        Correlativo   = GetInt(reader, "RN"),
-                        RazonSocial   = GetStr(reader, "RAZON SOCIAL"),
-                        Oc            = GetStr(reader, "OC"),
-                        Pedido        = GetStr(reader, "PEDIDO"),
-                        Factura       = GetStr(reader, "FACTURA"),
-                        FechaDoc      = GetDt(reader, "FECHA.DOC"),
-                        Articulo      = GetStr(reader, "ARTICULO"),
-                        Cantidad      = GetDec(reader, "CANT_PEDIDO"),
-                        CantFacturada = GetDec(reader, "CANT_FACTURADA"),
-                        Precio        = GetDec(reader, "PRECIO"),
-                        Guia          = GetNullInt(reader, "GUIA"),
-                        Obs           = GetStr(reader, "OBS"),
-                        FacturaTipo   = GetStr(reader, "FACTURA_TIPO"),
-                        FacturaSerie  = GetStr(reader, "FACTURA_SERIE"),
-                        GuiaCodAlm    = GetStr(reader, "GUIA_COD_ALM"),
-                        GuiaTpTransac = GetStr(reader, "GUIA_TP_TRANSAC"),
-                        GuiaSerie     = GetNullInt(reader, "GUIA_SERIE"),
-                        CodCliente    = GetStr(reader, "COD_CLIENTE"),
-                        EnviadoATC    = GetInt(reader, "ENVIADO_A_TC") == 1,
-                        NumReqTC      = GetNullInt(reader, "NUM_REQ_TC"),
-                        NumCer        = GetStr(reader, "NUM_CER")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido}, factura={Factura}, razonSocial={RazonSocial}, fechaInicio={FechaInicio}, fechaFin={FechaFin})",
-                    guia, pedido, factura, razonSocial, fechaInicio, fechaFin);
-            }
-
-            return (result, totalCount);
-        }
-
-        // ========== LISTADO DE DESPACHOS CON FILTRO DE CERTIFICADOS ==========
-
-        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosCertificadosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10)
-        {
-            var connStr = GetOracleConnectionString();
-            if (string.IsNullOrEmpty(connStr)) return ([], 0);
-
-            int startRow = (page - 1) * pageSize + 1;
-            int endRow   = page * pageSize;
-
-            bool hasGuia        = !string.IsNullOrWhiteSpace(guia);
-            bool hasPedido      = !string.IsNullOrWhiteSpace(pedido);
-            bool hasFactura     = !string.IsNullOrWhiteSpace(factura);
-            bool hasRazonSocial = !string.IsNullOrWhiteSpace(razonSocial);
-            bool hasFechaIni    = fechaInicio.HasValue;
-            bool hasFechaFin    = fechaFin.HasValue;
             bool hasGots        = gots.HasValue && gots.Value;
             bool hasOcs         = ocs.HasValue && ocs.Value;
 
@@ -1455,7 +1259,7 @@ namespace FabricaHilos.Services.Sgc
                     FROM (
                         SELECT
                             F.NOMBRE                                                AS ""RAZON SOCIAL"",
-                            MAX(P.NUMERO_REF)                                   AS ""OC"",
+                            MAX(P.NUMERO_REF)                                       AS ""OC"",
                             MAX(CASE WHEN P.NUM_PED IS NOT NULL THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) END) AS ""PEDIDO"",
                             TRIM(F.NUMERO)                                          AS ""FACTURA"",
                             F.FECHA                                                 AS ""FECHA.DOC"",
@@ -1484,27 +1288,40 @@ namespace FabricaHilos.Services.Sgc
                                 ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                                AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                                AND G.TIP_DOC_REF       = P.TIPO_DOCTO
+                               AND G.ESTADO <> '9'
+                        LEFT  JOIN SIG.KARDEX_D D
+                                ON D.COD_ALM    = G.COD_ALM
+                               AND D.TP_TRANSAC = G.TP_TRANSAC
+                               AND D.SERIE      = G.SERIE
+                               AND D.NUMERO     = G.NUMERO
                         LEFT  JOIN SIG.DOCUVENT F
                                 ON F.TIPODOC       = G.TIP_REF
                                AND TRIM(F.SERIE)   = TRIM(G.SER_REF)
                                AND TRIM(F.NUMERO)  = TRIM(G.NRO_REF)
+                               AND F.ESTADO <> '9'
+                               AND F.TIP_DOC_REF IN ('21','23','PL')
                         LEFT  JOIN SIG.ITEMDOCU ID
                                 ON ID.TIPODOC       = F.TIPODOC
                                AND TRIM(ID.SERIE)   = TRIM(F.SERIE)
                                AND TRIM(ID.NUMERO)  = TRIM(F.NUMERO)
+                               AND ID.COD_ART       = D.COD_ART
                         LEFT  JOIN SIG.ARTICUL A
                                 ON A.COD_ART = ID.COD_ART
+                               AND A.TP_ART = 'T'
                         LEFT  JOIN SIG.ITEMPED I
                                 ON I.NUM_PED = P.NUM_PED
                                AND I.SERIE   = P.SERIE
                                AND I.COD_ART = ID.COD_ART
+                        LEFT  JOIN SIG.PACKING_G PK
+                                ON PK.NUM_PED = P.NUM_PED
                         LEFT  JOIN SIG.REQ_CERT_D RD
                                 ON RD.TIPODOC = F.TIPODOC
                                AND TRIM(RD.SERIE) = TRIM(F.SERIE)
                                AND RD.NUMERO = TO_NUMBER(TRIM(F.NUMERO))
                         LEFT  JOIN SIG.REQ_CERT RC
                                 ON RC.NUM_REQ = RD.NUM_REQ
-                        WHERE 1=1{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
+                        WHERE ID.COD_ART IS NOT NULL
+                          AND I.COD_ART  IS NOT NULL{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
                             F.TIPODOC,
                             F.SERIE,
@@ -1512,7 +1329,8 @@ namespace FabricaHilos.Services.Sgc
                             F.NOMBRE,
                             F.FECHA,
                             F.COD_CLIENTE,
-                            F.COD_VENDE
+                            F.COD_VENDE,
+                            D.COD_ART
                     ) Q
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -1583,7 +1401,7 @@ namespace FabricaHilos.Services.Sgc
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener listado de despachos con certificados (guia={Guia}, pedido={Pedido}, factura={Factura}, razonSocial={RazonSocial}, fechaInicio={FechaInicio}, fechaFin={FechaFin}, gots={Gots}, ocs={Ocs})",
+                _logger.LogError(ex, "Error al obtener listado de despachos (guia={Guia}, pedido={Pedido}, factura={Factura}, razonSocial={RazonSocial}, fechaInicio={FechaInicio}, fechaFin={FechaFin}, gots={Gots}, ocs={Ocs})",
                     guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs);
             }
 

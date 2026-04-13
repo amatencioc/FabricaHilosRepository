@@ -152,55 +152,82 @@ namespace FabricaHilos.Middleware
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <title>Acceso Restringido – La Colonial</title>
-                <link rel="stylesheet"
-                      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-                      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
-                      crossorigin="anonymous" />
                 <style>
-                    body { background-color: #1a3a2e; }
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body {
+                        background-color: #1a3a2e;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-height: 100vh;
+                    }
+                    .overlay {
+                        position: fixed; inset: 0;
+                        background: rgba(0,0,0,0.5);
+                    }
+                    .modal-box {
+                        position: relative; z-index: 10;
+                        background: #fff;
+                        border-radius: 8px;
+                        max-width: 460px;
+                        width: 90%;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                        overflow: hidden;
+                    }
+                    .modal-header {
+                        background-color: #dc3545;
+                        color: #fff;
+                        padding: 16px 20px;
+                        font-size: 1.15rem;
+                        font-weight: 600;
+                    }
+                    .modal-body {
+                        padding: 20px;
+                        color: #333;
+                        line-height: 1.6;
+                    }
+                    .modal-body strong { color: #000; }
+                    .modal-footer {
+                        padding: 12px 20px 20px;
+                    }
+                    .btn-success {
+                        display: block;
+                        width: 100%;
+                        padding: 12px;
+                        background-color: #198754;
+                        color: #fff;
+                        text-align: center;
+                        text-decoration: none;
+                        border: none;
+                        border-radius: 6px;
+                        font-size: 1rem;
+                        font-weight: 500;
+                        cursor: pointer;
+                    }
+                    .btn-success:hover { background-color: #157347; }
                 </style>
             </head>
             <body>
-                <!-- Modal -->
-                <div class="modal fade" id="modalAccesoRestringido" tabindex="-1"
-                     aria-labelledby="modalAccesoRestringidoLabel" aria-modal="true" role="dialog"
-                     data-bs-backdrop="static" data-bs-keyboard="false">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header bg-danger text-white">
-                                <h5 class="modal-title" id="modalAccesoRestringidoLabel">
-                                    🔒 Acceso Restringido
-                                </h5>
-                            </div>
-                            <div class="modal-body">
-                                <p>
-                                    El módulo que intentas acceder <strong>solo está disponible dentro de la
-                                    red interna</strong> de La Colonial - Fábrica de Hilos S.A.
-                                </p>
-                                <p>
-                                    Si necesitas registrar una <strong>Inspección de Seguridad</strong>,
-                                    puedes hacerlo desde el módulo habilitado para acceso externo.
-                                </p>
-                            </div>
-                            <div class="modal-footer">
-                                <a href="/Account/Login" class="btn btn-success w-100">
-                                    Ir a Seguridad / Inspecciones
-                                </a>
-                            </div>
-                        </div>
+                <div class="overlay"></div>
+                <div class="modal-box">
+                    <div class="modal-header">🔒 Acceso Restringido</div>
+                    <div class="modal-body">
+                        <p>
+                            El módulo que intentas acceder <strong>solo está disponible dentro de la
+                            red interna</strong> de La Colonial - Fábrica de Hilos S.A.
+                        </p>
+                        <p style="margin-top:12px;">
+                            Si necesitas registrar una <strong>Inspección de Seguridad</strong>,
+                            puedes hacerlo desde el módulo habilitado para acceso externo.
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="/Account/Login" class="btn-success">
+                            Ir a Seguridad / Inspecciones
+                        </a>
                     </div>
                 </div>
-
-                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-                        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc4s9bIOgUxi8T/jzmRZ5+fKxQ2bBT5rz5sT9bqcjxE"
-                        crossorigin="anonymous"></script>
-                <script>
-                    document.addEventListener('DOMContentLoaded', function () {
-                        var modal = new bootstrap.Modal(
-                            document.getElementById('modalAccesoRestringido'));
-                        modal.show();
-                    });
-                </script>
             </body>
             </html>
             """;
