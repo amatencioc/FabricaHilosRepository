@@ -9,6 +9,8 @@ namespace FabricaHilos.Models
     {
         public string c_user { get; set; }
         public string psw_sig { get; set; }
+        public string c_codigo { get; set; }
+        public string c_nombre { get; set; }
         public string c_costo { get; set; }
     }
 }

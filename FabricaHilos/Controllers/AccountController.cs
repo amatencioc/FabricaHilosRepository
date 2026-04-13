@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models;
 using FabricaHilos.Logica;
 using FabricaHilos.Services;
@@ -72,11 +73,35 @@ namespace FabricaHilos.Controllers
             try
             {
                 // 1. Validar contra Oracle Database
-                var loginOracle = new Login(_configuration, null);
+                var loginOracle = new Login(_configuration, _logger);
                 var usuarioOracle = loginOracle.EncontrarUsuario(usuario, password);
 
                 if (!string.IsNullOrEmpty(usuarioOracle.c_user))
                 {
+                    // Validar que las credenciales funcionen como login Oracle real.
+                    // Si la cuenta Oracle del usuario tiene una contraseña distinta a
+                    // PSW_SIG (o no existe como usuario Oracle), se permite el login
+                    // pero los servicios usarán la conexión base del appsettings.
+                    bool oracleCredencialesValidas = false;
+                    var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
+                    var csb = new OracleConnectionStringBuilder(baseConnStr)
+                    {
+                        UserID = usuario,
+                        Password = password
+                    };
+                    try
+                    {
+                        using var testConn = new OracleConnection(csb.ToString());
+                        await testConn.OpenAsync();
+                        oracleCredencialesValidas = true;
+                    }
+                    catch (OracleException oex) when (oex.Number == 1017 || oex.Number == 1004)
+                    {
+                        _logger.LogWarning(
+                            "Usuario {Usuario} existe en CS_USER pero sus credenciales no son válidas como login Oracle (ORA-{Codigo}). Se usará la conexión base.",
+                            usuario, oex.Number);
+                    }
+
                     var adminUsers = _configuration.GetSection("AdminUsers").Get<string[]>()
                                     ?? [];
                     var esAdmin = adminUsers.Contains(usuario, StringComparer.OrdinalIgnoreCase);
@@ -90,7 +115,7 @@ namespace FabricaHilos.Controllers
                         {
                             UserName = usuario,
                             Email = $"{usuario}@fabricahilos.com",
-                            NombreCompleto = usuarioOracle.c_user,
+                            NombreCompleto = usuarioOracle.c_nombre ?? usuarioOracle.c_user,
                             Cargo = usuarioOracle.c_costo ?? "Usuario",
                             EmailConfirmed = true
                         };
@@ -123,9 +148,10 @@ namespace FabricaHilos.Controllers
                             userIdentity.UserName = usuario;
                             needsUpdate = true;
                         }
-                        if (userIdentity.NombreCompleto != usuarioOracle.c_user)
+                        var nombreOracle = usuarioOracle.c_nombre ?? usuarioOracle.c_user;
+                        if (userIdentity.NombreCompleto != nombreOracle)
                         {
-                            userIdentity.NombreCompleto = usuarioOracle.c_user;
+                            userIdentity.NombreCompleto = nombreOracle;
                             needsUpdate = true;
                         }
                         if (needsUpdate)
@@ -154,10 +180,13 @@ namespace FabricaHilos.Controllers
 
                     await _signInManager.SignInAsync(userIdentity, recordarme);
 
-                    // Guardar credenciales Oracle del usuario en sesión para que
-                    // los servicios conecten a Oracle con el usuario propio.
+                    // Siempre guardar el usuario Oracle en sesión (para auditoría).
+                    // Solo guardar la contraseña si las credenciales Oracle son válidas;
+                    // así GetOracleConnectionString() usará la conexión base cuando no
+                    // exista OraclePass en sesión (fallback seguro).
                     HttpContext.Session.SetString("OracleUser", usuario);
-                    HttpContext.Session.SetString("OraclePass", password);
+                    if (oracleCredencialesValidas)
+                        HttpContext.Session.SetString("OraclePass", password);
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);

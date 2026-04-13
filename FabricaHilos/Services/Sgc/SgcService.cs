@@ -28,13 +28,14 @@ namespace FabricaHilos.Services.Sgc
 
     public class SgcService : ISgcService
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _baseConnectionString;
         private readonly ILogger<SgcService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
         public SgcService(IConfiguration configuration, ILogger<SgcService> logger, IHttpContextAccessor httpContextAccessor)
         {
-            _configuration = configuration;
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
         }
@@ -43,11 +44,10 @@ namespace FabricaHilos.Services.Sgc
         {
             var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
             var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-            var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
 
             if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
             {
-                var csBuilder = new OracleConnectionStringBuilder(baseConnStr)
+                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
                 {
                     UserID = oraUser,
                     Password = oraPass
@@ -55,7 +55,7 @@ namespace FabricaHilos.Services.Sgc
                 return csBuilder.ToString();
             }
 
-            return baseConnStr;
+            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>

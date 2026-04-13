@@ -5,7 +5,7 @@ namespace FabricaHilos.Services.Ventas
 {
     public class IndicadoresComercialesService : IIndicadoresComercialesService
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _baseConnectionString;
         private readonly ILogger<IndicadoresComercialesService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -14,28 +14,28 @@ namespace FabricaHilos.Services.Ventas
             ILogger<IndicadoresComercialesService> logger,
             IHttpContextAccessor httpContextAccessor)
         {
-            _configuration       = configuration;
-            _logger              = logger;
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException("Oracle connection string not found.");
+            _logger = logger;
             _httpContextAccessor = httpContextAccessor;
         }
 
         private string GetOracleConnectionString()
         {
-            var oraUser  = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass  = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-            var baseConn = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
+            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
+            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
 
             if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
             {
-                var csb = new OracleConnectionStringBuilder(baseConn)
+                var csb = new OracleConnectionStringBuilder(_baseConnectionString)
                 {
-                    UserID   = oraUser,
+                    UserID = oraUser,
                     Password = oraPass
                 };
                 return csb.ToString();
             }
 
-            return baseConn;
+            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>

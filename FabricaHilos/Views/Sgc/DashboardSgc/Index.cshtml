@@ -454,8 +454,8 @@
         const hoy  = new Date();
         const ini  = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
         const toISO = d => d.toISOString().slice(0, 10);
-        document.getElementById('fechaInicio').value = toISO(ini);
-        document.getElementById('fechaFin').value    = toISO(hoy);
+        fpSetDate('#fechaInicio', toISO(ini));
+        fpSetDate('#fechaFin',    toISO(hoy));
     }
 
     /* ── Parámetros del query string ────────────────── */

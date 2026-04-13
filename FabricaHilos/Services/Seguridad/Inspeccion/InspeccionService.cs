@@ -50,7 +50,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         /// Lanza InvalidOperationException si NRODOC está bloqueada por otra sesión.
         /// </summary>
         Task<int> RegistrarHallazgoAsync(InspeccionRegistroDto inspeccion, string usuario);
-        Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null);
+        Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null);
         Task<InspeccionListDto?> ObtenerInspeccionPorNumeroAsync(int numero);
         Task RegistrarAccionCorrectivaAsync(int numero, string rutaFoto, string ubicaFoto, string usuario);
         Task AnularInspeccionAsync(int numero, string usuario);
@@ -192,7 +192,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             return resultado;
         }
 
-        public async Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null)
+        public async Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
         {
             var resultado = new List<InspeccionListDto>();
 
@@ -230,6 +230,16 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 query += " AND i.ESTADO = :estado";
             }
 
+            if (fechaInicio.HasValue)
+            {
+                query += " AND i.FECHA >= :fechaInicio";
+            }
+
+            if (fechaFin.HasValue)
+            {
+                query += " AND i.FECHA < :fechaFin";
+            }
+
             query += " ORDER BY i.NUMERO DESC";
 
             try
@@ -247,6 +257,16 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 if (!string.IsNullOrWhiteSpace(estado))
                 {
                     command.Parameters.Add("estado", OracleDbType.Varchar2).Value = estado;
+                }
+
+                if (fechaInicio.HasValue)
+                {
+                    command.Parameters.Add("fechaInicio", OracleDbType.Date).Value = fechaInicio.Value.Date;
+                }
+
+                if (fechaFin.HasValue)
+                {
+                    command.Parameters.Add("fechaFin", OracleDbType.Date).Value = fechaFin.Value.Date.AddDays(1);
                 }
 
                 using var reader = await command.ExecuteReaderAsync();

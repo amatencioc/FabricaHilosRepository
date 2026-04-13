@@ -22,12 +22,15 @@ namespace FabricaHilos.Services.Sgc
 
     public class CargaTcService : ICargaTcService
     {
+        private readonly string _baseConnectionString;
         private readonly IConfiguration _configuration;
         private readonly ILogger<CargaTcService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
         public CargaTcService(IConfiguration configuration, ILogger<CargaTcService> logger, IHttpContextAccessor httpContextAccessor)
         {
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _configuration = configuration;
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
@@ -37,18 +40,18 @@ namespace FabricaHilos.Services.Sgc
         {
             var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
             var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-            var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
 
             if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
             {
-                var csBuilder = new OracleConnectionStringBuilder(baseConnStr)
+                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
                 {
                     UserID = oraUser,
                     Password = oraPass
                 };
-                return csBuilder.ConnectionString;
+                return csBuilder.ToString();
             }
-            return baseConnStr;
+
+            return _baseConnectionString;
         }
 
         private static int? SafeGetInt32(OracleDataReader reader, string columnName)

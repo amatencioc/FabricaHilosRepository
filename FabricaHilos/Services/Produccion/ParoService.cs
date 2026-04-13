@@ -106,33 +106,34 @@ namespace FabricaHilos.Services.Produccion
 
     public class ParoService : IParoService
     {
-        private readonly IConfiguration        _configuration;
-        private readonly ILogger<ParoService>  _logger;
-        private readonly IHttpContextAccessor  _httpContextAccessor;
+        private readonly string _baseConnectionString;
+        private readonly ILogger<ParoService> _logger;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public ParoService(IConfiguration configuration, ILogger<ParoService> logger, IHttpContextAccessor httpContextAccessor)
         {
-            _configuration       = configuration;
-            _logger              = logger;
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException("Oracle connection string not found.");
+            _logger = logger;
             _httpContextAccessor = httpContextAccessor;
         }
 
         private string GetOracleConnectionString()
         {
-            var oraUser    = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass    = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-            var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
+            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
+            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
 
             if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
             {
-                var csBuilder = new OracleConnectionStringBuilder(baseConnStr)
+                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
                 {
-                    UserID   = oraUser,
+                    UserID = oraUser,
                     Password = oraPass
                 };
                 return csBuilder.ToString();
             }
-            return baseConnStr;
+
+            return _baseConnectionString;
         }
 
         public async Task<List<MotivoDto>> ObtenerMotivosAsync()

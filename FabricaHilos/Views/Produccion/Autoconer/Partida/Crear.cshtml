@@ -668,8 +668,8 @@
 
             // Valores por defecto para fechas
             const ahora = ahoraLocal();
-            if (!document.getElementById('HoraInicio').value) document.getElementById('HoraInicio').value = ahora;
-            if (!document.getElementById('HoraFinal').value) document.getElementById('HoraFinal').value = ahora;
+            if (!document.getElementById('HoraInicio').value) fpSetDate('#HoraInicio', ahora);
+            if (!document.getElementById('HoraFinal').value) fpSetDate('#HoraFinal', ahora);
 
             // Nº Partida
             document.getElementById('btnBuscarPartida').addEventListener('click', buscarPartida);

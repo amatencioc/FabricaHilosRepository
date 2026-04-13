@@ -56,14 +56,16 @@ namespace FabricaHilos.Controllers.Seguridad
         [HttpGet]
         [Route("")]
         [Route("Index")]
-        public async Task<IActionResult> Index(string? tipo, string? estado)
+        public async Task<IActionResult> Index(string? tipo, string? estado, DateTime? fechaInicio, DateTime? fechaFin)
         {
             try
             {
-                var inspecciones = await _inspeccionService.ObtenerInspeccionesAsync(tipo, estado);
+                var inspecciones = await _inspeccionService.ObtenerInspeccionesAsync(tipo, estado, fechaInicio, fechaFin);
 
                 ViewBag.TipoFiltro = tipo;
                 ViewBag.EstadoFiltro = estado;
+                ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
+                ViewBag.FechaFin = fechaFin?.ToString("yyyy-MM-dd");
 
                 return View("~/Views/Seguridad/Inspeccion/Index.cshtml", inspecciones);
             }

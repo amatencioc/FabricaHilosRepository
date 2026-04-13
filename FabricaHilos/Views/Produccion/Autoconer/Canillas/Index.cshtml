@@ -826,8 +826,8 @@
             document.getElementById('materialInput').value = '';
             document.getElementById('tituloSelect').value = '';
             document.getElementById('velocidadInput').value = '';
-            document.getElementById('horaInicioInput').value = ahoraLocal();
-            document.getElementById('horaFinalInput').value = ahoraLocal();
+            fpSetDate('#horaInicioInput', ahoraLocal());
+            fpSetDate('#horaFinalInput', ahoraLocal());
             document.getElementById('destinoSelect').value = '';
             document.getElementById('procesoHidden').value = '';
             document.getElementById('tramo1Input').value = '';
@@ -868,8 +868,8 @@
             document.getElementById('materialInput').value = reg.DescripcionMaterial;
             document.getElementById('tituloSelect').value = reg.Titulo;
             document.getElementById('velocidadInput').value = reg.VelocidadMMin || '';
-            document.getElementById('horaInicioInput').value = reg.HoraInicio || '';
-            document.getElementById('horaFinalInput').value = reg.HoraFinal || '';
+            fpSetDate('#horaInicioInput', reg.HoraInicio || '');
+            fpSetDate('#horaFinalInput', reg.HoraFinal || '');
             document.getElementById('destinoSelect').value = reg.Destino || '';
             document.getElementById('procesoHidden').value = reg.Proceso || '';
             document.getElementById('tramo1Input').value = reg.Tramo1 || '';
@@ -957,8 +957,8 @@
 
             // Valores por defecto para fechas
             const ahora = ahoraLocal();
-            document.getElementById('horaInicioInput').value = ahora;
-            document.getElementById('horaFinalInput').value = ahora;
+            fpSetDate('#horaInicioInput', ahora);
+            fpSetDate('#horaFinalInput', ahora);
 
             // Eventos de búsqueda
             document.getElementById('btnBuscarPartida').addEventListener('click', buscarPartida);

@@ -185,14 +185,20 @@
             </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
-                <input type="date" name="fechaInicio" value="@fechaInicio"
+                <input type="text" id="fpFechaInicio" name="fechaInicio" value="@fechaInicio"
                        class="form-control form-control-sm"
+                       placeholder="dd/mm/aaaa"
+                       autocomplete="off"
+                       data-flatpickr="date"
                        style="width: 145px;" />
             </div>
             <div class="col-auto">
                 <label class="form-label form-label-sm mb-0">Fecha Fin</label>
-                <input type="date" name="fechaFin" value="@fechaFin"
+                <input type="text" id="fpFechaFin" name="fechaFin" value="@fechaFin"
                        class="form-control form-control-sm"
+                       placeholder="dd/mm/aaaa"
+                       autocomplete="off"
+                       data-flatpickr="date"
                        style="width: 145px;" />
             </div>
             <div class="col-auto">

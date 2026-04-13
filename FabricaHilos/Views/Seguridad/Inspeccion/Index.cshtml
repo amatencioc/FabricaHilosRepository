@@ -78,15 +78,15 @@
 
     <!-- Filtros -->
     <div class="filter-panel">
-        <form method="get" class="row g-2">
-            <div class="col-12 col-md-4">
+        <form method="get" class="row g-2" id="formFiltros">
+            <div class="col-12 col-md-3">
                 <select name="tipo" class="form-select">
                     <option value="">Todos los tipos</option>
                     <option value="P" selected="@(ViewBag.TipoFiltro == "P")">📋 Planeada</option>
                     <option value="N" selected="@(ViewBag.TipoFiltro == "N")">⚡ No Planeada</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-2">
                 <select name="estado" class="form-select">
                     <option value="">Todos los estados</option>
                     <option value="1" selected="@(ViewBag.EstadoFiltro == "1")">✅ Registrado</option>
@@ -94,13 +94,22 @@
                     <option value="9" selected="@(ViewBag.EstadoFiltro == "9")">❌ Anulado</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-6 col-md-2">
+                <input type="date" name="fechaInicio" id="fechaInicio" class="form-control"
+                       value="@ViewBag.FechaInicio" placeholder="Fecha Inicio" />
+            </div>
+            <div class="col-6 col-md-2">
+                <input type="date" name="fechaFin" id="fechaFin" class="form-control"
+                       value="@ViewBag.FechaFin" placeholder="Fecha Fin" />
+            </div>
+            <div class="col-12 col-md-3">
                 <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-search"></i> Filtrar
                 </button>
             </div>
         </form>
-        @if (!string.IsNullOrEmpty(ViewBag.TipoFiltro as string) || !string.IsNullOrEmpty(ViewBag.EstadoFiltro as string))
+        @if (!string.IsNullOrEmpty(ViewBag.TipoFiltro as string) || !string.IsNullOrEmpty(ViewBag.EstadoFiltro as string)
+            || !string.IsNullOrEmpty(ViewBag.FechaInicio as string) || !string.IsNullOrEmpty(ViewBag.FechaFin as string))
         {
             <div class="mt-2">
                 <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
@@ -598,5 +607,48 @@
                 efPreview(file);
             }
         });
+
+        // ===== Validaciones de rango de fechas =====
+        (function () {
+            const fechaInicio = document.getElementById('fechaInicio');
+            const fechaFin = document.getElementById('fechaFin');
+            const hoy = new Date().toISOString().split('T')[0];
+
+            function waitForFlatpickr() {
+                const fpInicio = fechaInicio._flatpickr;
+                const fpFin = fechaFin._flatpickr;
+                if (!fpInicio || !fpFin) {
+                    setTimeout(waitForFlatpickr, 100);
+                    return;
+                }
+
+                // Limitar ambos a hoy
+                fpInicio.set('maxDate', hoy);
+                fpFin.set('maxDate', hoy);
+
+                // Si ya hay fecha inicio, limitar fecha fin
+                if (fechaInicio.value) {
+                    fpFin.set('minDate', fechaInicio.value);
+                }
+
+                // Al cambiar fecha inicio → copiar a fecha fin
+                fpInicio.config.onChange.push(function (selectedDates, dateStr) {
+                    if (dateStr) {
+                        fpFin.set('minDate', dateStr);
+                        fpFin.setDate(dateStr, true);
+                    } else {
+                        fpFin.set('minDate', null);
+                    }
+                });
+
+                // Al cambiar fecha fin → no permitir menor a fecha inicio
+                fpFin.config.onChange.push(function (selectedDates, dateStr) {
+                    if (fechaInicio.value && dateStr && dateStr < fechaInicio.value) {
+                        fpFin.setDate(fechaInicio.value, false);
+                    }
+                });
+            }
+            waitForFlatpickr();
+        })();
     </script>
 }

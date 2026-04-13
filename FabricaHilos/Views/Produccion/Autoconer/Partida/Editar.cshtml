@@ -555,10 +555,10 @@
 
             // Solo asignar fecha actual si el campo está completamente vacío
             if (horaInicioInput && !horaInicioInput.value) {
-                horaInicioInput.value = ahoraLocal();
+                fpSetDate(horaInicioInput, ahoraLocal());
             }
             if (horaFinalInput && !horaFinalInput.value) {
-                horaFinalInput.value = ahoraLocal();
+                fpSetDate(horaFinalInput, ahoraLocal());
             }
 
             // Nº Partida

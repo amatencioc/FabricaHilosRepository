@@ -13,9 +13,9 @@ namespace FabricaHilos.Logica
     public class Login
     {
         private readonly string _conexion;
-        private readonly ILogger<Login> _logger;
+        private readonly ILogger _logger;
 
-        public Login(IConfiguration configuration, ILogger<Login> logger = null)
+        public Login(IConfiguration configuration, ILogger logger = null)
         {
             _conexion = configuration.GetConnectionString("OracleConnection");
             _logger = logger;
@@ -42,7 +42,7 @@ namespace FabricaHilos.Logica
 
                 using (OracleConnection oconexion = new OracleConnection(_conexion))
                 {
-                    string query = "select c_user, psw_sig, c_costo from cs_user where c_user = :puser and psw_sig = :ppsw";
+                    string query = "select c_user, psw_sig, c_codigo, c_nombre, c_costo from cs_user where c_user = :puser and psw_sig = :ppsw";
 
                     _logger?.LogInformation("📝 Query SQL: {Query}", query);
 
@@ -63,10 +63,14 @@ namespace FabricaHilos.Logica
                         {
                             objeto.c_user = dr["c_user"]?.ToString();
                             objeto.psw_sig = dr["psw_sig"]?.ToString();
+                            objeto.c_codigo = dr["c_codigo"]?.ToString();
+                            objeto.c_nombre = dr["c_nombre"]?.ToString();
                             objeto.c_costo = dr["c_costo"]?.ToString();
 
                             _logger?.LogInformation("✅ USUARIO ENCONTRADO EN ORACLE");
                             _logger?.LogInformation("   - c_user: {CUser}", objeto.c_user);
+                            _logger?.LogInformation("   - c_nombre: {CNombre}", objeto.c_nombre);
+                            _logger?.LogInformation("   - c_codigo: {CCodigo}", objeto.c_codigo);
                             _logger?.LogInformation("   - c_costo: {CCosto}", objeto.c_costo);
                         }
                         else

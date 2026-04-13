@@ -212,40 +212,34 @@ namespace FabricaHilos.Services.Produccion
 
     public class RecetaService : IRecetaService
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _baseConnectionString;
         private readonly ILogger<RecetaService> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
         public RecetaService(IConfiguration configuration, ILogger<RecetaService> logger, IHttpContextAccessor httpContextAccessor)
         {
-            _configuration = configuration;
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
+                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
         }
 
-        /// <summary>
-        /// Construye la cadena de conexión Oracle usando las credenciales del usuario
-        /// actualmente logueado (guardadas en sesión). Si no hay sesión activa,
-        /// usa la cadena de conexión por defecto del appsettings.json.
-        /// </summary>
         private string GetOracleConnectionString()
         {
             var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
             var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-            var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
 
             if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
             {
-                var csBuilder = new OracleConnectionStringBuilder(baseConnStr)
+                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
                 {
-                    UserID   = oraUser,
+                    UserID = oraUser,
                     Password = oraPass
                 };
-                _logger.LogDebug("Usando conexión Oracle como usuario: {OraUser}", oraUser);
                 return csBuilder.ToString();
             }
 
-            return baseConnStr;
+            return _baseConnectionString;
         }
 
         public async Task<List<RecetaDto>> BuscarRecetaPorCodigoAsync(string codigo)

@@ -9,6 +9,7 @@
     <title>@ViewData["Title"] - Fábrica de Hilos</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/lib/flatpickr/dist/flatpickr.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
@@ -291,6 +292,9 @@ else
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
 <script src="~/lib/chart.js/dist/chart.umd.min.js" asp-append-version="true"></script>
 <script src="~/js/site.js" asp-append-version="true"></script>
+<script src="~/lib/flatpickr/dist/flatpickr.min.js" asp-append-version="true"></script>
+<script src="~/lib/flatpickr/dist/l10n/es.js" asp-append-version="true"></script>
+<script src="~/js/flatpickr-init.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

@@ -400,19 +400,19 @@
         const years = getSelectedYears();
         const fi = document.getElementById('fechaInicio');
         const ff = document.getElementById('fechaFin');
-        if (years.length === 0) { fi.disabled = false; ff.disabled = false; return; }
+        if (years.length === 0) { fpSetDisabled(fi, false); fpSetDisabled(ff, false); return; }
         const hoy = new Date();
         if (years.length === 1) {
             const y = years[0];
-            fi.value = y + '-01-01';
-            ff.value = y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31';
-            fi.disabled = false; ff.disabled = false;
+            fpSetDate(fi, y + '-01-01');
+            fpSetDate(ff, y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31');
+            fpSetDisabled(fi, false); fpSetDisabled(ff, false);
             return;
         }
         const minY = Math.min(...years), maxY = Math.max(...years);
-        fi.value = minY + '-01-01';
-        ff.value = maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31';
-        fi.disabled = true; ff.disabled = true;
+        fpSetDate(fi, minY + '-01-01');
+        fpSetDate(ff, maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31');
+        fpSetDisabled(fi, true); fpSetDisabled(ff, true);
     };
 
     /* ── Fechas por defecto (1° enero del año actual → hoy) ── */
@@ -420,8 +420,8 @@
         const hoy = new Date();
         const ini = new Date(hoy.getFullYear(), 0, 1);
         const toISO = d => d.toISOString().slice(0, 10);
-        document.getElementById('fechaInicio').value = toISO(ini);
-        document.getElementById('fechaFin').value    = toISO(hoy);
+        fpSetDate('#fechaInicio', toISO(ini));
+        fpSetDate('#fechaFin',    toISO(hoy));
     }
 
     /* ── Parámetros del query string ────────────────── */
@@ -997,8 +997,8 @@
         document.getElementById('moneda').value = 'D';
         const curYear = new Date().getFullYear();
         document.querySelectorAll('#yearCheckBar input').forEach(cb => { cb.checked = parseInt(cb.value) === curYear; });
-        document.getElementById('fechaInicio').disabled = false;
-        document.getElementById('fechaFin').disabled = false;
+        fpSetDisabled('#fechaInicio', false);
+        fpSetDisabled('#fechaFin', false);
         setDefaultDates();
         loadAll();
     };
