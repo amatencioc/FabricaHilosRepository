@@ -170,6 +170,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
+app.UseMiddleware<FabricaHilos.Middleware.NetworkAccessMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 

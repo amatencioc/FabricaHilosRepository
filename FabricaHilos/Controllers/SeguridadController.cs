@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
+using FabricaHilos.Filters;
 
 namespace FabricaHilos.Controllers
 {
     [Authorize]
+    [AccesoExternoPermitido]
     public class SeguridadController : Controller
     {
         private readonly IMenuService _menuService;
