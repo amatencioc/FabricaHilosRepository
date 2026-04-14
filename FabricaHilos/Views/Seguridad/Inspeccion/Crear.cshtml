@@ -2,7 +2,7 @@
 @using FabricaHilos.Services.Seguridad.Inspeccion
 
 @{
-    ViewData["Title"] = "Registrar Hallazgo";
+    ViewData["Title"] = "Registrar Inspección";
 
     var listaRA  = ViewBag.ResponsablesAreaList as List<ResponsableDto> ?? new();
     var listaCC  = ViewBag.CentrosCostoList     as List<CentroCostoDto> ?? new();
@@ -13,195 +13,113 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-action="Index">Seguridad</a></li>
-    <li class="breadcrumb-item active">Registrar Hallazgo</li>
+    <li class="breadcrumb-item active">Registrar Inspección</li>
 }
 
-<style>
-    .preview-container {
-        border: 2px dashed var(--color-border, #dee2e6);
-        border-radius: 0.5rem;
-        padding: 1rem;
-        text-align: center;
-        background: var(--color-bg-light, #f8f9fa);
-        min-height: 200px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .preview-container.has-image {
-        border-color: #28a745;
-        background: #fff;
-    }
-</style>
-
-<h4 class="section-title"><i class="bi bi-camera-fill me-2"></i>Registrar Hallazgo</h4>
+<h4 class="section-title"><i class="bi bi-shield-check me-2"></i>Registrar Inspección</h4>
 
 <div class="row justify-content-center">
     <div class="col-md-8">
         <div class="card shadow-sm">
             <div class="card-body p-4">
-                <form asp-action="Crear" asp-controller="Inspeccion" method="post" enctype="multipart/form-data">
+                <form asp-action="Crear" asp-controller="Inspeccion" method="post">
                     @Html.AntiForgeryToken()
 
                     <div class="row g-3">
-                <div class="col-md-6 position-relative">
-                    <label class="form-label fw-semibold">
-                        Responsable de Área <span class="text-danger">*</span>
-                    </label>
-                    <input type="hidden" asp-for="ResponsableArea" id="respAreaCodigo" />
-                    <div class="input-group">
-                        <input type="text"
-                               id="respAreaBuscar"
-                               class="form-control"
-                               placeholder="Buscar por código o nombre..."
-                               autocomplete="off"
-                               value="@textoRespArea" />
-                        <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('respAreaBuscar','respAreaCodigo','respAreaStatus')">
-                            <i class="bi bi-x"></i>
-                        </button>
-                    </div>
-                    <small id="respAreaStatus" class="text-muted"></small>
-                    <ul id="respAreaResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
-                    <span asp-validation-for="ResponsableArea" class="text-danger small"></span>
-                </div>
-
-                <div class="col-md-6">
-                    <label asp-for="ResponsableInspeccion" class="form-label fw-semibold">
-                        Responsable de Inspección
-                    </label>
-                    <select asp-for="ResponsableInspeccion" 
-                            class="form-select" 
-                            asp-items="@ViewBag.ResponsablesInspeccion">
-                        <option value="">-- Seleccione --</option>
-                    </select>
-                    <span asp-validation-for="ResponsableInspeccion" class="text-danger small"></span>
-                </div>
-
-                <div class="col-md-6 position-relative">
-                    <label class="form-label fw-semibold">
-                        Centro de Costo <span class="text-danger">*</span>
-                    </label>
-                    <input type="hidden" asp-for="CentroCosto" id="ccostoCodigo" />
-                    <div class="input-group">
-                        <input type="text"
-                               id="ccostoBuscar"
-                               class="form-control"
-                               placeholder="Buscar por código o nombre..."
-                               autocomplete="off"
-                               value="@textoCentroCosto" />
-                        <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('ccostoBuscar','ccostoCodigo','ccostoStatus')">
-                            <i class="bi bi-x"></i>
-                        </button>
-                    </div>
-                    <small id="ccostoStatus" class="text-muted"></small>
-                    <ul id="ccostoResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
-                    <span asp-validation-for="CentroCosto" class="text-danger small"></span>
-                </div>
-
-                <div class="col-md-6">
-                    <label asp-for="TipoInspeccion" class="form-label fw-semibold">
-                        Tipo de Inspección
-                    </label>
-                    <select asp-for="TipoInspeccion" 
-                            class="form-select" 
-                            asp-items="@ViewBag.TiposInspeccion">
-                        <option value="">-- Seleccione --</option>
-                    </select>
-                    <span asp-validation-for="TipoInspeccion" class="text-danger small"></span>
-                </div>
-
-                                        <div class="col-12">
-                                            <label asp-for="UbicacionFoto" class="form-label fw-semibold">
-                                                Ubicación del Hallazgo
-                                            </label>
-                                            <input asp-for="UbicacionFoto" 
-                                                   type="text" 
-                                                   class="form-control" 
-                                                   placeholder="Ej: Área de Producción - Máquina 5" 
-                                                   maxlength="100" />
-                                            <span asp-validation-for="UbicacionFoto" class="text-danger small"></span>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <label class="form-label fw-semibold">
-                                                Foto del Hallazgo
-                                            </label>
-                                            <input asp-for="Foto" type="file" accept="image/*" id="inputFoto" class="d-none" />
-                                            <input type="file" accept="image/*" capture="environment" id="cameraInput" class="d-none" />
-                                            <div class="d-flex gap-2 mb-2">
-                                                <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('cameraInput').click()">
-                                                    <i class="bi bi-camera-fill me-1"></i>Tomar Foto
-                                                </button>
-                                                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('inputFoto').click()">
-                                                    <i class="bi bi-image me-1"></i>Elegir Archivo
-                                                </button>
-                                            </div>
-                                            <small id="fotoNombre" class="text-muted"></small>
-                                            <div class="form-text">JPG, JPEG, PNG o WebP. La imagen se optimizará automáticamente.</div>
-                                            <span asp-validation-for="Foto" class="text-danger small"></span>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <div id="previewContainer" class="preview-container d-none">
-                                                <img id="previewImg" src="#" alt="Vista previa" class="img-fluid rounded" style="max-height: 300px;" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-4 d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="bi bi-save me-1"></i>Registrar Hallazgo
-                                        </button>
-                                        <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
-                                    </div>
-                                </form>
+                        <div class="col-md-6 position-relative">
+                            <label class="form-label fw-semibold">
+                                Responsable de Área <span class="text-danger">*</span>
+                            </label>
+                            <input type="hidden" asp-for="ResponsableArea" id="respAreaCodigo" />
+                            <div class="input-group">
+                                <input type="text"
+                                       id="respAreaBuscar"
+                                       class="form-control"
+                                       placeholder="Buscar por código o nombre..."
+                                       autocomplete="off"
+                                       value="@textoRespArea" />
+                                <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('respAreaBuscar','respAreaCodigo','respAreaStatus')">
+                                    <i class="bi bi-x"></i>
+                                </button>
                             </div>
+                            <small id="respAreaStatus" class="text-muted"></small>
+                            <ul id="respAreaResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
+                            <span asp-validation-for="ResponsableArea" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="ResponsableInspeccion" class="form-label fw-semibold">
+                                Responsable de Inspección
+                            </label>
+                            <select asp-for="ResponsableInspeccion"
+                                    class="form-select"
+                                    asp-items="@ViewBag.ResponsablesInspeccion">
+                                <option value="">-- Seleccione --</option>
+                            </select>
+                            <span asp-validation-for="ResponsableInspeccion" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6 position-relative">
+                            <label class="form-label fw-semibold">
+                                Centro de Costo <span class="text-danger">*</span>
+                            </label>
+                            <input type="hidden" asp-for="CentroCosto" id="ccostoCodigo" />
+                            <div class="input-group">
+                                <input type="text"
+                                       id="ccostoBuscar"
+                                       class="form-control"
+                                       placeholder="Buscar por código o nombre..."
+                                       autocomplete="off"
+                                       value="@textoCentroCosto" />
+                                <button type="button" class="btn btn-outline-secondary" onclick="limpiarBuscador('ccostoBuscar','ccostoCodigo','ccostoStatus')">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <small id="ccostoStatus" class="text-muted"></small>
+                            <ul id="ccostoResultados" class="list-group position-absolute w-100 d-none" style="z-index:1000;max-height:220px;overflow-y:auto;top:100%;"></ul>
+                            <span asp-validation-for="CentroCosto" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="TipoInspeccion" class="form-label fw-semibold">
+                                Tipo de Inspección
+                            </label>
+                            <select asp-for="TipoInspeccion"
+                                    class="form-select"
+                                    asp-items="@ViewBag.TiposInspeccion">
+                                <option value="">-- Seleccione --</option>
+                            </select>
+                            <span asp-validation-for="TipoInspeccion" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <label asp-for="ObjetivoHallazgo" class="form-label fw-semibold">
+                                Objetivo del Hallazgo <span class="text-danger">*</span>
+                            </label>
+                            <textarea asp-for="ObjetivoHallazgo"
+                                      class="form-control"
+                                      rows="3"
+                                      placeholder="Describa el objetivo de la inspección..."
+                                      maxlength="200"></textarea>
+                            <span asp-validation-for="ObjetivoHallazgo" class="text-danger small"></span>
                         </div>
                     </div>
-                </div>
+
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Registrar Inspección
+                        </button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
-        // ===== Vista previa de foto =====
-        function mostrarPreview(file) {
-            const container = document.getElementById('previewContainer');
-            const img = document.getElementById('previewImg');
-            const nombre = document.getElementById('fotoNombre');
-
-            if (file && file.type.startsWith('image/')) {
-                nombre.textContent = file.name;
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    img.src = e.target.result;
-                    container.classList.remove('d-none');
-                    container.classList.add('has-image');
-                };
-                reader.readAsDataURL(file);
-            } else {
-                container.classList.add('d-none');
-                container.classList.remove('has-image');
-                nombre.textContent = '';
-            }
-        }
-
-        // Cámara → copiar archivo al input del formulario + preview
-        document.getElementById('cameraInput').addEventListener('change', function () {
-            const file = this.files[0];
-            if (file) {
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                document.getElementById('inputFoto').files = dt.files;
-                mostrarPreview(file);
-            }
-        });
-
-        // Galería/archivo → preview directo
-        document.getElementById('inputFoto').addEventListener('change', function () {
-            mostrarPreview(this.files[0]);
-        });
-
-        // ===== Buscador genérico =====
         function initBuscador(inputId, codigoId, statusId, resultadosId, urlBuscar) {
             const input      = document.getElementById(inputId);
             const codigoHid  = document.getElementById(codigoId);
@@ -227,7 +145,7 @@
                     li.className = 'list-group-item list-group-item-action py-2';
                     li.style.cursor = 'pointer';
                     li.innerHTML = `<span class="fw-semibold text-primary me-1">${item.codigo}</span><span class="text-muted">—</span> ${item.nombre}`;
-                    li.addEventListener('mousedown', e => e.preventDefault()); // evita blur antes del click
+                    li.addEventListener('mousedown', e => e.preventDefault());
                     li.addEventListener('click', () => {
                         codigoHid.value    = item.codigo;
                         input.value        = item.texto;
@@ -240,7 +158,6 @@
                 resultados.classList.remove('d-none');
             }
 
-            // Al hacer click/foco: mostrar primeros 15
             input.addEventListener('focus', async function () {
                 if (!resultados.classList.contains('d-none')) return;
                 status.textContent = 'Cargando...';
@@ -256,7 +173,6 @@
                 }
             });
 
-            // Al escribir: filtrar con debounce
             input.addEventListener('input', function () {
                 clearTimeout(debounceTimer);
                 codigoHid.value = '';
@@ -274,7 +190,6 @@
                 }, 250);
             });
 
-            // Cerrar al hacer click fuera
             input.addEventListener('blur', () => {
                 setTimeout(() => resultados.classList.add('d-none'), 150);
             });
@@ -287,7 +202,6 @@
             document.getElementById(inputId.replace('Buscar', 'Resultados'))?.classList.add('d-none');
         }
 
-        // Inicializar buscadores
         const baseUrl = '@Url.Action("BuscarResponsable", "Inspeccion")'.split('?')[0];
         const ccUrl   = '@Url.Action("BuscarCentroCosto", "Inspeccion")'.split('?')[0];
 

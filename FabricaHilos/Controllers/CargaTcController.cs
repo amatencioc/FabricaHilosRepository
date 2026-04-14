@@ -141,7 +141,7 @@ namespace FabricaHilos.Controllers
             try
             {
                 if (archivo == null || archivo.Length == 0)
-                    return Json(new { tipo = "Advertencia", mensaje = "Debe seleccionar un archivo PDF." });
+                    return Json(new { tipo = "Advertencia", mensaje = "El Archivo PDF del certificado es obligatorio." });
 
                 if (!archivo.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
                     return Json(new { tipo = "Advertencia", mensaje = "Solo se permiten archivos PDF." });
@@ -163,7 +163,7 @@ namespace FabricaHilos.Controllers
                 // Validar que al menos NumCer esté presente para generar la ruta
                 if (string.IsNullOrWhiteSpace(numCer))
                 {
-                    return Json(new { tipo = "Advertencia", mensaje = "Debe ingresar el Nº Certificado para cargar el PDF." });
+                    return Json(new { tipo = "Advertencia", mensaje = "El Nº Certificado es obligatorio." });
                 }
 
                 // Autenticarse en el recurso de red antes de cualquier operación

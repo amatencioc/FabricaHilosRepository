@@ -17,6 +17,20 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         public string TextoCompleto => $"{CentroCosto} - {Nombre}";
     }
 
+    public class InspeccionFotoDto
+    {
+        public int Numero { get; set; }
+        public int Item { get; set; }
+        public string? RutaFotoH { get; set; }
+        public DateTime? FechaFotoH { get; set; }
+        public string? UbicaFotoH { get; set; }
+        public string? RutaFotoAc { get; set; }
+        public DateTime? FechaFotoAc { get; set; }
+        public string? UbicaFotoAc { get; set; }
+        public string? Estado { get; set; }
+        public bool TieneAccionCorrectiva => !string.IsNullOrEmpty(UbicaFotoAc);
+    }
+
     public class InspeccionListDto
     {
         public int Numero { get; set; }
@@ -29,13 +43,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         public string ResponsableArea { get; set; } = string.Empty;
         public string NombreRespArea { get; set; } = string.Empty;
         public string Estado { get; set; } = string.Empty;
-        public string? RutaFotoH { get; set; }
-        public DateTime? FechaFotoH { get; set; }
-        public string? UbicaFotoH { get; set; }
-        public string? RutaFotoAc { get; set; }
-        public DateTime? FechaFotoAc { get; set; }
-        public string? UbicaFotoAc { get; set; }
-        public bool TieneAccionCorrectiva => !string.IsNullOrEmpty(UbicaFotoAc);
+        public string Objetivo { get; set; } = string.Empty;
+        public List<InspeccionFotoDto> Fotos { get; set; } = new();
+        public int CantFotos => Fotos.Count;
+        public int CantAccionesCorrectivas => Fotos.Count(f => f.TieneAccionCorrectiva);
+        public bool TieneHallazgos => Fotos.Any();
+        public bool TieneAccionCorrectivaPendiente => Fotos.Any(f => !f.TieneAccionCorrectiva);
+        public bool TodasTienenAccionCorrectiva => Fotos.Any() && Fotos.All(f => f.TieneAccionCorrectiva);
+        public bool PuedeAgregarHallazgo => Fotos.Count < 10 && Estado != "9";
     }
 
     public interface IInspeccionService
@@ -44,17 +59,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         Task<List<ResponsableDto>> ObtenerResponsablesInspeccionAsync();
         Task<List<CentroCostoDto>> ObtenerCentrosCostoAsync();
         Task<int> ObtenerSiguienteNumeroInspeccionAsync();
-        /// <summary>
-        /// Registra un hallazgo en una sola transacción: obtiene el número de NRODOC (FOR UPDATE NOWAIT),
-        /// inserta en SI_INSPECCION y actualiza el correlativo. Retorna el número asignado.
-        /// Lanza InvalidOperationException si NRODOC está bloqueada por otra sesión.
-        /// </summary>
         Task<int> RegistrarHallazgoAsync(InspeccionRegistroDto inspeccion, string usuario);
         Task<List<InspeccionListDto>> ObtenerInspeccionesAsync(string? tipo = null, string? estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null);
         Task<InspeccionListDto?> ObtenerInspeccionPorNumeroAsync(int numero);
-        Task RegistrarAccionCorrectivaAsync(int numero, string rutaFoto, string ubicaFoto, string usuario);
+        Task<List<InspeccionFotoDto>> ObtenerFotosInspeccionAsync(int numero);
+        Task<int> AgregarFotoHallazgoAsync(int numero, string rutaFoto, string ubicaFoto, string usuario);
+        Task RegistrarAccionCorrectivaAsync(int numero, int item, string rutaFoto, string ubicaFoto, string usuario);
         Task AnularInspeccionAsync(int numero, string usuario);
-        Task ActualizarFotoAsync(int numero, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario);
+        Task ActualizarFotoAsync(int numero, int item, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario);
         Task ActualizarHallazgoAsync(int numero, string ccosto, string tipo, string respInspeccion, string respArea, string usuario);
     }
 
@@ -65,21 +77,40 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         public string TipoInspeccion { get; set; } = string.Empty;
         public string ResponsableInspeccion { get; set; } = string.Empty;
         public string ResponsableArea { get; set; } = string.Empty;
-        public string RutaFoto { get; set; } = string.Empty;
-        public string UbicaFoto { get; set; } = string.Empty;
+        public string ObjetivoHallazgo { get; set; } = string.Empty;
     }
 
     public class InspeccionService : IInspeccionService
     {
-        private readonly string _connectionString;
+        private readonly string _baseConnectionString;
         private readonly ILogger<InspeccionService> _logger;
+        private readonly IHttpContextAccessor _httpContextAccessor;
         private const int CmdTimeoutSec = 15; // Timeout para comandos Oracle (evita bloqueo infinito por locks)
 
-        public InspeccionService(IConfiguration configuration, ILogger<InspeccionService> logger)
+        public InspeccionService(IConfiguration configuration, ILogger<InspeccionService> logger, IHttpContextAccessor httpContextAccessor)
         {
-            _connectionString = configuration.GetConnectionString("OracleConnection")
+            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
                 ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private string GetOracleConnectionString()
+        {
+            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
+            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
+
+            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
+            {
+                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
+                {
+                    UserID = oraUser,
+                    Password = oraPass
+                };
+                return csBuilder.ToString();
+            }
+
+            return _baseConnectionString;
         }
 
         public async Task<List<ResponsableDto>> ObtenerResponsablesAreaAsync()
@@ -94,7 +125,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
 
                 using var command = new OracleCommand(query, connection);
@@ -131,7 +162,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
 
                 using var command = new OracleCommand(query, connection);
@@ -168,7 +199,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
 
                 using var command = new OracleCommand(query, connection);
@@ -207,14 +238,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     NVL(vp1.NOMBRE_CORTO, '') AS NOMBRE_RESP_INSPECCION,
                     i.RESP_AREA,
                     NVL(vp2.NOMBRE_CORTO, '') AS NOMBRE_RESP_AREA,
-                    i.ESTADO,
-                    i.RUTA_FOTO_H,
-                    i.FCH_FOTO_H,
-                    i.UBICA_FOTO_H,
-                    i.RUTA_FOTO_AC,
-                    i.FCH_FOTO_AC,
-                    i.UBICA_FOTO_AC
-                FROM SI_INSPECCION i
+                    i.ESTADO
+                FROM SIG.SI_INSPECCION i
                 LEFT JOIN CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
                 LEFT JOIN V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
                 LEFT JOIN V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
@@ -244,7 +269,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
 
                 using var command = new OracleCommand(query, connection);
@@ -269,29 +294,30 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     command.Parameters.Add("fechaFin", OracleDbType.Date).Value = fechaFin.Value.Date.AddDays(1);
                 }
 
-                using var reader = await command.ExecuteReaderAsync();
-
-                while (await reader.ReadAsync())
+                using (var reader = await command.ExecuteReaderAsync())
                 {
-                    resultado.Add(new InspeccionListDto
+                    while (await reader.ReadAsync())
                     {
-                        Numero = reader.GetInt32(0),
-                        CentroCosto = reader.GetString(1),
-                        NombreCentroCosto = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
-                        Fecha = reader.GetDateTime(3),
-                        Tipo = reader.GetString(4),
-                        ResponsableInspeccion = reader.GetString(5),
-                        NombreRespInspeccion = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
-                        ResponsableArea = reader.GetString(7),
-                        NombreRespArea = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
-                        Estado = reader.GetString(9),
-                        RutaFotoH = reader.IsDBNull(10) ? null : reader.GetString(10),
-                        FechaFotoH = reader.IsDBNull(11) ? null : reader.GetDateTime(11),
-                        UbicaFotoH = reader.IsDBNull(12) ? null : reader.GetString(12),
-                        RutaFotoAc = reader.IsDBNull(13) ? null : reader.GetString(13),
-                        FechaFotoAc = reader.IsDBNull(14) ? null : reader.GetDateTime(14),
-                        UbicaFotoAc = reader.IsDBNull(15) ? null : reader.GetString(15)
-                    });
+                        resultado.Add(new InspeccionListDto
+                        {
+                            Numero = reader.GetInt32(0),
+                            CentroCosto = reader.GetString(1),
+                            NombreCentroCosto = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                            Fecha = reader.GetDateTime(3),
+                            Tipo = reader.GetString(4),
+                            ResponsableInspeccion = reader.GetString(5),
+                            NombreRespInspeccion = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                            ResponsableArea = reader.GetString(7),
+                            NombreRespArea = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
+                            Estado = reader.GetString(9),
+                            Objetivo = string.Empty
+                        });
+                    }
+                }
+
+                if (resultado.Any())
+                {
+                    await CargarFotosAsync(connection, resultado);
                 }
             }
             catch (Exception ex)
@@ -316,14 +342,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     NVL(vp1.NOMBRE_CORTO, '') AS NOMBRE_RESP_INSPECCION,
                     i.RESP_AREA,
                     NVL(vp2.NOMBRE_CORTO, '') AS NOMBRE_RESP_AREA,
-                    i.ESTADO,
-                    i.RUTA_FOTO_H,
-                    i.FCH_FOTO_H,
-                    i.UBICA_FOTO_H,
-                    i.RUTA_FOTO_AC,
-                    i.FCH_FOTO_AC,
-                    i.UBICA_FOTO_AC
-                FROM SI_INSPECCION i
+                    i.ESTADO
+                FROM SIG.SI_INSPECCION i
                 LEFT JOIN CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
                 LEFT JOIN V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
                 LEFT JOIN V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
@@ -331,44 +351,48 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
+
+                InspeccionListDto? dto = null;
 
                 using var command = new OracleCommand(query, connection);
                 command.Parameters.Add("numero", OracleDbType.Int32).Value = numero;
 
-                using var reader = await command.ExecuteReaderAsync();
-
-                if (await reader.ReadAsync())
+                using (var reader = await command.ExecuteReaderAsync())
                 {
-                    return new InspeccionListDto
+                    if (await reader.ReadAsync())
                     {
-                        Numero = reader.GetInt32(0),
-                        CentroCosto = reader.GetString(1),
-                        NombreCentroCosto = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
-                        Fecha = reader.GetDateTime(3),
-                        Tipo = reader.GetString(4),
-                        ResponsableInspeccion = reader.GetString(5),
-                        NombreRespInspeccion = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
-                        ResponsableArea = reader.GetString(7),
-                        NombreRespArea = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
-                        Estado = reader.GetString(9),
-                        RutaFotoH = reader.IsDBNull(10) ? null : reader.GetString(10),
-                        FechaFotoH = reader.IsDBNull(11) ? null : reader.GetDateTime(11),
-                        UbicaFotoH = reader.IsDBNull(12) ? null : reader.GetString(12),
-                        RutaFotoAc = reader.IsDBNull(13) ? null : reader.GetString(13),
-                        FechaFotoAc = reader.IsDBNull(14) ? null : reader.GetDateTime(14),
-                        UbicaFotoAc = reader.IsDBNull(15) ? null : reader.GetString(15)
-                    };
+                        dto = new InspeccionListDto
+                        {
+                            Numero = reader.GetInt32(0),
+                            CentroCosto = reader.GetString(1),
+                            NombreCentroCosto = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                            Fecha = reader.GetDateTime(3),
+                            Tipo = reader.GetString(4),
+                            ResponsableInspeccion = reader.GetString(5),
+                            NombreRespInspeccion = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                            ResponsableArea = reader.GetString(7),
+                            NombreRespArea = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
+                            Estado = reader.GetString(9),
+                            Objetivo = string.Empty
+                        };
+                    }
                 }
+
+                if (dto != null)
+                {
+                    var lista = new List<InspeccionListDto> { dto };
+                    await CargarFotosAsync(connection, lista);
+                }
+
+                return dto;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener inspección {Numero}", numero);
                 throw;
             }
-
-            return null;
         }
 
         public async Task<int> ObtenerSiguienteNumeroInspeccionAsync()
@@ -379,7 +403,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 _logger.LogWarning("▶▶ SVC ObtenerSiguienteNumero: Abriendo conexión Oracle...");
-                using var connection = new OracleConnection(_connectionString);
+                using var connection = new OracleConnection(GetOracleConnectionString());
                 await connection.OpenAsync();
                 _logger.LogWarning("▶▶ SVC ObtenerSiguienteNumero: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
 
@@ -402,7 +426,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Abriendo conexión Oracle...");
-            using var connection = new OracleConnection(_connectionString);
+            using var connection = new OracleConnection(GetOracleConnectionString());
             await connection.OpenAsync();
             _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
 
@@ -430,21 +454,33 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
                 _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Número obtenido de NRODOC={Numero}, fila bloqueada ({Ms}ms)", numero, sw.ElapsedMilliseconds);
 
-                // 2. Construir ruta completa con nombre de archivo y extensión
-                var nombreArchivo = $"{numero}-H.jpg";
-                var rutaFotoCompleta = Path.Combine(inspeccion.RutaFoto, nombreArchivo);
-                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Ruta foto completa={Ruta}", rutaFotoCompleta);
+                // 2. Construir ruta completa — ya no se guarda foto en el registro
+                // La foto se agrega después desde la ventana H / AC
 
-                // 3. Insertar en SI_INSPECCION con el número obtenido
+                // 3. Obtener cantidad de trabajadores activos
+                const string queryNroTrab = @"
+                    SELECT COUNT(*)
+                    FROM V_PERSONAL
+                    WHERE SITUACION = '1'
+                      AND C_ESTADO IN ('CO','ES')";
+                int nroTrab;
+
+                using (var cmdNroTrab = new OracleCommand(queryNroTrab, connection))
+                {
+                    cmdNroTrab.Transaction = transaction;
+                    cmdNroTrab.CommandTimeout = CmdTimeoutSec;
+                    var resultNroTrab = await cmdNroTrab.ExecuteScalarAsync();
+                    nroTrab = resultNroTrab != null ? Convert.ToInt32(resultNroTrab) : 0;
+                }
+                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: NRO_TRAB={NroTrab} ({Ms}ms)", nroTrab, sw.ElapsedMilliseconds);
+
+                // 4. Insertar cabecera en SI_INSPECCION (sin datos de foto)
                 const string queryInsertar = @"
-                    INSERT INTO SI_INSPECCION 
-                    (NUMERO, CCOSTO, FECHA, TIPO, RESP_INSPECCION, RESP_AREA, ESTADO, 
-                     RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H, A_ADUSER, A_ADFECHA)
+                    INSERT INTO SIG.SI_INSPECCION 
+                    (NUMERO, CCOSTO, FECHA, TIPO, RESP_INSPECCION, RESP_AREA, ESTADO, NRO_TRAB, A_ADUSER, A_ADFECHA)
                     VALUES 
-                    (:pNumero, :pCcosto, SYSDATE, :pTipo, :pRespInspeccion, :pRespArea, '1',
-                     :pRutaFoto, SYSDATE, :pUbicaFoto, :pUsuario, SYSDATE)";
+                    (:pNumero, :pCcosto, SYSDATE, :pTipo, :pRespInspeccion, :pRespArea, '1', :pNroTrab, :pUsuario, SYSDATE)";
 
-                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Ejecutando INSERT SI_INSPECCION con Numero={Num}...", numero);
                 using (var cmdInsertar = new OracleCommand(queryInsertar, connection))
                 {
                     cmdInsertar.BindByName = true;
@@ -455,15 +491,12 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     cmdInsertar.Parameters.Add("pTipo", OracleDbType.Varchar2).Value = inspeccion.TipoInspeccion;
                     cmdInsertar.Parameters.Add("pRespInspeccion", OracleDbType.Varchar2).Value = inspeccion.ResponsableInspeccion;
                     cmdInsertar.Parameters.Add("pRespArea", OracleDbType.Varchar2).Value = inspeccion.ResponsableArea;
-                    cmdInsertar.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
-                    cmdInsertar.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = inspeccion.UbicaFoto;
+                    cmdInsertar.Parameters.Add("pNroTrab", OracleDbType.Int32).Value = nroTrab;
                     cmdInsertar.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
-
-                    var filasInsertadas = await cmdInsertar.ExecuteNonQueryAsync();
-                    _logger.LogWarning("▶▶ SVC RegistrarHallazgo: INSERT OK, filas={Filas} ({Ms}ms)", filasInsertadas, sw.ElapsedMilliseconds);
+                    await cmdInsertar.ExecuteNonQueryAsync();
                 }
 
-                // 4. Actualizar el correlativo en NRODOC (+1) — ya tenemos el lock, no puede bloquearse
+                // 5. Actualizar el correlativo en NRODOC (+1)
                 const string queryActualizarCorrelativo = @"
                     UPDATE NRODOC 
                     SET NUMERO = NUMERO + 1 
@@ -503,120 +536,119 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             }
         }
 
-        public async Task RegistrarAccionCorrectivaAsync(int numero, string rutaFoto, string ubicaFoto, string usuario)
+        public async Task RegistrarAccionCorrectivaAsync(int numero, int item, string rutaFoto, string ubicaFoto, string usuario)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
-            _logger.LogWarning("▶▶ SVC RegistrarAC: Abriendo conexión Oracle...");
-            using var connection = new OracleConnection(_connectionString);
+            using var connection = new OracleConnection(GetOracleConnectionString());
             await connection.OpenAsync();
-            _logger.LogWarning("▶▶ SVC RegistrarAC: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
-
             using var transaction = connection.BeginTransaction();
-            _logger.LogWarning("▶▶ SVC RegistrarAC: Transacción iniciada ({Ms}ms)", sw.ElapsedMilliseconds);
 
             try
             {
-                // 1. Bloquear el registro de inspección y verificar estado y acción correctiva
-                const string querySelect = @"
-                    SELECT RUTA_FOTO_AC, ESTADO 
-                    FROM SI_INSPECCION 
-                    WHERE NUMERO = :pNumero 
-                    FOR UPDATE NOWAIT";
-
-                string? rutaFotoActual;
+                // 1. Verificar estado de la cabecera
+                const string queryEstado = @"
+                    SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estadoActual;
-
-                _logger.LogWarning("▶▶ SVC RegistrarAC: SELECT FOR UPDATE NOWAIT Num={Num}...", numero);
-                using (var cmdSelect = new OracleCommand(querySelect, connection))
+                using (var cmdEstado = new OracleCommand(queryEstado, connection))
                 {
-                    cmdSelect.Transaction = transaction;
-                    cmdSelect.CommandTimeout = CmdTimeoutSec;
-                    cmdSelect.BindByName = true;
-                    cmdSelect.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
-
-                    using var reader = await cmdSelect.ExecuteReaderAsync();
-                    if (!await reader.ReadAsync())
-                    {
-                        throw new InvalidOperationException($"No se encontró el hallazgo con número {numero}.");
-                    }
-
-                    rutaFotoActual = reader.IsDBNull(0) ? null : reader.GetString(0);
-                    estadoActual = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    cmdEstado.Transaction = transaction;
+                    cmdEstado.CommandTimeout = CmdTimeoutSec;
+                    cmdEstado.BindByName = true;
+                    cmdEstado.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    var result = await cmdEstado.ExecuteScalarAsync();
+                    if (result == null || result == DBNull.Value)
+                        throw new InvalidOperationException($"No se encontró la inspección #{numero}.");
+                    estadoActual = result.ToString();
                 }
 
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Registro bloqueado. RUTA_FOTO_AC actual={Ruta}, ESTADO={Estado} ({Ms}ms)", 
-                    rutaFotoActual ?? "NULL", estadoActual ?? "NULL", sw.ElapsedMilliseconds);
-
-                // 2. Verificar que no esté anulado
                 if (estadoActual == "9")
+                    throw new InvalidOperationException($"La inspección #{numero} está anulada.");
+
+                // 2. Bloquear el item de detalle y verificar que no tenga AC
+                const string querySelectF = @"
+                    SELECT RUTA_FOTO_AC FROM SIG.SI_INSPECCION_F
+                    WHERE NUMERO = :pNumero AND ITEM = :pItem FOR UPDATE NOWAIT";
+                string? rutaAcActual;
+                using (var cmdF = new OracleCommand(querySelectF, connection))
                 {
-                    throw new InvalidOperationException(
-                        $"El hallazgo #{numero} está anulado y no se puede registrar una acción correctiva.");
+                    cmdF.Transaction = transaction;
+                    cmdF.CommandTimeout = CmdTimeoutSec;
+                    cmdF.BindByName = true;
+                    cmdF.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    cmdF.Parameters.Add("pItem", OracleDbType.Int32).Value = item;
+                    using var reader = await cmdF.ExecuteReaderAsync();
+                    if (!await reader.ReadAsync())
+                        throw new InvalidOperationException($"No se encontró el hallazgo #{numero} ítem {item}.");
+                    rutaAcActual = reader.IsDBNull(0) ? null : reader.GetString(0);
                 }
 
-                // 3. Verificar que no tenga ya una acción correctiva registrada
-                if (!string.IsNullOrEmpty(rutaFotoActual))
-                {
-                    _logger.LogWarning("▶▶ SVC RegistrarAC: El hallazgo {Num} YA TIENE acción correctiva registrada ({Ms}ms)", 
-                        numero, sw.ElapsedMilliseconds);
-                    throw new InvalidOperationException(
-                        $"El hallazgo #{numero} ya tiene una acción correctiva registrada. " +
-                        "No se puede sobrescribir.");
-                }
+                if (!string.IsNullOrEmpty(rutaAcActual))
+                    throw new InvalidOperationException($"El hallazgo #{numero} ítem {item} ya tiene acción correctiva.");
 
-                // 4. Construir ruta completa con nombre de archivo y extensión
-                var nombreArchivo = $"{numero}-AC.jpg";
+                // 3. Actualizar SI_INSPECCION_F con la acción correctiva
+                var nombreArchivo = $"{numero}-{item}-AC.jpg";
                 var rutaFotoCompleta = Path.Combine(rutaFoto, nombreArchivo);
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Ruta foto completa={Ruta}", rutaFotoCompleta);
 
-                // 5. Actualizar con la acción correctiva
-                const string queryUpdate = @"
-                    UPDATE SI_INSPECCION
+                const string queryUpdateF = @"
+                    UPDATE SIG.SI_INSPECCION_F
                     SET RUTA_FOTO_AC = :pRutaFoto,
                         FCH_FOTO_AC = SYSDATE,
                         UBICA_FOTO_AC = :pUbicaFoto,
-                        ESTADO = '6',
                         A_MDUSER = :pUsuario,
                         A_MDFECHA = SYSDATE
-                    WHERE NUMERO = :pNumero";
-
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Ejecutando UPDATE SI_INSPECCION Num={Num}...", numero);
-                using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
+                    WHERE NUMERO = :pNumero AND ITEM = :pItem";
+                using (var cmdUpd = new OracleCommand(queryUpdateF, connection))
                 {
-                    cmdUpdate.Transaction = transaction;
-                    cmdUpdate.CommandTimeout = CmdTimeoutSec;
-                    cmdUpdate.BindByName = true;
-                    cmdUpdate.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
-                    cmdUpdate.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = ubicaFoto;
-                    cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
-                    cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
-
-                    var filasActualizadas = await cmdUpdate.ExecuteNonQueryAsync();
-                    _logger.LogWarning("▶▶ SVC RegistrarAC: UPDATE OK, filas={Filas} ({Ms}ms)", 
-                        filasActualizadas, sw.ElapsedMilliseconds);
+                    cmdUpd.Transaction = transaction;
+                    cmdUpd.CommandTimeout = CmdTimeoutSec;
+                    cmdUpd.BindByName = true;
+                    cmdUpd.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
+                    cmdUpd.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = ubicaFoto;
+                    cmdUpd.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpd.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    cmdUpd.Parameters.Add("pItem", OracleDbType.Int32).Value = item;
+                    await cmdUpd.ExecuteNonQueryAsync();
                 }
 
-                // 6. Commit
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Commit...");
+                // 4. Verificar si todos los items tienen AC → cerrar inspección (ESTADO='6')
+                const string querySinAC = @"
+                    SELECT COUNT(*) FROM SIG.SI_INSPECCION_F
+                    WHERE NUMERO = :pNumero AND ESTADO <> '9' AND RUTA_FOTO_AC IS NULL";
+                using (var cmdCheck = new OracleCommand(querySinAC, connection))
+                {
+                    cmdCheck.Transaction = transaction;
+                    cmdCheck.CommandTimeout = CmdTimeoutSec;
+                    cmdCheck.BindByName = true;
+                    cmdCheck.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    var pendientes = Convert.ToInt32(await cmdCheck.ExecuteScalarAsync());
+                    if (pendientes == 0)
+                    {
+                        const string queryCerrar = @"
+                            UPDATE SIG.SI_INSPECCION SET ESTADO = '6', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                        using var cmdCerrar = new OracleCommand(queryCerrar, connection);
+                        cmdCerrar.Transaction = transaction;
+                        cmdCerrar.CommandTimeout = CmdTimeoutSec;
+                        cmdCerrar.BindByName = true;
+                        cmdCerrar.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                        cmdCerrar.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                        await cmdCerrar.ExecuteNonQueryAsync();
+                    }
+                }
+
                 await transaction.CommitAsync();
-                _logger.LogWarning("▶▶ SVC RegistrarAC: ✅ Commit OK. Acción correctiva registrada para hallazgo #{Num} ({Ms}ms)", 
-                    numero, sw.ElapsedMilliseconds);
+                _logger.LogInformation("Acción correctiva registrada: inspección #{Num} ítem {Item}", numero, item);
             }
-            catch (OracleException oraEx) when (oraEx.Number == 54) // ORA-00054: resource busy (NOWAIT)
+            catch (OracleException oraEx) when (oraEx.Number == 54)
             {
-                _logger.LogWarning("▶▶ SVC RegistrarAC: Registro BLOQUEADO por otra sesión ({Ms}ms)", sw.ElapsedMilliseconds);
-                try { await transaction.RollbackAsync(); }
-                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC RegistrarAC: ERROR en Rollback (lock)"); }
+                try { await transaction.RollbackAsync(); } catch { }
                 throw new InvalidOperationException(
-                    $"El hallazgo #{numero} está siendo actualizado por otro usuario en este momento. " +
-                    "Por favor, intente nuevamente en unos segundos.", oraEx);
+                    $"El registro está siendo modificado por otro usuario. Intente nuevamente.", oraEx);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "▶▶ SVC RegistrarAC: ERROR — Rollback ({Ms}ms)", sw.ElapsedMilliseconds);
-                try { await transaction.RollbackAsync(); }
-                catch (Exception exRb) { _logger.LogError(exRb, "▶▶ SVC RegistrarAC: ERROR en Rollback"); }
+                _logger.LogError(ex, "Error al registrar AC inspección #{Num} ítem {Item}", numero, item);
+                try { await transaction.RollbackAsync(); } catch { }
                 throw;
             }
         }
@@ -626,7 +658,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             _logger.LogWarning("▶▶ SVC Anular: Abriendo conexión Oracle...");
-            using var connection = new OracleConnection(_connectionString);
+            using var connection = new OracleConnection(GetOracleConnectionString());
             await connection.OpenAsync();
             _logger.LogWarning("▶▶ SVC Anular: Conexión OK ({Ms}ms)", sw.ElapsedMilliseconds);
 
@@ -638,7 +670,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 // 1. Bloquear el registro y verificar estado actual
                 const string querySelect = @"
                     SELECT ESTADO 
-                    FROM SI_INSPECCION 
+                    FROM SIG.SI_INSPECCION 
                     WHERE NUMERO = :pNumero 
                     FOR UPDATE NOWAIT";
 
@@ -668,15 +700,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     throw new InvalidOperationException($"La inspección #{numero} ya se encuentra anulada.");
                 }
 
-                // 2. Actualizar estado a 9 (Anulado)
+                // 2. Anular cabecera
                 const string queryUpdate = @"
-                    UPDATE SI_INSPECCION
+                    UPDATE SIG.SI_INSPECCION
                     SET ESTADO = '9',
                         A_MDUSER = :pUsuario,
                         A_MDFECHA = SYSDATE
                     WHERE NUMERO = :pNumero";
 
-                _logger.LogWarning("▶▶ SVC Anular: Ejecutando UPDATE ESTADO='9' Num={Num}...", numero);
                 using (var cmdUpdate = new OracleCommand(queryUpdate, connection))
                 {
                     cmdUpdate.Transaction = transaction;
@@ -684,12 +715,28 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     cmdUpdate.BindByName = true;
                     cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
                     cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
-
-                    var filasActualizadas = await cmdUpdate.ExecuteNonQueryAsync();
-                    _logger.LogWarning("▶▶ SVC Anular: UPDATE OK, filas={Filas} ({Ms}ms)", filasActualizadas, sw.ElapsedMilliseconds);
+                    await cmdUpdate.ExecuteNonQueryAsync();
                 }
 
-                // 3. Commit
+                // 3. Anular detalle (SI_INSPECCION_F)
+                const string queryUpdateF = @"
+                    UPDATE SIG.SI_INSPECCION_F
+                    SET ESTADO = '9',
+                        A_MDUSER = :pUsuario,
+                        A_MDFECHA = SYSDATE
+                    WHERE NUMERO = :pNumero";
+
+                using (var cmdUpdateF = new OracleCommand(queryUpdateF, connection))
+                {
+                    cmdUpdateF.Transaction = transaction;
+                    cmdUpdateF.CommandTimeout = CmdTimeoutSec;
+                    cmdUpdateF.BindByName = true;
+                    cmdUpdateF.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdUpdateF.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    await cmdUpdateF.ExecuteNonQueryAsync();
+                }
+
+                // 4. Commit
                 _logger.LogWarning("▶▶ SVC Anular: Commit...");
                 await transaction.CommitAsync();
                 _logger.LogWarning("▶▶ SVC Anular: ✅ Commit OK. Inspección #{Num} anulada ({Ms}ms)", numero, sw.ElapsedMilliseconds);
@@ -711,18 +758,16 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             }
         }
 
-        public async Task ActualizarFotoAsync(int numero, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario)
+        public async Task ActualizarFotoAsync(int numero, int item, string tipoFoto, string ubicaFoto, string? rutaFotoCompleta, string usuario)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            _logger.LogWarning("▶▶ SVC ActualizarFoto: tipo={Tipo}, Num={Num}...", tipoFoto, numero);
-
-            using var connection = new OracleConnection(_connectionString);
+            using var connection = new OracleConnection(GetOracleConnectionString());
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                const string queryLock = "SELECT ESTADO FROM SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                // Verificar estado cabecera
+                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estado;
                 using (var cmdLock = new OracleCommand(queryLock, connection))
                 {
@@ -737,20 +782,21 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
 
                 if (estado == "9")
-                    throw new InvalidOperationException($"La inspección #{numero} está anulada y no se pueden editar sus fotos.");
+                    throw new InvalidOperationException($"La inspección #{numero} está anulada.");
 
+                // Actualizar en SI_INSPECCION_F
                 string query;
                 if (tipoFoto == "H")
                 {
                     query = rutaFotoCompleta != null
-                        ? "UPDATE SI_INSPECCION SET UBICA_FOTO_H = :pUbica, RUTA_FOTO_H = :pRuta, FCH_FOTO_H = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero"
-                        : "UPDATE SI_INSPECCION SET UBICA_FOTO_H = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                        ? "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, RUTA_FOTO_H = :pRuta, FCH_FOTO_H = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
+                        : "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
                 }
                 else
                 {
                     query = rutaFotoCompleta != null
-                        ? "UPDATE SI_INSPECCION SET UBICA_FOTO_AC = :pUbica, RUTA_FOTO_AC = :pRuta, FCH_FOTO_AC = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero"
-                        : "UPDATE SI_INSPECCION SET UBICA_FOTO_AC = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                        ? "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, RUTA_FOTO_AC = :pRuta, FCH_FOTO_AC = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
+                        : "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
                 }
 
                 using (var cmdUpdate = new OracleCommand(query, connection))
@@ -763,11 +809,11 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                         cmdUpdate.Parameters.Add("pRuta", OracleDbType.Varchar2).Value = rutaFotoCompleta;
                     cmdUpdate.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
                     cmdUpdate.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    cmdUpdate.Parameters.Add("pItem", OracleDbType.Int32).Value = item;
                     await cmdUpdate.ExecuteNonQueryAsync();
                 }
 
                 await transaction.CommitAsync();
-                _logger.LogWarning("▶▶ SVC ActualizarFoto: ✅ OK ({Ms}ms)", sw.ElapsedMilliseconds);
             }
             catch (OracleException oraEx) when (oraEx.Number == 54)
             {
@@ -776,7 +822,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "▶▶ SVC ActualizarFoto: ERROR");
+                _logger.LogError(ex, "Error al actualizar foto inspección #{Num} ítem {Item}", numero, item);
                 try { await transaction.RollbackAsync(); } catch { }
                 throw;
             }
@@ -787,13 +833,13 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             var sw = System.Diagnostics.Stopwatch.StartNew();
             _logger.LogWarning("▶▶ SVC ActualizarHallazgo: Num={Num}...", numero);
 
-            using var connection = new OracleConnection(_connectionString);
+            using var connection = new OracleConnection(GetOracleConnectionString());
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                const string queryLock = "SELECT ESTADO FROM SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estado;
                 using (var cmdLock = new OracleCommand(queryLock, connection))
                 {
@@ -811,7 +857,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     throw new InvalidOperationException($"La inspección #{numero} está anulada y no se puede editar.");
 
                 const string queryUpdate = @"
-                    UPDATE SI_INSPECCION
+                    UPDATE SIG.SI_INSPECCION
                     SET CCOSTO = :pCcosto, TIPO = :pTipo,
                         RESP_INSPECCION = :pRespInspeccion, RESP_AREA = :pRespArea,
                         A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE
@@ -842,6 +888,193 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             catch (Exception ex)
             {
                 _logger.LogError(ex, "▶▶ SVC ActualizarHallazgo: ERROR");
+                try { await transaction.RollbackAsync(); } catch { }
+                throw;
+            }
+        }
+
+        // ========== FOTOS (SI_INSPECCION_F) ==========
+
+        private async Task CargarFotosAsync(OracleConnection connection, List<InspeccionListDto> inspecciones)
+        {
+            if (!inspecciones.Any()) return;
+
+            var numeros = inspecciones.Select(i => i.Numero).Distinct().ToList();
+            var inClause = string.Join(",", numeros);
+
+            var query = $@"
+                SELECT NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H,
+                       RUTA_FOTO_AC, FCH_FOTO_AC, UBICA_FOTO_AC, ESTADO
+                FROM SIG.SI_INSPECCION_F
+                WHERE NUMERO IN ({inClause}) AND ESTADO <> '9'
+                ORDER BY NUMERO, ITEM";
+
+            var fotos = new List<InspeccionFotoDto>();
+            using (var cmd = new OracleCommand(query, connection))
+            {
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    fotos.Add(new InspeccionFotoDto
+                    {
+                        Numero = reader.GetInt32(0),
+                        Item = reader.GetInt32(1),
+                        RutaFotoH = reader.IsDBNull(2) ? null : reader.GetString(2),
+                        FechaFotoH = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
+                        UbicaFotoH = reader.IsDBNull(4) ? null : reader.GetString(4),
+                        RutaFotoAc = reader.IsDBNull(5) ? null : reader.GetString(5),
+                        FechaFotoAc = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
+                        UbicaFotoAc = reader.IsDBNull(7) ? null : reader.GetString(7),
+                        Estado = reader.IsDBNull(8) ? null : reader.GetString(8)
+                    });
+                }
+            }
+
+            var fotosPorNumero = fotos.GroupBy(f => f.Numero).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var insp in inspecciones)
+            {
+                if (fotosPorNumero.TryGetValue(insp.Numero, out var lista))
+                    insp.Fotos = lista;
+            }
+        }
+
+        public async Task<List<InspeccionFotoDto>> ObtenerFotosInspeccionAsync(int numero)
+        {
+            var resultado = new List<InspeccionFotoDto>();
+
+            const string query = @"
+                SELECT NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H,
+                       RUTA_FOTO_AC, FCH_FOTO_AC, UBICA_FOTO_AC, ESTADO
+                FROM SIG.SI_INSPECCION_F
+                WHERE NUMERO = :pNumero AND ESTADO <> '9'
+                ORDER BY ITEM";
+
+            try
+            {
+                using var connection = new OracleConnection(GetOracleConnectionString());
+                await connection.OpenAsync();
+                using var cmd = new OracleCommand(query, connection);
+                cmd.BindByName = true;
+                cmd.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    resultado.Add(new InspeccionFotoDto
+                    {
+                        Numero = reader.GetInt32(0),
+                        Item = reader.GetInt32(1),
+                        RutaFotoH = reader.IsDBNull(2) ? null : reader.GetString(2),
+                        FechaFotoH = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
+                        UbicaFotoH = reader.IsDBNull(4) ? null : reader.GetString(4),
+                        RutaFotoAc = reader.IsDBNull(5) ? null : reader.GetString(5),
+                        FechaFotoAc = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
+                        UbicaFotoAc = reader.IsDBNull(7) ? null : reader.GetString(7),
+                        Estado = reader.IsDBNull(8) ? null : reader.GetString(8)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener fotos de inspección {Numero}", numero);
+                throw;
+            }
+
+            return resultado;
+        }
+
+        public async Task<int> AgregarFotoHallazgoAsync(int numero, string rutaFoto, string ubicaFoto, string usuario)
+        {
+            using var connection = new OracleConnection(GetOracleConnectionString());
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                // 1. Verificar estado cabecera
+                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                string? estado;
+                using (var cmdLock = new OracleCommand(queryLock, connection))
+                {
+                    cmdLock.Transaction = transaction;
+                    cmdLock.CommandTimeout = CmdTimeoutSec;
+                    cmdLock.BindByName = true;
+                    cmdLock.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    var result = await cmdLock.ExecuteScalarAsync();
+                    if (result == null || result == DBNull.Value)
+                        throw new InvalidOperationException($"No se encontró la inspección #{numero}.");
+                    estado = result.ToString();
+                }
+
+                if (estado == "9")
+                    throw new InvalidOperationException($"La inspección #{numero} está anulada.");
+
+                // 2. Obtener siguiente ITEM
+                const string queryMaxItem = @"
+                    SELECT NVL(MAX(ITEM), 0) FROM SIG.SI_INSPECCION_F WHERE NUMERO = :pNumero";
+                int maxItem;
+                using (var cmdMax = new OracleCommand(queryMaxItem, connection))
+                {
+                    cmdMax.Transaction = transaction;
+                    cmdMax.CommandTimeout = CmdTimeoutSec;
+                    cmdMax.BindByName = true;
+                    cmdMax.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    maxItem = Convert.ToInt32(await cmdMax.ExecuteScalarAsync());
+                }
+
+                int nuevoItem = maxItem + 1;
+                if (nuevoItem > 10)
+                    throw new InvalidOperationException($"La inspección #{numero} ya tiene el máximo de 10 hallazgos.");
+
+                // 3. Construir ruta
+                var nombreArchivo = $"{numero}-{nuevoItem}-H.jpg";
+                var rutaFotoCompleta = Path.Combine(rutaFoto, nombreArchivo);
+
+                // 4. Insertar en SI_INSPECCION_F
+                const string queryInsert = @"
+                    INSERT INTO SIG.SI_INSPECCION_F
+                    (NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H, ESTADO, A_ADUSER, A_ADFECHA)
+                    VALUES
+                    (:pNumero, :pItem, :pRutaFoto, SYSDATE, :pUbicaFoto, '1', :pUsuario, SYSDATE)";
+                using (var cmdIns = new OracleCommand(queryInsert, connection))
+                {
+                    cmdIns.Transaction = transaction;
+                    cmdIns.CommandTimeout = CmdTimeoutSec;
+                    cmdIns.BindByName = true;
+                    cmdIns.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    cmdIns.Parameters.Add("pItem", OracleDbType.Int32).Value = nuevoItem;
+                    cmdIns.Parameters.Add("pRutaFoto", OracleDbType.Varchar2).Value = rutaFotoCompleta;
+                    cmdIns.Parameters.Add("pUbicaFoto", OracleDbType.Varchar2).Value = ubicaFoto;
+                    cmdIns.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    await cmdIns.ExecuteNonQueryAsync();
+                }
+
+                // 5. Reabrir inspección si estaba cerrada
+                if (estado == "6")
+                {
+                    const string queryReabrir = @"
+                        UPDATE SIG.SI_INSPECCION SET ESTADO = '1', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                    using var cmdReabrir = new OracleCommand(queryReabrir, connection);
+                    cmdReabrir.Transaction = transaction;
+                    cmdReabrir.CommandTimeout = CmdTimeoutSec;
+                    cmdReabrir.BindByName = true;
+                    cmdReabrir.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
+                    cmdReabrir.Parameters.Add("pNumero", OracleDbType.Int32).Value = numero;
+                    await cmdReabrir.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Hallazgo agregado: inspección #{Num} ítem {Item}", numero, nuevoItem);
+                return nuevoItem;
+            }
+            catch (OracleException oraEx) when (oraEx.Number == 54)
+            {
+                try { await transaction.RollbackAsync(); } catch { }
+                throw new InvalidOperationException("El registro está siendo modificado por otro usuario.", oraEx);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al agregar hallazgo a inspección #{Num}", numero);
                 try { await transaction.RollbackAsync(); } catch { }
                 throw;
             }

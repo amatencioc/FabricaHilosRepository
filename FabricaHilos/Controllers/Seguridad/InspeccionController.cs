@@ -79,7 +79,7 @@ namespace FabricaHilos.Controllers.Seguridad
             }
         }
 
-        // ========== CREAR HALLAZGO (H) ==========
+        // ========== CREAR INSPECCIÓN ==========
 
         [HttpGet("Crear")]
         public async Task<IActionResult> Crear()
@@ -92,85 +92,33 @@ namespace FabricaHilos.Controllers.Seguridad
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Crear(FotoSeguridadViewModel model)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            _logger.LogWarning("▶▶ POST Crear — INICIO ({Ms}ms)", sw.ElapsedMilliseconds);
-
             if (!ModelState.IsValid)
             {
-                var errores = string.Join(" | ", ModelState.Values
-                    .SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-                _logger.LogWarning("▶▶ ModelState INVÁLIDO: {Errores} ({Ms}ms)", errores, sw.ElapsedMilliseconds);
                 await CargarDatosFormularioAsync();
-                _logger.LogWarning("▶▶ CargarDatos terminó ({Ms}ms)", sw.ElapsedMilliseconds);
                 return View("~/Views/Seguridad/Inspeccion/Crear.cshtml", model);
             }
-            _logger.LogWarning("▶▶ ModelState OK ({Ms}ms)", sw.ElapsedMilliseconds);
 
             try
             {
-                // 1. Usuario
                 var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "DESCONOCIDO";
-                _logger.LogWarning("▶▶ Paso 1: Usuario={Usuario} ({Ms}ms)", usuario, sw.ElapsedMilliseconds);
 
-                // 2. Registrar en BD (obtiene número, inserta y actualiza correlativo en una sola transacción)
-                _logger.LogWarning("▶▶ Paso 2: RegistrarHallazgoAsync (transacción atómica)...");
                 var inspeccionDto = new InspeccionRegistroDto
                 {
                     CentroCosto = model.CentroCosto,
                     TipoInspeccion = model.TipoInspeccion,
                     ResponsableInspeccion = model.ResponsableInspeccion,
                     ResponsableArea = model.ResponsableArea,
-                    RutaFoto = _rutaSeguridad,
-                    UbicaFoto = model.UbicacionFoto
+                    ObjetivoHallazgo = model.ObjetivoHallazgo
                 };
 
                 var numeroInspeccion = await _inspeccionService.RegistrarHallazgoAsync(inspeccionDto, usuario);
-                _logger.LogWarning("▶▶ Paso 2: BD OK — Número asignado={Numero} ({Ms}ms)", numeroInspeccion, sw.ElapsedMilliseconds);
-
-                // 3. Imagen con timeout
-                var nombreArchivo = $"{numeroInspeccion}-H.jpg";
-                try
-                {
-                    _logger.LogWarning("▶▶ Paso 4a: Leyendo bytes de imagen en memoria...");
-                    using var msImg = new MemoryStream();
-                    await model.Foto.CopyToAsync(msImg);
-                    var imgBytes = msImg.ToArray();
-                    _logger.LogWarning("▶▶ Paso 4a: {Size} bytes leídos ({Ms}ms)", imgBytes.Length, sw.ElapsedMilliseconds);
-
-                    _logger.LogWarning("▶▶ Paso 4b: Iniciando Task.Run para guardar en red (timeout 15s)...");
-                    var imgTask = Task.Run(async () =>
-                    {
-                        if (OperatingSystem.IsWindows())
-                            NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
-                        using var imgStream = new MemoryStream(imgBytes, writable: false);
-                        await _procesadorImagen.GuardarYOptimizarImagenAsync(imgStream, nombreArchivo);
-                    });
-
-                    if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(15))) == imgTask)
-                    {
-                        await imgTask; // re-throw si hubo error
-                        _logger.LogWarning("▶▶ Paso 4b: Imagen guardada OK ({Ms}ms)", sw.ElapsedMilliseconds);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("▶▶ Paso 4b: TIMEOUT 15s guardando imagen en red ({Ms}ms)", sw.ElapsedMilliseconds);
-                    }
-
-                    TempData["Success"] = $"Hallazgo N° {numeroInspeccion} registrado exitosamente.";
-                }
-                catch (Exception exImg)
-                {
-                    _logger.LogError(exImg, "▶▶ Paso 4: ERROR imagen ({Ms}ms)", sw.ElapsedMilliseconds);
-                    TempData["Warning"] = $"Hallazgo N° {numeroInspeccion} registrado, pero no se pudo guardar la imagen: {exImg.Message}";
-                }
-
-                _logger.LogWarning("▶▶ POST Crear — FIN. Redirigiendo a Index ({Ms}ms)", sw.ElapsedMilliseconds);
+                TempData["Success"] = $"Inspección N° {numeroInspeccion} registrada exitosamente.";
                 return RedirectToAction(nameof(Index));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "▶▶ POST Crear — ERROR GENERAL ({Ms}ms)", sw.ElapsedMilliseconds);
-                TempData["Error"] = $"Error al registrar hallazgo: {ex.Message}";
+                _logger.LogError(ex, "Error al registrar inspección");
+                TempData["Error"] = $"Error al registrar inspección: {ex.Message}";
                 await CargarDatosFormularioAsync();
                 return View("~/Views/Seguridad/Inspeccion/Crear.cshtml", model);
             }
@@ -178,8 +126,8 @@ namespace FabricaHilos.Controllers.Seguridad
 
         // ========== AGREGAR ACCIÓN CORRECTIVA (AC) ==========
 
-        [HttpGet("AccionCorrectiva/{numero}")]
-        public async Task<IActionResult> AccionCorrectiva(int numero)
+        [HttpGet("AccionCorrectiva/{numero}/{item}")]
+        public async Task<IActionResult> AccionCorrectiva(int numero, int item)
         {
             try
             {
@@ -191,29 +139,38 @@ namespace FabricaHilos.Controllers.Seguridad
                     return RedirectToAction(nameof(Index));
                 }
 
-                if (inspeccion.TieneAccionCorrectiva)
+                var foto = inspeccion.Fotos.FirstOrDefault(f => f.Item == item);
+                if (foto == null)
                 {
-                    TempData["Warning"] = "Esta inspección ya tiene una acción correctiva registrada.";
+                    TempData["Error"] = $"No se encontró el hallazgo ítem {item}.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                if (foto.TieneAccionCorrectiva)
+                {
+                    TempData["Warning"] = $"El hallazgo ítem {item} ya tiene una acción correctiva registrada.";
                     return RedirectToAction(nameof(Index));
                 }
 
                 ViewBag.Inspeccion = inspeccion;
+                ViewBag.Item = item;
+                ViewBag.FotoHallazgo = foto;
                 return View("~/Views/Seguridad/Inspeccion/AccionCorrectiva.cshtml");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al cargar formulario de acción correctiva para inspección {Numero}", numero);
+                _logger.LogError(ex, "Error al cargar formulario de acción correctiva para inspección {Numero}/{Item}", numero, item);
                 TempData["Error"] = "Error al cargar el formulario.";
                 return RedirectToAction(nameof(Index));
             }
         }
 
-        [HttpPost("AccionCorrectiva/{numero}")]
+        [HttpPost("AccionCorrectiva/{numero}/{item}")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AccionCorrectiva(int numero, AccionCorrectivaViewModel model)
+        public async Task<IActionResult> AccionCorrectiva(int numero, int item, AccionCorrectivaViewModel model)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            _logger.LogWarning("▶▶ POST AccionCorrectiva({Numero}) — INICIO ({Ms}ms)", numero, sw.ElapsedMilliseconds);
+            _logger.LogWarning("▶▶ POST AccionCorrectiva({Numero}/{Item}) — INICIO ({Ms}ms)", numero, item, sw.ElapsedMilliseconds);
 
             if (!ModelState.IsValid)
             {
@@ -222,6 +179,8 @@ namespace FabricaHilos.Controllers.Seguridad
                 _logger.LogWarning("▶▶ AC ModelState INVÁLIDO: {Errores} ({Ms}ms)", errores, sw.ElapsedMilliseconds);
                 var inspeccion = await _inspeccionService.ObtenerInspeccionPorNumeroAsync(numero);
                 ViewBag.Inspeccion = inspeccion;
+                ViewBag.Item = item;
+                ViewBag.FotoHallazgo = inspeccion?.Fotos.FirstOrDefault(f => f.Item == item);
                 return View("~/Views/Seguridad/Inspeccion/AccionCorrectiva.cshtml", model);
             }
             _logger.LogWarning("▶▶ AC ModelState OK ({Ms}ms)", sw.ElapsedMilliseconds);
@@ -230,24 +189,18 @@ namespace FabricaHilos.Controllers.Seguridad
             {
                 // 1. Usuario
                 var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "DESCONOCIDO";
-                _logger.LogWarning("▶▶ AC Paso 1: Usuario={Usuario} ({Ms}ms)", usuario, sw.ElapsedMilliseconds);
 
-                // 2. Registrar acción correctiva en BD (con transacción y bloqueo)
-                _logger.LogWarning("▶▶ AC Paso 2: RegistrarAccionCorrectivaAsync...");
-                await _inspeccionService.RegistrarAccionCorrectivaAsync(numero, _rutaSeguridad, model.UbicacionFoto, usuario);
-                _logger.LogWarning("▶▶ AC Paso 2: BD OK ({Ms}ms)", sw.ElapsedMilliseconds);
+                // 2. Registrar acción correctiva en BD
+                await _inspeccionService.RegistrarAccionCorrectivaAsync(numero, item, _rutaSeguridad, model.UbicacionFoto, usuario);
 
                 // 3. Imagen con timeout
-                var nombreArchivo = $"{numero}-AC.jpg";
+                var nombreArchivo = $"{numero}-{item}-AC.jpg";
                 try
                 {
-                    _logger.LogWarning("▶▶ AC Paso 3a: Leyendo bytes de imagen...");
                     using var msImg = new MemoryStream();
                     await model.Foto.CopyToAsync(msImg);
                     var imgBytes = msImg.ToArray();
-                    _logger.LogWarning("▶▶ AC Paso 3a: {Size} bytes leídos ({Ms}ms)", imgBytes.Length, sw.ElapsedMilliseconds);
 
-                    _logger.LogWarning("▶▶ AC Paso 3b: Task.Run guardar en red (timeout 15s)...");
                     var imgTask = Task.Run(async () =>
                     {
                         if (OperatingSystem.IsWindows())
@@ -257,29 +210,22 @@ namespace FabricaHilos.Controllers.Seguridad
                     });
 
                     if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(15))) == imgTask)
-                    {
                         await imgTask;
-                        _logger.LogWarning("▶▶ AC Paso 3b: Imagen guardada OK ({Ms}ms)", sw.ElapsedMilliseconds);
-                    }
                     else
-                    {
-                        _logger.LogWarning("▶▶ AC Paso 3b: TIMEOUT 15s guardando imagen en red ({Ms}ms)", sw.ElapsedMilliseconds);
-                    }
+                        _logger.LogWarning("▶▶ AC: TIMEOUT 15s guardando imagen en red ({Ms}ms)", sw.ElapsedMilliseconds);
 
-                    TempData["Success"] = $"Acción correctiva registrada para inspección N° {numero}.";
+                    TempData["Success"] = $"Acción correctiva registrada para inspección N° {numero}, ítem {item}.";
                 }
                 catch (Exception exImg)
                 {
-                    _logger.LogError(exImg, "▶▶ AC Paso 3: ERROR imagen ({Ms}ms)", sw.ElapsedMilliseconds);
-                    TempData["Warning"] = $"Acción correctiva N° {numero} registrada, pero no se pudo guardar la imagen: {exImg.Message}";
+                    _logger.LogError(exImg, "▶▶ AC: ERROR imagen ({Ms}ms)", sw.ElapsedMilliseconds);
+                    TempData["Warning"] = $"Acción correctiva N° {numero} ítem {item} registrada, pero no se pudo guardar la imagen: {exImg.Message}";
                 }
 
-                _logger.LogWarning("▶▶ POST AccionCorrectiva — FIN. Redirigiendo a Index ({Ms}ms)", sw.ElapsedMilliseconds);
                 return RedirectToAction(nameof(Index));
             }
             catch (InvalidOperationException ioEx)
             {
-                _logger.LogWarning(ioEx, "▶▶ POST AccionCorrectiva — Validación/Concurrencia ({Ms}ms)", sw.ElapsedMilliseconds);
                 TempData["Warning"] = ioEx.Message;
                 return RedirectToAction(nameof(Index));
             }
@@ -287,7 +233,7 @@ namespace FabricaHilos.Controllers.Seguridad
             {
                 _logger.LogError(ex, "▶▶ POST AccionCorrectiva — ERROR GENERAL ({Ms}ms)", sw.ElapsedMilliseconds);
                 TempData["Error"] = $"Error al registrar acción correctiva: {ex.Message}";
-                return RedirectToAction(nameof(AccionCorrectiva), new { numero });
+                return RedirectToAction(nameof(AccionCorrectiva), new { numero, item });
             }
         }
 
@@ -321,9 +267,9 @@ namespace FabricaHilos.Controllers.Seguridad
 
         [HttpPost("ActualizarFoto")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ActualizarFoto(int numero, string tipoFoto, string ubicacion, IFormFile? foto)
+        public async Task<IActionResult> ActualizarFoto(int numero, int item, string tipoFoto, string ubicacion, IFormFile? foto)
         {
-            _logger.LogWarning("▶▶ POST ActualizarFoto Num={Num}, Tipo={Tipo}", numero, tipoFoto);
+            _logger.LogWarning("▶▶ POST ActualizarFoto Num={Num}, Item={Item}, Tipo={Tipo}", numero, item, tipoFoto);
             try
             {
                 var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "DESCONOCIDO";
@@ -331,7 +277,7 @@ namespace FabricaHilos.Controllers.Seguridad
 
                 if (foto != null && foto.Length > 0)
                 {
-                    var nombreArchivo = $"{numero}-{tipoFoto}.jpg";
+                    var nombreArchivo = $"{numero}-{item}-{tipoFoto}.jpg";
                     try
                     {
                         using var msImg = new MemoryStream();
@@ -360,10 +306,10 @@ namespace FabricaHilos.Controllers.Seguridad
                     }
                 }
 
-                await _inspeccionService.ActualizarFotoAsync(numero, tipoFoto, ubicacion, rutaFotoCompleta, usuario);
+                await _inspeccionService.ActualizarFotoAsync(numero, item, tipoFoto, ubicacion, rutaFotoCompleta, usuario);
 
                 if (TempData["Warning"] == null)
-                    TempData["Success"] = $"Foto de {(tipoFoto == "H" ? "hallazgo" : "acción correctiva")} actualizada para inspección N° {numero}.";
+                    TempData["Success"] = $"Foto de {(tipoFoto == "H" ? "hallazgo" : "acción correctiva")} actualizada para inspección N° {numero}, ítem {item}.";
             }
             catch (Exception ex)
             {
@@ -374,7 +320,7 @@ namespace FabricaHilos.Controllers.Seguridad
             return RedirectToAction(nameof(Index));
         }
 
-        // ========== EDITAR HALLAZGO (datos sin foto) ==========
+        // ========== EDITAR INSPECCIÓN ==========
 
         [HttpGet("Editar/{numero}")]
         public async Task<IActionResult> Editar(int numero)
@@ -400,7 +346,8 @@ namespace FabricaHilos.Controllers.Seguridad
                     ResponsableArea = inspeccion.ResponsableArea,
                     ResponsableInspeccion = inspeccion.ResponsableInspeccion,
                     CentroCosto = inspeccion.CentroCosto,
-                    TipoInspeccion = inspeccion.Tipo
+                    TipoInspeccion = inspeccion.Tipo,
+                    ObjetivoHallazgo = inspeccion.Objetivo
                 };
 
                 ViewBag.Numero = numero;
@@ -464,10 +411,16 @@ namespace FabricaHilos.Controllers.Seguridad
                     item.ResponsableArea,
                     item.NombreRespArea,
                     item.Estado,
-                    item.UbicaFotoH,
-                    FechaFotoH = item.FechaFotoH?.ToString("dd/MM/yyyy"),
-                    item.UbicaFotoAc,
-                    FechaFotoAc = item.FechaFotoAc?.ToString("dd/MM/yyyy")
+                    item.Objetivo,
+                    Fotos = item.Fotos.Select(f => new
+                    {
+                        f.Item,
+                        f.UbicaFotoH,
+                        FechaFotoH = f.FechaFotoH?.ToString("dd/MM/yyyy"),
+                        f.UbicaFotoAc,
+                        FechaFotoAc = f.FechaFotoAc?.ToString("dd/MM/yyyy"),
+                        f.TieneAccionCorrectiva
+                    }).ToList()
                 });
             }
             catch (Exception ex)
@@ -479,13 +432,13 @@ namespace FabricaHilos.Controllers.Seguridad
 
         // ========== SERVIR IMAGEN ==========
 
-        [HttpGet("Imagen/{numero}/{tipo}")]
-        public IActionResult Imagen(int numero, string tipo)
+        [HttpGet("Imagen/{numero}/{item}/{tipo}")]
+        public IActionResult Imagen(int numero, int item, string tipo)
         {
             tipo = tipo.ToUpperInvariant();
             if (tipo != "H" && tipo != "AC") return BadRequest();
 
-            var nombreArchivo = $"{numero}-{tipo}.jpg";
+            var nombreArchivo = $"{numero}-{item}-{tipo}.jpg";
             var rutaCompleta = Path.Combine(_rutaSeguridad, nombreArchivo);
 
             try
@@ -536,6 +489,97 @@ namespace FabricaHilos.Controllers.Seguridad
             }
         }
 
+        // ========== GESTIÓN H / AC ==========
+
+        [HttpGet("HallazgosAC/{numero}")]
+        public async Task<IActionResult> HallazgosAC(int numero)
+        {
+            try
+            {
+                var inspeccion = await _inspeccionService.ObtenerInspeccionPorNumeroAsync(numero);
+                if (inspeccion == null)
+                {
+                    TempData["Error"] = "No se encontró la inspección.";
+                    return RedirectToAction(nameof(Index));
+                }
+                if (inspeccion.Estado == "9")
+                {
+                    TempData["Warning"] = "No se puede gestionar una inspección anulada.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                ViewBag.Inspeccion = inspeccion;
+                return View("~/Views/Seguridad/Inspeccion/AgregarHallazgo.cshtml");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al cargar gestión H/AC para inspección {Numero}", numero);
+                TempData["Error"] = "Error al cargar la gestión de hallazgos.";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
+        [HttpPost("AgregarHallazgo/{numero}")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AgregarHallazgo(int numero, AgregarHallazgoFotoViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                var inspeccion = await _inspeccionService.ObtenerInspeccionPorNumeroAsync(numero);
+                ViewBag.Inspeccion = inspeccion;
+                return View("~/Views/Seguridad/Inspeccion/AgregarHallazgo.cshtml", model);
+            }
+
+            try
+            {
+                var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "DESCONOCIDO";
+
+                var nuevoItem = await _inspeccionService.AgregarFotoHallazgoAsync(
+                    numero, _rutaSeguridad, model.UbicacionFoto, usuario);
+
+                var nombreArchivo = $"{numero}-{nuevoItem}-H.jpg";
+                try
+                {
+                    using var msImg = new MemoryStream();
+                    await model.Foto.CopyToAsync(msImg);
+                    var imgBytes = msImg.ToArray();
+
+                    var imgTask = Task.Run(async () =>
+                    {
+                        if (OperatingSystem.IsWindows())
+                            NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
+                        using var imgStream = new MemoryStream(imgBytes, writable: false);
+                        await _procesadorImagen.GuardarYOptimizarImagenAsync(imgStream, nombreArchivo);
+                    });
+
+                    if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(15))) == imgTask)
+                        await imgTask;
+                    else
+                        _logger.LogWarning("▶▶ AgregarHallazgo: TIMEOUT guardando imagen");
+
+                    TempData["Success"] = $"Hallazgo ítem {nuevoItem} agregado a inspección N° {numero}.";
+                }
+                catch (Exception exImg)
+                {
+                    _logger.LogError(exImg, "▶▶ AgregarHallazgo: ERROR imagen");
+                    TempData["Warning"] = $"Hallazgo ítem {nuevoItem} registrado, pero no se pudo guardar la imagen: {exImg.Message}";
+                }
+
+                return RedirectToAction(nameof(HallazgosAC), new { numero });
+            }
+            catch (InvalidOperationException ioEx)
+            {
+                TempData["Warning"] = ioEx.Message;
+                return RedirectToAction(nameof(HallazgosAC), new { numero });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al agregar hallazgo a inspección {Numero}", numero);
+                TempData["Error"] = $"Error al agregar hallazgo: {ex.Message}";
+                return RedirectToAction(nameof(HallazgosAC), new { numero });
+            }
+        }
+
         // ========== BÚSQUEDA AJAX ==========
 
         [HttpGet("BuscarResponsable")]
@@ -573,9 +617,8 @@ namespace FabricaHilos.Controllers.Seguridad
         // ========== COMPATIBILIDAD CON MENÚ ANTIGUO ==========
 
         [HttpGet("SubirFoto")]
-        public async Task<IActionResult> SubirFoto()
+        public IActionResult SubirFoto()
         {
-            // Redirigir a Crear para mantener compatibilidad
             return RedirectToAction(nameof(Crear));
         }
     }

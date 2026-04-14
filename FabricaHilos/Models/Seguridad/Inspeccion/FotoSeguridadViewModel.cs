@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace FabricaHilos.Models.Seguridad.Inspeccion
 {
+    /// <summary>Registrar Inspección (sin foto/ubicación; con objetivo).</summary>
     public class FotoSeguridadViewModel
     {
         [Required(ErrorMessage = "Debe seleccionar un responsable de área.")]
@@ -21,14 +22,10 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         [Display(Name = "Tipo de Inspección")]
         public string TipoInspeccion { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Debe ingresar la ubicación del hallazgo.")]
-        [StringLength(100, ErrorMessage = "La ubicación no puede exceder los 100 caracteres.")]
-        [Display(Name = "Ubicación del Hallazgo")]
-        public string UbicacionFoto { get; set; } = string.Empty;
-
-        [Required(ErrorMessage = "Debe seleccionar una imagen.")]
-        [Display(Name = "Foto a subir")]
-        public IFormFile Foto { get; set; } = null!;
+        [Required(ErrorMessage = "Debe ingresar el objetivo del hallazgo.")]
+        [StringLength(200, ErrorMessage = "El objetivo no puede exceder los 200 caracteres.")]
+        [Display(Name = "Objetivo del Hallazgo")]
+        public string ObjetivoHallazgo { get; set; } = string.Empty;
     }
 
     public class AccionCorrectivaViewModel
@@ -43,6 +40,7 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         public IFormFile Foto { get; set; } = null!;
     }
 
+    /// <summary>Editar Inspección (mismos campos que registrar).</summary>
     public class EditarHallazgoViewModel
     {
         [Required(ErrorMessage = "Debe seleccionar un responsable de área.")]
@@ -60,5 +58,22 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         [Required(ErrorMessage = "Debe seleccionar el tipo de inspección.")]
         [Display(Name = "Tipo de Inspección")]
         public string TipoInspeccion { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Debe ingresar el objetivo del hallazgo.")]
+        [StringLength(200, ErrorMessage = "El objetivo no puede exceder los 200 caracteres.")]
+        [Display(Name = "Objetivo del Hallazgo")]
+        public string ObjetivoHallazgo { get; set; } = string.Empty;
+    }
+
+    /// <summary>Agregar hallazgo desde la ventana H / AC (ubicación + foto).</summary>
+    public class AgregarHallazgoFotoViewModel
+    {
+        [Display(Name = "Ubicación del Hallazgo")]
+        [StringLength(100, ErrorMessage = "La ubicación no puede exceder los 100 caracteres.")]
+        public string UbicacionFoto { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Debe seleccionar una imagen.")]
+        [Display(Name = "Foto del Hallazgo")]
+        public IFormFile Foto { get; set; } = null!;
     }
 }

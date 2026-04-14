@@ -1,0 +1,285 @@
+@model FabricaHilos.Models.Seguridad.Inspeccion.AgregarHallazgoFotoViewModel
+
+@{
+    ViewData["Title"] = "Gestión H / AC";
+    var inspeccion = ViewBag.Inspeccion as FabricaHilos.Services.Seguridad.Inspeccion.InspeccionListDto;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-action="Index">Seguridad</a></li>
+    <li class="breadcrumb-item active">Hallazgos / AC</li>
+}
+
+<style>
+    .preview-container {
+        border: 2px dashed var(--color-border, #dee2e6);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        background: var(--color-bg-light, #f8f9fa);
+        min-height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .preview-container.has-image {
+        border-color: #28a745;
+        background: #fff;
+    }
+</style>
+
+<h4 class="section-title"><i class="bi bi-list-check me-2"></i>Hallazgos / Acciones Correctivas</h4>
+
+@if (inspeccion != null)
+{
+    <!-- Info de la inspección -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body p-4">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-info-circle me-2"></i>Inspección N° @inspeccion.Numero
+            </h6>
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted" style="width:140px;">Fecha</td>
+                                <td class="fw-semibold">@inspeccion.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Tipo</td>
+                                <td>
+                                    @if (inspeccion.Tipo == "P")
+                                    {
+                                        <span class="badge bg-info">Planeada</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">No Planeada</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Centro de Costo</td>
+                                <td>@inspeccion.NombreCentroCosto</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted" style="width:140px;">Resp. Inspección</td>
+                                <td>@inspeccion.NombreRespInspeccion</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Resp. Área</td>
+                                <td>@inspeccion.NombreRespArea</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Objetivo</td>
+                                <td>@(string.IsNullOrWhiteSpace(inspeccion.Objetivo) ? "—" : inspeccion.Objetivo)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grilla de hallazgos -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-semibold">
+                <i class="bi bi-camera-fill me-1"></i>Hallazgos
+                <span class="badge bg-primary ms-1">@inspeccion.CantFotos / 10</span>
+            </h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:50px;">Ítem</th>
+                            <th>Ubicación</th>
+                            <th class="text-center" style="width:90px;">Foto H</th>
+                            <th class="text-center" style="width:100px;">AC</th>
+                            <th class="text-center" style="width:90px;">Foto AC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (inspeccion.Fotos.Any())
+                        {
+                            foreach (var foto in inspeccion.Fotos)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@foto.Item</td>
+                                    <td>@(string.IsNullOrWhiteSpace(foto.UbicaFotoH) ? "—" : foto.UbicaFotoH)</td>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(foto.RutaFotoH))
+                                        {
+                                            <a href="@Url.Action("Imagen", "Inspeccion", new { numero = inspeccion.Numero, item = foto.Item, tipo = "H" })"
+                                               target="_blank" class="btn btn-sm btn-outline-success" title="Ver foto hallazgo">
+                                                <i class="bi bi-image"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (foto.TieneAccionCorrectiva)
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check-lg"></i> Sí</span>
+                                        }
+                                        else
+                                        {
+                                            <a asp-action="AccionCorrectiva" asp-route-numero="@inspeccion.Numero" asp-route-item="@foto.Item"
+                                               class="btn btn-sm btn-outline-primary" title="Agregar AC">
+                                                <i class="bi bi-file-earmark-plus me-1"></i>AC
+                                            </a>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(foto.RutaFotoAc))
+                                        {
+                                            <a href="@Url.Action("Imagen", "Inspeccion", new { numero = inspeccion.Numero, item = foto.Item, tipo = "AC" })"
+                                               target="_blank" class="btn btn-sm btn-outline-info" title="Ver foto AC">
+                                                <i class="bi bi-image"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No hay hallazgos registrados. Agregue el primero a continuación.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulario para agregar hallazgo -->
+    @if (inspeccion.PuedeAgregarHallazgo)
+    {
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0 fw-semibold"><i class="bi bi-plus-circle me-1"></i>Agregar Hallazgo</h6>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="AgregarHallazgo" asp-controller="Inspeccion" asp-route-numero="@inspeccion.Numero" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="UbicacionFoto" class="form-label fw-semibold">
+                                Ubicación del Hallazgo
+                            </label>
+                            <input asp-for="UbicacionFoto"
+                                   type="text"
+                                   class="form-control"
+                                   placeholder="Ej: Área de Producción - Máquina 5"
+                                   maxlength="100" />
+                            <span asp-validation-for="UbicacionFoto" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">
+                                Foto del Hallazgo <span class="text-danger">*</span>
+                            </label>
+                            <input asp-for="Foto" type="file" accept="image/*" id="inputFoto" class="d-none" required />
+                            <input type="file" accept="image/*" capture="environment" id="cameraInput" class="d-none" />
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('cameraInput').click()">
+                                    <i class="bi bi-camera-fill me-1"></i>Tomar Foto
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('inputFoto').click()">
+                                    <i class="bi bi-image me-1"></i>Elegir Archivo
+                                </button>
+                            </div>
+                            <small id="fotoNombre" class="text-muted"></small>
+                            <div class="form-text">JPG, JPEG, PNG o WebP.</div>
+                            <span asp-validation-for="Foto" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <div id="previewContainer" class="preview-container d-none">
+                                <img id="previewImg" src="#" alt="Vista previa" class="img-fluid rounded" style="max-height: 200px;" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-plus-circle me-1"></i>Agregar Hallazgo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-1"></i>Esta inspección ya tiene el máximo de 10 hallazgos.
+        </div>
+    }
+
+    <div class="mt-3">
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver al Listado
+        </a>
+    </div>
+}
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+    <script>
+        function mostrarPreview(file) {
+            const container = document.getElementById('previewContainer');
+            const img = document.getElementById('previewImg');
+            const nombre = document.getElementById('fotoNombre');
+
+            if (file && file.type.startsWith('image/')) {
+                nombre.textContent = file.name;
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    img.src = e.target.result;
+                    container.classList.remove('d-none');
+                    container.classList.add('has-image');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                container.classList.add('d-none');
+                container.classList.remove('has-image');
+                nombre.textContent = '';
+            }
+        }
+
+        document.getElementById('cameraInput')?.addEventListener('change', function () {
+            const file = this.files[0];
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                document.getElementById('inputFoto').files = dt.files;
+                mostrarPreview(file);
+            }
+        });
+
+        document.getElementById('inputFoto')?.addEventListener('change', function () {
+            mostrarPreview(this.files[0]);
+        });
+    </script>
+}

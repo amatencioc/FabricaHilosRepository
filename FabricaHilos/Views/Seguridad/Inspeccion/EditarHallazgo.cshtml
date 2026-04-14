@@ -2,7 +2,7 @@
 @using FabricaHilos.Services.Seguridad.Inspeccion
 
 @{
-    ViewData["Title"] = "Editar Hallazgo";
+    ViewData["Title"] = "Editar Inspección";
     var numero = ViewBag.Numero as int? ?? 0;
 
     var listaRA  = ViewBag.ResponsablesAreaList as List<ResponsableDto> ?? new();
@@ -14,10 +14,10 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-action="Index">Seguridad</a></li>
-    <li class="breadcrumb-item active">Editar Hallazgo</li>
+    <li class="breadcrumb-item active">Editar Inspección</li>
 }
 
-<h4 class="section-title"><i class="bi bi-pencil-square me-2"></i>Editar Hallazgo N° @numero</h4>
+<h4 class="section-title"><i class="bi bi-pencil-square me-2"></i>Editar Inspección N° @numero</h4>
 
 <div class="row justify-content-center">
     <div class="col-md-8">
@@ -92,6 +92,18 @@
                             </select>
                             <span asp-validation-for="TipoInspeccion" class="text-danger small"></span>
                         </div>
+
+                        <div class="col-12">
+                            <label asp-for="ObjetivoHallazgo" class="form-label fw-semibold">
+                                Objetivo del Hallazgo <span class="text-danger">*</span>
+                            </label>
+                            <textarea asp-for="ObjetivoHallazgo"
+                                      class="form-control"
+                                      rows="3"
+                                      placeholder="Describa el objetivo de la inspección..."
+                                      maxlength="200"></textarea>
+                            <span asp-validation-for="ObjetivoHallazgo" class="text-danger small"></span>
+                        </div>
                     </div>
 
                     <div class="mt-4 d-flex gap-2">
@@ -109,7 +121,6 @@
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
-        // ===== Buscador genérico =====
         function initBuscador(inputId, codigoId, statusId, resultadosId, urlBuscar) {
             const input      = document.getElementById(inputId);
             const codigoHid  = document.getElementById(codigoId);
@@ -192,7 +203,6 @@
             document.getElementById(inputId.replace('Buscar', 'Resultados'))?.classList.add('d-none');
         }
 
-        // Inicializar buscadores
         const baseUrl = '@Url.Action("BuscarResponsable", "Inspeccion")'.split('?')[0];
         const ccUrl   = '@Url.Action("BuscarCentroCosto", "Inspeccion")'.split('?')[0];
 

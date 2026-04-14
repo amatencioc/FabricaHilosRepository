@@ -1208,13 +1208,14 @@ namespace FabricaHilos.Services.Sgc
             string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(F.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(F.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
 
             // Filtro de certificados basado en ITEMPED.COD_ART (concepto del pedido)
+            // Se usa EXISTS para evitar row multiplication cuando no hay filtro de certificados
             string certFilter = string.Empty;
             if (hasGots && hasOcs)
-                certFilter = "\n                          AND (ICERT.COD_ART = 'CERTGOTS' OR ICERT.COD_ART = 'CERTOCS')";
+                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART IN ('CERTGOTS','CERTOCS'))";
             else if (hasGots)
-                certFilter = "\n                          AND ICERT.COD_ART = 'CERTGOTS'";
+                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTGOTS')";
             else if (hasOcs)
-                certFilter = "\n                          AND ICERT.COD_ART = 'CERTOCS'";
+                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1279,11 +1280,7 @@ namespace FabricaHilos.Services.Sgc
                             CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
                             MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
                             MAX(RC.NUM_CER)                                         AS ""NUM_CER""
-                        FROM SIG.ITEMPED ICERT
-                        INNER JOIN SIG.PEDIDO P
-                                ON P.NUM_PED = ICERT.NUM_PED
-                               AND P.SERIE   = ICERT.SERIE
-                               AND P.ESTADO <> '9'
+                        FROM SIG.PEDIDO P
                         LEFT  JOIN SIG.KARDEX_G G
                                 ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                                AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
@@ -1312,15 +1309,14 @@ namespace FabricaHilos.Services.Sgc
                                 ON I.NUM_PED = P.NUM_PED
                                AND I.SERIE   = P.SERIE
                                AND I.COD_ART = ID.COD_ART
-                        LEFT  JOIN SIG.PACKING_G PK
-                                ON PK.NUM_PED = P.NUM_PED
                         LEFT  JOIN SIG.REQ_CERT_D RD
                                 ON RD.TIPODOC = F.TIPODOC
                                AND TRIM(RD.SERIE) = TRIM(F.SERIE)
                                AND RD.NUMERO = TO_NUMBER(TRIM(F.NUMERO))
                         LEFT  JOIN SIG.REQ_CERT RC
                                 ON RC.NUM_REQ = RD.NUM_REQ
-                        WHERE ID.COD_ART IS NOT NULL
+                        WHERE P.ESTADO <> '9'
+                          AND ID.COD_ART IS NOT NULL
                           AND I.COD_ART  IS NOT NULL{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
                             F.TIPODOC,
@@ -1342,6 +1338,7 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(connStr);
                 await conn.OpenAsync();
                 using var cmd = new OracleCommand(sql, conn);
+                cmd.CommandTimeout = 60;
                 cmd.BindByName = true;
 
                 if (hasGuia)

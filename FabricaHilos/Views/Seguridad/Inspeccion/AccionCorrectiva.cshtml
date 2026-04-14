@@ -3,6 +3,8 @@
 @{
     ViewData["Title"] = "Acción Correctiva";
     var inspeccion = ViewBag.Inspeccion as FabricaHilos.Services.Seguridad.Inspeccion.InspeccionListDto;
+    var itemNum = (int)(ViewBag.Item ?? 0);
+    var fotoHallazgo = ViewBag.FotoHallazgo as FabricaHilos.Services.Seguridad.Inspeccion.InspeccionFotoDto;
 }
 
 @section Breadcrumb {
@@ -70,13 +72,13 @@
                                 <td class="text-muted">Resp. Área</td>
                                 <td>@inspeccion.NombreRespArea</td>
                             </tr>
-                            @if (!string.IsNullOrEmpty(inspeccion.UbicaFotoH))
+                            @if (fotoHallazgo != null && !string.IsNullOrEmpty(fotoHallazgo.UbicaFotoH))
                             {
                                 <tr>
-                                    <td class="text-muted">Hallazgo</td>
+                                    <td class="text-muted">Hallazgo (Ítem @fotoHallazgo.Item)</td>
                                     <td>
-                                        @inspeccion.UbicaFotoH
-                                        <small class="text-muted ms-2">(@inspeccion.FechaFotoH?.ToString("dd/MM/yyyy"))</small>
+                                        @fotoHallazgo.UbicaFotoH
+                                        <small class="text-muted ms-2">(@fotoHallazgo.FechaFotoH?.ToString("dd/MM/yyyy"))</small>
                                     </td>
                                 </tr>
                             }
@@ -88,7 +90,7 @@
             <!-- Formulario -->
             <div class="card shadow-sm">
                 <div class="card-body p-4">
-                    <form asp-action="AccionCorrectiva" asp-controller="Inspeccion" asp-route-numero="@inspeccion.Numero" method="post" enctype="multipart/form-data">
+                    <form asp-action="AccionCorrectiva" asp-controller="Inspeccion" asp-route-numero="@inspeccion.Numero" asp-route-item="@itemNum" method="post" enctype="multipart/form-data">
                         @Html.AntiForgeryToken()
 
                         <div class="row g-3">

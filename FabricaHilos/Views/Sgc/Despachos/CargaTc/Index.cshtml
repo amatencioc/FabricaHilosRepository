@@ -29,18 +29,31 @@
 <!-- Filtros -->
 <div class="card mb-3">
     <div class="card-body py-2">
-        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap">
-            <input type="text" name="buscar" value="@buscar" class="form-control form-control-sm" placeholder="Buscar (NUM_CER, Razón Social, RUC)..." style="max-width: 300px;" />
-            <input type="date" name="fechaInicio" value="@fechaInicio" class="form-control form-control-sm" style="max-width: 180px;" />
-            <input type="date" name="fechaFin" value="@fechaFin" class="form-control form-control-sm" style="max-width: 180px;" />
-            <button type="submit" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-search me-1"></i>Filtrar
-            </button>
+        <form method="get" asp-action="Index" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Buscar</label>
+                <input type="text" name="buscar" value="@buscar" class="form-control form-control-sm" placeholder="Buscar (NUM_CER, Razón Social, RUC)..." style="width: 280px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Inicio</label>
+                <input type="text" name="fechaInicio" value="@fechaInicio" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <label class="form-label form-label-sm mb-0">Fecha Fin</label>
+                <input type="text" name="fechaFin" value="@fechaFin" class="form-control form-control-sm" placeholder="dd/mm/aaaa" autocomplete="off" data-flatpickr="date" style="width: 145px;" />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Filtrar
+                </button>
+            </div>
             @if (!string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin))
             {
-                <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
-                    <i class="bi bi-x-circle me-1"></i>Limpiar filtros
-                </a>
+                <div class="col-auto">
+                    <a asp-action="Index" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros">
+                        <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                    </a>
+                </div>
             }
         </form>
     </div>

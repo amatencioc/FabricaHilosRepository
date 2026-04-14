@@ -40,6 +40,17 @@ namespace FabricaHilos.Controllers
             string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, 
             bool? gots = null, bool? ocs = null, int page = 1)
         {
+            // Cuando no hay ningún filtro (primera carga), aplicar rango de fechas por defecto (último mes)
+            bool sinFiltros = string.IsNullOrEmpty(t)
+                && guia == null && pedido == null && factura == null && razonSocial == null
+                && !fechaInicio.HasValue && !fechaFin.HasValue && !gots.HasValue && !ocs.HasValue;
+
+            if (sinFiltros)
+            {
+                fechaFin    = DateTime.Today;
+                fechaInicio = DateTime.Today.AddDays(-30);
+                gots        = true;
+            }
 
             // Si hay filtros nuevos sin token, crear token y redirigir
             if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || razonSocial != null || fechaInicio.HasValue || fechaFin.HasValue || gots.HasValue || ocs.HasValue))

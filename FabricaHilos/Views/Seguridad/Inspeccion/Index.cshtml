@@ -168,70 +168,52 @@
 
                         <div class="row g-2 mb-3">
                             <div class="col-6 text-center">
-                                @if (!string.IsNullOrEmpty(item.UbicaFotoH))
+                                @if (item.TieneHallazgos)
                                 {
-                                    @if (item.Estado != "9")
-                                    {
-                                        <a href="#" class="btn-editar-foto text-decoration-none"
-                                           data-numero="@item.Numero" data-tipo="H"
-                                           data-ubicacion="@item.UbicaFotoH">
-                                            <div class="info-badge bg-success text-white">
-                                                <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> H
-                                            </div>
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <div class="info-badge bg-secondary text-white">
-                                            <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> H
-                                        </div>
-                                    }
-                                    <div><small class="text-muted">@item.FechaFotoH?.ToString("dd/MM/yy")</small></div>
+                                    <div class="info-badge bg-success text-white">
+                                        <i class="bi bi-camera-fill me-1"></i> H: @item.CantFotos
+                                    </div>
                                 }
                                 else
                                 {
                                     <div class="info-badge bg-light">
-                                        <i class="bi bi-dash"></i> H
+                                        <i class="bi bi-dash"></i> H: 0
                                     </div>
                                 }
                             </div>
                             <div class="col-6 text-center">
-                                @if (item.TieneAccionCorrectiva)
+                                @if (item.CantAccionesCorrectivas > 0)
                                 {
-                                    @if (item.Estado != "9")
-                                    {
-                                        <a href="#" class="btn-editar-foto text-decoration-none"
-                                           data-numero="@item.Numero" data-tipo="AC"
-                                           data-ubicacion="@item.UbicaFotoAc">
-                                            <div class="info-badge bg-success text-white">
-                                                <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> AC
-                                            </div>
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <div class="info-badge bg-secondary text-white">
-                                            <i class="bi bi-camera-fill me-1"></i><i class="bi bi-check-circle-fill"></i> AC
-                                        </div>
-                                    }
-                                    <div><small class="text-muted">@item.FechaFotoAc?.ToString("dd/MM/yy")</small></div>
+                                    <div class="info-badge @(item.TodasTienenAccionCorrectiva ? "bg-success" : "bg-warning") text-white">
+                                        <i class="bi bi-check-circle-fill me-1"></i> AC: @item.CantAccionesCorrectivas/@item.CantFotos
+                                    </div>
                                 }
                                 else
                                 {
                                     <div class="info-badge bg-light">
-                                        <i class="bi bi-dash"></i> AC
+                                        <i class="bi bi-dash"></i> AC: 0
                                     </div>
                                 }
                             </div>
                         </div>
 
-                        <div class="d-flex gap-2 justify-content-center">
-                            @if (!item.TieneAccionCorrectiva && item.Estado != "9")
+                        <div class="d-flex gap-2 justify-content-center flex-wrap">
+                            @if (item.PuedeAgregarHallazgo)
                             {
-                                <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero"
-                                   class="btn btn-sm btn-outline-primary" title="Agregar AC">
-                                    <i class="bi bi-file-earmark-plus"></i>
+                                <a asp-action="AgregarHallazgo" asp-route-numero="@item.Numero"
+                                   class="btn btn-sm btn-outline-success" title="Agregar Hallazgo">
+                                    <i class="bi bi-plus-circle"></i> H
                                 </a>
+                            }
+                            @if (item.TieneAccionCorrectivaPendiente && item.Estado != "9")
+                            {
+                                @foreach (var foto in item.Fotos.Where(f => !f.TieneAccionCorrectiva))
+                                {
+                                    <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero" asp-route-item="@foto.Item"
+                                       class="btn btn-sm btn-outline-primary" title="AC ítem @foto.Item">
+                                        <i class="bi bi-file-earmark-plus"></i> AC-@foto.Item
+                                    </a>
+                                }
                             }
                             @if (item.Estado != "9")
                             {
@@ -308,64 +290,35 @@
                                         <td>@item.NombreRespInspeccion</td>
                                         <td>@item.NombreRespArea</td>
                                         <td class="text-center">
-                                            @if (!string.IsNullOrEmpty(item.UbicaFotoH))
+                                            @if (item.TieneHallazgos)
                                             {
-                                                @if (item.Estado != "9")
-                                                {
-                                                    <a href="#" class="btn-editar-foto text-decoration-none"
-                                                       data-numero="@item.Numero" data-tipo="H"
-                                                       data-ubicacion="@item.UbicaFotoH"
-                                                       title="Editar hallazgo - foto y ubicación">
-                                                        <i class="bi bi-camera-fill text-secondary me-1"></i><i class="bi bi-check-circle-fill text-success"></i>
-                                                    </a>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-check-circle-fill text-muted"></i>
-                                                }
-                                                <div><small class="text-muted">@item.FechaFotoH?.ToString("dd/MM/yy")</small></div>
+                                                <span class="badge bg-success">@item.CantFotos</span>
                                             }
                                             else
                                             {
-                                                <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-dash text-muted"></i>
+                                                <span class="badge bg-light text-muted">0</span>
                                             }
                                         </td>
                                         <td class="text-center">
-                                            @if (item.TieneAccionCorrectiva)
+                                            @if (item.CantAccionesCorrectivas > 0)
                                             {
-                                                @if (item.Estado != "9")
-                                                {
-                                                    <a href="#" class="btn-editar-foto text-decoration-none"
-                                                       data-numero="@item.Numero" data-tipo="AC"
-                                                       data-ubicacion="@item.UbicaFotoAc"
-                                                       title="Editar acción correctiva - foto y ubicación">
-                                                        <i class="bi bi-camera-fill text-secondary me-1"></i><i class="bi bi-check-circle-fill text-success"></i>
-                                                    </a>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-check-circle-fill text-muted"></i>
-                                                }
-                                                <div><small class="text-muted">@item.FechaFotoAc?.ToString("dd/MM/yy")</small></div>
+                                                <span class="badge @(item.TodasTienenAccionCorrectiva ? "bg-success" : "bg-warning")">@item.CantAccionesCorrectivas/@item.CantFotos</span>
                                             }
                                             else
                                             {
-                                                <i class="bi bi-camera-fill text-muted me-1"></i><i class="bi bi-dash text-muted"></i>
+                                                <span class="badge bg-light text-muted">0/@item.CantFotos</span>
                                             }
                                         </td>
                                         <td>
-                                            <div class="d-flex gap-1">
-                                                @if (!item.TieneAccionCorrectiva && item.Estado != "9")
-                                                {
-                                                    <a asp-action="AccionCorrectiva" asp-route-numero="@item.Numero"
-                                                       class="btn btn-sm btn-outline-primary" title="Agregar AC">
-                                                        <i class="bi bi-file-earmark-plus"></i>
-                                                    </a>
-                                                }
+                                            <div class="d-flex gap-1 flex-wrap">
                                                 @if (item.Estado != "9")
                                                 {
+                                                    <a asp-action="HallazgosAC" asp-route-numero="@item.Numero"
+                                                       class="btn btn-sm btn-outline-success" title="Agregar H / AC">
+                                                        <i class="bi bi-plus-circle"></i>
+                                                    </a>
                                                     <a asp-action="Editar" asp-route-numero="@item.Numero"
-                                                       class="btn btn-sm btn-outline-secondary" title="Editar Hallazgo">
+                                                       class="btn btn-sm btn-outline-secondary" title="Editar Inspección">
                                                         <i class="bi bi-pencil-square"></i>
                                                     </a>
                                                 }
@@ -431,6 +384,7 @@
             <form asp-action="ActualizarFoto" asp-controller="Inspeccion" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="numero" id="efNumero" />
+                <input type="hidden" name="item" id="efItem" />
                 <input type="hidden" name="tipoFoto" id="efTipoFoto" />
                 <div class="modal-body">
                     <div class="mb-3">
@@ -510,12 +464,13 @@
             el.addEventListener('click', function (e) {
                 e.preventDefault();
                 document.getElementById('efNumero').value = this.dataset.numero;
+                document.getElementById('efItem').value = this.dataset.item;
                 document.getElementById('efTipoFoto').value = this.dataset.tipo;
                 document.getElementById('efUbicacion').value = this.dataset.ubicacion || '';
                 document.getElementById('efFoto').value = '';
                 document.getElementById('efPreviewContainer').classList.add('d-none');
                 document.getElementById('modalEditarFotoLabel').textContent =
-                    this.dataset.tipo === 'H' ? 'Editar Hallazgo - Foto y Ubicación' : 'Editar Acción Correctiva - Foto y Ubicación';
+                    this.dataset.tipo === 'H' ? 'Editar Hallazgo - Foto y Ubicación (Ítem ' + this.dataset.item + ')' : 'Editar Acción Correctiva - Foto y Ubicación (Ítem ' + this.dataset.item + ')';
                 new bootstrap.Modal(document.getElementById('modalEditarFoto')).show();
             });
         });
@@ -543,7 +498,7 @@
                     const d = await resp.json();
                     const estadoMap = { '1': '<span class="badge bg-success">Registrado</span>', '6': '<span class="badge bg-info">Cerrado</span>', '9': '<span class="badge bg-danger">Anulado</span>' };
                     const tipoLabel = d.tipo === 'P' ? '<span class="badge bg-info">Planeada</span>' : '<span class="badge bg-warning">No Planeada</span>';
-                    const imgUrl = (t) => basePath + '/Imagen/' + numero + '/' + t;
+                    const imgUrl = (item, t) => basePath + '/Imagen/' + numero + '/' + item + '/' + t;
                     let html = `
                         <h6 class="fw-semibold"><i class="bi bi-info-circle me-2"></i>Datos de la Inspección</h6>
                         <table class="table table-sm table-borderless">
@@ -556,28 +511,37 @@
                             <tr><td class="text-muted">Resp. Área</td><td>${d.nombreRespArea}</td></tr>
                         </table>
                         <hr/>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <h6 class="fw-semibold"><i class="bi bi-camera-fill me-2"></i>Hallazgo (H)</h6>`;
-                    if (d.ubicaFotoH) {
-                        html += `<p><strong>Ubicación:</strong> ${d.ubicaFotoH}</p>
-                                 <p><strong>Fecha:</strong> ${d.fechaFotoH || '-'}</p>
-                                 <img src="${imgUrl('H')}" class="img-fluid rounded border" alt="Foto Hallazgo"
-                                      onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
+                        <h6 class="fw-semibold"><i class="bi bi-camera-fill me-2"></i>Fotos (${d.fotos.length})</h6>`;
+                    if (d.fotos && d.fotos.length > 0) {
+                        d.fotos.forEach(f => {
+                            html += `<div class="card mb-3"><div class="card-body">
+                                <h6 class="fw-semibold mb-2">Ítem ${f.item}</h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-2">
+                                        <strong>Hallazgo (H)</strong>`;
+                            if (f.ubicaFotoH) {
+                                html += `<p class="mb-1"><small class="text-muted">Ubicación:</small> ${f.ubicaFotoH}</p>
+                                         <p class="mb-1"><small class="text-muted">Fecha:</small> ${f.fechaFotoH || '-'}</p>
+                                         <img src="${imgUrl(f.item, 'H')}" class="img-fluid rounded border" alt="H-${f.item}" style="max-height:200px;"
+                                              onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
+                            } else {
+                                html += '<p class="text-muted">Sin foto</p>';
+                            }
+                            html += `</div><div class="col-md-6 mb-2">
+                                        <strong>Acción Correctiva (AC)</strong>`;
+                            if (f.ubicaFotoAc) {
+                                html += `<p class="mb-1"><small class="text-muted">Ubicación:</small> ${f.ubicaFotoAc}</p>
+                                         <p class="mb-1"><small class="text-muted">Fecha:</small> ${f.fechaFotoAc || '-'}</p>
+                                         <img src="${imgUrl(f.item, 'AC')}" class="img-fluid rounded border" alt="AC-${f.item}" style="max-height:200px;"
+                                              onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
+                            } else {
+                                html += '<p class="text-muted">Sin acción correctiva</p>';
+                            }
+                            html += '</div></div></div></div>';
+                        });
                     } else {
-                        html += '<p class="text-muted">Sin hallazgo registrado</p>';
+                        html += '<p class="text-muted">Sin fotos registradas</p>';
                     }
-                    html += `</div><div class="col-md-6 mb-3">
-                                <h6 class="fw-semibold"><i class="bi bi-check-circle-fill me-2"></i>Acción Correctiva (AC)</h6>`;
-                    if (d.ubicaFotoAc) {
-                        html += `<p><strong>Ubicación:</strong> ${d.ubicaFotoAc}</p>
-                                 <p><strong>Fecha:</strong> ${d.fechaFotoAc || '-'}</p>
-                                 <img src="${imgUrl('AC')}" class="img-fluid rounded border" alt="Foto AC"
-                                      onerror="this.outerHTML='<p class=\\'text-muted\\'>Imagen no disponible</p>'" />`;
-                    } else {
-                        html += '<p class="text-muted">Sin acción correctiva</p>';
-                    }
-                    html += '</div></div>';
                     document.getElementById('verBody').innerHTML = html;
                 } catch (e) {
                     document.getElementById('verBody').innerHTML = '<div class="alert alert-danger">Error al cargar los datos.</div>';
