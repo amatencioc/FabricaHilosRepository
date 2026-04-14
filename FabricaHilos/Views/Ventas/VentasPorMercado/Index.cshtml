@@ -1,0 +1,747 @@
+@{
+    ViewData["Title"] = "Ventas por Mercado";
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .chart-spinner {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+    .detail-table thead th {
+        background: #1B4D3E;
+        color: #fff;
+        font-weight: 600;
+        font-size: .82rem;
+        white-space: nowrap;
+    }
+    .detail-table td { font-size: .83rem; vertical-align: middle; }
+
+    .kpi-card {
+        border-radius: 12px;
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(0,0,0,.18);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .kpi-card .kpi-icon { font-size: 2.4rem; opacity: .85; }
+    .kpi-card .kpi-label { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
+    .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
+    .kpi-card .kpi-sub   { font-size: .75rem; opacity: .8; margin-top: 2px; }
+    .bg-kpi-total { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
+    .bg-kpi-peru  { background: linear-gradient(135deg, #1a237e, #3949ab); }
+    .bg-kpi-latam { background: linear-gradient(135deg, #e65100, #fb8c00); }
+    .bg-kpi-global{ background: linear-gradient(135deg, #b71c1c, #e53935); }
+
+    /* Mapa SVG */
+    .map-container { position: relative; }
+    .map-container svg { width: 100%; height: auto; }
+    .map-region { fill: #e0e0e0; stroke: #fff; stroke-width: .5; transition: fill .3s, opacity .3s; cursor: pointer; }
+    .map-region:hover { opacity: .8; }
+    .map-region.region-peru  { fill: #1a237e; }
+    .map-region.region-latam { fill: #fb8c00; }
+    .map-region.region-global{ fill: #e53935; }
+
+    /* Leyenda de colores */
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 1.2rem;
+        font-size: .82rem;
+        font-weight: 500;
+        color: #333;
+    }
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: .4rem;
+        display: inline-block;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Ventas por Mercado</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Moneda</label>
+            <select id="moneda" class="form-select form-select-sm" style="min-width:110px">
+                <option value="D" selected>Dólares (USD)</option>
+                <option value="S">Soles (PEN)</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+</div>
+
+<!-- ── KPI Resumen ────────────────────────────────────── -->
+<div class="row g-3 mb-3" id="kpiRow">
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-total">
+            <i class="bi bi-currency-dollar kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Total Ventas</div>
+                <div class="kpi-value" id="kpiTotal">—</div>
+                <div class="kpi-sub">en el período</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-peru">
+            <i class="bi bi-geo-alt-fill kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Perú</div>
+                <div class="kpi-value" id="kpiPeru">—</div>
+                <div class="kpi-sub" id="kpiPeruPct">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-latam">
+            <i class="bi bi-globe-americas kpi-icon"></i>
+            <div>
+                <div class="kpi-label">LATAM</div>
+                <div class="kpi-value" id="kpiLatam">—</div>
+                <div class="kpi-sub" id="kpiLatamPct">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="kpi-card bg-kpi-global">
+            <i class="bi bi-globe2 kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Global</div>
+                <div class="kpi-value" id="kpiGlobal">—</div>
+                <div class="kpi-sub" id="kpiGlobalPct">—</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección Principal: Mapa + Donut ────────────────── -->
+<div class="section-title"><i class="bi bi-globe-americas me-1"></i>Ventas por Mercado</div>
+<p class="report-desc">Distribución de ventas por mercado geográfico. <strong>Perú</strong> = ventas nacionales, <strong>LATAM</strong> = países de Latinoamérica (indicador L), <strong>Global</strong> = Europa, Asia, Oceanía y otros. <strong>Haga clic en el donut</strong> para ver el detalle por país.</p>
+<div class="row g-3 mb-3">
+    <!-- Mapa -->
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Distribución Geográfica</div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center" style="min-height:380px">
+                <div class="map-container" id="mapContainer" style="max-width:600px; width:100%;">
+                    <!-- SVG world map simplified -->
+                    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+                        <!-- América del Norte -->
+                        <path class="map-region region-global" data-mercado="Global" d="M120,30 L280,30 L300,60 L310,100 L290,140 L260,160 L230,150 L210,130 L180,120 L150,110 L130,80 L120,50 Z" title="América del Norte"/>
+                        <!-- México + Centroamérica -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M130,150 L180,130 L210,140 L230,160 L240,180 L220,200 L200,210 L180,200 L160,190 L140,175 Z" title="México y Centroamérica"/>
+                        <!-- Caribe -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M245,175 L270,165 L285,175 L280,190 L260,195 L245,188 Z" title="Caribe"/>
+                        <!-- Colombia/Venezuela -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M220,210 L260,200 L290,210 L300,240 L280,260 L250,260 L230,250 L215,235 Z" title="Colombia y Venezuela"/>
+                        <!-- Perú -->
+                        <path class="map-region region-peru" data-mercado="Perú" d="M215,260 L250,260 L260,280 L255,310 L240,330 L220,325 L210,300 L205,275 Z" title="Perú"/>
+                        <!-- Brasil -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M260,260 L320,240 L360,260 L370,300 L350,340 L320,370 L290,370 L270,350 L255,320 L260,290 Z" title="Brasil"/>
+                        <!-- Bolivia/Paraguay -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M255,320 L270,330 L285,340 L290,370 L270,380 L250,370 L245,345 Z" title="Bolivia y Paraguay"/>
+                        <!-- Chile -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M230,335 L245,345 L250,380 L245,410 L240,440 L230,460 L220,450 L225,410 L222,370 Z" title="Chile"/>
+                        <!-- Argentina/Uruguay -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M250,380 L280,385 L290,400 L285,430 L270,450 L250,455 L240,440 L245,410 Z" title="Argentina y Uruguay"/>
+                        <!-- Ecuador -->
+                        <path class="map-region region-latam" data-mercado="LATAM" d="M200,240 L215,235 L215,260 L205,275 L195,265 Z" title="Ecuador"/>
+                        <!-- Europa -->
+                        <path class="map-region region-global" data-mercado="Global" d="M440,40 L530,30 L570,50 L580,80 L600,90 L610,120 L580,140 L540,145 L500,140 L470,130 L450,110 L440,80 Z" title="Europa"/>
+                        <!-- Rusia / Europa del Este -->
+                        <path class="map-region region-global" data-mercado="Global" d="M570,30 L700,20 L780,40 L800,70 L780,100 L720,110 L650,100 L610,90 L600,60 Z" title="Rusia"/>
+                        <!-- África del Norte -->
+                        <path class="map-region region-global" data-mercado="Global" d="M440,150 L540,145 L580,160 L580,200 L560,230 L520,240 L480,240 L450,220 L440,190 Z" title="África del Norte"/>
+                        <!-- África Central y Sur -->
+                        <path class="map-region region-global" data-mercado="Global" d="M480,240 L530,245 L560,260 L570,300 L560,340 L540,370 L520,390 L500,380 L490,350 L480,310 L470,280 Z" title="África"/>
+                        <!-- Medio Oriente -->
+                        <path class="map-region region-global" data-mercado="Global" d="M580,140 L620,130 L660,140 L680,170 L660,200 L620,210 L590,200 L580,170 Z" title="Medio Oriente"/>
+                        <!-- Asia Central -->
+                        <path class="map-region region-global" data-mercado="Global" d="M660,60 L750,50 L800,70 L810,100 L790,120 L740,130 L700,120 L680,100 Z" title="Asia Central"/>
+                        <!-- India -->
+                        <path class="map-region region-global" data-mercado="Global" d="M680,170 L720,150 L740,170 L735,210 L720,240 L700,250 L685,230 L680,200 Z" title="India"/>
+                        <!-- China / Este de Asia -->
+                        <path class="map-region region-global" data-mercado="Global" d="M750,70 L850,50 L890,80 L900,120 L880,150 L840,160 L800,150 L770,130 L750,100 Z" title="China y Este de Asia"/>
+                        <!-- Sudeste Asiático -->
+                        <path class="map-region region-global" data-mercado="Global" d="M780,170 L830,160 L860,180 L870,210 L850,240 L820,250 L790,240 L775,210 Z" title="Sudeste Asiático"/>
+                        <!-- Japón/Corea -->
+                        <path class="map-region region-global" data-mercado="Global" d="M890,90 L920,80 L935,100 L930,130 L910,140 L895,125 Z" title="Japón y Corea"/>
+                        <!-- Oceanía -->
+                        <path class="map-region region-global" data-mercado="Global" d="M820,320 L900,300 L940,320 L950,360 L930,390 L880,400 L840,380 L820,350 Z" title="Oceanía"/>
+                        <!-- Nueva Zelanda -->
+                        <path class="map-region region-global" data-mercado="Global" d="M930,400 L950,390 L960,410 L955,430 L940,435 L930,420 Z" title="Nueva Zelanda"/>
+                    </svg>
+                </div>
+                <div class="mt-3">
+                    <span class="legend-item"><span class="legend-dot" style="background:#1a237e"></span>Perú</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#fb8c00"></span>LATAM</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#e53935"></span>Global</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Donut -->
+    <div class="col-lg-5">
+        <div class="card chart-card position-relative">
+            <div id="spinnerMercado" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Participación por Mercado</div>
+            <div class="card-body d-flex align-items-center justify-content-center" style="height:380px">
+                <canvas id="chartMercado"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 2: Detalle por País (drill-down) ── -->
+<div id="detallePaisPanel" style="display:none">
+    <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle por País — <span id="detallePaisTitulo"></span></div>
+    <p class="report-desc">Lista de países y el importe vendido en cada uno para el mercado seleccionado, ordenados de mayor a menor.</p>
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetallePais" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Importe por País</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetallePais()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Código</th>
+                                <th>País</th>
+                                <th class="text-end">Importe</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetallePais"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card chart-card position-relative">
+                <div class="card-header small">Distribución por País</div>
+                <div class="card-body d-flex align-items-center justify-content-center" style="height:350px">
+                    <canvas id="chartDetallePais"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 3: Detalle por Departamento (Perú) ── -->
+<div id="detalleDptoPanel" style="display:none">
+    <div class="section-title"><i class="bi bi-geo-alt me-1"></i>Detalle por Departamento — Perú</div>
+    <p class="report-desc">Distribución de ventas nacionales por departamento. Permite identificar las regiones con mayor concentración de ventas.</p>
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetalleDpto" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Importe por Departamento</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleDpto()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Departamento</th>
+                                <th class="text-end">Importe</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleDpto"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card chart-card position-relative">
+                <div class="card-header small">Top Departamentos</div>
+                <div class="card-body" style="height:350px">
+                    <canvas id="chartDetalleDpto"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+(function () {
+    'use strict';
+
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
+
+    /* ── Formato de números ─────────────────────────── */
+    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmt  = n => fmtPE.format(n ?? 0);
+    const fmtMil = n => {
+        n = n ?? 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return fmt(n);
+    };
+
+    /* ── Colores por mercado ──────────────────────────── */
+    const MERCADO_COLORS = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Global': '#e53935' };
+    const PAIS_COLORS = [
+        '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+        '#00838f','#c62828','#4e342e','#37474f','#f9a825',
+        '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
+    ];
+
+    /* ── Instancias de charts ──────────────────────── */
+    const charts = {};
+    function destroyChart(key) {
+        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+    }
+
+    /* ── Spinner helpers ───────────────────────────── */
+    function showSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+    function hideSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    /* ── Toast ──────────────────────────────────────── */
+    function showToast(msg, type) {
+        type = type || 'danger';
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
+        toast.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
+        toast.innerHTML = msg + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
+        container.appendChild(toast);
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 6000);
+    }
+
+    /* ── Fechas por defecto ──────────────────────────── */
+    function setDefaultDates() {
+        const hoy = new Date();
+        const ini = new Date(hoy.getFullYear(), 0, 1);
+        const toISO = d => d.toISOString().slice(0, 10);
+        fpSetDate('#fechaInicio', toISO(ini));
+        fpSetDate('#fechaFin',    toISO(hoy));
+    }
+
+    /* ── Parámetros del query string ────────────────── */
+    function buildParams() {
+        const fi  = document.getElementById('fechaInicio').value;
+        const ff  = document.getElementById('fechaFin').value;
+        const mon = document.getElementById('moneda').value;
+        const p   = new URLSearchParams();
+        if (fi)  p.set('fechaInicio', fi);
+        if (ff)  p.set('fechaFin',    ff);
+        if (mon) p.set('moneda',      mon);
+        return p;
+    }
+
+    /* ── Fetch genérico ─────────────────────────────── */
+    async function apiFetch(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    }
+
+    /* ══════════════════════════════════════════════════
+       DONUT: Ventas por Mercado
+       ══════════════════════════════════════════════════ */
+    function renderMercado(data) {
+        destroyChart('mercado');
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+        // KPI cards
+        document.getElementById('kpiTotal').textContent = monLabel + ' ' + fmtMil(total);
+
+        const peruVal  = data.find(d => d.mercado === 'Perú')?.importe ?? 0;
+        const latamVal = data.find(d => d.mercado === 'LATAM')?.importe ?? 0;
+        const globalVal= data.find(d => d.mercado === 'Global')?.importe ?? 0;
+
+        document.getElementById('kpiPeru').textContent   = monLabel + ' ' + fmtMil(peruVal);
+        document.getElementById('kpiLatam').textContent  = monLabel + ' ' + fmtMil(latamVal);
+        document.getElementById('kpiGlobal').textContent = monLabel + ' ' + fmtMil(globalVal);
+
+        document.getElementById('kpiPeruPct').textContent   = total > 0 ? ((peruVal / total) * 100).toFixed(1) + '% del total' : '—';
+        document.getElementById('kpiLatamPct').textContent  = total > 0 ? ((latamVal / total) * 100).toFixed(1) + '% del total' : '—';
+        document.getElementById('kpiGlobalPct').textContent = total > 0 ? ((globalVal / total) * 100).toFixed(1) + '% del total' : '—';
+
+        const labels   = data.map(d => d.mercado);
+        const values   = data.map(d => d.importe ?? 0);
+        const colors   = labels.map(l => MERCADO_COLORS[l] || '#999');
+
+        charts['mercado'] = new Chart(document.getElementById('chartMercado').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                onClick: handleDonutClick,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 14, font: { size: 12 }, padding: 18 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                                return ctx.label + ': ' + monLabel + ' ' + fmt(ctx.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 14 },
+                        formatter: function (v) {
+                            const pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0;
+                            return pct + '%';
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'centerText',
+                afterDraw: function (chart) {
+                    const ctx = chart.ctx;
+                    const { width, height } = chart.chartArea || chart;
+                    const cx = (chart.chartArea.left + chart.chartArea.right) / 2;
+                    const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2;
+
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    ctx.font = 'bold 18px sans-serif';
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 8);
+
+                    ctx.font = '12px sans-serif';
+                    ctx.fillStyle = '#888';
+                    ctx.fillText('TOTAL', cx, cy + 14);
+
+                    ctx.restore();
+                }
+            }]
+        });
+    }
+
+    /* ══════════════════════════════════════════════════
+       DONUT click → drill-down por país
+       ══════════════════════════════════════════════════ */
+    function handleDonutClick(evt, elements) {
+        if (!elements || elements.length === 0) return;
+        const idx = elements[0].index;
+        const mercado = charts['mercado'].data.labels[idx];
+        loadDetallePais(mercado);
+
+        if (mercado === 'Perú') {
+            loadDetalleDpto();
+        } else {
+            document.getElementById('detalleDptoPanel').style.display = 'none';
+        }
+    }
+
+    /* ══════════════════════════════════════════════════
+       Detalle por País
+       ══════════════════════════════════════════════════ */
+    async function loadDetallePais(mercado) {
+        document.getElementById('detallePaisPanel').style.display = 'block';
+        document.getElementById('detallePaisTitulo').textContent = mercado;
+        showSpin('spinnerDetallePais');
+
+        try {
+            const p = buildParams();
+            p.set('mercado', mercado);
+            const data = await apiFetch('/VentasPorMercado/DatosDetallePorPais?' + p);
+
+            const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+            const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+            // Tabla
+            const tbody = document.getElementById('tablaDetallePais');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>';
+            } else {
+                tbody.innerHTML = data.map((d, i) => {
+                    const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+                    return '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (d.codigoPais ?? '') + '</td>'
+                        + '<td>' + (d.pais ?? '') + '</td>'
+                        + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
+                        + '<td class="text-end">' + pct + '%</td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            // Chart de barras horizontal
+            destroyChart('detallePais');
+            const top10 = data.slice(0, 10);
+            charts['detallePais'] = new Chart(document.getElementById('chartDetallePais').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: top10.map(d => d.pais ?? d.codigoPais),
+                    datasets: [{
+                        data: top10.map(d => d.importe ?? 0),
+                        backgroundColor: PAIS_COLORS.slice(0, top10.length),
+                        borderWidth: 1,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '45%',
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+                        tooltip: {
+                            callbacks: {
+                                label: c => c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)'
+                            }
+                        },
+                        datalabels: {
+                            display: function (ctx) { return ctx.dataset.data[ctx.dataIndex] / total > 0.05; },
+                            color: '#fff',
+                            font: { weight: '600', size: 10 },
+                            formatter: function (v) { return total > 0 ? ((v / total) * 100).toFixed(0) + '%' : ''; }
+                        }
+                    }
+                }
+            });
+
+            document.getElementById('detallePaisPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            showToast('Error al cargar detalle por país: ' + e.message);
+        } finally {
+            hideSpin('spinnerDetallePais');
+        }
+    }
+
+    window.cerrarDetallePais = function () {
+        document.getElementById('detallePaisPanel').style.display = 'none';
+        destroyChart('detallePais');
+    };
+
+    /* ══════════════════════════════════════════════════
+       Detalle por Departamento (Perú)
+       ══════════════════════════════════════════════════ */
+    async function loadDetalleDpto() {
+        document.getElementById('detalleDptoPanel').style.display = 'block';
+        showSpin('spinnerDetalleDpto');
+
+        try {
+            const p = buildParams();
+            const data = await apiFetch('/VentasPorMercado/DatosDetallePorDepartamento?' + p);
+
+            const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+            const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+            // Tabla
+            const tbody = document.getElementById('tablaDetalleDpto');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>';
+            } else {
+                tbody.innerHTML = data.map((d, i) => {
+                    const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+                    return '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (d.departamento ?? '') + '</td>'
+                        + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
+                        + '<td class="text-end">' + pct + '%</td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            // Horizontal bar chart
+            destroyChart('detalleDpto');
+            const top10 = data.slice(0, 10);
+            charts['detalleDpto'] = new Chart(document.getElementById('chartDetalleDpto').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: top10.map(d => d.departamento),
+                    datasets: [{
+                        label: 'Importe',
+                        data: top10.map(d => d.importe ?? 0),
+                        backgroundColor: PAIS_COLORS.slice(0, top10.length),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: { label: c => monLabel + ' ' + fmt(c.raw) }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            font: { size: 9, weight: '600' },
+                            color: '#333',
+                            formatter: v => monLabel + ' ' + fmtMil(v)
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } }
+                    }
+                }
+            });
+
+            document.getElementById('detalleDptoPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            showToast('Error al cargar detalle por departamento: ' + e.message);
+        } finally {
+            hideSpin('spinnerDetalleDpto');
+        }
+    }
+
+    window.cerrarDetalleDpto = function () {
+        document.getElementById('detalleDptoPanel').style.display = 'none';
+        destroyChart('detalleDpto');
+    };
+
+    /* ══════════════════════════════════════════════════
+       Map region click
+       ══════════════════════════════════════════════════ */
+    document.querySelectorAll('.map-region').forEach(el => {
+        el.addEventListener('click', function () {
+            const mercado = this.getAttribute('data-mercado');
+            if (mercado) {
+                loadDetallePais(mercado);
+                if (mercado === 'Perú') {
+                    loadDetalleDpto();
+                } else {
+                    document.getElementById('detalleDptoPanel').style.display = 'none';
+                }
+            }
+        });
+    });
+
+    /* ══════════════════════════════════════════════════
+       Load all data
+       ══════════════════════════════════════════════════ */
+    async function loadMercado() {
+        showSpin('spinnerMercado');
+        try {
+            const data = await apiFetch('/VentasPorMercado/DatosVentasPorMercado?' + buildParams());
+            renderMercado(data);
+        } catch (e) {
+            showToast('Error al cargar datos de mercado: ' + e.message);
+        } finally {
+            hideSpin('spinnerMercado');
+        }
+    }
+
+    window.loadAll = function () {
+        cerrarDetallePais();
+        cerrarDetalleDpto();
+        loadMercado();
+    };
+
+    window.clearFilters = function () {
+        setDefaultDates();
+        document.getElementById('moneda').value = 'D';
+        loadAll();
+    };
+
+    /* ── Inicialización ─────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', function () {
+        setDefaultDates();
+        loadAll();
+    });
+})();
+</script>
+}

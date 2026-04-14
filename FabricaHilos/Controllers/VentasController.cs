@@ -48,6 +48,19 @@ namespace FabricaHilos.Controllers
                 });
             }
 
+            if (menus.VentasVentasPorMercado)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Ventas por Mercado",
+                    Descripcion = "Distribución de ventas por mercado geográfico: Perú, LATAM y Global.",
+                    Icono = "bi-globe-americas",
+                    ColorClase = "text-info",
+                    Controller = "VentasPorMercado",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
     }
