@@ -70,6 +70,7 @@ public class MenuService : IMenuService
                     FacturacionListaDocumentos = false,
                     VentasConsultaTC = true,
                     VentasIndicadoresComerciales = true,
+                    VentasVentasPorMercado = true,
                     SeguridadInspecciones = false
                 };
             }
@@ -102,6 +103,7 @@ public class MenuService : IMenuService
                 FacturacionListaDocumentos = global.FacturacionListaDocumentos,
                 VentasConsultaTC = false,
                 VentasIndicadoresComerciales = false,
+                VentasVentasPorMercado = false,
                 SeguridadInspecciones = global.SeguridadInspecciones
             };
             return menusGlobal;
@@ -161,6 +163,7 @@ public class MenuService : IMenuService
             // ── Submenús: Ventas ──────────────────────────────────────────
             VentasConsultaTC = SubMenu(global.VentasConsultaTC, "Ventas", "Ventas.ConsultaTC"),
             VentasIndicadoresComerciales = SubMenu(global.VentasIndicadoresComerciales, "Ventas", "Ventas.IndicadoresComerciales"),
+            VentasVentasPorMercado = SubMenu(global.VentasVentasPorMercado, "Ventas", "Ventas.VentasPorMercado"),
 
             // ── Submenús: Seguridad ───────────────────────────────────────
             SeguridadInspecciones = SubMenu(global.SeguridadInspecciones, "Seguridad", "Seguridad.Inspeccion"),

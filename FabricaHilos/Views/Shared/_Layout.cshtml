@@ -164,7 +164,7 @@
                 @if (menus.Ventas)
                 {
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" || ctrl == "VentasPorMercado" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -181,6 +181,14 @@
                         <li>
                             <a asp-controller="IndicadoresComerciales" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "IndicadoresComerciales" ? "active" : "")">
                                 <i class="bi bi-bar-chart-line"></i> Indicadores Comerciales
+                            </a>
+                        </li>
+                        }
+                        @if (menus.VentasVentasPorMercado)
+                        {
+                        <li>
+                            <a asp-controller="VentasPorMercado" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "VentasPorMercado" ? "active" : "")">
+                                <i class="bi bi-globe-americas"></i> Ventas por Mercado
                             </a>
                         </li>
                         }
