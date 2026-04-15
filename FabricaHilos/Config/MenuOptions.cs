@@ -40,6 +40,8 @@ public class MenuOptions
     public bool VentasConsultaTC { get; set; } = true;
     public bool VentasIndicadoresComerciales { get; set; } = true;
     public bool VentasVentasPorMercado { get; set; } = true;
+    public bool VentasDashboardComercial { get; set; } = true;
+    public bool VentasDashboardGerencial { get; set; } = true;
 
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
@@ -74,6 +76,8 @@ public class MenuOptions
         VentasConsultaTC = true,
         VentasIndicadoresComerciales = true,
         VentasVentasPorMercado = true,
+        VentasDashboardComercial = true,
+        VentasDashboardGerencial = true,
 
         SeguridadInspecciones = true,
     };

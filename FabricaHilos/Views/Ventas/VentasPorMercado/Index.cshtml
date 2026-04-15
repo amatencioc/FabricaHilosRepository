@@ -73,19 +73,23 @@
     .bg-kpi-total { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
     .bg-kpi-peru  { background: linear-gradient(135deg, #1a237e, #3949ab); }
     .bg-kpi-latam { background: linear-gradient(135deg, #e65100, #fb8c00); }
-    .bg-kpi-global{ background: linear-gradient(135deg, #b71c1c, #e53935); }
+    .bg-kpi-europa{ background: linear-gradient(135deg, #1565c0, #42a5f5); }
+    .bg-kpi-asia  { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
+    .bg-kpi-oceania{ background: linear-gradient(135deg, #00695c, #26a69a); }
+    .bg-kpi-otros { background: linear-gradient(135deg, #546e7a, #90a4ae); }
 
-    /* Mapa SVG */
-    .map-container { position: relative; }
-    .map-container svg { width: 100%; height: auto; }
-    .map-region { fill: #e0e0e0; stroke: #fff; stroke-width: .5; transition: fill .3s, opacity .3s; cursor: pointer; }
-    .map-region:hover { opacity: .8; }
-    .map-region.region-peru  { fill: #1a237e; }
-    .map-region.region-latam { fill: #fb8c00; }
-    .map-region.region-global{ fill: #e53935; }
+    /* Mapa jVectorMap */
+    #worldMap { background: linear-gradient(180deg, #d6eaf8 0%, #e8f4f8 40%, #eaf6f0 100%); border-radius: 10px; border: 1px solid #cfd8dc; }
+    .jvectormap-tip { background: rgba(30,30,30,.94) !important; color: #fff !important; border: none !important; border-radius: 8px !important; font-size: .82rem !important; padding: .55rem .85rem !important; font-family: inherit !important; box-shadow: 0 4px 12px rgba(0,0,0,.3) !important; }
+    .jvectormap-zoomin, .jvectormap-zoomout { background: #1B4D3E !important; width: 28px !important; height: 28px !important; line-height: 28px !important; font-size: 16px !important; }
 
     /* Donut clickable hint */
     #chartMercado { cursor: pointer; }
+
+    /* Tabla documentos responsive */
+    #tablaDocumentos th, #tablaDocumentos td {
+        white-space: nowrap;
+    }
 
     /* Leyenda de colores */
     .legend-item {
@@ -102,6 +106,40 @@
         border-radius: 50%;
         margin-right: .4rem;
         display: inline-block;
+    }
+
+    /* Filas clickeables */
+    .clickable-row {
+        cursor: pointer;
+        transition: background .2s;
+    }
+    .clickable-row:hover {
+        background: #e8f5e9 !important;
+    }
+    .clickable-row td:first-child::before {
+        content: '▸ ';
+        color: #1B4D3E;
+        font-weight: 700;
+    }
+    /* Fila resaltada al hacer clic desde el mapa */
+    .highlight-row {
+        background: #fff3e0 !important;
+        box-shadow: inset 4px 0 0 #fb8c00;
+        animation: highlightFade 4s ease forwards;
+    }
+    @@keyframes highlightFade {
+        0%   { background: #ffe0b2 !important; }
+        70%  { background: #fff3e0 !important; }
+        100% { background: transparent !important; }
+    }
+
+    /* Tooltip contextual de columnas documentos */
+    .col-label-hint {
+        font-size: .68rem;
+        color: #888;
+        font-weight: 400;
+        display: block;
+        line-height: 1.1;
     }
 </style>
 }
@@ -139,8 +177,8 @@
 </div>
 
 <!-- ── KPI Resumen ────────────────────────────────────── -->
-<div class="row g-3 mb-3" id="kpiRow">
-    <div class="col-sm-6 col-xl-3">
+<div class="row g-2 mb-3" id="kpiRow">
+    <div class="col-6 col-md-4 col-xl">
         <div class="kpi-card bg-kpi-total">
             <i class="bi bi-currency-dollar kpi-icon"></i>
             <div>
@@ -150,7 +188,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-md-4 col-xl">
         <div class="kpi-card bg-kpi-peru">
             <i class="bi bi-geo-alt-fill kpi-icon"></i>
             <div>
@@ -160,7 +198,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-md-4 col-xl">
         <div class="kpi-card bg-kpi-latam">
             <i class="bi bi-globe-americas kpi-icon"></i>
             <div>
@@ -170,13 +208,43 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi-card bg-kpi-global">
+    <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card bg-kpi-europa">
+            <i class="bi bi-globe-europe-africa kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Europa</div>
+                <div class="kpi-value" id="kpiEuropa">—</div>
+                <div class="kpi-sub" id="kpiEuropaPct">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card bg-kpi-asia">
+            <i class="bi bi-globe-asia-australia kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Asia</div>
+                <div class="kpi-value" id="kpiAsia">—</div>
+                <div class="kpi-sub" id="kpiAsiaPct">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card bg-kpi-oceania">
+            <i class="bi bi-water kpi-icon"></i>
+            <div>
+                <div class="kpi-label">Oceanía</div>
+                <div class="kpi-value" id="kpiOceania">—</div>
+                <div class="kpi-sub" id="kpiOceaniaPct">—</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card bg-kpi-otros">
             <i class="bi bi-globe2 kpi-icon"></i>
             <div>
-                <div class="kpi-label">Global</div>
-                <div class="kpi-value" id="kpiGlobal">—</div>
-                <div class="kpi-sub" id="kpiGlobalPct">—</div>
+                <div class="kpi-label">Otros</div>
+                <div class="kpi-value" id="kpiOtros">—</div>
+                <div class="kpi-sub" id="kpiOtrosPct">—</div>
             </div>
         </div>
     </div>
@@ -184,76 +252,32 @@
 
 <!-- ── Sección Principal: Mapa + Donut ────────────────── -->
 <div class="section-title"><i class="bi bi-globe-americas me-1"></i>Ventas por Mercado</div>
-<p class="report-desc">Distribución de ventas por mercado geográfico. <strong>Perú</strong> = ventas nacionales, <strong>LATAM</strong> = países de Latinoamérica (indicador L), <strong>Global</strong> = Europa, Asia, Oceanía y otros. <strong>Haga clic en el donut</strong> para ver el detalle por país.</p>
+<p class="report-desc">Distribución de ventas por mercado geográfico. <strong>Perú</strong> = ventas nacionales, <strong>LATAM</strong> = Latinoamérica, <strong>Europa</strong> = países europeos, <strong>Asia</strong> = países asiáticos, <strong>Oceanía</strong> = países de Oceanía, <strong>Otros</strong> = resto del mundo. <strong>Haga clic en el donut o en el mapa</strong> para ver el detalle por país.</p>
 <div class="row g-3 mb-3">
-    <!-- Mapa -->
-    <div class="col-lg-7">
+    <!-- Mapa (más ancho) -->
+    <div class="col-lg-8">
         <div class="card chart-card position-relative">
-            <div class="card-header small">Distribución Geográfica</div>
-            <div class="card-body d-flex flex-column align-items-center justify-content-center" style="min-height:380px">
-                <div class="map-container" id="mapContainer" style="max-width:600px; width:100%;">
-                    <!-- SVG world map simplified -->
-                    <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
-                        <!-- América del Norte -->
-                        <path class="map-region region-global" data-mercado="Global" d="M120,30 L280,30 L300,60 L310,100 L290,140 L260,160 L230,150 L210,130 L180,120 L150,110 L130,80 L120,50 Z" title="América del Norte"/>
-                        <!-- México + Centroamérica -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M130,150 L180,130 L210,140 L230,160 L240,180 L220,200 L200,210 L180,200 L160,190 L140,175 Z" title="México y Centroamérica"/>
-                        <!-- Caribe -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M245,175 L270,165 L285,175 L280,190 L260,195 L245,188 Z" title="Caribe"/>
-                        <!-- Colombia/Venezuela -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M220,210 L260,200 L290,210 L300,240 L280,260 L250,260 L230,250 L215,235 Z" title="Colombia y Venezuela"/>
-                        <!-- Perú -->
-                        <path class="map-region region-peru" data-mercado="Perú" d="M215,260 L250,260 L260,280 L255,310 L240,330 L220,325 L210,300 L205,275 Z" title="Perú"/>
-                        <!-- Brasil -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M260,260 L320,240 L360,260 L370,300 L350,340 L320,370 L290,370 L270,350 L255,320 L260,290 Z" title="Brasil"/>
-                        <!-- Bolivia/Paraguay -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M255,320 L270,330 L285,340 L290,370 L270,380 L250,370 L245,345 Z" title="Bolivia y Paraguay"/>
-                        <!-- Chile -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M230,335 L245,345 L250,380 L245,410 L240,440 L230,460 L220,450 L225,410 L222,370 Z" title="Chile"/>
-                        <!-- Argentina/Uruguay -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M250,380 L280,385 L290,400 L285,430 L270,450 L250,455 L240,440 L245,410 Z" title="Argentina y Uruguay"/>
-                        <!-- Ecuador -->
-                        <path class="map-region region-latam" data-mercado="LATAM" d="M200,240 L215,235 L215,260 L205,275 L195,265 Z" title="Ecuador"/>
-                        <!-- Europa -->
-                        <path class="map-region region-global" data-mercado="Global" d="M440,40 L530,30 L570,50 L580,80 L600,90 L610,120 L580,140 L540,145 L500,140 L470,130 L450,110 L440,80 Z" title="Europa"/>
-                        <!-- Rusia / Europa del Este -->
-                        <path class="map-region region-global" data-mercado="Global" d="M570,30 L700,20 L780,40 L800,70 L780,100 L720,110 L650,100 L610,90 L600,60 Z" title="Rusia"/>
-                        <!-- África del Norte -->
-                        <path class="map-region region-global" data-mercado="Global" d="M440,150 L540,145 L580,160 L580,200 L560,230 L520,240 L480,240 L450,220 L440,190 Z" title="África del Norte"/>
-                        <!-- África Central y Sur -->
-                        <path class="map-region region-global" data-mercado="Global" d="M480,240 L530,245 L560,260 L570,300 L560,340 L540,370 L520,390 L500,380 L490,350 L480,310 L470,280 Z" title="África"/>
-                        <!-- Medio Oriente -->
-                        <path class="map-region region-global" data-mercado="Global" d="M580,140 L620,130 L660,140 L680,170 L660,200 L620,210 L590,200 L580,170 Z" title="Medio Oriente"/>
-                        <!-- Asia Central -->
-                        <path class="map-region region-global" data-mercado="Global" d="M660,60 L750,50 L800,70 L810,100 L790,120 L740,130 L700,120 L680,100 Z" title="Asia Central"/>
-                        <!-- India -->
-                        <path class="map-region region-global" data-mercado="Global" d="M680,170 L720,150 L740,170 L735,210 L720,240 L700,250 L685,230 L680,200 Z" title="India"/>
-                        <!-- China / Este de Asia -->
-                        <path class="map-region region-global" data-mercado="Global" d="M750,70 L850,50 L890,80 L900,120 L880,150 L840,160 L800,150 L770,130 L750,100 Z" title="China y Este de Asia"/>
-                        <!-- Sudeste Asiático -->
-                        <path class="map-region region-global" data-mercado="Global" d="M780,170 L830,160 L860,180 L870,210 L850,240 L820,250 L790,240 L775,210 Z" title="Sudeste Asiático"/>
-                        <!-- Japón/Corea -->
-                        <path class="map-region region-global" data-mercado="Global" d="M890,90 L920,80 L935,100 L930,130 L910,140 L895,125 Z" title="Japón y Corea"/>
-                        <!-- Oceanía -->
-                        <path class="map-region region-global" data-mercado="Global" d="M820,320 L900,300 L940,320 L950,360 L930,390 L880,400 L840,380 L820,350 Z" title="Oceanía"/>
-                        <!-- Nueva Zelanda -->
-                        <path class="map-region region-global" data-mercado="Global" d="M930,400 L950,390 L960,410 L955,430 L940,435 L930,420 Z" title="Nueva Zelanda"/>
-                    </svg>
-                </div>
-                <div class="mt-3">
+            <div class="card-header small">Distribución Geográfica — Haga clic en un país para ver su detalle</div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center" style="min-height:480px">
+                <div id="worldMap" style="width:100%; height:430px;"></div>
+                <div class="mt-2 d-flex flex-wrap justify-content-center gap-2">
                     <span class="legend-item"><span class="legend-dot" style="background:#1a237e"></span>Perú</span>
                     <span class="legend-item"><span class="legend-dot" style="background:#fb8c00"></span>LATAM</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#e53935"></span>Global</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#1565c0"></span>Europa</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#6a1b9a"></span>Asia</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#00695c"></span>Oceanía</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#546e7a"></span>Otros</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>
                 </div>
             </div>
         </div>
     </div>
-    <!-- Donut -->
-    <div class="col-lg-5">
+    <!-- Donut (misma fila) -->
+    <div class="col-lg-4">
         <div class="card chart-card position-relative">
             <div id="spinnerMercado" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">Participación por Mercado</div>
-            <div class="card-body d-flex align-items-center justify-content-center" style="height:380px">
+            <div class="card-body d-flex align-items-center justify-content-center" style="height:460px">
                 <canvas id="chartMercado"></canvas>
             </div>
         </div>
@@ -263,7 +287,7 @@
 <!-- ── Sección 2: Detalle por País (drill-down) ── -->
 <div id="detallePaisPanel" style="display:none">
     <div class="section-title"><i class="bi bi-list-ul me-1"></i>Detalle por País — <span id="detallePaisTitulo"></span></div>
-    <p class="report-desc">Lista de países y el importe vendido en cada uno para el mercado seleccionado, ordenados de mayor a menor.</p>
+    <p class="report-desc">Lista de países y el importe vendido en cada uno para el mercado seleccionado, ordenados de mayor a menor. <strong>Haga clic en un país extranjero</strong> para ver las ciudades/distritos de ese país.</p>
     <div class="row g-3 mb-3">
         <div class="col-lg-7">
             <div class="card chart-card position-relative">
@@ -301,10 +325,51 @@
     </div>
 </div>
 
+<!-- ── Sección 2b: Ciudades de un País Extranjero (drill-down) ── -->
+<div id="detalleCiudadPaisPanel" style="display:none">
+    <div class="section-title"><i class="bi bi-building me-1"></i>Ciudades/Distritos — <span id="detalleCiudadPaisTitulo"></span></div>
+    <p class="report-desc">Detalle de ciudades/distritos del país seleccionado. Cuando el país en UBIGEO es extranjero (≠01), el campo <strong>NOM_DPT</strong> contiene el nombre del país y <strong>NOM_DTT</strong> la ciudad o distrito de ese país.</p>
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetalleCiudadPais" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Importe por Ciudad</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleCiudadPais()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>País</th>
+                                <th>Ciudad / Distrito</th>
+                                <th class="text-end">Importe</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleCiudadPais"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card chart-card position-relative">
+                <div class="card-header small">Distribución por Ciudad</div>
+                <div class="card-body d-flex align-items-center justify-content-center" style="height:350px">
+                    <canvas id="chartDetalleCiudadPais"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Sección 3: Detalle por Departamento (Perú) ── -->
 <div id="detalleDptoPanel" style="display:none">
     <div class="section-title"><i class="bi bi-geo-alt me-1"></i>Detalle por Departamento — Perú</div>
-    <p class="report-desc">Distribución de ventas nacionales por departamento. Permite identificar las regiones con mayor concentración de ventas.</p>
+    <p class="report-desc">Distribución de ventas nacionales por departamento (UBIGEO.PAIS='01'). <strong>Haga clic en un departamento</strong> para ver los distritos de ese departamento.</p>
     <div class="row g-3 mb-3">
         <div class="col-lg-7">
             <div class="card chart-card position-relative">
@@ -341,7 +406,172 @@
     </div>
 </div>
 
+<!-- ── Sección 3b: Detalle por Distrito (drill-down de departamento) ── -->
+<div id="detalleDistritoPanel" style="display:none">
+    <div class="section-title"><i class="bi bi-pin-map me-1"></i>Distritos — <span id="detalleDistritoTitulo"></span></div>
+    <p class="report-desc">Distribución de ventas por distrito dentro del departamento seleccionado (UBIGEO.PAIS='01', NOM_DTT=distrito).</p>
+    <div class="row g-3 mb-3">
+        <div class="col-lg-7">
+            <div class="card chart-card position-relative">
+                <div id="spinnerDetalleDistrito" class="chart-spinner" style="display:none"><div class="spinner-border text-primary"></div></div>
+                <div class="card-header small d-flex justify-content-between align-items-center">
+                    <span>Importe por Distrito</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleDistrito()">
+                        <i class="bi bi-x-lg me-1"></i>Cerrar
+                    </button>
+                </div>
+                <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
+                    <table class="table table-hover table-sm mb-0 detail-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Distrito</th>
+                                <th class="text-end">Importe</th>
+                                <th class="text-end">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleDistrito"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card chart-card position-relative">
+                <div class="card-header small">Top Distritos</div>
+                <div class="card-body" style="height:350px">
+                    <canvas id="chartDetalleDistrito"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 4: Evolución Mensual por Mercado ── -->
+<div class="section-title"><i class="bi bi-graph-up me-1"></i>Evolución Mensual de Ventas</div>
+<p class="report-desc">Tendencia mensual de ventas por mercado geográfico. Permite visualizar estacionalidad, crecimiento y comportamiento comparativo entre <strong>Perú</strong>, <strong>LATAM</strong>, <strong>Europa</strong>, <strong>Asia</strong>, <strong>Oceanía</strong> y <strong>Otros</strong> a lo largo del período seleccionado.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerEvolucion" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Importe Mensual por Mercado</div>
+            <div class="card-body" style="height:350px"><canvas id="chartEvolucion"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 5: Top Clientes ── -->
+<div class="section-title"><i class="bi bi-people-fill me-1"></i>Top Clientes por Importe</div>
+<p class="report-desc">Los 15 clientes con mayor volumen de ventas en el período. Se muestra el nombre del cliente, país de origen, mercado, importe acumulado y cantidad de documentos.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div id="spinnerTopClientes" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small d-flex justify-content-between align-items-center">
+                <span>Top 15 Clientes</span>
+                <select id="filtroMercadoClientes" class="form-select form-select-sm" style="width:auto" onchange="loadTopClientes()">
+                    <option value="">Todos los mercados</option>
+                    <option value="Perú">Perú</option>
+                    <option value="LATAM">LATAM</option>
+                    <option value="Europa">Europa</option>
+                    <option value="Asia">Asia</option>
+                    <option value="Oceanía">Oceanía</option>
+                    <option value="Otros">Otros</option>
+                </select>
+            </div>
+            <div class="card-body p-0" style="max-height:450px; overflow-y:auto; overflow-x:auto">
+                <table class="table table-hover table-sm mb-0 detail-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Código</th>
+                            <th>Razón Social</th>
+                            <th>País</th>
+                            <th>Mercado</th>
+                            <th class="text-end">Importe</th>
+                            <th class="text-end">Docs</th>
+                            <th class="text-end">%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaTopClientes"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Participación Top Clientes</div>
+            <div class="card-body" style="height:420px">
+                <canvas id="chartTopClientes"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 6: Detalle Completo de Documentos ── -->
+<div class="section-title"><i class="bi bi-table me-1"></i>Detalle de Documentos</div>
+<p class="report-desc">Listado transaccional completo con <strong>todas las columnas del query original</strong>. Las columnas <strong>Dpto/País</strong> y <strong>Distrito/Ciudad</strong> se interpretan según UBIGEO: si PAIS='01' son departamento y distrito de Perú; si PAIS≠'01' son el nombre del país extranjero y su ciudad. <strong>Exportable a Excel.</strong></p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerDocumentos" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <span>Documentos de Venta</span>
+                    <span class="badge bg-secondary" id="badgeTotalDocs">0</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="filtroMercadoDocs" class="form-select form-select-sm" style="width:auto" onchange="loadDocumentos()">
+                        <option value="">Todos los mercados</option>
+                        <option value="Perú">Perú</option>
+                        <option value="LATAM">LATAM</option>
+                        <option value="Europa">Europa</option>
+                        <option value="Asia">Asia</option>
+                        <option value="Oceanía">Oceanía</option>
+                        <option value="Otros">Otros</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-success" onclick="exportarExcel()">
+                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0" style="max-height:500px; overflow-y:auto; overflow-x:auto">
+                <table class="table table-hover table-sm mb-0 detail-table" id="tablaDocumentos">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Tipo</th>
+                            <th>Serie</th>
+                            <th>Número</th>
+                            <th>Fecha</th>
+                            <th>Moneda</th>
+                            <th>Cód.Cliente</th>
+                            <th>Razón Social</th>
+                            <th>País</th>
+                            <th>Exp</th>
+                            <th>Mercado</th>
+                            <th class="text-end">T.C.</th>
+                            <th class="text-end">Val.Venta</th>
+                            <th class="text-end">Descto</th>
+                            <th class="text-end">Anticipo</th>
+                            <th class="text-end">Interés</th>
+                            <th class="text-end">Neto</th>
+                            <th class="text-end">IGV</th>
+                            <th class="text-end">Precio Vta</th>
+                            <th>Dpto / País<span class="col-label-hint">Perú: depto | Ext: país</span></th>
+                            <th>Distrito / Ciudad<span class="col-label-hint">Perú: distrito | Ext: ciudad</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaDocumentosBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.6.0/dist/jsvectormap.css" />
+<script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.6.0/dist/jsvectormap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.6.0/dist/maps/world.js"></script>
 <script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
 <script>
 (function () {
@@ -362,7 +592,10 @@
     };
 
     /* ── Colores por mercado ──────────────────────────── */
-    const MERCADO_COLORS = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Global': '#e53935' };
+    const MERCADO_COLORS = {
+        'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Europa': '#1565c0',
+        'Asia': '#6a1b9a', 'Oceanía': '#00695c', 'Otros': '#546e7a'
+    };
     const PAIS_COLORS = [
         '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
         '#00838f','#c62828','#4e342e','#37474f','#f9a825',
@@ -437,17 +670,17 @@
         // KPI cards
         document.getElementById('kpiTotal').textContent = monLabel + ' ' + fmtMil(total);
 
-        const peruVal  = data.find(d => d.mercado === 'Perú')?.importe ?? 0;
-        const latamVal = data.find(d => d.mercado === 'LATAM')?.importe ?? 0;
-        const globalVal= data.find(d => d.mercado === 'Global')?.importe ?? 0;
-
-        document.getElementById('kpiPeru').textContent   = monLabel + ' ' + fmtMil(peruVal);
-        document.getElementById('kpiLatam').textContent  = monLabel + ' ' + fmtMil(latamVal);
-        document.getElementById('kpiGlobal').textContent = monLabel + ' ' + fmtMil(globalVal);
-
-        document.getElementById('kpiPeruPct').textContent   = total > 0 ? ((peruVal / total) * 100).toFixed(1) + '% del total' : '—';
-        document.getElementById('kpiLatamPct').textContent  = total > 0 ? ((latamVal / total) * 100).toFixed(1) + '% del total' : '—';
-        document.getElementById('kpiGlobalPct').textContent = total > 0 ? ((globalVal / total) * 100).toFixed(1) + '% del total' : '—';
+        const getVal = name => data.find(d => d.mercado === name)?.importe ?? 0;
+        const setKpi = (id, val) => {
+            document.getElementById('kpi' + id).textContent = monLabel + ' ' + fmtMil(val);
+            document.getElementById('kpi' + id + 'Pct').textContent = total > 0 ? ((val / total) * 100).toFixed(1) + '% del total' : '—';
+        };
+        setKpi('Peru', getVal('Perú'));
+        setKpi('Latam', getVal('LATAM'));
+        setKpi('Europa', getVal('Europa'));
+        setKpi('Asia', getVal('Asia'));
+        setKpi('Oceania', getVal('Oceanía'));
+        setKpi('Otros', getVal('Otros'));
 
         const labels   = data.map(d => d.mercado);
         const values   = data.map(d => d.importe ?? 0);
@@ -517,7 +750,285 @@
                 }
             }]
         });
+
+        // ── Actualizar mapa con los datos reales ──
+        updateMap(data, monLabel, total);
     }
+
+    /* ══════════════════════════════════════════════════
+       MAPA jVectorMap: Configuración y datos
+       ══════════════════════════════════════════════════ */
+    // Mapeo dinámico de Código BD → ISO-2 (se carga desde la BD al inicio)
+    // Fallback con mapeo conocido por si la carga falla
+    const BD_TO_ISO_FALLBACK = {
+        '01': 'PE', '02': 'US', '03': 'PA', '04': 'DE', '05': 'EC',
+        '06': 'BO', '07': 'CH', '08': 'GB', '09': 'NZ', '10': 'CA',
+        '11': 'VE', '12': 'MX', '13': 'IT', '14': 'BR', '15': 'JP',
+        '16': 'CN', '17': 'CL', '18': 'RU', '19': 'KR', '20': 'AR',
+        '21': 'FR', '22': 'CO', '23': 'TW', '24': 'DO', '25': 'UY',
+        '27': 'ES', '28': 'IN', '29': 'PK', '30': 'CZ', '31': 'HN',
+        '32': 'GT', '33': 'IE', '34': 'LT', '35': 'AT', '36': 'SG',
+        '37': 'VN', '38': 'TR', '39': 'IL', '40': 'EE'
+    };
+    let BD_TO_ISO = Object.assign({}, BD_TO_ISO_FALLBACK);
+    // Inverso: ISO → código BD
+    let ISO_TO_BD = {};
+    Object.entries(BD_TO_ISO).forEach(([k, v]) => { ISO_TO_BD[v] = k; });
+
+    // Cargar mapeo dinámico desde la BD (TABLAS_AUXILIARES TIPO=25, INDICADOR2=ISO)
+    async function cargarMapeoPaises() {
+        try {
+            const data = await apiFetch('/VentasPorMercado/DatosPaisesISO');
+            if (data && data.length > 0) {
+                const mapDinamico = {};
+                data.forEach(d => {
+                    if (d.codigoBD && d.codigoISO) {
+                        mapDinamico[d.codigoBD.trim()] = d.codigoISO.trim().toUpperCase();
+                    }
+                });
+                // Si la BD devolvió datos, combinar: primero fallback, luego BD (BD tiene prioridad)
+                if (Object.keys(mapDinamico).length > 0) {
+                    BD_TO_ISO = Object.assign({}, BD_TO_ISO_FALLBACK, mapDinamico);
+                    // Reconstruir inverso
+                    ISO_TO_BD = {};
+                    Object.entries(BD_TO_ISO).forEach(([k, v]) => { ISO_TO_BD[v] = k; });
+                }
+            }
+        } catch (e) {
+            // Si falla, se usa el fallback — no afecta la funcionalidad
+            console.warn('No se pudo cargar mapeo de países desde la BD, usando fallback.', e);
+        }
+    }
+
+    // Nombres de países en español (todos los del mapa jVectorMap)
+    const ISO_ES = {
+        'AF':'Afganistán','AL':'Albania','DZ':'Argelia','AO':'Angola','AR':'Argentina',
+        'AM':'Armenia','AU':'Australia','AT':'Austria','AZ':'Azerbaiyán','BS':'Bahamas',
+        'BD':'Bangladés','BY':'Bielorrusia','BE':'Bélgica','BZ':'Belice','BJ':'Benín',
+        'BT':'Bután','BO':'Bolivia','BA':'Bosnia y Herzegovina','BW':'Botsuana','BR':'Brasil',
+        'BN':'Brunéi','BG':'Bulgaria','BF':'Burkina Faso','BI':'Burundi','KH':'Camboya',
+        'CM':'Camerún','CA':'Canadá','CF':'Rep. Centroafricana','TD':'Chad','CL':'Chile',
+        'CN':'China','CO':'Colombia','CG':'Congo','CD':'R.D. del Congo','CR':'Costa Rica',
+        'CI':'Costa de Marfil','HR':'Croacia','CU':'Cuba','CY':'Chipre','CZ':'Chequia',
+        'DK':'Dinamarca','DJ':'Yibuti','DO':'Rep. Dominicana','EC':'Ecuador','EG':'Egipto',
+        'SV':'El Salvador','GQ':'Guinea Ecuatorial','ER':'Eritrea','EE':'Estonia','ET':'Etiopía',
+        'FK':'Islas Malvinas','FJ':'Fiyi','FI':'Finlandia','FR':'Francia','GA':'Gabón',
+        'GM':'Gambia','GE':'Georgia','DE':'Alemania','GH':'Ghana','GR':'Grecia',
+        'GL':'Groenlandia','GT':'Guatemala','GN':'Guinea','GW':'Guinea-Bisáu','GY':'Guyana',
+        'HT':'Haití','HN':'Honduras','HU':'Hungría','IS':'Islandia','IN':'India',
+        'ID':'Indonesia','IR':'Irán','IQ':'Irak','IE':'Irlanda','IL':'Israel',
+        'IT':'Italia','JM':'Jamaica','JP':'Japón','JO':'Jordania','KZ':'Kazajistán',
+        'KE':'Kenia','KP':'Corea del Norte','KR':'Corea del Sur','KW':'Kuwait','KG':'Kirguistán',
+        'LA':'Laos','LV':'Letonia','LB':'Líbano','LS':'Lesoto','LR':'Liberia',
+        'LY':'Libia','LT':'Lituania','LU':'Luxemburgo','MK':'Macedonia del Norte','MG':'Madagascar',
+        'MW':'Malaui','MY':'Malasia','ML':'Malí','MR':'Mauritania','MX':'México',
+        'MD':'Moldavia','MN':'Mongolia','ME':'Montenegro','MA':'Marruecos','MZ':'Mozambique',
+        'MM':'Birmania (Myanmar)','NA':'Namibia','NP':'Nepal','NL':'Países Bajos','NC':'Nueva Caledonia',
+        'NZ':'Nueva Zelanda','NI':'Nicaragua','NE':'Níger','NG':'Nigeria','NO':'Noruega',
+        'OM':'Omán','PK':'Pakistán','PS':'Palestina','PA':'Panamá','PG':'Papúa Nueva Guinea',
+        'PY':'Paraguay','PE':'Perú','PH':'Filipinas','PL':'Polonia','PT':'Portugal',
+        'PR':'Puerto Rico','QA':'Catar','RO':'Rumanía','RU':'Rusia','RW':'Ruanda',
+        'SA':'Arabia Saudita','SN':'Senegal','RS':'Serbia','SL':'Sierra Leona','SK':'Eslovaquia',
+        'SI':'Eslovenia','SB':'Islas Salomón','SO':'Somalia','ZA':'Sudáfrica','SS':'Sudán del Sur',
+        'ES':'España','LK':'Sri Lanka','SD':'Sudán','SR':'Surinam','SZ':'Esuatini',
+        'SE':'Suecia','CH':'Suiza','SY':'Siria','TW':'Taiwán','TJ':'Tayikistán',
+        'TZ':'Tanzania','TH':'Tailandia','TL':'Timor Oriental','TG':'Togo','TT':'Trinidad y Tobago',
+        'TN':'Túnez','TR':'Turquía','TM':'Turkmenistán','UG':'Uganda','UA':'Ucrania',
+        'AE':'Emiratos Árabes Unidos','GB':'Reino Unido','US':'Estados Unidos','UY':'Uruguay',
+        'UZ':'Uzbekistán','VU':'Vanuatu','VE':'Venezuela','VN':'Vietnam','EH':'Sahara Occidental',
+        'YE':'Yemen','ZM':'Zambia','ZW':'Zimbabue','SG':'Singapur','TF':'Tierras Australes Francesas',
+        'DK':'Dinamarca'
+    };
+    // Obtener nombre en español de un país por su ISO
+    function getNombrePais(isoCode) {
+        return ISO_ES[isoCode] || isoCode;
+    }
+
+    // Estado global: datos por país para colorear el mapa
+    let _mapPaisData = [];   // array de {codigoPais, pais, mercado, importe}
+    let _mapInstance = null;
+
+    // Inicializar jsVectorMap
+    function initMap() {
+        if (_mapInstance) {
+            _mapInstance.destroy();
+            _mapInstance = null;
+        }
+        _mapInstance = new jsVectorMap({
+            selector: '#worldMap',
+            map: 'world',
+            zoomOnScroll: true,
+            zoomButtons: true,
+            showTooltip: true,
+            regionStyle: {
+                initial: {
+                    fill: '#dde3e8',
+                    fillOpacity: 1,
+                    stroke: '#b0bec5',
+                    strokeWidth: 0.5
+                },
+                hover: {
+                    fillOpacity: 0.8,
+                    cursor: 'pointer'
+                }
+            },
+            onRegionTooltipShow: function (e, tip, code) {
+                const nombreES = getNombrePais(code);
+                const info = getCountryInfo(code);
+                if (info) {
+                    const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+                    tip.text('');
+                    tip.html(
+                        '<div style="text-align:center">' +
+                        '<strong style="font-size:.9rem">' + nombreES + '</strong><br/>' +
+                        '<span style="color:#90caf9">Mercado: <b>' + info.mercado + '</b></span><br/>' +
+                        '<span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + monLabel + ' ' + fmt(info.importe) + '</span>' +
+                        '</div>'
+                    );
+                } else {
+                    tip.text('');
+                    tip.html(
+                        '<strong>' + nombreES + '</strong><br/>' +
+                        '<span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'
+                    );
+                }
+            },
+            onRegionClick: function (e, code) {
+                const info = getCountryInfo(code);
+                if (!info) return;
+                const mercado = info.mercado;
+                const paisBD = info.pais;
+                const codPais = info.codigoPais;
+                loadDetallePais(mercado, paisBD);
+                document.getElementById('detalleDistritoPanel').style.display = 'none';
+                if (mercado === 'Perú') {
+                    loadDetalleDpto();
+                } else {
+                    document.getElementById('detalleDptoPanel').style.display = 'none';
+                    // Abrir automáticamente el detalle de ciudades del país clickeado
+                    if (codPais && codPais !== '01') {
+                        loadCiudadesPais(codPais, paisBD);
+                    }
+                }
+            }
+        });
+    }
+
+    // Buscar info del país por código ISO
+    function getCountryInfo(isoCode) {
+        const codBD = ISO_TO_BD[isoCode];
+        if (!codBD) return null;
+        return _mapPaisData.find(d => d.codigoPais === codBD) || null;
+    }
+
+    // Actualizar colores del mapa con los datos reales
+    function updateMap(dataMercado, monLabel, total) {
+        // Cargar detalle por país para colorear individualmente
+        const p = buildParams();
+        apiFetch('/VentasPorMercado/DatosDetallePorPais?' + p).then(function (paisData) {
+            _mapPaisData = paisData || [];
+
+            // Construir objeto de colores: { 'PE': '#1a237e', 'EC': '#fb8c00', ... }
+            const regionColors = {};
+            _mapPaisData.forEach(d => {
+                const iso = BD_TO_ISO[d.codigoPais];
+                if (!iso) return;
+                regionColors[iso] = MERCADO_COLORS[d.mercado] || '#546e7a';
+            });
+
+            // Destruir instancia anterior
+            if (_mapInstance) {
+                _mapInstance.destroy();
+                _mapInstance = null;
+            }
+
+            // Recrear mapa con colores personalizados
+            _mapInstance = new jsVectorMap({
+                selector: '#worldMap',
+                map: 'world',
+                zoomOnScroll: true,
+                zoomButtons: true,
+                showTooltip: true,
+                regionStyle: {
+                    initial: {
+                        fill: '#dde3e8',
+                        fillOpacity: 1,
+                        stroke: '#b0bec5',
+                        strokeWidth: 0.5
+                    },
+                    hover: {
+                        fillOpacity: 0.8,
+                        cursor: 'pointer'
+                    }
+                },
+                onLoaded: function () {
+                    // Colorear países directamente en el SVG DOM cuando el mapa ya está renderizado
+                    var mapEl = document.getElementById('worldMap');
+                    if (!mapEl) return;
+                    Object.keys(regionColors).forEach(function (iso) {
+                        var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]');
+                        paths.forEach(function (path) {
+                            path.setAttribute('fill', regionColors[iso]);
+                        });
+                    });
+                },
+                onRegionTooltipShow: function (e, tip, code) {
+                    var nombreES = getNombrePais(code);
+                    var info = getCountryInfo(code);
+                    if (info) {
+                        var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+                        tip.text('');
+                        tip.html(
+                            '<div style="text-align:center">' +
+                            '<strong style="font-size:.9rem">' + nombreES + '</strong><br/>' +
+                            '<span style="color:#90caf9">Mercado: <b>' + info.mercado + '</b></span><br/>' +
+                            '<span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span>' +
+                            '</div>'
+                        );
+                    } else {
+                        tip.text('');
+                        tip.html(
+                            '<strong>' + nombreES + '</strong><br/>' +
+                            '<span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'
+                        );
+                    }
+                },
+                onRegionClick: function (e, code) {
+                    var info = getCountryInfo(code);
+                    if (!info) return;
+                    var mercado = info.mercado;
+                    var paisBD = info.pais;
+                    var codPais = info.codigoPais;
+                    loadDetallePais(mercado, paisBD);
+                    document.getElementById('detalleDistritoPanel').style.display = 'none';
+                    if (mercado === 'Perú') {
+                        loadDetalleDpto();
+                    } else {
+                        document.getElementById('detalleDptoPanel').style.display = 'none';
+                        // Abrir automáticamente el detalle de ciudades del país clickeado
+                        if (codPais && codPais !== '01') {
+                            loadCiudadesPais(codPais, paisBD);
+                        }
+                    }
+                }
+            });
+
+            // Respaldo: colorear también con setTimeout por si onLoaded no es suficiente
+            setTimeout(function () {
+                var mapEl = document.getElementById('worldMap');
+                if (!mapEl) return;
+                Object.keys(regionColors).forEach(function (iso) {
+                    var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]');
+                    paths.forEach(function (path) {
+                        path.setAttribute('fill', regionColors[iso]);
+                    });
+                });
+            }, 300);
+        }).catch(function () { /* silenciar errores del mapa */ });
+    }
+
+    // Inicialización
+    initMap();
 
     /* ══════════════════════════════════════════════════
        DONUT click → drill-down por país
@@ -538,27 +1049,44 @@
     /* ══════════════════════════════════════════════════
        Detalle por País
        ══════════════════════════════════════════════════ */
-    async function loadDetallePais(mercado) {
+    let _detallePaisData = [];
+    let _detallePaisMercado = '';
+
+    async function loadDetallePais(mercado, highlightPais) {
         document.getElementById('detallePaisPanel').style.display = 'block';
         document.getElementById('detallePaisTitulo').textContent = mercado;
+        document.getElementById('detalleCiudadPaisPanel').style.display = 'none';
+        _detallePaisMercado = mercado;
         showSpin('spinnerDetallePais');
+
+        // Normalizar highlightPais para comparar
+        const hlNorm = (highlightPais ?? '').toUpperCase().trim();
 
         try {
             const p = buildParams();
             p.set('mercado', mercado);
             const data = await apiFetch('/VentasPorMercado/DatosDetallePorPais?' + p);
+            _detallePaisData = data;
 
             const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
             const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
 
-            // Tabla
+            // Tabla — filas clickeables para países extranjeros (≠01)
             const tbody = document.getElementById('tablaDetallePais');
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>';
             } else {
                 tbody.innerHTML = data.map((d, i) => {
                     const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
-                    return '<tr>'
+                    const isClickable = d.codigoPais !== '01';
+                    const isHighlight = hlNorm && (d.pais ?? '').toUpperCase().trim() === hlNorm;
+                    const classes = (isClickable ? 'clickable-row' : '') + (isHighlight ? ' highlight-row' : '');
+                    const rowId = isHighlight ? ' id="highlightedRow"' : '';
+                    const rowClick = isClickable
+                        ? ' onclick="loadCiudadesPais(\'' + (d.codigoPais ?? '').replace(/'/g, "\\'") + '\', \'' + (d.pais ?? '').replace(/'/g, "\\'") + '\')"'
+                        : '';
+                    const hint = isClickable ? ' title="Clic para ver ciudades de ' + (d.pais ?? '') + '"' : '';
+                    return '<tr' + rowId + ' class="' + classes.trim() + '"' + rowClick + hint + '>'
                         + '<td>' + (i + 1) + '</td>'
                         + '<td>' + (d.codigoPais ?? '') + '</td>'
                         + '<td>' + (d.pais ?? '') + '</td>'
@@ -604,6 +1132,12 @@
             });
 
             document.getElementById('detallePaisPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // Si hay un país resaltado desde el mapa, hacer scroll a esa fila
+            const hlRow = document.getElementById('highlightedRow');
+            if (hlRow) {
+                setTimeout(() => hlRow.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400);
+            }
         } catch (e) {
             showToast('Error al cargar detalle por país: ' + e.message);
         } finally {
@@ -613,14 +1147,101 @@
 
     window.cerrarDetallePais = function () {
         document.getElementById('detallePaisPanel').style.display = 'none';
+        document.getElementById('detalleCiudadPaisPanel').style.display = 'none';
         destroyChart('detallePais');
+        destroyChart('detalleCiudadPais');
     };
 
     /* ══════════════════════════════════════════════════
-       Detalle por Departamento (Perú)
+       Ciudades por País extranjero (UBIGEO.PAIS≠'01')
+       NOM_DPT = país, NOM_DTT = ciudad/distrito
+       ══════════════════════════════════════════════════ */
+    window.loadCiudadesPais = async function (codigoPais, nombrePais) {
+        document.getElementById('detalleCiudadPaisPanel').style.display = 'block';
+        document.getElementById('detalleCiudadPaisTitulo').textContent = nombrePais || codigoPais;
+        showSpin('spinnerDetalleCiudadPais');
+
+        try {
+            const p = buildParams();
+            p.set('codigoPais', codigoPais);
+            const data = await apiFetch('/VentasPorMercado/DatosCiudadesPorPais?' + p);
+
+            const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+            const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+            const tbody = document.getElementById('tablaDetalleCiudadPais');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos de ciudades</td></tr>';
+            } else {
+                tbody.innerHTML = data.map((d, i) => {
+                    const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+                    return '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (d.pais ?? '') + '</td>'
+                        + '<td>' + (d.ciudad ?? '') + '</td>'
+                        + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
+                        + '<td class="text-end">' + pct + '%</td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            // Chart donut para ciudades
+            destroyChart('detalleCiudadPais');
+            const top10 = (data || []).slice(0, 10);
+            if (top10.length > 0) {
+                charts['detalleCiudadPais'] = new Chart(document.getElementById('chartDetalleCiudadPais').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: top10.map(d => d.ciudad ?? 'Sin Ciudad'),
+                        datasets: [{
+                            data: top10.map(d => d.importe ?? 0),
+                            backgroundColor: PAIS_COLORS.slice(0, top10.length),
+                            borderWidth: 1,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '45%',
+                        plugins: {
+                            legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
+                            tooltip: {
+                                callbacks: {
+                                    label: c => c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)'
+                                }
+                            },
+                            datalabels: {
+                                display: function (ctx) { return ctx.dataset.data[ctx.dataIndex] / total > 0.05; },
+                                color: '#fff',
+                                font: { weight: '600', size: 10 },
+                                formatter: function (v) { return total > 0 ? ((v / total) * 100).toFixed(0) + '%' : ''; }
+                            }
+                        }
+                    }
+                });
+            }
+
+            document.getElementById('detalleCiudadPaisPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            showToast('Error al cargar ciudades del país: ' + e.message);
+        } finally {
+            hideSpin('spinnerDetalleCiudadPais');
+        }
+    };
+
+    window.cerrarDetalleCiudadPais = function () {
+        document.getElementById('detalleCiudadPaisPanel').style.display = 'none';
+        destroyChart('detalleCiudadPais');
+    };
+
+    /* ══════════════════════════════════════════════════
+       Detalle por Departamento (Perú, UBIGEO.PAIS='01')
+       NOM_DPT = departamento real
        ══════════════════════════════════════════════════ */
     async function loadDetalleDpto() {
         document.getElementById('detalleDptoPanel').style.display = 'block';
+        document.getElementById('detalleDistritoPanel').style.display = 'none';
         showSpin('spinnerDetalleDpto');
 
         try {
@@ -630,14 +1251,15 @@
             const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
             const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
 
-            // Tabla
+            // Tabla — filas clickeables para drill-down a distritos
             const tbody = document.getElementById('tablaDetalleDpto');
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>';
             } else {
                 tbody.innerHTML = data.map((d, i) => {
                     const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
-                    return '<tr>'
+                    const dptoName = (d.departamento ?? '').replace(/'/g, "\\'");
+                    return '<tr class="clickable-row" onclick="loadDetalleDistrito(\'' + dptoName + '\')" title="Clic para ver distritos de ' + (d.departamento ?? '') + '">'
                         + '<td>' + (i + 1) + '</td>'
                         + '<td>' + (d.departamento ?? '') + '</td>'
                         + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
@@ -693,25 +1315,359 @@
 
     window.cerrarDetalleDpto = function () {
         document.getElementById('detalleDptoPanel').style.display = 'none';
+        document.getElementById('detalleDistritoPanel').style.display = 'none';
         destroyChart('detalleDpto');
+        destroyChart('detalleDistrito');
     };
 
     /* ══════════════════════════════════════════════════
-       Map region click
+       Detalle por Distrito (drill-down de departamento)
+       UBIGEO.PAIS='01' → NOM_DTT = distrito real
        ══════════════════════════════════════════════════ */
-    document.querySelectorAll('.map-region').forEach(el => {
-        el.addEventListener('click', function () {
-            const mercado = this.getAttribute('data-mercado');
-            if (mercado) {
-                loadDetallePais(mercado);
-                if (mercado === 'Perú') {
-                    loadDetalleDpto();
-                } else {
-                    document.getElementById('detalleDptoPanel').style.display = 'none';
+    window.loadDetalleDistrito = async function (departamento) {
+        document.getElementById('detalleDistritoPanel').style.display = 'block';
+        document.getElementById('detalleDistritoTitulo').textContent = departamento;
+        showSpin('spinnerDetalleDistrito');
+
+        try {
+            const p = buildParams();
+            p.set('departamento', departamento);
+            const data = await apiFetch('/VentasPorMercado/DatosDetallePorDistrito?' + p);
+
+            const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+            const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+            const tbody = document.getElementById('tablaDetalleDistrito');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos de distritos</td></tr>';
+            } else {
+                tbody.innerHTML = data.map((d, i) => {
+                    const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+                    return '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (d.distrito ?? '') + '</td>'
+                        + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
+                        + '<td class="text-end">' + pct + '%</td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            // Horizontal bar chart top 10 distritos
+            destroyChart('detalleDistrito');
+            const top10 = (data || []).slice(0, 10);
+            if (top10.length > 0) {
+                charts['detalleDistrito'] = new Chart(document.getElementById('chartDetalleDistrito').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: top10.map(d => d.distrito ?? 'Sin Distrito'),
+                        datasets: [{
+                            label: 'Importe',
+                            data: top10.map(d => d.importe ?? 0),
+                            backgroundColor: PAIS_COLORS.slice(0, top10.length),
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: { label: c => monLabel + ' ' + fmt(c.raw) }
+                            },
+                            datalabels: {
+                                anchor: 'end',
+                                align: 'right',
+                                font: { size: 9, weight: '600' },
+                                color: '#333',
+                                formatter: v => monLabel + ' ' + fmtMil(v)
+                            }
+                        },
+                        scales: {
+                            x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } }
+                        }
+                    }
+                });
+            }
+
+            document.getElementById('detalleDistritoPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            showToast('Error al cargar distritos: ' + e.message);
+        } finally {
+            hideSpin('spinnerDetalleDistrito');
+        }
+    };
+
+    window.cerrarDetalleDistrito = function () {
+        document.getElementById('detalleDistritoPanel').style.display = 'none';
+        destroyChart('detalleDistrito');
+    };
+
+    /* ══════════════════════════════════════════════════
+       EVOLUCIÓN MENSUAL por Mercado (line chart)
+       ══════════════════════════════════════════════════ */
+    async function loadEvolucion() {
+        showSpin('spinnerEvolucion');
+        try {
+            const data = await apiFetch('/VentasPorMercado/DatosEvolucionMensual?' + buildParams());
+            renderEvolucion(data);
+        } catch (e) {
+            showToast('Error al cargar evolución mensual: ' + e.message);
+        } finally {
+            hideSpin('spinnerEvolucion');
+        }
+    }
+
+    function renderEvolucion(data) {
+        destroyChart('evolucion');
+        if (!data || data.length === 0) return;
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        const periodos = [...new Set(data.map(d => d.periodo))].sort();
+        const mercados = [...new Set(data.map(d => d.mercado))];
+
+        const datasets = mercados.map(m => {
+            const values = periodos.map(p => {
+                const item = data.find(d => d.periodo === p && d.mercado === m);
+                return item ? item.importe : 0;
+            });
+            return {
+                label: m,
+                data: values,
+                borderColor: MERCADO_COLORS[m] || '#999',
+                backgroundColor: (MERCADO_COLORS[m] || '#999') + '22',
+                borderWidth: 2.5,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                tension: 0.3,
+                fill: true
+            };
+        });
+
+        charts['evolucion'] = new Chart(document.getElementById('chartEvolucion').getContext('2d'), {
+            type: 'line',
+            data: { labels: periodos, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 }, padding: 14 } },
+                    tooltip: {
+                        callbacks: {
+                            label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw)
+                        }
+                    },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } },
+                    x: { grid: { display: false } }
                 }
             }
         });
-    });
+    }
+
+    /* ══════════════════════════════════════════════════
+       TOP CLIENTES por Mercado
+       ══════════════════════════════════════════════════ */
+    window.loadTopClientes = async function () {
+        showSpin('spinnerTopClientes');
+        try {
+            const p = buildParams();
+            const mercado = document.getElementById('filtroMercadoClientes').value;
+            if (mercado) p.set('mercado', mercado);
+            p.set('top', '15');
+
+            const data = await apiFetch('/VentasPorMercado/DatosTopClientes?' + p);
+            renderTopClientes(data);
+        } catch (e) {
+            showToast('Error al cargar top clientes: ' + e.message);
+        } finally {
+            hideSpin('spinnerTopClientes');
+        }
+    };
+
+    function renderTopClientes(data) {
+        destroyChart('topClientes');
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
+        const tbody = document.getElementById('tablaTopClientes');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin datos</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.map((d, i) => {
+            const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+            return '<tr>'
+                + '<td>' + (i + 1) + '</td>'
+                + '<td>' + (d.codCliente ?? '') + '</td>'
+                + '<td>' + (d.nomCliente ?? '') + '</td>'
+                + '<td>' + (d.pais ?? '') + '</td>'
+                + '<td><span class="badge" style="background:' + (MERCADO_COLORS[d.mercado] || '#999') + '">' + (d.mercado ?? '') + '</span></td>'
+                + '<td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td>'
+                + '<td class="text-end">' + (d.cantDocumentos ?? 0) + '</td>'
+                + '<td class="text-end">' + pct + '%</td>'
+                + '</tr>';
+        }).join('');
+
+        // Horizontal bar chart top 10
+        const top10 = data.slice(0, 10);
+        charts['topClientes'] = new Chart(document.getElementById('chartTopClientes').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: top10.map(d => (d.nomCliente ?? d.codCliente ?? '').substring(0, 25)),
+                datasets: [{
+                    label: 'Importe',
+                    data: top10.map(d => d.importe ?? 0),
+                    backgroundColor: top10.map(d => MERCADO_COLORS[d.mercado] || '#999'),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: { label: c => monLabel + ' ' + fmt(c.raw) }
+                    },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'right',
+                        font: { size: 9, weight: '600' },
+                        color: '#333',
+                        formatter: v => monLabel + ' ' + fmtMil(v)
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════════════
+       DETALLE DOCUMENTOS (tabla completa transaccional)
+       ══════════════════════════════════════════════════ */
+    let _docsData = [];
+
+    window.loadDocumentos = async function () {
+        showSpin('spinnerDocumentos');
+        try {
+            const p = buildParams();
+            const mercado = document.getElementById('filtroMercadoDocs').value;
+            if (mercado) p.set('mercado', mercado);
+
+            _docsData = await apiFetch('/VentasPorMercado/DatosDetalleDocumentos?' + p);
+            renderDocumentos(_docsData);
+        } catch (e) {
+            showToast('Error al cargar documentos: ' + e.message);
+        } finally {
+            hideSpin('spinnerDocumentos');
+        }
+    };
+
+    function renderDocumentos(data) {
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        document.getElementById('badgeTotalDocs').textContent = (data ? data.length : 0) + ' registros';
+
+        const tbody = document.getElementById('tablaDocumentosBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="21" class="text-center text-muted py-3">Sin datos</td></tr>';
+            return;
+        }
+
+        const fmtDate = d => {
+            if (!d) return '';
+            const dt = new Date(d);
+            return dt.toLocaleDateString('es-PE');
+        };
+
+        tbody.innerHTML = data.map((d, i) => {
+            // Interpretar campos según UBIGEO.PAIS:
+            // '01' = Perú → departamento y distrito reales
+            // ≠'01' → NOM_DPT=país extranjero, NOM_DTT=ciudad de ese país
+            const esPeru = (d.ubigeoPais ?? '01') === '01';
+            const colDpto = esPeru
+                ? (d.departamento ?? '')
+                : '<span class="text-info" title="País (UBIGEO.PAIS≠01)">' + (d.departamento ?? '') + '</span>';
+            const colDist = esPeru
+                ? (d.distrito ?? '')
+                : '<span class="text-info" title="Ciudad (UBIGEO.PAIS≠01)">' + (d.distrito ?? '') + '</span>';
+
+            return '<tr>'
+            + '<td>' + (i + 1) + '</td>'
+            + '<td>' + (d.tipoDoc ?? '') + '</td>'
+            + '<td>' + (d.serie ?? '') + '</td>'
+            + '<td>' + (d.numero ?? '') + '</td>'
+            + '<td>' + fmtDate(d.fecha) + '</td>'
+            + '<td>' + (d.moneda ?? '') + '</td>'
+            + '<td>' + (d.codCliente ?? '') + '</td>'
+            + '<td>' + (d.nomCliente ?? '') + '</td>'
+            + '<td>' + (d.pais ?? '') + '</td>'
+            + '<td>' + (d.exportacion ?? '') + '</td>'
+            + '<td><span class="badge" style="background:' + (MERCADO_COLORS[d.mercado] || '#999') + ';font-size:.7rem">' + (d.mercado ?? '') + '</span></td>'
+            + '<td class="text-end">' + fmt(d.importCam) + '</td>'
+            + '<td class="text-end">' + fmt(d.valVenta) + '</td>'
+            + '<td class="text-end">' + fmt(d.impDescto) + '</td>'
+            + '<td class="text-end">' + fmt(d.impAnticipo) + '</td>'
+            + '<td class="text-end">' + fmt(d.impInteres) + '</td>'
+            + '<td class="text-end fw-semibold">' + fmt(d.impNeto) + '</td>'
+            + '<td class="text-end">' + fmt(d.impIgv) + '</td>'
+            + '<td class="text-end">' + fmt(d.precioVta) + '</td>'
+            + '<td>' + colDpto + '</td>'
+            + '<td>' + colDist + '</td>'
+            + '</tr>';
+        }).join('');
+    }
+
+    /* ══════════════════════════════════════════════════
+       EXPORTAR A EXCEL (CSV con BOM UTF-8)
+       ══════════════════════════════════════════════════ */
+    window.exportarExcel = function () {
+        if (!_docsData || _docsData.length === 0) {
+            showToast('No hay datos para exportar.', 'warning');
+            return;
+        }
+
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'PEN' : 'USD';
+        const fmtDate = d => {
+            if (!d) return '';
+            const dt = new Date(d);
+            return dt.toLocaleDateString('es-PE');
+        };
+
+        const headers = ['#','Tipo','Serie','Número','Fecha','Moneda','Cód.Cliente','Razón Social',
+                         'País','Exp','Mercado','T.C.','Val.Venta','Descto','Anticipo','Interés',
+                         'Neto','IGV','Precio Vta','Dpto/País','Distrito/Ciudad'];
+
+        const rows = _docsData.map((d, i) => [
+            i + 1, d.tipoDoc, d.serie, d.numero, fmtDate(d.fecha), d.moneda,
+            d.codCliente, d.nomCliente, d.pais, d.exportacion, d.mercado,
+            d.importCam, d.valVenta, d.impDescto, d.impAnticipo, d.impInteres,
+            d.impNeto, d.impIgv, d.precioVta, d.departamento, d.distrito
+        ]);
+
+        const csvContent = [headers, ...rows]
+            .map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(','))
+            .join('\n');
+
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'VentasPorMercado_' + monLabel + '_' + new Date().toISOString().slice(0,10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     /* ══════════════════════════════════════════════════
        Load all data
@@ -731,18 +1687,27 @@
     window.loadAll = function () {
         cerrarDetallePais();
         cerrarDetalleDpto();
+        cerrarDetalleDistrito();
+        cerrarDetalleCiudadPais();
         loadMercado();
+        loadEvolucion();
+        loadTopClientes();
+        loadDocumentos();
     };
 
     window.clearFilters = function () {
         setDefaultDates();
         document.getElementById('moneda').value = 'D';
+        document.getElementById('filtroMercadoClientes').value = '';
+        document.getElementById('filtroMercadoDocs').value = '';
         loadAll();
     };
 
     /* ── Inicialización ─────────────────────────────── */
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', async function () {
         setDefaultDates();
+        // Cargar mapeo BD→ISO desde la BD antes de renderizar el mapa
+        await cargarMapeoPaises();
         loadAll();
     });
 })();

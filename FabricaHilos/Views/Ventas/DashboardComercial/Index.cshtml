@@ -1,0 +1,1305 @@
+@{
+    ViewData["Title"] = "Dashboard Comercial";
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .chart-spinner {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+
+
+    .year-check-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .5rem;
+        margin-top: .6rem;
+        padding-top: .6rem;
+        border-top: 1px solid #e9ecef;
+    }
+    .year-check-bar .form-check-input:checked {
+        background-color: #1B4D3E;
+        border-color: #1B4D3E;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Dashboard Comercial</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Moneda</label>
+            <select id="moneda" class="form-select form-select-sm" style="min-width:110px">
+                <option value="D" selected>Dólares (USD)</option>
+                <option value="S">Soles (PEN)</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+    <div class="year-check-bar" id="yearCheckBar"></div>
+</div>
+
+<!-- ── Sección 1: Cartera por Asesor ───────────────── -->
+<div class="section-title"><i class="bi bi-briefcase me-1"></i>Cartera por Asesor</div>
+<p class="report-desc">Muestra para cada asesor su <strong>Venta total (S/ o USD)</strong> en barras, la <strong>Producción en kilogramos</strong> en barras superpuestas, y el <strong>% de participación</strong> en la línea. Permite comparar de un vistazo el <strong>volumen monetario, físico y la cuota</strong> de cada vendedor.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Cartera por Asesor — Venta, Producción y % Participación</div>
+            <div class="card-body" style="height:420px"><canvas id="chartCartera"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Cartera por Asesor — Venta, Producción y % Participación (Horizontal)</div>
+            <div class="card-body" style="height:420px"><canvas id="chartCarteraBar"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 2: Top 3 Clientes por Asesor (Importe) ── -->
+<div class="section-title"><i class="bi bi-currency-dollar me-1"></i>Resumen por Asesor y Cliente (Importe) — TOP 3</div>
+<p class="report-desc">Muestra los <strong>3 clientes con mayor facturación</strong> de cada asesor, acumulado en todo el período. Las barras están agrupadas por asesor, permitiendo ver <strong>quiénes son los clientes más importantes</strong> en términos monetarios.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerTopImporte" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Top 3 Clientes por Asesor (Importe)</div>
+            <div class="card-body" style="min-height:420px"><canvas id="chartTopImporte"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 3: Top 3 Clientes por Asesor (Kilos) ── -->
+<div class="section-title"><i class="bi bi-box-seam me-1"></i>Resumen por Asesor y Cliente (Kilos) — TOP 3</div>
+<p class="report-desc">Muestra los <strong>3 clientes con mayor volumen en kilogramos</strong> de cada asesor, acumulado en todo el período. Las barras están agrupadas por asesor, permitiendo ver <strong>quiénes son los clientes más grandes</strong> en volumen físico.</p>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card chart-card position-relative">
+            <div id="spinnerTopKg" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Top 3 Clientes por Asesor (Kilos)</div>
+            <div class="card-body" style="min-height:420px"><canvas id="chartTopKg"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 4: Total y % de Clientes por Asesor ─── -->
+<div class="section-title"><i class="bi bi-pie-chart me-1"></i>¿Cómo se distribuyen los clientes entre asesores?</div>
+<p class="report-desc">A la <strong>izquierda</strong>: gráfico circular con la <strong>cantidad total de clientes</strong> por asesor en todo el período. A la <strong>derecha</strong>: gráfico de barras horizontales con el <strong>porcentaje de clientes</strong> que maneja cada asesor respecto del total. Permite ver la <strong>concentración de cartera</strong>.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-5">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Total de Clientes por Asesor</div>
+            <div class="card-body" style="height:380px"><canvas id="chartClientesPie"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">% de Clientes por Asesor</div>
+            <div class="card-body" style="height:380px"><canvas id="chartClientesPct"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 5: Ranking y Participación por Asesor ── -->
+<div class="section-title"><i class="bi bi-trophy me-1"></i>¿Quién vendió más y qué porcentaje representa?</div>
+<p class="report-desc">A la <strong>izquierda</strong>: ranking que ordena a los asesores del que menos vendió al que más vendió en todo el período. A la <strong>derecha</strong>: gráfico circular que muestra qué porcentaje del total de ventas representa cada asesor. Ideal para identificar rápidamente <strong>quién lidera las ventas</strong> y cómo se reparte el esfuerzo comercial.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Ranking de Asesores (Importe Total)</div>
+            <div class="card-body" style="height:380px"><canvas id="chartRanking"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card position-relative">
+            <div class="card-header small">Participación por Asesor (%)</div>
+            <div class="card-body" style="height:380px"><canvas id="chartParticipacion"></canvas></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+(function () {
+    'use strict';
+
+    /* ── Registrar plugin datalabels globalmente ────── */
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
+
+    /* ── Formato de números ─────────────────────────── */
+    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmt  = n => fmtPE.format(n ?? 0);
+    const fmtMil = n => {
+        n = n ?? 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return fmt(n);
+    };
+
+    /* ── Paleta de colores ──────────────────────────── */
+    const COLORS = [
+        '#1B4D3E', '#1565C0', '#2e7d32', '#e65100', '#6a1b9a',
+        '#00838f', '#c62828', '#4e342e', '#37474f', '#f9a825',
+        '#00695c', '#ad1457', '#283593', '#ef6c00', '#2e7d5e'
+    ];
+    const YEAR_COLORS = ['#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f','#c62828'];
+    const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+    /* ── Convertir "2026/01" → "Ene 2026" ──────────── */
+    function mesLabel(m) {
+        const parts = m.split('/');
+        if (parts.length === 2) {
+            const idx = parseInt(parts[1]) - 1;
+            return MONTH_NAMES[idx] + ' ' + parts[0];
+        }
+        return m;
+    }
+
+
+
+    /* ── Instancias de charts ──────────────────────── */
+    const charts = {};
+    function destroyChart(key) {
+        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+    }
+
+    /* ── Spinner helpers ───────────────────────────── */
+    function showSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+    function hideSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    /* ── Toast de notificación ──────────────────────── */
+    function showToast(msg, type) {
+        type = type || 'danger';
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
+        toast.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
+        toast.innerHTML = msg + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
+        container.appendChild(toast);
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 6000);
+    }
+
+    /* ── Años: generar checkboxes ─────────────────── */
+    function buildYearCheckboxes() {
+        const bar = document.getElementById('yearCheckBar');
+        const currentYear = new Date().getFullYear();
+        let html = '<span class="small fw-semibold text-muted me-1"><i class="bi bi-calendar3 me-1"></i>Comparar Años:</span>';
+        for (let y = currentYear; y >= currentYear - 5; y--) {
+            const chk = y === currentYear ? 'checked' : '';
+            html += '<div class="form-check form-check-inline mb-0">'
+                  + '<input class="form-check-input" type="checkbox" id="year' + y + '" value="' + y + '" ' + chk + ' onchange="onYearsChanged()">'
+                  + '<label class="form-check-label small" for="year' + y + '">' + y + '</label></div>';
+        }
+        bar.innerHTML = html;
+    }
+
+    function getSelectedYears() {
+        return Array.from(document.querySelectorAll('#yearCheckBar input:checked')).map(c => parseInt(c.value)).sort();
+    }
+
+    function isComparisonMode() { return getSelectedYears().length >= 2; }
+
+    window.onYearsChanged = function () {
+        const years = getSelectedYears();
+        const fi = document.getElementById('fechaInicio');
+        const ff = document.getElementById('fechaFin');
+        if (years.length === 0) { fpSetDisabled(fi, false); fpSetDisabled(ff, false); return; }
+        const hoy = new Date();
+        if (years.length === 1) {
+            const y = years[0];
+            fpSetDate(fi, y + '-01-01');
+            fpSetDate(ff, y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31');
+            fpSetDisabled(fi, false); fpSetDisabled(ff, false);
+            loadAll();
+            return;
+        }
+        const minY = Math.min(...years), maxY = Math.max(...years);
+        fpSetDate(fi, minY + '-01-01');
+        fpSetDate(ff, maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31');
+        fpSetDisabled(fi, true); fpSetDisabled(ff, true);
+        loadAll();
+    };
+
+    /* ── Fechas por defecto (1° enero del año actual → hoy) ── */
+    function setDefaultDates() {
+        const hoy = new Date();
+        const ini = new Date(hoy.getFullYear(), 0, 1);
+        const toISO = d => d.toISOString().slice(0, 10);
+        fpSetDate('#fechaInicio', toISO(ini));
+        fpSetDate('#fechaFin',    toISO(hoy));
+    }
+
+    /* ── Parámetros del query string ────────────────── */
+    function buildParams() {
+        const fi  = document.getElementById('fechaInicio').value;
+        const ff  = document.getElementById('fechaFin').value;
+        const mon = document.getElementById('moneda').value;
+        const p   = new URLSearchParams();
+        if (fi)  p.set('fechaInicio', fi);
+        if (ff)  p.set('fechaFin',    ff);
+        if (mon) p.set('moneda',      mon);
+        return p;
+    }
+
+    /* ── Fetch genérico ─────────────────────────────── */
+    async function apiFetch(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    }
+
+
+
+    /* ── Datos compartidos para gráficos de resumen ── */
+    let importeData = [];
+
+    let kgData = [];
+
+    let clientesData = [];
+
+    /* ═════════════════════════════════════════════════
+       GRÁFICOS DE RESUMEN (calculados client-side)
+       ═════════════════════════════════════════════════ */
+
+    /* ── Ranking de Asesores (horizontal bar) ─────── */
+    function renderRanking() {
+        destroyChart('ranking');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const map = {};
+        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
+            .sort((a, b) => a.total - b.total);
+
+        charts['ranking'] = new Chart(document.getElementById('chartRanking').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    label: 'Importe Total',
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'right',
+                        font: { size: 11, weight: '600' },
+                        color: '#333',
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
+                },
+                layout: { padding: { right: 80 } },
+                scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
+            }
+        });
+    }
+
+    /* ── Participación por Asesor (doughnut) ──────── */
+    function renderParticipacion() {
+        destroyChart('participacion');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const map = {};
+        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
+            .sort((a, b) => b.total - a.total);
+        const gran = sorted.reduce((s, r) => s + r.total, 0);
+
+        charts['participacion'] = new Chart(document.getElementById('chartParticipacion').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: c => {
+                                const pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
+                                return c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: function(ctx) {
+                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
+                            return total > 0 && (ctx.dataset.data[ctx.dataIndex] / total * 100) >= 5;
+                        },
+                        color: '#fff',
+                        font: { size: 12, weight: 'bold' },
+                        formatter: function(v, ctx) {
+                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
+                            return total > 0 ? (v / total * 100).toFixed(1) + '%' : '';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+
+
+    /* ── Render todos los gráficos de resumen ─────── */
+    function renderResumen() {
+        if (importeData.length === 0 && kgData.length === 0 && clientesData.length === 0) return;
+        renderCartera();
+        renderCarteraBar();
+        renderRanking();
+        renderParticipacion();
+        renderClientesPie();
+        renderClientesPct();
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 7a: Total de Clientes por Asesor (pie)
+       ═════════════════════════════════════════════════ */
+    function renderClientesPie() {
+        destroyChart('clientesPie');
+        // Contar clientes distintos por asesor (usar clientesData = nroClientes por asesor/mes)
+        const map = {};
+        clientesData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.nroClientes ?? 0); });
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
+            .sort((a, b) => b.total - a.total);
+
+        charts['clientesPie'] = new Chart(document.getElementById('chartClientesPie').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(c) {
+                                var gran = c.dataset.data.reduce(function(a,b){ return a+b; }, 0);
+                                var pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
+                                return c.label + ': ' + c.raw + ' clientes (' + pct + '%)';
+                            }
+                        }
+                    },
+                    datalabels: {
+                        color: '#fff',
+                        font: { size: 12, weight: 'bold' },
+                        formatter: function(v, ctx) {
+                            return ctx.chart.data.labels[ctx.dataIndex] + ', ' + v;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 7b: % de Clientes por Asesor (horizontal bar)
+       ═════════════════════════════════════════════════ */
+    function renderClientesPct() {
+        destroyChart('clientesPct');
+        const map = {};
+        clientesData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.nroClientes ?? 0); });
+        const gran = Object.values(map).reduce((s, v) => s + v, 0);
+        const sorted = Object.entries(map)
+            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', pct: gran > 0 ? (total / gran * 100) : 0 }))
+            .sort((a, b) => a.pct - b.pct);
+
+        charts['clientesPct'] = new Chart(document.getElementById('chartClientesPct').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    label: '% de Clientes',
+                    data: sorted.map(r => r.pct),
+                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: function(c) { return c.raw.toFixed(1) + '%'; } } },
+                    datalabels: {
+                        display: true,
+                        anchor: 'end', align: 'right',
+                        font: { size: 12, weight: '700' },
+                        color: '#333',
+                        formatter: function(v) { return v.toFixed(0) + '%'; }
+                    }
+                },
+                layout: { padding: { right: 50 } },
+                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } } }
+            }
+        });
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 8: Cartera por Asesor (Venta, Producción, % Participación)
+       ═════════════════════════════════════════════════ */
+    function renderCartera() {
+        destroyChart('cartera');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        /* Detect unique years from importeData/kgData (mes = 'YYYY/MM') */
+        const yearsSet = new Set();
+        importeData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
+        kgData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
+        const years = [...yearsSet].sort();
+        const multiYear = years.length > 1;
+
+        if (!multiYear) {
+            /* Single year — original behavior */
+            const imp = {}, kg = {};
+            importeData.forEach(d => { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
+            kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
+            const asesores = [...new Set([...Object.keys(imp), ...Object.keys(kg)])].sort();
+            const totalImp = Object.values(imp).reduce((s, v) => s + v, 0);
+            const ventas = asesores.map(a => imp[a] ?? 0);
+            const kilos  = asesores.map(a => kg[a]  ?? 0);
+            const pcts   = asesores.map(a => totalImp > 0 ? ((imp[a] ?? 0) / totalImp * 100) : 0);
+
+            charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: asesores.map(a => a ?? 'Sin Asesor'),
+                    datasets: [
+                        { label: 'Venta (' + monLabel + ')', data: ventas, backgroundColor: '#1B4D3E', borderRadius: 4, yAxisID: 'y' },
+                        { label: 'Producción (kg)', data: kilos, backgroundColor: '#1565C0', borderRadius: 4, yAxisID: 'y' },
+                        {
+                            label: '% Participación', data: pcts, type: 'line',
+                            borderColor: '#e65100', borderWidth: 3, backgroundColor: '#e65100',
+                            pointRadius: 6, pointBackgroundColor: '#e65100', pointBorderColor: '#fff', pointBorderWidth: 3,
+                            tension: 0.3, yAxisID: 'y1',
+                            datalabels: {
+                                backgroundColor: 'rgba(255,255,255,.85)', borderColor: '#e65100', borderWidth: 1, borderRadius: 4,
+                                padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                                font: { size: 11, weight: '700' }, color: '#e65100',
+                                formatter: function(v) { return v.toFixed(0) + '%'; }
+                            }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(c) {
+                                    if (c.datasetIndex === 2) return c.dataset.label + ': ' + c.raw.toFixed(1) + '%';
+                                    if (c.datasetIndex === 1) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
+                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function(ctx) {
+                                if (ctx.datasetIndex === 2) return true;
+                                return ctx.dataset.data[ctx.dataIndex] > 0;
+                            },
+                            anchor: 'end', align: 'top',
+                            font: { size: 10, weight: '600' },
+                            color: function(ctx) {
+                                if (ctx.datasetIndex === 2) return '#e65100';
+                                return ctx.datasetIndex === 0 ? '#1B4D3E' : '#1565C0';
+                            },
+                            formatter: function(v, ctx) {
+                                if (ctx.datasetIndex === 2) return v.toFixed(1) + '%';
+                                if (ctx.datasetIndex === 1) return fmtMil(v) + ' kg';
+                                return monLabel + ' ' + fmtMil(v);
+                            }
+                        }
+                    },
+                    scales: {
+                        y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Venta / Producción' }, ticks: { callback: function(v) { return fmtMil(v); } } },
+                        y1: { beginAtZero: true, position: 'right', title: { display: true, text: '% Participación' }, max: 100, ticks: { callback: function(v) { return v + '%'; } }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        } else {
+            /* Multi-year — grouped bar sets per year */
+            const asesoresSet = new Set();
+            importeData.forEach(d => asesoresSet.add(d.asesor));
+            kgData.forEach(d => asesoresSet.add(d.asesor));
+            const asesores = [...asesoresSet].sort();
+
+            /* Build per-year, per-asesor totals */
+            const impByYr = {}, kgByYr = {};
+            years.forEach(yr => { impByYr[yr] = {}; kgByYr[yr] = {}; });
+            importeData.forEach(d => {
+                var yr = d.mes ? d.mes.substring(0, 4) : '';
+                if (impByYr[yr]) impByYr[yr][d.asesor] = (impByYr[yr][d.asesor] || 0) + (d.importe ?? 0);
+            });
+            kgData.forEach(d => {
+                var yr = d.mes ? d.mes.substring(0, 4) : '';
+                if (kgByYr[yr]) kgByYr[yr][d.asesor] = (kgByYr[yr][d.asesor] || 0) + (d.cantidadKg ?? 0);
+            });
+
+            var datasets = [];
+            var ventaColors = ['#1B4D3E', '#4CAF50', '#81C784', '#A5D6A7'];
+            var kgColors    = ['#1565C0', '#42A5F5', '#90CAF9', '#BBDEFB'];
+            years.forEach(function(yr, yi) {
+                datasets.push({
+                    label: 'Venta ' + yr + ' (' + monLabel + ')',
+                    data: asesores.map(a => impByYr[yr][a] ?? 0),
+                    backgroundColor: ventaColors[yi % ventaColors.length],
+                    borderRadius: 4, yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Producción ' + yr + ' (kg)',
+                    data: asesores.map(a => kgByYr[yr][a] ?? 0),
+                    backgroundColor: kgColors[yi % kgColors.length],
+                    borderRadius: 4, yAxisID: 'y'
+                });
+            });
+
+            charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: asesores.map(a => a ?? 'Sin Asesor'),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(c) {
+                                    if (c.dataset.label.indexOf('Producción') >= 0) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
+                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                            anchor: 'end', align: 'top',
+                            font: { size: 9, weight: '600' },
+                            color: '#333',
+                            formatter: function(v, ctx) {
+                                if (ctx.dataset.label.indexOf('Producción') >= 0) return fmtMil(v) + ' kg';
+                                return monLabel + ' ' + fmtMil(v);
+                            }
+                        }
+                    },
+                    scales: {
+                        y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Venta / Producción' }, ticks: { callback: function(v) { return fmtMil(v); } } },
+                        y1: { display: false }
+                    }
+                }
+            });
+        }
+    }
+
+    /* ── Cartera por Asesor — Venta, Producción y % Participación (horizontal) ── */
+    function renderCarteraBar() {
+        destroyChart('carteraBar');
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        /* Detect unique years */
+        const yearsSet = new Set();
+        importeData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
+        kgData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
+        const years = [...yearsSet].sort();
+        const multiYear = years.length > 1;
+
+        const asesoresSet = new Set();
+        importeData.forEach(d => asesoresSet.add(d.asesor));
+        kgData.forEach(d => asesoresSet.add(d.asesor));
+        const asesores = [...asesoresSet].sort();
+
+        if (!multiYear) {
+            /* Single year — original */
+            const imp = {}, kg = {};
+            importeData.forEach(d => { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
+            kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
+            const totalImp = Object.values(imp).reduce((s, v) => s + v, 0);
+
+            const sorted = asesores
+                .map(a => ({ asesor: a ?? 'Sin Asesor', venta: imp[a] ?? 0, produccion: kg[a] ?? 0, pct: totalImp > 0 ? ((imp[a] ?? 0) / totalImp * 100) : 0 }))
+                .sort((a, b) => a.venta - b.venta);
+
+            charts['carteraBar'] = new Chart(document.getElementById('chartCarteraBar').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(r => r.asesor),
+                    datasets: [
+                        { label: 'Venta (' + monLabel + ')', data: sorted.map(r => r.venta), backgroundColor: '#1B4D3E', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x' },
+                        { label: 'Producción (kg)', data: sorted.map(r => r.produccion), backgroundColor: '#1565C0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x' },
+                        { label: '% Participación', data: sorted.map(r => r.pct), backgroundColor: '#e65100', borderRadius: 4, barPercentage: 0.5, categoryPercentage: 0.75, xAxisID: 'x1' }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(c) {
+                                    if (c.datasetIndex === 2) return c.dataset.label + ': ' + c.raw.toFixed(1) + '%';
+                                    if (c.datasetIndex === 1) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
+                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function(ctx) {
+                                if (ctx.datasetIndex === 2) return true;
+                                return ctx.dataset.data[ctx.dataIndex] > 0;
+                            },
+                            anchor: 'end', align: 'right',
+                            font: { size: 10, weight: '600' },
+                            color: function(ctx) {
+                                if (ctx.datasetIndex === 2) return '#e65100';
+                                return ctx.datasetIndex === 0 ? '#1B4D3E' : '#1565C0';
+                            },
+                            formatter: function(v, ctx) {
+                                if (ctx.datasetIndex === 2) return v.toFixed(0) + '%';
+                                if (ctx.datasetIndex === 1) return fmtMil(v) + ' kg';
+                                return monLabel + ' ' + fmtMil(v);
+                            }
+                        }
+                    },
+                    layout: { padding: { right: 80 } },
+                    scales: {
+                        x:  { position: 'bottom', beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                        x1: { position: 'top', beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } }, grid: { drawOnChartArea: false } },
+                        y:  { ticks: { font: { size: 12, weight: '600' } }, grid: { display: false } }
+                    }
+                }
+            });
+        } else {
+            /* Multi-year — grouped horizontal bars per year */
+            const impByYr = {}, kgByYr = {};
+            years.forEach(yr => { impByYr[yr] = {}; kgByYr[yr] = {}; });
+            importeData.forEach(d => {
+                var yr = d.mes ? d.mes.substring(0, 4) : '';
+                if (impByYr[yr]) impByYr[yr][d.asesor] = (impByYr[yr][d.asesor] || 0) + (d.importe ?? 0);
+            });
+            kgData.forEach(d => {
+                var yr = d.mes ? d.mes.substring(0, 4) : '';
+                if (kgByYr[yr]) kgByYr[yr][d.asesor] = (kgByYr[yr][d.asesor] || 0) + (d.cantidadKg ?? 0);
+            });
+
+            /* Sort asesores by total importe across all years (ascending for horizontal) */
+            const totalByAsesor = {};
+            asesores.forEach(a => {
+                totalByAsesor[a] = years.reduce((s, yr) => s + (impByYr[yr][a] || 0), 0);
+            });
+            const sorted = asesores.slice().sort((a, b) => totalByAsesor[a] - totalByAsesor[b]);
+
+            var datasets = [];
+            var ventaColors = ['#1B4D3E', '#4CAF50', '#81C784', '#A5D6A7'];
+            var kgColors    = ['#1565C0', '#42A5F5', '#90CAF9', '#BBDEFB'];
+            years.forEach(function(yr, yi) {
+                datasets.push({
+                    label: 'Venta ' + yr + ' (' + monLabel + ')',
+                    data: sorted.map(a => impByYr[yr][a] ?? 0),
+                    backgroundColor: ventaColors[yi % ventaColors.length],
+                    borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x'
+                });
+                datasets.push({
+                    label: 'Producción ' + yr + ' (kg)',
+                    data: sorted.map(a => kgByYr[yr][a] ?? 0),
+                    backgroundColor: kgColors[yi % kgColors.length],
+                    borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x'
+                });
+            });
+
+            charts['carteraBar'] = new Chart(document.getElementById('chartCarteraBar').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(a => a ?? 'Sin Asesor'),
+                    datasets: datasets
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(c) {
+                                    if (c.dataset.label.indexOf('Producción') >= 0) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
+                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                            anchor: 'end', align: 'right',
+                            font: { size: 9, weight: '600' },
+                            color: '#333',
+                            formatter: function(v, ctx) {
+                                if (ctx.dataset.label.indexOf('Producción') >= 0) return fmtMil(v) + ' kg';
+                                return monLabel + ' ' + fmtMil(v);
+                            }
+                        }
+                    },
+                    layout: { padding: { right: 80 } },
+                    scales: {
+                        x:  { position: 'bottom', beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } }, grid: { color: 'rgba(0,0,0,0.06)' } },
+                        x1: { display: false },
+                        y:  { ticks: { font: { size: 12, weight: '600' } }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+    }
+
+    /* ═════════════════════════════════════════════════
+       CHART 9 & 10: Top 3 Clientes por Asesor (Kilos e Importe)
+       ═════════════════════════════════════════════════ */
+    let topClientesData = [];
+
+    function renderTopKg() {
+        destroyChart('topKg');
+        if (topClientesData.length === 0) return;
+
+        /* Detect unique years */
+        const yearsSet = new Set(topClientesData.map(d => d.anio));
+        const years = [...yearsSet].sort();
+        const multiYear = years.length > 1;
+
+        /* Group by asesor, then by year */
+        const grupos = {};
+        topClientesData.forEach(function(d) {
+            if (!grupos[d.asesor]) grupos[d.asesor] = {};
+            var yr = d.anio || 0;
+            if (!grupos[d.asesor][yr]) grupos[d.asesor][yr] = [];
+            grupos[d.asesor][yr].push(d);
+        });
+        const asesores = Object.keys(grupos).sort();
+
+        const labels = [];
+        const dataKg = [];
+        const bgColors = [];
+        const groupInfoKg = [];
+
+        asesores.forEach(function(asesor, ai) {
+            /* spacer between groups */
+            if (ai > 0) { labels.push(''); dataKg.push(null); bgColors.push('transparent'); }
+            var startIdx = labels.length;
+            var yrKeys = Object.keys(grupos[asesor]).sort();
+            yrKeys.forEach(function(yr, yi) {
+                /* spacer between years within same asesor */
+                if (yi > 0 && multiYear) { labels.push(''); dataKg.push(null); bgColors.push('transparent'); }
+                var clientes = grupos[asesor][yr].slice().sort(function(a, b) { return (b.cantidadKg || 0) - (a.cantidadKg || 0); });
+                clientes.forEach(function(c) {
+                    var lbl = c.razonSocial || '';
+                    if (multiYear) lbl = lbl + '\n(' + yr + ')';
+                    labels.push(lbl);
+                    dataKg.push(c.cantidadKg || 0);
+                    bgColors.push(multiYear ? YEAR_COLORS[years.indexOf(parseInt(yr)) % YEAR_COLORS.length] : COLORS[ai % COLORS.length]);
+                });
+            });
+            groupInfoKg.push({ startIdx: startIdx, endIdx: labels.length - 1, asesor: asesor });
+        });
+
+        var chartH = Math.max(500, labels.length * 40);
+        document.getElementById('chartTopKg').parentElement.style.height = chartH + 'px';
+
+        var topGroupPluginKg = {
+            id: 'topGroupPluginKg',
+            afterDraw: function(chart) {
+                var ctx = chart.ctx;
+                var xScale = chart.scales.x;
+                var area = chart.chartArea;
+                ctx.save();
+                /* Build separator positions between groups */
+                var separators = [];
+                for (var g = 0; g < groupInfoKg.length; g++) {
+                    var gi = groupInfoKg[g];
+                    if (gi.startIdx > 0) {
+                        var xPrev = xScale.getPixelForValue(gi.startIdx - 1);
+                        var xCur = xScale.getPixelForValue(gi.startIdx);
+                        separators.push((xPrev + xCur) / 2);
+                    }
+                }
+                var yLabel = area.bottom + (xScale.height - 4);
+                /* Draw separator lines */
+                for (var s = 0; s < separators.length; s++) {
+                    ctx.strokeStyle = '#ccc';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(separators[s], area.top);
+                    ctx.lineTo(separators[s], yLabel - 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                ctx.font = 'bold 12px "Segoe UI", sans-serif';
+                ctx.fillStyle = '#1B4D3E';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                for (var g = 0; g < groupInfoKg.length; g++) {
+                    var gi = groupInfoKg[g];
+                    var firstBar = xScale.getPixelForValue(gi.startIdx);
+                    var lastBar = xScale.getPixelForValue(gi.endIdx);
+                    var xCenter = (firstBar + lastBar) / 2;
+                    ctx.fillText(gi.asesor, xCenter, yLabel);
+                }
+                ctx.restore();
+            }
+        };
+
+        /* Year legend plugin (only when multiple years) */
+        var yearLegendPluginKg = {
+            id: 'yearLegendPluginKg',
+            afterDraw: function(chart) {
+                if (!multiYear) return;
+                var ctx = chart.ctx;
+                var area = chart.chartArea;
+                ctx.save();
+                var x = area.right - 10;
+                var y = area.top + 10;
+                ctx.font = 'bold 11px "Segoe UI", sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                for (var i = 0; i < years.length; i++) {
+                    var color = YEAR_COLORS[i % YEAR_COLORS.length];
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - 50, y + i * 20, 14, 14);
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(years[i].toString(), x, y + i * 20 + 2);
+                }
+                ctx.restore();
+            }
+        };
+
+        charts['topKg'] = new Chart(document.getElementById('chartTopKg').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Kilos',
+                    data: dataKg,
+                    backgroundColor: bgColors,
+                    borderRadius: 4,
+                    maxBarThickness: 55,
+                    barPercentage: 0.9,
+                    categoryPercentage: 0.85
+                }]
+            },
+            plugins: [topGroupPluginKg, yearLegendPluginKg],
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { top: 30, bottom: 28 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        filter: function(item) { return item.raw != null; },
+                        callbacks: {
+                            title: function(items) {
+                                var i = items[0].dataIndex;
+                                var base = (labels[i] || '').replace(/\n\(\d+\)/, '');
+                                for (var g = 0; g < groupInfoKg.length; g++) {
+                                    if (i >= groupInfoKg[g].startIdx && i <= groupInfoKg[g].endIdx) {
+                                        return base + ' — ' + groupInfoKg[g].asesor;
+                                    }
+                                }
+                                return base;
+                            },
+                            label: function(c) { return fmt(c.raw) + ' KG'; }
+                        }
+                    },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] != null && ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 10, weight: '700' },
+                        color: '#333',
+                        formatter: function(v) { return fmtMil(v) + ' kg'; }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { size: 9 },
+                            autoSkip: false,
+                            maxRotation: 0,
+                            padding: 4,
+                            callback: function(value, index) {
+                                var lbl = labels[index] || '';
+                                if (!lbl) return '';
+                                /* Split on \n first (for year suffix) then word-wrap */
+                                var parts = lbl.split('\n');
+                                var lines = [];
+                                parts.forEach(function(part) {
+                                    var words = part.split(' ');
+                                    var line = '';
+                                    for (var w = 0; w < words.length; w++) {
+                                        if (line.length + words[w].length > 12) {
+                                            if (line.trim()) lines.push(line.trim());
+                                            line = '';
+                                        }
+                                        line += words[w] + ' ';
+                                    }
+                                    if (line.trim()) lines.push(line.trim());
+                                });
+                                return lines;
+                            }
+                        },
+                        grid: { display: false }
+                    },
+                    y: { beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } } }
+                }
+            }
+        });
+    }
+
+    function renderTopImporte() {
+        destroyChart('topImporte');
+        if (topClientesData.length === 0) return;
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        /* Detect unique years */
+        const yearsSet = new Set(topClientesData.map(d => d.anio));
+        const years = [...yearsSet].sort();
+        const multiYear = years.length > 1;
+
+        /* Group by asesor, then by year */
+        const grupos = {};
+        topClientesData.forEach(function(d) {
+            if (!grupos[d.asesor]) grupos[d.asesor] = {};
+            var yr = d.anio || 0;
+            if (!grupos[d.asesor][yr]) grupos[d.asesor][yr] = [];
+            grupos[d.asesor][yr].push(d);
+        });
+        const asesores = Object.keys(grupos).sort();
+
+        const labels = [];
+        const dataImp = [];
+        const bgColors = [];
+        const groupInfoImp = [];
+
+        asesores.forEach(function(asesor, ai) {
+            /* spacer between groups */
+            if (ai > 0) { labels.push(''); dataImp.push(null); bgColors.push('transparent'); }
+            var startIdx = labels.length;
+            var yrKeys = Object.keys(grupos[asesor]).sort();
+            yrKeys.forEach(function(yr, yi) {
+                /* spacer between years within same asesor */
+                if (yi > 0 && multiYear) { labels.push(''); dataImp.push(null); bgColors.push('transparent'); }
+                var clientes = grupos[asesor][yr].slice().sort(function(a, b) { return (b.importe || 0) - (a.importe || 0); });
+                clientes.forEach(function(c) {
+                    var lbl = c.razonSocial || '';
+                    if (multiYear) lbl = lbl + '\n(' + yr + ')';
+                    labels.push(lbl);
+                    dataImp.push(c.importe || 0);
+                    bgColors.push(multiYear ? YEAR_COLORS[years.indexOf(parseInt(yr)) % YEAR_COLORS.length] : COLORS[ai % COLORS.length]);
+                });
+            });
+            groupInfoImp.push({ startIdx: startIdx, endIdx: labels.length - 1, asesor: asesor });
+        });
+
+        var chartH = Math.max(500, labels.length * 40);
+        document.getElementById('chartTopImporte').parentElement.style.height = chartH + 'px';
+
+        var topGroupPluginImp = {
+            id: 'topGroupPluginImp',
+            afterDraw: function(chart) {
+                var ctx = chart.ctx;
+                var xScale = chart.scales.x;
+                var area = chart.chartArea;
+                ctx.save();
+                /* Build separator positions between groups */
+                var separators = [];
+                for (var g = 0; g < groupInfoImp.length; g++) {
+                    var gi = groupInfoImp[g];
+                    if (gi.startIdx > 0) {
+                        var xPrev = xScale.getPixelForValue(gi.startIdx - 1);
+                        var xCur = xScale.getPixelForValue(gi.startIdx);
+                        separators.push((xPrev + xCur) / 2);
+                    }
+                }
+                var yLabel = area.bottom + (xScale.height - 4);
+                /* Draw separator lines */
+                for (var s = 0; s < separators.length; s++) {
+                    ctx.strokeStyle = '#ccc';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(separators[s], area.top);
+                    ctx.lineTo(separators[s], yLabel - 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                ctx.font = 'bold 12px "Segoe UI", sans-serif';
+                ctx.fillStyle = '#1B4D3E';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                for (var g = 0; g < groupInfoImp.length; g++) {
+                    var gi = groupInfoImp[g];
+                    var firstBar = xScale.getPixelForValue(gi.startIdx);
+                    var lastBar = xScale.getPixelForValue(gi.endIdx);
+                    var xCenter = (firstBar + lastBar) / 2;
+                    ctx.fillText(gi.asesor, xCenter, yLabel);
+                }
+                ctx.restore();
+            }
+        };
+
+        /* Year legend plugin (only when multiple years) */
+        var yearLegendPluginImp = {
+            id: 'yearLegendPluginImp',
+            afterDraw: function(chart) {
+                if (!multiYear) return;
+                var ctx = chart.ctx;
+                var area = chart.chartArea;
+                ctx.save();
+                var x = area.right - 10;
+                var y = area.top + 10;
+                ctx.font = 'bold 11px "Segoe UI", sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'top';
+                for (var i = 0; i < years.length; i++) {
+                    var color = YEAR_COLORS[i % YEAR_COLORS.length];
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x - 50, y + i * 20, 14, 14);
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(years[i].toString(), x, y + i * 20 + 2);
+                }
+                ctx.restore();
+            }
+        };
+
+        charts['topImporte'] = new Chart(document.getElementById('chartTopImporte').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Importe',
+                    data: dataImp,
+                    backgroundColor: bgColors,
+                    borderRadius: 4,
+                    maxBarThickness: 55,
+                    barPercentage: 0.9,
+                    categoryPercentage: 0.85
+                }]
+            },
+            plugins: [topGroupPluginImp, yearLegendPluginImp],
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { top: 30, bottom: 28 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        filter: function(item) { return item.raw != null; },
+                        callbacks: {
+                            title: function(items) {
+                                var i = items[0].dataIndex;
+                                var base = (labels[i] || '').replace(/\n\(\d+\)/, '');
+                                for (var g = 0; g < groupInfoImp.length; g++) {
+                                    if (i >= groupInfoImp[g].startIdx && i <= groupInfoImp[g].endIdx) {
+                                        return base + ' — ' + groupInfoImp[g].asesor;
+                                    }
+                                }
+                                return base;
+                            },
+                            label: function(c) { return monLabel + ' ' + fmt(c.raw); }
+                        }
+                    },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] != null && ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'top',
+                        font: { size: 10, weight: '700' },
+                        color: '#333',
+                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { size: 9 },
+                            autoSkip: false,
+                            maxRotation: 0,
+                            padding: 4,
+                            callback: function(value, index) {
+                                var lbl = labels[index] || '';
+                                if (!lbl) return '';
+                                /* Split on \n first (for year suffix) then word-wrap */
+                                var parts = lbl.split('\n');
+                                var lines = [];
+                                parts.forEach(function(part) {
+                                    var words = part.split(' ');
+                                    var line = '';
+                                    for (var w = 0; w < words.length; w++) {
+                                        if (line.length + words[w].length > 12) {
+                                            if (line.trim()) lines.push(line.trim());
+                                            line = '';
+                                        }
+                                        line += words[w] + ' ';
+                                    }
+                                    if (line.trim()) lines.push(line.trim());
+                                });
+                                return lines;
+                            }
+                        },
+                        grid: { display: false }
+                    },
+                    y: { beginAtZero: true, ticks: { callback: function(v) { return monLabel + ' ' + fmtMil(v); } } }
+                }
+            }
+        });
+    }
+
+    /* ═════════════════════════════════════════════════
+       CARGAR TODOS LOS DATOS
+       ═════════════════════════════════════════════════ */
+    window.loadAll = async function () {
+        const p = buildParams();
+
+        showSpin('spinnerTopKg');
+        showSpin('spinnerTopImporte');
+
+        const errors = [];
+
+        const [impRes, kgRes, cliRes, topRes] = await Promise.allSettled([
+            apiFetch('@Url.Action("DatosImportePorAsesor", "DashboardComercial")?' + p),
+            apiFetch('@Url.Action("DatosCantidadKgPorAsesor", "DashboardComercial")?' + p),
+            apiFetch('@Url.Action("DatosNroClientesPorAsesor", "DashboardComercial")?' + p),
+            apiFetch('@Url.Action("DatosTopClientesPorAsesor", "DashboardComercial")?' + p + '&top=3')
+        ]);
+
+        if (impRes.status === 'fulfilled') {
+            importeData = impRes.value;
+        }
+        else { console.error(impRes.reason); errors.push('Importe'); }
+
+        if (kgRes.status === 'fulfilled') {
+            kgData = kgRes.value;
+        }
+        else { console.error(kgRes.reason); errors.push('Cantidad KG'); }
+
+        if (cliRes.status === 'fulfilled') {
+            clientesData = cliRes.value;
+        }
+        else { console.error(cliRes.reason); errors.push('Nro Clientes'); }
+
+        if (topRes.status === 'fulfilled') { topClientesData = topRes.value; renderTopKg(); renderTopImporte(); }
+        else { console.error(topRes.reason); errors.push('Top Clientes'); }
+        hideSpin('spinnerTopKg');
+        hideSpin('spinnerTopImporte');
+
+        if (errors.length > 0) {
+            showToast('Error al cargar: ' + errors.join(', ') + '. Verifique su conexión.', 'danger');
+        }
+
+        // Gráficos de resumen (calculados client-side)
+        renderResumen();
+    };
+
+    /* ── Limpiar filtros ──────────────────────────── */
+    window.clearFilters = function () {
+        document.getElementById('moneda').value = 'D';
+        const curYear = new Date().getFullYear();
+        document.querySelectorAll('#yearCheckBar input').forEach(cb => { cb.checked = parseInt(cb.value) === curYear; });
+        fpSetDisabled('#fechaInicio', false);
+        fpSetDisabled('#fechaFin', false);
+        setDefaultDates();
+        loadAll();
+    };
+
+    /* ── Inicio ───────────────────────────────────── */
+    buildYearCheckboxes();
+    setDefaultDates();
+    loadAll();
+})();
+</script>
+}

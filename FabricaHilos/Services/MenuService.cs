@@ -71,6 +71,8 @@ public class MenuService : IMenuService
                     VentasConsultaTC = true,
                     VentasIndicadoresComerciales = true,
                     VentasVentasPorMercado = true,
+                    VentasDashboardComercial = true,
+                    VentasDashboardGerencial = true,
                     SeguridadInspecciones = false
                 };
             }
@@ -104,6 +106,8 @@ public class MenuService : IMenuService
                 VentasConsultaTC = false,
                 VentasIndicadoresComerciales = false,
                 VentasVentasPorMercado = false,
+                VentasDashboardComercial = false,
+                VentasDashboardGerencial = false,
                 SeguridadInspecciones = global.SeguridadInspecciones
             };
             return menusGlobal;
@@ -164,6 +168,8 @@ public class MenuService : IMenuService
             VentasConsultaTC = SubMenu(global.VentasConsultaTC, "Ventas", "Ventas.ConsultaTC"),
             VentasIndicadoresComerciales = SubMenu(global.VentasIndicadoresComerciales, "Ventas", "Ventas.IndicadoresComerciales"),
             VentasVentasPorMercado = SubMenu(global.VentasVentasPorMercado, "Ventas", "Ventas.VentasPorMercado"),
+            VentasDashboardComercial = SubMenu(global.VentasDashboardComercial, "Ventas", "Ventas.DashboardComercial"),
+            VentasDashboardGerencial = SubMenu(global.VentasDashboardGerencial, "Ventas", "Ventas.DashboardGerencial"),
 
             // ── Submenús: Seguridad ───────────────────────────────────────
             SeguridadInspecciones = SubMenu(global.SeguridadInspecciones, "Seguridad", "Seguridad.Inspeccion"),
