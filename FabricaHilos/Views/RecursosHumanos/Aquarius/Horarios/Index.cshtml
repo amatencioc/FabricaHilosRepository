@@ -1,0 +1,439 @@
+@{
+    ViewData["Title"] = "Horarios — " + ViewBag.Nombre;
+    var codPersonal = (string)ViewBag.CodPersonal;
+    var nombre      = (string)ViewBag.Nombre;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">Recursos Humanos</li>
+    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/Marcaciones">Empleados</a></li>
+    <li class="breadcrumb-item active">Horarios</li>
+}
+
+@section Styles {
+<style>
+    :root { --rh-primary: #1B4D3E; --rh-primary-light: #e8f5e9; }
+
+    .emp-hero {
+        background: linear-gradient(135deg, var(--rh-primary) 0%, #2d6a4f 100%);
+        color: #fff;
+        border-radius: .5rem;
+        padding: 1.1rem 1.4rem;
+        display: flex; align-items: center; gap: 1rem;
+    }
+    .emp-hero .avatar {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: rgba(255,255,255,.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
+    }
+    .emp-hero h5 { margin: 0; font-weight: 600; }
+    .emp-hero small { opacity: .8; font-size: .82rem; }
+
+    .range-card { border: none; border-radius: .5rem; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+    .range-card .card-header {
+        background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+        font-weight: 600; font-size: .88rem;
+        padding: .7rem 1.1rem;
+    }
+
+    .btn-consultar {
+        background: var(--rh-primary); border: none; color: #fff;
+        padding: .42rem 1.2rem; border-radius: .4rem; font-size: .87rem;
+    }
+    .btn-consultar:hover { background: #2d6a4f; color: #fff; }
+    .btn-consultar:disabled { opacity: .6; }
+
+    .week-nav .btn { font-size: .8rem; padding: .3rem .7rem; }
+    .week-label { font-size: .85rem; font-weight: 600; color: var(--rh-primary); min-width: 220px; text-align: center; }
+
+    /* Tabla de horarios */
+    .tbl-hor { font-size: .82rem; }
+    .tbl-hor thead th {
+        background: #f1f3f5; color: #495057;
+        font-size: .72rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .4px; white-space: nowrap;
+        padding: .5rem .75rem; border-bottom: 2px solid #dee2e6;
+    }
+    .tbl-hor tbody td { padding: .5rem .75rem; vertical-align: middle; }
+    .tbl-hor tbody tr:hover { background: var(--rh-primary-light); }
+
+    .row-descanso  { background: #eff6ff !important; }
+    .row-permiso   { background: #fffbeb !important; }
+    .row-pendiente { background: #fff1f2 !important; }
+
+    .hora-auto { color: #f97316; font-style: italic; }
+    .hora-real { color: #16a34a; font-weight: 500; }
+    .hora-nd   { color: #9ca3af; }
+
+    .badge-descanso  { background: #dbeafe; color: #1d4ed8; font-size: .7rem; }
+    .badge-permiso   { background: #fef3c7; color: #92400e; font-size: .7rem; }
+    .badge-pendiente { background: #fee2e2; color: #991b1b; font-size: .7rem; }
+    .badge-ok        { background: #f3f4f6; color: #374151; font-size: .7rem; }
+
+    .resultado-dep { display: none; border-radius: .4rem; overflow: hidden; }
+    .stat-box { background: #fff; border: 1px solid #e5e7eb; border-radius: .4rem; text-align: center; padding: .7rem; }
+    .stat-num  { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+    .stat-lbl  { font-size: .72rem; color: #6b7280; margin-top: .2rem; }
+
+    #spinnerWrap { display:none; text-align:center; padding: 3rem 1rem; color: #6c757d; }
+    #panelVacio  { display:none; text-align:center; padding: 3rem 1rem; color: #9ca3af; }
+    #panelTabla  { display:none; }
+</style>
+}
+
+<div class="container-fluid px-2 px-md-4 py-3">
+
+    {{!-- Hero del empleado --}}
+    <div class="emp-hero mb-3">
+        <div class="avatar" id="heroAvatar"></div>
+        <div>
+            <h5 id="heroNombre">@nombre</h5>
+            <small>Código: <strong id="heroCodigo">@codPersonal</strong></small>
+        </div>
+        <div class="ms-auto">
+            <a href="/RecursosHumanos/Aquarius/Marcaciones" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
+                <i class="bi bi-arrow-left me-1"></i>Volver
+            </a>
+        </div>
+    </div>
+
+    {{!-- Filtro de rango --}}
+    <div class="card range-card mb-3">
+        <div class="card-header d-flex align-items-center gap-2">
+            <i class="bi bi-calendar-range text-success"></i>
+            <span>Rango de consulta</span>
+        </div>
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-end gap-3">
+
+                {{!-- Navegación rápida por semana --}}
+                <div class="d-flex align-items-center gap-2 week-nav">
+                    <button type="button" id="btnSemAnterior" class="btn btn-outline-secondary" title="Semana anterior">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="week-label" id="lblSemana">—</span>
+                    <button type="button" id="btnSemSiguiente" class="btn btn-outline-secondary" title="Semana siguiente">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+
+                {{!-- Inputs de fecha --}}
+                <div>
+                    <label class="form-label mb-1 small fw-semibold">Desde</label>
+                    <input type="date" id="fechaInicio" class="form-control form-control-sm" style="width:155px;" />
+                </div>
+                <div>
+                    <label class="form-label mb-1 small fw-semibold">Hasta</label>
+                    <input type="date" id="fechaFin" class="form-control form-control-sm" style="width:155px;" />
+                </div>
+
+                <button type="button" id="btnConsultar" class="btn btn-consultar">
+                    <i class="bi bi-search me-1"></i>Consultar
+                </button>
+
+                <button type="button" id="btnDepurar" class="btn btn-outline-danger btn-sm ms-auto" style="display:none;">
+                    <i class="bi bi-lightning-charge me-1"></i>Depurar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{!-- Estados --}}
+    <div id="spinnerWrap">
+        <div class="spinner-border text-success mb-2" role="status"></div>
+        <p class="small">Consultando horarios…</p>
+    </div>
+
+    <div id="panelVacio">
+        <i class="bi bi-calendar-x" style="font-size:2.5rem; display:block; margin-bottom:.5rem;"></i>
+        <p class="fw-semibold mb-1">Sin marcaciones en este rango</p>
+        <p class="small">Pruebe con un rango de fechas diferente.</p>
+    </div>
+
+    {{!-- Tabla --}}
+    <div id="panelTabla">
+        <div class="card shadow-sm" style="border:none; border-radius:.5rem; overflow:hidden;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+                <span class="fw-semibold small"><i class="bi bi-table me-1 text-success"></i>Horarios y Marcaciones</span>
+                <span class="badge bg-secondary" id="lblTotalDias" style="font-size:.75rem;"></span>
+            </div>
+            <div class="table-responsive">
+                <table class="table tbl-hor table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Horario</th>
+                            <th title="Hora teórica entrada/salida">Teórico</th>
+                            <th title="Entrada real">Entrada</th>
+                            <th title="Inicio Refrigerio">IniRef</th>
+                            <th title="Fin Refrigerio">FinRef</th>
+                            <th title="Salida real">Salida</th>
+                            <th title="N° marcaciones">Marcas</th>
+                            <th title="Horas efectivas">H.Ef</th>
+                            <th title="Horas extras">H.Extra</th>
+                            <th>Estado</th>
+                            <th>Dep.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyHorarios"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {{!-- Panel depuración --}}
+    <div id="panelDep" class="resultado-dep mt-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header fw-semibold" id="depHeader" style="font-size:.88rem;"></div>
+            <div class="card-body" id="depBody"></div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<script>
+(function () {
+    'use strict';
+
+    const codPersonal = '@Html.Raw(codPersonal)';
+    const nombre      = '@Html.Raw(System.Text.Json.JsonSerializer.Serialize(nombre))';
+    const token       = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+    // ── Avatar ────────────────────────────────────────────────────────────
+    const heroAvatar = document.getElementById('heroAvatar');
+    const partes = (JSON.parse(nombre) || '?').split(' ').filter(Boolean);
+    heroAvatar.textContent = (partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '');
+
+    // ── Refs DOM ──────────────────────────────────────────────────────────
+    const fechaInicio     = document.getElementById('fechaInicio');
+    const fechaFin        = document.getElementById('fechaFin');
+    const btnConsultar    = document.getElementById('btnConsultar');
+    const btnDepurar      = document.getElementById('btnDepurar');
+    const btnSemAnterior  = document.getElementById('btnSemAnterior');
+    const btnSemSiguiente = document.getElementById('btnSemSiguiente');
+    const lblSemana       = document.getElementById('lblSemana');
+    const spinnerWrap     = document.getElementById('spinnerWrap');
+    const panelVacio      = document.getElementById('panelVacio');
+    const panelTabla      = document.getElementById('panelTabla');
+    const tbodyHorarios   = document.getElementById('tbodyHorarios');
+    const lblTotalDias    = document.getElementById('lblTotalDias');
+    const panelDep        = document.getElementById('panelDep');
+    const depHeader       = document.getElementById('depHeader');
+    const depBody         = document.getElementById('depBody');
+
+    // ── Semana actual ─────────────────────────────────────────────────────
+    function lunesDeHoy() {
+        const hoy = new Date();
+        const d   = hoy.getDay(); // 0=dom
+        const diff = d === 0 ? -6 : 1 - d;
+        const lun = new Date(hoy);
+        lun.setDate(hoy.getDate() + diff);
+        return lun;
+    }
+
+    function fmt(date) { return date.toISOString().slice(0, 10); }
+
+    function aplicarSemana(lunes) {
+        const dom = new Date(lunes);
+        dom.setDate(lunes.getDate() + 6);
+        fechaInicio.value = fmt(lunes);
+        fechaFin.value    = fmt(dom);
+        const opts = { day: '2-digit', month: 'short' };
+        lblSemana.textContent = `${lunes.toLocaleDateString('es-PE', opts)} — ${dom.toLocaleDateString('es-PE', opts)}`;
+    }
+
+    let semanaActual = lunesDeHoy();
+    aplicarSemana(semanaActual);
+
+    btnSemAnterior.addEventListener('click', () => {
+        semanaActual.setDate(semanaActual.getDate() - 7);
+        aplicarSemana(new Date(semanaActual));
+        consultar();
+    });
+    btnSemSiguiente.addEventListener('click', () => {
+        semanaActual.setDate(semanaActual.getDate() + 7);
+        aplicarSemana(new Date(semanaActual));
+        consultar();
+    });
+
+    // Sincronizar cuando el usuario cambia los inputs de fecha manualmente
+    fechaInicio.addEventListener('change', () => {
+        semanaActual = new Date(fechaInicio.value + 'T00:00:00');
+        const dom = new Date(semanaActual);
+        dom.setDate(semanaActual.getDate() + 6);
+        fechaFin.value = fmt(dom);
+        const opts = { day: '2-digit', month: 'short' };
+        lblSemana.textContent = `${semanaActual.toLocaleDateString('es-PE', opts)} — ${dom.toLocaleDateString('es-PE', opts)}`;
+    });
+
+    // ── Utilidades ────────────────────────────────────────────────────────
+    function hora(val, tipo) {
+        if (!val) return '<span class="hora-nd">—</span>';
+        const cls = tipo === 'AUTO' ? 'hora-auto' : 'hora-real';
+        return `<span class="${cls}">${val}</span>`;
+    }
+    function hh(val) {
+        return val ? `<span>${val}</span>` : '<span class="hora-nd">—</span>';
+    }
+
+    // ── Consultar ─────────────────────────────────────────────────────────
+    async function consultar() {
+        panelTabla.style.display  = 'none';
+        panelVacio.style.display  = 'none';
+        panelDep.style.display    = 'none';
+        btnDepurar.style.display  = 'none';
+        spinnerWrap.style.display = 'block';
+        btnConsultar.disabled     = true;
+
+        try {
+            const url = `/RecursosHumanos/Aquarius/Marcaciones/ConsultarRango`
+                + `?codPersonal=${encodeURIComponent(codPersonal)}`
+                + `&fechaInicio=${fechaInicio.value}&fechaFin=${fechaFin.value}`;
+
+            const res  = await fetch(url);
+            const json = await res.json();
+
+            spinnerWrap.style.display = 'none';
+
+            if (!json.ok) {
+                panelVacio.style.display = 'block';
+                panelVacio.querySelector('p').textContent = json.mensaje ?? 'Error al consultar.';
+                return;
+            }
+            if (!json.data?.length) {
+                panelVacio.style.display = 'block';
+                return;
+            }
+
+            lblTotalDias.textContent = json.data.length + ' días';
+            tbodyHorarios.innerHTML  = json.data.map(m => {
+                const esDescanso    = m.descanso === 'S';
+                const tienePermiso  = ['descMedico','vacaciones','subsidio','permGoce','permSgoce',
+                                       'suspension','licPaternidad','licFallecimiento']
+                                      .some(k => m[k] === 'S');
+                const tienePendiente = !!m.alerta01;
+
+                let rowClass = '', estadoHtml = '';
+                if (esDescanso) {
+                    rowClass    = 'row-descanso';
+                    estadoHtml  = '<span class="badge rounded-pill badge-descanso">Descanso</span>';
+                } else if (tienePermiso) {
+                    rowClass    = 'row-permiso';
+                    const etiq  = m.descMedico==='S' ? '🏥 Desc.Médico'
+                                : m.vacaciones==='S' ? '🌴 Vacaciones'
+                                : m.subsidio==='S'   ? '💊 Subsidio'
+                                : m.permGoce==='S'   ? '✅ Perm.Goce'
+                                : '⚠️ Permiso';
+                    estadoHtml  = `<span class="badge rounded-pill badge-permiso">${etiq}</span>`;
+                } else if (tienePendiente) {
+                    rowClass    = 'row-pendiente';
+                    estadoHtml  = '<span class="badge rounded-pill badge-pendiente">Pendiente</span>';
+                } else {
+                    estadoHtml  = '<span class="badge rounded-pill badge-ok">OK</span>';
+                }
+
+                const dep = m.codDepuracion
+                    ? `<span class="badge bg-info text-dark" title="${m.descDepuracion ?? ''}">${m.codDepuracion}</span>`
+                    : '';
+
+                return `<tr class="${rowClass}">
+                    <td class="fw-semibold" style="white-space:nowrap;">${m.fechamar ?? '—'}</td>
+                    <td><small class="text-muted">${m.horDescripcion ?? '—'}</small></td>
+                    <td class="text-muted" style="white-space:nowrap;">
+                        ${hh(m.entradaTeorica)} <small>→</small> ${hh(m.salidaTeorica)}
+                    </td>
+                    <td>${hora(m.entrada, m.tipoEntrada)}</td>
+                    <td>${hh(m.iniRefri)}</td>
+                    <td>${hh(m.finRefri)}</td>
+                    <td>${hora(m.salida, m.tipoSalida)}</td>
+                    <td class="text-center">${m.numMarcaciones ?? '—'}</td>
+                    <td>${hh(m.hrsEfectivas)}</td>
+                    <td>${hh(m.horaExtraAjus)}</td>
+                    <td>${estadoHtml}</td>
+                    <td>${dep}</td>
+                </tr>`;
+            }).join('');
+
+            panelTabla.style.display = 'block';
+            btnDepurar.style.display = 'inline-flex';
+
+        } catch (err) {
+            spinnerWrap.style.display = 'none';
+            panelVacio.style.display  = 'block';
+            console.error(err);
+        } finally {
+            btnConsultar.disabled = false;
+        }
+    }
+
+    btnConsultar.addEventListener('click', consultar);
+
+    // ── Depurar ───────────────────────────────────────────────────────────
+    btnDepurar.addEventListener('click', async () => {
+        if (!confirm(`¿Depurar marcaciones de ${JSON.parse(nombre)}\ndel ${fechaInicio.value} al ${fechaFin.value}?`)) return;
+
+        btnDepurar.disabled   = true;
+        btnConsultar.disabled = true;
+        panelDep.style.display = 'none';
+
+        const fd = new FormData();
+        fd.append('codPersonal', codPersonal);
+        fd.append('fechaInicio', fechaInicio.value);
+        fd.append('fechaFin',    fechaFin.value);
+        fd.append('__RequestVerificationToken', token);
+
+        try {
+            const res  = await fetch('/RecursosHumanos/Aquarius/Marcaciones/DepurarRango', { method: 'POST', body: fd });
+            const json = await res.json();
+            const d    = json.data ?? {};
+            const ok   = json.ok;
+
+            depHeader.innerHTML = ok
+                ? '<i class="bi bi-check-circle-fill text-success me-1"></i>Depuración completada'
+                : '<i class="bi bi-x-circle-fill text-danger me-1"></i>Error en depuración';
+            depHeader.className = ok ? 'card-header bg-success text-white' : 'card-header bg-danger text-white';
+
+            depBody.innerHTML = ok ? `
+                <div class="row g-2 text-center mb-3">
+                    ${[
+                        ['✅', d.diasOk,          'Días OK',         'text-success'],
+                        ['❌', d.diasError,        'Días error',      'text-danger'],
+                        ['🔢', d.totalGeneradas,   'Marcas gen.',     'text-primary'],
+                        ['📋', d.totalHistorial,   'Historial',       'text-info'],
+                    ].map(([ic, n, l, c]) => `
+                        <div class="col-6 col-md-3">
+                            <div class="stat-box">
+                                <div class="stat-num ${c}">${ic} ${n}</div>
+                                <div class="stat-lbl">${l}</div>
+                            </div>
+                        </div>`).join('')}
+                </div>
+                <div class="row g-2 small text-muted">
+                    <div class="col-6 col-md-4">🌙 Nocturnos: <b>${d.turnosNocturnos}</b></div>
+                    <div class="col-6 col-md-4">🚪 Entradas: <b>${d.entradas}</b></div>
+                    <div class="col-6 col-md-4">⏩ Anticipadas: <b>${d.anticipadas}</b></div>
+                    <div class="col-6 col-md-4">🚶 Salidas: <b>${d.salidas}</b></div>
+                    <div class="col-6 col-md-4">🥗 IniRefri: <b>${d.inirefris}</b></div>
+                    <div class="col-6 col-md-4">🥗 FinRefri: <b>${d.finrefris}</b></div>
+                    <div class="col-6 col-md-4">⚠️ Anomalías: <b>${d.anomalas}</b></div>
+                    <div class="col-6 col-md-4">🔄 Recálculos: <b>${d.recalculos}</b></div>
+                </div>` : `<div class="alert alert-danger mb-0">${d.resultado ?? json.mensaje ?? 'Error desconocido'}</div>`;
+
+            panelDep.style.display = 'block';
+            panelDep.scrollIntoView({ behavior: 'smooth' });
+
+            if (ok) setTimeout(consultar, 600);
+        } finally {
+            btnDepurar.disabled   = false;
+            btnConsultar.disabled = false;
+        }
+    });
+
+    // Consultar al cargar
+    consultar();
+})();
+</script>
+}

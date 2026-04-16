@@ -385,7 +385,7 @@ CREATE OR REPLACE PACKAGE PKG_SCA_DEPURA_TAREO AS
         p_cod_personal   IN VARCHAR2 DEFAULT NULL,
         p_fecha_inicio   IN VARCHAR2,
         p_fecha_fin      IN VARCHAR2,
-        p_solo_obreros   IN VARCHAR2 DEFAULT 'S',
+        p_solo_obreros   IN VARCHAR2 DEFAULT 'N',
         cv_resultado     OUT SYS_REFCURSOR
     );
 
@@ -4170,7 +4170,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         p_cod_personal   IN VARCHAR2 DEFAULT NULL,
         p_fecha_inicio   IN VARCHAR2,
         p_fecha_fin      IN VARCHAR2,
-        p_solo_obreros   IN VARCHAR2 DEFAULT 'S',
+        p_solo_obreros   IN VARCHAR2 DEFAULT 'N',
         cv_resultado     OUT SYS_REFCURSOR
     )
     AS

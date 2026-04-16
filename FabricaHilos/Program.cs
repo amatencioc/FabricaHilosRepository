@@ -6,14 +6,16 @@ using FabricaHilos.Models;
 using FabricaHilos.Models.Ventas;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
+using FabricaHilos.Services.RecursosHumanos;
 using FabricaHilos.Services.Sgc;
 using FabricaHilos.Services.Ventas;
-using QuestPDF.Infrastructure;
+using FabricaHilos.Services.Seguridad.Inspeccion;
 using FabricaHilos.Config;
 using FabricaHilos.Notificaciones.Extensions;
 using Serilog;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,7 +117,8 @@ builder.Services.AddScoped<IDashboardComercialService, DashboardComercialService
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IRedInternaService, RedInternaService>();
-builder.Services.AddScoped<FabricaHilos.Services.Seguridad.Inspeccion.IInspeccionService, FabricaHilos.Services.Seguridad.Inspeccion.InspeccionService>();
+builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
+builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
@@ -143,6 +146,8 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/Sgc/{1}/{0}.cshtml");
         // Permite que Views/Ventas/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/Ventas/{1}/{0}.cshtml");
+        // Permite que Views/RecursosHumanos/Aquarius/{Controller}/{Action}.cshtml sea encontrado
+        options.ViewLocationFormats.Add("/Views/RecursosHumanos/Aquarius/{1}/{0}.cshtml");
     });
 
 // Rate Limiting: protege /Account/Login contra fuerza bruta

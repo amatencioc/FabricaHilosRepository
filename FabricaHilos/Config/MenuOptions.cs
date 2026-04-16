@@ -45,6 +45,11 @@ public class MenuOptions
     // ── Submenús: Seguridad ───────────────────────────────────────────────
     public bool SeguridadInspecciones { get; set; } = true;
 
+    // ── Menús: Recursos Humanos ───────────────────────────────────────────
+    public bool RecursosHumanos    { get; set; } = false;
+    public bool RhMarcaciones      { get; set; } = true;
+    public bool RhDiagnostico      { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -78,6 +83,10 @@ public class MenuOptions
         VentasDashboardGerencial = true,
 
         SeguridadInspecciones = true,
+
+        RecursosHumanos = true,
+        RhMarcaciones   = true,
+        RhDiagnostico   = true,
     };
 }
 

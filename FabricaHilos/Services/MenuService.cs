@@ -72,8 +72,11 @@ public class MenuService : IMenuService
                     VentasVentasPorMercado = true,
                     VentasDashboardComercial = true,
                     VentasDashboardGerencial = true,
-                    SeguridadInspecciones = false
-                };
+                    SeguridadInspecciones = false,
+                    RecursosHumanos = false,
+                            RhMarcaciones   = false,
+                            RhDiagnostico   = false,
+                        };
             }
 
             // Sin UserMenus: Admin respeta la configuración global
@@ -106,7 +109,10 @@ public class MenuService : IMenuService
                 VentasVentasPorMercado = false,
                 VentasDashboardComercial = false,
                 VentasDashboardGerencial = false,
-                SeguridadInspecciones = global.SeguridadInspecciones
+                SeguridadInspecciones = global.SeguridadInspecciones,
+                RecursosHumanos = global.RecursosHumanos,
+                RhMarcaciones   = global.RhMarcaciones,
+                RhDiagnostico   = global.RhDiagnostico,
             };
             return menusGlobal;
         }
@@ -170,6 +176,11 @@ public class MenuService : IMenuService
 
             // ── Submenús: Seguridad ───────────────────────────────────────
             SeguridadInspecciones = SubMenu(global.SeguridadInspecciones, "Seguridad", "Seguridad.Inspeccion"),
+
+            // ── Menús: Recursos Humanos ───────────────────────────────────
+            RecursosHumanos = Menu(global.RecursosHumanos, "RecursosHumanos"),
+            RhMarcaciones   = SubMenu(global.RhMarcaciones, "RecursosHumanos", "RecursosHumanos.Marcaciones"),
+            RhDiagnostico   = SubMenu(global.RhDiagnostico, "RecursosHumanos", "RecursosHumanos.Diagnostico"),
         };
     }
 

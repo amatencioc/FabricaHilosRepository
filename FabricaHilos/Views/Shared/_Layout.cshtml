@@ -228,6 +228,35 @@
                         </ul>
                     </li>
                 }
+
+                @if (menus.RecursosHumanos)
+                {
+                    <!-- RECURSOS HUMANOS -->
+                    <li class="sidebar-section">RECURSOS HUMANOS</li>
+                    <li>
+                        <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link @(ctrl == "Marcaciones" ? "active" : "")">
+                            <i class="bi bi-people"></i> Aquarius
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.RhMarcaciones)
+                            {
+                            <li>
+                                <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
+                                    <i class="bi bi-clock-history"></i> Marcaciones
+                                </a>
+                            </li>
+                            }
+                            @if (menus.RhDiagnostico)
+                            {
+                            <li>
+                                <a href="/RecursosHumanos/Aquarius/Diagnostico" class="sidebar-link sidebar-sublink @(ctrl == "Diagnostico" ? "active" : "")">
+                                    <i class="bi bi-database-check"></i> Diagnóstico BD
+                                </a>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
             </ul>
         </nav>
 

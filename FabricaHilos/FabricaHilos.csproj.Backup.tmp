@@ -36,7 +36,6 @@
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Aquarius\Horarios\Index.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
