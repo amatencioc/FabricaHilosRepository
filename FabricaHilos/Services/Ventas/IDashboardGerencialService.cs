@@ -22,13 +22,19 @@ namespace FabricaHilos.Services.Ventas
         /// <summary>Evolución mensual de ventas por mercado.</summary>
         Task<List<DgVentaMercadoEvolucionDto>> ObtenerEvolucionMensualAsync(DateTime fechaInicio, DateTime fechaFin, string moneda);
 
-        /// <summary>Top clientes por importe de ventas.</summary>
-        Task<List<DgVentaMercadoTopClienteDto>> ObtenerTopClientesAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string? mercado, int top);
-
-        /// <summary>Detalle completo de documentos de venta (nivel transaccional).</summary>
-        Task<List<DgVentaMercadoDocumentoDto>> ObtenerDetalleDocumentosAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string? mercado);
-
         /// <summary>Mapeo de países BD (TABLAS_AUXILIARES TIPO=25) con código ISO (INDICADOR2).</summary>
         Task<List<DgPaisIsoDto>> ObtenerPaisesIsoAsync();
+
+        /// <summary>Cantidad KG mensual (todos los asesores, sin filtro).</summary>
+        Task<List<DgKgMensualDto>> ObtenerKgMensualAsync(DateTime fechaInicio, DateTime fechaFin);
+
+        /// <summary>Top hilados (familia TFAMLIN) por importe facturado.</summary>
+        Task<List<DgTopHiladoImporteDto>> ObtenerTopHiladosImporteAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, int top);
+
+        /// <summary>Ventas agrupadas por giro de cliente.</summary>
+        Task<List<DgVentaPorGiroDto>> ObtenerVentasPorGiroAsync(DateTime fechaInicio, DateTime fechaFin, string moneda);
+
+        /// <summary>Top hilados (familia TFAMLIN) por kilogramos vendidos.</summary>
+        Task<List<DgTopHiladoKgDto>> ObtenerTopHiladosKgAsync(DateTime fechaInicio, DateTime fechaFin, int top);
     }
 }

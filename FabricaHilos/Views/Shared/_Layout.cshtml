@@ -1,6 +1,7 @@
 @using FabricaHilos.Services
 @inject IMenuService MenuService
-@{ var menus = MenuService.GetMenusActuales(); }
+@inject IRedInternaService RedInternaService
+@{ var menus = MenuService.GetMenusActuales(); var esInterna = RedInternaService.EsRedInterna(); }
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -33,6 +34,8 @@
                 var act  = ViewContext.RouteData.Values["action"]?.ToString();
             }
             <ul class="list-unstyled p-2 sidebar-menu">
+                @if (esInterna)
+                {
                 <!-- Dashboard -->
                 @if (menus.Dashboard)
                 {
@@ -88,18 +91,10 @@
                 @if (menus.Sgc)
                 {
                 <li>
-                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "DashboardSgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")">
+                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
                     </a>
                     <ul class="list-unstyled ps-3">
-                        @if (menus.SgcDashboard)
-                        {
-                        <li>
-                            <a asp-controller="DashboardSgc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardSgc" ? "active" : "")">
-                                <i class="bi bi-bar-chart-line me-2"></i>Dashboard SGC
-                            </a>
-                        </li>
-                        }
                         @if (menus.SgcPedidos)
                         {
                         <li>
@@ -211,20 +206,21 @@
                     </ul>
                 </li>
                 }
+                } @* fin esInterna *@
 
                 @if (menus.Seguridad)
                 {
                     <!-- SEGURIDAD -->
                     <li class="sidebar-section">SEGURIDAD</li>
                     <li>
-                        <a asp-controller="Seguridad" asp-action="Index" class="sidebar-link @(ctrl == "Seguridad" || ctrl == "Inspeccion" ? "active" : "")">
+                        <a href="/Seguridad" class="sidebar-link @(ctrl == "Seguridad" || ctrl == "Inspeccion" ? "active" : "")">
                             <i class="bi bi-shield-check"></i> Seguridad
                         </a>
                         <ul class="list-unstyled ps-3">
                             @if (menus.SeguridadInspecciones)
                             {
                             <li>
-                                <a asp-controller="Inspeccion" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Inspeccion" ? "active" : "")">
+                                <a href="/Seguridad/Inspeccion" class="sidebar-link sidebar-sublink @(ctrl == "Inspeccion" ? "active" : "")">
                                     <i class="bi bi-clipboard-check"></i> Inspecciones
                                 </a>
                             </li>

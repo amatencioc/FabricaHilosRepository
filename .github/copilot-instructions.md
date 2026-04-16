@@ -2,6 +2,7 @@
 
 ## General Guidelines
 - When the user asks to make validation "equal" or "the same" as another field's validation, they mean the validation MESSAGE TEXT should follow the same format/pattern, NOT that the validation logic should change.
+- Use hardcoded emoji icons for dashboard charts instead of dynamic/generic solutions to enhance visual richness, even if data changes slightly.
 
 ## Data Interpretation Rules
 - In the UBIGEO table:

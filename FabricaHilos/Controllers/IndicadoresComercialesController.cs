@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Filters;
 using FabricaHilos.Services.Ventas;
 
@@ -8,7 +7,7 @@ namespace FabricaHilos.Controllers
 {
     [Authorize]
     [VentasAuthorize]
-    public class IndicadoresComercialesController : Controller
+    public class IndicadoresComercialesController : OracleBaseController
     {
         private readonly IIndicadoresComercialesService _service;
         private readonly ILogger<IndicadoresComercialesController> _logger;
@@ -19,18 +18,6 @@ namespace FabricaHilos.Controllers
         {
             _service = service;
             _logger  = logger;
-        }
-
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en Indicadores Comerciales. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
         }
 
         public IActionResult Index()

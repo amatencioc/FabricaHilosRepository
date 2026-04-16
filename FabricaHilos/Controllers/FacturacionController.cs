@@ -26,6 +26,10 @@ public class FacturacionController : Controller
     [HttpGet]
     public IActionResult ImportarFacturas() => View();
 
+    private static readonly string[] _tiposFactura =
+        ["application/pdf", "image/jpeg", "image/png"];
+    private const long _maxFacturaBytes = 20 * 1024 * 1024; // 20 MB
+
     // POST: /Facturacion/ImportarFacturas
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -34,6 +38,18 @@ public class FacturacionController : Controller
         if (archivoPdf == null || archivoPdf.Length == 0)
         {
             TempData["Error"] = "Por favor seleccione un archivo PDF, PNG o JPEG.";
+            return View();
+        }
+
+        if (archivoPdf.Length > _maxFacturaBytes)
+        {
+            TempData["Error"] = "El archivo no puede superar los 20 MB.";
+            return View();
+        }
+
+        if (!_tiposFactura.Contains(archivoPdf.ContentType, StringComparer.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "Tipo de archivo no permitido. Solo se aceptan PDF, PNG o JPEG.";
             return View();
         }
 

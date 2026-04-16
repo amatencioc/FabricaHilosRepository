@@ -70,23 +70,16 @@
     .kpi-card .kpi-label { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
     .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
     .kpi-card .kpi-sub   { font-size: .75rem; opacity: .8; margin-top: 2px; }
-    .bg-kpi-total { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
-    .bg-kpi-peru  { background: linear-gradient(135deg, #1a237e, #3949ab); }
-    .bg-kpi-latam { background: linear-gradient(135deg, #e65100, #fb8c00); }
-    .bg-kpi-europa{ background: linear-gradient(135deg, #1565c0, #42a5f5); }
-    .bg-kpi-asia  { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
-    .bg-kpi-oceania{ background: linear-gradient(135deg, #00695c, #26a69a); }
-    .bg-kpi-otros { background: linear-gradient(135deg, #546e7a, #90a4ae); }
+    .bg-kpi-total  { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
+    .bg-kpi-peru   { background: linear-gradient(135deg, #1a237e, #3949ab); }
+    .bg-kpi-latam  { background: linear-gradient(135deg, #e65100, #fb8c00); }
+    .bg-kpi-global { background: linear-gradient(135deg, #1565c0, #42a5f5); }
 
     #worldMap { background: linear-gradient(180deg, #d6eaf8 0%, #e8f4f8 40%, #eaf6f0 100%); border-radius: 10px; border: 1px solid #cfd8dc; }
     .jvectormap-tip { background: rgba(30,30,30,.94) !important; color: #fff !important; border: none !important; border-radius: 8px !important; font-size: .82rem !important; padding: .55rem .85rem !important; font-family: inherit !important; box-shadow: 0 4px 12px rgba(0,0,0,.3) !important; }
     .jvectormap-zoomin, .jvectormap-zoomout { background: #1B4D3E !important; width: 28px !important; height: 28px !important; line-height: 28px !important; font-size: 16px !important; }
 
     #chartMercado { cursor: pointer; }
-
-    #tablaDocumentos th, #tablaDocumentos td {
-        white-space: nowrap;
-    }
 
     .legend-item {
         display: inline-flex;
@@ -127,12 +120,18 @@
         100% { background: transparent !important; }
     }
 
-    .col-label-hint {
-        font-size: .68rem;
-        color: #888;
-        font-weight: 400;
-        display: block;
-        line-height: 1.1;
+    .year-check-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .5rem;
+        margin-top: .6rem;
+        padding-top: .6rem;
+        border-top: 1px solid #e9ecef;
+    }
+    .year-check-bar .form-check-input:checked {
+        background-color: #1B4D3E;
+        border-color: #1B4D3E;
     }
 </style>
 }
@@ -167,6 +166,7 @@
             <i class="bi bi-x-circle me-1"></i>Limpiar
         </button>
     </div>
+    <div class="year-check-bar" id="yearCheckBar"></div>
 </div>
 
 <!-- ── KPI Resumen ────────────────────────────────────── -->
@@ -174,10 +174,7 @@
     <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-total"><i class="bi bi-currency-dollar kpi-icon"></i><div><div class="kpi-label">Total Ventas</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">en el período</div></div></div></div>
     <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-peru"><i class="bi bi-geo-alt-fill kpi-icon"></i><div><div class="kpi-label">Perú</div><div class="kpi-value" id="kpiPeru">—</div><div class="kpi-sub" id="kpiPeruPct">—</div></div></div></div>
     <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-latam"><i class="bi bi-globe-americas kpi-icon"></i><div><div class="kpi-label">LATAM</div><div class="kpi-value" id="kpiLatam">—</div><div class="kpi-sub" id="kpiLatamPct">—</div></div></div></div>
-    <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-europa"><i class="bi bi-globe-europe-africa kpi-icon"></i><div><div class="kpi-label">Europa</div><div class="kpi-value" id="kpiEuropa">—</div><div class="kpi-sub" id="kpiEuropaPct">—</div></div></div></div>
-    <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-asia"><i class="bi bi-globe-asia-australia kpi-icon"></i><div><div class="kpi-label">Asia</div><div class="kpi-value" id="kpiAsia">—</div><div class="kpi-sub" id="kpiAsiaPct">—</div></div></div></div>
-    <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-oceania"><i class="bi bi-water kpi-icon"></i><div><div class="kpi-label">Oceanía</div><div class="kpi-value" id="kpiOceania">—</div><div class="kpi-sub" id="kpiOceaniaPct">—</div></div></div></div>
-    <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-otros"><i class="bi bi-globe2 kpi-icon"></i><div><div class="kpi-label">Otros</div><div class="kpi-value" id="kpiOtros">—</div><div class="kpi-sub" id="kpiOtrosPct">—</div></div></div></div>
+    <div class="col-6 col-md-4 col-xl"><div class="kpi-card bg-kpi-global"><i class="bi bi-globe2 kpi-icon"></i><div><div class="kpi-label">Global</div><div class="kpi-value" id="kpiGlobal">—</div><div class="kpi-sub" id="kpiGlobalPct">—</div></div></div></div>
 </div>
 
 <!-- ── Sección Principal: Mapa + Donut ────────────────── -->
@@ -189,15 +186,7 @@
             <div class="card-header small">Distribución Geográfica — Haga clic en un país para ver su detalle</div>
             <div class="card-body d-flex flex-column align-items-center justify-content-center" style="min-height:480px">
                 <div id="worldMap" style="width:100%; height:430px;"></div>
-                <div class="mt-2 d-flex flex-wrap justify-content-center gap-2">
-                    <span class="legend-item"><span class="legend-dot" style="background:#1a237e"></span>Perú</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#fb8c00"></span>LATAM</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#1565c0"></span>Europa</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#6a1b9a"></span>Asia</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#00695c"></span>Oceanía</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#546e7a"></span>Otros</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>
-                </div>
+                <div id="mapLegend" class="mt-2 d-flex flex-wrap justify-content-center gap-2"></div>
             </div>
         </div>
     </div>
@@ -341,92 +330,67 @@
     </div>
 </div>
 
-<!-- ── Sección 5: Top Clientes ── -->
-<div class="section-title"><i class="bi bi-people-fill me-1"></i>Top Clientes por Importe</div>
-<p class="report-desc">Los 15 clientes con mayor volumen de ventas en el período.</p>
+<!-- ── Sección 4b: Importe Total por Mes / Año ── -->
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Importe Total por Mes / Año</div>
+<p class="report-desc">Comparativa año a año del importe total mensual (todos los mercados).</p>
 <div class="row g-3 mb-3">
-    <div class="col-lg-7">
+    <div class="col-12">
         <div class="card chart-card position-relative">
-            <div id="spinnerTopClientes" class="chart-spinner"><div class="spinner-border text-success"></div></div>
-            <div class="card-header small d-flex justify-content-between align-items-center">
-                <span>Top 15 Clientes</span>
-                <select id="filtroMercadoClientes" class="form-select form-select-sm" style="width:auto" onchange="loadTopClientes()">
-                    <option value="">Todos los mercados</option>
-                    <option value="Perú">Perú</option>
-                    <option value="LATAM">LATAM</option>
-                    <option value="Europa">Europa</option>
-                    <option value="Asia">Asia</option>
-                    <option value="Oceanía">Oceanía</option>
-                    <option value="Otros">Otros</option>
-                </select>
-            </div>
-            <div class="card-body p-0" style="max-height:450px; overflow-y:auto; overflow-x:auto">
-                <table class="table table-hover table-sm mb-0 detail-table">
-                    <thead><tr><th>#</th><th>Código</th><th>Razón Social</th><th>País</th><th>Mercado</th><th class="text-end">Importe</th><th class="text-end">Docs</th><th class="text-end">%</th></tr></thead>
-                    <tbody id="tablaTopClientes"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-5">
-        <div class="card chart-card position-relative">
-            <div class="card-header small">Participación Top Clientes</div>
-            <div class="card-body" style="height:420px"><canvas id="chartTopClientes"></canvas></div>
+            <div id="spinnerImporteTotalMes" class="chart-spinner" style="display:none"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Importe Total por Mes / Año</div>
+            <div class="card-body" style="height:350px"><canvas id="chartImporteTotalMes"></canvas></div>
         </div>
     </div>
 </div>
 
-<!-- ── Sección 6: Detalle Completo de Documentos ── -->
-<div class="section-title"><i class="bi bi-table me-1"></i>Detalle de Documentos</div>
-<p class="report-desc">Listado transaccional completo. <strong>Exportable a Excel.</strong></p>
+<!-- ── Sección 4c: KG Total por Mes / Año ── -->
+<div class="section-title"><i class="bi bi-box-seam me-1"></i>KG Total por Mes / Año</div>
+<p class="report-desc">Comparativa año a año de la cantidad de kilogramos vendidos por mes.</p>
 <div class="row g-3 mb-3">
     <div class="col-12">
         <div class="card chart-card position-relative">
-            <div id="spinnerDocumentos" class="chart-spinner"><div class="spinner-border text-success"></div></div>
-            <div class="card-header small d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center gap-2">
-                    <span>Documentos de Venta</span>
-                    <span class="badge bg-secondary" id="badgeTotalDocs">0</span>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <select id="filtroMercadoDocs" class="form-select form-select-sm" style="width:auto" onchange="loadDocumentos()">
-                        <option value="">Todos los mercados</option>
-                        <option value="Perú">Perú</option>
-                        <option value="LATAM">LATAM</option>
-                        <option value="Europa">Europa</option>
-                        <option value="Asia">Asia</option>
-                        <option value="Oceanía">Oceanía</option>
-                        <option value="Otros">Otros</option>
-                    </select>
-                    <button class="btn btn-sm btn-outline-success" onclick="exportarExcel()">
-                        <i class="bi bi-file-earmark-excel me-1"></i>Excel
-                    </button>
-                </div>
+            <div id="spinnerKgTotalMes" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">KG Total por Mes / Año</div>
+            <div class="card-body" style="height:350px"><canvas id="chartKgTotalMes"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 4d: Top 5 Hilados más Facturados + Ventas por Giro + Top 5 Hilados por KG ── -->
+<div class="section-title"><i class="bi bi-bar-chart-fill me-1"></i>Análisis de Hilados y Giros</div>
+<p class="report-desc">Top familias de hilados por importe facturado, distribución por giro de cliente, y top artículos por kilogramos.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-4">
+        <div class="card chart-card position-relative">
+            <div id="spinnerTopHiladosImporte" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">TOP 5 Hilados más Facturados</div>
+            <div class="card-body" style="height:380px"><canvas id="chartTopHiladosImporte"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card chart-card position-relative">
+            <div id="spinnerVentasGiro" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Ventas por Giro</div>
+            <div class="card-body p-2 d-flex align-items-center" style="height:380px">
+                <div id="funnelVentasGiro" class="w-100"></div>
             </div>
-            <div class="card-body p-0" style="max-height:500px; overflow-y:auto; overflow-x:auto">
-                <table class="table table-hover table-sm mb-0 detail-table" id="tablaDocumentos">
-                    <thead>
-                        <tr>
-                            <th>#</th><th>Tipo</th><th>Serie</th><th>Número</th><th>Fecha</th><th>Moneda</th>
-                            <th>Cód.Cliente</th><th>Razón Social</th><th>País</th><th>Exp</th><th>Mercado</th>
-                            <th class="text-end">T.C.</th><th class="text-end">Val.Venta</th><th class="text-end">Descto</th>
-                            <th class="text-end">Anticipo</th><th class="text-end">Interés</th><th class="text-end">Neto</th>
-                            <th class="text-end">IGV</th><th class="text-end">Precio Vta</th>
-                            <th>Dpto / País<span class="col-label-hint">Perú: depto | Ext: país</span></th>
-                            <th>Distrito / Ciudad<span class="col-label-hint">Perú: distrito | Ext: ciudad</span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaDocumentosBody"></tbody>
-                </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card chart-card position-relative">
+            <div id="spinnerTopHiladosKg" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">TOP 5 Hilados por KG</div>
+            <div class="card-body p-0 d-flex flex-column justify-content-center" style="height:380px">
+                <div id="barsTopHiladosKg" class="px-3 py-2"></div>
             </div>
         </div>
     </div>
 </div>
 
 @section Scripts {
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@@1.6.0/dist/jsvectormap.css" />
-<script src="https://cdn.jsdelivr.net/npm/jsvectormap@@1.6.0/dist/jsvectormap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsvectormap@@1.6.0/dist/maps/world.js"></script>
+<link rel="stylesheet" href="~/lib/jsvectormap/dist/jsvectormap.css" asp-append-version="true" />
+<script src="~/lib/jsvectormap/dist/jsvectormap.min.js" asp-append-version="true"></script>
+<script src="~/lib/jsvectormap/dist/maps/world.js" asp-append-version="true"></script>
 <script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
 <script>
 (function () {
@@ -438,7 +402,9 @@
     const fmt  = n => fmtPE.format(n ?? 0);
     const fmtMil = n => { n = n ?? 0; if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'; return fmt(n); };
 
-    const MERCADO_COLORS = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Europa': '#1565c0', 'Asia': '#6a1b9a', 'Oceanía': '#00695c', 'Otros': '#546e7a' };
+    const MERCADO_COLORS = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Global': '#1565c0' };
+    function mapMercado(m) { return (m === 'Perú' || m === 'LATAM') ? m : 'Global'; }
+    function aggregateByMappedMercado(data) { const agg = {}; data.forEach(d => { const m = mapMercado(d.mercado); agg[m] = (agg[m] || 0) + (d.importe ?? 0); }); return Object.entries(agg).map(([mercado, importe]) => ({ mercado, importe })); }
     const PAIS_COLORS = ['#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a','#00838f','#c62828','#4e342e','#37474f','#f9a825','#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'];
 
     const charts = {};
@@ -460,6 +426,45 @@
 
     function setDefaultDates() { const hoy = new Date(); const ini = new Date(hoy.getFullYear(), 0, 1); const toISO = d => d.toISOString().slice(0, 10); fpSetDate('#fechaInicio', toISO(ini)); fpSetDate('#fechaFin', toISO(hoy)); }
 
+    /* ── Años: generar checkboxes ─────────────────── */
+    function buildYearCheckboxes() {
+        const bar = document.getElementById('yearCheckBar');
+        const currentYear = new Date().getFullYear();
+        let html = '<span class="small fw-semibold text-muted me-1"><i class="bi bi-calendar3 me-1"></i>Comparar Años:</span>';
+        for (let y = currentYear; y >= currentYear - 5; y--) {
+            const chk = y === currentYear ? 'checked' : '';
+            html += '<div class="form-check form-check-inline mb-0">'
+                  + '<input class="form-check-input" type="checkbox" id="year' + y + '" value="' + y + '" ' + chk + ' onchange="onYearsChanged()">'
+                  + '<label class="form-check-label small" for="year' + y + '">' + y + '</label></div>';
+        }
+        bar.innerHTML = html;
+    }
+
+    function getSelectedYears() {
+        return Array.from(document.querySelectorAll('#yearCheckBar input:checked')).map(c => parseInt(c.value)).sort();
+    }
+
+    window.onYearsChanged = function () {
+        const years = getSelectedYears();
+        const fi = document.getElementById('fechaInicio');
+        const ff = document.getElementById('fechaFin');
+        if (years.length === 0) { fpSetDisabled(fi, false); fpSetDisabled(ff, false); return; }
+        const hoy = new Date();
+        if (years.length === 1) {
+            const y = years[0];
+            fpSetDate(fi, y + '-01-01');
+            fpSetDate(ff, y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31');
+            fpSetDisabled(fi, false); fpSetDisabled(ff, false);
+            loadAll();
+            return;
+        }
+        const minY = Math.min(...years), maxY = Math.max(...years);
+        fpSetDate(fi, minY + '-01-01');
+        fpSetDate(ff, maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31');
+        fpSetDisabled(fi, true); fpSetDisabled(ff, true);
+        loadAll();
+    };
+
     function buildParams() { const fi = document.getElementById('fechaInicio').value; const ff = document.getElementById('fechaFin').value; const mon = document.getElementById('moneda').value; const p = new URLSearchParams(); if (fi) p.set('fechaInicio', fi); if (ff) p.set('fechaFin', ff); if (mon) p.set('moneda', mon); return p; }
 
     async function apiFetch(url) { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
@@ -470,10 +475,12 @@
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
         const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
         document.getElementById('kpiTotal').textContent = monLabel + ' ' + fmtMil(total);
-        const getVal = name => data.find(d => d.mercado === name)?.importe ?? 0;
+        /* Agregar data a 3 categorías para KPIs y donut */
+        const aggData = aggregateByMappedMercado(data);
+        const getVal = name => aggData.find(d => d.mercado === name)?.importe ?? 0;
         const setKpi = (id, val) => { document.getElementById('kpi' + id).textContent = monLabel + ' ' + fmtMil(val); document.getElementById('kpi' + id + 'Pct').textContent = total > 0 ? ((val / total) * 100).toFixed(1) + '% del total' : '—'; };
-        setKpi('Peru', getVal('Perú')); setKpi('Latam', getVal('LATAM')); setKpi('Europa', getVal('Europa')); setKpi('Asia', getVal('Asia')); setKpi('Oceania', getVal('Oceanía')); setKpi('Otros', getVal('Otros'));
-        const labels = data.map(d => d.mercado); const values = data.map(d => d.importe ?? 0); const colors = labels.map(l => MERCADO_COLORS[l] || '#999');
+        setKpi('Peru', getVal('Perú')); setKpi('Latam', getVal('LATAM')); setKpi('Global', getVal('Global'));
+        const labels = aggData.map(d => d.mercado); const values = aggData.map(d => d.importe ?? 0); const colors = labels.map(l => MERCADO_COLORS[l] || '#999');
         charts['mercado'] = new Chart(document.getElementById('chartMercado').getContext('2d'), {
             type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }] },
             options: { responsive: true, maintainAspectRatio: false, cutout: '60%', onClick: handleDonutClick,
@@ -482,7 +489,7 @@
                     datalabels: { color: '#fff', font: { weight: 'bold', size: 14 }, formatter: function (v) { const pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0; return pct + '%'; } } } },
             plugins: [{ id: 'centerText', afterDraw: function (chart) { const ctx = chart.ctx; const cx = (chart.chartArea.left + chart.chartArea.right) / 2; const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2; ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = '#333'; ctx.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 8); ctx.font = '12px sans-serif'; ctx.fillStyle = '#888'; ctx.fillText('TOTAL', cx, cy + 14); ctx.restore(); } }]
         });
-        updateMap(data, monLabel, total);
+        updateMap(data, monLabel, total); /* pasa data original (6 cat.) al mapa */
     }
 
     /* ── MAPA ── */
@@ -506,8 +513,8 @@
         if (_mapInstance) { _mapInstance.destroy(); _mapInstance = null; }
         _mapInstance = new jsVectorMap({ selector: '#worldMap', map: 'world', zoomOnScroll: true, zoomButtons: true, showTooltip: true,
             regionStyle: { initial: { fill: '#dde3e8', fillOpacity: 1, stroke: '#b0bec5', strokeWidth: 0.5 }, hover: { fillOpacity: 0.8, cursor: 'pointer' } },
-            onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + info.mercado + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
-            onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = info.mercado; var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
+            onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var mapped = mapMercado(info.mercado); var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + mapped + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
+            onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = mapMercado(info.mercado); var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
         });
     }
 
@@ -517,21 +524,29 @@
         const p = buildParams();
         apiFetch('/DashboardGerencial/DatosDetallePorPais?' + p).then(function (paisData) {
             _mapPaisData = paisData || [];
-            const regionColors = {}; _mapPaisData.forEach(d => { const iso = BD_TO_ISO[d.codigoPais]; if (!iso) return; regionColors[iso] = MERCADO_COLORS[d.mercado] || '#546e7a'; });
+            const regionColors = {}; _mapPaisData.forEach(d => { const iso = BD_TO_ISO[d.codigoPais]; if (!iso) return; regionColors[iso] = MERCADO_COLORS[mapMercado(d.mercado)] || '#999'; });
+            /* Leyenda dinámica del mapa basada en mercados presentes */
+            const mapMercadosPresentes = new Set(); _mapPaisData.forEach(d => mapMercadosPresentes.add(mapMercado(d.mercado)));
+            const legendEl = document.getElementById('mapLegend');
+            if (legendEl) { let lh = ''; ['Perú','LATAM','Global'].forEach(m => { if (mapMercadosPresentes.has(m)) lh += '<span class="legend-item"><span class="legend-dot" style="background:' + MERCADO_COLORS[m] + '"></span>' + m + '</span>'; }); lh += '<span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>'; legendEl.innerHTML = lh; }
             if (_mapInstance) { _mapInstance.destroy(); _mapInstance = null; }
             _mapInstance = new jsVectorMap({ selector: '#worldMap', map: 'world', zoomOnScroll: true, zoomButtons: true, showTooltip: true,
                 regionStyle: { initial: { fill: '#dde3e8', fillOpacity: 1, stroke: '#b0bec5', strokeWidth: 0.5 }, hover: { fillOpacity: 0.8, cursor: 'pointer' } },
                 onLoaded: function () { var mapEl = document.getElementById('worldMap'); if (!mapEl) return; Object.keys(regionColors).forEach(function (iso) { var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]'); paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); }); }); },
-                onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + info.mercado + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
-                onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = info.mercado; var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
+                onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var mapped = mapMercado(info.mercado); var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + mapped + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
+                onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = mapMercado(info.mercado); var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
             });
             setTimeout(function () { var mapEl = document.getElementById('worldMap'); if (!mapEl) return; Object.keys(regionColors).forEach(function (iso) { var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]'); paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); }); }); }, 300);
         }).catch(function () {});
     }
 
     initMap();
+    /* Leyenda inicial del mapa (se actualiza dinámicamente con datos reales) */
+    (function () { var el = document.getElementById('mapLegend'); if (el) { var lh = ''; ['Perú','LATAM','Global'].forEach(function (m) { lh += '<span class="legend-item"><span class="legend-dot" style="background:' + MERCADO_COLORS[m] + '"></span>' + m + '</span>'; }); lh += '<span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>'; el.innerHTML = lh; } })();
 
     function handleDonutClick(evt, elements) { if (!elements || elements.length === 0) return; const idx = elements[0].index; const mercado = charts['mercado'].data.labels[idx]; loadDetallePais(mercado); if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; } }
+    /* Mapear mercado en drill-down: Global agrupa Europa,Asia,Oceanía,Otros */
+    const GLOBAL_MERCADOS = ['Europa', 'Asia', 'Oceanía', 'Otros'];
 
     /* ── Detalle por País ── */
     let _detallePaisData = []; let _detallePaisMercado = '';
@@ -606,63 +621,412 @@
     /* ── Evolución Mensual ── */
     async function loadEvolucion() {
         showSpin('spinnerEvolucion');
-        try { const data = await apiFetch('/DashboardGerencial/DatosEvolucionMensual?' + buildParams()); renderEvolucion(data); } catch (e) { showToast('Error al cargar evolución mensual: ' + e.message); } finally { hideSpin('spinnerEvolucion'); }
+        try { const data = await apiFetch('/DashboardGerencial/DatosEvolucionMensual?' + buildParams()); renderEvolucion(data); renderImporteTotalMes(data); } catch (e) { showToast('Error al cargar evolución mensual: ' + e.message); } finally { hideSpin('spinnerEvolucion'); }
     }
     function renderEvolucion(data) {
         destroyChart('evolucion'); if (!data || data.length === 0) return;
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-        const periodos = [...new Set(data.map(d => d.periodo))].sort(); const mercados = [...new Set(data.map(d => d.mercado))];
-        const datasets = mercados.map(m => { const values = periodos.map(p => { const item = data.find(d => d.periodo === p && d.mercado === m); return item ? item.importe : 0; }); return { label: m, data: values, borderColor: MERCADO_COLORS[m] || '#999', backgroundColor: (MERCADO_COLORS[m] || '#999') + '22', borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6, tension: 0.3, fill: true }; });
-        charts['evolucion'] = new Chart(document.getElementById('chartEvolucion').getContext('2d'), { type: 'line', data: { labels: periodos, datasets }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 }, padding: 14 } }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } }, datalabels: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } }, x: { grid: { display: false } } } } });
+        const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        const mercadoOrder = ['Perú', 'LATAM', 'Global'];
+        const mercadoColors = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Global': '#1565c0' };
+
+        /* Reagrupar data: mapear Europa/Asia/Oceanía/Otros → Global */
+        const mappedData = data.map(d => ({ ...d, mercado: mapMercado(d.mercado) }));
+        /* Sumar importes por periodo + mercado mapeado */
+        const aggMap = {};
+        mappedData.forEach(d => { const key = d.periodo + '|' + d.mercado; aggMap[key] = (aggMap[key] || 0) + (d.importe ?? 0); });
+        const aggData = Object.entries(aggMap).map(([k, v]) => { const [periodo, mercado] = k.split('|'); return { periodo, mercado, importe: v }; });
+
+        /* Extraer años, meses y mercados */
+        const years = [...new Set(aggData.map(d => d.periodo.substring(0, 4)))].sort();
+        const months = [...new Set(aggData.map(d => d.periodo.substring(5, 7)))].sort();
+        const allMercados = [...new Set(aggData.map(d => d.mercado))];
+        const mercados = mercadoOrder.filter(m => allMercados.includes(m));
+        const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
+
+        /* Mapa: periodo|mercado → importe (ya agregado) */
+        const map = {};
+        aggData.forEach(d => { map[d.periodo + '|' + d.mercado] = (map[d.periodo + '|' + d.mercado] || 0) + (d.importe ?? 0); });
+
+        /* Estilos de línea por año: sólida el más reciente, dash los anteriores */
+        const dashPatterns = [[],  [8, 4], [4, 4], [2, 3], [12, 4, 2, 4], [6, 2]];
+        const widths = years.map((_, i) => i === years.length - 1 ? 2.5 : 1.8);
+        const radii  = years.map((_, i) => i === years.length - 1 ? 4 : 2.5);
+
+        /* Una línea por cada combinación mercado + año */
+        const datasets = [];
+        mercados.forEach(m => {
+            const baseColor = mercadoColors[m] || '#999';
+            years.forEach((yr, yi) => {
+                const values = months.map(mo => map[yr + '-' + mo + '|' + m] ?? 0);
+                datasets.push({
+                    label: m + ' ' + yr,
+                    data: values,
+                    borderColor: baseColor,
+                    backgroundColor: baseColor,
+                    borderWidth: widths[yi],
+                    borderDash: dashPatterns[yi % dashPatterns.length],
+                    pointRadius: radii[yi],
+                    pointHoverRadius: radii[yi] + 3,
+                    pointBackgroundColor: baseColor,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    tension: 0.3,
+                    fill: false
+                });
+            });
+        });
+
+        charts['evolucion'] = new Chart(document.getElementById('chartEvolucion').getContext('2d'), {
+            type: 'line',
+            data: { labels: xLabels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { left: 6, right: 6 } },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: false,
+                            boxWidth: 28,
+                            boxHeight: 2,
+                            font: { size: 11 },
+                            padding: 14,
+                            generateLabels: function (chart) {
+                                return chart.data.datasets.map(function (ds, i) {
+                                    return {
+                                        text: ds.label,
+                                        fillStyle: 'transparent',
+                                        strokeStyle: ds.borderColor,
+                                        lineWidth: ds.borderWidth || 2,
+                                        lineDash: ds.borderDash || [],
+                                        hidden: !chart.isDatasetVisible(i),
+                                        datasetIndex: i,
+                                        pointStyle: 'line'
+                                    };
+                                });
+                            }
+                        }
+                    },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
+                }
+            }
+        });
     }
 
-    /* ── Top Clientes ── */
-    window.loadTopClientes = async function () {
-        showSpin('spinnerTopClientes');
-        try { const p = buildParams(); const mercado = document.getElementById('filtroMercadoClientes').value; if (mercado) p.set('mercado', mercado); p.set('top', '15'); const data = await apiFetch('/DashboardGerencial/DatosTopClientes?' + p); renderTopClientes(data); } catch (e) { showToast('Error al cargar top clientes: ' + e.message); } finally { hideSpin('spinnerTopClientes'); }
-    };
-    function renderTopClientes(data) {
-        destroyChart('topClientes'); const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
-        const tbody = document.getElementById('tablaTopClientes');
-        if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin datos</td></tr>'; return; }
-        tbody.innerHTML = data.map((d, i) => { const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0'; return '<tr><td>' + (i + 1) + '</td><td>' + (d.codCliente ?? '') + '</td><td>' + (d.nomCliente ?? '') + '</td><td>' + (d.pais ?? '') + '</td><td><span class="badge" style="background:' + (MERCADO_COLORS[d.mercado] || '#999') + '">' + (d.mercado ?? '') + '</span></td><td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td><td class="text-end">' + (d.cantDocumentos ?? 0) + '</td><td class="text-end">' + pct + '%</td></tr>'; }).join('');
-        const top10 = data.slice(0, 10);
-        charts['topClientes'] = new Chart(document.getElementById('chartTopClientes').getContext('2d'), { type: 'bar', data: { labels: top10.map(d => (d.nomCliente ?? d.codCliente ?? '').substring(0, 25)), datasets: [{ label: 'Importe', data: top10.map(d => d.importe ?? 0), backgroundColor: top10.map(d => MERCADO_COLORS[d.mercado] || '#999'), borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } }, datalabels: { anchor: 'end', align: 'right', font: { size: 9, weight: '600' }, color: '#333', formatter: v => monLabel + ' ' + fmtMil(v) } }, scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } } } });
+    /* ── Importe Total por Mes / Año ── */
+    function renderImporteTotalMes(data) {
+        destroyChart('importeTotalMes'); if (!data || data.length === 0) return;
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        const yearColors = ['#1a237e', '#fb8c00', '#6a1b9a', '#1565c0', '#00695c', '#c62828', '#2e7d32', '#e65100'];
+        /* Agrupar: sumar todos los mercados por periodo */
+        const totalMap = {};
+        data.forEach(d => { totalMap[d.periodo] = (totalMap[d.periodo] || 0) + (d.importe ?? 0); });
+        /* Extraer años y meses */
+        const years = [...new Set(Object.keys(totalMap).map(p => p.substring(0, 4)))].sort();
+        const months = [...new Set(Object.keys(totalMap).map(p => p.substring(5, 7)))].sort();
+        const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
+        /* Un dataset (línea) por cada año */
+        const datasets = years.map((yr, i) => {
+            const c = yearColors[i % yearColors.length];
+            return {
+                label: yr,
+                data: months.map(m => totalMap[yr + '-' + m] ?? 0),
+                borderColor: c,
+                backgroundColor: c,
+                borderWidth: 2.5,
+                pointRadius: 4,
+                pointHoverRadius: 7,
+                pointBackgroundColor: c,
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1.5,
+                tension: 0.3,
+                fill: false
+            };
+        });
+        charts['importeTotalMes'] = new Chart(document.getElementById('chartImporteTotalMes').getContext('2d'), {
+            type: 'line',
+            data: { labels: xLabels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { left: 6, right: 6 } },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 12 }, padding: 18 } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
+                }
+            }
+        });
     }
 
-    /* ── Documentos ── */
-    let _docsData = [];
-    window.loadDocumentos = async function () {
-        showSpin('spinnerDocumentos');
-        try { const p = buildParams(); const mercado = document.getElementById('filtroMercadoDocs').value; if (mercado) p.set('mercado', mercado); _docsData = await apiFetch('/DashboardGerencial/DatosDetalleDocumentos?' + p); renderDocumentos(_docsData); } catch (e) { showToast('Error al cargar documentos: ' + e.message); } finally { hideSpin('spinnerDocumentos'); }
-    };
-    function renderDocumentos(data) {
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; document.getElementById('badgeTotalDocs').textContent = (data ? data.length : 0) + ' registros';
-        const tbody = document.getElementById('tablaDocumentosBody');
-        if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="21" class="text-center text-muted py-3">Sin datos</td></tr>'; return; }
-        const fmtDate = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('es-PE'); };
-        tbody.innerHTML = data.map((d, i) => { const esPeru = (d.ubigeoPais ?? '01') === '01'; const colDpto = esPeru ? (d.departamento ?? '') : '<span class="text-info" title="País (UBIGEO.PAIS≠01)">' + (d.departamento ?? '') + '</span>'; const colDist = esPeru ? (d.distrito ?? '') : '<span class="text-info" title="Ciudad (UBIGEO.PAIS≠01)">' + (d.distrito ?? '') + '</span>'; return '<tr><td>' + (i + 1) + '</td><td>' + (d.tipoDoc ?? '') + '</td><td>' + (d.serie ?? '') + '</td><td>' + (d.numero ?? '') + '</td><td>' + fmtDate(d.fecha) + '</td><td>' + (d.moneda ?? '') + '</td><td>' + (d.codCliente ?? '') + '</td><td>' + (d.nomCliente ?? '') + '</td><td>' + (d.pais ?? '') + '</td><td>' + (d.exportacion ?? '') + '</td><td><span class="badge" style="background:' + (MERCADO_COLORS[d.mercado] || '#999') + ';font-size:.7rem">' + (d.mercado ?? '') + '</span></td><td class="text-end">' + fmt(d.importCam) + '</td><td class="text-end">' + fmt(d.valVenta) + '</td><td class="text-end">' + fmt(d.impDescto) + '</td><td class="text-end">' + fmt(d.impAnticipo) + '</td><td class="text-end">' + fmt(d.impInteres) + '</td><td class="text-end fw-semibold">' + fmt(d.impNeto) + '</td><td class="text-end">' + fmt(d.impIgv) + '</td><td class="text-end">' + fmt(d.precioVta) + '</td><td>' + colDpto + '</td><td>' + colDist + '</td></tr>'; }).join('');
+    /* ── KG Total por Mes / Año ── */
+    async function loadKgMensual() {
+        showSpin('spinnerKgTotalMes');
+        try { const data = await apiFetch('/DashboardGerencial/DatosKgMensual?' + buildParams()); renderKgTotalMes(data); } catch (e) { showToast('Error al cargar KG mensual: ' + e.message); } finally { hideSpin('spinnerKgTotalMes'); }
+    }
+    function renderKgTotalMes(data) {
+        destroyChart('kgTotalMes'); if (!data || data.length === 0) return;
+        const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        const yearColors = ['#1a237e', '#fb8c00', '#6a1b9a', '#1565c0', '#00695c', '#c62828', '#2e7d32', '#e65100'];
+        const years = [...new Set(data.map(d => d.periodo.substring(0, 4)))].sort();
+        const months = [...new Set(data.map(d => d.periodo.substring(5, 7)))].sort();
+        const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
+        const map = {};
+        data.forEach(d => { map[d.periodo] = (map[d.periodo] || 0) + (d.cantidadKg ?? 0); });
+        const datasets = years.map((yr, i) => {
+            const c = yearColors[i % yearColors.length];
+            return {
+                label: yr,
+                data: months.map(m => map[yr + '-' + m] ?? 0),
+                borderColor: c, backgroundColor: c,
+                borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 7,
+                pointBackgroundColor: c, pointBorderColor: '#fff', pointBorderWidth: 1.5,
+                tension: 0.3, fill: false
+            };
+        });
+        charts['kgTotalMes'] = new Chart(document.getElementById('chartKgTotalMes').getContext('2d'), {
+            type: 'line',
+            data: { labels: xLabels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { left: 6, right: 6 } },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 12 }, padding: 18 } },
+                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtMil(c.raw) + ' KG' } },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
+                }
+            }
+        });
     }
 
-    /* ── Exportar Excel ── */
-    window.exportarExcel = function () {
-        if (!_docsData || _docsData.length === 0) { showToast('No hay datos para exportar.', 'warning'); return; }
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'PEN' : 'USD';
-        const fmtDate = d => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('es-PE'); };
-        const headers = ['#','Tipo','Serie','Número','Fecha','Moneda','Cód.Cliente','Razón Social','País','Exp','Mercado','T.C.','Val.Venta','Descto','Anticipo','Interés','Neto','IGV','Precio Vta','Dpto/País','Distrito/Ciudad'];
-        const rows = _docsData.map((d, i) => [i + 1, d.tipoDoc, d.serie, d.numero, fmtDate(d.fecha), d.moneda, d.codCliente, d.nomCliente, d.pais, d.exportacion, d.mercado, d.importCam, d.valVenta, d.impDescto, d.impAnticipo, d.impInteres, d.impNeto, d.impIgv, d.precioVta, d.departamento, d.distrito]);
-        const csvContent = [headers, ...rows].map(r => r.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\n');
-        const BOM = '\uFEFF'; const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'DashboardGerencial_' + monLabel + '_' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); URL.revokeObjectURL(url);
+    /* ── Iconos por keyword para hilados ── */
+    /* IMPORTANTE: las reglas más específicas van PRIMERO para evitar
+       que un keyword genérico (TANGUIS, PIMA) capture todo. */
+    function getHiladoIcon(name) {
+        const n = (name ?? '').toUpperCase();
+        /* ── Mezclas y compuestos (antes que fibras simples) ── */
+        if (n.includes('MOULINE'))  return '🌀';
+        if (n.includes('MEZCLA') || n.includes('BLEND'))  return '🔀';
+        if (n.includes('ORGANICO') || n.includes('ORGÁNICO')) return '♻️';
+        if (n.includes('TENCEL') || n.includes('LYOCELL')) return '🌱';
+        /* ── Fibras base ── */
+        if (n.includes('TANGUIS'))  return '🌾';
+        if (n.includes('PIMA'))     return '🏅';
+        if (n.includes('ALGODON') || n.includes('ALGODÓN')) return '☁️';
+        if (n.includes('POLYESTER') || n.includes('POLIESTER') || n.includes('PET')) return '🔷';
+        if (n.includes('VISCOSA') || n.includes('RAYON') || n.includes('MODAL')) return '🍃';
+        if (n.includes('ACRIL') || n.includes('ACRYL')) return '💎';
+        if (n.includes('NYLON') || n.includes('POLIAMIDA')) return '⚡';
+        if (n.includes('LANA') || n.includes('WOOL')) return '🐑';
+        if (n.includes('SEDA') || n.includes('SILK')) return '✨';
+        if (n.includes('LYCRA') || n.includes('SPANDEX') || n.includes('ELASTAN')) return '🔄';
+        if (n.includes('CRUDO')) return '🪵';
+        if (n.includes('BLANCO')) return '⬜';
+        if (n.includes('PREMIUM')) return '⭐';
+        return '🧶';
+    }
+    /* ── Iconos por keyword para giros ── */
+    function getGiroIcon(name) {
+        const n = (name ?? '').toUpperCase();
+        if (n.includes('CHOMPER'))  return '🧥';
+        if (n.includes('PUNTO'))    return '🧶';
+        if (n.includes('MEDIER'))   return '🧦';
+        if (n.includes('COSTUR'))   return '✂️';
+        if (n.includes('LABOR'))    return '🪡';
+        if (n.includes('PLANO'))    return '🪟';
+        if (n.includes('TEJIDO'))   return '🧵';
+        if (n.includes('CALCET'))   return '🧦';
+        if (n.includes('BORDA'))    return '🎨';
+        if (n.includes('CONFEC'))   return '👔';
+        if (n.includes('TELA'))     return '🪡';
+        if (n.includes('EXPORT'))   return '🌍';
+        if (n.includes('SIN GIRO')) return '❓';
+        return '🏭';
+    }
+    /* ── Plugin: icono dentro de barras verticales ── */
+    const barIconPlugin = {
+        id: 'barIconPlugin',
+        afterDatasetDraw(chart) {
+            const { ctx, data, chartArea } = chart;
+            const meta = chart.getDatasetMeta(0);
+            const icons = data._icons;
+            if (!icons) return;
+            meta.data.forEach((bar, i) => {
+                if (!icons[i]) return;
+                const x = bar.x;
+                const y = bar.y;
+                const bottom = chartArea.bottom;
+                const barH = bottom - y;
+                if (barH < 30) return;
+                const centerY = y + barH * 0.45;
+                ctx.save();
+                ctx.font = '22px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.globalAlpha = 0.35;
+                ctx.fillText(icons[i], x, centerY);
+                ctx.restore();
+            });
+        }
     };
+
+    /* ── TOP 5 Hilados más Facturados (barras verticales con icono) ── */
+    async function loadTopHiladosImporte() {
+        showSpin('spinnerTopHiladosImporte');
+        try { const p = buildParams(); p.set('top', '5'); const data = await apiFetch('/DashboardGerencial/DatosTopHiladosImporte?' + p); renderTopHiladosImporte(data); } catch (e) { showToast('Error al cargar top hilados importe: ' + e.message); } finally { hideSpin('spinnerTopHiladosImporte'); }
+    }
+    function renderTopHiladosImporte(data) {
+        destroyChart('topHiladosImporte');
+        if (!data || data.length === 0) return;
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const barColors = ['#2d3436', '#3d4a4c', '#4d5c5e', '#636e72', '#7a8a8e'];
+        const icons = data.map(d => getHiladoIcon(d.familia));
+        const chartData = {
+            labels: data.map(d => {
+                const lbl = (d.familia ?? '');
+                const words = lbl.split(' ');
+                const lines = []; let cur = '';
+                words.forEach(w => {
+                    if (cur && (cur + ' ' + w).length > 14) { lines.push(cur); cur = w; }
+                    else { cur = cur ? cur + ' ' + w : w; }
+                });
+                if (cur) lines.push(cur);
+                return lines.length > 1 ? lines : lbl;
+            }),
+            datasets: [{
+                label: 'Importe',
+                data: data.map(d => d.importe ?? 0),
+                backgroundColor: data.map((_, i) => barColors[i % barColors.length]),
+                borderRadius: 6,
+                barPercentage: 0.72,
+                categoryPercentage: 0.85
+            }]
+        };
+        chartData._icons = icons;
+        charts['topHiladosImporte'] = new Chart(document.getElementById('chartTopHiladosImporte').getContext('2d'), {
+            type: 'bar',
+            data: chartData,
+            plugins: [barIconPlugin],
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { top: 30 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
+                    datalabels: {
+                        anchor: 'end', align: 'top', clip: false,
+                        font: { size: 12, weight: '700' },
+                        color: '#2d3436',
+                        formatter: v => monLabel + ' ' + fmtMil(v)
+                    }
+                },
+                scales: {
+                    x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 9, weight: '600' }, color: '#555', maxRotation: 0 } },
+                    y: { display: false, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    /* ── Ventas por Giro (Funnel HTML con icono) ── */
+    async function loadVentasGiro() {
+        showSpin('spinnerVentasGiro');
+        try { const data = await apiFetch('/DashboardGerencial/DatosVentasPorGiro?' + buildParams()); renderVentasGiro(data); } catch (e) { showToast('Error al cargar ventas por giro: ' + e.message); } finally { hideSpin('spinnerVentasGiro'); }
+    }
+    function renderVentasGiro(data) {
+        const container = document.getElementById('funnelVentasGiro');
+        container.innerHTML = '';
+        if (!data || data.length === 0) { container.innerHTML = '<p class="text-muted text-center m-0">Sin datos</p>'; return; }
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+        const colors = ['#1B4D3E','#265e4a','#317056','#3d8263','#4a9470','#57a67d','#65b88b','#74ca99','#84dca8','#95eeb7'];
+        const maxItems = Math.min(data.length, 8);
+        const items = data.slice(0, maxItems);
+        const widthMin = 50;
+        const widthMax = 100;
+
+        let html = '';
+        items.forEach((d, i) => {
+            const name = (d.descGiro ?? d.codigoGiro ?? 'Sin Giro').substring(0, 18);
+            const icon = getGiroIcon(name);
+            const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
+            const w = widthMax - ((widthMax - widthMin) * i / Math.max(maxItems - 1, 1));
+            const bg = colors[i % colors.length];
+            const isFirst = i === 0;
+            const isLast = i === maxItems - 1;
+            const radius = isFirst ? 'border-radius: 6px 6px 0 0;' : (isLast ? 'border-radius: 0 0 6px 6px;' : '');
+            html += `<div style="width:${w}%; margin:0 auto 3px auto; background:${bg}; color:#fff; padding:9px 14px; display:flex; justify-content:space-between; align-items:center; ${radius}">
+                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                    <span style="font-size:16px; flex-shrink:0;">${icon}</span>
+                    <span style="font-weight:700; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
+                </div>
+                <div style="text-align:right; flex-shrink:0; margin-left:8px;">
+                    <span style="font-weight:700; font-size:13px;">${fmtMil(d.importe)}</span>
+                    <span style="font-size:10px; opacity:0.8; margin-left:4px;">${pct}%</span>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    /* ── TOP 5 Hilados por KG (barras HTML con icono) ── */
+    async function loadTopHiladosKg() {
+        showSpin('spinnerTopHiladosKg');
+        try { const p = buildParams(); p.set('top', '5'); const data = await apiFetch('/DashboardGerencial/DatosTopHiladosKg?' + p); renderTopHiladosKg(data); } catch (e) { showToast('Error al cargar top hilados KG: ' + e.message); } finally { hideSpin('spinnerTopHiladosKg'); }
+    }
+    function renderTopHiladosKg(data) {
+        const container = document.getElementById('barsTopHiladosKg');
+        container.innerHTML = '';
+        if (!data || data.length === 0) { container.innerHTML = '<p class="text-muted text-center m-0">Sin datos</p>'; return; }
+        const maxVal = Math.max(...data.map(d => d.kilos ?? 0), 1);
+        const colors = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb'];
+
+        let html = '';
+        data.forEach((d, i) => {
+            const name = (d.familia ?? '').substring(0, 30);
+            const icon = getHiladoIcon(d.familia);
+            const pct = Math.max(((d.kilos ?? 0) / maxVal) * 100, 8);
+            const bg = colors[i % colors.length];
+            html += `<div style="margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px;">
+                    <span style="font-size:12px; font-weight:600; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;">${icon} ${name}</span>
+                    <span style="font-size:12px; font-weight:700; color:${bg}; flex-shrink:0;">${fmtMil(d.kilos)} KG</span>
+                </div>
+                <div style="background:#e9ecef; border-radius:4px; height:18px; overflow:hidden;">
+                    <div style="width:${pct}%; height:100%; background:${bg}; border-radius:4px; transition:width 0.6s ease;"></div>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
 
     /* ── Load all ── */
     async function loadMercado() { showSpin('spinnerMercado'); try { const data = await apiFetch('/DashboardGerencial/DatosVentasPorMercado?' + buildParams()); renderMercado(data); } catch (e) { showToast('Error al cargar datos de mercado: ' + e.message); } finally { hideSpin('spinnerMercado'); } }
 
-    window.loadAll = function () { cerrarDetallePais(); cerrarDetalleDpto(); cerrarDetalleDistrito(); cerrarDetalleCiudadPais(); loadMercado(); loadEvolucion(); loadTopClientes(); loadDocumentos(); };
-    window.clearFilters = function () { setDefaultDates(); document.getElementById('moneda').value = 'D'; document.getElementById('filtroMercadoClientes').value = ''; document.getElementById('filtroMercadoDocs').value = ''; loadAll(); };
+    window.loadAll = function () { cerrarDetallePais(); cerrarDetalleDpto(); cerrarDetalleDistrito(); cerrarDetalleCiudadPais(); loadMercado(); loadEvolucion(); loadKgMensual(); loadTopHiladosImporte(); loadVentasGiro(); loadTopHiladosKg(); };
+    window.clearFilters = function () { setDefaultDates(); document.getElementById('moneda').value = 'D'; buildYearCheckboxes(); loadAll(); };
 
-    document.addEventListener('DOMContentLoaded', async function () { setDefaultDates(); await cargarMapeoPaises(); loadAll(); });
+    /* ── Inicio ── */
+    buildYearCheckboxes();
+    setDefaultDates();
+    (async function () { await cargarMapeoPaises(); loadAll(); })();
 })();
 </script>
 }

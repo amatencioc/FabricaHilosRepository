@@ -12,6 +12,8 @@ using QuestPDF.Infrastructure;
 using FabricaHilos.Config;
 using FabricaHilos.Notificaciones.Extensions;
 using Serilog;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,13 +68,15 @@ const int sessionHours = 8;
 // Configurar cookies de autenticación web (Identity)
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.LoginPath          = "/Account/Login";
-    options.LogoutPath         = "/Account/Logout";
-    options.AccessDeniedPath   = "/Account/AccesoDenegado";
-    options.ExpireTimeSpan     = TimeSpan.FromHours(sessionHours); // expira tras inactividad
-    options.SlidingExpiration  = true;  // se renueva en cada request activo
-    options.Cookie.HttpOnly    = true;
-    options.Cookie.IsEssential = true;
+    options.LoginPath           = "/Account/Login";
+    options.LogoutPath          = "/Account/Logout";
+    options.AccessDeniedPath    = "/Account/AccesoDenegado";
+    options.ExpireTimeSpan      = TimeSpan.FromHours(sessionHours); // expira tras inactividad
+    options.SlidingExpiration   = true;  // se renueva en cada request activo
+    options.Cookie.HttpOnly     = true;
+    options.Cookie.IsEssential  = true;
+    options.Cookie.SameSite     = SameSiteMode.Lax;                      // compatibilidad móvil
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;      // permite HTTP y HTTPS
 });
 
 // Habilitar acceso al HttpContext desde servicios y sesión por usuario
@@ -80,11 +84,12 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout        = TimeSpan.FromHours(sessionHours); // sincronizado con Identity
-    options.Cookie.HttpOnly    = true;
-    options.Cookie.IsEssential = true;
-    options.Cookie.Name        = ".FabricaHilos.Session";
-    options.Cookie.SameSite    = SameSiteMode.Lax;
+    options.IdleTimeout         = TimeSpan.FromHours(sessionHours); // sincronizado con Identity
+    options.Cookie.HttpOnly     = true;
+    options.Cookie.IsEssential  = true;
+    options.Cookie.Name         = ".FabricaHilos.Session";
+    options.Cookie.SameSite     = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // permite HTTP y HTTPS
 });
 
 // Persistir claves de Data Protection en disco, fuera del folder de publicación,
@@ -103,13 +108,13 @@ builder.Services.AddDataProtection()
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
-builder.Services.AddScoped<IDashboardSgcService, DashboardSgcService>();
 builder.Services.AddScoped<ICargaTcService, CargaTcService>();
 builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
 builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
 builder.Services.AddScoped<IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IRedInternaService, RedInternaService>();
 builder.Services.AddScoped<FabricaHilos.Services.Seguridad.Inspeccion.IInspeccionService, FabricaHilos.Services.Seguridad.Inspeccion.InspeccionService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
@@ -140,6 +145,20 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/Ventas/{1}/{0}.cshtml");
     });
 
+// Rate Limiting: protege /Account/Login contra fuerza bruta
+// Máximo 10 intentos por IP en una ventana de 5 minutos
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("login", policy =>
+    {
+        policy.PermitLimit         = 10;
+        policy.Window              = TimeSpan.FromMinutes(5);
+        policy.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        policy.QueueLimit          = 0;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 // Visibilidad de menús del sidebar (configurable en appsettings.json)
 builder.Services.Configure<MenuOptions>(
     builder.Configuration.GetSection(MenuOptions.Seccion));
@@ -169,9 +188,21 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Security headers: previene clickjacking, MIME sniffing, XSS y fuga de Referer
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"]  = "nosniff";
+    context.Response.Headers["X-Frame-Options"]         = "SAMEORIGIN";
+    context.Response.Headers["X-XSS-Protection"]        = "1; mode=block";
+    context.Response.Headers["Referrer-Policy"]         = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"]      = "geolocation=(), microphone=(), camera=()";
+    await next();
+});
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseSession();
 app.UseMiddleware<FabricaHilos.Middleware.NetworkAccessMiddleware>();
 app.UseAuthentication();

@@ -61,6 +61,32 @@ namespace FabricaHilos.Controllers
                 });
             }
 
+            if (menus.VentasDashboardComercial)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Dashboard Comercial",
+                    Descripcion = "Seguimiento de ventas y metas comerciales por asesor y período.",
+                    Icono = "bi-graph-up-arrow",
+                    ColorClase = "text-warning",
+                    Controller = "DashboardComercial",
+                    Action = "Index"
+                });
+            }
+
+            if (menus.VentasDashboardGerencial)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Dashboard Gerencial",
+                    Descripcion = "Visión ejecutiva consolidada de ventas, márgenes y tendencias.",
+                    Icono = "bi-speedometer2",
+                    ColorClase = "text-danger",
+                    Controller = "DashboardGerencial",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
     }

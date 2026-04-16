@@ -1,4 +1,5 @@
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
@@ -41,8 +42,15 @@ namespace FabricaHilos.Services.Ventas
         private static string? GetStr(OracleDataReader r, string col) =>
             r[col] == DBNull.Value ? null : r[col]?.ToString();
 
-        private static decimal GetDec(OracleDataReader r, string col) =>
-            r[col] == DBNull.Value ? 0m : Convert.ToDecimal(r[col]);
+        private static decimal GetDec(OracleDataReader r, string col)
+        {
+            var ordinal = r.GetOrdinal(col);
+            if (r.IsDBNull(ordinal)) return 0m;
+            var oraVal = r.GetOracleDecimal(ordinal);
+            // Truncar a la precisión de .NET decimal (28 dígitos) para evitar OverflowException
+            oraVal = OracleDecimal.SetPrecision(oraVal, 28);
+            return oraVal.Value;
+        }
 
         // ─────────────────────────────────────────────────────────
         // Ventas agrupadas por Mercado: Perú / Latam / Global
@@ -145,7 +153,8 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
   )
- WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO)
+ WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO
+        OR (:P_MERCADO = 'Global' AND MERCADO IN ('Europa','Asia','Oceanía','Otros')))
  GROUP BY MERCADO, CODIGO_PAIS, PAIS_NOMBRE
  ORDER BY IMPORTE DESC";
 
@@ -418,173 +427,6 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
         }
 
         // ─────────────────────────────────────────────────────────
-        // Top Clientes por Mercado
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DgVentaMercadoTopClienteDto>> ObtenerTopClientesAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda, string? mercado, int top)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DgVentaMercadoTopClienteDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            string sql = $@"
-SELECT * FROM (
-  SELECT COD_CLIENTE, NOM_CLIENTE, PAIS, MERCADO,
-         SUM(IMPORTE) IMPORTE, COUNT(*) CANT_DOCS
-    FROM (
-      SELECT D.COD_CLIENTE,
-             NVL(C.NOMBRE, D.COD_CLIENTE) NOM_CLIENTE,
-              C.PAIS,
-              CASE
-                WHEN C.PAIS = '01' THEN 'Perú'
-                WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
-                WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
-                WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
-                WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
-                ELSE 'Otros'
-              END MERCADO,
-             DECODE(:P_MON,
-                    'S', DECODE(D.MONEDA,
-                                'S', D.IMP_NETO,
-                                ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                    DECODE(D.MONEDA,
-                           'D', D.IMP_NETO,
-                           ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
-        FROM DOCUVENT D
-        JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-        LEFT JOIN TABLAS_AUXILIARES TA ON TA.TIPO = 25 AND TA.CODIGO = C.PAIS
-       WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-         AND D.ESTADO <> '9'
-    )
-   WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO)
-   GROUP BY COD_CLIENTE, NOM_CLIENTE, PAIS, MERCADO
-   ORDER BY IMPORTE DESC
-) WHERE ROWNUM <= :P_TOP";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",     OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1",  OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2",  OracleDbType.Date).Value     = fechaFin.Date;
-                cmd.Parameters.Add("P_MERCADO", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(mercado) ? (object)DBNull.Value : mercado;
-                cmd.Parameters.Add("P_TOP",     OracleDbType.Int32).Value    = top > 0 ? top : 15;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DgVentaMercadoTopClienteDto
-                    {
-                        CodCliente     = GetStr(reader, "COD_CLIENTE"),
-                        NomCliente     = GetStr(reader, "NOM_CLIENTE"),
-                        Pais           = GetStr(reader, "PAIS"),
-                        Mercado        = GetStr(reader, "MERCADO"),
-                        Importe        = GetDec(reader, "IMPORTE"),
-                        CantDocumentos = Convert.ToInt32(reader["CANT_DOCS"])
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener top clientes por Mercado (Dashboard Gerencial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // Detalle completo de Documentos (nivel transaccional)
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DgVentaMercadoDocumentoDto>> ObtenerDetalleDocumentosAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda, string? mercado)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DgVentaMercadoDocumentoDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            const string sql = @"
-SELECT D.TIPODOC, D.SERIE, D.NUMERO, D.FECHA, D.MONEDA,
-       D.COD_CLIENTE, NVL(C.NOMBRE, D.COD_CLIENTE) NOM_CLIENTE,
-       C.PAIS, NVL(D.EXPORTACION, 'N') EXPORTACION,
-       CASE
-         WHEN C.PAIS = '01' THEN 'Perú'
-         WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
-         WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
-         WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
-         WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
-         ELSE 'Otros'
-       END MERCADO,
-       D.IMPORT_CAM, D.VAL_VENTA, D.IMP_DESCTO, D.IMP_ANTICIPO,
-       D.IMP_INTERES, D.IMP_NETO, D.IMP_IGV, D.PRECIO_VTA,
-       NVL(U.NOM_DPT, '') DEPARTAMENTO,
-       NVL(U.NOM_DTT, '') DISTRITO,
-       NVL(U.PAIS, C.PAIS) UBIGEO_PAIS
-  FROM DOCUVENT D
-  JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
-  LEFT JOIN TABLAS_AUXILIARES TA ON TA.TIPO = 25 AND TA.CODIGO = C.PAIS
- WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND D.ESTADO <> '9'
-   AND (:P_MERCADO IS NULL OR
-        CASE
-          WHEN C.PAIS = '01' THEN 'Perú'
-          WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
-          WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
-          WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
-          WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
-          ELSE 'Otros'
-        END = :P_MERCADO)
- ORDER BY D.FECHA DESC, D.TIPODOC, D.SERIE, D.NUMERO";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_FECHA1",  OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2",  OracleDbType.Date).Value     = fechaFin.Date;
-                cmd.Parameters.Add("P_MERCADO", OracleDbType.Varchar2).Value = string.IsNullOrEmpty(mercado) ? (object)DBNull.Value : mercado;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DgVentaMercadoDocumentoDto
-                    {
-                        TipoDoc      = GetStr(reader, "TIPODOC"),
-                        Serie        = GetStr(reader, "SERIE"),
-                        Numero       = GetStr(reader, "NUMERO"),
-                        Fecha        = reader["FECHA"] == DBNull.Value ? null : Convert.ToDateTime(reader["FECHA"]),
-                        Moneda       = GetStr(reader, "MONEDA"),
-                        CodCliente   = GetStr(reader, "COD_CLIENTE"),
-                        NomCliente   = GetStr(reader, "NOM_CLIENTE"),
-                        Pais         = GetStr(reader, "PAIS"),
-                        Exportacion  = GetStr(reader, "EXPORTACION"),
-                        Mercado      = GetStr(reader, "MERCADO"),
-                        ImportCam    = GetDec(reader, "IMPORT_CAM"),
-                        ValVenta     = GetDec(reader, "VAL_VENTA"),
-                        ImpDescto    = GetDec(reader, "IMP_DESCTO"),
-                        ImpAnticipo  = GetDec(reader, "IMP_ANTICIPO"),
-                        ImpInteres   = GetDec(reader, "IMP_INTERES"),
-                        ImpNeto      = GetDec(reader, "IMP_NETO"),
-                        ImpIgv       = GetDec(reader, "IMP_IGV"),
-                        PrecioVta    = GetDec(reader, "PRECIO_VTA"),
-                        Departamento = GetStr(reader, "DEPARTAMENTO"),
-                        Distrito     = GetStr(reader, "DISTRITO"),
-                        UbigeoPais   = GetStr(reader, "UBIGEO_PAIS")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener detalle de documentos (Dashboard Gerencial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
         // Mapeo de países BD → ISO (TABLAS_AUXILIARES TIPO=25)
         // ─────────────────────────────────────────────────────────
         public async Task<List<DgPaisIsoDto>> ObtenerPaisesIsoAsync()
@@ -618,6 +460,252 @@ SELECT CODIGO, INDICADOR2, DESCRIPCION
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener mapeo de países ISO (Dashboard Gerencial)");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // Cantidad KG mensual (sin filtro de asesor)
+        // ─────────────────────────────────────────────────────────
+        public async Task<List<DgKgMensualDto>> ObtenerKgMensualAsync(
+            DateTime fechaInicio, DateTime fechaFin)
+        {
+            var connStr = GetOracleConnectionString();
+            var result  = new List<DgKgMensualDto>();
+            if (string.IsNullOrEmpty(connStr)) return result;
+
+            const string sql = @"
+SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
+       SUM(B.CANTIDAD * E.FACTOR)   CANTIDAD_KG
+  FROM ITEMDOCU         B,
+       DOCUVENT         C,
+       ARTICUL          A,
+       EQUIVALENCIA     E
+ WHERE C.TIPODOC = B.TIPODOC
+   AND C.SERIE   = B.SERIE
+   AND C.NUMERO  = B.NUMERO
+   AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+   AND C.ESTADO <> '9'
+   AND A.TP_ART IN ('T', 'S')
+   AND A.COD_ART = B.COD_ART
+   AND E.UNIDAD  = 'KG'
+   AND E.COD_ART = A.COD_ART
+ GROUP BY TO_CHAR(C.FECHA, 'YYYY-MM')
+ ORDER BY 1";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value = fechaFin.Date;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DgKgMensualDto
+                    {
+                        Periodo    = GetStr(reader, "PERIODO"),
+                        CantidadKg = GetDec(reader, "CANTIDAD_KG")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener KG mensual (Dashboard Gerencial)");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // Top Hilados por Importe (agrupado por familia TFAMLIN)
+        // ─────────────────────────────────────────────────────────
+        public async Task<List<DgTopHiladoImporteDto>> ObtenerTopHiladosImporteAsync(
+            DateTime fechaInicio, DateTime fechaFin, string moneda, int top)
+        {
+            var connStr = GetOracleConnectionString();
+            var result  = new List<DgTopHiladoImporteDto>();
+            if (string.IsNullOrEmpty(connStr)) return result;
+
+            const string sql = @"
+SELECT FAMILIA, IMPORTE FROM (
+  SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
+         SUM(DECODE(:P_MON,
+                    'S',
+                    DECODE(D.MONEDA,
+                           'S', (I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)),
+                           ((I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
+                    DECODE(D.MONEDA,
+                           'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                           ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
+    FROM ITEMDOCU     I,
+         DOCUVENT     D,
+         ARTICUL      A,
+         TFAMLIN      F
+   WHERE D.TIPODOC = I.TIPODOC
+     AND D.SERIE   = I.SERIE
+     AND D.NUMERO  = I.NUMERO
+     AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND D.ESTADO <> '9'
+     AND A.COD_ART = I.COD_ART
+     AND A.TP_ART IN ('T', 'S')
+     AND F.COD_FAM(+) = A.COD_FAM
+     AND F.COD_LIN(+) = A.COD_LIN
+   GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
+   ORDER BY IMPORTE DESC
+) WHERE ROWNUM <= :P_TOP";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
+                cmd.Parameters.Add("P_TOP",    OracleDbType.Int32).Value    = top;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DgTopHiladoImporteDto
+                    {
+                        Familia = GetStr(reader, "FAMILIA"),
+                        Importe = GetDec(reader, "IMPORTE")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener Top Hilados por Importe (Dashboard Gerencial)");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // Ventas por Giro de Cliente
+        // ─────────────────────────────────────────────────────────
+        public async Task<List<DgVentaPorGiroDto>> ObtenerVentasPorGiroAsync(
+            DateTime fechaInicio, DateTime fechaFin, string moneda)
+        {
+            var connStr = GetOracleConnectionString();
+            var result  = new List<DgVentaPorGiroDto>();
+            if (string.IsNullOrEmpty(connStr)) return result;
+
+            const string sql = @"
+SELECT C.GIRO            CODIGO_GIRO,
+       NVL(T2.ABREVIADA, 'SIN GIRO') DESC_GIRO,
+       SUM(DECODE(:P_MON,
+                  'S',
+                  DECODE(D.MONEDA,
+                         'S', (I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)),
+                         ((I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
+                  DECODE(D.MONEDA,
+                         'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                         ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
+  FROM ITEMDOCU          I,
+       DOCUVENT          D,
+       ARTICUL           A,
+       CLIENTES          C,
+       TABLAS_AUXILIARES T2
+ WHERE D.TIPODOC = I.TIPODOC
+   AND D.SERIE   = I.SERIE
+   AND D.NUMERO  = I.NUMERO
+   AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+   AND D.ESTADO <> '9'
+   AND A.COD_ART = I.COD_ART
+   AND A.TP_ART IN ('T', 'S')
+   AND C.COD_CLIENTE = D.COD_CLIENTE
+   AND T2.TIPO(+) = 27
+   AND T2.CODIGO(+) = C.GIRO
+ GROUP BY C.GIRO, NVL(T2.ABREVIADA, 'SIN GIRO')
+ ORDER BY IMPORTE DESC";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DgVentaPorGiroDto
+                    {
+                        CodigoGiro = GetStr(reader, "CODIGO_GIRO"),
+                        DescGiro   = GetStr(reader, "DESC_GIRO"),
+                        Importe    = GetDec(reader, "IMPORTE")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener Ventas por Giro (Dashboard Gerencial)");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // Top Hilados por KG (agrupado por descripción artículo)
+        // ─────────────────────────────────────────────────────────
+        public async Task<List<DgTopHiladoKgDto>> ObtenerTopHiladosKgAsync(
+            DateTime fechaInicio, DateTime fechaFin, int top)
+        {
+            var connStr = GetOracleConnectionString();
+            var result  = new List<DgTopHiladoKgDto>();
+            if (string.IsNullOrEmpty(connStr)) return result;
+
+            const string sql = @"
+SELECT FAMILIA, KILOS FROM (
+  SELECT A.DESCRIPCION FAMILIA,
+         SUM(I.CANTIDAD * E.FACTOR) KILOS
+    FROM ITEMDOCU     I,
+         DOCUVENT     D,
+         ARTICUL      A,
+         EQUIVALENCIA E
+   WHERE D.TIPODOC = I.TIPODOC
+     AND D.SERIE   = I.SERIE
+     AND D.NUMERO  = I.NUMERO
+     AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND D.ESTADO <> '9'
+     AND A.COD_ART = I.COD_ART
+     AND A.TP_ART IN ('T', 'S')
+     AND E.COD_ART(+) = I.COD_ART
+     AND E.UNIDAD(+)  = 'KG'
+   GROUP BY A.DESCRIPCION
+   ORDER BY KILOS DESC
+) WHERE ROWNUM <= :P_TOP";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value  = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value  = fechaFin.Date;
+                cmd.Parameters.Add("P_TOP",    OracleDbType.Int32).Value = top;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new DgTopHiladoKgDto
+                    {
+                        Familia = GetStr(reader, "FAMILIA"),
+                        Kilos   = GetDec(reader, "KILOS")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener Top Hilados por KG (Dashboard Gerencial)");
             }
 
             return result;

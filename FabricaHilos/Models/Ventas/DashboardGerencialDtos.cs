@@ -47,48 +47,40 @@ namespace FabricaHilos.Models.Ventas
         public decimal Importe { get; set; }
     }
 
-    /// <summary>Top clientes por importe de ventas.</summary>
-    public class DgVentaMercadoTopClienteDto
-    {
-        public string? CodCliente { get; set; }
-        public string? NomCliente { get; set; }
-        public string? Pais { get; set; }
-        public string? Mercado { get; set; }
-        public decimal Importe { get; set; }
-        public int CantDocumentos { get; set; }
-    }
-
-    /// <summary>Detalle completo de documentos de venta (nivel transaccional).</summary>
-    public class DgVentaMercadoDocumentoDto
-    {
-        public string? TipoDoc { get; set; }
-        public string? Serie { get; set; }
-        public string? Numero { get; set; }
-        public DateTime? Fecha { get; set; }
-        public string? Moneda { get; set; }
-        public string? CodCliente { get; set; }
-        public string? NomCliente { get; set; }
-        public string? Pais { get; set; }
-        public string? Exportacion { get; set; }
-        public string? Mercado { get; set; }
-        public decimal ImportCam { get; set; }
-        public decimal ValVenta { get; set; }
-        public decimal ImpDescto { get; set; }
-        public decimal ImpAnticipo { get; set; }
-        public decimal ImpInteres { get; set; }
-        public decimal ImpNeto { get; set; }
-        public decimal ImpIgv { get; set; }
-        public decimal PrecioVta { get; set; }
-        public string? Departamento { get; set; }
-        public string? Distrito { get; set; }
-        public string? UbigeoPais { get; set; }
-    }
-
     /// <summary>Mapeo de país BD → ISO para el mapa interactivo.</summary>
     public class DgPaisIsoDto
     {
         public string? CodigoBD { get; set; }
         public string? CodigoISO { get; set; }
         public string? Descripcion { get; set; }
+    }
+
+    /// <summary>Cantidad KG mensual (sin filtro de asesor).</summary>
+    public class DgKgMensualDto
+    {
+        public string? Periodo { get; set; }
+        public decimal CantidadKg { get; set; }
+    }
+
+    /// <summary>Top hilados (familia) por importe facturado.</summary>
+    public class DgTopHiladoImporteDto
+    {
+        public string? Familia { get; set; }
+        public decimal Importe { get; set; }
+    }
+
+    /// <summary>Ventas agrupadas por giro de cliente.</summary>
+    public class DgVentaPorGiroDto
+    {
+        public string? CodigoGiro { get; set; }
+        public string? DescGiro { get; set; }
+        public decimal Importe { get; set; }
+    }
+
+    /// <summary>Top hilados (familia) por kilogramos vendidos.</summary>
+    public class DgTopHiladoKgDto
+    {
+        public string? Familia { get; set; }
+        public decimal Kilos { get; set; }
     }
 }

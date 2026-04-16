@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
@@ -10,7 +9,7 @@ using FabricaHilos.Notificaciones.Models.Payloads;
 namespace FabricaHilos.Controllers
 {
     [Authorize]
-    public class CargaTcController : Controller
+    public class CargaTcController : OracleBaseController
     {
         private readonly ICargaTcService _cargaTcService;
         private readonly ILogger<CargaTcController> _logger;
@@ -30,18 +29,6 @@ namespace FabricaHilos.Controllers
             _navToken = navToken;
             _emailService = emailService;
             _configuration = configuration;
-        }
-
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en Carga TC. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
         }
 
         // ========== LISTADO DE REQUERIMIENTOS (REQ_CERT) ==========

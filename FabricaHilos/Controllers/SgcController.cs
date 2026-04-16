@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Configuration;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Sgc;
@@ -10,7 +9,7 @@ using FabricaHilos.Services.Sgc;
 namespace FabricaHilos.Controllers
 {
     [Authorize]
-    public class SgcController : Controller
+    public class SgcController : OracleBaseController
     {
         private readonly ISgcService _sgcService;
             private readonly ILogger<SgcController> _logger;
@@ -33,38 +32,12 @@ namespace FabricaHilos.Controllers
                 _menuService      = menuService;
             }
 
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en SGC. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
-        }
-
         // ========== INDEX ==========
 
         public IActionResult Index()
         {
             var menus = _menuService.GetMenusActuales();
             var modulos = new List<SgcModuloDto>();
-
-            // Dashboard SGC
-            if (menus.SgcDashboard)
-            {
-                modulos.Add(new SgcModuloDto
-                {
-                    Nombre = "Dashboard SGC",
-                    Descripcion = "Panel de control y métricas del módulo SGC.",
-                    Icono = "bi-speedometer2",
-                    ColorClase = "text-info",
-                    Controller = "Sgc",
-                    Action = "DashboardSgc"
-                });
-            }
 
             // Pedidos
             if (menus.SgcPedidos)

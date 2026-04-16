@@ -10,7 +10,7 @@ using FabricaHilos.Services.Produccion;
 namespace FabricaHilos.Controllers
 {
     [Authorize]
-    public class RegistroPreparatoriaController : Controller
+    public class RegistroPreparatoriaController : OracleBaseController
     {
         private readonly ApplicationDbContext _context;
         private readonly IRecetaService _recetaService;
@@ -49,18 +49,12 @@ namespace FabricaHilos.Controllers
 
         public override void OnActionExecuting(ActionExecutingContext context)
         {
-            base.OnActionExecuting(context);
+            // Saltar verificación de sesión para endpoints API internos (AJAX)
             if (context.ActionDescriptor.RouteValues.TryGetValue("action", out var action) &&
                 _apiActions.Contains(action ?? string.Empty))
                 return;
 
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en RegistroPreparatoria. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
+            base.OnActionExecuting(context);
         }
 
         public async Task<IActionResult> Index(string? buscar, string? maquina, string? tipoMaquina, List<string>? estado, int page = 1)

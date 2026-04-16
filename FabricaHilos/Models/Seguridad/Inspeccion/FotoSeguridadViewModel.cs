@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using System.ComponentModel.DataAnnotations;
+using FabricaHilos.Attributes;
 
 namespace FabricaHilos.Models.Seguridad.Inspeccion
 {
@@ -36,6 +37,7 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         public string UbicacionFoto { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Debe seleccionar una imagen.")]
+        [AllowedFile(10, "image/jpeg", "image/png", "image/webp")]
         [Display(Name = "Foto de Acción Correctiva")]
         public IFormFile Foto { get; set; } = null!;
     }
@@ -73,6 +75,7 @@ namespace FabricaHilos.Models.Seguridad.Inspeccion
         public string UbicacionFoto { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Debe seleccionar una imagen.")]
+        [AllowedFile(10, "image/jpeg", "image/png", "image/webp")]
         [Display(Name = "Foto del Hallazgo")]
         public IFormFile Foto { get; set; } = null!;
     }

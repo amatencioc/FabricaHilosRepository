@@ -1207,15 +1207,17 @@ namespace FabricaHilos.Services.Sgc
             string facturaFilter    = hasFactura     ? "\n                          AND TRIM(F.NUMERO) LIKE '%' || TRIM(:factura) || '%'" : string.Empty;
             string razonSocialFilter = hasRazonSocial ? "\n                          AND (UPPER(F.NOMBRE) LIKE '%' || UPPER(:razonSocial) || '%' OR UPPER(F.RUC) LIKE '%' || UPPER(:razonSocial) || '%')" : string.Empty;
 
-            // Filtro de certificados basado en ITEMPED.COD_ART (concepto del pedido)
-            // Se usa EXISTS para evitar row multiplication cuando no hay filtro de certificados
+            // Filtro de certificados: función sobre el artículo + EXISTS en ITEMPED para verificar el pedido
             string certFilter = string.Empty;
             if (hasGots && hasOcs)
-                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART IN ('CERTGOTS','CERTOCS'))";
+                certFilter = "\n                          AND SIG.FIBRA_ORG_GOTS(A.COD_ART) = 'S' AND SIG.FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
+                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART IN ('CERTGOTS','CERTOCS'))";
             else if (hasGots)
-                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTGOTS')";
+                certFilter = "\n                          AND SIG.FIBRA_ORG_GOTS(A.COD_ART) = 'S'" +
+                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTGOTS')";
             else if (hasOcs)
-                certFilter = "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
+                certFilter = "\n                          AND SIG.FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
+                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1317,7 +1319,8 @@ namespace FabricaHilos.Services.Sgc
                                 ON RC.NUM_REQ = RD.NUM_REQ
                         WHERE P.ESTADO <> '9'
                           AND ID.COD_ART IS NOT NULL
-                          AND I.COD_ART  IS NOT NULL{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
+                          AND I.COD_ART  IS NOT NULL
+                          AND SIG.FIBRA_ORG(A.COD_ART) = 'S'{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
                             F.TIPODOC,
                             F.SERIE,

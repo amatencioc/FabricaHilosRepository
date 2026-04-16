@@ -61,7 +61,6 @@ public class MenuService : IMenuService
                     ProduccionAutoconer = false,
                     ProduccionAutoconerPorPartida = false,
                     ProduccionAutoconerPorCanillas = false,
-                    SgcDashboard = false,
                     SgcPedidos = false,
                     SgcDespachos = false,
                     SgcDespachosRelacionFacCli = false,
@@ -96,7 +95,6 @@ public class MenuService : IMenuService
                 ProduccionAutoconer = global.ProduccionAutoconer,
                 ProduccionAutoconerPorPartida = global.ProduccionAutoconerPorPartida,
                 ProduccionAutoconerPorCanillas = global.ProduccionAutoconerPorCanillas,
-                SgcDashboard = global.SgcDashboard,
                 SgcPedidos = global.SgcPedidos,
                 SgcDespachos = global.SgcDespachos,
                 SgcDespachosRelacionFacCli = global.SgcDespachosRelacionFacCli,
@@ -154,7 +152,6 @@ public class MenuService : IMenuService
             ProduccionAutoconerPorCanillas = SubMenu(global.ProduccionAutoconerPorCanillas, "Produccion", "Produccion.Autoconer.PorCanillas"),
 
             // ── Submenús: SGC ─────────────────────────────────────────────
-            SgcDashboard = SubMenu(global.SgcDashboard, "Sgc", "Sgc.Dashboard"),
             SgcPedidos   = SubMenu(global.SgcPedidos,   "Sgc", "Sgc.Pedidos"),
             SgcDespachos = SubMenu(global.SgcDespachos, "Sgc", "Sgc.Despachos"),
             SgcDespachosRelacionFacCli = SubMenu(global.SgcDespachosRelacionFacCli, "Sgc", "Sgc.Despachos.RelacionFacCli"),

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Filters;
 using FabricaHilos.Services.Ventas;
 
@@ -8,7 +7,7 @@ namespace FabricaHilos.Controllers
 {
     [Authorize]
     [VentasAuthorize]
-    public class DashboardGerencialController : Controller
+    public class DashboardGerencialController : OracleBaseController
     {
         private readonly IDashboardGerencialService _service;
         private readonly ILogger<DashboardGerencialController> _logger;
@@ -19,18 +18,6 @@ namespace FabricaHilos.Controllers
         {
             _service = service;
             _logger  = logger;
-        }
-
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en Dashboard Gerencial. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
         }
 
         public IActionResult Index()
@@ -91,25 +78,41 @@ namespace FabricaHilos.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> DatosTopClientes(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? mercado, int top = 15)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerTopClientesAsync(fi, ff, moneda ?? "D", mercado, top);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosDetalleDocumentos(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? mercado)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerDetalleDocumentosAsync(fi, ff, moneda ?? "D", mercado);
-            return Json(data);
-        }
-
-        [HttpGet]
         public async Task<IActionResult> DatosPaisesISO()
         {
             var data = await _service.ObtenerPaisesIsoAsync();
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosKgMensual(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerKgMensualAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosTopHiladosImporte(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, int top = 5)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerTopHiladosImporteAsync(fi, ff, moneda ?? "D", top);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosVentasPorGiro(DateTime? fechaInicio, DateTime? fechaFin, string? moneda)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerVentasPorGiroAsync(fi, ff, moneda ?? "D");
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosTopHiladosKg(DateTime? fechaInicio, DateTime? fechaFin, int top = 5)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerTopHiladosKgAsync(fi, ff, top);
             return Json(data);
         }
 

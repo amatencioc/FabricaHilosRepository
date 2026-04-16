@@ -223,7 +223,7 @@ namespace FabricaHilos.Middleware
                         </p>
                     </div>
                     <div class="modal-footer">
-                        <a href="/Account/Login" class="btn-success">
+                        <a href="/Seguridad/Inspeccion" class="btn-success">
                             Ir a Seguridad / Inspecciones
                         </a>
                     </div>

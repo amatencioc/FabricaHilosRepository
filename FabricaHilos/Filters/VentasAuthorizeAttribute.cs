@@ -1,59 +1,48 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FabricaHilos.Filters
 {
     /// <summary>
-    /// Filtro de autorización personalizado para el módulo VENTAS.
-    /// Permite acceso a:
-    /// - Usuarios administradores (rol Admin)
-    /// - Usuario específico: COSTOS2
-    /// - Usuarios que comiencen con: VENT (ejemplo: VENT001, VENTADMIN, etc.)
+    /// Filtro de autorización para el módulo VENTAS.
+    /// Los usuarios y prefijos permitidos se configuran en appsettings.json → VentasAcceso.
     /// </summary>
     public class VentasAuthorizeAttribute : Attribute, IAuthorizationFilter
     {
         public void OnAuthorization(AuthorizationFilterContext context)
         {
-            // Verificar si el usuario está autenticado
             if (!context.HttpContext.User.Identity?.IsAuthenticated ?? true)
             {
                 context.Result = new RedirectToActionResult("Login", "Account", null);
                 return;
             }
 
-            // Verificar si el usuario es administrador (tiene rol Admin)
             if (context.HttpContext.User.IsInRole("Admin"))
-            {
-                return; // Los administradores tienen acceso total
-            }
+                return;
 
-            // Obtener nombre de usuario desde la sesión de Oracle (más confiable)
-            var oracleUser = context.HttpContext.Session.GetString("OracleUser");
+            var oracleUser = context.HttpContext.Session.GetString("OracleUser")
+                             ?? context.HttpContext.User.Identity?.Name;
 
-            // Si no hay sesión Oracle, obtener desde Identity
-            if (string.IsNullOrEmpty(oracleUser))
-            {
-                oracleUser = context.HttpContext.User.Identity?.Name;
-            }
-
-            // Si aún no hay usuario, denegar acceso
             if (string.IsNullOrEmpty(oracleUser))
             {
                 context.Result = new ForbidResult();
                 return;
             }
 
-            // Convertir a mayúsculas para comparación uniforme
             var usuario = oracleUser.ToUpperInvariant();
 
-            // Validar si el usuario tiene permiso de acceso
-            bool tieneAcceso = usuario == "COSTOS2" || usuario.StartsWith("VENT");
+            // Leer reglas de acceso desde configuración (sin hardcodear usuarios en código)
+            var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+            var usuariosExactos = config.GetSection("VentasAcceso:UsuariosExactos").Get<string[]>() ?? [];
+            var prefijos        = config.GetSection("VentasAcceso:Prefijos").Get<string[]>() ?? [];
+
+            bool tieneAcceso = usuariosExactos.Any(u => string.Equals(u, usuario, StringComparison.OrdinalIgnoreCase))
+                            || prefijos.Any(p => usuario.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
             if (!tieneAcceso)
-            {
-                // Redirigir a página de acceso denegado
                 context.Result = new RedirectToActionResult("AccesoDenegado", "Account", null);
-            }
         }
     }
 }

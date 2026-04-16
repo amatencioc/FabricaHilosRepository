@@ -4,7 +4,6 @@ using FabricaHilos.Models.Seguridad.Inspeccion;
 using FabricaHilos.Services.Seguridad.Inspeccion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace FabricaHilos.Controllers.Seguridad
@@ -12,7 +11,7 @@ namespace FabricaHilos.Controllers.Seguridad
     [Authorize]
     [AccesoExternoPermitido]
     [Route("Seguridad/Inspeccion")]
-    public class InspeccionController : Controller
+    public class InspeccionController : OracleBaseController
     {
         private readonly ProcesadorImagenSeguridad _procesadorImagen;
         private readonly IInspeccionService _inspeccionService;
@@ -38,19 +37,6 @@ namespace FabricaHilos.Controllers.Seguridad
             _procesadorImagen = new ProcesadorImagenSeguridad(_rutaSeguridad, logger);
             _inspeccionService = inspeccionService;
             _logger = logger;
-        }
-
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en Inspección. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
         }
 
         // ========== LISTADO DE INSPECCIONES ==========
@@ -448,8 +434,9 @@ namespace FabricaHilos.Controllers.Seguridad
 
                 if (!System.IO.File.Exists(rutaCompleta)) return NotFound();
 
-                var bytes = System.IO.File.ReadAllBytes(rutaCompleta);
-                return File(bytes, "image/jpeg");
+                // Usar FileStream en lugar de ReadAllBytes para no cargar toda la imagen en RAM
+                var stream = new FileStream(rutaCompleta, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+                return File(stream, "image/jpeg");
             }
             catch (Exception ex)
             {

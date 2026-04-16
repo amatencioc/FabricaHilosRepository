@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
@@ -8,7 +7,7 @@ using FabricaHilos.Services.Sgc;
 namespace FabricaHilos.Controllers
 {
     [Authorize]
-    public class RelacionFacCliController : Controller
+    public class RelacionFacCliController : OracleBaseController
     {
         private readonly ISgcService _sgcService;
         private readonly ILogger<RelacionFacCliController> _logger;
@@ -21,19 +20,7 @@ namespace FabricaHilos.Controllers
             _navToken = navToken;
         }
 
-        public override void OnActionExecuting(ActionExecutingContext context)
-        {
-            base.OnActionExecuting(context);
-            if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-            {
-                _logger.LogWarning("Sesión Oracle expirada en Relación Factura-Cliente. Redirigiendo al login.");
-                TempData["Warning"] = "Su sesión Oracle ha expirado. Por favor, inicie sesión nuevamente.";
-                context.Result = RedirectToAction("Login", "Account",
-                    new { returnUrl = Request.Path + Request.QueryString });
-            }
-        }
-
-        // ========== LISTADO DE DESPACHOS (Relación Factura-Cliente) ==========
+        // ========== LISTADO DE DESPACHOS
 
         [HttpGet]
         public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, 

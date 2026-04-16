@@ -26,7 +26,6 @@ public class MenuOptions
     public bool ProduccionAutoconerPorCanillas { get; set; } = true;
 
     // ── Submenús: SGC ─────────────────────────────────────────────────────
-    public bool SgcDashboard { get; set; } = true;
     public bool SgcPedidos   { get; set; } = true;
     public bool SgcDespachos { get; set; } = true;
     public bool SgcDespachosRelacionFacCli { get; set; } = true;
@@ -64,7 +63,6 @@ public class MenuOptions
         ProduccionAutoconerPorPartida  = true,
         ProduccionAutoconerPorCanillas = true,
 
-        SgcDashboard = true,
         SgcPedidos   = true,
         SgcDespachos = true,
         SgcDespachosRelacionFacCli = true,

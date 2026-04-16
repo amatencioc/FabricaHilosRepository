@@ -1,5 +1,7 @@
 using System;
 using System.Data;
+using System.Threading;
+using System.Threading.Tasks;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models;
 using Microsoft.Extensions.Configuration;
@@ -14,6 +16,7 @@ namespace FabricaHilos.Logica
     {
         private readonly string _conexion;
         private readonly ILogger _logger;
+        private const int TimeoutSegundos = 8; // Timeout para evitar bloqueos en red móvil lenta
 
         public Login(IConfiguration configuration, ILogger logger = null)
         {
@@ -22,86 +25,73 @@ namespace FabricaHilos.Logica
         }
 
         /// <summary>
-        /// Busca y valida un usuario en la base de datos Oracle
+        /// Busca y valida un usuario en la base de datos Oracle de forma asíncrona.
         /// </summary>
-        /// <param name="usu">Nombre de usuario</param>
-        /// <param name="psw">Contraseña del usuario</param>
-        /// <returns>Objeto Usuario si existe, o Usuario vacío si no se encuentra</returns>
-        public Usuario EncontrarUsuario(string usu, string psw)
+        public async Task<Usuario> EncontrarUsuarioAsync(string usu, string psw)
         {
-            Usuario objeto = new Usuario();
+            var objeto = new Usuario();
 
             try
             {
-                _logger?.LogInformation("═══════════════════════════════════════════");
-                _logger?.LogInformation("🔍 INTENTANDO CONECTAR A ORACLE DATABASE");
-                _logger?.LogInformation("═══════════════════════════════════════════");
-                _logger?.LogInformation("👤 Usuario recibido: {Usuario}", usu);
-                _logger?.LogInformation("🔑 Contraseña recibida: {Password}", new string('*', psw?.Length ?? 0));
-                _logger?.LogInformation("🔌 Cadena de conexión: {Conexion}", _conexion?.Substring(0, Math.Min(50, _conexion?.Length ?? 0)) + "...");
+                _logger?.LogInformation("🔍 Login Oracle — Usuario: {Usuario}", usu);
 
-                using (OracleConnection oconexion = new OracleConnection(_conexion))
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(TimeoutSegundos));
+                using var oconexion = new OracleConnection(_conexion);
+
+                await oconexion.OpenAsync(cts.Token);
+
+                // No se selecciona psw_sig para evitar que la contraseña circule innecesariamente
+                const string query = @"
+                    SELECT c_user, c_codigo, c_nombre, c_costo
+                    FROM cs_user
+                    WHERE c_user = :puser AND psw_sig = :ppsw";
+
+                using var cmd = new OracleCommand(query, oconexion);
+                cmd.Parameters.Add(new OracleParameter("puser", usu));
+                cmd.Parameters.Add(new OracleParameter("ppsw", psw));
+                cmd.CommandType  = CommandType.Text;
+                cmd.CommandTimeout = TimeoutSegundos;
+
+                using var dr = await cmd.ExecuteReaderAsync(cts.Token);
+
+                if (await dr.ReadAsync(cts.Token))
                 {
-                    string query = "select c_user, psw_sig, c_codigo, c_nombre, c_costo from cs_user where c_user = :puser and psw_sig = :ppsw";
+                    objeto.c_user    = dr["c_user"]?.ToString();
+                    objeto.c_codigo  = dr["c_codigo"]?.ToString();
+                    objeto.c_nombre  = dr["c_nombre"]?.ToString();
+                    objeto.c_costo   = dr["c_costo"]?.ToString();
+                    objeto.psw_sig   = psw; // conservar en memoria solo para el flujo de login
 
-                    _logger?.LogInformation("📝 Query SQL: {Query}", query);
-
-                    OracleCommand cmd = new OracleCommand(query, oconexion);
-                    cmd.Parameters.Add(new OracleParameter("puser", usu));
-                    cmd.Parameters.Add(new OracleParameter("ppsw", psw));
-                    cmd.CommandType = CommandType.Text;
-
-                    _logger?.LogInformation("🔄 Abriendo conexión a Oracle...");
-                    oconexion.Open();
-                    _logger?.LogInformation("✅ Conexión a Oracle abierta exitosamente");
-
-                    using (OracleDataReader dr = cmd.ExecuteReader())
-                    {
-                        _logger?.LogInformation("🔍 Ejecutando query y leyendo resultados...");
-
-                        if (dr.Read())
-                        {
-                            objeto.c_user = dr["c_user"]?.ToString();
-                            objeto.psw_sig = dr["psw_sig"]?.ToString();
-                            objeto.c_codigo = dr["c_codigo"]?.ToString();
-                            objeto.c_nombre = dr["c_nombre"]?.ToString();
-                            objeto.c_costo = dr["c_costo"]?.ToString();
-
-                            _logger?.LogInformation("✅ USUARIO ENCONTRADO EN ORACLE");
-                            _logger?.LogInformation("   - c_user: {CUser}", objeto.c_user);
-                            _logger?.LogInformation("   - c_nombre: {CNombre}", objeto.c_nombre);
-                            _logger?.LogInformation("   - c_codigo: {CCodigo}", objeto.c_codigo);
-                            _logger?.LogInformation("   - c_costo: {CCosto}", objeto.c_costo);
-                        }
-                        else
-                        {
-                            _logger?.LogWarning("❌ USUARIO NO ENCONTRADO EN ORACLE");
-                            _logger?.LogWarning("   El usuario '{Usuario}' no existe o la contraseña es incorrecta", usu);
-                        }
-                    }
-
-                    _logger?.LogInformation("🔒 Cerrando conexión a Oracle...");
+                    _logger?.LogInformation("✅ Usuario encontrado en CS_USER: {CUser}", objeto.c_user);
                 }
-
-                _logger?.LogInformation("═══════════════════════════════════════════");
+                else
+                {
+                    _logger?.LogWarning("❌ Usuario '{Usuario}' no encontrado o contraseña incorrecta en CS_USER.", usu);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogError("⏱ Timeout ({Seg}s) al conectar con Oracle para autenticar usuario {Usuario}.", TimeoutSegundos, usu);
+                objeto = new Usuario();
             }
             catch (OracleException oex)
             {
-                _logger?.LogError("❌ ERROR DE ORACLE: {Message}", oex.Message);
-                _logger?.LogError("   Código de error: {ErrorCode}", oex.Number);
-                _logger?.LogError("   Detalles: {Details}", oex.ToString());
+                _logger?.LogError("❌ ERROR Oracle al autenticar {Usuario}: ORA-{Codigo} {Message}", usu, oex.Number, oex.Message);
                 objeto = new Usuario();
             }
             catch (Exception ex)
             {
-                _logger?.LogError("❌ ERROR GENERAL AL CONECTAR CON ORACLE");
-                _logger?.LogError("   Tipo: {Type}", ex.GetType().Name);
-                _logger?.LogError("   Mensaje: {Message}", ex.Message);
-                _logger?.LogError("   Stack Trace: {StackTrace}", ex.StackTrace);
+                _logger?.LogError(ex, "❌ ERROR inesperado al autenticar usuario {Usuario}.", usu);
                 objeto = new Usuario();
             }
 
             return objeto;
         }
+
+        /// <summary>
+        /// Versión sincrónica mantenida por compatibilidad. Preferir EncontrarUsuarioAsync.
+        /// </summary>
+        public Usuario EncontrarUsuario(string usu, string psw)
+            => EncontrarUsuarioAsync(usu, psw).GetAwaiter().GetResult();
     }
 }

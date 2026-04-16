@@ -900,7 +900,10 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             if (!inspecciones.Any()) return;
 
             var numeros = inspecciones.Select(i => i.Numero).Distinct().ToList();
-            var inClause = string.Join(",", numeros);
+
+            // Parámetros nombrados para el IN (:p0, :p1, ...) — evita interpolación directa
+            var paramNames = numeros.Select((_, i) => $":p{i}").ToList();
+            var inClause   = string.Join(",", paramNames);
 
             var query = $@"
                 SELECT NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H,
@@ -912,6 +915,9 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             var fotos = new List<InspeccionFotoDto>();
             using (var cmd = new OracleCommand(query, connection))
             {
+                for (int i = 0; i < numeros.Count; i++)
+                    cmd.Parameters.Add(new OracleParameter($":p{i}", numeros[i]));
+
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {

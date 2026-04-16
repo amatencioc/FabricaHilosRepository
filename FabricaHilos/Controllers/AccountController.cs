@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models;
@@ -17,6 +18,7 @@ namespace FabricaHilos.Controllers
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IMenuService _menuService;
+        private readonly IRedInternaService _redInternaService;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
@@ -24,7 +26,8 @@ namespace FabricaHilos.Controllers
             RoleManager<IdentityRole> roleManager,
             ILogger<AccountController> logger,
             IConfiguration configuration,
-            IMenuService menuService)
+            IMenuService menuService,
+            IRedInternaService redInternaService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -32,6 +35,7 @@ namespace FabricaHilos.Controllers
             _logger = logger;
             _configuration = configuration;
             _menuService = menuService;
+            _redInternaService = redInternaService;
         }
 
         [HttpGet]
@@ -41,12 +45,7 @@ namespace FabricaHilos.Controllers
             {
                 // Si la sesión Oracle también está activa, redirigir a la app directamente
                 if (!string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
-                {
-                    var (ctrl, act, area) = _menuService.GetLanding();
-                    return area != null 
-                        ? RedirectToAction(act, ctrl, new { area }) 
-                        : RedirectToAction(act, ctrl);
-                }
+                    return RedirectToLanding();
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
                 // → cerrar sesión web y redirigir a login limpio para evitar HTTP 400
@@ -61,6 +60,7 @@ namespace FabricaHilos.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting("login")]
         public async Task<IActionResult> Login(string usuario, string password, bool recordarme, string? returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
@@ -72,9 +72,9 @@ namespace FabricaHilos.Controllers
 
             try
             {
-                // 1. Validar contra Oracle Database
+                // 1. Validar contra Oracle Database (async con timeout interno)
                 var loginOracle = new Login(_configuration, _logger);
-                var usuarioOracle = loginOracle.EncontrarUsuario(usuario, password);
+                var usuarioOracle = await loginOracle.EncontrarUsuarioAsync(usuario, password);
 
                 if (!string.IsNullOrEmpty(usuarioOracle.c_user))
                 {
@@ -89,17 +89,26 @@ namespace FabricaHilos.Controllers
                         UserID = usuario,
                         Password = password
                     };
-                    try
+                    using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5)))
                     {
-                        using var testConn = new OracleConnection(csb.ToString());
-                        await testConn.OpenAsync();
-                        oracleCredencialesValidas = true;
-                    }
-                    catch (OracleException oex) when (oex.Number == 1017 || oex.Number == 1004)
-                    {
-                        _logger.LogWarning(
-                            "Usuario {Usuario} existe en CS_USER pero sus credenciales no son válidas como login Oracle (ORA-{Codigo}). Se usará la conexión base.",
-                            usuario, oex.Number);
+                        try
+                        {
+                            using var testConn = new OracleConnection(csb.ToString());
+                            await testConn.OpenAsync(cts.Token);
+                            oracleCredencialesValidas = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            _logger.LogWarning(
+                                "Timeout al verificar credenciales Oracle directas para {Usuario}. Se usará la conexión base.",
+                                usuario);
+                        }
+                        catch (OracleException oex) when (oex.Number == 1017 || oex.Number == 1004)
+                        {
+                            _logger.LogWarning(
+                                "Usuario {Usuario} existe en CS_USER pero sus credenciales no son válidas como login Oracle (ORA-{Codigo}). Se usará la conexión base.",
+                                usuario, oex.Number);
+                        }
                     }
 
                     var adminUsers = _configuration.GetSection("AdminUsers").Get<string[]>()
@@ -178,7 +187,8 @@ namespace FabricaHilos.Controllers
                         }
                     }
 
-                    await _signInManager.SignInAsync(userIdentity, recordarme);
+                    // isPersistent: true → cookie duradera, no se pierde al cerrar el navegador móvil
+                    await _signInManager.SignInAsync(userIdentity, isPersistent: true);
 
                     // Siempre guardar el usuario Oracle en sesión (para auditoría).
                     // Solo guardar la contraseña si las credenciales Oracle son válidas;
@@ -190,22 +200,17 @@ namespace FabricaHilos.Controllers
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    var (ctrl, act, area) = _menuService.GetLanding();
-                    return area != null 
-                        ? RedirectToAction(act, ctrl, new { area }) 
-                        : RedirectToAction(act, ctrl);
+                    return RedirectToLanding();
                 }
 
                 // 2. Validar contra Identity local
-                var resultado = await _signInManager.PasswordSignInAsync(usuario, password, recordarme, lockoutOnFailure: true);
+                // Identity local: siempre persistente para consistencia con el flujo Oracle
+                var resultado = await _signInManager.PasswordSignInAsync(usuario, password, isPersistent: true, lockoutOnFailure: true);
                 if (resultado.Succeeded)
                 {
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);
-                    var (ctrl, act, area) = _menuService.GetLanding();
-                    return area != null 
-                        ? RedirectToAction(act, ctrl, new { area }) 
-                        : RedirectToAction(act, ctrl);
+                    return RedirectToLanding();
                 }
 
                 if (resultado.IsLockedOut)
@@ -238,6 +243,21 @@ namespace FabricaHilos.Controllers
         public IActionResult AccesoDenegado()
         {
             return View();
+        }
+
+        /// <summary>
+        /// Redirige al landing apropiado según la red del usuario:
+        /// red interna → landing configurado, red externa → Seguridad/Inspecciones.
+        /// </summary>
+        private IActionResult RedirectToLanding()
+        {
+            if (!_redInternaService.EsRedInterna())
+                return Redirect("/Seguridad/Inspeccion");
+
+            var (ctrl, act, area) = _menuService.GetLanding();
+            return area != null
+                ? RedirectToAction(act, ctrl, new { area })
+                : RedirectToAction(act, ctrl);
         }
     }
 }
