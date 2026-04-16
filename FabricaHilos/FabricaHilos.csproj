@@ -36,15 +36,10 @@
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Aquarius\Horarios\Index.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Views\RecursosHumanos\Aquarius\Diagnostico\Index.cshtml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Views\RecursosHumanos\Aquarius\Horarios\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\HorarioPorEmpleado.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -70,4 +65,5 @@
     <ProjectReference Include="..\FabricaHilos.Notificaciones\FabricaHilos.Notificaciones.csproj" />
   </ItemGroup>
 
-</Project>
+
+  </Project>

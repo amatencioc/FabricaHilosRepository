@@ -46,7 +46,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         {
             ViewBag.CodPersonal = codPersonal;
             ViewBag.Nombre      = nombre;
-            return View("~/Views/RecursosHumanos/Aquarius/Horarios/Index.cshtml");
+            return View("~/Views/RecursosHumanos/Aquarius/Marcaciones/HorarioPorEmpleado.cshtml");
         }
 
         // ========== BUSCAR EMPLEADO (AJAX — autocompletado) ==========

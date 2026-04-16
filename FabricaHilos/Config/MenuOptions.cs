@@ -48,7 +48,6 @@ public class MenuOptions
     // ── Menús: Recursos Humanos ───────────────────────────────────────────
     public bool RecursosHumanos    { get; set; } = false;
     public bool RhMarcaciones      { get; set; } = true;
-    public bool RhDiagnostico      { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -86,7 +85,6 @@ public class MenuOptions
 
         RecursosHumanos = true,
         RhMarcaciones   = true,
-        RhDiagnostico   = true,
     };
 }
 

@@ -75,7 +75,6 @@ public class MenuService : IMenuService
                     SeguridadInspecciones = false,
                     RecursosHumanos = false,
                             RhMarcaciones   = false,
-                            RhDiagnostico   = false,
                         };
             }
 
@@ -112,7 +111,6 @@ public class MenuService : IMenuService
                 SeguridadInspecciones = global.SeguridadInspecciones,
                 RecursosHumanos = global.RecursosHumanos,
                 RhMarcaciones   = global.RhMarcaciones,
-                RhDiagnostico   = global.RhDiagnostico,
             };
             return menusGlobal;
         }
@@ -180,7 +178,6 @@ public class MenuService : IMenuService
             // ── Menús: Recursos Humanos ───────────────────────────────────
             RecursosHumanos = Menu(global.RecursosHumanos, "RecursosHumanos"),
             RhMarcaciones   = SubMenu(global.RhMarcaciones, "RecursosHumanos", "RecursosHumanos.Marcaciones"),
-            RhDiagnostico   = SubMenu(global.RhDiagnostico, "RecursosHumanos", "RecursosHumanos.Diagnostico"),
         };
     }
 
