@@ -254,10 +254,11 @@ namespace FabricaHilos.Controllers
             if (!_redInternaService.EsRedInterna())
                 return Redirect("/Seguridad/Inspeccion");
 
-            var (ctrl, act, area) = _menuService.GetLanding();
+            var (ctrl, act, area, url) = _menuService.GetLanding();
+            if (url != null) return Redirect(url);
             return area != null
-                ? RedirectToAction(act, ctrl, new { area })
-                : RedirectToAction(act, ctrl);
+                ? RedirectToAction(act!, ctrl!, new { area })
+                : RedirectToAction(act!, ctrl!);
         }
     }
 }

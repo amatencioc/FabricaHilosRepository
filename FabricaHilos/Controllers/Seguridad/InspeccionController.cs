@@ -512,6 +512,9 @@ namespace FabricaHilos.Controllers.Seguridad
         {
             if (!ModelState.IsValid)
             {
+                var errores = string.Join(" | ", ModelState.Values
+                    .SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+                _logger.LogWarning("▶▶ AgregarHallazgo ModelState INVÁLIDO #{Num}: {Errores}", numero, errores);
                 var inspeccion = await _inspeccionService.ObtenerInspeccionPorNumeroAsync(numero);
                 ViewBag.Inspeccion = inspeccion;
                 return View("~/Views/Seguridad/Inspeccion/AgregarHallazgo.cshtml", model);

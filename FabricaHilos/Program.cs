@@ -118,6 +118,9 @@ builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IRedInternaService, RedInternaService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
+builder.Services.AddSingleton<DepuracionJobService>();
+builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();

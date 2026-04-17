@@ -6,7 +6,7 @@ namespace FabricaHilos.Services;
 public interface IMenuService
 {
     MenuOptions GetMenusActuales();
-    (string controller, string action, string? area) GetLanding();
+    (string? controller, string? action, string? area, string? url) GetLanding();
 }
 
 public class MenuService : IMenuService
@@ -181,17 +181,18 @@ public class MenuService : IMenuService
         };
     }
 
-    public (string controller, string action, string? area) GetLanding()
+    public (string? controller, string? action, string? area, string? url) GetLanding()
     {
         var menus = GetMenusActuales();
 
-        if (menus.Dashboard)        return ("Home",       "Index", null);
-        if (menus.Produccion)       return ("Produccion", "Index", null);
-        if (menus.Sgc)              return ("Sgc",        "Index", null);
-        if (menus.Facturacion)      return ("Facturacion",          "Index", null);
-        if (menus.Ventas)           return ("Ventas",               "Index", null);
-        if (menus.Seguridad)        return ("Inspeccion",           "Index", null);
-        return ("RegistroPreparatoria", "Index", null);
+        if (menus.Dashboard)        return ("Home",                  "Index", null, null);
+        if (menus.Produccion)       return ("Produccion",             "Index", null, null);
+        if (menus.Sgc)              return ("Sgc",                    "Index", null, null);
+        if (menus.Facturacion)      return ("Facturacion",            "Index", null, null);
+        if (menus.Ventas)           return ("Ventas",                 "Index", null, null);
+        if (menus.Seguridad)        return ("Inspeccion",             "Index", null, null);
+        if (menus.RecursosHumanos)  return (null, null, null, "/RecursosHumanos/Aquarius/Marcaciones");
+        return ("RegistroPreparatoria", "Index", null, null);
     }
 
     /// <summary>

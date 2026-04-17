@@ -1038,8 +1038,8 @@ namespace FabricaHilos.Services.Produccion
                     ? orden.FechaInicio.Date.AddDays(-1)
                     : orden.FechaInicio.Date;
                 command.Parameters.Add(new OracleParameter(":fecha_turno",  OracleDbType.Varchar2, fechaTurno.ToString("dd/MM/yyyy"), ParameterDirection.Input));
-                command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal) { Value = orden.Velocidad.HasValue ? (object)orden.Velocidad.Value : DBNull.Value });
-                command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal) { Value = orden.Metraje.HasValue  ? (object)orden.Metraje.Value  : DBNull.Value });
+                command.Parameters.Add(new OracleParameter(":velocidad",    OracleDbType.Decimal) { Value = orden.Velocidad.HasValue ? (object)orden.Velocidad.Value : (object)0 });
+                command.Parameters.Add(new OracleParameter(":metraje",     OracleDbType.Decimal) { Value = orden.Metraje.HasValue  ? (object)orden.Metraje.Value  : (object)0 });
                 command.Parameters.Add(new OracleParameter(":proceso",     OracleDbType.Varchar2) { Value = (object?)orden.Proceso ?? DBNull.Value });
                 command.Parameters.Add(new OracleParameter(":a_aduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));
                 command.Parameters.Add(new OracleParameter(":a_mduser",     OracleDbType.Varchar2, adUser ?? string.Empty, ParameterDirection.Input));

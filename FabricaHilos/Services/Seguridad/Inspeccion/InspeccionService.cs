@@ -477,9 +477,9 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 // 4. Insertar cabecera en SI_INSPECCION (sin datos de foto)
                 const string queryInsertar = @"
                     INSERT INTO SIG.SI_INSPECCION 
-                    (NUMERO, CCOSTO, FECHA, TIPO, RESP_INSPECCION, RESP_AREA, ESTADO, NRO_TRAB, A_ADUSER, A_ADFECHA)
+                    (NUMERO, CCOSTO, FECHA, TIPO, RESP_INSPECCION, RESP_AREA, ESTADO, NRO_TRAB, OBJETIVO, A_ADUSER, A_ADFECHA)
                     VALUES 
-                    (:pNumero, :pCcosto, SYSDATE, :pTipo, :pRespInspeccion, :pRespArea, '1', :pNroTrab, :pUsuario, SYSDATE)";
+                    (:pNumero, :pCcosto, SYSDATE, :pTipo, :pRespInspeccion, :pRespArea, '1', :pNroTrab, :pObjetivo, :pUsuario, SYSDATE)";
 
                 using (var cmdInsertar = new OracleCommand(queryInsertar, connection))
                 {
@@ -492,6 +492,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     cmdInsertar.Parameters.Add("pRespInspeccion", OracleDbType.Varchar2).Value = inspeccion.ResponsableInspeccion;
                     cmdInsertar.Parameters.Add("pRespArea", OracleDbType.Varchar2).Value = inspeccion.ResponsableArea;
                     cmdInsertar.Parameters.Add("pNroTrab", OracleDbType.Int32).Value = nroTrab;
+                    cmdInsertar.Parameters.Add("pObjetivo", OracleDbType.Varchar2).Value =
+                        string.IsNullOrWhiteSpace(inspeccion.ObjetivoHallazgo) ? (object)DBNull.Value : inspeccion.ObjetivoHallazgo;
                     cmdInsertar.Parameters.Add("pUsuario", OracleDbType.Varchar2).Value = usuario;
                     await cmdInsertar.ExecuteNonQueryAsync();
                 }

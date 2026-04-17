@@ -77,6 +77,28 @@
     }
     .btn-horarios:hover { background: var(--rh-primary); color: #fff; }
 
+    .autocomplete-wrap { position: relative; }
+    .autocomplete-list {
+        position: absolute; top: 100%; left: 0; right: 0; z-index: 1050;
+        background: #fff; border: 1px solid #dee2e6; border-top: none;
+        border-radius: 0 0 .4rem .4rem; box-shadow: 0 4px 12px rgba(0,0,0,.12);
+        max-height: 260px; overflow-y: auto; display: none;
+    }
+    .autocomplete-list .ac-item {
+        padding: .55rem .9rem; cursor: pointer; font-size: .85rem;
+        display: flex; align-items: center; gap: .6rem;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .autocomplete-list .ac-item:last-child { border-bottom: none; }
+    .autocomplete-list .ac-item:hover, .autocomplete-list .ac-item.ac-active {
+        background: var(--rh-primary-light);
+    }
+    .autocomplete-list .ac-item .avatar {
+        width: 28px; height: 28px; font-size: .65rem;
+    }
+    .autocomplete-list .ac-name { font-weight: 500; }
+    .autocomplete-list .ac-code { font-size: .75rem; color: #6c757d; margin-left: auto; }
+
     .pagination-bar {
         padding: .75rem 1.4rem;
         border-top: 1px solid #dee2e6;
@@ -97,7 +119,7 @@
 <div class="container-fluid px-2 px-md-4 py-3">
 <div class="card shadow-sm" style="border-radius:.5rem; overflow:hidden; border:none;">
 
-    {{!-- Encabezado --}}
+    <!-- Encabezado -->
     <div class="rh-header d-flex justify-content-between align-items-center">
         <div>
             <h5><i class="bi bi-people-fill me-2"></i>Empleados</h5>
@@ -117,18 +139,21 @@
         </span>
     </div>
 
-    {{!-- Barra de búsqueda --}}
+    <!-- Barra de búsqueda -->
     <div class="search-bar">
         <form method="get" action="/RecursosHumanos/Aquarius/Marcaciones" class="d-flex gap-2 align-items-center">
             <input type="hidden" name="page" value="1" />
-            <div class="input-group" style="max-width:420px;">
-                <input type="text" name="buscar" value="@buscar"
-                       class="form-control"
-                       placeholder="Buscar por nombre o código..."
-                       autocomplete="off" />
-                <button type="submit" class="btn btn-search px-3">
-                    <i class="bi bi-search"></i>
-                </button>
+            <div class="autocomplete-wrap" style="max-width:420px; flex:1;">
+                <div class="input-group">
+                    <input type="text" name="buscar" id="txtBuscar" value="@buscar"
+                           class="form-control"
+                           placeholder="Buscar por nombre o código..."
+                           autocomplete="off" />
+                    <button type="submit" class="btn btn-search px-3">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                <div class="autocomplete-list" id="acList"></div>
             </div>
             @if (!string.IsNullOrEmpty(buscar))
             {
@@ -139,7 +164,7 @@
         </form>
     </div>
 
-    {{!-- Tabla --}}
+    <!-- Tabla -->
     @if (Model != null && Model.Count > 0)
     {
         <div class="table-responsive">
@@ -217,7 +242,7 @@
         </div>
     }
 
-    {{!-- Paginación --}}
+    <!-- Paginación -->
     @if (totalPages > 1)
     {
         <div class="pagination-bar">
@@ -261,5 +286,72 @@
 </div>
 </div>
 
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+    const input  = document.getElementById('txtBuscar');
+    const list   = document.getElementById('acList');
+    let timer    = null;
+    let idx      = -1;
+
+    input.addEventListener('input', () => {
+        clearTimeout(timer);
+        const q = input.value.trim();
+        if (q.length < 2) { cerrar(); return; }
+        timer = setTimeout(() => buscar(q), 300);
+    });
+
+    async function buscar(q) {
+        try {
+            const res  = await fetch(`/RecursosHumanos/Aquarius/Marcaciones/BuscarEmpleado?nombre=${encodeURIComponent(q)}`);
+            const json = await res.json();
+            if (!json.ok || !json.data?.length) { cerrar(); return; }
+            const items = json.data.slice(0, 5);
+            idx = -1;
+            list.innerHTML = items.map((e, i) => {
+                const ini = (e.empleado || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+                return `<div class="ac-item" data-idx="${i}" data-code="${e.personal}" data-name="${e.empleado}">`
+                    + `<span class="avatar">${ini}</span>`
+                    + `<span class="ac-name">${resaltar(e.empleado, q)}</span>`
+                    + `<span class="ac-code">${e.personal}</span>`
+                    + `</div>`;
+            }).join('');
+            list.style.display = 'block';
+            list.querySelectorAll('.ac-item').forEach(el => {
+                el.addEventListener('mousedown', (ev) => {
+                    ev.preventDefault();
+                    input.value = el.dataset.name;
+                    cerrar();
+                    input.closest('form').submit();
+                });
+            });
+        } catch { cerrar(); }
+    }
+
+    function resaltar(text, q) {
+        const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return (text || '').replace(re, '<mark>$1</mark>');
+    }
+
+    function cerrar() { list.style.display = 'none'; list.innerHTML = ''; idx = -1; }
+
+    input.addEventListener('keydown', (e) => {
+        const items = list.querySelectorAll('.ac-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); marcar(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(items); }
+        else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].dispatchEvent(new Event('mousedown')); }
+        else if (e.key === 'Escape') { cerrar(); }
+    });
+
+    function marcar(items) {
+        items.forEach((el, i) => el.classList.toggle('ac-active', i === idx));
+    }
+
+    document.addEventListener('click', (e) => { if (!e.target.closest('.autocomplete-wrap')) cerrar(); });
+})();
+</script>
+}
 
 

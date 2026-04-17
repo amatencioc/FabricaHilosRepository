@@ -25,10 +25,11 @@ namespace FabricaHilos.Controllers
         // Punto de entrada por defecto: redirige al primer módulo disponible del usuario
         public IActionResult Landing()
         {
-            var (ctrl, act, area) = _menuService.GetLanding();
+            var (ctrl, act, area, url) = _menuService.GetLanding();
+            if (url != null) return Redirect(url);
             return area != null 
-                ? RedirectToAction(act, ctrl, new { area }) 
-                : RedirectToAction(act, ctrl);
+                ? RedirectToAction(act!, ctrl!, new { area }) 
+                : RedirectToAction(act!, ctrl!);
         }
 
         public async Task<IActionResult> Index()

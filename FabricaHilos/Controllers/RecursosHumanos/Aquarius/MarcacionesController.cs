@@ -9,18 +9,23 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
     public class MarcacionesController : OracleBaseController
     {
         private readonly IMarcacionesService _marcacionesService;
+        private readonly IDepuracionJobService _depuracionJobService;
         private readonly ILogger<MarcacionesController> _logger;
         private readonly string _codEmpresa;
+        private readonly string _baseConnStr;
         private const int PageSize = 10;
 
         public MarcacionesController(
             IMarcacionesService marcacionesService,
+            IDepuracionJobService depuracionJobService,
             ILogger<MarcacionesController> logger,
             IConfiguration configuration)
         {
-            _marcacionesService = marcacionesService;
-            _logger = logger;
-            _codEmpresa = configuration["Aquarius:CodEmpresa"] ?? "0003";
+            _marcacionesService    = marcacionesService;
+            _depuracionJobService  = depuracionJobService;
+            _logger                = logger;
+            _codEmpresa            = configuration["Aquarius:CodEmpresa"] ?? "0003";
+            _baseConnStr           = configuration.GetConnectionString("AquariusConnection") ?? string.Empty;
         }
 
         // ========== INDEX — Lista paginada de empleados ==========
@@ -87,27 +92,62 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             }
         }
 
-        // ========== DEPURAR RANGO (AJAX POST) ==========
+        // ========== DEPURAR RANGO — Encola el job y retorna jobId inmediatamente ==========
 
         [HttpPost("DepurarRango")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DepurarRango([FromForm] string codPersonal, [FromForm] string fechaInicio, [FromForm] string fechaFin)
+        public IActionResult DepurarRango([FromForm] string codPersonal, [FromForm] string fechaInicio, [FromForm] string fechaFin)
         {
-            try
-            {
-                if (!DateTime.TryParseExact(fechaInicio, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtInicio)
-                 || !DateTime.TryParseExact(fechaFin,    "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtFin))
-                    return Json(new { ok = false, mensaje = "Formato de fecha inválido." });
+            if (!DateTime.TryParseExact(fechaInicio, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtInicio)
+             || !DateTime.TryParseExact(fechaFin,    "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtFin))
+                return Json(new { ok = false, mensaje = "Formato de fecha inválido." });
 
-                var resultado = await _marcacionesService.DepurarRangoAsync(_codEmpresa, codPersonal, dtInicio, dtFin);
-                bool esError  = resultado.Resultado?.StartsWith("ERROR") == true;
-                return Json(new { ok = !esError, data = resultado });
-            }
-            catch (Exception ex)
+            // Resolver la connection string con credenciales de sesión del usuario logueado
+            var oracleUser = HttpContext.Session.GetString("OracleUser");
+            var oraclePass = HttpContext.Session.GetString("OraclePass");
+            string connStr = _baseConnStr;
+            if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
             {
-                _logger.LogError(ex, "Error al depurar rango: personal={Personal}", codPersonal);
-                return Json(new { ok = false, mensaje = "Error al ejecutar depuración." });
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                {
+                    UserID   = oracleUser,
+                    Password = oraclePass
+                };
+                connStr = csb.ToString();
             }
+
+            var jobId = _depuracionJobService.Encolar(_codEmpresa, codPersonal, dtInicio, dtFin, connStr);
+            return Json(new { ok = true, jobId });
+        }
+
+        // ========== CONSULTAR ESTADO DE DEPURACIÓN (polling) ==========
+
+        [HttpGet("ConsultarDepuracion")]
+        public IActionResult ConsultarDepuracion(string jobId)
+        {
+            var job = _depuracionJobService.ObtenerEstado(jobId);
+            if (job == null)
+                return Json(new { ok = false, mensaje = "Job no encontrado." });
+
+            return Json(new
+            {
+                ok       = true,
+                estado   = job.Estado.ToString(),     // Pendiente | EnProceso | Completado | Error
+                completado = job.Estado is DepuracionEstado.Completado or DepuracionEstado.Error,
+                exito    = job.Estado == DepuracionEstado.Completado
+                           && job.Resultado?.Resultado?.StartsWith("ERROR") != true,
+                mensaje  = job.Estado switch
+                {
+                    DepuracionEstado.Pendiente   => "En cola, esperando procesamiento…",
+                    DepuracionEstado.EnProceso   => "Depuración en proceso…",
+                    DepuracionEstado.Completado  => "Depuración completada correctamente.",
+                    DepuracionEstado.Error       => $"Error: {job.MensajeError ?? job.Resultado?.Resultado}",
+                    _                            => "Estado desconocido"
+                },
+                duracionSeg = job.FinalizadoEn.HasValue && job.IniciadoEn.HasValue
+                    ? (int)(job.FinalizadoEn.Value - job.IniciadoEn.Value).TotalSeconds
+                    : (int?)null
+            });
         }
     }
 }

@@ -84,7 +84,7 @@
 
 <div class="container-fluid px-2 px-md-4 py-3">
 
-    {{!-- Hero del empleado --}}
+    <!-- Hero del empleado -->
     <div class="emp-hero mb-3">
         <div class="avatar" id="heroAvatar"></div>
         <div>
@@ -98,7 +98,7 @@
         </div>
     </div>
 
-    {{!-- Filtro de rango --}}
+    <!-- Filtro de rango -->
     <div class="card range-card mb-3">
         <div class="card-header d-flex align-items-center gap-2">
             <i class="bi bi-calendar-range text-success"></i>
@@ -107,7 +107,7 @@
         <div class="card-body py-3">
             <div class="d-flex flex-wrap align-items-end gap-3">
 
-                {{!-- Navegación rápida por semana --}}
+                <!-- Navegación rápida por semana -->
                 <div class="d-flex align-items-center gap-2 week-nav">
                     <button type="button" id="btnSemAnterior" class="btn btn-outline-secondary" title="Semana anterior">
                         <i class="bi bi-chevron-left"></i>
@@ -118,7 +118,7 @@
                     </button>
                 </div>
 
-                {{!-- Inputs de fecha --}}
+                <!-- Inputs de fecha -->
                 <div>
                     <label class="form-label mb-1 small fw-semibold">Desde</label>
                     <input type="date" id="fechaInicio" class="form-control form-control-sm" style="width:155px;" />
@@ -139,7 +139,7 @@
         </div>
     </div>
 
-    {{!-- Estados --}}
+    <!-- Estados -->
     <div id="spinnerWrap">
         <div class="spinner-border text-success mb-2" role="status"></div>
         <p class="small">Consultando horarios…</p>
@@ -151,7 +151,7 @@
         <p class="small">Pruebe con un rango de fechas diferente.</p>
     </div>
 
-    {{!-- Tabla --}}
+    <!-- Tabla -->
     <div id="panelTabla">
         <div class="card shadow-sm" style="border:none; border-radius:.5rem; overflow:hidden;">
             <div class="card-header d-flex justify-content-between align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
@@ -162,18 +162,26 @@
                 <table class="table tbl-hor table-hover mb-0">
                     <thead>
                         <tr>
-                            <th>Fecha</th>
-                            <th>Horario</th>
-                            <th title="Hora teórica entrada/salida">Teórico</th>
+                            <th rowspan="2" style="vertical-align:middle;">Fecha</th>
+                            <th rowspan="2" style="vertical-align:middle;">Fotocheck</th>
+                            <th colspan="4" class="text-center" style="border-bottom:1px solid #dee2e6;">Horario Programado</th>
+                            <th rowspan="2" style="vertical-align:middle;">Marcas</th>
+                            <th colspan="4" class="text-center" style="border-bottom:1px solid #dee2e6;">Horario Marcado</th>
+                            <th rowspan="2" style="vertical-align:middle;">Pendiente</th>
+                            <th rowspan="2" style="vertical-align:middle;">Caso</th>
+                            <th rowspan="2" style="vertical-align:middle;">Problema</th>
+                            <th rowspan="2" style="vertical-align:middle;">Cód.Dep</th>
+                            <th rowspan="2" style="vertical-align:middle;">Desc.Dep</th>
+                        </tr>
+                        <tr>
+                            <th title="Horario entrada">Hor.Entrada</th>
+                            <th title="Horario inicio refrigerio">Hor.IniRef</th>
+                            <th title="Horario fin refrigerio">Hor.FinRef</th>
+                            <th title="Horario salida">Hor.Salida</th>
                             <th title="Entrada real">Entrada</th>
-                            <th title="Inicio Refrigerio">IniRef</th>
-                            <th title="Fin Refrigerio">FinRef</th>
+                            <th title="Inicio Refrigerio">IniRefri</th>
+                            <th title="Fin Refrigerio">FinRefri</th>
                             <th title="Salida real">Salida</th>
-                            <th title="N° marcaciones">Marcas</th>
-                            <th title="Horas efectivas">H.Ef</th>
-                            <th title="Horas extras">H.Extra</th>
-                            <th>Estado</th>
-                            <th>Dep.</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyHorarios"></tbody>
@@ -182,11 +190,24 @@
         </div>
     </div>
 
-    {{!-- Panel depuración --}}
-    <div id="panelDep" class="resultado-dep mt-3">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header fw-semibold" id="depHeader" style="font-size:.88rem;"></div>
-            <div class="card-body" id="depBody"></div>
+    <!-- Modal Depurar -->
+    <div class="modal fade" id="modalDepurar" tabindex="-1" aria-labelledby="modalDepurarLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" id="modalDepHeader">
+                    <h6 class="modal-title" id="modalDepurarLabel"><i class="bi bi-lightning-charge me-1"></i>Depurar marcaciones</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body" id="modalDepBody">
+                    <p id="modalDepMsg" class="mb-0"></p>
+                </div>
+                <div class="modal-footer" id="modalDepFooter">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarDep">
+                        <i class="bi bi-lightning-charge me-1"></i>Depurar
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -220,9 +241,7 @@
     const panelTabla      = document.getElementById('panelTabla');
     const tbodyHorarios   = document.getElementById('tbodyHorarios');
     const lblTotalDias    = document.getElementById('lblTotalDias');
-    const panelDep        = document.getElementById('panelDep');
-    const depHeader       = document.getElementById('depHeader');
-    const depBody         = document.getElementById('depBody');
+
 
     // ── Semana actual ─────────────────────────────────────────────────────
     function lunesDeHoy() {
@@ -234,7 +253,12 @@
         return lun;
     }
 
-    function fmt(date) { return date.toISOString().slice(0, 10); }
+    function fmt(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
 
     function aplicarSemana(lunes) {
         const dom = new Date(lunes);
@@ -259,14 +283,12 @@
         consultar();
     });
 
-    // Sincronizar cuando el usuario cambia los inputs de fecha manualmente
+    // Cuando el usuario cambia manualmente las fechas, limpiar el label de semana
     fechaInicio.addEventListener('change', () => {
-        semanaActual = new Date(fechaInicio.value + 'T00:00:00');
-        const dom = new Date(semanaActual);
-        dom.setDate(semanaActual.getDate() + 6);
-        fechaFin.value = fmt(dom);
-        const opts = { day: '2-digit', month: 'short' };
-        lblSemana.textContent = `${semanaActual.toLocaleDateString('es-PE', opts)} — ${dom.toLocaleDateString('es-PE', opts)}`;
+        lblSemana.textContent = 'Rango personalizado';
+    });
+    fechaFin.addEventListener('change', () => {
+        lblSemana.textContent = 'Rango personalizado';
     });
 
     // ── Utilidades ────────────────────────────────────────────────────────
@@ -283,7 +305,6 @@
     async function consultar() {
         panelTabla.style.display  = 'none';
         panelVacio.style.display  = 'none';
-        panelDep.style.display    = 'none';
         btnDepurar.style.display  = 'none';
         spinnerWrap.style.display = 'block';
         btnConsultar.disabled     = true;
@@ -335,25 +356,29 @@
                     estadoHtml  = '<span class="badge rounded-pill badge-ok">OK</span>';
                 }
 
-                const dep = m.codDepuracion
-                    ? `<span class="badge bg-info text-dark" title="${m.descDepuracion ?? ''}">${m.codDepuracion}</span>`
-                    : '';
-
                 return `<tr class="${rowClass}">
                     <td class="fw-semibold" style="white-space:nowrap;">${m.fechamar ?? '—'}</td>
-                    <td><small class="text-muted">${m.horDescripcion ?? '—'}</small></td>
-                    <td class="text-muted" style="white-space:nowrap;">
-                        ${hh(m.entradaTeorica)} <small>→</small> ${hh(m.salidaTeorica)}
-                    </td>
-                    <td>${hora(m.entrada, m.tipoEntrada)}</td>
+                    <td>${m.fotocheck ?? '—'}</td>
+                    <td>${hh(m.horEntrada)}</td>
+                    <td>${hh(m.horIniRefri)}</td>
+                    <td>${hh(m.horFinRefri)}</td>
+                    <td>${hh(m.horSalida)}</td>
+                    <td class="text-center">${m.numMarcaciones ?? '—'}</td>
+                    <td>${hh(m.entrada)}</td>
                     <td>${hh(m.iniRefri)}</td>
                     <td>${hh(m.finRefri)}</td>
-                    <td>${hora(m.salida, m.tipoSalida)}</td>
-                    <td class="text-center">${m.numMarcaciones ?? '—'}</td>
-                    <td>${hh(m.hrsEfectivas)}</td>
-                    <td>${hh(m.horaExtraAjus)}</td>
-                    <td>${estadoHtml}</td>
-                    <td>${dep}</td>
+                    <td>${hh(m.salida)}</td>
+                    <td class="text-center">${(() => {
+                        const v = m.pendiente ?? '—';
+                        if (v === 'S') return '<span class="badge" style="background:#f59e0b;color:#fff;">S</span>';
+                        if (v === 'D') return '<span class="badge" style="background:#16a34a;color:#fff;">D</span>';
+                        if (v === 'N') return '<span class="text-muted">N</span>';
+                        return v;
+                    })()}</td>
+                    <td>${m.casoAplica ?? '—'}</td>
+                    <td>${m.problema ?? '—'}</td>
+                    <td><small>${m.codDepuracion ?? '—'}</small></td>
+                    <td><small class="text-muted">${m.descDepuracion ?? '—'}</small></td>
                 </tr>`;
             }).join('');
 
@@ -372,12 +397,30 @@
     btnConsultar.addEventListener('click', consultar);
 
     // ── Depurar ───────────────────────────────────────────────────────────
-    btnDepurar.addEventListener('click', async () => {
-        if (!confirm(`¿Depurar marcaciones de ${JSON.parse(nombre)}\ndel ${fechaInicio.value} al ${fechaFin.value}?`)) return;
+    const modalDepEl      = document.getElementById('modalDepurar');
+    const modalDep        = new bootstrap.Modal(modalDepEl);
+    const modalDepMsg     = document.getElementById('modalDepMsg');
+    const modalDepHeader  = document.getElementById('modalDepHeader');
+    const modalDepFooter  = document.getElementById('modalDepFooter');
+    const btnConfirmarDep = document.getElementById('btnConfirmarDep');
+    let _depJobId = null;
+    let _depPollTimer = null;
 
-        btnDepurar.disabled   = true;
-        btnConsultar.disabled = true;
-        panelDep.style.display = 'none';
+    btnDepurar.addEventListener('click', () => {
+        _depJobId = null;
+        clearInterval(_depPollTimer);
+        modalDepMsg.textContent = `¿Depurar marcaciones de ${JSON.parse(nombre)} del ${fechaInicio.value} al ${fechaFin.value}?`;
+        modalDepHeader.className = 'modal-header';
+        modalDepFooter.style.display = '';
+        btnConfirmarDep.style.display = '';
+        btnConfirmarDep.disabled = false;
+        modalDep.show();
+    });
+
+    btnConfirmarDep.addEventListener('click', async () => {
+        btnConfirmarDep.disabled = true;
+        btnConfirmarDep.style.display = 'none';
+        modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Enviando solicitud…</span></div>';
 
         const fd = new FormData();
         fd.append('codPersonal', codPersonal);
@@ -388,47 +431,58 @@
         try {
             const res  = await fetch('/RecursosHumanos/Aquarius/Marcaciones/DepurarRango', { method: 'POST', body: fd });
             const json = await res.json();
-            const d    = json.data ?? {};
-            const ok   = json.ok;
 
-            depHeader.innerHTML = ok
-                ? '<i class="bi bi-check-circle-fill text-success me-1"></i>Depuración completada'
-                : '<i class="bi bi-x-circle-fill text-danger me-1"></i>Error en depuración';
-            depHeader.className = ok ? 'card-header bg-success text-white' : 'card-header bg-danger text-white';
+            if (!json.ok) {
+                modalDepHeader.className = 'modal-header bg-danger text-white';
+                modalDepMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>' + (json.mensaje ?? 'Error al encolar la depuración.');
+                return;
+            }
 
-            depBody.innerHTML = ok ? `
-                <div class="row g-2 text-center mb-3">
-                    ${[
-                        ['✅', d.diasOk,          'Días OK',         'text-success'],
-                        ['❌', d.diasError,        'Días error',      'text-danger'],
-                        ['🔢', d.totalGeneradas,   'Marcas gen.',     'text-primary'],
-                        ['📋', d.totalHistorial,   'Historial',       'text-info'],
-                    ].map(([ic, n, l, c]) => `
-                        <div class="col-6 col-md-3">
-                            <div class="stat-box">
-                                <div class="stat-num ${c}">${ic} ${n}</div>
-                                <div class="stat-lbl">${l}</div>
-                            </div>
-                        </div>`).join('')}
-                </div>
-                <div class="row g-2 small text-muted">
-                    <div class="col-6 col-md-4">🌙 Nocturnos: <b>${d.turnosNocturnos}</b></div>
-                    <div class="col-6 col-md-4">🚪 Entradas: <b>${d.entradas}</b></div>
-                    <div class="col-6 col-md-4">⏩ Anticipadas: <b>${d.anticipadas}</b></div>
-                    <div class="col-6 col-md-4">🚶 Salidas: <b>${d.salidas}</b></div>
-                    <div class="col-6 col-md-4">🥗 IniRefri: <b>${d.inirefris}</b></div>
-                    <div class="col-6 col-md-4">🥗 FinRefri: <b>${d.finrefris}</b></div>
-                    <div class="col-6 col-md-4">⚠️ Anomalías: <b>${d.anomalas}</b></div>
-                    <div class="col-6 col-md-4">🔄 Recálculos: <b>${d.recalculos}</b></div>
-                </div>` : `<div class="alert alert-danger mb-0">${d.resultado ?? json.mensaje ?? 'Error desconocido'}</div>`;
+            // Job encolado: iniciar polling
+            _depJobId = json.jobId;
+            modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Depuración en proceso en el servidor…<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará hasta completarse.</small></span></div>';
 
-            panelDep.style.display = 'block';
-            panelDep.scrollIntoView({ behavior: 'smooth' });
+            _depPollTimer = setInterval(async () => {
+                try {
+                    const pRes  = await fetch(`/RecursosHumanos/Aquarius/Marcaciones/ConsultarDepuracion?jobId=${_depJobId}`);
+                    const pJson = await pRes.json();
 
-            if (ok) setTimeout(consultar, 600);
-        } finally {
-            btnDepurar.disabled   = false;
-            btnConsultar.disabled = false;
+                    if (!pJson.completado) {
+                        // Todavía corriendo — actualizar mensaje
+                        modalDepMsg.innerHTML = `<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>${pJson.mensaje}<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará.</small></span></div>`;
+                        return;
+                    }
+
+                    clearInterval(_depPollTimer);
+
+                    if (pJson.exito) {
+                        modalDepHeader.className = 'modal-header bg-success text-white';
+                        const dur = pJson.duracionSeg != null ? ` (${pJson.duracionSeg}s)` : '';
+                        modalDepMsg.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Depuración completada correctamente${dur}.`;
+                    } else {
+                        modalDepHeader.className = 'modal-header bg-danger text-white';
+                        modalDepMsg.innerHTML = `<i class="bi bi-x-circle-fill me-2"></i>${pJson.mensaje}`;
+                    }
+                } catch (pollErr) {
+                    console.warn('Error en polling de depuración:', pollErr);
+                }
+            }, 2500);
+
+        } catch (err) {
+            modalDepHeader.className = 'modal-header bg-danger text-white';
+            modalDepMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Error de comunicación al enviar la solicitud.';
+            console.error(err);
+        }
+    });
+
+    modalDepEl.addEventListener('hidden.bs.modal', () => {
+        // Si había un poll activo aún (el usuario cerró el modal antes de terminar),
+        // detener el poll visual pero el job sigue corriendo en el servidor.
+        if (_depPollTimer) clearInterval(_depPollTimer);
+
+        // Si ya terminó (btnConfirmarDep oculto = se ejecutó), refrescar grilla
+        if (btnConfirmarDep.style.display === 'none') {
+            consultar();
         }
     });
 

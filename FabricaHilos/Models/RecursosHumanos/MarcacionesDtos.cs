@@ -80,6 +80,11 @@ public class MarcacionRangoDto
     public string?  Alerta01          { get; set; }
     public string?  Alerta06          { get; set; }
 
+    // Depuración pendiente
+    public string?  Pendiente         { get; set; }
+    public string?  CasoAplica        { get; set; }
+    public string?  Problema          { get; set; }
+
     // Verificación cruzada con SCA_HISTORIAL
     public int?     MarcasHistorial   { get; set; }
 
