@@ -18,7 +18,6 @@ namespace FabricaHilos.Controllers
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IMenuService _menuService;
-        private readonly IRedInternaService _redInternaService;
 
         public AccountController(
             UserManager<ApplicationUser> userManager,
@@ -26,8 +25,7 @@ namespace FabricaHilos.Controllers
             RoleManager<IdentityRole> roleManager,
             ILogger<AccountController> logger,
             IConfiguration configuration,
-            IMenuService menuService,
-            IRedInternaService redInternaService)
+            IMenuService menuService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -35,7 +33,6 @@ namespace FabricaHilos.Controllers
             _logger = logger;
             _configuration = configuration;
             _menuService = menuService;
-            _redInternaService = redInternaService;
         }
 
         [HttpGet]
@@ -246,14 +243,11 @@ namespace FabricaHilos.Controllers
         }
 
         /// <summary>
-        /// Redirige al landing apropiado según la red del usuario:
-        /// red interna → landing configurado, red externa → Seguridad/Inspecciones.
+        /// Redirige al landing apropiado según los permisos del usuario.
+        /// El middleware se encarga de controlar el acceso por red.
         /// </summary>
         private IActionResult RedirectToLanding()
         {
-            if (!_redInternaService.EsRedInterna())
-                return Redirect("/Seguridad/Inspeccion");
-
             var (ctrl, act, area, url) = _menuService.GetLanding();
             if (url != null) return Redirect(url);
             return area != null

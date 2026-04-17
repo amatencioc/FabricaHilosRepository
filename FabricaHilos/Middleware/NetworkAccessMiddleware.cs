@@ -5,7 +5,7 @@ namespace FabricaHilos.Middleware
     /// <summary>
     /// Middleware que restringe el acceso por red.
     /// - Peticiones desde la red interna (LAN): acceso TOTAL a todos los módulos.
-    /// - Peticiones desde internet (externa): acceso SOLO al módulo Seguridad/Inspecciones.
+    /// - Peticiones desde internet (externa): acceso SOLO a los módulos Seguridad/Inspecciones y Producción.
     /// </summary>
     public class NetworkAccessMiddleware
     {
@@ -13,13 +13,16 @@ namespace FabricaHilos.Middleware
         private readonly ILogger<NetworkAccessMiddleware> _logger;
         private readonly IConfiguration _configuration;
 
-        // Rutas que SÍ son accesibles desde internet (módulo Seguridad)
+        // Rutas que SÍ son accesibles desde internet (módulos Seguridad y Producción)
         private static readonly string[] _rutasPermitidas = new[]
         {
             "/account/login",
             "/account/logout",
             "/account/accesodenegado",
             "/seguridad",
+            "/produccion",
+            "/registropreparatoria",
+            "/autoconer",
         };
 
         // Prefijos de rutas estáticas siempre permitidos
@@ -65,14 +68,14 @@ namespace FabricaHilos.Middleware
                 return;
             }
 
-            // 3. Fuera de la red interna → solo rutas de Seguridad permitidas
+            // 3. Fuera de la red interna → solo rutas de Seguridad y Producción permitidas
             bool rutaPermitida = _rutasPermitidas.Any(r =>
                 path == r || path.StartsWith(r + "/"));
 
             if (rutaPermitida)
             {
                 _logger.LogInformation(
-                    "Acceso externo permitido a ruta de Seguridad: {Path} desde IP: {IP}",
+                    "Acceso externo permitido a ruta permitida: {Path} desde IP: {IP}",
                     path, remoteIp);
                 await _next(context);
                 return;
@@ -218,8 +221,8 @@ namespace FabricaHilos.Middleware
                             red interna</strong> de La Colonial - Fábrica de Hilos S.A.
                         </p>
                         <p style="margin-top:12px;">
-                            Si necesitas registrar una <strong>Inspección de Seguridad</strong>,
-                            puedes hacerlo desde el módulo habilitado para acceso externo.
+                            Si necesitas registrar una <strong>Inspección de Seguridad</strong> o acceder al módulo de <strong>Producción</strong>,
+                                puedes hacerlo desde los módulos habilitados para acceso externo.
                         </p>
                     </div>
                     <div class="modal-footer">

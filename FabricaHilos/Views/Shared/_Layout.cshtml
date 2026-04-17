@@ -1,7 +1,6 @@
 @using FabricaHilos.Services
 @inject IMenuService MenuService
-@inject IRedInternaService RedInternaService
-@{ var menus = MenuService.GetMenusActuales(); var esInterna = RedInternaService.EsRedInterna(); }
+@{ var menus = MenuService.GetMenusActuales(); }
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -34,8 +33,6 @@
                 var act  = ViewContext.RouteData.Values["action"]?.ToString();
             }
             <ul class="list-unstyled p-2 sidebar-menu">
-                @if (esInterna)
-                {
                 <!-- Dashboard -->
                 @if (menus.Dashboard)
                 {
@@ -206,7 +203,7 @@
                     </ul>
                 </li>
                 }
-                } @* fin esInterna *@
+
 
                 @if (menus.Seguridad)
                 {
