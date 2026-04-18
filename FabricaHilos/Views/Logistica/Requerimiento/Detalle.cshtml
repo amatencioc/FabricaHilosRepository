@@ -320,65 +320,76 @@
             </div>
         </form>
 
-        <!-- Listado de archivos existentes -->
+        <!-- Listado de archivos existentes agrupados por ID_GRUPO -->
         @if (archivos.Any())
         {
+            var gruposArchivos = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
+            string[] coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
+            int colorIdx = 0;
+
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">
                     <thead class="table-light">
                         <tr>
                             <th>Nombre</th>
-                            <th class="text-center">Grupo</th>
                             <th class="text-end">Tamaño</th>
                             <th class="text-center">Fecha de carga</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var archivo in archivos)
+                        @foreach (var grupo in gruposArchivos)
                         {
-                            var icon = IconoArchivo(archivo.NombreArchivo);
-                            <tr>
-                                <td>
-                                    <i class="bi @icon me-1"></i>
-                                    @archivo.NombreArchivo
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-info text-dark small" title="ID Grupo">@archivo.IdGrupo</span>
-                                </td>
-                                <td class="text-end small text-muted">
-                                    @(archivo.TamanioBytes < 1024
-                                        ? $"{archivo.TamanioBytes} B"
-                                        : archivo.TamanioBytes < 1048576
-                                            ? $"{archivo.TamanioBytes / 1024.0:N1} KB"
-                                            : $"{archivo.TamanioBytes / 1048576.0:N1} MB")
-                                </td>
-                                <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
-                                <td class="text-center">
-                                    <div class="d-flex gap-1 justify-content-center">
-                                        <a asp-controller="Requisicion"
-                                           asp-action="Descargar"
-                                           asp-route-idGrupo="@archivo.IdGrupo"
-                                           asp-route-nombreArchivo="@archivo.NombreArchivo"
-                                           class="btn btn-sm btn-outline-primary"
-                                           title="Descargar"
-                                           target="_blank">
-                                            <i class="bi bi-download"></i>
-                                        </a>
-                                        <form asp-controller="Requisicion"
-                                              asp-action="EliminarArchivo"
-                                              method="post"
-                                              onsubmit="return confirm('¿Eliminar el archivo «@archivo.NombreArchivo»?');">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
-                                            <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
-                                    </div>
+                            var color = coloresGrupo[colorIdx % coloresGrupo.Length];
+                            colorIdx++;
+                            <tr class="table-secondary">
+                                <td colspan="4" class="py-1 px-2">
+                                    <span class="badge bg-@color me-2" style="font-size:.8rem;">Grupo @grupo.Key</span>
+                                    <small class="text-muted">@grupo.Count() archivo(s)</small>
                                 </td>
                             </tr>
+                            @foreach (var archivo in grupo)
+                            {
+                                var icon = IconoArchivo(archivo.NombreArchivo);
+                                <tr>
+                                    <td class="ps-4">
+                                        <i class="bi @icon me-1"></i>
+                                        @archivo.NombreArchivo
+                                    </td>
+                                    <td class="text-end small text-muted">
+                                        @(archivo.TamanioBytes < 1024
+                                            ? $"{archivo.TamanioBytes} B"
+                                            : archivo.TamanioBytes < 1048576
+                                                ? $"{archivo.TamanioBytes / 1024.0:N1} KB"
+                                                : $"{archivo.TamanioBytes / 1048576.0:N1} MB")
+                                    </td>
+                                    <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td class="text-center">
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            <a asp-controller="Requisicion"
+                                               asp-action="Descargar"
+                                               asp-route-idGrupo="@archivo.IdGrupo"
+                                               asp-route-nombreArchivo="@archivo.NombreArchivo"
+                                               class="btn btn-sm btn-outline-primary"
+                                               title="Descargar"
+                                               target="_blank">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                            <form asp-controller="Requisicion"
+                                                  asp-action="EliminarArchivo"
+                                                  method="post"
+                                                  onsubmit="return confirm('¿Eliminar el archivo «@archivo.NombreArchivo»?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
+                                                <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>

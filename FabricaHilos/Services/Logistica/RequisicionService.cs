@@ -88,12 +88,16 @@ public class RequisicionService : IRequisicionService
               "   OR UPPER(CENTRO_COSTO) LIKE '%' || UPPER(:buscar) || '%')"
             : string.Empty;
 
-        string fechaIniFilter = hasFechaIni ? " AND TRUNC(FECHA) >= TRUNC(:fechaIni)" : string.Empty;
-        string fechaFinFilter = hasFechaFin ? " AND TRUNC(FECHA) <= TRUNC(:fechaFin)" : string.Empty;
-        string estadoFilter   = hasEstado   ? " AND ESTADO = :estado"                 : string.Empty;
+        // Si hay búsqueda de texto, no aplicar filtro de fechas (se busca por cualquier fecha)
+        bool aplicarFechas = !hasBuscar;
+        string fechaIniFilter = (aplicarFechas && hasFechaIni) ? " AND TRUNC(FECHA) >= TRUNC(:fechaIni)" : string.Empty;
+        string fechaFinFilter = (aplicarFechas && hasFechaFin) ? " AND TRUNC(FECHA) <= TRUNC(:fechaFin)" : string.Empty;
+        string estadoFilter   = hasEstado ? " AND ESTADO = :estado" : string.Empty;
 
-        // Excluir siempre ESTADO '6' y '9'
-        string whereClause = $"WHERE ESTADO NOT IN ('6','9'){buscarFilter}{fechaIniFilter}{fechaFinFilter}{estadoFilter}";
+        // Excluir estados cerrado/anulado solo cuando no hay búsqueda activa
+        string baseEstadoFilter = hasBuscar ? string.Empty : " AND ESTADO NOT IN ('6','9')";
+
+        string whereClause = $"WHERE 1=1{baseEstadoFilter}{buscarFilter}{fechaIniFilter}{fechaFinFilter}{estadoFilter}";
 
         string sql = $@"
             SELECT PAGED.TOTAL_COUNT,
@@ -131,9 +135,9 @@ public class RequisicionService : IRequisicionService
 
             if (hasBuscar)
                 cmd.Parameters.Add(new OracleParameter(":buscar",    OracleDbType.Varchar2, buscar,                  ParameterDirection.Input));
-            if (hasFechaIni)
+            if (aplicarFechas && hasFechaIni)
                 cmd.Parameters.Add(new OracleParameter(":fechaIni",  OracleDbType.Date,     fechaInicio!.Value.Date, ParameterDirection.Input));
-            if (hasFechaFin)
+            if (aplicarFechas && hasFechaFin)
                 cmd.Parameters.Add(new OracleParameter(":fechaFin",  OracleDbType.Date,     fechaFin!.Value.Date,    ParameterDirection.Input));
             if (hasEstado)
                 cmd.Parameters.Add(new OracleParameter(":estado",    OracleDbType.Varchar2, estado,                  ParameterDirection.Input));

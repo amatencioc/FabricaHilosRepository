@@ -50,6 +50,24 @@
             </a>
         </div>
     }
+    @if (menus.Logistica)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Logistica" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #8B5E3C !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(139,94,60,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-box-seam fs-2" style="color: #8B5E3C;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Logística</div>
+                            <small class="text-muted">Requerimientos y compras</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
     @if (menus.Facturacion)
     {
         <div class="col-sm-6 col-lg-4 col-xl-3">
