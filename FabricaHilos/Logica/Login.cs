@@ -42,7 +42,7 @@ namespace FabricaHilos.Logica
 
                 // No se selecciona psw_sig para evitar que la contraseña circule innecesariamente
                 const string query = @"
-                    SELECT c_user, c_codigo, c_nombre, c_costo
+                    SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web
                     FROM cs_user
                     WHERE c_user = :puser AND psw_sig = :ppsw";
 
@@ -56,11 +56,12 @@ namespace FabricaHilos.Logica
 
                 if (await dr.ReadAsync(cts.Token))
                 {
-                    objeto.c_user    = dr["c_user"]?.ToString();
-                    objeto.c_codigo  = dr["c_codigo"]?.ToString();
-                    objeto.c_nombre  = dr["c_nombre"]?.ToString();
-                    objeto.c_costo   = dr["c_costo"]?.ToString();
-                    objeto.psw_sig   = psw; // conservar en memoria solo para el flujo de login
+                    objeto.c_user      = dr["c_user"]?.ToString();
+                    objeto.c_codigo    = dr["c_codigo"]?.ToString();
+                    objeto.c_nombre    = dr["c_nombre"]?.ToString();
+                    objeto.c_costo     = dr["c_costo"]?.ToString();
+                    objeto.acceso_web  = dr["acceso_web"]?.ToString();
+                    objeto.psw_sig     = psw; // conservar en memoria solo para el flujo de login
 
                     _logger?.LogInformation("✅ Usuario encontrado en CS_USER: {CUser}", objeto.c_user);
                 }

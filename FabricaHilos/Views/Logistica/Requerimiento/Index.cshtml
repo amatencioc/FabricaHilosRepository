@@ -1,0 +1,247 @@
+@model IEnumerable<FabricaHilos.Models.Logistica.RequisicionDto>
+
+@{
+    ViewData["Title"] = "Requerimientos";
+    string? buscar      = ViewBag.Buscar      as string;
+    string? fechaInicio = ViewBag.FechaInicio as string;
+    string? fechaFin    = ViewBag.FechaFin    as string;
+    string? estado      = ViewBag.Estado      as string;
+    bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(fechaInicio)
+                       || !string.IsNullOrEmpty(fechaFin) || !string.IsNullOrEmpty(estado);
+    var nombres = ViewBag.Nombres as Dictionary<string, string> ?? new Dictionary<string, string>();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">Logística</li>
+    <li class="breadcrumb-item active">Requerimientos</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-clipboard-check me-2"></i>Requerimientos</h4>
+    <span class="text-muted small">@(ViewBag.TotalCount ?? 0) registro(s) encontrado(s)</span>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="text" name="buscar" value="@buscar"
+                   class="form-control form-control-sm"
+                   placeholder="Buscar por proveedor, N° req. o centro costo..."
+                   style="max-width:280px;" />
+
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">Fecha desde:</label>
+                <input type="date" name="fechaInicio" value="@fechaInicio"
+                       class="form-control form-control-sm" style="max-width:155px;" />
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">hasta:</label>
+                <input type="date" name="fechaFin" value="@fechaFin"
+                       class="form-control form-control-sm" style="max-width:155px;" />
+            </div>
+
+            <select name="estado" class="form-select form-select-sm" style="max-width:160px;">
+                <option value="">-- Todos los estados --</option>
+                <option value="0" selected="@(estado == "0")">Pendiente</option>
+                <option value="1" selected="@(estado == "1")">Autorizado</option>
+                <option value="2" selected="@(estado == "2")">Atendido</option>
+                <option value="A" selected="@(estado == "A")">Anulado</option>
+            </select>
+
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-search"></i> Buscar
+            </button>
+            @if (hayFiltros)
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+            }
+        </form>
+    </div>
+</div>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center">TipDoc</th>
+                        <th class="text-center">Serie</th>
+                        <th class="text-center">N° Req.</th>
+                        <th>Centro Costo</th>
+                        <th>Proveedor(es)</th>
+                        <th class="text-center">Fecha</th>
+                        <th class="text-center">F. Entrega</th>
+                        <th class="text-center">Prioridad / Resp.</th>
+                        <th class="text-center">Autoriza / F. Autoriza</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var req in Model)
+                    {
+                        <tr>
+                            <td class="text-center">@(req.TipDoc ?? "-")</td>
+                            <td class="text-center">@req.Serie</td>
+                            <td class="text-center fw-semibold">@req.NumReq</td>
+                            <td>@(req.CentroCosto ?? "-")</td>
+                            <td>@(req.Proveedores ?? "-")</td>
+                            <td class="text-center">@(req.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-center">@(req.FEntrega?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(req.Prioridad))
+                                {
+                                    <span class="badge bg-secondary">@req.Prioridad</span>
+                                }
+                                @if (req.Responsable != null && nombres.TryGetValue(req.Responsable, out var nomResp))
+                                {
+                                    <br /><span class="text-muted small">@nomResp</span>
+                                }
+                                else if (!string.IsNullOrEmpty(req.Responsable))
+                                {
+                                    <br /><span class="text-muted small">@req.Responsable</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(req.Autoriza) || req.FAutoriza.HasValue)
+                                {
+                                    @if (req.Autoriza != null && nombres.TryGetValue(req.Autoriza, out var nomAutoriza))
+                                    {
+                                        <span class="text-muted small">@nomAutoriza</span>
+                                    }
+                                    else if (!string.IsNullOrEmpty(req.Autoriza))
+                                    {
+                                        <span class="text-muted small">@req.Autoriza</span>
+                                    }
+                                    @if (req.FAutoriza.HasValue)
+                                    {
+                                        <br /><span class="text-muted small">@req.FAutoriza.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @{
+                                    var (badge, texto) = req.Estado switch
+                                    {
+                                        "0" => ("bg-secondary", "Pendiente"),
+                                        "1" => ("bg-success",   "Autorizado"),
+                                        "2" => ("bg-primary",   "Atendido"),
+                                        "A" => ("bg-danger",    "Anulado"),
+                                        _   => ("bg-light text-dark", req.Estado ?? "-")
+                                    };
+                                }
+                                <span class="badge @badge">@texto</span>
+                            </td>
+                            <td class="text-center">
+                                <a asp-action="Detalle"
+                                   asp-route-tipDoc="@req.TipDoc"
+                                   asp-route-serie="@req.Serie"
+                                   asp-route-numReq="@req.NumReq"
+                                   class="btn btn-sm btn-outline-primary"
+                                   title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-4 d-block mb-1"></i>
+                                No se encontraron requerimientos.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@{
+    int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+    int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+    int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+    int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
+    int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+    int endItem     = Math.Min(currentPage * pgSize, totalCount);
+}
+<div class="d-flex justify-content-between align-items-center mt-2 px-1">
+    <small class="text-muted">
+        @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}–{endItem} de {totalCount} requerimientos")
+    </small>
+    @if (totalPages > 1)
+    {
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-buscar="@buscar"
+                       asp-route-fechaInicio="@fechaInicio"
+                       asp-route-fechaFin="@fechaFin"
+                       asp-route-estado="@estado"
+                       asp-route-page="@(currentPage - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                @for (int pg = Math.Max(1, currentPage - 2); pg <= Math.Min(totalPages, currentPage + 2); pg++)
+                {
+                    <li class="page-item @(pg == currentPage ? "active" : "")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-buscar="@buscar"
+                           asp-route-fechaInicio="@fechaInicio"
+                           asp-route-fechaFin="@fechaFin"
+                           asp-route-estado="@estado"
+                           asp-route-page="@pg">@pg</a>
+                    </li>
+                }
+                <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                    <a class="page-link"
+                       asp-action="Index"
+                       asp-route-buscar="@buscar"
+                       asp-route-fechaInicio="@fechaInicio"
+                       asp-route-fechaFin="@fechaFin"
+                       asp-route-estado="@estado"
+                       asp-route-page="@(currentPage + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var ini = document.querySelector('input[name="fechaInicio"]');
+            var fin = document.querySelector('input[name="fechaFin"]');
+            if (ini && !ini.value && fin && !fin.value) {
+                var hoy  = new Date();
+                var dia  = hoy.getDay(); // 0=dom, 1=lun, ..., 6=sab
+                var diffLunes = (dia === 0) ? -6 : 1 - dia;
+                var lunes   = new Date(hoy);
+                lunes.setDate(hoy.getDate() + diffLunes);
+                var domingo = new Date(lunes);
+                domingo.setDate(lunes.getDate() + 6);
+                var toISO = function (d) {
+                    return d.getFullYear() + '-' +
+                           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                           String(d.getDate()).padStart(2, '0');
+                };
+                ini.value = toISO(lunes);
+                fin.value = toISO(domingo);
+            }
+        })();
+    </script>
+}

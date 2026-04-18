@@ -2,12 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
-using FabricaHilos.Filters;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Sgc
 {
     [Authorize]
-    [VentasAuthorize]
     public class ConsultaTcController : OracleBaseController
     {
         private readonly ICargaTcService _cargaTcService;

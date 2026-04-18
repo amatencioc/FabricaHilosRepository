@@ -4,7 +4,7 @@ using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Sgc;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Sgc
 {
     [Authorize]
     public class RelacionFacCliController : OracleBaseController

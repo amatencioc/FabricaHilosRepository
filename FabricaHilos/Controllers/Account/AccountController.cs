@@ -2,19 +2,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models;
 using FabricaHilos.Logica;
 using FabricaHilos.Services;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Account
 {
     public class AccountController : Controller
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
-        private readonly RoleManager<IdentityRole> _roleManager;
         private readonly ILogger<AccountController> _logger;
         private readonly IConfiguration _configuration;
         private readonly IMenuService _menuService;
@@ -22,14 +20,12 @@ namespace FabricaHilos.Controllers
         public AccountController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
-            RoleManager<IdentityRole> roleManager,
             ILogger<AccountController> logger,
             IConfiguration configuration,
             IMenuService menuService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
-            _roleManager = roleManager;
             _logger = logger;
             _configuration = configuration;
             _menuService = menuService;
@@ -192,6 +188,7 @@ namespace FabricaHilos.Controllers
                     // así GetOracleConnectionString() usará la conexión base cuando no
                     // exista OraclePass en sesión (fallback seguro).
                     HttpContext.Session.SetString("OracleUser", usuario);
+                    HttpContext.Session.SetString("AccesoWeb", usuarioOracle.acceso_web ?? string.Empty);
                     if (oracleCredencialesValidas)
                         HttpContext.Session.SetString("OraclePass", password);
 

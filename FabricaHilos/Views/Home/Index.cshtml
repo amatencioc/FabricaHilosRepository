@@ -1,112 +1,131 @@
+@using FabricaHilos.Config
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "Inicio";
+    var menus = ViewBag.MenusActuales as MenuOptions ?? new MenuOptions();
 }
 
 @section Breadcrumb {
-    <li class="breadcrumb-item active">Dashboard</li>
+    <li class="breadcrumb-item active">Inicio</li>
 }
 
-<h4 class="section-title"><i class="bi bi-speedometer2 me-2"></i>Panel Principal</h4>
-
-<!-- Tarjetas de resumen -->
-<div class="row g-4 mb-4">
-    <div class="col-sm-6 col-xl-4">
-        <div class="card card-dashboard h-100" style="border-left: 4px solid var(--color-secondary);">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <p class="text-muted small mb-1">Órdenes Activas</p>
-                        <h3 class="fw-bold mb-0">@ViewBag.OrdenesActivas</h3>
-                    </div>
-                    <div class="bg-warning bg-opacity-10 rounded-circle p-3">
-                        <i class="bi bi-gear-wide-connected fs-4 text-warning"></i>
-                    </div>
-                </div>
-                <a asp-controller="Produccion" asp-action="Index" class="small text-muted mt-2 d-block">Ver producción →</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-sm-6 col-xl-4">
-        <div class="card card-dashboard h-100" style="border-left: 4px solid var(--color-primary-light);">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <p class="text-muted small mb-1">Ventas del Mes</p>
-                        <h3 class="fw-bold mb-0">S/ @ViewBag.VentasMes.ToString("N2")</h3>
-                    </div>
-                    <div class="bg-success bg-opacity-10 rounded-circle p-3">
-                        <i class="bi bi-cash-coin fs-4 text-success"></i>
-                    </div>
-                </div>
-                <a asp-controller="Ventas" asp-action="Index" class="small text-muted mt-2 d-block">Ver ventas →</a>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-sm-6 col-xl-4">
-        <div class="card card-dashboard h-100" style="border-left: 4px solid var(--color-primary);">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <p class="text-muted small mb-1">Inspecciones</p>
-                    </div>
-                    <div class="bg-primary bg-opacity-10 rounded-circle p-3">
-                        <i class="bi bi-shield-check fs-4 text-primary"></i>
-                    </div>
-                </div>
-                <a asp-controller="Inspeccion" asp-action="Index" class="small text-muted mt-2 d-block">Ver inspecciones →</a>
-            </div>
-        </div>
-    </div>
+<div class="d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-grid-1x2-fill fs-4" style="color: var(--color-secondary);"></i>
+    <h4 class="mb-0 fw-bold">Acceso Rápido</h4>
 </div>
 
-<!-- Gráficos y accesos rápidos -->
-<div class="row g-4">
-    @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
+<div class="row g-3">
+    @if (menus.Produccion)
     {
-        <div class="col-md-8">
-            <div class="card card-dashboard">
-                <div class="card-header bg-white border-bottom">
-                    <h6 class="mb-0 fw-bold"><i class="bi bi-bar-chart me-2"></i>Resumen de Actividad</h6>
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Produccion" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #C8A951 !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(200,169,81,0.12); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-gear-wide-connected fs-2" style="color: #C8A951;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Producción</div>
+                            <small class="text-muted">Gestión de órdenes y procesos</small>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <canvas id="graficoResumen" height="200"></canvas>
-                </div>
-            </div>
+            </a>
         </div>
     }
-
-    <div class="col-md-@(User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor") ? "4" : "12")">
-        <div class="card card-dashboard h-100">
-            <div class="card-header bg-white border-bottom">
-                <h6 class="mb-0 fw-bold"><i class="bi bi-lightning me-2"></i>Acceso Rápido</h6>
-            </div>
-            <div class="card-body">
-                <div class="d-grid gap-2">
-                    <a asp-controller="Produccion" asp-action="Index" class="btn btn-outline-warning text-start">
-                        <i class="bi bi-gear-wide-connected me-2"></i>Producción
-                    </a>
-                    <a asp-controller="Sgc" asp-action="Index" class="btn btn-outline-primary text-start">
-                        <i class="bi bi-file-earmark-text me-2"></i>SGC
-                    </a>
-                    <a asp-controller="Facturacion" asp-action="Index" class="btn btn-outline-secondary text-start">
-                        <i class="bi bi-receipt me-2"></i>Facturación
-                    </a>
-                    <a asp-controller="Inspeccion" asp-action="Index" class="btn btn-outline-success text-start">
-                        <i class="bi bi-shield-check me-2"></i>Inspecciones de Seguridad
-                    </a>
+    @if (menus.Sgc)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Sgc" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #2D7A5F !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(45,122,95,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-file-earmark-check fs-2" style="color: #2D7A5F;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">SGC</div>
+                            <small class="text-muted">Pedidos y despachos</small>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
-    </div>
+    }
+    @if (menus.Facturacion)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Facturacion" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #3D4451 !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(61,68,81,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-receipt-cutoff fs-2" style="color: #3D4451;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Facturación</div>
+                            <small class="text-muted">Documentos y facturas</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+    @if (menus.Ventas)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Ventas" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #1B6CA8 !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(27,108,168,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-graph-up-arrow fs-2" style="color: #1B6CA8;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Ventas</div>
+                            <small class="text-muted">Indicadores y dashboards</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+    @if (menus.Seguridad)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="Inspeccion" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #0B7CBF !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(11,124,191,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-shield-check fs-2" style="color: #0B7CBF;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Seguridad</div>
+                            <small class="text-muted">Inspecciones de seguridad</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+    @if (menus.RecursosHumanos)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a href="/RecursosHumanos/Aquarius/Marcaciones" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #5A5A8A !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(90,90,138,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-people-fill fs-2" style="color: #5A5A8A;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Recursos Humanos</div>
+                            <small class="text-muted">Marcaciones y personal</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
 </div>
 
 @section Scripts {
     <script>
-        // ============================================================
-        // MOSTRAR DATOS DE ORACLE EN CONSOLA DEL NAVEGADOR
-        // ============================================================
         @if (TempData["OracleLoginSuccess"] != null)
         {
             <text>
@@ -117,9 +136,6 @@
             console.log('%c 🏢 Centro de Costo:', 'color: #2D7A5F; font-weight: bold;', '@TempData["OracleCentroCosto"]');
             console.log('%c ✅ Login exitoso desde Oracle Database', 'color: #2D7A5F; font-style: italic;');
             console.log('%c ═══════════════════════════════════════════════════', 'color: #1B4D3E; font-weight: bold;');
-
-            // Objeto completo para inspección
-            console.log('%c 📦 Objeto Usuario Oracle:', 'color: #3D4451; font-weight: bold;');
             console.table({
                 'Usuario': '@TempData["OracleUser"]',
                 'Centro de Costo': '@TempData["OracleCentroCosto"]',
@@ -128,31 +144,19 @@
             });
             </text>
         }
-
-        @if (User.IsInRole("Admin") || User.IsInRole("Gerencia") || User.IsInRole("Supervisor"))
-        {
-            <text>
-            const ctx = document.getElementById('graficoResumen');
-            if (ctx) {
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: ['Materia Prima', 'Productos', 'Órdenes Activas', 'Empleados'],
-                        datasets: [{
-                            label: 'Cantidad',
-                            data: [@ViewBag.StockBajo, @ViewBag.TotalProductos, @ViewBag.OrdenesActivas, @ViewBag.TotalEmpleados],
-                            backgroundColor: ['#C0392B', '#1B4D3E', '#C8A951', '#3D4451'],
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-                    }
-                });
-            }
-            </text>
-        }
     </script>
 }
+
+
+    @section Styles {
+        <style>
+            .quick-access-card {
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                cursor: pointer;
+            }
+            .quick-access-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+            }
+        </style>
+    }

@@ -1,20 +1,18 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using FabricaHilos.Filters;
 using FabricaHilos.Services.Ventas;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Ventas
 {
     [Authorize]
-    [VentasAuthorize]
-    public class IndicadoresComercialesController : OracleBaseController
+    public class DashboardComercialController : OracleBaseController
     {
-        private readonly IIndicadoresComercialesService _service;
-        private readonly ILogger<IndicadoresComercialesController> _logger;
+        private readonly IDashboardComercialService _service;
+        private readonly ILogger<DashboardComercialController> _logger;
 
-        public IndicadoresComercialesController(
-            IIndicadoresComercialesService service,
-            ILogger<IndicadoresComercialesController> logger)
+        public DashboardComercialController(
+            IDashboardComercialService service,
+            ILogger<DashboardComercialController> logger)
         {
             _service = service;
             _logger  = logger;
@@ -72,6 +70,14 @@ namespace FabricaHilos.Controllers
                 return Json(new List<object>());
 
             var data = await _service.ObtenerDetalleClientesPorAsesorAsync(fi, ff, moneda ?? "D", asesor, mes);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosTopClientesPorAsesor(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, int top = 3)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerTopClientesPorAsesorAsync(fi, ff, moneda ?? "D", top);
             return Json(data);
         }
 

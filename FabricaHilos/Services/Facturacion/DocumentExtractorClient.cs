@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using FabricaHilos.Models.Facturacion;
 
-namespace FabricaHilos.Services;
+namespace FabricaHilos.Services.Facturacion;
 
 public class DocumentExtractorClient
 {

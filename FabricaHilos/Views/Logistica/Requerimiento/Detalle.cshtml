@@ -1,0 +1,475 @@
+@model FabricaHilos.Models.Logistica.RequisicionDetalleViewModel
+@using FabricaHilos.Models.Logistica
+@using System.IO
+
+@{
+    ViewData["Title"] = $"Requerimiento {Model.Cabecera.TipDoc}-{Model.Cabecera.Serie:D3}-{Model.Cabecera.NumReq}";
+    var cab      = Model.Cabecera;
+    var archivos = ViewBag.ArchivosExistentes as List<ArchivoRequisicionDto> ?? new();
+    var nombres  = ViewBag.Nombres as Dictionary<string, string> ?? new Dictionary<string, string>();
+    _ = nombres.TryGetValue(cab.Responsable ?? "", out var nomResp);
+    _ = nombres.TryGetValue(cab.Autoriza ?? "", out var nomAutoriza);
+
+    var (badgeClass, estadoTexto) = cab.Estado switch
+    {
+        "0" => ("bg-secondary", "Pendiente"),
+        "1" => ("bg-success",   "Autorizado"),
+        "2" => ("bg-primary",   "Atendido"),
+        "A" => ("bg-danger",    "Anulado"),
+        _   => ("bg-light text-dark", cab.Estado ?? "-")
+    };
+
+    Func<string, string> IconoArchivo = nombre =>
+    {
+        var ext = System.IO.Path.GetExtension(nombre).ToLower();
+        if (ext == ".pdf")  return "bi-file-earmark-pdf text-danger";
+        if (ext == ".doc" || ext == ".docx") return "bi-file-earmark-word text-primary";
+        if (ext == ".xls" || ext == ".xlsx") return "bi-file-earmark-excel text-success";
+        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp")
+            return "bi-file-earmark-image text-warning";
+        if (ext == ".zip" || ext == ".rar") return "bi-file-earmark-zip text-secondary";
+        return "bi-file-earmark text-muted";
+    };
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-action="Index">Logística</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index">Requerimientos</a></li>
+    <li class="breadcrumb-item active">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-clipboard-check me-2"></i>
+        Requerimiento &nbsp;<span class="fw-bold">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</span>
+        &nbsp;<span class="badge @badgeClass">@estadoTexto</span>
+    </h4>
+    <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Volver al listado
+    </a>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ CABECERA ══ -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header py-2 fw-semibold">
+        <i class="bi bi-info-circle me-1"></i> Datos del Requerimiento
+    </div>
+    <div class="card-body py-3">
+        <div class="row g-2 row-cols-2 row-cols-md-3 row-cols-lg-4" style="--bs-gutter-x:1rem;">
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Tipo Doc.</label>
+                <div class="fw-semibold">@(cab.TipDoc ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Serie</label>
+                <div class="fw-semibold">@cab.Serie</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">N° Requerimiento</label>
+                <div class="fw-semibold">@cab.NumReq</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Centro de Costo</label>
+                <div>@(cab.CentroCosto ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Proveedor(es)</label>
+                <div>@(cab.Proveedores ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Fecha</label>
+                <div>@(cab.Fecha?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">F. Entrega</label>
+                <div>@(cab.FEntrega?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Responsable</label>
+                <div class="text-truncate" style="max-width:220px;" title="@(cab.Responsable) @nomResp">@(cab.Responsable ?? "-")@if (!string.IsNullOrEmpty(nomResp)) { <span class="text-muted small ms-1">@nomResp</span> }</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Prioridad</label>
+                <div>@(cab.Prioridad ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Destino</label>
+                <div>@(cab.Destino ?? "-")</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Ind. Servicio</label>
+                <div>@(cab.IndServ == "S" ? "Sí" : cab.IndServ == "N" ? "No" : (cab.IndServ ?? "-"))</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">F. Entrega Logística</label>
+                <div>@(cab.FchEntregaLogist?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            @if (cab.Impsto.HasValue && cab.Impsto > 0)
+            {
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Impuesto</label>
+                <div>@cab.Impsto?.ToString("N2")%</div>
+            </div>
+            }
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Afecto IGV</label>
+                <div>@(cab.AfectoIgv == "S" ? "Sí" : cab.AfectoIgv == "N" ? "No" : (cab.AfectoIgv ?? "-"))</div>
+            </div>
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Afecto Imp. Renta</label>
+                <div>@(cab.AfectoIrenta == "S" ? "Sí" : cab.AfectoIrenta == "N" ? "No" : (cab.AfectoIrenta ?? "-"))</div>
+            </div>
+            @if (!string.IsNullOrEmpty(cab.TipRef))
+            {
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Referencia</label>
+                <div>@cab.TipRef-@cab.SerRef?.ToString("D3")-@cab.NroRef</div>
+            </div>
+            }
+            @if (!string.IsNullOrEmpty(cab.Autoriza) || !string.IsNullOrEmpty(cab.UserAutoriza))
+            {
+            <div class="col" style="min-width:200px;">
+                <label class="form-label small text-muted mb-0">Autoriza</label>
+                <div class="text-truncate" style="max-width:240px;"
+                     title="@cab.Autoriza @nomAutoriza @(cab.UserAutoriza != null ? "- " + cab.UserAutoriza : "") @(cab.FAutoriza.HasValue ? cab.FAutoriza.Value.ToString("dd/MM/yyyy") : "")">
+                    @if (!string.IsNullOrEmpty(cab.Autoriza))
+                    {
+                        <span>@cab.Autoriza</span>
+                        @if (!string.IsNullOrEmpty(nomAutoriza)) { <span class="text-muted small ms-1">@nomAutoriza</span> }
+                    }
+                    @if (!string.IsNullOrEmpty(cab.UserAutoriza))
+                    {
+                        <span class="ms-1">- @cab.UserAutoriza</span>
+                    }
+                    @if (cab.FAutoriza.HasValue)
+                    {
+                        <span class="text-muted small ms-1">@cab.FAutoriza.Value.ToString("dd/MM/yyyy")</span>
+                    }
+                </div>
+            </div>
+            }
+            @if (!string.IsNullOrEmpty(cab.Recibe))
+            {
+            <div class="col">
+                <label class="form-label small text-muted mb-0">Recibe</label>
+                <div>@cab.Recibe &nbsp;<span class="text-muted small">@(cab.FRecibe?.ToString("dd/MM/yyyy"))</span></div>
+            </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(cab.Observacion))
+        {
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-0">Observación</label>
+                <div class="border rounded px-2 py-1 bg-light small">@cab.Observacion</div>
+            </div>
+        }
+        @if (cab.Estado == "A" && !string.IsNullOrWhiteSpace(cab.NotaAnulacion))
+        {
+            <div class="mt-2">
+                <label class="form-label small text-muted mb-0">Nota de Anulación</label>
+                <div class="border rounded px-2 py-1 bg-danger bg-opacity-10 text-danger small">@cab.NotaAnulacion</div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ DETALLE ══ -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header py-2 fw-semibold">
+        <i class="bi bi-list-ul me-1"></i> Ítems del Requerimiento
+        <span class="badge bg-secondary ms-2">@Model.Items.Count</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width:38px;">
+                            <input type="checkbox" id="chkTodos" class="form-check-input" title="Seleccionar todos" />
+                        </th>
+                        <th class="text-center">#</th>
+                        <th>Cód. Artículo</th>
+                        <th>Descripción</th>
+                        <th class="text-center">Unidad</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Saldo</th>
+                        <th class="text-end">Stk. Mín.</th>
+                        <th class="text-end">Stk. Hist.</th>
+                        <th class="text-end">Precio</th>
+                        <th class="text-center">Moneda</th>
+                        <th>Marca</th>
+                        <th>Cta. Contable</th>
+                        <th>Solicitante</th>
+                        <th>Destino</th>
+                        <th class="text-center">F. Aprobado</th>
+                        <th class="text-center">Grupo</th>
+                        <th>Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox" class="form-check-input chk-item"
+                                       value="@item.Orden"
+                                       data-idgrupo="@(item.IdGrupo?.ToString() ?? "")" />
+                            </td>
+                            <td class="text-center">@item.Orden</td>
+                            <td>@(item.CodArt ?? "-")</td>
+                            <td>@(item.Detalle ?? "-")</td>
+                            <td class="text-center">@(item.Unidad ?? "-")</td>
+                            <td class="text-end">@item.Cantidad.ToString("N2")</td>
+                            <td class="text-end">@item.Saldo.ToString("N2")</td>
+                            <td class="text-end text-muted">@(item.StkMin.HasValue ? item.StkMin.Value.ToString("N2") : "-")</td>
+                            <td class="text-end text-muted">@(item.StkHist.HasValue ? item.StkHist.Value.ToString("N2") : "-")</td>
+                            <td class="text-end">@(item.Precio > 0 ? item.Precio.ToString("N2") : "-")</td>
+                            <td class="text-center">
+                                @(item.Moneda == "D" ? "USD" : item.Moneda == "S" ? "PEN" : (item.Moneda ?? "-"))
+                            </td>
+                            <td>@(item.Marca ?? "-")</td>
+                            <td class="small">@(item.CtaCtble ?? "-")</td>
+                            <td>@(item.CodSolicita ?? "-")</td>
+                            <td>@(item.Destino ?? "-")</td>
+                            <td class="text-center">@(item.FAprobado?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-center">
+                                @if (item.IdGrupo.HasValue)
+                                {
+                                    <span class="badge bg-info text-dark" title="ID Grupo: @item.IdGrupo">@item.IdGrupo</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td class="small text-muted">@(item.Observaciones ?? "-")</td>
+                        </tr>
+                    }
+                    @if (!Model.Items.Any())
+                    {
+                        <tr>
+                            <td colspan="18" class="text-center text-muted py-3">
+                                <i class="bi bi-inbox d-block mb-1"></i> Sin ítems registrados.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                @if (Model.Items.Any())
+                {
+                    <tfoot class="table-light fw-semibold">
+                        <tr>
+                            <td colspan="6" class="text-end small">Totales:</td>
+                                <td class="text-end">@Model.Items.Sum(i => i.Cantidad).ToString("N2")</td>
+                                <td class="text-end">@Model.Items.Sum(i => i.Saldo).ToString("N2")</td>
+                                <td colspan="10"></td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ ARCHIVOS ══ -->
+<div class="card shadow-sm">
+    <div class="card-header py-2 fw-semibold">
+        <i class="bi bi-paperclip me-1"></i> Archivos Adjuntos
+        @if (archivos.Any())
+        {
+            <span class="badge bg-secondary ms-2">@archivos.Count</span>
+        }
+    </div>
+    <div class="card-body">
+
+        <!-- Subir nuevos archivos -->
+        <form asp-controller="Requisicion"
+              asp-action="SubirArchivos"
+              method="post"
+              enctype="multipart/form-data"
+              class="mb-3"
+              id="formSubirArchivos">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="TipDoc" value="@cab.TipDoc" />
+            <input type="hidden" name="Serie"  value="@cab.Serie" />
+            <input type="hidden" name="NumReq" value="@cab.NumReq" />
+            <div id="hiddenOrdenesContainer"></div>
+
+            <div class="alert alert-info py-2 small mb-2">
+                <i class="bi bi-info-circle me-1"></i>
+                Seleccione uno o más ítems en la tabla y luego elija los archivos a adjuntar.
+                Se generará un código de grupo único que quedará registrado en los ítems seleccionados.
+            </div>
+
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <div class="flex-grow-1">
+                    <input type="file"
+                           name="Archivos"
+                           id="inputArchivos"
+                           class="form-control form-control-sm"
+                           multiple
+                           accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.bmp,.txt,.zip,.rar" />
+                    <div class="form-text text-muted">
+                        Formatos permitidos: PDF, Word, Excel, imágenes (JPG/PNG/GIF/BMP), TXT, ZIP, RAR.
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="btnCargar" disabled>
+                    <i class="bi bi-upload me-1"></i> Cargar
+                    <span id="lblItemsSel" class="badge bg-light text-dark ms-1">0 ítems</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Listado de archivos existentes -->
+        @if (archivos.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nombre</th>
+                            <th class="text-center">Grupo</th>
+                            <th class="text-end">Tamaño</th>
+                            <th class="text-center">Fecha de carga</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var archivo in archivos)
+                        {
+                            var icon = IconoArchivo(archivo.NombreArchivo);
+                            <tr>
+                                <td>
+                                    <i class="bi @icon me-1"></i>
+                                    @archivo.NombreArchivo
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-info text-dark small" title="ID Grupo">@archivo.IdGrupo</span>
+                                </td>
+                                <td class="text-end small text-muted">
+                                    @(archivo.TamanioBytes < 1024
+                                        ? $"{archivo.TamanioBytes} B"
+                                        : archivo.TamanioBytes < 1048576
+                                            ? $"{archivo.TamanioBytes / 1024.0:N1} KB"
+                                            : $"{archivo.TamanioBytes / 1048576.0:N1} MB")
+                                </td>
+                                <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td class="text-center">
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        <a asp-controller="Requisicion"
+                                           asp-action="Descargar"
+                                           asp-route-idGrupo="@archivo.IdGrupo"
+                                           asp-route-nombreArchivo="@archivo.NombreArchivo"
+                                           class="btn btn-sm btn-outline-primary"
+                                           title="Descargar"
+                                           target="_blank">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                        <form asp-controller="Requisicion"
+                                              asp-action="EliminarArchivo"
+                                              method="post"
+                                              onsubmit="return confirm('¿Eliminar el archivo «@archivo.NombreArchivo»?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
+                                            <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center text-muted small py-2">
+                <i class="bi bi-folder2-open me-1"></i> Aún no se han adjuntado archivos.
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var chkTodos   = document.getElementById('chkTodos');
+    var btnCargar  = document.getElementById('btnCargar');
+    var lblItems   = document.getElementById('lblItemsSel');
+    var container  = document.getElementById('hiddenOrdenesContainer');
+    var form       = document.getElementById('formSubirArchivos');
+    var inputFiles = document.getElementById('inputArchivos');
+
+    function getSeleccionados() {
+        return Array.from(document.querySelectorAll('.chk-item:checked'))
+                    .map(function (c) { return c.value; });
+    }
+
+    function actualizarBoton() {
+        var sel = getSeleccionados();
+        var tieneArchivos = inputFiles.files && inputFiles.files.length > 0;
+        btnCargar.disabled = (sel.length === 0 || !tieneArchivos);
+        lblItems.textContent = sel.length + ' ítem' + (sel.length !== 1 ? 's' : '');
+    }
+
+    chkTodos.addEventListener('change', function () {
+        document.querySelectorAll('.chk-item').forEach(function (c) {
+            c.checked = chkTodos.checked;
+        });
+        actualizarBoton();
+    });
+
+    document.querySelectorAll('.chk-item').forEach(function (c) {
+        c.addEventListener('change', function () {
+            var total   = document.querySelectorAll('.chk-item').length;
+            var marcados = document.querySelectorAll('.chk-item:checked').length;
+            chkTodos.indeterminate = marcados > 0 && marcados < total;
+            chkTodos.checked       = marcados === total;
+            actualizarBoton();
+        });
+    });
+
+    inputFiles.addEventListener('change', actualizarBoton);
+
+    btnCargar.addEventListener('click', function () {
+        container.innerHTML = '';
+
+        var seleccionados = Array.from(document.querySelectorAll('.chk-item:checked'));
+
+        // Agregar los órdenes seleccionados
+        seleccionados.forEach(function (chk) {
+            var inp   = document.createElement('input');
+            inp.type  = 'hidden';
+            inp.name  = 'OrdenesItems';
+            inp.value = chk.value;
+            container.appendChild(inp);
+        });
+
+        // Obtener los grupos no vacíos de los ítems seleccionados
+        var gruposConValor = seleccionados
+            .map(function (chk) { return chk.dataset.idgrupo; })
+            .filter(function (g) { return g && g !== ''; });
+
+        // Si hay ítems con grupo Y todos comparten el mismo → reutilizarlo
+        // (aplica también a los ítems seleccionados que aún no tienen grupo)
+        var grupoUnico = gruposConValor.length > 0 &&
+                         gruposConValor.every(function (g) { return g === gruposConValor[0]; })
+                         ? gruposConValor[0]
+                         : null;
+
+        if (grupoUnico) {
+            var inpGrupo   = document.createElement('input');
+            inpGrupo.type  = 'hidden';
+            inpGrupo.name  = 'ExistingIdGrupo';
+            inpGrupo.value = grupoUnico;
+            container.appendChild(inpGrupo);
+        }
+
+        form.submit();
+    });
+})();
+</script>
+}

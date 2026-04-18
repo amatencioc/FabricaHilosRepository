@@ -8,6 +8,7 @@ using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 using FabricaHilos.Services.RecursosHumanos;
 using FabricaHilos.Services.Sgc;
+using FabricaHilos.Services.Logistica;
 using FabricaHilos.Services.Ventas;
 using FabricaHilos.Services.Seguridad.Inspeccion;
 using FabricaHilos.Config;
@@ -16,6 +17,7 @@ using Serilog;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using QuestPDF.Infrastructure;
+using FabricaHilos.Services.Facturacion;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -116,12 +118,12 @@ builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
 builder.Services.AddScoped<IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
-builder.Services.AddScoped<IRedInternaService, RedInternaService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
 builder.Services.AddSingleton<DepuracionJobService>();
 builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
+builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
@@ -151,6 +153,8 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/Ventas/{1}/{0}.cshtml");
         // Permite que Views/RecursosHumanos/Aquarius/{Controller}/{Action}.cshtml sea encontrado
         options.ViewLocationFormats.Add("/Views/RecursosHumanos/Aquarius/{1}/{0}.cshtml");
+        // Permite que Views/Seguridad/{Controller}/{Action}.cshtml sea encontrado automáticamente
+        options.ViewLocationFormats.Add("/Views/Seguridad/{1}/{0}.cshtml");
     });
 
 // Rate Limiting: protege /Account/Login contra fuerza bruta
@@ -251,7 +255,7 @@ static async Task InicializarBD(IServiceProvider services)
         await context.Database.MigrateAsync();
 
         // Crear roles
-        string[] roles = { "Admin", "Gerencia", "Supervisor", "Trabajador" };
+        string[] roles = { "Admin", "Trabajador" };
         foreach (var rol in roles)
         {
             if (!await roleManager.RoleExistsAsync(rol))

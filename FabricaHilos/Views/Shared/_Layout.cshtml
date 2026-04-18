@@ -38,12 +38,12 @@
                 {
                 <li>
                     <a asp-controller="Home" asp-action="Index" class="sidebar-link @(ctrl == "Home" ? "active" : "")">
-                        <i class="bi bi-speedometer2"></i> Dashboard
+                        <i class="bi bi-grid-1x2-fill"></i> Inicio
                     </a>
                 </li>
                 }
 
-                @if (menus.Produccion || menus.Sgc || menus.Facturacion)
+                @if (menus.Produccion)
                 {
                 <li class="sidebar-section">OPERACIONES</li>
                 }
@@ -87,6 +87,7 @@
                 }
                 @if (menus.Sgc)
                 {
+                <li class="sidebar-section">GESTIÓN DE CALIDAD</li>
                 <li>
                     <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
@@ -128,6 +129,7 @@
                 }
                 @if (menus.Facturacion)
                 {
+                <li class="sidebar-section">FINANZAS</li>
                 <li>
                     <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ctrl == "Facturacion" ? "active" : "")">
                         <i class="bi bi-receipt"></i> Facturación
@@ -152,9 +154,9 @@
                     </ul>
                 </li>
                 }
-                <!-- VENTAS -->
                 @if (menus.Ventas)
                 {
+                <li class="sidebar-section">COMERCIAL</li>
                 <li>
                     <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" || ctrl == "VentasPorMercado" || ctrl == "DashboardComercial" || ctrl == "DashboardGerencial" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
@@ -210,14 +212,14 @@
                     <!-- SEGURIDAD -->
                     <li class="sidebar-section">SEGURIDAD</li>
                     <li>
-                        <a href="/Seguridad" class="sidebar-link @(ctrl == "Seguridad" || ctrl == "Inspeccion" ? "active" : "")">
+                        <a asp-controller="Seguridad" asp-action="Index" class="sidebar-link @(ctrl == "Seguridad" || ctrl == "Inspeccion" ? "active" : "")">
                             <i class="bi bi-shield-check"></i> Seguridad
                         </a>
                         <ul class="list-unstyled ps-3">
                             @if (menus.SeguridadInspecciones)
                             {
                             <li>
-                                <a href="/Seguridad/Inspeccion" class="sidebar-link sidebar-sublink @(ctrl == "Inspeccion" ? "active" : "")">
+                                <a asp-controller="Inspeccion" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Inspeccion" ? "active" : "")">
                                     <i class="bi bi-clipboard-check"></i> Inspecciones
                                 </a>
                             </li>
@@ -229,21 +231,51 @@
                 @if (menus.RecursosHumanos)
                 {
                     <!-- RECURSOS HUMANOS -->
-                    <li class="sidebar-section">RECURSOS HUMANOS</li>
-                    <li>
-                        <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link @(ctrl == "Marcaciones" ? "active" : "")">
-                            <i class="bi bi-people"></i> Aquarius
+                    <li class="sidebar-section">RECURSOS HUMANOS</li>                    <li>
+                        <a asp-controller="RecursosHumanos" asp-action="Index"
+                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" ? "active" : "")">
+                            <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
-                            @if (menus.RhMarcaciones)
+                            <li>
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")"
+                                   data-bs-toggle="collapse" href="#submenuAquarius" role="button"
+                                   aria-expanded="@(ctrl == "Marcaciones" ? "true" : "false")"
+                                   aria-controls="submenuAquarius">
+                                    <i class="bi bi-people-fill"></i> Aquarius
+                                </a>
+                                <ul class="collapse @(ctrl == "Marcaciones" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                    @if (menus.RhMarcaciones)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
+                                            <i class="bi bi-clock-history"></i> Marcaciones
+                                        </a>
+                                    </li>
+                                    }
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                }
+
+                @if (menus.Logistica)
+                {
+                    <!-- LOGÍSTICA -->
+                    <li class="sidebar-section">LOGÍSTICA</li>
+                    <li>
+                        <a href="/Logistica/Requerimiento" class="sidebar-link @(ctrl == "Requisicion" ? "active" : "")">
+                            <i class="bi bi-box-seam"></i> Logística
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.LogisticaRequerimiento)
                             {
                             <li>
-                                <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
-                                    <i class="bi bi-clock-history"></i> Marcaciones
+                                <a href="/Logistica/Requerimiento" class="sidebar-link sidebar-sublink @(ctrl == "Requisicion" ? "active" : "")">
+                                    <i class="bi bi-clipboard-check"></i> Requerimientos
                                 </a>
                             </li>
                             }
-
                         </ul>
                     </li>
                 }

@@ -1,13 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using FabricaHilos.Filters;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Ventas
 {
     [Authorize]
-    [VentasAuthorize]
     public class VentasController : Controller
     {
         private readonly IMenuService _menuService;

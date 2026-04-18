@@ -4,7 +4,7 @@ using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Filters;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Seguridad
 {
     [Authorize]
     [AccesoExternoPermitido]
@@ -35,7 +35,7 @@ namespace FabricaHilos.Controllers
                 });
             }
 
-            return View(modulos);
+            return View("~/Views/Seguridad/Index.cshtml", modulos);
         }
     }
 }

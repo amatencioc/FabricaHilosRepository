@@ -1,11 +1,9 @@
 namespace FabricaHilos.Config;
 
 /// <summary>
-/// Controla qué menús y submenús del sidebar son visibles.
+/// Controla qué submenús del sidebar están habilitados globalmente.
 /// Se configura en appsettings.json → sección "Menus".
-/// false = oculto, true = visible.
-/// Por usuario se usa "UserMenus:{username}" como lista de claves permitidas.
-/// Clave de submenú usa notación punteada: "Produccion.Autoconer".
+/// El acceso por módulo se determina desde el campo ACCESO_WEB de Oracle (CS_USER).
 /// </summary>
 public class MenuOptions
 {
@@ -49,6 +47,10 @@ public class MenuOptions
     public bool RecursosHumanos    { get; set; } = false;
     public bool RhMarcaciones      { get; set; } = true;
 
+    // ── Menús: Logística ──────────────────────────────────────────────────
+    public bool Logistica                { get; set; } = false;
+    public bool LogisticaRequerimiento   { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -85,6 +87,9 @@ public class MenuOptions
 
         RecursosHumanos = true,
         RhMarcaciones   = true,
+
+        Logistica              = true,
+        LogisticaRequerimiento = true,
     };
 }
 

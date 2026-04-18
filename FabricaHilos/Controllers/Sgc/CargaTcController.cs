@@ -6,7 +6,7 @@ using FabricaHilos.Services.Sgc;
 using FabricaHilos.Notificaciones.Abstractions;
 using FabricaHilos.Notificaciones.Models.Payloads;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Sgc
 {
     [Authorize]
     public class CargaTcController : OracleBaseController

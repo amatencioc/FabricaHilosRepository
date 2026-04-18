@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Produccion
 {
     [Authorize]
     public class ProduccionController : Controller

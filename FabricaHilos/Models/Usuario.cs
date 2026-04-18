@@ -12,5 +12,6 @@ namespace FabricaHilos.Models
         public string c_codigo { get; set; }
         public string c_nombre { get; set; }
         public string c_costo { get; set; }
+        public string acceso_web { get; set; }
     }
 }

@@ -7,7 +7,7 @@ using FabricaHilos.Helpers;
 using FabricaHilos.Models.Produccion;
 using FabricaHilos.Services.Produccion;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Produccion
 {
     [Authorize]
     public class AutoconerController : OracleBaseController

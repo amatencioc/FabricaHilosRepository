@@ -6,7 +6,7 @@ using FabricaHilos.Models;
 using FabricaHilos.Services;
 using System.Diagnostics;
 
-namespace FabricaHilos.Controllers
+namespace FabricaHilos.Controllers.Home
 {
     [Authorize]
     public class HomeController : Controller
@@ -44,6 +44,7 @@ namespace FabricaHilos.Controllers
 
             ViewBag.OrdenesActivas = ordenesActivas;
             ViewBag.VentasMes = ventasMes;
+            ViewBag.MenusActuales = _menuService.GetMenusActuales();
 
             return View();
         }

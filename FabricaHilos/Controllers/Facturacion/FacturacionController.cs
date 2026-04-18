@@ -1,11 +1,11 @@
 using FabricaHilos.Data;
 using FabricaHilos.Models.Facturacion;
-using FabricaHilos.Services;
+using FabricaHilos.Services.Facturacion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace FabricaHilos.Controllers;
+namespace FabricaHilos.Controllers.Facturacion.Facturacion;
 
 [Authorize]
 public class FacturacionController : Controller
