@@ -48,14 +48,6 @@
         margin: 0 0 .9rem .65rem;
         line-height: 1.55;
     }
-    .detail-table thead th {
-        background: #1B4D3E;
-        color: #fff;
-        font-weight: 600;
-        font-size: .82rem;
-        white-space: nowrap;
-    }
-    .detail-table td { font-size: .83rem; vertical-align: middle; }
     #detallePanel {
         display: none;
     }
@@ -186,17 +178,7 @@
                     </button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>RUC</th>
-                                <th>Razón Social</th>
-                                <th class="text-end">Importe</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaDetalleImporte"></tbody>
-                    </table>
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                 </div>
             </div>
         </div>
@@ -244,18 +226,7 @@
                     </button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>RUC</th>
-                                <th>Razón Social</th>
-                                <th class="text-end">Cantidad KG</th>
-                                <th class="text-end">Importe</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaDetalle"></tbody>
-                    </table>
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                 </div>
             </div>
         </div>
@@ -566,11 +537,16 @@
        (click en barra → drill-down Query 3.1)
        ═════════════════════════════════════════════════ */
     let clientesData = [];
+    let clientesTotalData = [];   /* distintos por asesor en el período */
+    function updateKpiClientes(totalData) {
+        clientesTotalData = totalData;
+        const totalClientes = totalData.reduce((s, d) => s + (d.nroClientes ?? 0), 0);
+        document.getElementById('kpiTotalClientes').textContent = totalClientes.toLocaleString('es-PE');
+        if (importeData.length > 0 && kgData.length > 0) renderTicketPrecio();
+    }
     function renderClientes(data) {
         destroyChart('clientes');
         clientesData = data;
-        const totalClientes = data.reduce((s, d) => s + (d.nroClientes ?? 0), 0);
-        document.getElementById('kpiTotalClientes').textContent = totalClientes.toLocaleString('es-PE');
 
         let labels, datasets;
         const comp = isComparisonMode();
@@ -878,9 +854,9 @@
         destroyChart('ticket');
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
         const imp = {}, kg = {}, cli = {};
-        importeData.forEach(d =>  { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
-        kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
-        clientesData.forEach(d => { cli[d.asesor] = (cli[d.asesor] || 0) + (d.nroClientes ?? 0); });
+        importeData.forEach(d =>       { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
+        kgData.forEach(d =>            { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
+        clientesTotalData.forEach(d => { cli[d.asesor] = (d.nroClientes ?? 0); }); /* distintos en el período */
 
         const asesores = [...new Set([...Object.keys(imp), ...Object.keys(kg), ...Object.keys(cli)])].sort();
         const tickets = asesores.map(a => cli[a] > 0 ? imp[a] / cli[a] : 0);
@@ -949,7 +925,7 @@
         renderRanking();
         renderParticipacion();
         renderTendencia();
-        if (kgData.length > 0 && clientesData.length > 0) renderTicketPrecio();
+        if (kgData.length > 0 && clientesTotalData.length > 0) renderTicketPrecio();
     }
 
     /* ═════════════════════════════════════════════════
@@ -966,10 +942,11 @@
 
         const errors = [];
 
-        const [impRes, kgRes, cliRes] = await Promise.allSettled([
+        const [impRes, kgRes, cliRes, cliTotalRes] = await Promise.allSettled([
             apiFetch('@Url.Action("DatosImportePorAsesor")?' + p),
             apiFetch('@Url.Action("DatosCantidadKgPorAsesor")?' + p),
-            apiFetch('@Url.Action("DatosNroClientesPorAsesor")?' + p)
+            apiFetch('@Url.Action("DatosNroClientesPorAsesor")?' + p),
+            apiFetch('@Url.Action("DatosNroClientesTotalPorAsesor")?' + p)
         ]);
 
         if (impRes.status === 'fulfilled') { renderImporte(impRes.value); }
@@ -983,6 +960,9 @@
         if (cliRes.status === 'fulfilled') { renderClientes(cliRes.value); }
         else { console.error(cliRes.reason); errors.push('Nro Clientes'); }
         hideSpin('spinnerClientes');
+
+        if (cliTotalRes.status === 'fulfilled') { updateKpiClientes(cliTotalRes.value); }
+        else { console.error(cliTotalRes.reason); errors.push('Total Clientes'); }
 
         if (errors.length > 0) {
             showToast('Error al cargar: ' + errors.join(', ') + '. Verifique su conexión.', 'danger');

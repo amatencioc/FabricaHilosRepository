@@ -126,7 +126,12 @@
             <div class="row g-3">
                 <div class="col-md-12">
                     <label for="numCer" class="form-label">Nº Certificado <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="numCer" name="numCer" value="@requerimiento.NumCer" placeholder="Requerido" required>
+                    <input type="text" class="form-control" id="numCer" name="numCer" value="@requerimiento.NumCer"
+                           placeholder="Requerido" maxlength="30" required>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">Máximo 30 caracteres (límite de base de datos).</small>
+                        <small id="numCerContador" class="text-muted">@((requerimiento.NumCer?.Length ?? 0))/30</small>
+                    </div>
                 </div>
             </div>
 
@@ -205,6 +210,18 @@
         document.addEventListener('DOMContentLoaded', function () {
             const btnGuardar = document.getElementById('btnGuardar');
             const loadingOverlay = document.getElementById('loadingOverlay');
+            const numCerInput = document.getElementById('numCer');
+            const numCerContador = document.getElementById('numCerContador');
+
+            // Contador de caracteres en tiempo real
+            if (numCerInput && numCerContador) {
+                numCerInput.addEventListener('input', function () {
+                    const len = this.value.length;
+                    numCerContador.textContent = `${len}/30`;
+                    numCerContador.classList.toggle('text-danger', len >= 30);
+                    numCerContador.classList.toggle('text-muted', len < 30);
+                });
+            }
 
             if (btnGuardar) {
                 btnGuardar.addEventListener('click', function () {

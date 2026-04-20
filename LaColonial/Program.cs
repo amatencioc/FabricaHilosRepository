@@ -6,13 +6,19 @@ builder.Services.AddControllersWithViews();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
+    // En desarrollo se puede redirigir a HTTPS con el certificado de desarrollo de .NET
+    app.UseHttpsRedirection();
 }
-
-app.UseHttpsRedirection();
+else
+{
+    // En producción sin certificado SSL válido no redirigir a HTTPS:
+    // UseHttpsRedirection() causaba que iOS Safari mostrara un diálogo de descarga
+    // al no poder resolver HTTPS en una IP sin certificado válido.
+    // HSTS también desactivado: el servidor corre en HTTP puro (IP sin dominio/cert).
+    app.UseExceptionHandler("/Home/Error");
+}
 
 // Cache de archivos estáticos: 30 días para producción
 app.UseStaticFiles(new StaticFileOptions

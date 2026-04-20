@@ -46,6 +46,9 @@ namespace FabricaHilos.Models.Sgc
     public class ActualizarCertificadoDto
     {
         public int NumReq { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(30,
+            ErrorMessage = "El Nº Certificado no puede superar los 30 caracteres.")]
         public string? NumCer { get; set; }
     }
 

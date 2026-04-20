@@ -23,6 +23,12 @@ public class UblXmlParserService : IXmlParserService
         @"&(?!(?:amp|lt|gt|quot|apos);|#)([A-Za-z]\w*);",
         RegexOptions.Compiled);
 
+    // Regex: caracteres de control inválidos en XML 1.0 (excepto \t=0x09, \n=0x0A, \r=0x0D).
+    // Incluye: 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F y el sustituto 0xFFFD.
+    private static readonly Regex RegexControles = new(
+        @"[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFD]",
+        RegexOptions.Compiled);
+
     // Entidades HTML comunes → referencia numérica XML equivalente.
     private static readonly Dictionary<string, string> HtmlEntidadesXml =
         new(StringComparer.OrdinalIgnoreCase)
@@ -45,15 +51,60 @@ public class UblXmlParserService : IXmlParserService
         };
 
     /// <summary>
-    /// Reemplaza entidades HTML con nombre (&amp;nbsp; &amp;mdash; etc.) con su referencia
-    /// numérica XML equivalente para que <see cref="XDocument.Parse"/> no las rechace.
-    /// Las entidades XML estándar y referencias numéricas se conservan intactas.
+    /// Sanitiza el string XML antes de parsearlo:
+    /// <list type="number">
+    ///   <item>Elimina BOM UTF-8/UTF-16 (U+FEFF, U+FFFE) que pueden quedar como caracteres
+    ///         si el XML llegó por correo como texto o fue re-serializado.</item>
+    ///   <item>Elimina caracteres de control inválidos en XML 1.0 (0x00-0x08, 0x0B, 0x0C,
+    ///         0x0E-0x1F, U+FFFD) que causan <see cref="System.Xml.XmlException"/>.</item>
+    ///   <item>Reemplaza entidades HTML con nombre (&amp;nbsp; &amp;mdash; etc.) con su
+    ///         referencia numérica XML equivalente.</item>
+    /// </list>
     /// </summary>
-    private static string SanitizarEntidadesHtml(string xml)
+    private static string SanitizarXml(string xml)
     {
-        if (!xml.Contains('&')) return xml;
-        return RegexEntidadHtml.Replace(xml, m =>
-            HtmlEntidadesXml.TryGetValue(m.Groups[1].Value, out var repl) ? repl : " ");
+        if (string.IsNullOrEmpty(xml)) return xml;
+
+        // 1. Strip BOM como carácter (U+FEFF byte-order mark, U+FFFE reverse BOM).
+        int inicio = 0;
+        while (inicio < xml.Length && (xml[inicio] == '\uFEFF' || xml[inicio] == '\uFFFE'))
+            inicio++;
+        if (inicio > 0) xml = xml[inicio..];
+
+        // 2. Eliminar caracteres de control inválidos en XML 1.0.
+        if (RegexControles.IsMatch(xml))
+            xml = RegexControles.Replace(xml, string.Empty);
+
+        // 3. Reemplazar entidades HTML no estándar.
+        if (xml.Contains('&'))
+            xml = RegexEntidadHtml.Replace(xml, m =>
+                HtmlEntidadesXml.TryGetValue(m.Groups[1].Value, out var repl) ? repl : " ");
+
+        return xml;
+    }
+
+    /// <summary>
+    /// Trunca un string al número máximo de <paramref name="maxBytes"/> en UTF-8,
+    /// respetando los límites de carácter (no corta en mitad de un carácter multibyte).
+    /// Útil para columnas Oracle declaradas como <c>VARCHAR2(N BYTE)</c>.
+    /// </summary>
+    private static string? TruncarBytes(string? s, int maxBytes)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(s);
+        if (bytes <= maxBytes) return s;
+
+        // Recortar carácter a carácter hasta que el conteo de bytes no supere el límite.
+        var sb = new System.Text.StringBuilder();
+        int acumulado = 0;
+        foreach (var c in s)
+        {
+            int cb = System.Text.Encoding.UTF8.GetByteCount([c]);
+            if (acumulado + cb > maxBytes) break;
+            sb.Append(c);
+            acumulado += cb;
+        }
+        return sb.ToString();
     }
 
     private readonly ILogger<UblXmlParserService> _logger;
@@ -68,7 +119,15 @@ public class UblXmlParserService : IXmlParserService
     {
         try
         {
-            var doc = XDocument.Parse(SanitizarEntidadesHtml(xmlContenido));
+            // Detectar y advertir sobre BOM antes de sanitizar, para trazabilidad en logs.
+            if (xmlContenido.Length > 0 && (xmlContenido[0] == '\uFEFF' || xmlContenido[0] == '\uFFFE'))
+                _logger.LogWarning(
+                    "XML '{Archivo}': BOM detectado como carácter (U+{Hex:X4}). " +
+                    "El proveedor genera XML con BOM — se elimina automáticamente.",
+                    nombreArchivo, (int)xmlContenido[0]);
+
+            var xmlLimpio = SanitizarXml(xmlContenido);
+            var doc = XDocument.Parse(xmlLimpio);
             var root = doc.Root;
             if (root is null)
                 return new ResultadoParseo(EstadoParseo.XmlInvalido,
@@ -168,8 +227,8 @@ public class UblXmlParserService : IXmlParserService
         if (supplier is not null)
         {
             doc.RucEmisor             = Elem(supplier?.Element(NsCac + "PartyIdentification"), NsCbc, "ID") ?? string.Empty;
-            doc.NombreComercialEmisor = Elem(supplier?.Element(NsCac + "PartyName"), NsCbc, "Name") ?? string.Empty;
-            doc.RazonSocialEmisor     = Elem(supplier?.Element(NsCac + "PartyLegalEntity"), NsCbc, "RegistrationName") ?? string.Empty;
+            doc.NombreComercialEmisor = TruncarBytes(Elem(supplier?.Element(NsCac + "PartyName"), NsCbc, "Name") ?? string.Empty, 300) ?? string.Empty;
+            doc.RazonSocialEmisor     = TruncarBytes(Elem(supplier?.Element(NsCac + "PartyLegalEntity"), NsCbc, "RegistrationName") ?? string.Empty, 300) ?? string.Empty;
 
             var regAddr = supplier?.Element(NsCac + "PartyLegalEntity")
                                    ?.Element(NsCac + "RegistrationAddress");
@@ -177,7 +236,7 @@ public class UblXmlParserService : IXmlParserService
                 regAddr = supplier?.Element(NsCac + "PostalAddress");
 
             doc.UbigeoEmisor    = Elem(regAddr, NsCbc, "ID") ?? string.Empty;
-            doc.DireccionEmisor = Elem(regAddr?.Element(NsCac + "AddressLine"), NsCbc, "Line") ?? string.Empty;
+            doc.DireccionEmisor = TruncarBytes(Elem(regAddr?.Element(NsCac + "AddressLine"), NsCbc, "Line") ?? string.Empty, 500) ?? string.Empty;
         }
 
         // ── Receptor ──────────────────────────────────────────────────────────
@@ -186,7 +245,7 @@ public class UblXmlParserService : IXmlParserService
         if (customer is not null)
         {
             doc.RucReceptor         = Elem(customer?.Element(NsCac + "PartyIdentification"), NsCbc, "ID") ?? string.Empty;
-            doc.RazonSocialReceptor = Elem(customer?.Element(NsCac + "PartyLegalEntity"), NsCbc, "RegistrationName") ?? string.Empty;
+            doc.RazonSocialReceptor = TruncarBytes(Elem(customer?.Element(NsCac + "PartyLegalEntity"), NsCbc, "RegistrationName") ?? string.Empty, 300) ?? string.Empty;
 
             var custAddr = customer?.Element(NsCac + "PartyLegalEntity")
                                     ?.Element(NsCac + "RegistrationAddress");
@@ -194,7 +253,7 @@ public class UblXmlParserService : IXmlParserService
                 custAddr = customer?.Element(NsCac + "PostalAddress");
 
             doc.UbigeoReceptor    = Elem(custAddr, NsCbc, "ID") ?? string.Empty;
-            doc.DireccionReceptor = Elem(custAddr?.Element(NsCac + "AddressLine"), NsCbc, "Line") ?? string.Empty;
+            doc.DireccionReceptor = TruncarBytes(Elem(custAddr?.Element(NsCac + "AddressLine"), NsCbc, "Line") ?? string.Empty, 500) ?? string.Empty;
         }
 
         // ── Importes ──────────────────────────────────────────────────────────
@@ -231,14 +290,35 @@ public class UblXmlParserService : IXmlParserService
         // ── Forma de pago y cuotas ─────────────────────────────────────────────
         foreach (var pt in root.Elements(NsCac + "PaymentTerms"))
         {
-            var ptId = Elem(pt, NsCbc, "ID");
+            var ptId      = Elem(pt, NsCbc, "ID");
+            var ptMeansId = Elem(pt, NsCbc, "PaymentMeansID") ?? string.Empty;
+
+            // SUNAT usa <cbc:ID>FormaPago</cbc:ID> en todos los PaymentTerms.
+            // La distinción entre "forma de pago" y "cuota" se hace por PaymentMeansID:
+            //   "Contado" / "Credito"  → forma de pago principal
+            //   "Cuota001", "Cuota002" → cuota individual
+            // Algunos emisores usan el formato antiguo donde <cbc:ID> ya es "Cuota001".
             if (ptId?.Equals("FormaPago", StringComparison.OrdinalIgnoreCase) == true)
             {
-                doc.FormaPago          = Elem(pt, NsCbc, "PaymentMeansID") ?? string.Empty;
-                doc.MontoNetoPendiente = Dec(pt, NsCbc, "Amount");
+                if (ptMeansId.StartsWith("Cuota", StringComparison.OrdinalIgnoreCase))
+                {
+                    doc.Cuotas.Add(new CuotaPago
+                    {
+                        NumeroCuota      = ptMeansId,
+                        FechaVencimiento = Fecha(Elem(pt, NsCbc, "PaymentDueDate")),
+                        Monto            = Dec(pt, NsCbc, "Amount"),
+                        Moneda           = doc.Moneda,
+                    });
+                }
+                else
+                {
+                    doc.FormaPago          = ptMeansId;
+                    doc.MontoNetoPendiente = Dec(pt, NsCbc, "Amount");
+                }
             }
             else if (ptId?.StartsWith("Cuota", StringComparison.OrdinalIgnoreCase) == true)
             {
+                // Formato legacy donde <cbc:ID> ya contiene el número de cuota.
                 doc.Cuotas.Add(new CuotaPago
                 {
                     NumeroCuota      = ptId,
@@ -286,10 +366,12 @@ public class UblXmlParserService : IXmlParserService
         }
 
         // ── Referencias ───────────────────────────────────────────────────────
-        doc.NumeroPedido = Elem(root.Element(NsCac + "OrderReference"), NsCbc, "ID") ?? string.Empty;
-        doc.NumeroGuia   = Elem(root.Element(NsCac + "DespatchDocumentReference"), NsCbc, "ID") ?? string.Empty;
-        doc.NumeroDocRef = Elem(root.Element(NsCac + "BillingReference")
-                                    ?.Element(NsCac + "InvoiceDocumentReference"), NsCbc, "ID") ?? string.Empty;
+        // TruncarBytes: previene ORA-12899 en columnas VARCHAR2(N BYTE) cuando el valor
+        // contiene caracteres multibyte (ej: Ñ, tildes, CJK) que ocupan más de 1 byte en UTF-8.
+        doc.NumeroPedido = TruncarBytes(Elem(root.Element(NsCac + "OrderReference"), NsCbc, "ID") ?? string.Empty, 200) ?? string.Empty;
+        doc.NumeroGuia   = TruncarBytes(Elem(root.Element(NsCac + "DespatchDocumentReference"), NsCbc, "ID") ?? string.Empty, 100) ?? string.Empty;
+        doc.NumeroDocRef = TruncarBytes(Elem(root.Element(NsCac + "BillingReference")
+                                    ?.Element(NsCac + "InvoiceDocumentReference"), NsCbc, "ID") ?? string.Empty, 100) ?? string.Empty;
 
         foreach (var prop in root.Descendants(NsFac + "AdditionalPrintedProperty"))
         {
@@ -351,9 +433,9 @@ public class UblXmlParserService : IXmlParserService
             AfectacionIgv  = Elem(taxCat, NsCbc, "TaxExemptionReasonCode") ?? string.Empty,
             TotalLinea     = Dec(linea, NsCbc, "LineExtensionAmount")
                            + Dec(linea.Element(NsCac + "TaxTotal"), NsCbc, "TaxAmount"),
-            Descripcion    = Elem(item, NsCbc, "Description") ?? string.Empty,
-            NombreItem     = Elem(item, NsCbc, "Name") ?? string.Empty,
-            CodigoProducto = Elem(item?.Element(NsCac + "SellersItemIdentification"), NsCbc, "ID") ?? string.Empty,
+            Descripcion    = TruncarBytes(Elem(item, NsCbc, "Description") ?? string.Empty, 1000) ?? string.Empty,
+            NombreItem     = TruncarBytes(Elem(item, NsCbc, "Name") ?? string.Empty, 500) ?? string.Empty,
+            CodigoProducto = TruncarBytes(Elem(item?.Element(NsCac + "SellersItemIdentification"), NsCbc, "ID") ?? string.Empty, 100) ?? string.Empty,
             CodigoUNSPSC   = item?.Element(NsCac + "CommodityClassification")
                                    ?.Element(NsCbc + "ItemClassificationCode")?.Value?.Trim() ?? string.Empty,
         };

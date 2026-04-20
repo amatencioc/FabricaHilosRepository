@@ -81,6 +81,25 @@ namespace FabricaHilos.Controllers.Ventas
             return Json(data);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> DatosClientesImportePorAsesor(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            if (string.IsNullOrEmpty(asesor))
+                return Json(new List<object>());
+
+            var data = await _service.ObtenerClientesImportePorAsesorAsync(fi, ff, moneda ?? "D", asesor);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosClientesImporteTodos(DateTime? fechaInicio, DateTime? fechaFin, string? moneda)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerClientesImporteTodosAsync(fi, ff, moneda ?? "D");
+            return Json(data);
+        }
+
         // ─────────────────────────────────────────────────────────
         // Helper
         // ─────────────────────────────────────────────────────────

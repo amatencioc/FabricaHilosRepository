@@ -63,6 +63,14 @@ namespace FabricaHilos.Controllers.Ventas
         }
 
         [HttpGet]
+        public async Task<IActionResult> DatosNroClientesTotalPorAsesor(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
+            var data = await _service.ObtenerNroClientesTotalPorAsesorAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
         public async Task<IActionResult> DatosDetalleClientes(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor, string? mes)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);

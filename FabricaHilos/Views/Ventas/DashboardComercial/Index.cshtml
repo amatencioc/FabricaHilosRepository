@@ -23,7 +23,7 @@
         background: rgba(255,255,255,.75);
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: center;º
         border-radius: 12px;
         z-index: 10;
     }
@@ -63,6 +63,8 @@
         background-color: #1B4D3E;
         border-color: #1B4D3E;
     }
+
+
 </style>
 }
 
@@ -111,15 +113,6 @@
     </div>
 </div>
 
-<div class="row g-3 mb-3">
-    <div class="col-12">
-        <div class="card chart-card position-relative">
-            <div class="card-header small">Cartera por Asesor — Venta, Producción y % Participación (Horizontal)</div>
-            <div class="card-body" style="height:420px"><canvas id="chartCarteraBar"></canvas></div>
-        </div>
-    </div>
-</div>
-
 <!-- ── Sección 2: Top 3 Clientes por Asesor (Importe) ── -->
 <div class="section-title"><i class="bi bi-currency-dollar me-1"></i>Resumen por Asesor y Cliente (Importe) — TOP 3</div>
 <p class="report-desc">Muestra los <strong>3 clientes con mayor facturación</strong> de cada asesor, acumulado en todo el período. Las barras están agrupadas por asesor, permitiendo ver <strong>quiénes son los clientes más importantes</strong> en términos monetarios.</p>
@@ -148,11 +141,14 @@
 
 <!-- ── Sección 4: Total y % de Clientes por Asesor ─── -->
 <div class="section-title"><i class="bi bi-pie-chart me-1"></i>¿Cómo se distribuyen los clientes entre asesores?</div>
-<p class="report-desc">A la <strong>izquierda</strong>: gráfico circular con la <strong>cantidad total de clientes</strong> por asesor en todo el período. A la <strong>derecha</strong>: gráfico de barras horizontales con el <strong>porcentaje de clientes</strong> que maneja cada asesor respecto del total. Permite ver la <strong>concentración de cartera</strong>.</p>
+<p class="report-desc">A la <strong>izquierda</strong>: gráfico circular con la <strong>cantidad total de clientes</strong> por asesor en todo el período. A la <strong>derecha</strong>: gráfico de barras horizontales con el <strong>porcentaje de clientes</strong> que maneja cada asesor respecto del total. Permite ver la <strong>concentración de cartera</strong>. <strong>Haga clic en un sector del gráfico circular</strong> para ver el detalle de clientes del asesor seleccionado.</p>
 <div class="row g-3 mb-3">
     <div class="col-lg-5">
         <div class="card chart-card position-relative">
-            <div class="card-header small">Total de Clientes por Asesor</div>
+            <div class="card-header small d-flex justify-content-between align-items-center">
+                <span>Total de Clientes por Asesor</span>
+                <button class="btn btn-sm btn-outline-success py-0" onclick="exportarTodosClientesExcel()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+            </div>
             <div class="card-body" style="height:380px"><canvas id="chartClientesPie"></canvas></div>
         </div>
     </div>
@@ -160,6 +156,36 @@
         <div class="card chart-card position-relative">
             <div class="card-header small">% de Clientes por Asesor</div>
             <div class="card-body" style="height:380px"><canvas id="chartClientesPct"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Detalle: Clientes del Asesor — Importe ────────── -->
+<div id="panelClientesAsesor" style="display:none" class="mb-4">
+    <div class="card chart-card">
+        <div class="card-header d-flex justify-content-between align-items-center small">
+            <span><i class="bi bi-list-ul me-1"></i>Clientes del Asesor — <strong id="lblAsesorDetalle"></strong></span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-success py-0" onclick="exportarClientesAsesorExcel()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+                <button class="btn btn-sm btn-outline-secondary py-0" onclick="cerrarDetalleClientes()"><i class="bi bi-x-circle me-1"></i>Cerrar</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="spinnerClientesAsesor" class="chart-spinner" style="display:none"><div class="spinner-border text-success"></div></div>
+            <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                <table class="table table-sm table-hover table-striped table-corporate mb-0" id="tablaClientesAsesor">
+                    <thead class="sticky-top">
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th>RUC</th>
+                            <th>Razón Social</th>
+                            <th>Giro</th>
+                            <th class="text-end">Importe</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bodyClientesAsesor"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -184,6 +210,7 @@
 
 @section Scripts {
 <script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script src="~/js/dashboard-comercial-export.js" asp-append-version="true"></script>
 <script>
 (function () {
     'use strict';
@@ -320,7 +347,8 @@
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
     }
-
+    window.apiFetch    = apiFetch;
+    window.buildParams = buildParams;
 
 
     /* ── Datos compartidos para gráficos de resumen ── */
@@ -431,7 +459,6 @@
     function renderResumen() {
         if (importeData.length === 0 && kgData.length === 0 && clientesData.length === 0) return;
         renderCartera();
-        renderCarteraBar();
         renderRanking();
         renderParticipacion();
         renderClientesPie();
@@ -480,6 +507,12 @@
                             return ctx.chart.data.labels[ctx.dataIndex] + ', ' + v;
                         }
                     }
+                },
+                onClick: function(evt, elements) {
+                    if (!elements || elements.length === 0) return;
+                    var idx = elements[0].index;
+                    var asesor = sorted[idx].asesor;
+                    loadDetalleClientesAsesor(asesor);
                 }
             }
         });
@@ -535,6 +568,9 @@
         destroyChart('cartera');
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
 
+        /* Normalizar asesor null/"null" */
+        const normalize = a => (!a || a === 'null') ? 'Sin Asesor' : a;
+
         /* Detect unique years from importeData/kgData (mes = 'YYYY/MM') */
         const yearsSet = new Set();
         importeData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
@@ -545,8 +581,8 @@
         if (!multiYear) {
             /* Single year — original behavior */
             const imp = {}, kg = {};
-            importeData.forEach(d => { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
-            kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
+            importeData.forEach(d => { const a = normalize(d.asesor); imp[a] = (imp[a] || 0) + (d.importe ?? 0); });
+            kgData.forEach(d =>       { const a = normalize(d.asesor);  kg[a]  = (kg[a]  || 0) + (d.cantidadKg ?? 0); });
             const asesores = [...new Set([...Object.keys(imp), ...Object.keys(kg)])].sort();
             const totalImp = Object.values(imp).reduce((s, v) => s + v, 0);
             const ventas = asesores.map(a => imp[a] ?? 0);
@@ -556,7 +592,7 @@
             charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: asesores.map(a => a ?? 'Sin Asesor'),
+                    labels: asesores,
                     datasets: [
                         { label: 'Venta (' + monLabel + ')', data: ventas, backgroundColor: '#1B4D3E', borderRadius: 4, yAxisID: 'y' },
                         { label: 'Producción (kg)', data: kilos, backgroundColor: '#1565C0', borderRadius: 4, yAxisID: 'y' },
@@ -614,8 +650,8 @@
         } else {
             /* Multi-year — grouped bar sets per year */
             const asesoresSet = new Set();
-            importeData.forEach(d => asesoresSet.add(d.asesor));
-            kgData.forEach(d => asesoresSet.add(d.asesor));
+            importeData.forEach(d => asesoresSet.add(normalize(d.asesor)));
+            kgData.forEach(d => asesoresSet.add(normalize(d.asesor)));
             const asesores = [...asesoresSet].sort();
 
             /* Build per-year, per-asesor totals */
@@ -623,11 +659,13 @@
             years.forEach(yr => { impByYr[yr] = {}; kgByYr[yr] = {}; });
             importeData.forEach(d => {
                 var yr = d.mes ? d.mes.substring(0, 4) : '';
-                if (impByYr[yr]) impByYr[yr][d.asesor] = (impByYr[yr][d.asesor] || 0) + (d.importe ?? 0);
+                var a = normalize(d.asesor);
+                if (impByYr[yr]) impByYr[yr][a] = (impByYr[yr][a] || 0) + (d.importe ?? 0);
             });
             kgData.forEach(d => {
                 var yr = d.mes ? d.mes.substring(0, 4) : '';
-                if (kgByYr[yr]) kgByYr[yr][d.asesor] = (kgByYr[yr][d.asesor] || 0) + (d.cantidadKg ?? 0);
+                var a = normalize(d.asesor);
+                if (kgByYr[yr]) kgByYr[yr][a] = (kgByYr[yr][a] || 0) + (d.cantidadKg ?? 0);
             });
 
             var datasets = [];
@@ -651,7 +689,7 @@
             charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: asesores.map(a => a ?? 'Sin Asesor'),
+                    labels: asesores,
                     datasets: datasets
                 },
                 options: {
@@ -686,163 +724,6 @@
         }
     }
 
-    /* ── Cartera por Asesor — Venta, Producción y % Participación (horizontal) ── */
-    function renderCarteraBar() {
-        destroyChart('carteraBar');
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-
-        /* Detect unique years */
-        const yearsSet = new Set();
-        importeData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
-        kgData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
-        const years = [...yearsSet].sort();
-        const multiYear = years.length > 1;
-
-        const asesoresSet = new Set();
-        importeData.forEach(d => asesoresSet.add(d.asesor));
-        kgData.forEach(d => asesoresSet.add(d.asesor));
-        const asesores = [...asesoresSet].sort();
-
-        if (!multiYear) {
-            /* Single year — original */
-            const imp = {}, kg = {};
-            importeData.forEach(d => { imp[d.asesor] = (imp[d.asesor] || 0) + (d.importe ?? 0); });
-            kgData.forEach(d =>       { kg[d.asesor]  = (kg[d.asesor]  || 0) + (d.cantidadKg ?? 0); });
-            const totalImp = Object.values(imp).reduce((s, v) => s + v, 0);
-
-            const sorted = asesores
-                .map(a => ({ asesor: a ?? 'Sin Asesor', venta: imp[a] ?? 0, produccion: kg[a] ?? 0, pct: totalImp > 0 ? ((imp[a] ?? 0) / totalImp * 100) : 0 }))
-                .sort((a, b) => a.venta - b.venta);
-
-            charts['carteraBar'] = new Chart(document.getElementById('chartCarteraBar').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(r => r.asesor),
-                    datasets: [
-                        { label: 'Venta (' + monLabel + ')', data: sorted.map(r => r.venta), backgroundColor: '#1B4D3E', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x' },
-                        { label: 'Producción (kg)', data: sorted.map(r => r.produccion), backgroundColor: '#1565C0', borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x' },
-                        { label: '% Participación', data: sorted.map(r => r.pct), backgroundColor: '#e65100', borderRadius: 4, barPercentage: 0.5, categoryPercentage: 0.75, xAxisID: 'x1' }
-                    ]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(c) {
-                                    if (c.datasetIndex === 2) return c.dataset.label + ': ' + c.raw.toFixed(1) + '%';
-                                    if (c.datasetIndex === 1) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
-                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: function(ctx) {
-                                if (ctx.datasetIndex === 2) return true;
-                                return ctx.dataset.data[ctx.dataIndex] > 0;
-                            },
-                            anchor: 'end', align: 'right',
-                            font: { size: 10, weight: '600' },
-                            color: function(ctx) {
-                                if (ctx.datasetIndex === 2) return '#e65100';
-                                return ctx.datasetIndex === 0 ? '#1B4D3E' : '#1565C0';
-                            },
-                            formatter: function(v, ctx) {
-                                if (ctx.datasetIndex === 2) return v.toFixed(0) + '%';
-                                if (ctx.datasetIndex === 1) return fmtMil(v) + ' kg';
-                                return monLabel + ' ' + fmtMil(v);
-                            }
-                        }
-                    },
-                    layout: { padding: { right: 80 } },
-                    scales: {
-                        x:  { position: 'bottom', beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } }, grid: { color: 'rgba(0,0,0,0.06)' } },
-                        x1: { position: 'top', beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } }, grid: { drawOnChartArea: false } },
-                        y:  { ticks: { font: { size: 12, weight: '600' } }, grid: { display: false } }
-                    }
-                }
-            });
-        } else {
-            /* Multi-year — grouped horizontal bars per year */
-            const impByYr = {}, kgByYr = {};
-            years.forEach(yr => { impByYr[yr] = {}; kgByYr[yr] = {}; });
-            importeData.forEach(d => {
-                var yr = d.mes ? d.mes.substring(0, 4) : '';
-                if (impByYr[yr]) impByYr[yr][d.asesor] = (impByYr[yr][d.asesor] || 0) + (d.importe ?? 0);
-            });
-            kgData.forEach(d => {
-                var yr = d.mes ? d.mes.substring(0, 4) : '';
-                if (kgByYr[yr]) kgByYr[yr][d.asesor] = (kgByYr[yr][d.asesor] || 0) + (d.cantidadKg ?? 0);
-            });
-
-            /* Sort asesores by total importe across all years (ascending for horizontal) */
-            const totalByAsesor = {};
-            asesores.forEach(a => {
-                totalByAsesor[a] = years.reduce((s, yr) => s + (impByYr[yr][a] || 0), 0);
-            });
-            const sorted = asesores.slice().sort((a, b) => totalByAsesor[a] - totalByAsesor[b]);
-
-            var datasets = [];
-            var ventaColors = ['#1B4D3E', '#4CAF50', '#81C784', '#A5D6A7'];
-            var kgColors    = ['#1565C0', '#42A5F5', '#90CAF9', '#BBDEFB'];
-            years.forEach(function(yr, yi) {
-                datasets.push({
-                    label: 'Venta ' + yr + ' (' + monLabel + ')',
-                    data: sorted.map(a => impByYr[yr][a] ?? 0),
-                    backgroundColor: ventaColors[yi % ventaColors.length],
-                    borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x'
-                });
-                datasets.push({
-                    label: 'Producción ' + yr + ' (kg)',
-                    data: sorted.map(a => kgByYr[yr][a] ?? 0),
-                    backgroundColor: kgColors[yi % kgColors.length],
-                    borderRadius: 4, barPercentage: 0.7, categoryPercentage: 0.75, xAxisID: 'x'
-                });
-            });
-
-            charts['carteraBar'] = new Chart(document.getElementById('chartCarteraBar').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: sorted.map(a => a ?? 'Sin Asesor'),
-                    datasets: datasets
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(c) {
-                                    if (c.dataset.label.indexOf('Producción') >= 0) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
-                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
-                            anchor: 'end', align: 'right',
-                            font: { size: 9, weight: '600' },
-                            color: '#333',
-                            formatter: function(v, ctx) {
-                                if (ctx.dataset.label.indexOf('Producción') >= 0) return fmtMil(v) + ' kg';
-                                return monLabel + ' ' + fmtMil(v);
-                            }
-                        }
-                    },
-                    layout: { padding: { right: 80 } },
-                    scales: {
-                        x:  { position: 'bottom', beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } }, grid: { color: 'rgba(0,0,0,0.06)' } },
-                        x1: { display: false },
-                        y:  { ticks: { font: { size: 12, weight: '600' } }, grid: { display: false } }
-                    }
-                }
-            });
-        }
-    }
-
     /* ═════════════════════════════════════════════════
        CHART 9 & 10: Top 3 Clientes por Asesor (Kilos e Importe)
        ═════════════════════════════════════════════════ */
@@ -851,19 +732,25 @@
     function renderTopKg() {
         destroyChart('topKg');
         if (topClientesData.length === 0) return;
+        const normalizeA = a => (!a || a === 'null') ? 'Sin Asesor' : a;
+
+        /* Filtrar solo los del ranking KG */
+        const kgData2 = topClientesData.filter(d => !d.topType || d.topType === 'kg' || d.topType === 'both');
+        if (kgData2.length === 0) return;
 
         /* Detect unique years */
-        const yearsSet = new Set(topClientesData.map(d => d.anio));
+        const yearsSet = new Set(kgData2.map(d => d.anio));
         const years = [...yearsSet].sort();
         const multiYear = years.length > 1;
 
         /* Group by asesor, then by year */
         const grupos = {};
-        topClientesData.forEach(function(d) {
-            if (!grupos[d.asesor]) grupos[d.asesor] = {};
+        kgData2.forEach(function(d) {
+            var a = normalizeA(d.asesor);
+            if (!grupos[a]) grupos[a] = {};
             var yr = d.anio || 0;
-            if (!grupos[d.asesor][yr]) grupos[d.asesor][yr] = [];
-            grupos[d.asesor][yr].push(d);
+            if (!grupos[a][yr]) grupos[a][yr] = [];
+            grupos[a][yr].push(d);
         });
         const asesores = Object.keys(grupos).sort();
 
@@ -1047,19 +934,25 @@
         destroyChart('topImporte');
         if (topClientesData.length === 0) return;
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const normalizeA = a => (!a || a === 'null') ? 'Sin Asesor' : a;
+
+        /* Filtrar solo los del ranking Importe */
+        const impData = topClientesData.filter(d => !d.topType || d.topType === 'importe' || d.topType === 'both');
+        if (impData.length === 0) return;
 
         /* Detect unique years */
-        const yearsSet = new Set(topClientesData.map(d => d.anio));
+        const yearsSet = new Set(impData.map(d => d.anio));
         const years = [...yearsSet].sort();
         const multiYear = years.length > 1;
 
         /* Group by asesor, then by year */
         const grupos = {};
-        topClientesData.forEach(function(d) {
-            if (!grupos[d.asesor]) grupos[d.asesor] = {};
+        impData.forEach(function(d) {
+            var a = normalizeA(d.asesor);
+            if (!grupos[a]) grupos[a] = {};
             var yr = d.anio || 0;
-            if (!grupos[d.asesor][yr]) grupos[d.asesor][yr] = [];
-            grupos[d.asesor][yr].push(d);
+            if (!grupos[a][yr]) grupos[a][yr] = [];
+            grupos[a][yr].push(d);
         });
         const asesores = Object.keys(grupos).sort();
 
@@ -1240,10 +1133,64 @@
     }
 
     /* ═════════════════════════════════════════════════
+       DETALLE: Clientes del Asesor — Importe (desde pie chart)
+       ═════════════════════════════════════════════════ */
+    async function loadDetalleClientesAsesor(asesor) {
+        const panel  = document.getElementById('panelClientesAsesor');
+        const lbl    = document.getElementById('lblAsesorDetalle');
+        const body   = document.getElementById('bodyClientesAsesor');
+        const spin   = document.getElementById('spinnerClientesAsesor');
+
+        panel.style.display = 'block';
+        lbl.textContent = asesor;
+        body.innerHTML  = '';
+        spin.style.display = 'flex';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        const p = buildParams();
+        p.set('asesor', asesor);
+        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+
+        try {
+            const data = await apiFetch('@Url.Action("DatosClientesImportePorAsesor", "DashboardComercial")?' + p);
+            if (!data || data.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+            } else {
+                data.forEach(function(row, i) {
+                    var tr = '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td>' + (row.ruc || '') + '</td>'
+                        + '<td>' + (row.razonSocial || '') + '</td>'
+                        + '<td>' + (row.giro || '') + '</td>'
+                        + '<td class="text-end fw-semibold">' + monLabel + ' ' + fmt(row.importe) + '</td>'
+                        + '</tr>';
+                    body.innerHTML += tr;
+                });
+            }
+        } catch (e) {
+            console.error(e);
+            body.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
+        } finally {
+            spin.style.display = 'none';
+        }
+    }
+
+    window.cerrarDetalleClientes = function () {
+        document.getElementById('panelClientesAsesor').style.display = 'none';
+        document.getElementById('bodyClientesAsesor').innerHTML = '';
+    };
+
+    /* exportarClientesAsesorExcel y exportarTodosClientesExcel definidos en dashboard-comercial-export.js */
+    window._dcExportUrl = '@Url.Action("DatosClientesImporteTodos", "DashboardComercial")';
+
+    /* ═════════════════════════════════════════════════
        CARGAR TODOS LOS DATOS
        ═════════════════════════════════════════════════ */
     window.loadAll = async function () {
         const p = buildParams();
+
+        /* Cerrar panel de detalle al recargar */
+        cerrarDetalleClientes();
 
         showSpin('spinnerTopKg');
         showSpin('spinnerTopImporte');

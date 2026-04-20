@@ -21,5 +21,11 @@ namespace FabricaHilos.Services.Ventas
 
         /// <summary>Query 4: Top N clientes por Asesor (Kilos e Importe acumulado)</summary>
         Task<List<DcTopClienteAsesorDto>> ObtenerTopClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, int top);
+
+        /// <summary>Query 5: Clientes del Asesor — Importe + Giro (período completo)</summary>
+        Task<List<DcClienteImporteAsesorDto>> ObtenerClientesImportePorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor);
+
+        /// <summary>Query 5b: Todos los Clientes — Importe + Giro por Asesor (período completo)</summary>
+        Task<List<DcClienteImporteTodosDto>> ObtenerClientesImporteTodosAsync(DateTime fechaInicio, DateTime fechaFin, string moneda);
     }
 }

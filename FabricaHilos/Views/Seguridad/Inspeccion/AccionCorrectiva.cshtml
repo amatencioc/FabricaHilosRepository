@@ -173,10 +173,18 @@
         // Cámara → copiar archivo al input del formulario + preview
         document.getElementById('cameraInput').addEventListener('change', function () {
             const file = this.files[0];
-            if (file) {
+            if (!file) return;
+            // Intentar DataTransfer (no disponible en Safari/iOS)
+            try {
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 document.getElementById('foto').files = dt.files;
+                mostrarPreview(file);
+            } catch (e) {
+                // Fallback iOS: renombrar inputs para que el form envíe el de la cámara
+                const cam = document.getElementById('cameraInput');
+                cam.name = 'Foto';
+                document.getElementById('foto').name = '_Foto_disabled';
                 mostrarPreview(file);
             }
         });

@@ -153,6 +153,12 @@ namespace FabricaHilos.Controllers.Sgc
                     return Json(new { tipo = "Advertencia", mensaje = "El Nº Certificado es obligatorio." });
                 }
 
+                // Validar longitud máxima permitida por Oracle (columna NUM_CER VARCHAR2(30))
+                if (numCer.Length > 30)
+                {
+                    return Json(new { tipo = "Advertencia", mensaje = $"El Nº Certificado no puede superar los 30 caracteres (ingresó {numCer.Length})." });
+                }
+
                 // Autenticarse en el recurso de red antes de cualquier operación
                 var rutaBase = _configuration["RutaCertificados"] ?? @"\\10.0.7.14\6-20100096260\Certificados";
                 var username = _configuration["NetworkShare:Username"];

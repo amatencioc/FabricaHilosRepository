@@ -82,7 +82,9 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
       FROM DOCUVENT D
       JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-      LEFT JOIN TABLAS_AUXILIARES TA ON TA.TIPO = 25 AND TA.CODIGO = C.PAIS
+      LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
+                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                  GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
   )
@@ -149,7 +151,10 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
       FROM DOCUVENT D
       JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-      LEFT JOIN TABLAS_AUXILIARES TA ON TA.TIPO = 25 AND TA.CODIGO = C.PAIS
+      LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1,
+                        MAX(DESCRIPCION) DESCRIPCION
+                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                  GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
   )
@@ -208,11 +213,11 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
   FROM DOCUVENT D
-  JOIN CLIENTES C ON C.COD_CLIENTE = D.COD_CLIENTE
-  JOIN UBIGEO U   ON U.COD_UBC = C.COD_UBC
+  JOIN CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND D.ESTADO <> '9'
-   AND U.PAIS = '01'
+   AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
  GROUP BY NVL(U.NOM_DPT, 'Sin Departamento')
  ORDER BY IMPORTE DESC";
 
@@ -264,12 +269,12 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
   FROM DOCUVENT D
-  JOIN CLIENTES C ON C.COD_CLIENTE = D.COD_CLIENTE
-  JOIN UBIGEO U   ON U.COD_UBC = C.COD_UBC
+  JOIN CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND D.ESTADO <> '9'
-   AND U.PAIS = '01'
-   AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
+   AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+    AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
  GROUP BY NVL(U.NOM_DPT, 'Sin Departamento'), NVL(U.NOM_DTT, 'Sin Distrito')
  ORDER BY IMPORTE DESC";
 
@@ -391,7 +396,9 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
       FROM DOCUVENT D
       JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-      LEFT JOIN TABLAS_AUXILIARES TA ON TA.TIPO = 25 AND TA.CODIGO = C.PAIS
+      LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
+                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                  GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
   )
@@ -533,18 +540,18 @@ SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
             const string sql = @"
 SELECT FAMILIA, IMPORTE FROM (
   SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
-         SUM(DECODE(:P_MON,
-                    'S',
-                    DECODE(D.MONEDA,
-                           'S', (I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)),
-                           ((I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
-                    DECODE(D.MONEDA,
-                           'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                           ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
-    FROM ITEMDOCU     I,
-         DOCUVENT     D,
-         ARTICUL      A,
-         TFAMLIN      F
+               SUM(DECODE(:P_MON,
+                          'S',
+                          DECODE(D.MONEDA,
+                                 'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                                 ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
+                          DECODE(D.MONEDA,
+                                 'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                                 ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
+         FROM ITEMDOCU     I,
+              DOCUVENT     D,
+              ARTICUL      A,
+              TFAMLIN      F
    WHERE D.TIPODOC = I.TIPODOC
      AND D.SERIE   = I.SERIE
      AND D.NUMERO  = I.NUMERO
@@ -602,8 +609,8 @@ SELECT C.GIRO            CODIGO_GIRO,
        SUM(DECODE(:P_MON,
                   'S',
                   DECODE(D.MONEDA,
-                         'S', (I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)),
-                         ((I.IMP_VVTA * ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
+                         'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                         ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
                   DECODE(D.MONEDA,
                          'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
@@ -611,7 +618,10 @@ SELECT C.GIRO            CODIGO_GIRO,
        DOCUVENT          D,
        ARTICUL           A,
        CLIENTES          C,
-       TABLAS_AUXILIARES T2
+       (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
+          FROM TABLAS_AUXILIARES
+         WHERE TIPO = 27
+         GROUP BY CODIGO) T2
  WHERE D.TIPODOC = I.TIPODOC
    AND D.SERIE   = I.SERIE
    AND D.NUMERO  = I.NUMERO
@@ -620,10 +630,9 @@ SELECT C.GIRO            CODIGO_GIRO,
    AND A.COD_ART = I.COD_ART
    AND A.TP_ART IN ('T', 'S')
    AND C.COD_CLIENTE = D.COD_CLIENTE
-   AND T2.TIPO(+) = 27
    AND T2.CODIGO(+) = C.GIRO
- GROUP BY C.GIRO, NVL(T2.ABREVIADA, 'SIN GIRO')
- ORDER BY IMPORTE DESC";
+  GROUP BY C.GIRO, NVL(T2.ABREVIADA, 'SIN GIRO')
+  ORDER BY IMPORTE DESC";
 
             try
             {

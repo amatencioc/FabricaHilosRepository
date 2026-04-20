@@ -16,6 +16,9 @@ namespace FabricaHilos.Services.Ventas
         /// <summary>Query 3: Nro. de Clientes por Asesor / Mes</summary>
         Task<List<NroClientesAsesorMesDto>> ObtenerNroClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin);
 
+        /// <summary>Query 3b: Nro. de Clientes DISTINTOS por Asesor (período completo, sin doble conteo)</summary>
+        Task<List<NroClientesAsesorMesDto>> ObtenerNroClientesTotalPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin);
+
         /// <summary>Query 3.1: Detalle de Clientes por Asesor / Mes</summary>
         Task<List<DetalleClienteAsesorMesDto>> ObtenerDetalleClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor, string mes);
     }

@@ -6,9 +6,10 @@
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
     string? estado      = ViewBag.Estado      as string;
-    bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(fechaInicio)
-                       || !string.IsNullOrEmpty(fechaFin) || !string.IsNullOrEmpty(estado);
-    var nombres = ViewBag.Nombres as Dictionary<string, string> ?? new Dictionary<string, string>();
+    bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
+                       || Context.Request.Query.ContainsKey("fechaInicio") || Context.Request.Query.ContainsKey("fechaFin");
+    var nombres     = ViewBag.Nombres     as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var prioridades = ViewBag.Prioridades as Dictionary<string, string> ?? new Dictionary<string, string>();
 }
 
 @section Breadcrumb {
@@ -43,10 +44,11 @@
 
             <select name="estado" class="form-select form-select-sm" style="max-width:160px;">
                 <option value="">-- Todos los estados --</option>
-                <option value="0" selected="@(estado == "0")">Pendiente</option>
-                <option value="1" selected="@(estado == "1")">Autorizado</option>
-                <option value="2" selected="@(estado == "2")">Atendido</option>
-                <option value="A" selected="@(estado == "A")">Anulado</option>
+                <option value="0" selected="@(estado == "0")">Emitida</option>
+                <option value="1" selected="@(estado == "1")">Autorizada</option>
+                <option value="2" selected="@(estado == "2")">Recibida</option>
+                <option value="6" selected="@(estado == "6")">Cerrada</option>
+                <option value="9" selected="@(estado == "9")">Cancelada</option>
             </select>
 
             <button type="submit" class="btn btn-sm btn-outline-primary">
@@ -94,7 +96,8 @@
                             <td class="text-center">
                                 @if (!string.IsNullOrEmpty(req.Prioridad))
                                 {
-                                    <span class="badge bg-secondary">@req.Prioridad</span>
+                                    var descPrio = prioridades.TryGetValue(req.Prioridad, out var dp) && !string.IsNullOrWhiteSpace(dp) ? dp : req.Prioridad;
+                                    <span class="badge bg-secondary" title="@req.Prioridad">@descPrio</span>
                                 }
                                 @if (req.Responsable != null && nombres.TryGetValue(req.Responsable, out var nomResp))
                                 {
@@ -130,10 +133,11 @@
                                 @{
                                     var (badge, texto) = req.Estado switch
                                     {
-                                        "0" => ("bg-secondary", "Pendiente"),
-                                        "1" => ("bg-success",   "Autorizado"),
-                                        "2" => ("bg-primary",   "Atendido"),
-                                        "A" => ("bg-danger",    "Anulado"),
+                                        "0" => ("bg-secondary", "Emitida"),
+                                        "1" => ("bg-success",   "Autorizada"),
+                                        "2" => ("bg-primary",   "Recibida"),
+                                        "6" => ("bg-dark",      "Cerrada"),
+                                        "9" => ("bg-danger",    "Cancelada"),
                                         _   => ("bg-light text-dark", req.Estado ?? "-")
                                     };
                                 }
@@ -222,26 +226,4 @@
 </div>
 
 @section Scripts {
-    <script>
-        (function () {
-            var ini = document.querySelector('input[name="fechaInicio"]');
-            var fin = document.querySelector('input[name="fechaFin"]');
-            if (ini && !ini.value && fin && !fin.value) {
-                var hoy  = new Date();
-                var dia  = hoy.getDay(); // 0=dom, 1=lun, ..., 6=sab
-                var diffLunes = (dia === 0) ? -6 : 1 - dia;
-                var lunes   = new Date(hoy);
-                lunes.setDate(hoy.getDate() + diffLunes);
-                var domingo = new Date(lunes);
-                domingo.setDate(lunes.getDate() + 6);
-                var toISO = function (d) {
-                    return d.getFullYear() + '-' +
-                           String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                           String(d.getDate()).padStart(2, '0');
-                };
-                ini.value = toISO(lunes);
-                fin.value = toISO(domingo);
-            }
-        })();
-    </script>
 }

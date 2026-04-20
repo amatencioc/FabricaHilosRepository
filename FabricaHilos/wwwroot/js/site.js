@@ -26,8 +26,11 @@ const GlobalLoading = {
             this.hide();
         });
 
-        // Ocultar overlay al recibir error de navegación
-        window.addEventListener('pageshow', () => {
+        // Ocultar overlay al recibir la página (incluye bfcache de iOS Safari)
+        // event.persisted === true cuando la página viene del back-forward cache
+        window.addEventListener('pageshow', (event) => {
+            // Forzar reset completo del contador para que el overlay siempre desaparezca
+            this.activeRequests = 0;
             this.hide();
         });
     },

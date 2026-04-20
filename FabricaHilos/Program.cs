@@ -194,10 +194,18 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure pipeline HTTP
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
+    // En desarrollo se puede redirigir a HTTPS con el certificado de desarrollo de .NET
+    app.UseHttpsRedirection();
+}
+else
+{
+    // En producción sin certificado SSL válido no redirigir a HTTPS:
+    // UseHttpsRedirection() causaba que iOS Safari mostrara un diálogo de descarga
+    // al no poder resolver HTTPS en una IP sin certificado válido.
+    // HSTS también desactivado: el servidor corre en HTTP puro (IP sin dominio/cert).
     app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
 }
 
 // Security headers: previene clickjacking, MIME sniffing, XSS y fuga de Referer
@@ -207,11 +215,9 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"]         = "SAMEORIGIN";
     context.Response.Headers["X-XSS-Protection"]        = "1; mode=block";
     context.Response.Headers["Referrer-Policy"]         = "strict-origin-when-cross-origin";
-    context.Response.Headers["Permissions-Policy"]      = "geolocation=(), microphone=(), camera=()";
+    context.Response.Headers["Permissions-Policy"]      = "geolocation=(), microphone=()";
     await next();
 });
-
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseRateLimiter();

@@ -17,6 +17,12 @@ public interface IRequisicionService
 
     Task<Dictionary<string, string>> ObtenerNombresPersonalAsync(IEnumerable<string> codigos);
 
+    Task<Dictionary<string, string>> ObtenerDescripcionesArticulosAsync(IEnumerable<string> codigos);
+
+    Task<Dictionary<string, string>> ObtenerDescripcionesTablaAuxiliarAsync(string tipo, IEnumerable<string> codigos);
+
+    Task<Dictionary<string, string>> ObtenerDescripcionesCentroCostosAsync(IEnumerable<string> codigos);
+
     Task ActualizarIdGrupoItemsAsync(string tipDoc, int serie, long numReq, IEnumerable<int> ordenes, long idGrupo);
 
     Task<long> ObtenerSiguienteIdGrupoAsync();
@@ -337,6 +343,109 @@ public async Task<Dictionary<string, string>> ObtenerNombresPersonalAsync(IEnume
     catch (Exception ex)
     {
         _logger.LogError(ex, "Error al obtener nombres de personal");
+    }
+
+    return result;
+}
+
+public async Task<Dictionary<string, string>> ObtenerDescripcionesArticulosAsync(IEnumerable<string> codigos)
+{
+    var lista = codigos.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+    var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (lista.Count == 0) return result;
+
+    var paramNames = lista.Select((_, i) => $":c{i}").ToList();
+    var sql = $"SELECT COD_ART, DESCRIPCION FROM SIG.ARTICUL WHERE COD_ART IN ({string.Join(",", paramNames)})";
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        for (int i = 0; i < lista.Count; i++)
+            cmd.Parameters.Add(new OracleParameter($":c{i}", OracleDbType.Varchar2) { Value = lista[i] });
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var codArt = reader["COD_ART"]?.ToString()?.Trim() ?? "";
+            var desc   = reader["DESCRIPCION"]?.ToString()?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(codArt))
+                result[codArt] = desc;
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener descripciones de artículos");
+    }
+
+    return result;
+}
+
+public async Task<Dictionary<string, string>> ObtenerDescripcionesTablaAuxiliarAsync(string tipo, IEnumerable<string> codigos)
+{
+    var lista = codigos.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+    var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (lista.Count == 0) return result;
+
+    var paramNames = lista.Select((_, i) => $":c{i}").ToList();
+    var sql = $"SELECT CODIGO, DESCRIPCION FROM SIG.TABLAS_AUXILIARES WHERE TIPO = :tipo AND CODIGO IN ({string.Join(",", paramNames)})";
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        cmd.Parameters.Add(new OracleParameter(":tipo", OracleDbType.Varchar2) { Value = tipo });
+        for (int i = 0; i < lista.Count; i++)
+            cmd.Parameters.Add(new OracleParameter($":c{i}", OracleDbType.Varchar2) { Value = lista[i] });
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var codigo = reader["CODIGO"]?.ToString()?.Trim() ?? "";
+            var desc   = reader["DESCRIPCION"]?.ToString()?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(codigo))
+                result[codigo] = desc;
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener descripciones de TABLAS_AUXILIARES tipo={Tipo}", tipo);
+    }
+
+    return result;
+}
+
+public async Task<Dictionary<string, string>> ObtenerDescripcionesCentroCostosAsync(IEnumerable<string> codigos)
+{
+    var lista = codigos.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+    var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (lista.Count == 0) return result;
+
+    var paramNames = lista.Select((_, i) => $":c{i}").ToList();
+    var sql = $"SELECT CENTRO_COSTO, NOMBRE FROM SIG.CENTRO_DE_COSTOS WHERE CENTRO_COSTO IN ({string.Join(",", paramNames)})";
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        for (int i = 0; i < lista.Count; i++)
+            cmd.Parameters.Add(new OracleParameter($":c{i}", OracleDbType.Varchar2) { Value = lista[i] });
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var codigo = reader["CENTRO_COSTO"]?.ToString()?.Trim() ?? "";
+            var desc   = reader["NOMBRE"]?.ToString()?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(codigo))
+                result[codigo] = desc;
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener descripciones de CENTRO_DE_COSTOS");
     }
 
     return result;

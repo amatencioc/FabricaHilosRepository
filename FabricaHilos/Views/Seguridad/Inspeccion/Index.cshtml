@@ -200,7 +200,7 @@
                         <div class="d-flex gap-2 justify-content-center flex-wrap">
                             @if (item.PuedeAgregarHallazgo)
                             {
-                                <a asp-action="AgregarHallazgo" asp-route-numero="@item.Numero"
+                                <a asp-action="HallazgosAC" asp-route-numero="@item.Numero"
                                    class="btn btn-sm btn-outline-success" title="Agregar Hallazgo">
                                     <i class="bi bi-plus-circle"></i> H
                                 </a>
@@ -252,8 +252,7 @@
         <div class="card shadow-sm">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead class="table-light">
+                    <table class="table table-hover table-corporate mb-0">
                             <tr>
                                 <th>N°</th>
                                 <th>Fecha</th>
@@ -565,9 +564,17 @@
         document.getElementById('efFoto').addEventListener('change', function () { efPreview(this.files[0]); });
         document.getElementById('efCamera').addEventListener('change', function () {
             const file = this.files[0];
-            if (file) {
+            if (!file) return;
+            // Intentar DataTransfer (no disponible en Safari/iOS)
+            try {
                 const dt = new DataTransfer(); dt.items.add(file);
                 document.getElementById('efFoto').files = dt.files;
+                efPreview(file);
+            } catch (e) {
+                // Fallback iOS: renombrar inputs para que el form envíe el de la cámara
+                const cam = document.getElementById('efCamera');
+                cam.name = 'foto';
+                document.getElementById('efFoto').name = '_foto_disabled';
                 efPreview(file);
             }
         });

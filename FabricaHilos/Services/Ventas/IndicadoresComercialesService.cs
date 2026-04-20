@@ -68,36 +68,37 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-          FROM V_DOCUVEN A, TABLAS_AUXILIARES T
-         WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO = 29
-           AND T.CODIGO = A.VENDEDOR
-         GROUP BY A.VENDEDOR,
-                  T.DESCRIPCION,
-                  TO_CHAR(A.FECHA, 'YYYY/MM')) A,
-       (SELECT D.COD_VENDE                     VENDEDOR,
-               TO_CHAR(D.FECHA, 'YYYY/MM')     MES,
-               SUM(DECODE(:P_MON,
-                          'S',
-                          DECODE(D.MONEDA,
-                                 'S', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                          DECODE(D.MONEDA,
-                                 'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
-         WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND D.ESTADO <> '9'
-           AND I.TIPODOC = D.TIPODOC
-           AND I.SERIE = D.SERIE
-           AND I.NUMERO = D.NUMERO
-           AND I.COD_ART IN ('9300049997', '9300049999',
-                             '930004999A', '9300049998')
-         GROUP BY D.COD_VENDE,
-                  TO_CHAR(D.FECHA, 'YYYY/MM')) B
- WHERE B.VENDEDOR(+) = A.VENDEDOR
-   AND B.MES(+) = A.MES
- ORDER BY A.ASESOR, A.MES";
+                    FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+                  WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND T.TIPO(+) = 29
+                    AND T.CODIGO(+) = A.VENDEDOR
+                    AND (T.DESCRIPCION IS NULL OR UPPER(T.DESCRIPCION) <> 'OFICINA')
+                  GROUP BY A.VENDEDOR,
+                           T.DESCRIPCION,
+                           TO_CHAR(A.FECHA, 'YYYY/MM')) A,
+                (SELECT D.COD_VENDE                     VENDEDOR,
+                        TO_CHAR(D.FECHA, 'YYYY/MM')     MES,
+                        SUM(DECODE(:P_MON,
+                                   'S',
+                                   DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
+                   FROM DOCUVENT D, ITEMDOCU I
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.TIPODOC = D.TIPODOC
+                    AND I.SERIE = D.SERIE
+                    AND I.NUMERO = D.NUMERO
+                    AND I.COD_ART IN ('9300049997', '9300049999',
+                                      '930004999A', '9300049998')
+                  GROUP BY D.COD_VENDE,
+                           TO_CHAR(D.FECHA, 'YYYY/MM')) B
+          WHERE B.VENDEDOR(+) = A.VENDEDOR
+            AND B.MES(+) = A.MES
+          ORDER BY A.ASESOR, A.MES";
 
             try
             {
@@ -156,6 +157,7 @@ SELECT A.ASESOR,
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO = 29
            AND T.CODIGO = A.VENDEDOR
+           AND UPPER(T.DESCRIPCION) <> 'OFICINA'
            AND T.DESCRIPCION = :P_ASESOR
            AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
          GROUP BY A.VENDEDOR,
@@ -252,6 +254,7 @@ SELECT T.DESCRIPCION                    ASESOR,
    AND A.COD_ART = B.COD_ART
    AND T.TIPO = 29
    AND T.CODIGO = C.COD_VENDE
+   AND UPPER(T.DESCRIPCION) <> 'OFICINA'
    AND E.UNIDAD = 'KG'
    AND E.COD_ART = A.COD_ART
  GROUP BY T.DESCRIPCION,
@@ -302,19 +305,17 @@ SELECT T.DESCRIPCION                    ASESOR,
   FROM DOCUVENT         C,
        ITEMDOCU         B,
        ARTICUL          A,
-       TABLAS_AUXILIARES T,
-       EQUIVALENCIA     E
+       TABLAS_AUXILIARES T
  WHERE C.TIPODOC = B.TIPODOC
-   AND C.SERIE = B.SERIE
-   AND C.NUMERO = B.NUMERO
+   AND C.SERIE   = B.SERIE
+   AND C.NUMERO  = B.NUMERO
    AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND C.ESTADO <> '9'
    AND A.TP_ART IN ('T', 'S')
    AND A.COD_ART = B.COD_ART
-   AND T.TIPO = 29
-   AND T.CODIGO = C.COD_VENDE
-   AND E.UNIDAD = 'KG'
-   AND E.COD_ART = A.COD_ART
+   AND T.TIPO    = 29
+   AND T.CODIGO  = C.COD_VENDE
+   AND UPPER(T.DESCRIPCION) <> 'OFICINA'
  GROUP BY T.DESCRIPCION,
           TO_CHAR(C.FECHA, 'YYYY/MM')
  ORDER BY 1, 2";
@@ -341,6 +342,63 @@ SELECT T.DESCRIPCION                    ASESOR,
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al obtener Nro Clientes por Asesor/Mes");
+            }
+
+            return result;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // Query 3b: Nro. de Clientes DISTINTOS por Asesor (período completo)
+        // ─────────────────────────────────────────────────────────
+        public async Task<List<NroClientesAsesorMesDto>> ObtenerNroClientesTotalPorAsesorAsync(
+            DateTime fechaInicio, DateTime fechaFin)
+        {
+            var connStr = GetOracleConnectionString();
+            var result  = new List<NroClientesAsesorMesDto>();
+            if (string.IsNullOrEmpty(connStr)) return result;
+
+            const string sql = @"
+SELECT T.DESCRIPCION                    ASESOR,
+       COUNT(DISTINCT C.COD_CLIENTE)    NRO_CLIENTES
+  FROM DOCUVENT         C,
+       ITEMDOCU         B,
+       ARTICUL          A,
+       TABLAS_AUXILIARES T
+ WHERE C.TIPODOC = B.TIPODOC
+   AND C.SERIE   = B.SERIE
+   AND C.NUMERO  = B.NUMERO
+   AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+   AND C.ESTADO <> '9'
+   AND A.TP_ART IN ('T', 'S')
+   AND A.COD_ART = B.COD_ART
+   AND T.TIPO    = 29
+   AND T.CODIGO  = C.COD_VENDE
+   AND UPPER(T.DESCRIPCION) <> 'OFICINA'
+ GROUP BY T.DESCRIPCION
+ ORDER BY 1";
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value = fechaFin.Date;
+
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new NroClientesAsesorMesDto
+                    {
+                        Asesor      = GetStr(reader, "ASESOR"),
+                        Mes         = null,
+                        NroClientes = GetInt(reader, "NRO_CLIENTES")
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener Nro Clientes Total por Asesor (IndicadoresComerciales)");
             }
 
             return result;
@@ -375,6 +433,7 @@ SELECT V.ASESOR,
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO   = 29
            AND T.CODIGO = A.VENDEDOR
+           AND UPPER(T.DESCRIPCION) <> 'OFICINA'
            AND T.DESCRIPCION = :P_ASESOR
            AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
          GROUP BY A.VENDEDOR,

@@ -46,6 +46,14 @@ public class RequisicionController : OracleBaseController
         string? estado,
         int page = 1)
     {
+        // Aplicar semana actual como rango por defecto cuando no se envían fechas
+        if (fechaInicio is null && fechaFin is null && string.IsNullOrWhiteSpace(buscar))
+        {
+            var hoy       = DateTime.Today;
+            int diasDesde = hoy.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)hoy.DayOfWeek - 1;
+            fechaInicio   = hoy.AddDays(-diasDesde);          // lunes de la semana actual
+            fechaFin      = fechaInicio.Value.AddDays(6);     // domingo de la semana actual
+        }
         const int pageSize = 10;
         var (items, total) = await _service.ObtenerRequisicionesAsync(
             buscar, fechaInicio, fechaFin, estado, page, pageSize);
@@ -64,6 +72,9 @@ public class RequisicionController : OracleBaseController
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Distinct()!;
         ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigos);
+
+        var codigosPrio = items.Select(r => r.Prioridad).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70", codigosPrio);
 
         return View("~/Views/Logistica/Requerimiento/Index.cshtml", items);
     }
@@ -97,10 +108,22 @@ public class RequisicionController : OracleBaseController
         // Archivos ya cargados para este requerimiento (por idGrupo de los ítems)
         ViewBag.ArchivosExistentes = ObtenerArchivosExistentes(items);
 
-        var codigos = new[] { cabecera.Responsable, cabecera.Autoriza }
+        var codigosPersonal = new[] { cabecera.Responsable, cabecera.Autoriza }
+            .Concat(items.Select(i => i.CodSolicita))
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Distinct()!;
-        ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigos);
+        ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigosPersonal);
+
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
+
+        ViewBag.Destinos   = await _service.ObtenerDescripcionesTablaAuxiliarAsync("85",
+            new[] { cabecera.Destino }.Where(c => !string.IsNullOrWhiteSpace(c))!);
+        ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70",
+            new[] { cabecera.Prioridad }.Where(c => !string.IsNullOrWhiteSpace(c))!);
+
+        var codigosCc = items.Select(i => i.Destino).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        ViewBag.DestinosItem = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
         return View("~/Views/Logistica/Requerimiento/Detalle.cshtml", vm);
     }

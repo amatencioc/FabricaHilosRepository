@@ -48,14 +48,6 @@
         margin: 0 0 .9rem .65rem;
         line-height: 1.55;
     }
-    .detail-table thead th {
-        background: #1B4D3E;
-        color: #fff;
-        font-weight: 600;
-        font-size: .82rem;
-        white-space: nowrap;
-    }
-    .detail-table td { font-size: .83rem; vertical-align: middle; }
 
     .kpi-card {
         border-radius: 12px;
@@ -214,8 +206,7 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetallePais()"><i class="bi bi-x-lg me-1"></i>Cerrar</button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
-                        <thead><tr><th>#</th><th>Código</th><th>País</th><th class="text-end">Importe</th><th class="text-end">%</th></tr></thead>
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                         <tbody id="tablaDetallePais"></tbody>
                     </table>
                 </div>
@@ -243,7 +234,7 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleCiudadPais()"><i class="bi bi-x-lg me-1"></i>Cerrar</button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                         <thead><tr><th>#</th><th>País</th><th>Ciudad / Distrito</th><th class="text-end">Importe</th><th class="text-end">%</th></tr></thead>
                         <tbody id="tablaDetalleCiudadPais"></tbody>
                     </table>
@@ -272,7 +263,7 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleDpto()"><i class="bi bi-x-lg me-1"></i>Cerrar</button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                         <thead><tr><th>#</th><th>Departamento</th><th class="text-end">Importe</th><th class="text-end">%</th></tr></thead>
                         <tbody id="tablaDetalleDpto"></tbody>
                     </table>
@@ -301,7 +292,7 @@
                     <button class="btn btn-sm btn-outline-secondary" onclick="cerrarDetalleDistrito()"><i class="bi bi-x-lg me-1"></i>Cerrar</button>
                 </div>
                 <div class="card-body p-0" style="max-height:400px; overflow-y:auto; overflow-x:auto">
-                    <table class="table table-hover table-sm mb-0 detail-table">
+                    <table class="table table-hover table-sm table-corporate mb-0 detail-table">
                         <thead><tr><th>#</th><th>Distrito</th><th class="text-end">Importe</th><th class="text-end">%</th></tr></thead>
                         <tbody id="tablaDetalleDistrito"></tbody>
                     </table>

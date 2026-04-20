@@ -7,15 +7,20 @@
     var cab      = Model.Cabecera;
     var archivos = ViewBag.ArchivosExistentes as List<ArchivoRequisicionDto> ?? new();
     var nombres  = ViewBag.Nombres as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var descsArt = ViewBag.DescripcionesArticulos as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var destinos     = ViewBag.Destinos    as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var prioridades  = ViewBag.Prioridades as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var destinosItem = ViewBag.DestinosItem as Dictionary<string, string> ?? new Dictionary<string, string>();
     _ = nombres.TryGetValue(cab.Responsable ?? "", out var nomResp);
     _ = nombres.TryGetValue(cab.Autoriza ?? "", out var nomAutoriza);
 
     var (badgeClass, estadoTexto) = cab.Estado switch
     {
-        "0" => ("bg-secondary", "Pendiente"),
-        "1" => ("bg-success",   "Autorizado"),
-        "2" => ("bg-primary",   "Atendido"),
-        "A" => ("bg-danger",    "Anulado"),
+        "0" => ("bg-secondary", "Emitida"),
+        "1" => ("bg-success",   "Autorizada"),
+        "2" => ("bg-primary",   "Recibida"),
+        "6" => ("bg-dark",      "Cerrada"),
+        "9" => ("bg-danger",    "Cancelada"),
         _   => ("bg-light text-dark", cab.Estado ?? "-")
     };
 
@@ -90,11 +95,11 @@
             </div>
             <div class="col">
                 <label class="form-label small text-muted mb-0">Prioridad</label>
-                <div>@(cab.Prioridad ?? "-")</div>
+                <div>@((!string.IsNullOrWhiteSpace(cab.Prioridad) && prioridades.TryGetValue(cab.Prioridad, out var descPrio) && !string.IsNullOrWhiteSpace(descPrio)) ? descPrio : (cab.Prioridad ?? "-"))</div>
             </div>
             <div class="col">
                 <label class="form-label small text-muted mb-0">Destino</label>
-                <div>@(cab.Destino ?? "-")</div>
+                <div>@((!string.IsNullOrWhiteSpace(cab.Destino) && destinos.TryGetValue(cab.Destino, out var descDest) && !string.IsNullOrWhiteSpace(descDest)) ? descDest : (cab.Destino ?? "-"))</div>
             </div>
             <div class="col">
                 <label class="form-label small text-muted mb-0">Ind. Servicio</label>
@@ -199,7 +204,6 @@
                         <th class="text-end">Precio</th>
                         <th class="text-center">Moneda</th>
                         <th>Marca</th>
-                        <th>Cta. Contable</th>
                         <th>Solicitante</th>
                         <th>Destino</th>
                         <th class="text-center">F. Aprobado</th>
@@ -218,7 +222,7 @@
                             </td>
                             <td class="text-center">@item.Orden</td>
                             <td>@(item.CodArt ?? "-")</td>
-                            <td>@(item.Detalle ?? "-")</td>
+                            <td>@((!string.IsNullOrWhiteSpace(item.CodArt) && descsArt.TryGetValue(item.CodArt, out var descArt) && !string.IsNullOrWhiteSpace(descArt)) ? descArt : (item.Detalle ?? "-"))</td>
                             <td class="text-center">@(item.Unidad ?? "-")</td>
                             <td class="text-end">@item.Cantidad.ToString("N2")</td>
                             <td class="text-end">@item.Saldo.ToString("N2")</td>
@@ -229,9 +233,19 @@
                                 @(item.Moneda == "D" ? "USD" : item.Moneda == "S" ? "PEN" : (item.Moneda ?? "-"))
                             </td>
                             <td>@(item.Marca ?? "-")</td>
-                            <td class="small">@(item.CtaCtble ?? "-")</td>
-                            <td>@(item.CodSolicita ?? "-")</td>
-                            <td>@(item.Destino ?? "-")</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(item.CodSolicita))
+                                {
+                                    <span title="@item.CodSolicita">
+                                        @(nombres.TryGetValue(item.CodSolicita, out var nomSol) && !string.IsNullOrEmpty(nomSol) ? nomSol : item.CodSolicita)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>@((!string.IsNullOrWhiteSpace(item.Destino) && destinosItem.TryGetValue(item.Destino, out var descDestItem) && !string.IsNullOrWhiteSpace(descDestItem)) ? descDestItem : (item.Destino ?? "-"))</td>
                             <td class="text-center">@(item.FAprobado?.ToString("dd/MM/yyyy") ?? "-")</td>
                             <td class="text-center">
                                 @if (item.IdGrupo.HasValue)
@@ -249,7 +263,7 @@
                     @if (!Model.Items.Any())
                     {
                         <tr>
-                            <td colspan="18" class="text-center text-muted py-3">
+                            <td colspan="17" class="text-center text-muted py-3">
                                 <i class="bi bi-inbox d-block mb-1"></i> Sin ítems registrados.
                             </td>
                         </tr>
@@ -259,10 +273,10 @@
                 {
                     <tfoot class="table-light fw-semibold">
                         <tr>
-                            <td colspan="6" class="text-end small">Totales:</td>
+                            <td colspan="5" class="text-end small">Totales:</td>
                                 <td class="text-end">@Model.Items.Sum(i => i.Cantidad).ToString("N2")</td>
                                 <td class="text-end">@Model.Items.Sum(i => i.Saldo).ToString("N2")</td>
-                                <td colspan="10"></td>
+                                <td colspan="9"></td>
                         </tr>
                     </tfoot>
                 }
@@ -328,8 +342,8 @@
             int colorIdx = 0;
 
             <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-sm table-hover table-corporate mb-0">
+                    <thead>
                         <tr>
                             <th>Nombre</th>
                             <th class="text-end">Tamaño</th>

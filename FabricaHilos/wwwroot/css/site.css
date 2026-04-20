@@ -20,7 +20,10 @@
 /* Sidebar */
 #sidebar {
     width: var(--color-sidebar-ancho);
-    min-height: 100vh;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
     background-color: var(--color-corporativo) !important;
     transition: all 0.3s;
     flex-shrink: 0;
@@ -94,7 +97,7 @@ header {
 
 /* Contenido */
 #content {
-    min-height: 100vh;
+    flex: 1;
     background-color: var(--color-bg-light);
 }
 
@@ -111,17 +114,31 @@ header {
     box-shadow: var(--shadow-lg);
 }
 
-/* Encabezados de tabla */
-.table-corporate thead th {
-    background-color: var(--color-corporativo);
-    color: white;
-    font-weight: 600;
-    font-size: 0.85rem;
-    border: none;
+/* Tablas corporativas */
+.table-corporate,
+.table-corporate th,
+.table-corporate td {
+    font-family: inherit;
+    font-size: .8125rem;
 }
 
-.table-corporate tbody tr:hover {
-    background-color: rgba(27, 77, 62, 0.06);
+.table-corporate thead th {
+    background-color: #1B4D3E !important;
+    color: #fff !important;
+    font-weight: 600;
+    font-size: .8125rem;
+    letter-spacing: .03em;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-color: #155235 !important;
+}
+
+.table-corporate tbody td {
+    vertical-align: middle;
+}
+
+.table-corporate tbody tr:hover td {
+    background-color: rgba(27, 77, 62, .06) !important;
 }
 
 /* Página de Login */
@@ -211,3 +228,8 @@ header {
     margin-top: 0.5rem;
     text-align: center;
 }
+
+/* =============================================
+   Las tablas de grilla usan la clase "table-corporate"
+   definida arriba — válida para todo el proyecto.
+   ============================================= */

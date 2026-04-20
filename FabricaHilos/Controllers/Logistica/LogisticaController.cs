@@ -15,6 +15,8 @@ public class LogisticaController : Controller
         _menuService = menuService;
     }
 
+    public IActionResult Landing() => RedirectToAction(nameof(Index));
+
     public IActionResult Index()
     {
         var menus   = _menuService.GetMenusActuales();
