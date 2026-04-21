@@ -8,8 +8,15 @@
     string? estado      = ViewBag.Estado      as string;
     bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
                        || Context.Request.Query.ContainsKey("fechaInicio") || Context.Request.Query.ContainsKey("fechaFin");
-    var nombres     = ViewBag.Nombres     as Dictionary<string, string> ?? new Dictionary<string, string>();
-    var prioridades = ViewBag.Prioridades as Dictionary<string, string> ?? new Dictionary<string, string>();
+    int currentPage = ViewBag.Page      != null ? Convert.ToInt32(ViewBag.Page)      : 1;
+    int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
+    int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
+    int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
+    int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+    int endItem     = Math.Min(currentPage * pgSize, totalCount);
+    var nombres      = ViewBag.Nombres      as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var prioridades  = ViewBag.Prioridades  as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var centrosCosto = ViewBag.CentrosCosto as Dictionary<string, string> ?? new Dictionary<string, string>();
 }
 
 @section Breadcrumb {
@@ -70,7 +77,6 @@
                 <thead>
                     <tr>
                         <th class="text-center">TipDoc</th>
-                        <th class="text-center">Serie</th>
                         <th class="text-center">N° Req.</th>
                         <th>Centro Costo</th>
                         <th>Proveedor(es)</th>
@@ -78,6 +84,8 @@
                         <th class="text-center">F. Entrega</th>
                         <th class="text-center">Prioridad / Resp.</th>
                         <th class="text-center">Autoriza / F. Autoriza</th>
+                        <th class="text-center" style="min-width:120px;" title="Ítems con documento adjunto aprobado">Progreso<br/><small class="fw-normal text-white-50">ítems aprobados</small></th>
+                        <th class="text-center" style="min-width:160px;" title="Situación general del requerimiento en el flujo logístico">Situación<br/><small class="fw-normal text-white-50">flujo logístico</small></th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
@@ -87,9 +95,14 @@
                     {
                         <tr>
                             <td class="text-center">@(req.TipDoc ?? "-")</td>
-                            <td class="text-center">@req.Serie</td>
                             <td class="text-center fw-semibold">@req.NumReq</td>
-                            <td>@(req.CentroCosto ?? "-")</td>
+                            <td>
+                                @{
+                                    var ccDesc = !string.IsNullOrEmpty(req.CentroCosto) && centrosCosto.TryGetValue(req.CentroCosto, out var ccD) && !string.IsNullOrWhiteSpace(ccD)
+                                        ? ccD : req.CentroCosto;
+                                }
+                                @(ccDesc ?? "-")
+                            </td>
                             <td>@(req.Proveedores ?? "-")</td>
                             <td class="text-center">@(req.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
                             <td class="text-center">@(req.FEntrega?.ToString("dd/MM/yyyy") ?? "-")</td>
@@ -131,6 +144,50 @@
                             </td>
                             <td class="text-center">
                                 @{
+                                    int pct      = req.Progreso;
+                                    string pctColor = pct == 100 ? "bg-success" : pct >= 50 ? "bg-primary" : "bg-warning";
+                                }
+                                <div class="progress" style="height:14px;min-width:80px;" title="@req.ItemsConGrupo de @req.TotalItems ítem(s) con documento aprobado">
+                                    <div class="progress-bar @pctColor" role="progressbar"
+                                         style="width:@pct%"
+                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
+                                    </div>
+                                </div>
+                                <small class="text-muted">@req.ItemsConGrupo/@req.TotalItems (@pct%)</small>
+                            </td>
+                            @* ── Columna: Situación general (4 etapas) ── *@
+                            <td class="text-center">
+                                @{
+                                    var pg = req.ProgresoGeneral;
+                                    var etapas = new[]
+                                    {
+                                        (Num: 1, Label: "Aprobación",    Ok: pg.Etapa1Aprobada, Items: pg.Etapa1Items),
+                                        (Num: 2, Label: "Orden compra",  Ok: pg.Etapa2Aprobada, Items: pg.Etapa2Items),
+                                        (Num: 3, Label: "Facturado",     Ok: pg.Etapa3Aprobada, Items: pg.Etapa3Items),
+                                        (Num: 4, Label: "Pago",          Ok: pg.Etapa4Aprobada, Items: pg.Etapa4Items),
+                                    };
+                                    int pctG = pg.PorcentajeGeneral;
+                                    string pctGColor = pctG == 100 ? "bg-success" : pctG >= 50 ? "bg-primary" : pctG > 0 ? "bg-warning" : "bg-secondary";
+                                    string etapaTooltip = string.Join(" → ", etapas.Select(e =>
+                                        $"{e.Num}.{e.Label}: {(e.Ok ? "✓" : "pendiente")}"));
+                                }
+                                <div class="progress mb-1" style="height:10px;min-width:140px;" title="@etapaTooltip">
+                                    <div class="progress-bar @pctGColor" role="progressbar"
+                                         style="width:@pctG%"
+                                         aria-valuenow="@pctG" aria-valuemin="0" aria-valuemax="100">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                    @foreach (var e in etapas)
+                                    {
+                                        string eColor  = e.Ok ? "bg-success" : "bg-light text-secondary border";
+                                        string eTitle  = e.Ok ? $"{e.Label} completado ({e.Items} ítem(s))" : $"{e.Label}: pendiente";
+                                        <span class="badge @eColor" style="font-size:.65rem;" title="@eTitle">@e.Num</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                @{
                                     var (badge, texto) = req.Estado switch
                                     {
                                         "0" => ("bg-secondary", "Emitida"),
@@ -148,6 +205,11 @@
                                    asp-route-tipDoc="@req.TipDoc"
                                    asp-route-serie="@req.Serie"
                                    asp-route-numReq="@req.NumReq"
+                                   asp-route-buscar="@buscar"
+                                   asp-route-fechaInicio="@fechaInicio"
+                                   asp-route-fechaFin="@fechaFin"
+                                   asp-route-estado="@estado"
+                                   asp-route-page="@currentPage"
                                    class="btn btn-sm btn-outline-primary"
                                    title="Ver detalle">
                                     <i class="bi bi-eye"></i>
@@ -158,7 +220,7 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-4">
+                            <td colspan="12" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox fs-4 d-block mb-1"></i>
                                 No se encontraron requerimientos.
                             </td>
@@ -170,14 +232,7 @@
     </div>
 </div>
 
-@{
-    int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
-    int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
-    int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
-    int pgSize      = ViewBag.PageSize   != null ? Convert.ToInt32(ViewBag.PageSize)   : 10;
-    int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
-    int endItem     = Math.Min(currentPage * pgSize, totalCount);
-}
+
 <div class="d-flex justify-content-between align-items-center mt-2 px-1">
     <small class="text-muted">
         @(totalCount == 0 ? "Sin registros" : $"Mostrando {startItem}–{endItem} de {totalCount} requerimientos")

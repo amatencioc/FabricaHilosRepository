@@ -46,13 +46,13 @@ public class RequisicionController : OracleBaseController
         string? estado,
         int page = 1)
     {
-        // Aplicar semana actual como rango por defecto cuando no se envían fechas
+        // Aplicar mes actual como rango por defecto cuando no se envían fechas
         if (fechaInicio is null && fechaFin is null && string.IsNullOrWhiteSpace(buscar))
         {
-            var hoy       = DateTime.Today;
-            int diasDesde = hoy.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)hoy.DayOfWeek - 1;
-            fechaInicio   = hoy.AddDays(-diasDesde);          // lunes de la semana actual
-            fechaFin      = fechaInicio.Value.AddDays(6);     // domingo de la semana actual
+            var hoy     = DateTime.Today;
+            fechaInicio = new DateTime(hoy.Year, hoy.Month, 1);           // primer día del mes
+            fechaFin    = new DateTime(hoy.Year, hoy.Month,
+                              DateTime.DaysInMonth(hoy.Year, hoy.Month)); // último día del mes
         }
         const int pageSize = 10;
         var (items, total) = await _service.ObtenerRequisicionesAsync(
@@ -76,13 +76,28 @@ public class RequisicionController : OracleBaseController
         var codigosPrio = items.Select(r => r.Prioridad).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
         ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70", codigosPrio);
 
+        var codigosCc = items.Select(r => r.CentroCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
+
+        // Progreso general: 4 etapas del flujo logístico
+        var clavesReq = items.Select(r => (r.TipDoc!, r.Serie, r.NumReq));
+        var progresoMap = await _service.ObtenerProgresoGeneralAsync(clavesReq);
+        foreach (var item in items)
+        {
+            var key = $"{item.TipDoc}|{item.Serie}|{item.NumReq}";
+            if (progresoMap.TryGetValue(key, out var pg))
+                item.ProgresoGeneral = pg;
+        }
+
         return View("~/Views/Logistica/Requerimiento/Index.cshtml", items);
     }
 
     // ── DETALLE (cabecera + ítems + upload) ────────────────────────────────────
 
     [HttpGet("Detalle/{tipDoc}/{serie:int}/{numReq:long}")]
-    public async Task<IActionResult> Detalle(string tipDoc, int serie, long numReq)
+    public async Task<IActionResult> Detalle(string tipDoc, int serie, long numReq,
+        string? buscar = null, string? fechaInicio = null, string? fechaFin = null,
+        string? estado = null, int page = 1)
     {
         var cabecera = await _service.ObtenerRequisicionAsync(tipDoc, serie, numReq);
         if (cabecera is null)
@@ -99,11 +114,23 @@ public class RequisicionController : OracleBaseController
             Items    = items,
             Upload   = new RequisicionUploadModel
             {
-                TipDoc = tipDoc,
-                Serie  = serie,
-                NumReq = numReq,
+                TipDoc           = tipDoc,
+                Serie            = serie,
+                NumReq           = numReq,
+                ReturnBuscar      = buscar,
+                ReturnFechaInicio = fechaInicio,
+                ReturnFechaFin    = fechaFin,
+                ReturnEstado      = estado,
+                ReturnPage        = page,
             }
         };
+
+        // Preservar filtros para "Volver al listado" y breadcrumb
+        ViewBag.ReturnBuscar      = buscar;
+        ViewBag.ReturnFechaInicio = fechaInicio;
+        ViewBag.ReturnFechaFin    = fechaFin;
+        ViewBag.ReturnEstado      = estado;
+        ViewBag.ReturnPage        = page;
 
         // Archivos ya cargados para este requerimiento (por idGrupo de los ítems)
         ViewBag.ArchivosExistentes = ObtenerArchivosExistentes(items);
@@ -125,6 +152,9 @@ public class RequisicionController : OracleBaseController
         var codigosCc = items.Select(i => i.Destino).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
         ViewBag.DestinosItem = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
+        var codigosCabCc = new[] { cabecera.CentroCosto }.Where(c => !string.IsNullOrWhiteSpace(c))!;
+        ViewBag.CentrosCostoCab = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCabCc);
+
         return View("~/Views/Logistica/Requerimiento/Detalle.cshtml", vm);
     }
 
@@ -137,13 +167,25 @@ public class RequisicionController : OracleBaseController
         if (model.Archivos == null || model.Archivos.Count == 0)
         {
             TempData["Warning"] = "No se seleccionaron archivos.";
-            return RedirectToAction(nameof(Detalle), new { tipDoc = model.TipDoc, serie = model.Serie, numReq = model.NumReq });
+            return RedirectToAction(nameof(Detalle), new
+            {
+                tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
+                buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
+                fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+                page        = model.ReturnPage
+            });
         }
 
         if (model.OrdenesItems.Count == 0)
         {
             TempData["Warning"] = "Debe seleccionar al menos un ítem antes de adjuntar archivos.";
-            return RedirectToAction(nameof(Detalle), new { tipDoc = model.TipDoc, serie = model.Serie, numReq = model.NumReq });
+            return RedirectToAction(nameof(Detalle), new
+            {
+                tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
+                buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
+                fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+                page        = model.ReturnPage
+            });
         }
 
         // Si los ítems seleccionados ya comparten un grupo, reutilizarlo; si no, generar uno nuevo
@@ -167,7 +209,8 @@ public class RequisicionController : OracleBaseController
                 continue;
             }
 
-            var nombreSeguro = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
+            // Formato: {nombre_original}_{numReq}_{yyyyMMdd}{ext}
+            var nombreSeguro = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{model.NumReq}_{DateTime.Now:yyyyMMdd}{ext}";
             nombreSeguro = string.Concat(nombreSeguro.Split(Path.GetInvalidFileNameChars()));
 
             var rutaDestino = Path.Combine(carpeta, nombreSeguro);
@@ -184,7 +227,76 @@ public class RequisicionController : OracleBaseController
         else
             TempData["Success"] = $"Se cargaron {exitosos} archivo(s) en el grupo {idGrupo}. {model.OrdenesItems.Count} ítem(s) actualizados.";
 
-        return RedirectToAction(nameof(Detalle), new { tipDoc = model.TipDoc, serie = model.Serie, numReq = model.NumReq });
+        return RedirectToAction(nameof(Detalle), new
+        {
+            tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
+            buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
+            fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+            page        = model.ReturnPage
+        });
+    }
+
+    // ── VER ARCHIVO INLINE (visor) ─────────────────────────────────────────────
+
+    [HttpGet("Ver/{idGrupo:long}/{nombreArchivo}")]
+    public IActionResult Ver(long idGrupo, string nombreArchivo)
+    {
+        nombreArchivo = Path.GetFileName(nombreArchivo);
+        var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
+
+        if (!System.IO.File.Exists(ruta))
+            return NotFound();
+
+        var contentType = ObtenerContentType(Path.GetExtension(nombreArchivo));
+        // Sin fileDownloadName → Content-Disposition: inline (el navegador lo muestra)
+        return PhysicalFile(ruta, contentType);
+    }
+
+    // ── APROBAR ARCHIVO ────────────────────────────────────────────────────────
+
+    [HttpPost("AprobarArchivo")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AprobarArchivo(
+        long idGrupo, string nombreArchivo,
+        string tipDoc, int serie, long numReq,
+        string? retBuscar, string? retFechaInicio, string? retFechaFin,
+        string? retEstado, int retPage = 1)
+    {
+        try
+        {
+            nombreArchivo = Path.GetFileName(nombreArchivo);
+
+            if (!nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase))
+            {
+                var carpeta      = ObtenerCarpetaPorGrupo(idGrupo);
+                var rutaOriginal = Path.Combine(carpeta, nombreArchivo);
+                var nuevoNombre  = $"APROBADO_{nombreArchivo}";
+                var rutaNueva    = Path.Combine(carpeta, nuevoNombre);
+
+                if (System.IO.File.Exists(rutaOriginal))
+                    System.IO.File.Move(rutaOriginal, rutaNueva);
+            }
+
+            await _service.AprobarGrupoAsync(idGrupo);
+            TempData["Success"] = $"Archivo aprobado correctamente.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al aprobar archivo del grupo {IdGrupo}", idGrupo);
+            TempData["Error"] = $"Error al aprobar el archivo: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Detalle), new
+        {
+            tipDoc,
+            serie,
+            numReq,
+            buscar      = retBuscar,
+            fechaInicio = retFechaInicio,
+            fechaFin    = retFechaFin,
+            estado      = retEstado,
+            page        = retPage
+        });
     }
 
     // ── DESCARGAR ARCHIVO ──────────────────────────────────────────────────────
@@ -206,16 +318,37 @@ public class RequisicionController : OracleBaseController
 
     [HttpPost("EliminarArchivo")]
     [ValidateAntiForgeryToken]
-    public IActionResult EliminarArchivo(long idGrupo, string nombreArchivo)
+    public async Task<IActionResult> EliminarArchivo(long idGrupo, string nombreArchivo,
+        string tipDoc, int serie, long numReq,
+        string? retBuscar = null, string? retFechaInicio = null, string? retFechaFin = null,
+        string? retEstado = null, int retPage = 1)
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
-        var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
+        var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
+        var ruta    = Path.Combine(carpeta, nombreArchivo);
 
         if (System.IO.File.Exists(ruta))
             System.IO.File.Delete(ruta);
 
+        // Si la carpeta de este grupo quedó sin archivos → limpiar ID_GRUPO + F_APROBADO y eliminar carpeta
+        bool carpetaVacia = !Directory.Exists(carpeta) || !Directory.EnumerateFiles(carpeta).Any();
+        if (carpetaVacia)
+        {
+            await _service.LimpiarIdGrupoAsync(idGrupo);
+            if (Directory.Exists(carpeta))
+                Directory.Delete(carpeta, recursive: false);
+        }
+
         TempData["Success"] = $"Archivo '{nombreArchivo}' eliminado.";
-        return Redirect(Request.Headers["Referer"].ToString());
+        return RedirectToAction(nameof(Detalle), new
+        {
+            tipDoc, serie, numReq,
+            buscar      = retBuscar,
+            fechaInicio = retFechaInicio,
+            fechaFin    = retFechaFin,
+            estado      = retEstado,
+            page        = retPage
+        });
     }
 
     // ── HELPERS ────────────────────────────────────────────────────────────────

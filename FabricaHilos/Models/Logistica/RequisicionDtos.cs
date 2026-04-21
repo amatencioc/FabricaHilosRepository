@@ -39,6 +39,15 @@ public class RequisicionDto
     public DateTime? FRecibe          { get; set; }
     public string?   Recibe           { get; set; }
 
+    // ── Progreso (ítems con grupo vs total) ──────────────────────────────────
+    public int TotalItems    { get; set; }
+    public int ItemsConGrupo { get; set; }
+    /// <summary>Progreso de ítems con documento adjunto (aprobación interna)</summary>
+    public int Progreso => TotalItems == 0 ? 0 : (int)Math.Round(ItemsConGrupo * 100.0 / TotalItems);
+
+    /// <summary>Progreso general del requerimiento por las 4 etapas del flujo logístico</summary>
+    public ProgresoGeneralDto ProgresoGeneral { get; set; } = new();
+
     // ── Logística ─────────────────────────────────────────────────────────────
     public DateTime? FchEntregaLogist { get; set; }
     public string?   NotaAnulacion    { get; set; }
@@ -109,6 +118,13 @@ public class RequisicionUploadModel
     public List<IFormFile>? Archivos        { get; set; }
     public List<int>        OrdenesItems    { get; set; } = new();
     public long?            ExistingIdGrupo { get; set; }
+
+    // Filtros del listado — se preservan al navegar a/desde el detalle
+    public string? ReturnBuscar      { get; set; }
+    public string? ReturnFechaInicio { get; set; }
+    public string? ReturnFechaFin    { get; set; }
+    public string? ReturnEstado      { get; set; }
+    public int     ReturnPage        { get; set; } = 1;
 }
 
 public class ArchivoRequisicionDto
@@ -119,4 +135,48 @@ public class ArchivoRequisicionDto
     public DateTime FechaCarga    { get; set; }
     public long     IdGrupo       { get; set; }
     public string   CarpetaGrupo  { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Progreso general del requerimiento a través de las 4 etapas del flujo logístico.
+/// Cada etapa indica si al menos un ítem del requerimiento ha alcanzado ese estado.
+/// </summary>
+public class ProgresoGeneralDto
+{
+    // ── Etapa 1: Aprobación del requerimiento ─────────────────────────────────
+    // Ítems que tienen ID_GRUPO y F_APROBADO (aprobación interna de logística)
+    public bool Etapa1Aprobada  { get; set; }
+    public int  Etapa1Items     { get; set; }   // cantidad de ítems con F_APROBADO
+
+    // ── Etapa 2: Orden de compra ──────────────────────────────────────────────
+    // Ítems que tienen una orden de compra emitida
+    // TODO: mapear desde tabla/campo correspondiente cuando esté disponible
+    public bool Etapa2Aprobada  { get; set; }
+    public int  Etapa2Items     { get; set; }
+
+    // ── Etapa 3: Facturado ────────────────────────────────────────────────────
+    // Orden de compra ya facturada (existe en REGISTRO_DIARIO con NUM_REF=NRO_DOC_REF AND TIPO='RS')
+    public bool    Etapa3Aprobada  { get; set; }
+    public int     Etapa3Items     { get; set; }
+    // Datos del comprobante obtenido de REGISTRO_DIARIO
+    public string? Etapa3TipDoc    { get; set; }
+    public string? Etapa3Serie     { get; set; }
+    public string? Etapa3Numero    { get; set; }
+    public string? Etapa3Relacion  { get; set; }
+
+    // ── Etapa 4: Pendiente de pago ────────────────────────────────────────────
+    // Pago: registro en FACTPAG WHERE tipdoc/serie_NUM/numero/cod_proveedor de Etapa3
+    public bool     Etapa4Aprobada { get; set; }
+    public int      Etapa4Items    { get; set; }
+    public decimal? Etapa4Saldo    { get; set; }
+
+    /// <summary>Etapa actual alcanzada (0 = ninguna, 1–4)</summary>
+    public int EtapaActual =>
+        Etapa4Aprobada ? 4 :
+        Etapa3Aprobada ? 3 :
+        Etapa2Aprobada ? 2 :
+        Etapa1Aprobada ? 1 : 0;
+
+    /// <summary>Porcentaje de avance (25% por etapa)</summary>
+    public int PorcentajeGeneral => EtapaActual * 25;
 }

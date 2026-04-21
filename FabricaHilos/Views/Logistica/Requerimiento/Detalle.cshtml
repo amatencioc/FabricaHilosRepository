@@ -10,8 +10,16 @@
     var descsArt = ViewBag.DescripcionesArticulos as Dictionary<string, string> ?? new Dictionary<string, string>();
     var destinos     = ViewBag.Destinos    as Dictionary<string, string> ?? new Dictionary<string, string>();
     var prioridades  = ViewBag.Prioridades as Dictionary<string, string> ?? new Dictionary<string, string>();
-    var destinosItem = ViewBag.DestinosItem as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var destinosItem   = ViewBag.DestinosItem   as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var centrosCostoCab = ViewBag.CentrosCostoCab as Dictionary<string, string> ?? new Dictionary<string, string>();
     _ = nombres.TryGetValue(cab.Responsable ?? "", out var nomResp);
+
+    // Filtros del listado para preservar navegación
+    string? retBuscar      = ViewBag.ReturnBuscar      as string;
+    string? retFechaInicio = ViewBag.ReturnFechaInicio as string;
+    string? retFechaFin    = ViewBag.ReturnFechaFin    as string;
+    string? retEstado      = ViewBag.ReturnEstado      as string;
+    int     retPage        = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
     _ = nombres.TryGetValue(cab.Autoriza ?? "", out var nomAutoriza);
 
     var (badgeClass, estadoTexto) = cab.Estado switch
@@ -39,7 +47,14 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-action="Index">Logística</a></li>
-    <li class="breadcrumb-item"><a asp-action="Index">Requerimientos</a></li>
+    <li class="breadcrumb-item">
+        <a asp-action="Index"
+           asp-route-buscar="@retBuscar"
+           asp-route-fechaInicio="@retFechaInicio"
+           asp-route-fechaFin="@retFechaFin"
+           asp-route-estado="@retEstado"
+           asp-route-page="@retPage">Requerimientos</a>
+    </li>
     <li class="breadcrumb-item active">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</li>
 }
 
@@ -49,7 +64,13 @@
         Requerimiento &nbsp;<span class="fw-bold">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</span>
         &nbsp;<span class="badge @badgeClass">@estadoTexto</span>
     </h4>
-    <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+    <a asp-action="Index"
+       asp-route-buscar="@retBuscar"
+       asp-route-fechaInicio="@retFechaInicio"
+       asp-route-fechaFin="@retFechaFin"
+       asp-route-estado="@retEstado"
+       asp-route-page="@retPage"
+       class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Volver al listado
     </a>
 </div>
@@ -75,7 +96,16 @@
             </div>
             <div class="col">
                 <label class="form-label small text-muted mb-0">Centro de Costo</label>
-                <div>@(cab.CentroCosto ?? "-")</div>
+                <div>
+                    @{
+                        var ccCabDesc = !string.IsNullOrEmpty(cab.CentroCosto) && centrosCostoCab.TryGetValue(cab.CentroCosto, out var ccCabD) && !string.IsNullOrWhiteSpace(ccCabD) ? ccCabD : null;
+                    }
+                    @(ccCabDesc ?? cab.CentroCosto ?? "-")
+                    @if (ccCabDesc != null)
+                    {
+                        <br /><small class="text-muted">@cab.CentroCosto</small>
+                    }
+                </div>
             </div>
             <div class="col">
                 <label class="form-label small text-muted mb-0">Proveedor(es)</label>
@@ -307,6 +337,11 @@
             <input type="hidden" name="TipDoc" value="@cab.TipDoc" />
             <input type="hidden" name="Serie"  value="@cab.Serie" />
             <input type="hidden" name="NumReq" value="@cab.NumReq" />
+            <input type="hidden" name="ReturnBuscar"      value="@retBuscar" />
+            <input type="hidden" name="ReturnFechaInicio" value="@retFechaInicio" />
+            <input type="hidden" name="ReturnFechaFin"    value="@retFechaFin" />
+            <input type="hidden" name="ReturnEstado"      value="@retEstado" />
+            <input type="hidden" name="ReturnPage"        value="@retPage" />
             <div id="hiddenOrdenesContainer"></div>
 
             <div class="alert alert-info py-2 small mb-2">
@@ -337,9 +372,17 @@
         <!-- Listado de archivos existentes agrupados por ID_GRUPO -->
         @if (archivos.Any())
         {
-            var gruposArchivos = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
+            var gruposArchivos  = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
             string[] coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
             int colorIdx = 0;
+
+            // Tipos visualizables en el visor
+            var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+
+            // Si ya existe algún archivo aprobado, se ocultan todos los botones Aprobar
+            bool hayAprobado = archivos.Any(a =>
+                a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
 
             <div class="table-responsive">
                 <table class="table table-sm table-hover table-corporate mb-0">
@@ -362,13 +405,42 @@
                                     <small class="text-muted">@grupo.Count() archivo(s)</small>
                                 </td>
                             </tr>
-                            @foreach (var archivo in grupo)
+                            @foreach (var archivo in grupo.OrderBy(a => a.NombreArchivo))
                             {
-                                var icon = IconoArchivo(archivo.NombreArchivo);
-                                <tr>
+                                bool esAprobado      = archivo.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
+                                var  extArch         = System.IO.Path.GetExtension(archivo.NombreArchivo);
+                                bool esVisualizble   = extVisualizables.Contains(extArch);
+                                var  icon            = IconoArchivo(archivo.NombreArchivo);
+                                var  urlVer          = Url.Action("Ver",       "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+                                var  urlDesc         = Url.Action("Descargar", "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+
+                                <tr class="@(esAprobado ? "table-success" : "")">
                                     <td class="ps-4">
-                                        <i class="bi @icon me-1"></i>
-                                        @archivo.NombreArchivo
+                                        @if (esAprobado)
+                                        {
+                                            <i class="bi bi-check-circle-fill text-success me-1"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi @icon me-1"></i>
+                                        }
+                                        @if (esVisualizble)
+                                        {
+                                            <a href="#" class="link-primary text-decoration-none btn-ver-archivo @(esAprobado ? "fw-semibold" : "")"
+                                               data-url="@urlVer"
+                                               data-nombre="@archivo.NombreArchivo"
+                                               data-tipo="@(extArch.TrimStart('.').ToLower())"
+                                               title="Haz clic para ver @archivo.NombreArchivo">
+                                                @archivo.NombreArchivo
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a href="@urlDesc" target="_blank" class="link-secondary text-decoration-none @(esAprobado ? "fw-semibold" : "")"
+                                               title="Descargar @archivo.NombreArchivo">
+                                                @archivo.NombreArchivo
+                                            </a>
+                                        }
                                     </td>
                                     <td class="text-end small text-muted">
                                         @(archivo.TamanioBytes < 1024
@@ -380,23 +452,47 @@
                                     <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
                                     <td class="text-center">
                                         <div class="d-flex gap-1 justify-content-center">
-                                            <a asp-controller="Requisicion"
-                                               asp-action="Descargar"
-                                               asp-route-idGrupo="@archivo.IdGrupo"
-                                               asp-route-nombreArchivo="@archivo.NombreArchivo"
-                                               class="btn btn-sm btn-outline-primary"
-                                               title="Descargar"
-                                               target="_blank">
-                                                <i class="bi bi-download"></i>
-                                            </a>
+                                            @if (!hayAprobado && !esAprobado)
+                                            {
+                                                <form asp-controller="Requisicion" asp-action="AprobarArchivo"
+                                                      method="post" class="d-inline form-confirmar"
+                                                      data-titulo="Aprobar archivo"
+                                                      data-mensaje="&iquest;Aprobar el archivo &laquo;@archivo.NombreArchivo&raquo;? Esta acci&oacute;n no se puede deshacer.">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
+                                                    <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
+                                                    <input type="hidden" name="tipDoc"        value="@cab.TipDoc" />
+                                                    <input type="hidden" name="serie"         value="@cab.Serie" />
+                                                    <input type="hidden" name="numReq"        value="@cab.NumReq" />
+                                                    <input type="hidden" name="retBuscar"      value="@retBuscar" />
+                                                    <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
+                                                    <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
+                                                    <input type="hidden" name="retEstado"      value="@retEstado" />
+                                                    <input type="hidden" name="retPage"        value="@retPage" />
+                                                    <button type="button" class="btn btn-sm btn-outline-success btn-abrir-confirmar"
+                                                            title="Aprobar este archivo">
+                                                        <i class="bi bi-check-circle me-1"></i>Aprobar
+                                                    </button>
+                                                </form>
+                                            }
                                             <form asp-controller="Requisicion"
                                                   asp-action="EliminarArchivo"
                                                   method="post"
-                                                  onsubmit="return confirm('¿Eliminar el archivo «@archivo.NombreArchivo»?');">
+                                                  class="form-confirmar"
+                                                  data-titulo="Eliminar archivo"
+                                                  data-mensaje="&iquest;Eliminar el archivo &laquo;@archivo.NombreArchivo&raquo;? Esta acci&oacute;n es irreversible.">
                                                 @Html.AntiForgeryToken()
-                                                <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
-                                                <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                                                <input type="hidden" name="idGrupo"        value="@archivo.IdGrupo" />
+                                                <input type="hidden" name="nombreArchivo"  value="@archivo.NombreArchivo" />
+                                                <input type="hidden" name="tipDoc"         value="@cab.TipDoc" />
+                                                <input type="hidden" name="serie"          value="@cab.Serie" />
+                                                <input type="hidden" name="numReq"         value="@cab.NumReq" />
+                                                <input type="hidden" name="retBuscar"      value="@retBuscar" />
+                                                <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
+                                                <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
+                                                <input type="hidden" name="retEstado"      value="@retEstado" />
+                                                <input type="hidden" name="retPage"        value="@retPage" />
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-abrir-confirmar" title="Eliminar">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </form>
@@ -419,8 +515,141 @@
 </div>
 
 @section Scripts {
+
+<!-- ── Modal de confirmación genérico ───────────────────────────────────── -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title" id="modalConfirmarLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    <span id="modalConfirmarTitulo"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmarMensaje"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="modalConfirmarOk">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal visor de archivos ────────────────────────────────────────── -->
+<div class="modal fade" id="modalVisorArchivo" tabindex="-1" aria-labelledby="modalVisorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="height:90vh;">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalVisorLabel">
+                    <i class="bi bi-file-earmark me-1"></i><span id="modalVisorNombre"></span>
+                </h6>
+                <div class="ms-auto d-flex gap-2 align-items-center">
+                    <a id="modalBtnDescargar" href="#" class="btn btn-sm btn-outline-primary" target="_blank" title="Descargar">
+                        <i class="bi bi-download"></i>
+                    </a>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:hidden;height:100%;">
+                <iframe  id="visorIframe" src=""  style="width:100%;height:100%;border:0;display:none;"></iframe>
+                <img     id="visorImg"    src=""  class="img-fluid" style="max-height:100%;object-fit:contain;display:none;" alt="Vista previa" />
+                <div id="visorSpinner" class="text-center text-muted py-5">
+                    <div class="spinner-border text-primary mb-2"></div><br/>Cargando…
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
+    // ── Modal de confirmación genérico ───────────────────────────────────────
+    var modalConfirmar    = new bootstrap.Modal(document.getElementById('modalConfirmar'));
+    var modalTitulo       = document.getElementById('modalConfirmarTitulo');
+    var modalMensaje      = document.getElementById('modalConfirmarMensaje');
+    var modalOk           = document.getElementById('modalConfirmarOk');
+    var _formPendiente    = null;
+
+    document.querySelectorAll('.btn-abrir-confirmar').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            _formPendiente = btn.closest('.form-confirmar');
+            modalTitulo.textContent  = _formPendiente.dataset.titulo  || 'Confirmar';
+            modalMensaje.innerHTML   = _formPendiente.dataset.mensaje  || '¿Desea continuar?';
+            // color del botón según contexto (danger para eliminar, success para aprobar)
+            modalOk.className = btn.classList.contains('btn-outline-danger')
+                ? 'btn btn-danger'
+                : 'btn btn-success';
+            modalConfirmar.show();
+        });
+    });
+
+    modalOk.addEventListener('click', function () {
+        modalConfirmar.hide();
+        if (_formPendiente) {
+            _formPendiente.submit();
+            _formPendiente = null;
+        }
+    });
+
+    // ── Visor de archivos ────────────────────────────────────────────────────
+    var modal          = new bootstrap.Modal(document.getElementById('modalVisorArchivo'));
+    var modalNombre    = document.getElementById('modalVisorNombre');
+    var modalDescarga  = document.getElementById('modalBtnDescargar');
+    var visorIframe    = document.getElementById('visorIframe');
+    var visorImg       = document.getElementById('visorImg');
+    var visorSpinner   = document.getElementById('visorSpinner');
+
+    var extImagen = ['jpg','jpeg','png','gif','bmp'];
+
+    document.querySelectorAll('.btn-ver-archivo').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            var url    = this.dataset.url;
+            var nombre = this.dataset.nombre;
+            var tipo   = this.dataset.tipo;   // extensión sin punto, en minúsculas
+            var urlDesc= url.replace('/Ver/', '/Descargar/');
+
+            modalNombre.textContent  = nombre;
+            modalDescarga.href       = urlDesc;
+
+            // Ocultar todo, mostrar spinner
+            visorIframe.style.display = 'none';
+            visorImg.style.display    = 'none';
+            visorSpinner.style.display= 'block';
+            visorIframe.src = '';
+            visorImg.src    = '';
+
+            modal.show();
+
+            if (extImagen.indexOf(tipo) !== -1) {
+                // Imagen
+                var img = new Image();
+                img.onload = function () {
+                    visorSpinner.style.display = 'none';
+                    visorImg.src               = url;
+                    visorImg.style.display     = 'block';
+                };
+                img.onerror = function () {
+                    visorSpinner.innerHTML = '<span class="text-danger">No se pudo cargar la imagen.</span>';
+                };
+                img.src = url;
+            } else {
+                // PDF (u otro visualizable)
+                visorSpinner.style.display = 'none';
+                visorIframe.src            = url;
+                visorIframe.style.display  = 'block';
+            }
+        });
+    });
+
+    // Limpiar al cerrar el modal
+    document.getElementById('modalVisorArchivo').addEventListener('hidden.bs.modal', function () {
+        visorIframe.src = '';
+        visorImg.src    = '';
+    });
+
+    // ── Upload: selección de ítems y carga ───────────────────────────────────
     var chkTodos   = document.getElementById('chkTodos');
     var btnCargar  = document.getElementById('btnCargar');
     var lblItems   = document.getElementById('lblItemsSel');
@@ -449,7 +678,7 @@
 
     document.querySelectorAll('.chk-item').forEach(function (c) {
         c.addEventListener('change', function () {
-            var total   = document.querySelectorAll('.chk-item').length;
+            var total    = document.querySelectorAll('.chk-item').length;
             var marcados = document.querySelectorAll('.chk-item:checked').length;
             chkTodos.indeterminate = marcados > 0 && marcados < total;
             chkTodos.checked       = marcados === total;
@@ -464,7 +693,6 @@
 
         var seleccionados = Array.from(document.querySelectorAll('.chk-item:checked'));
 
-        // Agregar los órdenes seleccionados
         seleccionados.forEach(function (chk) {
             var inp   = document.createElement('input');
             inp.type  = 'hidden';
@@ -473,13 +701,10 @@
             container.appendChild(inp);
         });
 
-        // Obtener los grupos no vacíos de los ítems seleccionados
         var gruposConValor = seleccionados
             .map(function (chk) { return chk.dataset.idgrupo; })
             .filter(function (g) { return g && g !== ''; });
 
-        // Si hay ítems con grupo Y todos comparten el mismo → reutilizarlo
-        // (aplica también a los ítems seleccionados que aún no tienen grupo)
         var grupoUnico = gruposConValor.length > 0 &&
                          gruposConValor.every(function (g) { return g === gruposConValor[0]; })
                          ? gruposConValor[0]

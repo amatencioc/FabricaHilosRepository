@@ -311,6 +311,29 @@
     </div>
 </div>
 
+<!-- Modal de Confirmación para Guardar Registros -->
+<div class="modal fade" id="modalGuardarRegistros" tabindex="-1" aria-labelledby="modalGuardarRegistrosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalGuardarRegistrosLabel">
+                    <i class="bi bi-save me-2"></i>Confirmar Guardado
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0" id="modalGuardarMensaje"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarGuardar" class="btn btn-success">
+                    <i class="bi bi-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
     <script>
@@ -913,9 +936,33 @@
                 return;
             }
 
-            if (!confirm(`¿Está seguro de guardar ${registros.length} registro(s)?`)) {
-                return;
-            }
+            const confirmado = await new Promise(function (resolve) {
+                document.getElementById('modalGuardarMensaje').textContent =
+                    `¿Está seguro de guardar ${registros.length} registro(s)?`;
+                var modalEl = document.getElementById('modalGuardarRegistros');
+                var modal   = bootstrap.Modal.getOrCreateInstance(modalEl);
+                var btnOk   = document.getElementById('btnConfirmarGuardar');
+
+                function onOk() {
+                    cleanup();
+                    modal.hide();
+                    modalEl.addEventListener('hidden.bs.modal', function h() {
+                        modalEl.removeEventListener('hidden.bs.modal', h);
+                        resolve(true);
+                    });
+                }
+                function onCancel() { cleanup(); resolve(false); }
+                function cleanup() {
+                    btnOk.removeEventListener('click', onOk);
+                    modalEl.removeEventListener('hidden.bs.modal', onCancel);
+                }
+
+                btnOk.addEventListener('click', onOk);
+                modalEl.addEventListener('hidden.bs.modal', onCancel);
+                modal.show();
+            });
+
+            if (!confirmado) return;
 
             const btnGuardar = document.getElementById('btnGuardarTodos');
             btnGuardar.disabled = true;

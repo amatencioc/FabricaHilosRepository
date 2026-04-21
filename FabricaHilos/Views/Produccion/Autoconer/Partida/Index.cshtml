@@ -198,6 +198,26 @@
 }
 
 @section Scripts {
+
+<!-- Modal de confirmación -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title" id="modalConfirmarLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    <span id="modalConfirmarTitulo"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmarMensaje"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="modalConfirmarOk">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
     // Estado dropdown panel
     const btnEstado    = document.getElementById('btnEstado');
@@ -226,5 +246,32 @@
             panelEstado.style.display = 'none';
         }
     });
+
+    // Modal de confirmación genérico
+    (function () {
+        var modalEl  = document.getElementById('modalConfirmar');
+        var modal    = new bootstrap.Modal(modalEl);
+        var titulo   = document.getElementById('modalConfirmarTitulo');
+        var mensaje  = document.getElementById('modalConfirmarMensaje');
+        var btnOk    = document.getElementById('modalConfirmarOk');
+        var _form    = null;
+
+        document.querySelectorAll('.btn-abrir-confirmar').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                _form = btn.closest('.form-confirmar');
+                titulo.textContent = _form.dataset.titulo  || 'Confirmar';
+                mensaje.innerHTML  = _form.dataset.mensaje || '¿Desea continuar?';
+                modal.show();
+            });
+        });
+
+        btnOk.addEventListener('click', function () {
+            modal.hide();
+            modalEl.addEventListener('hidden.bs.modal', function handler() {
+                modalEl.removeEventListener('hidden.bs.modal', handler);
+                if (_form) { _form.submit(); _form = null; }
+            });
+        });
+    })();
 </script>
 }
