@@ -86,6 +86,7 @@
                         <th class="text-center">Autoriza / F. Autoriza</th>
                         <th class="text-center" style="min-width:120px;" title="Ítems con documento adjunto aprobado">Progreso<br/><small class="fw-normal text-white-50">ítems aprobados</small></th>
                         <th class="text-center" style="min-width:160px;" title="Situación general del requerimiento en el flujo logístico">Situación<br/><small class="fw-normal text-white-50">flujo logístico</small></th>
+                        <th class="text-center" style="min-width:110px;" title="Número(s) de orden de compra">O/C<br/><small class="fw-normal text-white-50">orden compra</small></th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
@@ -144,14 +145,29 @@
                             </td>
                             <td class="text-center">
                                 @{
+                                    // Progreso = ítems con ID_GRUPO (documento adjunto) / total ítems
                                     int pct      = req.Progreso;
-                                    string pctColor = pct == 100 ? "bg-success" : pct >= 50 ? "bg-primary" : "bg-warning";
+                                    string pctColor = pct == 100 ? "bg-success" : "bg-success";
+                                    int pctRayadoItems = req.TotalItems > 0
+                                        ? (int)Math.Round((req.TotalItems - req.ItemsConGrupo) * 100.0 / req.TotalItems)
+                                        : 0;
                                 }
-                                <div class="progress" style="height:14px;min-width:80px;" title="@req.ItemsConGrupo de @req.TotalItems ítem(s) con documento aprobado">
-                                    <div class="progress-bar @pctColor" role="progressbar"
-                                         style="width:@pct%"
-                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
-                                    </div>
+                                <div class="progress" style="height:14px;min-width:80px;"
+                                     title="@req.ItemsConGrupo de @req.TotalItems ítem(s) con documento adjunto">
+                                    @if (pct > 0)
+                                    {
+                                        <div class="progress-bar bg-success" role="progressbar"
+                                             style="width:@pct%"
+                                             aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                    }
+                                    @if (pct > 0 && pct < 100 && pctRayadoItems > 0)
+                                    {
+                                        <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar"
+                                             style="width:@pctRayadoItems%; opacity:.4;"
+                                             aria-valuenow="@pctRayadoItems" aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                    }
                                 </div>
                                 <small class="text-muted">@req.ItemsConGrupo/@req.TotalItems (@pct%)</small>
                             </td>
@@ -159,32 +175,117 @@
                             <td class="text-center">
                                 @{
                                     var pg = req.ProgresoGeneral;
-                                    var etapas = new[]
-                                    {
-                                        (Num: 1, Label: "Aprobación",    Ok: pg.Etapa1Aprobada, Items: pg.Etapa1Items),
-                                        (Num: 2, Label: "Orden compra",  Ok: pg.Etapa2Aprobada, Items: pg.Etapa2Items),
-                                        (Num: 3, Label: "Facturado",     Ok: pg.Etapa3Aprobada, Items: pg.Etapa3Items),
-                                        (Num: 4, Label: "Pago",          Ok: pg.Etapa4Aprobada, Items: pg.Etapa4Items),
-                                    };
-                                    int pctG = pg.PorcentajeGeneral;
-                                    string pctGColor = pctG == 100 ? "bg-success" : pctG >= 50 ? "bg-primary" : pctG > 0 ? "bg-warning" : "bg-secondary";
-                                    string etapaTooltip = string.Join(" → ", etapas.Select(e =>
-                                        $"{e.Num}.{e.Label}: {(e.Ok ? "✓" : "pendiente")}"));
+
+                                    // Etapa 1: progreso parcial por grupos aprobados/total
+                                    int e1Total    = pg.Etapa1GruposTotal;
+                                    int e1Aprob    = pg.Etapa1GruposAprobados;
+                                    bool e1Ok      = pg.Etapa1Aprobada;
+                                    int e1Solido   = e1Total > 0 ? (int)Math.Round(e1Aprob         * 100.0 / e1Total) : 0;
+                                    int e1Rayado   = e1Total > 0 ? (int)Math.Round((e1Total - e1Aprob) * 100.0 / e1Total) : 0;
+
+                                    // Etapa 2: progreso parcial por ítems con O/C / total ítems
+                                    int e2Total    = pg.Etapa2ItemsTotal;
+                                    int e2ConOC    = pg.Etapa2ItemsConOC;
+                                    bool e2Ok      = pg.Etapa2Aprobada;
+                                    int e2Solido   = e2Total > 0 ? (int)Math.Round(e2ConOC          * 100.0 / e2Total) : 0;
+                                    int e2Rayado   = e2Total > 0 ? (int)Math.Round((e2Total - e2ConOC)  * 100.0 / e2Total) : 0;
+
+                                    // Etapa 3: progreso parcial por O/C facturadas / total O/C
+                                    int e3Total    = pg.Etapa3OcTotal;
+                                    int e3Fact     = pg.Etapa3OcFacturadas;
+                                    bool e3Ok      = pg.Etapa3Aprobada;
+                                    int e3Solido   = e3Total > 0 ? (int)Math.Round(e3Fact          * 100.0 / e3Total) : 0;
+                                    int e3Rayado   = e3Total > 0 ? (int)Math.Round((e3Total - e3Fact) * 100.0 / e3Total) : 0;
+
+                                    // Etapa 4: progreso parcial por facturas pagadas / total facturas
+                                    int e4Total    = pg.Etapa4FacturasTotal;
+                                    int e4Pagadas  = pg.Etapa4FacturasPagadas;
+                                    bool e4Ok      = pg.Etapa4Aprobada;
+                                    int e4Solido   = e4Total > 0 ? (int)Math.Round(e4Pagadas          * 100.0 / e4Total) : 0;
+                                    int e4Rayado   = e4Total > 0 ? (int)Math.Round((e4Total - e4Pagadas) * 100.0 / e4Total) : 0;
+
+                                    string e1Title = $"Etapa 1 - Aprobación: {e1Aprob}/{e1Total} grupo(s)";
+                                    string e2Title = $"Etapa 2 - Orden compra: {e2ConOC}/{e2Total} ítem(s) con O/C aprobado(s)";
+                                    string e3Title = $"Etapa 3 - Facturado: {e3Fact}/{e3Total} O/C facturada(s)";
+                                    string e4Title = $"Etapa 4 - Pago: {e4Pagadas}/{e4Total} factura(s) pagada(s)";
                                 }
-                                <div class="progress mb-1" style="height:10px;min-width:140px;" title="@etapaTooltip">
-                                    <div class="progress-bar @pctGColor" role="progressbar"
-                                         style="width:@pctG%"
-                                         aria-valuenow="@pctG" aria-valuemin="0" aria-valuemax="100">
+                                @* Barra dividida en 4 segmentos de 25% cada uno *@
+                                <div class="d-flex mb-1" style="height:10px;min-width:140px;gap:2px;">
+                                    @* Segmento 1 — sólido + rayado según grupos aprobados *@
+                                    <div class="progress flex-fill" style="height:10px;" title="@e1Title">
+                                        @if (e1Solido > 0)
+                                        {
+                                            <div class="progress-bar bg-success" style="width:@e1Solido%"></div>
+                                        }
+                                        @if (e1Rayado > 0 && e1Aprob > 0)
+                                        {
+                                            <div class="progress-bar bg-success progress-bar-striped progress-bar-animated"
+                                                 style="width:@e1Rayado%; opacity:.5;"></div>
+                                        }
+                                    </div>
+                                    @* Segmento 2 — sólido + rayado según ítems con O/C *@
+                                    <div class="progress flex-fill" style="height:10px;" title="@e2Title">
+                                        @if (e2Solido > 0)
+                                        {
+                                            <div class="progress-bar bg-primary" style="width:@e2Solido%"></div>
+                                        }
+                                        @if (e2Rayado > 0 && e2ConOC > 0)
+                                        {
+                                            <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated"
+                                                 style="width:@e2Rayado%; opacity:.5;"></div>
+                                        }
+                                    </div>
+                                    @* Segmento 3 — sólido + rayado según O/C facturadas *@
+                                    <div class="progress flex-fill" style="height:10px;" title="@e3Title">
+                                        @if (e3Solido > 0)
+                                        {
+                                            <div class="progress-bar bg-warning" style="width:@e3Solido%"></div>
+                                        }
+                                        @if (e3Rayado > 0 && e3Fact > 0)
+                                        {
+                                            <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated"
+                                                 style="width:@e3Rayado%; opacity:.5;"></div>
+                                        }
+                                    </div>
+                                    @* Segmento 4 — sólido + rayado según facturas pagadas *@
+                                    <div class="progress flex-fill" style="height:10px;" title="@e4Title">
+                                        @if (e4Solido > 0)
+                                        {
+                                            <div class="progress-bar bg-success" style="width:@e4Solido%"></div>
+                                        }
+                                        @if (e4Rayado > 0 && e4Pagadas > 0)
+                                        {
+                                            <div class="progress-bar bg-success progress-bar-striped progress-bar-animated"
+                                                 style="width:@e4Rayado%; opacity:.5;"></div>
+                                        }
                                     </div>
                                 </div>
                                 <div class="d-flex justify-content-center gap-1 flex-wrap">
-                                    @foreach (var e in etapas)
-                                    {
-                                        string eColor  = e.Ok ? "bg-success" : "bg-light text-secondary border";
-                                        string eTitle  = e.Ok ? $"{e.Label} completado ({e.Items} ítem(s))" : $"{e.Label}: pendiente";
-                                        <span class="badge @eColor" style="font-size:.65rem;" title="@eTitle">@e.Num</span>
+                                    @{
+                                        string c1 = e1Ok ? "bg-success" : (e1Aprob > 0 ? "bg-warning" : "bg-light text-secondary border");
+                                        string c2 = e2Ok ? "bg-primary"  : (e2ConOC > 0 ? "bg-warning" : "bg-light text-secondary border");
+                                        string c3 = e3Ok ? "bg-warning"  : (e3Fact > 0 ? "bg-info" : "bg-light text-secondary border");
+                                        string c4 = e4Ok ? "bg-success" : (e4Pagadas > 0 ? "bg-warning" : "bg-light text-secondary border");
                                     }
+                                    <span class="badge @c1" style="font-size:.65rem;" title="@e1Title">1</span>
+                                    <span class="badge @c2" style="font-size:.65rem;" title="@e2Title">2</span>
+                                    <span class="badge @c3" style="font-size:.65rem;" title="@e3Title">3</span>
+                                    <span class="badge @c4" style="font-size:.65rem;" title="@e4Title">4</span>
                                 </div>
+                            </td>
+                            @* ── Columna: O/C ── *@
+                            <td class="text-center">
+                                @if (req.OrdenesCompra.Any())
+                                {
+                                    foreach (var oc in req.OrdenesCompra)
+                                    {
+                                        <span class="badge bg-info text-dark d-block mb-1" style="font-size:.7rem;" title="Orden de compra @oc">@oc</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">-</span>
+                                }
                             </td>
                             <td class="text-center">
                                 @{

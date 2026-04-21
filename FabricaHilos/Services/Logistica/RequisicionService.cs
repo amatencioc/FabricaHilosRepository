@@ -29,6 +29,8 @@ public interface IRequisicionService
 
     Task AprobarGrupoAsync(long idGrupo);
 
+    Task DesaprobarGrupoAsync(long idGrupo);
+
     Task LimpiarIdGrupoAsync(long idGrupo);
 
     /// <summary>
@@ -37,6 +39,9 @@ public interface IRequisicionService
     /// Clave del diccionario: "TIPDOC|SERIE|NUMREQ"
     /// </summary>
     Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneralAsync(
+        IEnumerable<(string TipDoc, int Serie, long NumReq)> claves);
+
+    Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneralAsync_Backup(
         IEnumerable<(string TipDoc, int Serie, long NumReq)> claves);
 }
 
@@ -235,15 +240,23 @@ public class RequisicionService : IRequisicionService
     public async Task<List<ItemReqDto>> ObtenerItemsAsync(string tipDoc, int serie, long numReq)
     {
         const string sql = @"
-            SELECT TIPDOC, SERIE, NUMREQ, ORDEN, COD_ART, DETALLE, UNIDAD, MARCA, CTACTBLE,
-                   CANTIDAD, SALDO, STK_MIN, STK_HIST,
-                   MONEDA, PRECIO,
-                   TP_DESTINO, DESTINO, COD_SOLICITA,
-                   ID_GRUPO, F_APROBADO, OBSERVACIONES,
-                   A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA
-            FROM ITEMREQ
-            WHERE TIPDOC = :tipDoc AND SERIE = :serie AND NUMREQ = :numReq
-            ORDER BY ORDEN";
+            SELECT I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
+                   I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
+                   I.MONEDA, I.PRECIO,
+                   I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                   I.ID_GRUPO, I.F_APROBADO, I.OBSERVACIONES,
+                   I.A_ADUSER, I.A_ADFECHA, I.A_MDUSER, I.A_MDFECHA,
+                   MAX(D.NRO_DOC_REF) AS NRO_DOC_REF
+            FROM ITEMREQ I
+            LEFT JOIN DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+            WHERE I.TIPDOC = :tipDoc AND I.SERIE = :serie AND I.NUMREQ = :numReq
+            GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
+                   I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
+                   I.MONEDA, I.PRECIO,
+                   I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                   I.ID_GRUPO, I.F_APROBADO, I.OBSERVACIONES,
+                   I.A_ADUSER, I.A_ADFECHA, I.A_MDUSER, I.A_MDFECHA
+            ORDER BY I.ORDEN";
 
         var items = new List<ItemReqDto>();
         try
@@ -327,6 +340,7 @@ public class RequisicionService : IRequisicionService
         CodSolicita   = GetStr(r, "COD_SOLICITA"),
         IdGrupo       = GetNullLong(r, "ID_GRUPO"),
         FAprobado     = GetDt(r, "F_APROBADO"),
+        NroDocRef     = GetStr(r, "NRO_DOC_REF"),
         Observaciones = GetStr(r, "OBSERVACIONES"),
         AAduser       = GetStr(r, "A_ADUSER"),
         AAdfecha      = GetDt(r, "A_ADFECHA"),
@@ -547,6 +561,24 @@ public async Task AprobarGrupoAsync(long idGrupo)
     }
 }
 
+public async Task DesaprobarGrupoAsync(long idGrupo)
+{
+    const string sql = "UPDATE ITEMREQ SET F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+        await cmd.ExecuteNonQueryAsync();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al desaprobar grupo {IdGrupo}", idGrupo);
+        throw;
+    }
+}
+
 public async Task LimpiarIdGrupoAsync(long idGrupo)
 {
     const string sql = "UPDATE ITEMREQ SET ID_GRUPO = NULL, F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
@@ -574,6 +606,223 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
     var lista  = claves.Distinct().ToList();
     if (lista.Count == 0) return result;
 
+    foreach (var k in lista)
+        result[$"{k.TipDoc}|{k.Serie}|{k.NumReq}"] = new ProgresoGeneralDto();
+
+    var paramPairs = lista.Select((k, i) =>
+        $"(TIPDOC = :td{i} AND SERIE = :sr{i} AND NUMREQ = :nr{i})").ToList();
+    string whereIn = string.Join(" OR ", paramPairs);
+
+    // ── Etapa 1: grupos distintos por NUMREQ y cuántos tienen F_APROBADO ────────
+    string sqlEtapa1 = $@"
+        SELECT TIPDOC, SERIE, NUMREQ,
+               COUNT(*)                                               AS GRUPOS_TOTAL,
+               SUM(CASE WHEN APROBADO = 1 THEN 1 ELSE 0 END)         AS GRUPOS_APROBADOS
+        FROM (
+            SELECT TIPDOC, SERIE, NUMREQ, ID_GRUPO,
+                   MAX(CASE WHEN F_APROBADO IS NOT NULL THEN 1 ELSE 0 END) AS APROBADO
+            FROM   ITEMREQ
+            WHERE  ({whereIn})
+              AND  ID_GRUPO IS NOT NULL
+            GROUP BY TIPDOC, SERIE, NUMREQ, ID_GRUPO
+        )
+        GROUP BY TIPDOC, SERIE, NUMREQ";
+
+    // ── Etapa 2: ítems aprobados con/sin O/C por NUMREQ ────────────────────────
+    // Base = ítems con F_APROBADO (aprobados en Etapa1); de esos cuántos tienen O/C.
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+
+        // — Etapa 1 —
+        await using (var cmd = new OracleCommand(sqlEtapa1, con) { BindByName = true })
+        {
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var key = $"{GetStr(r,"TIPDOC")}|{GetInt(r,"SERIE")}|{GetLong(r,"NUMREQ")}";
+                if (result.TryGetValue(key, out var pg))
+                {
+                    pg.Etapa1GruposTotal     = GetInt(r, "GRUPOS_TOTAL");
+                    pg.Etapa1GruposAprobados = GetInt(r, "GRUPOS_APROBADOS");
+                }
+            }
+        }
+
+        // — Etapa 2: ítems con O/C (total) vs ítems con O/C y aprobados (parcial) ──
+        // Total     = ítems que tienen NRO_DOC_REF en DESP_ITEMREQ (tienen O/C asignada)
+        // Aprobados = de esos, cuántos tienen además F_APROBADO IS NOT NULL
+        if (lista.Count > 0)
+        {
+            var paramPairs2 = lista.Select((k, i) =>
+                $"(I.TIPDOC = :e2td{i} AND I.SERIE = :e2sr{i} AND I.NUMREQ = :e2nr{i})").ToList();
+            string sqlEtapa2 = $@"
+                SELECT I.TIPDOC, I.SERIE, I.NUMREQ,
+                       COUNT(*)                                                            AS ITEMS_CON_OC,
+                       SUM(CASE WHEN I.F_APROBADO IS NOT NULL THEN 1 ELSE 0 END)          AS ITEMS_APROBADOS
+                FROM   ITEMREQ I
+                JOIN   DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+                                     AND D.NRO_DOC_REF IS NOT NULL
+                WHERE  ({string.Join(" OR ", paramPairs2)})
+                GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ";
+
+            await using var cmdE2 = new OracleCommand(sqlEtapa2, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmdE2.Parameters.Add(new OracleParameter($":e2td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmdE2.Parameters.Add(new OracleParameter($":e2sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmdE2.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var rE2 = (OracleDataReader)await cmdE2.ExecuteReaderAsync();
+            while (await rE2.ReadAsync())
+            {
+                var key = $"{GetStr(rE2,"TIPDOC")}|{GetInt(rE2,"SERIE")}|{GetLong(rE2,"NUMREQ")}";
+                if (!result.TryGetValue(key, out var pg)) continue;
+                pg.Etapa2ItemsTotal = GetInt(rE2, "ITEMS_CON_OC");
+                pg.Etapa2ItemsConOC = GetInt(rE2, "ITEMS_APROBADOS");
+            }
+        }
+
+        // — Recolectar O/C distintas (columna O/C + base para Etapa3) ──────────
+        // Se toman de DESP_ITEMREQ sin filtro de aprobación: la O/C pertenece al
+        // requerimiento completo, no a un ítem individual aprobado.
+        // WM_CONCAT compatible con Oracle 10g; se itera fila a fila (sin concatenar).
+        if (lista.Count > 0)
+        {
+            var paramPairsOC = lista.Select((k, i) =>
+                $"(TIPDOC = :octd{i} AND SERIE = :ocsr{i} AND NUMREQ = :ocnr{i})").ToList();
+            string sqlOC = $@"
+                SELECT DISTINCT TIPDOC, SERIE, NUMREQ, NRO_DOC_REF
+                FROM   DESP_ITEMREQ
+                WHERE  NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairsOC)})
+                ORDER BY TIPDOC, SERIE, NUMREQ, NRO_DOC_REF";
+
+            await using var cmdOC = new OracleCommand(sqlOC, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmdOC.Parameters.Add(new OracleParameter($":octd{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmdOC.Parameters.Add(new OracleParameter($":ocsr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmdOC.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var rOC = (OracleDataReader)await cmdOC.ExecuteReaderAsync();
+            while (await rOC.ReadAsync())
+            {
+                var key = $"{GetStr(rOC,"TIPDOC")}|{GetInt(rOC,"SERIE")}|{GetLong(rOC,"NUMREQ")}";
+                if (!result.TryGetValue(key, out var pg)) continue;
+                string oc = GetStr(rOC, "NRO_DOC_REF") ?? "";
+                if (!string.IsNullOrWhiteSpace(oc) && !pg.OrdenesCompra.Contains(oc))
+                    pg.OrdenesCompra.Add(oc);
+            }
+        }
+
+        // — Etapa 3: facturado ─────────────────────────────────────────────────
+        // Por cada NUMREQ: cuántas O/C distintas hay (DESP_ITEMREQ.NRO_DOC_REF)
+        // y de esas cuántas tienen registro en REGISTRO_DIARIO TIPO='RS' (NUM_REF=NRO_DOC_REF).
+        // Mismo patrón que Etapa1 y Etapa2: una sola SQL con GROUP BY TIPDOC,SERIE,NUMREQ.
+        if (lista.Count > 0)
+        {
+            var paramPairs3 = lista.Select((k, i) =>
+                $"(D.TIPDOC = :e3td{i} AND D.SERIE = :e3sr{i} AND D.NUMREQ = :e3nr{i})").ToList();
+            string sqlEtapa3 = $@"
+                SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
+                       COUNT(DISTINCT D.NRO_DOC_REF)                                  AS OC_TOTAL,
+                       COUNT(DISTINCT CASE WHEN RD.NUM_REF IS NOT NULL
+                                           THEN D.NRO_DOC_REF END)                   AS OC_FACTURADAS
+                FROM   DESP_ITEMREQ D
+                LEFT JOIN REGISTRO_DIARIO RD
+                       ON RD.NUM_REF = D.NRO_DOC_REF
+                      AND RD.TIPO = 'RS'
+                WHERE  D.NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairs3)})
+                GROUP BY D.TIPDOC, D.SERIE, D.NUMREQ";
+
+            await using var cmd3 = new OracleCommand(sqlEtapa3, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmd3.Parameters.Add(new OracleParameter($":e3td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmd3.Parameters.Add(new OracleParameter($":e3sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var r3 = (OracleDataReader)await cmd3.ExecuteReaderAsync();
+            while (await r3.ReadAsync())
+            {
+                var key = $"{GetStr(r3,"TIPDOC")}|{GetInt(r3,"SERIE")}|{GetLong(r3,"NUMREQ")}";
+                if (result.TryGetValue(key, out var pg))
+                {
+                    pg.Etapa3OcTotal      = GetInt(r3, "OC_TOTAL");
+                    pg.Etapa3OcFacturadas = GetInt(r3, "OC_FACTURADAS");
+                }
+            }
+        }
+
+        // — Etapa 4: pago ──────────────────────────────────────────────────────
+        // Por cada NUMREQ: cuántas facturas distintas hay en REGISTRO_DIARIO (via O/C)
+        // y de esas cuántas tienen SALDO=0 en FACTPAG.
+        // Mismo patrón: una sola SQL con GROUP BY TIPDOC,SERIE,NUMREQ.
+        if (lista.Count > 0)
+        {
+            var paramPairs4 = lista.Select((k, i) =>
+                $"(D.TIPDOC = :e4td{i} AND D.SERIE = :e4sr{i} AND D.NUMREQ = :e4nr{i})").ToList();
+            string sqlEtapa4 = $@"
+                SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
+                       COUNT(DISTINCT RD.NUMERO)                                       AS FACT_TOTAL,
+                       COUNT(DISTINCT CASE WHEN FP.SALDO = 0 THEN RD.NUMERO END)       AS FACT_PAGADAS
+                FROM   DESP_ITEMREQ D
+                JOIN   REGISTRO_DIARIO RD
+                       ON RD.NUM_REF = D.NRO_DOC_REF
+                      AND RD.TIPO = 'RS'
+                LEFT JOIN FACTPAG FP
+                       ON FP.TIPDOC      = RD.TIPDOC
+                      AND FP.SERIE_NUM   = RD.SERIE
+                      AND FP.NUMERO      = RD.NUMERO
+                      AND FP.COD_PROVEEDOR = RD.RELACION
+                WHERE  D.NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairs4)})
+                GROUP BY D.TIPDOC, D.SERIE, D.NUMREQ";
+
+            await using var cmd4 = new OracleCommand(sqlEtapa4, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmd4.Parameters.Add(new OracleParameter($":e4td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmd4.Parameters.Add(new OracleParameter($":e4sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var r4 = (OracleDataReader)await cmd4.ExecuteReaderAsync();
+            while (await r4.ReadAsync())
+            {
+                var key = $"{GetStr(r4,"TIPDOC")}|{GetInt(r4,"SERIE")}|{GetLong(r4,"NUMREQ")}";
+                if (result.TryGetValue(key, out var pg))
+                {
+                    pg.Etapa4FacturasTotal   = GetInt(r4, "FACT_TOTAL");
+                    pg.Etapa4FacturasPagadas = GetInt(r4, "FACT_PAGADAS");
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener progreso general de requerimientos");
+    }
+
+    return result;
+}
+
+public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneralAsync_Backup(
+    IEnumerable<(string TipDoc, int Serie, long NumReq)> claves)
+{
+    var result = new Dictionary<string, ProgresoGeneralDto>(StringComparer.OrdinalIgnoreCase);
+    var lista  = claves.Distinct().ToList();
+    if (lista.Count == 0) return result;
+
     // Inicializar entradas
     foreach (var k in lista)
         result[$"{k.TipDoc}|{k.Serie}|{k.NumReq}"] = new ProgresoGeneralDto();
@@ -583,26 +832,25 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
         $"(TIPDOC = :td{i} AND SERIE = :sr{i} AND NUMREQ = :nr{i})").ToList();
     string whereIn = string.Join(" OR ", paramPairs);
 
-    // ── Etapa 1: ítems con ID_GRUPO y F_APROBADO ──────────────────────────────
+    // ── Etapa 1: grupos distintos por NUMREQ y cuántos tienen F_APROBADO ────────
+    // Se agrupa primero por NUMREQ+ID_GRUPO para determinar si ese grupo está
+    // aprobado (al menos un ítem con F_APROBADO), luego se cuenta por NUMREQ.
     string sqlEtapa1 = $@"
         SELECT TIPDOC, SERIE, NUMREQ,
-               COUNT(*) AS ITEMS_APROBADOS
-        FROM   ITEMREQ
-        WHERE  ({whereIn})
-          AND  ID_GRUPO   IS NOT NULL
-          AND  F_APROBADO IS NOT NULL
+               COUNT(*)                              AS GRUPOS_TOTAL,
+               SUM(CASE WHEN APROBADO = 1 THEN 1 ELSE 0 END) AS GRUPOS_APROBADOS
+        FROM (
+            SELECT TIPDOC, SERIE, NUMREQ, ID_GRUPO,
+                   MAX(CASE WHEN F_APROBADO IS NOT NULL THEN 1 ELSE 0 END) AS APROBADO
+            FROM   ITEMREQ
+            WHERE  ({whereIn})
+              AND  ID_GRUPO IS NOT NULL
+            GROUP BY TIPDOC, SERIE, NUMREQ, ID_GRUPO
+        )
         GROUP BY TIPDOC, SERIE, NUMREQ";
 
-    // ── Etapa 2: orden de compra (DESP_ITEMREQ con NRO_DOC_REF) ──────────────
-    // Un NUMREQ tiene varios ítems con el mismo NRO_DOC_REF → MAX para obtener 1 valor por NUMREQ
-    var paramNumreqs = lista.Select((k, i) => $":nr2_{i}").ToList();
-    string whereNumreqs = string.Join(",", paramNumreqs);
-    string sqlEtapa2 = $@"
-        SELECT D.NUMREQ, MAX(D.NRO_DOC_REF) AS NRO_DOC_REF
-        FROM   DESP_ITEMREQ D
-        WHERE  D.NUMREQ IN ({whereNumreqs})
-          AND  D.NRO_DOC_REF IS NOT NULL
-        GROUP BY D.NUMREQ";
+    // ── Etapa 2: ítems aprobados con/sin O/C por NUMREQ ──────────────────────
+    // Base = ítems con F_APROBADO IS NOT NULL; de esos cuántos tienen O/C.
 
     // ── Etapa 4: pendiente de pago ────────────────────────────────────────────
     // TODO: Implementar cuando se disponga del campo/tabla de contabilidad/pago
@@ -624,159 +872,158 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
             {
-                var key   = $"{GetStr(r,"TIPDOC")}|{GetInt(r,"SERIE")}|{GetLong(r,"NUMREQ")}";
-                var items = GetInt(r, "ITEMS_APROBADOS");
+                var key = $"{GetStr(r,"TIPDOC")}|{GetInt(r,"SERIE")}|{GetLong(r,"NUMREQ")}";
                 if (result.TryGetValue(key, out var pg))
                 {
-                    pg.Etapa1Items    = items;
-                    pg.Etapa1Aprobada = items > 0;
+                    pg.Etapa1GruposTotal     = GetInt(r, "GRUPOS_TOTAL");
+                    pg.Etapa1GruposAprobados = GetInt(r, "GRUPOS_APROBADOS");
                 }
             }
         }
 
-        // — Etapa 2: orden de compra —
-        // 1 NRO_DOC_REF por NUMREQ (GROUP BY NUMREQ con MAX)
-        var nroDocRefANumReqs = new Dictionary<string, List<long>>(StringComparer.OrdinalIgnoreCase);
-
-        await using (var cmd = new OracleCommand(sqlEtapa2, con) { BindByName = true })
+        // — Etapa 2: ítems con O/C (total) vs ítems con O/C y aprobados (parcial) ──
+        // Total     = ítems que tienen NRO_DOC_REF en DESP_ITEMREQ (tienen O/C asignada)
+        // Aprobados = de esos, cuántos tienen además F_APROBADO IS NOT NULL
+        if (lista.Count > 0)
         {
+            var paramPairs2b = lista.Select((k, i) =>
+                $"(I.TIPDOC = :e2td{i} AND I.SERIE = :e2sr{i} AND I.NUMREQ = :e2nr{i})").ToList();
+            string sqlEtapa2b = $@"
+                SELECT I.TIPDOC, I.SERIE, I.NUMREQ,
+                       COUNT(*)                                                            AS ITEMS_CON_OC,
+                       SUM(CASE WHEN I.F_APROBADO IS NOT NULL THEN 1 ELSE 0 END)          AS ITEMS_APROBADOS
+                FROM   ITEMREQ I
+                JOIN   DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+                                     AND D.NRO_DOC_REF IS NOT NULL
+                WHERE  ({string.Join(" OR ", paramPairs2b)})
+                GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ";
+
+            await using var cmdE2b = new OracleCommand(sqlEtapa2b, con) { BindByName = true };
             for (int i = 0; i < lista.Count; i++)
-                cmd.Parameters.Add(new OracleParameter($":nr2_{i}", OracleDbType.Int64) { Value = lista[i].NumReq });
-
-            await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
-            while (await r.ReadAsync())
             {
-                long   numReq    = GetLong(r, "NUMREQ");
-                string nroDocRef = GetStr(r,  "NRO_DOC_REF") ?? "";
-                if (string.IsNullOrWhiteSpace(nroDocRef)) continue;
-
-                _logger.LogDebug("Etapa2 → NUMREQ={NumReq} NRO_DOC_REF={NroDocRef}", numReq, nroDocRef);
-
-                if (!nroDocRefANumReqs.TryGetValue(nroDocRef, out var numReqs))
-                {
-                    numReqs = new List<long>();
-                    nroDocRefANumReqs[nroDocRef] = numReqs;
-                }
-                if (!numReqs.Contains(numReq)) numReqs.Add(numReq);
-
-                var match = result.FirstOrDefault(kv =>
-                    kv.Key.EndsWith($"|{numReq}", StringComparison.OrdinalIgnoreCase));
-                if (match.Value != null)
-                {
-                    match.Value.Etapa2Items    = 1;
-                    match.Value.Etapa2Aprobada = true;
-                }
+                cmdE2b.Parameters.Add(new OracleParameter($":e2td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmdE2b.Parameters.Add(new OracleParameter($":e2sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmdE2b.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var rE2b = (OracleDataReader)await cmdE2b.ExecuteReaderAsync();
+            while (await rE2b.ReadAsync())
+            {
+                var key = $"{GetStr(rE2b,"TIPDOC")}|{GetInt(rE2b,"SERIE")}|{GetLong(rE2b,"NUMREQ")}";
+                if (!result.TryGetValue(key, out var pg)) continue;
+                pg.Etapa2ItemsTotal = GetInt(rE2b, "ITEMS_CON_OC");
+                pg.Etapa2ItemsConOC = GetInt(rE2b, "ITEMS_APROBADOS");
             }
         }
 
-        _logger.LogDebug("Etapa2 completada. NRO_DOC_REF recolectados: [{Refs}]",
-            string.Join(", ", nroDocRefANumReqs.Keys));
+        // — Recolectar O/C distintas (columna O/C + base para Etapa3) ──────────
+        // Iteración fila a fila compatible con Oracle 10g (sin LISTAGG).
+        if (lista.Count > 0)
+        {
+            var paramPairsOCb = lista.Select((k, i) =>
+                $"(TIPDOC = :octd{i} AND SERIE = :ocsr{i} AND NUMREQ = :ocnr{i})").ToList();
+            string sqlOCb = $@"
+                SELECT DISTINCT TIPDOC, SERIE, NUMREQ, NRO_DOC_REF
+                FROM   DESP_ITEMREQ
+                WHERE  NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairsOCb)})
+                ORDER BY TIPDOC, SERIE, NUMREQ, NRO_DOC_REF";
+
+            await using var cmdOCb = new OracleCommand(sqlOCb, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmdOCb.Parameters.Add(new OracleParameter($":octd{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmdOCb.Parameters.Add(new OracleParameter($":ocsr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmdOCb.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
+            await using var rOCb = (OracleDataReader)await cmdOCb.ExecuteReaderAsync();
+            while (await rOCb.ReadAsync())
+            {
+                var key = $"{GetStr(rOCb,"TIPDOC")}|{GetInt(rOCb,"SERIE")}|{GetLong(rOCb,"NUMREQ")}";
+                if (!result.TryGetValue(key, out var pg)) continue;
+                string oc = GetStr(rOCb, "NRO_DOC_REF") ?? "";
+                if (!string.IsNullOrWhiteSpace(oc) && !pg.OrdenesCompra.Contains(oc))
+                    pg.OrdenesCompra.Add(oc);
+            }
+        }
 
         // — Etapa 3: facturado —
-        // REGISTRO_DIARIO WHERE NUM_REF = NRO_DOC_REF AND TIPO = 'RS'
-        if (nroDocRefANumReqs.Count > 0)
+        // Misma lógica que el método principal: una SQL con GROUP BY TIPDOC,SERIE,NUMREQ
+        // que cuenta O/C distintas y cuántas tienen registro en REGISTRO_DIARIO TIPO='RS'.
+        if (lista.Count > 0)
         {
-            var todosNroDocRef = nroDocRefANumReqs.Keys.ToList();
-            var paramE3 = todosNroDocRef.Select((_, i) => $":e3_{i}").ToList();
-            string sqlEtapa3 = $@"
-                SELECT RD.NUM_REF, COUNT(*) AS ITEMS_FACTURADOS,
-                       MAX(RD.TIPDOC)   AS TIPDOC,
-                       MAX(RD.SERIE)    AS SERIE,
-                       MAX(RD.NUMERO)   AS NUMERO,
-                       MAX(RD.RELACION) AS RELACION
-                FROM   REGISTRO_DIARIO RD
-                WHERE  RD.NUM_REF IN ({string.Join(",", paramE3)})
-                  AND  RD.TIPO = 'RS'
-                GROUP BY RD.NUM_REF";
+            var paramPairs3b = lista.Select((k, i) =>
+                $"(D.TIPDOC = :e3td{i} AND D.SERIE = :e3sr{i} AND D.NUMREQ = :e3nr{i})").ToList();
+            string sqlEtapa3b = $@"
+                SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
+                       COUNT(DISTINCT D.NRO_DOC_REF)                                  AS OC_TOTAL,
+                       COUNT(DISTINCT CASE WHEN RD.NUM_REF IS NOT NULL
+                                           THEN D.NRO_DOC_REF END)                   AS OC_FACTURADAS
+                FROM   DESP_ITEMREQ D
+                LEFT JOIN REGISTRO_DIARIO RD
+                       ON RD.NUM_REF = D.NRO_DOC_REF
+                      AND RD.TIPO = 'RS'
+                WHERE  D.NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairs3b)})
+                GROUP BY D.TIPDOC, D.SERIE, D.NUMREQ";
 
-            _logger.LogDebug("Etapa3 SQL: {Sql} | Params: [{Refs}]",
-                sqlEtapa3, string.Join(", ", todosNroDocRef));
-
-            await using var cmd3 = new OracleCommand(sqlEtapa3, con) { BindByName = true };
-            for (int i = 0; i < todosNroDocRef.Count; i++)
-                cmd3.Parameters.Add(new OracleParameter($":e3_{i}", OracleDbType.Varchar2) { Value = todosNroDocRef[i] });
-
+            await using var cmd3 = new OracleCommand(sqlEtapa3b, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
+            {
+                cmd3.Parameters.Add(new OracleParameter($":e3td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmd3.Parameters.Add(new OracleParameter($":e3sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            }
             await using var r3 = (OracleDataReader)await cmd3.ExecuteReaderAsync();
-            bool hayResultados = false;
             while (await r3.ReadAsync())
             {
-                hayResultados = true;
-                string numRef = GetStr(r3, "NUM_REF") ?? "";
-                _logger.LogDebug("Etapa3 → NUM_REF={NumRef} TIPDOC={TipDoc} NUMERO={Numero}", numRef, GetStr(r3, "TIPDOC"), GetStr(r3, "NUMERO"));
-
-                if (!nroDocRefANumReqs.TryGetValue(numRef, out var numReqsE3)) continue;
-
-                // Aplica a TODOS los NUMREQs que comparten este NRO_DOC_REF
-                foreach (long numReq in numReqsE3)
+                var key = $"{GetStr(r3,"TIPDOC")}|{GetInt(r3,"SERIE")}|{GetLong(r3,"NUMREQ")}";
+                if (result.TryGetValue(key, out var pg))
                 {
-                    var match = result.FirstOrDefault(kv =>
-                        kv.Key.EndsWith($"|{numReq}", StringComparison.OrdinalIgnoreCase));
-                    if (match.Value != null)
-                    {
-                        match.Value.Etapa3Items++;
-                        match.Value.Etapa3Aprobada = true;
-                        match.Value.Etapa3TipDoc   = GetStr(r3, "TIPDOC");
-                        match.Value.Etapa3Serie    = GetStr(r3, "SERIE");
-                        match.Value.Etapa3Numero   = GetStr(r3, "NUMERO");
-                        match.Value.Etapa3Relacion = GetStr(r3, "RELACION");
-                    }
+                    pg.Etapa3OcTotal      = GetInt(r3, "OC_TOTAL");
+                    pg.Etapa3OcFacturadas = GetInt(r3, "OC_FACTURADAS");
                 }
             }
-            if (!hayResultados)
-                _logger.LogDebug("Etapa3 → REGISTRO_DIARIO no devolvió filas para los NUM_REF buscados.");
         }
 
-        // — Etapa 4: pago en FACTPAG —
-        // Recolectar los NUMREQs con Etapa3 aprobada y sus datos de comprobante
-        var etapa4Keys = result.Values
-            .Where(pg => pg.Etapa3Aprobada
-                      && pg.Etapa3TipDoc   != null
-                      && pg.Etapa3Serie    != null
-                      && pg.Etapa3Numero   != null
-                      && pg.Etapa3Relacion  != null)
-            .Select(pg => pg)
-            .ToList();
-
-        if (etapa4Keys.Count > 0)
+        // — Etapa 4: pago —
+        // Misma lógica que el método principal: una SQL con GROUP BY TIPDOC,SERIE,NUMREQ
+        // que cuenta facturas distintas en REGISTRO_DIARIO y cuántas tienen SALDO=0 en FACTPAG.
+        if (lista.Count > 0)
         {
-            var wherePairs = etapa4Keys.Select((_, i) =>
-                $"(TIPDOC = :fp_td{i} AND SERIE_NUM = :fp_sr{i} AND NUMERO = :fp_nm{i} AND COD_PROVEEDOR = :fp_rv{i})"
-            ).ToList();
+            var paramPairs4b = lista.Select((k, i) =>
+                $"(D.TIPDOC = :e4td{i} AND D.SERIE = :e4sr{i} AND D.NUMREQ = :e4nr{i})").ToList();
+            string sqlEtapa4b = $@"
+                SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
+                       COUNT(DISTINCT RD.NUMERO)                                       AS FACT_TOTAL,
+                       COUNT(DISTINCT CASE WHEN FP.SALDO = 0 THEN RD.NUMERO END)       AS FACT_PAGADAS
+                FROM   DESP_ITEMREQ D
+                JOIN   REGISTRO_DIARIO RD
+                       ON RD.NUM_REF = D.NRO_DOC_REF
+                      AND RD.TIPO = 'RS'
+                LEFT JOIN FACTPAG FP
+                       ON FP.TIPDOC      = RD.TIPDOC
+                      AND FP.SERIE_NUM   = RD.SERIE
+                      AND FP.NUMERO      = RD.NUMERO
+                      AND FP.COD_PROVEEDOR = RD.RELACION
+                WHERE  D.NRO_DOC_REF IS NOT NULL
+                  AND  ({string.Join(" OR ", paramPairs4b)})
+                GROUP BY D.TIPDOC, D.SERIE, D.NUMREQ";
 
-            string sqlEtapa4 = $@"
-                SELECT TIPDOC, SERIE_NUM, NUMERO, COD_PROVEEDOR, SALDO
-                FROM   FACTPAG
-                WHERE  {string.Join(" OR ", wherePairs)}";
-
-            await using var cmd4 = new OracleCommand(sqlEtapa4, con) { BindByName = true };
-            for (int i = 0; i < etapa4Keys.Count; i++)
+            await using var cmd4 = new OracleCommand(sqlEtapa4b, con) { BindByName = true };
+            for (int i = 0; i < lista.Count; i++)
             {
-                cmd4.Parameters.Add(new OracleParameter($":fp_td{i}", OracleDbType.Varchar2) { Value = etapa4Keys[i].Etapa3TipDoc });
-                cmd4.Parameters.Add(new OracleParameter($":fp_sr{i}", OracleDbType.Varchar2) { Value = etapa4Keys[i].Etapa3Serie });
-                cmd4.Parameters.Add(new OracleParameter($":fp_nm{i}", OracleDbType.Varchar2) { Value = etapa4Keys[i].Etapa3Numero });
-                cmd4.Parameters.Add(new OracleParameter($":fp_rv{i}", OracleDbType.Varchar2) { Value = etapa4Keys[i].Etapa3Relacion });
+                cmd4.Parameters.Add(new OracleParameter($":e4td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+                cmd4.Parameters.Add(new OracleParameter($":e4sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
             }
-
             await using var r4 = (OracleDataReader)await cmd4.ExecuteReaderAsync();
-            // Indexar resultados de FACTPAG por clave compuesta
-            var factpagResults = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
             while (await r4.ReadAsync())
             {
-                string fpKey = $"{GetStr(r4,"TIPDOC")}|{GetStr(r4,"SERIE_NUM")}|{GetStr(r4,"NUMERO")}|{GetStr(r4,"COD_PROVEEDOR")}";
-                decimal saldo = r4.IsDBNull(r4.GetOrdinal("SALDO")) ? 0m : r4.GetDecimal(r4.GetOrdinal("SALDO"));
-                factpagResults[fpKey] = saldo;
-            }
-
-            // Aplicar Etapa4 a cada requisición con Etapa3 aprobada
-            foreach (var pg in etapa4Keys)
-            {
-                string fpKey = $"{pg.Etapa3TipDoc}|{pg.Etapa3Serie}|{pg.Etapa3Numero}|{pg.Etapa3Relacion}";
-                if (factpagResults.TryGetValue(fpKey, out decimal saldo))
+                var key = $"{GetStr(r4,"TIPDOC")}|{GetInt(r4,"SERIE")}|{GetLong(r4,"NUMREQ")}";
+                if (result.TryGetValue(key, out var pg))
                 {
-                    // Etapa4 concluida solo si SALDO = 0 (sin pendiente de pago)
-                    pg.Etapa4Aprobada = saldo == 0m;
-                    pg.Etapa4Items    = 1;
-                    pg.Etapa4Saldo    = saldo;
+                    pg.Etapa4FacturasTotal   = GetInt(r4, "FACT_TOTAL");
+                    pg.Etapa4FacturasPagadas = GetInt(r4, "FACT_PAGADAS");
                 }
             }
         }

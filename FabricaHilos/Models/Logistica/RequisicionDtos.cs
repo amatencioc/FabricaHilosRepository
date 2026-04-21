@@ -48,6 +48,9 @@ public class RequisicionDto
     /// <summary>Progreso general del requerimiento por las 4 etapas del flujo logístico</summary>
     public ProgresoGeneralDto ProgresoGeneral { get; set; } = new();
 
+    /// <summary>Números de órdenes de compra distintas asociadas al requerimiento</summary>
+    public List<string> OrdenesCompra { get; set; } = new();
+
     // ── Logística ─────────────────────────────────────────────────────────────
     public DateTime? FchEntregaLogist { get; set; }
     public string?   NotaAnulacion    { get; set; }
@@ -92,6 +95,7 @@ public class ItemReqDto
     // ── Grupo / aprobación ────────────────────────────────────────────────────
     public long?     IdGrupo       { get; set; }
     public DateTime? FAprobado     { get; set; }
+    public string?   NroDocRef     { get; set; }  // Nº de Orden de Compra (de DESP_ITEMREQ)
 
     // ── Observaciones ─────────────────────────────────────────────────────────
     public string?   Observaciones { get; set; }
@@ -144,31 +148,36 @@ public class ArchivoRequisicionDto
 public class ProgresoGeneralDto
 {
     // ── Etapa 1: Aprobación del requerimiento ─────────────────────────────────
-    // Ítems que tienen ID_GRUPO y F_APROBADO (aprobación interna de logística)
-    public bool Etapa1Aprobada  { get; set; }
-    public int  Etapa1Items     { get; set; }   // cantidad de ítems con F_APROBADO
+    // Un grupo se considera aprobado cuando tiene F_APROBADO. La etapa está
+    // completa solo cuando TODOS los grupos distintos han sido aprobados.
+    public int  Etapa1GruposTotal     { get; set; }   // grupos distintos con ID_GRUPO
+    public int  Etapa1GruposAprobados { get; set; }   // grupos que tienen F_APROBADO
+    public bool Etapa1Aprobada  => Etapa1GruposTotal > 0 && Etapa1GruposAprobados == Etapa1GruposTotal;
+    public int  Etapa1Items     => Etapa1GruposAprobados;  // compatibilidad con la vista
 
     // ── Etapa 2: Orden de compra ──────────────────────────────────────────────
-    // Ítems que tienen una orden de compra emitida
-    // TODO: mapear desde tabla/campo correspondiente cuando esté disponible
-    public bool Etapa2Aprobada  { get; set; }
-    public int  Etapa2Items     { get; set; }
+    // La etapa está completa cuando TODOS los ítems del requerimiento tienen O/C.
+    public int          Etapa2ItemsTotal    { get; set; }  // ítems del requerimiento
+    public int          Etapa2ItemsConOC    { get; set; }  // ítems con NRO_DOC_REF
+    public bool         Etapa2Aprobada  => Etapa2ItemsTotal > 0 && Etapa2ItemsConOC == Etapa2ItemsTotal;
+    public int          Etapa2Items     => Etapa2ItemsConOC;
+    public List<string> OrdenesCompra   { get; set; } = new();  // NRO_DOC_REF distintos
 
     // ── Etapa 3: Facturado ────────────────────────────────────────────────────
-    // Orden de compra ya facturada (existe en REGISTRO_DIARIO con NUM_REF=NRO_DOC_REF AND TIPO='RS')
-    public bool    Etapa3Aprobada  { get; set; }
-    public int     Etapa3Items     { get; set; }
-    // Datos del comprobante obtenido de REGISTRO_DIARIO
-    public string? Etapa3TipDoc    { get; set; }
-    public string? Etapa3Serie     { get; set; }
-    public string? Etapa3Numero    { get; set; }
-    public string? Etapa3Relacion  { get; set; }
+    // Completa cuando TODAS las O/C del requerimiento tienen factura en REGISTRO_DIARIO TIPO='RS'.
+    // OC_TOTAL = O/C distintas en DESP_ITEMREQ; OC_FACTURADAS = de esas, cuántas tienen NUM_REF en REGISTRO_DIARIO.
+    public int  Etapa3OcTotal      { get; set; }  // O/C distintas (DESP_ITEMREQ.NRO_DOC_REF)
+    public int  Etapa3OcFacturadas { get; set; }  // O/C que tienen factura (REGISTRO_DIARIO TIPO='RS')
+    public bool Etapa3Aprobada     => Etapa3OcTotal > 0 && Etapa3OcFacturadas == Etapa3OcTotal;
+    public int  Etapa3Items        => Etapa3OcFacturadas;
 
-    // ── Etapa 4: Pendiente de pago ────────────────────────────────────────────
-    // Pago: registro en FACTPAG WHERE tipdoc/serie_NUM/numero/cod_proveedor de Etapa3
-    public bool     Etapa4Aprobada { get; set; }
-    public int      Etapa4Items    { get; set; }
-    public decimal? Etapa4Saldo    { get; set; }
+    // ── Etapa 4: Pago ─────────────────────────────────────────────────────────
+    // Completa cuando TODAS las facturas de las O/C tienen SALDO=0 en FACTPAG.
+    // FACT_TOTAL = facturas distintas en REGISTRO_DIARIO; FACT_PAGADAS = con SALDO=0 en FACTPAG.
+    public int  Etapa4FacturasTotal  { get; set; }  // facturas distintas de REGISTRO_DIARIO
+    public int  Etapa4FacturasPagadas{ get; set; }  // facturas con SALDO=0 en FACTPAG
+    public bool Etapa4Aprobada       => Etapa4FacturasTotal > 0 && Etapa4FacturasPagadas == Etapa4FacturasTotal;
+    public int  Etapa4Items          => Etapa4FacturasPagadas;
 
     /// <summary>Etapa actual alcanzada (0 = ninguna, 1–4)</summary>
     public int EtapaActual =>
@@ -177,6 +186,24 @@ public class ProgresoGeneralDto
         Etapa2Aprobada ? 2 :
         Etapa1Aprobada ? 1 : 0;
 
-    /// <summary>Porcentaje de avance (25% por etapa)</summary>
-    public int PorcentajeGeneral => EtapaActual * 25;
+    /// <summary>
+    /// Porcentaje de avance total (0–100).
+    /// Cada etapa completa aporta 25%. Dentro de la Etapa1, el avance parcial
+    /// se calcula proporcionalmente por grupos aprobados / grupos totales.
+    /// </summary>
+    public int PorcentajeGeneral
+    {
+        get
+        {
+            // Etapas 2-4 completadas suman desde Etapa1 completa
+            int baseEtapas = EtapaActual * 25;
+            if (EtapaActual >= 1) return baseEtapas; // Etapa1 ya completa
+
+            // Progreso parcial dentro de Etapa1 (0–25%)
+            if (Etapa1GruposTotal > 0)
+                return (int)Math.Round(Etapa1GruposAprobados * 25.0 / Etapa1GruposTotal);
+
+            return 0;
+        }
+    }
 }

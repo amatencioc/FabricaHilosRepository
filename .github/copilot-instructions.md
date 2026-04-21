@@ -4,6 +4,9 @@
 - When the user asks to make validation "equal" or "the same" as another field's validation, they mean the validation MESSAGE TEXT should follow the same format/pattern, NOT that the validation logic should change.
 - Use hardcoded emoji icons for dashboard charts instead of dynamic/generic solutions to enhance visual richness, even if data changes slightly.
 
+## Database Guidelines
+- The user uses Oracle 10g as the database and Toad as the administration tool. Avoid modern Oracle functions like LISTAGG(DISTINCT ...); always use subqueries with DISTINCT + standard LISTAGG for compatibility with Oracle 10g.
+
 ## Data Interpretation Rules
 - In the UBIGEO table:
   - When PAIS='01', it means Peru (NOM_DPT=departamento, NOM_DTT=distrito).

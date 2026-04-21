@@ -86,7 +86,10 @@ public class RequisicionController : OracleBaseController
         {
             var key = $"{item.TipDoc}|{item.Serie}|{item.NumReq}";
             if (progresoMap.TryGetValue(key, out var pg))
+            {
                 item.ProgresoGeneral = pg;
+                item.OrdenesCompra   = pg.OrdenesCompra;
+            }
         }
 
         return View("~/Views/Logistica/Requerimiento/Index.cshtml", items);
@@ -154,6 +157,14 @@ public class RequisicionController : OracleBaseController
 
         var codigosCabCc = new[] { cabecera.CentroCosto }.Where(c => !string.IsNullOrWhiteSpace(c))!;
         ViewBag.CentrosCostoCab = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCabCc);
+
+        // Órdenes de compra distintas para mostrar en el detalle
+        cabecera.OrdenesCompra = items
+            .Where(i => !string.IsNullOrWhiteSpace(i.NroDocRef))
+            .Select(i => i.NroDocRef!)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
 
         return View("~/Views/Logistica/Requerimiento/Detalle.cshtml", vm);
     }
@@ -265,20 +276,36 @@ public class RequisicionController : OracleBaseController
         try
         {
             nombreArchivo = Path.GetFileName(nombreArchivo);
+            var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
+            bool aprobacionValida = false;
 
-            if (!nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase))
+            if (nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase))
             {
-                var carpeta      = ObtenerCarpetaPorGrupo(idGrupo);
+                // Ya tiene el prefijo, verificar que el archivo existe en disco
+                aprobacionValida = System.IO.File.Exists(Path.Combine(carpeta, nombreArchivo));
+            }
+            else
+            {
                 var rutaOriginal = Path.Combine(carpeta, nombreArchivo);
                 var nuevoNombre  = $"APROBADO_{nombreArchivo}";
                 var rutaNueva    = Path.Combine(carpeta, nuevoNombre);
 
                 if (System.IO.File.Exists(rutaOriginal))
+                {
                     System.IO.File.Move(rutaOriginal, rutaNueva);
+                    aprobacionValida = true;
+                }
             }
 
-            await _service.AprobarGrupoAsync(idGrupo);
-            TempData["Success"] = $"Archivo aprobado correctamente.";
+            if (aprobacionValida)
+            {
+                await _service.AprobarGrupoAsync(idGrupo);
+                TempData["Success"] = "Archivo aprobado correctamente.";
+            }
+            else
+            {
+                TempData["Error"] = "No se encontró el archivo para aprobar. Verifique que el archivo exista.";
+            }
         }
         catch (Exception ex)
         {
@@ -324,11 +351,16 @@ public class RequisicionController : OracleBaseController
         string? retEstado = null, int retPage = 1)
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
+        bool eraAprobado = nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
         var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
         var ruta    = Path.Combine(carpeta, nombreArchivo);
 
         if (System.IO.File.Exists(ruta))
             System.IO.File.Delete(ruta);
+
+        // Si se eliminó el archivo de aprobación → limpiar F_APROBADO en BD
+        if (eraAprobado)
+            await _service.DesaprobarGrupoAsync(idGrupo);
 
         // Si la carpeta de este grupo quedó sin archivos → limpiar ID_GRUPO + F_APROBADO y eliminar carpeta
         bool carpetaVacia = !Directory.Exists(carpeta) || !Directory.EnumerateFiles(carpeta).Any();

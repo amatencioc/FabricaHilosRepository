@@ -238,6 +238,7 @@
                         <th>Destino</th>
                         <th class="text-center">F. Aprobado</th>
                         <th class="text-center">Grupo</th>
+                        <th class="text-center" title="Número de Orden de Compra">O/C</th>
                         <th>Observaciones</th>
                     </tr>
                 </thead>
@@ -281,6 +282,16 @@
                                 @if (item.IdGrupo.HasValue)
                                 {
                                     <span class="badge bg-info text-dark" title="ID Grupo: @item.IdGrupo">@item.IdGrupo</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrWhiteSpace(item.NroDocRef))
+                                {
+                                    <span class="badge bg-info text-dark" style="font-size:.7rem;" title="Orden de compra: @item.NroDocRef">@item.NroDocRef</span>
                                 }
                                 else
                                 {
@@ -380,9 +391,8 @@
             var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
 
-            // Si ya existe algún archivo aprobado, se ocultan todos los botones Aprobar
-            bool hayAprobado = archivos.Any(a =>
-                a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
+            // La aprobación es POR GRUPO: si un grupo ya tiene un archivo aprobado,
+            // se oculta el botón Aprobar solo en ese grupo.
 
             <div class="table-responsive">
                 <table class="table table-sm table-hover table-corporate mb-0">
@@ -399,6 +409,7 @@
                         {
                             var color = coloresGrupo[colorIdx % coloresGrupo.Length];
                             colorIdx++;
+                            bool grupoAprobado = grupo.Any(a => a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
                             <tr class="table-secondary">
                                 <td colspan="4" class="py-1 px-2">
                                     <span class="badge bg-@color me-2" style="font-size:.8rem;">Grupo @grupo.Key</span>
@@ -452,7 +463,7 @@
                                     <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
                                     <td class="text-center">
                                         <div class="d-flex gap-1 justify-content-center">
-                                            @if (!hayAprobado && !esAprobado)
+                                            @if (!grupoAprobado && !esAprobado)
                                             {
                                                 <form asp-controller="Requisicion" asp-action="AprobarArchivo"
                                                       method="post" class="d-inline form-confirmar"
