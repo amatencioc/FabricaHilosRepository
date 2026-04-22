@@ -11,9 +11,9 @@
 :root {
 
   /* --- COLORES PRIMARIOS (Púrpura Arbona — suave/liviano) --- */
-  --color-primary:        #8E4FA3;   /* Púrpura suave — 5.2:1 sobre blanco ✅ */
-  --color-primary-dark:   #6B3580;   /* Púrpura medio-oscuro - hover    — 7.1:1 sobre blanco ✅ */
-  --color-primary-light:  #B07DC4;   /* Púrpura claro - variantes       — 3.5:1 decorativo   */
+  --color-primary:        #6A3D80;   /* Púrpura suave — 5.2:1 sobre blanco ✅ */
+  --color-primary-dark:   #4A3060;   /* Púrpura medio-oscuro - hover    — 7.1:1 sobre blanco ✅ */
+  --color-primary-light:  #8E65A5;   /* Púrpura claro - variantes       — 3.5:1 decorativo   */
 
   /* --- COLORES SECUNDARIOS (Dorado torre) --- */
   --color-secondary:      #D4A017;   /* Dorado cálido decorativo — sobre fondos oscuros ✅ */
@@ -34,11 +34,11 @@
   --color-border:         #D9C8E0;   /* Bordes y separadores (lavanda suave) */
 
   /* --- OVERLAY --- */
-  --color-overlay:        rgba(107, 53, 128, 0.70);
-  --color-overlay-light:  rgba(107, 53, 128, 0.35);
+  --color-overlay:        rgba(74, 48, 96, 0.70);
+  --color-overlay-light:  rgba(74, 48, 96, 0.35);
 
   /* --- GRADIENTES --- */
-  --gradient-primary: linear-gradient(135deg, #6B3580 0%, #8E4FA3 60%, #B07DC4 100%);
+  --gradient-primary: linear-gradient(135deg, #4A3060 0%, #6A3D80 60%, #8E65A5 100%);
   --gradient-gold:    linear-gradient(135deg, #9A7010 0%, #EDBE45 100%);
 
   /* --- TIPOGRAFÍA --- */
@@ -68,10 +68,10 @@
   --border-radius-xl:   24px;
   --border-radius-full: 9999px;
 
-  --shadow-sm:  0 1px 3px rgba(107, 53, 128, 0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:  0 4px 12px rgba(107, 53, 128, 0.12), 0 2px 4px rgba(0,0,0,0.06);
-  --shadow-lg:  0 10px 30px rgba(107, 53, 128, 0.14), 0 4px 8px rgba(0,0,0,0.07);
-  --shadow-xl:  0 20px 60px rgba(107, 53, 128, 0.16), 0 8px 16px rgba(0,0,0,0.09);
+  --shadow-sm:  0 1px 3px rgba(74, 48, 96, 0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(74, 48, 96, 0.12), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg:  0 10px 30px rgba(74, 48, 96, 0.14), 0 4px 8px rgba(0,0,0,0.07);
+  --shadow-xl:  0 20px 60px rgba(74, 48, 96, 0.16), 0 8px 16px rgba(0,0,0,0.09);
 
   /* --- TRANSICIONES --- */
   --transition-fast: 0.15s ease;
@@ -84,8 +84,8 @@
 
   /* --- SIDEBAR --- */
   --sidebar-width:            260px;
-  --sidebar-bg:               #6B3580;
-  --sidebar-bg-dark:          #4F2260;
+  --sidebar-bg:               #4A3060;
+  --sidebar-bg-dark:          #321E45;
   --sidebar-text:             rgba(255, 255, 255, 0.88);
   --sidebar-section-text:     rgba(255, 255, 255, 0.42);
   --sidebar-sublink-text:     rgba(255, 255, 255, 0.72);
@@ -98,6 +98,6 @@
   --header-text: var(--color-white);
 
   /* --- FOOTER --- */
-  --footer-bg:   #3A1D4A;
+  --footer-bg:   #251530;
   --footer-text: rgba(255, 255, 255, 0.82);
 }
