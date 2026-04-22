@@ -4,39 +4,17 @@ using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
 {
-    public class DashboardGerencialService : IDashboardGerencialService
+    public class DashboardGerencialService : OracleServiceBase, IDashboardGerencialService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<DashboardGerencialService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public DashboardGerencialService(
             IConfiguration configuration,
             ILogger<DashboardGerencialService> logger,
             IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csb = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csb.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>
@@ -62,7 +40,7 @@ namespace FabricaHilos.Services.Ventas
             var result  = new List<DgVentaMercadoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT MERCADO, SUM(IMPORTE) IMPORTE
   FROM (
     SELECT CASE
@@ -80,10 +58,10 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
-      FROM DOCUVENT D
-      JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+      FROM {S}DOCUVENT D
+      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
-                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                   FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
@@ -128,7 +106,7 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
             var result  = new List<DgVentaMercadoPaisDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
        SUM(IMPORTE) IMPORTE
   FROM (
@@ -149,11 +127,11 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
-      FROM DOCUVENT D
-      JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+      FROM {S}DOCUVENT D
+      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1,
                         MAX(DESCRIPCION) DESCRIPCION
-                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                   FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
@@ -203,7 +181,7 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
             var result  = new List<DgVentaMercadoDepartamentoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
        SUM(DECODE(:P_MON,
                   'S', DECODE(D.MONEDA,
@@ -212,9 +190,9 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM DOCUVENT D
-  JOIN CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
+  FROM {S}DOCUVENT D
+  JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND D.ESTADO <> '9'
    AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
@@ -258,7 +236,7 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
             var result  = new List<DgVentaMercadoDistritoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
        NVL(U.NOM_DTT, 'Sin Distrito') DISTRITO,
        SUM(DECODE(:P_MON,
@@ -268,9 +246,9 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM DOCUVENT D
-  JOIN CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
+  FROM {S}DOCUVENT D
+  JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND D.ESTADO <> '9'
    AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
@@ -317,7 +295,7 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
             var result  = new List<DgVentaMercadoCiudadPaisDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
        NVL(U.NOM_DTT, 'Sin Ciudad') CIUDAD,
        SUM(DECODE(:P_MON,
@@ -327,9 +305,9 @@ SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM DOCUVENT D
-  JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN UBIGEO U ON U.COD_UBC = C.COD_UBC
+  FROM {S}DOCUVENT D
+  JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
    AND D.ESTADO <> '9'
    AND C.PAIS = :P_PAIS
@@ -375,7 +353,7 @@ SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
             var result  = new List<DgVentaMercadoEvolucionDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
   FROM (
     SELECT TO_CHAR(D.FECHA, 'YYYY-MM') PERIODO,
@@ -394,10 +372,10 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
                          ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
-      FROM DOCUVENT D
-      JOIN CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+      FROM {S}DOCUVENT D
+      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
-                   FROM TABLAS_AUXILIARES WHERE TIPO = 25
+                   FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
        AND D.ESTADO <> '9'
@@ -442,9 +420,9 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
             var result  = new List<DgPaisIsoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT CODIGO, INDICADOR2, DESCRIPCION
-  FROM TABLAS_AUXILIARES
+  FROM {S}TABLAS_AUXILIARES
  WHERE TIPO = 25
  ORDER BY CODIGO";
 
@@ -482,13 +460,13 @@ SELECT CODIGO, INDICADOR2, DESCRIPCION
             var result  = new List<DgKgMensualDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
        SUM(B.CANTIDAD * E.FACTOR)   CANTIDAD_KG
-  FROM ITEMDOCU         B,
-       DOCUVENT         C,
-       ARTICUL          A,
-       EQUIVALENCIA     E
+  FROM {S}ITEMDOCU         B,
+       {S}DOCUVENT         C,
+       {S}ARTICUL          A,
+       {S}EQUIVALENCIA     E
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE   = B.SERIE
    AND C.NUMERO  = B.NUMERO
@@ -537,7 +515,7 @@ SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
             var result  = new List<DgTopHiladoImporteDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT FAMILIA, IMPORTE FROM (
   SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
                SUM(DECODE(:P_MON,
@@ -548,10 +526,10 @@ SELECT FAMILIA, IMPORTE FROM (
                           DECODE(D.MONEDA,
                                  'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
                                  ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
-         FROM ITEMDOCU     I,
-              DOCUVENT     D,
-              ARTICUL      A,
-              TFAMLIN      F
+         FROM {S}ITEMDOCU     I,
+              {S}DOCUVENT     D,
+              {S}ARTICUL      A,
+              {S}TFAMLIN      F
    WHERE D.TIPODOC = I.TIPODOC
      AND D.SERIE   = I.SERIE
      AND D.NUMERO  = I.NUMERO
@@ -603,7 +581,7 @@ SELECT FAMILIA, IMPORTE FROM (
             var result  = new List<DgVentaPorGiroDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT C.GIRO            CODIGO_GIRO,
        NVL(T2.ABREVIADA, 'SIN GIRO') DESC_GIRO,
        SUM(DECODE(:P_MON,
@@ -614,12 +592,12 @@ SELECT C.GIRO            CODIGO_GIRO,
                   DECODE(D.MONEDA,
                          'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
-  FROM ITEMDOCU          I,
-       DOCUVENT          D,
-       ARTICUL           A,
-       CLIENTES          C,
+  FROM {S}ITEMDOCU          I,
+       {S}DOCUVENT          D,
+       {S}ARTICUL           A,
+       {S}CLIENTES          C,
        (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-          FROM TABLAS_AUXILIARES
+          FROM {S}TABLAS_AUXILIARES
          WHERE TIPO = 27
          GROUP BY CODIGO) T2
  WHERE D.TIPODOC = I.TIPODOC
@@ -672,14 +650,14 @@ SELECT C.GIRO            CODIGO_GIRO,
             var result  = new List<DgTopHiladoKgDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT FAMILIA, KILOS FROM (
   SELECT A.DESCRIPCION FAMILIA,
          SUM(I.CANTIDAD * E.FACTOR) KILOS
-    FROM ITEMDOCU     I,
-         DOCUVENT     D,
-         ARTICUL      A,
-         EQUIVALENCIA E
+    FROM {S}ITEMDOCU     I,
+         {S}DOCUVENT     D,
+         {S}ARTICUL      A,
+         {S}EQUIVALENCIA E
    WHERE D.TIPODOC = I.TIPODOC
      AND D.SERIE   = I.SERIE
      AND D.NUMERO  = I.NUMERO

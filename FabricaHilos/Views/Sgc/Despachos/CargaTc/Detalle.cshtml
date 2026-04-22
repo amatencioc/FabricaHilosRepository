@@ -232,13 +232,13 @@
 
                     // Validar que Nº Certificado sea obligatorio
                     if (!numCer) {
-                        alert('El Nº Certificado es obligatorio.');
+                        AppAlert('El Nº Certificado es obligatorio.', 'Aviso', 'warning');
                         return;
                     }
 
                     // Validar que el archivo PDF sea obligatorio
                     if (!archivo) {
-                        alert('El Archivo PDF del certificado es obligatorio.');
+                        AppAlert('El Archivo PDF del certificado es obligatorio.', 'Aviso', 'warning');
                         return;
                     }
 
@@ -270,15 +270,15 @@
                             // El overlay global se mostrará automáticamente en la navegación
                             window.location.href = data.redirectUrl;
                         } else if (data.tipo === 'Advertencia') {
-                            alert(data.mensaje);
+                            AppAlert(data.mensaje, 'Advertencia', 'warning');
                         } else {
-                            alert(data.mensaje || 'Error al guardar el certificado');
+                            AppAlert(data.mensaje || 'Error al guardar el certificado', 'Error', 'danger');
                         }
                     })
                     .catch(error => {
                         loadingOverlay.classList.remove('show');
                         console.error('Error:', error);
-                        alert('Error al procesar la solicitud. Por favor, intente nuevamente.');
+                        AppAlert('Error al procesar la solicitud. Por favor, intente nuevamente.', 'Error', 'danger');
                     });
                 });
             }

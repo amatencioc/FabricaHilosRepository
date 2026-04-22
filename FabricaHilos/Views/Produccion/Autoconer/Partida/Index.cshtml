@@ -141,10 +141,11 @@
                                         {
                                             <form asp-action="Anular" asp-route-id="@item.LocalId"
                                                   asp-route-returnUrl="@ViewBag.ReturnUrl"
-                                                  method="post" class="d-inline"
-                                                  onsubmit="return confirm('¿Anular este registro Autoconer?');">
+                                                  method="post" class="d-inline form-confirmar"
+                                                  data-titulo="Anular registro"
+                                                  data-mensaje="¿Está seguro de anular este registro Autoconer?">
                                                 @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn btn-sm btn-outline-danger me-1" title="Anular">
+                                                <button type="button" class="btn btn-sm btn-outline-danger me-1 btn-abrir-confirmar" title="Anular">
                                                     <i class="bi bi-x-circle"></i>
                                                 </button>
                                             </form>

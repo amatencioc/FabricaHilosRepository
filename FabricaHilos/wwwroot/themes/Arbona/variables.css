@@ -1,0 +1,103 @@
+/* ============================================================
+   TEMA: ARBONA — Sistema de Gestión Empresarial
+   ============================================================
+   Paleta derivada del logo Arbona:
+     · Púrpura magenta  #7B2D8B  (fondo logo)    → PRIMARY
+     · Dorado torre     #D4A017  (torre/castillo)  → SECONDARY
+     · Verde pino       #2D5A27  (árboles logo)   → ACCENT
+   WCAG AA (ratio mínimo 4.5:1 texto normal)
+   ============================================================ */
+
+:root {
+
+  /* --- COLORES PRIMARIOS (Púrpura Arbona — suave/liviano) --- */
+  --color-primary:        #8E4FA3;   /* Púrpura suave — 5.2:1 sobre blanco ✅ */
+  --color-primary-dark:   #6B3580;   /* Púrpura medio-oscuro - hover    — 7.1:1 sobre blanco ✅ */
+  --color-primary-light:  #B07DC4;   /* Púrpura claro - variantes       — 3.5:1 decorativo   */
+
+  /* --- COLORES SECUNDARIOS (Dorado torre) --- */
+  --color-secondary:      #D4A017;   /* Dorado cálido decorativo — sobre fondos oscuros ✅ */
+  --color-secondary-dark: #9A7010;   /* Dorado oscuro — texto sobre blanco 5.1:1 ✅ */
+  --color-secondary-light:#EDBE45;   /* Dorado claro — highlights, iconos activos */
+
+  /* --- ACENTOS / CALL TO ACTION (Verde pino) --- */
+  --color-accent:         #2D5A27;   /* Verde pino profundo — 7.3:1 sobre blanco ✅ */
+  --color-accent-dark:    #1A3518;   /* Verde oscuro hover CTA — 11:1 sobre blanco ✅ */
+
+  /* --- NEUTROS --- */
+  --color-white:          #FFFFFF;
+  --color-bg-light:       #F9F5FB;   /* Fondo claro con toque lavanda */
+  --color-bg-medium:      #EFE6F4;   /* Fondo secciones intermedias */
+  --color-text-dark:      #1A1A1E;   /* Texto principal            — 18:1 ✅ */
+  --color-text-medium:    #3D3545;   /* Texto secundario / párrafos — 10:1 ✅ */
+  --color-text-light:     #6B5F72;   /* Texto terciario / subtítulos — 5.8:1 ✅ */
+  --color-border:         #D9C8E0;   /* Bordes y separadores (lavanda suave) */
+
+  /* --- OVERLAY --- */
+  --color-overlay:        rgba(107, 53, 128, 0.70);
+  --color-overlay-light:  rgba(107, 53, 128, 0.35);
+
+  /* --- GRADIENTES --- */
+  --gradient-primary: linear-gradient(135deg, #6B3580 0%, #8E4FA3 60%, #B07DC4 100%);
+  --gradient-gold:    linear-gradient(135deg, #9A7010 0%, #EDBE45 100%);
+
+  /* --- TIPOGRAFÍA --- */
+  --font-primary:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-xs:   0.75rem;
+  --font-size-sm:   0.875rem;
+  --font-size-base: 1rem;
+  --font-size-md:   1.125rem;
+  --font-size-lg:   1.25rem;
+  --font-size-xl:   1.5rem;
+  --font-size-2xl:  2rem;
+  --font-size-3xl:  2.5rem;
+  --font-size-4xl:  3rem;
+
+  /* --- ESPACIADO --- */
+  --spacing-xs:   0.5rem;
+  --spacing-sm:   1rem;
+  --spacing-md:   1.5rem;
+  --spacing-lg:   2rem;
+  --spacing-xl:   3rem;
+  --spacing-2xl:  5rem;
+
+  /* --- BORDES Y SOMBRAS --- */
+  --border-radius-sm:   4px;
+  --border-radius-md:   8px;
+  --border-radius-lg:   16px;
+  --border-radius-xl:   24px;
+  --border-radius-full: 9999px;
+
+  --shadow-sm:  0 1px 3px rgba(107, 53, 128, 0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(107, 53, 128, 0.12), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg:  0 10px 30px rgba(107, 53, 128, 0.14), 0 4px 8px rgba(0,0,0,0.07);
+  --shadow-xl:  0 20px 60px rgba(107, 53, 128, 0.16), 0 8px 16px rgba(0,0,0,0.09);
+
+  /* --- TRANSICIONES --- */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --transition-slow: 0.4s  ease;
+
+  /* --- ESTADO / FEEDBACK --- */
+  --color-input-readonly: var(--color-bg-medium);
+  --color-success-light:  rgba(45, 90, 39, 0.15);   /* verde pino translúcido */
+
+  /* --- SIDEBAR --- */
+  --sidebar-width:            260px;
+  --sidebar-bg:               #6B3580;
+  --sidebar-bg-dark:          #4F2260;
+  --sidebar-text:             rgba(255, 255, 255, 0.88);
+  --sidebar-section-text:     rgba(255, 255, 255, 0.42);
+  --sidebar-sublink-text:     rgba(255, 255, 255, 0.72);
+  --sidebar-hover-bg:         rgba(255, 255, 255, 0.12);
+  --sidebar-sublink-hover-bg: rgba(255, 255, 255, 0.08);
+  --sidebar-active:           #D4A017;
+
+  /* --- HEADER --- */
+  --header-bg:   var(--color-primary);
+  --header-text: var(--color-white);
+
+  /* --- FOOTER --- */
+  --footer-bg:   #3A1D4A;
+  --footer-text: rgba(255, 255, 255, 0.82);
+}

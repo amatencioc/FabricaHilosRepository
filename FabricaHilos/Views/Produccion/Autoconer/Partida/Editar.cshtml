@@ -532,11 +532,11 @@
             const fin    = document.getElementById('HoraFinal').value;
             if (inicio && fin) {
                 if (fin < inicio) {
-                    alert('La Fecha Fin no puede ser menor a la Fecha Inicio.');
+                    AppAlert('La Fecha Fin no puede ser menor a la Fecha Inicio.', 'Aviso', 'warning');
                     return false;
                 }
                 if (fin > ahoraLocal()) {
-                    alert('La Fecha Fin no puede ser mayor a la fecha actual del sistema.');
+                    AppAlert('La Fecha Fin no puede ser mayor a la fecha actual del sistema.', 'Aviso', 'warning');
                     return false;
                 }
             }

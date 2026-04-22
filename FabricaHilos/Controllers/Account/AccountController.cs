@@ -71,12 +71,15 @@ namespace FabricaHilos.Controllers.Account
 
                 if (!string.IsNullOrEmpty(usuarioOracle.c_user))
                 {
-                    // Validar que las credenciales funcionen como login Oracle real.
-                    // Si la cuenta Oracle del usuario tiene una contraseña distinta a
-                    // PSW_SIG (o no existe como usuario Oracle), se permite el login
-                    // pero los servicios usarán la conexión base del appsettings.
+                    // Determinar connection string según la empresa del usuario
+                    var connKeyEmpresa = usuarioOracle.Empresa == "ARBONA"
+                        ? "ArbonaConnection"
+                        : "LaColonialConnection";
+
+                    // Validar que las credenciales funcionen como login Oracle real
+                    // contra la conexión base de su empresa.
                     bool oracleCredencialesValidas = false;
-                    var baseConnStr = _configuration.GetConnectionString("OracleConnection") ?? string.Empty;
+                    var baseConnStr = _configuration.GetConnectionString(connKeyEmpresa) ?? string.Empty;
                     var csb = new OracleConnectionStringBuilder(baseConnStr)
                     {
                         UserID = usuario,
@@ -183,12 +186,11 @@ namespace FabricaHilos.Controllers.Account
                     // isPersistent: true → cookie duradera, no se pierde al cerrar el navegador móvil
                     await _signInManager.SignInAsync(userIdentity, isPersistent: true);
 
-                    // Siempre guardar el usuario Oracle en sesión (para auditoría).
-                    // Solo guardar la contraseña si las credenciales Oracle son válidas;
-                    // así GetOracleConnectionString() usará la conexión base cuando no
-                    // exista OraclePass en sesión (fallback seguro).
-                    HttpContext.Session.SetString("OracleUser", usuario);
-                    HttpContext.Session.SetString("AccesoWeb", usuarioOracle.acceso_web ?? string.Empty);
+                    // Guardar datos de sesión Oracle.
+                    // EmpresaConexion indica qué ConnectionString deben usar los servicios.
+                    HttpContext.Session.SetString("OracleUser",       usuario);
+                    HttpContext.Session.SetString("AccesoWeb",        usuarioOracle.acceso_web ?? string.Empty);
+                    HttpContext.Session.SetString("EmpresaConexion",  connKeyEmpresa);
                     if (oracleCredencialesValidas)
                         HttpContext.Session.SetString("OraclePass", password);
 

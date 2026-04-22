@@ -129,8 +129,8 @@ static void ValidarConfiguracionAlIniciar(IServiceProvider services)
         Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 LecturaCorreos:MaxCorreosPorCiclo={V} debe ser > 0.", opciones.MaxCorreosPorCiclo);
     if (opciones.IntervaloConsultaMinutos <= 0)
         Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 LecturaCorreos:IntervaloConsultaMinutos={V} debe ser > 0.", opciones.IntervaloConsultaMinutos);
-    if (string.IsNullOrWhiteSpace(config.GetConnectionString("OracleConnection")))
-        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 Cadena de conexi\u00f3n 'OracleConnection' no configurada. El servicio no puede conectarse a BD.");
+    if (string.IsNullOrWhiteSpace(config.GetConnectionString("LaColonialConnection")))
+        Log.Error("\u26a0\ufe0f Config inv\u00e1lida \u2014 Cadena de conexi\u00f3n 'LaColonialConnection' no configurada. El servicio no puede conectarse a BD.");
     if (string.IsNullOrWhiteSpace(opciones.RutaArchivos))
         Log.Warning("\u26a0\ufe0f LecturaCorreos:RutaArchivos no configurada \u2014 los documentos NO se guardar\u00e1n en disco.");
     if (opciones.WorkerCorreosActivo && !opciones.TodasLasCuentas.Any())

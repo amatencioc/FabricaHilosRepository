@@ -3,39 +3,17 @@ using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
 {
-    public class DashboardComercialService : IDashboardComercialService
+    public class DashboardComercialService : OracleServiceBase, IDashboardComercialService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<DashboardComercialService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public DashboardComercialService(
             IConfiguration configuration,
             ILogger<DashboardComercialService> logger,
             IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csb = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csb.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>
@@ -57,7 +35,7 @@ namespace FabricaHilos.Services.Ventas
             var result  = new List<DcImporteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT A.VENDEDOR                       COD_ASESOR,
        A.ASESOR,
        A.MES,
@@ -68,7 +46,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-                    FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+                    FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
                   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                     AND T.TIPO(+) = 29
                     AND T.CODIGO(+) = A.VENDEDOR
@@ -86,7 +64,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                                    DECODE(D.MONEDA,
                                           'D', I.IMP_VVTA,
                                           ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                   FROM DOCUVENT D, ITEMDOCU I
+                   FROM {S}DOCUVENT D, {S}ITEMDOCU I
                   WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                     AND D.ESTADO <> '9'
                     AND I.TIPODOC = D.TIPODOC
@@ -139,7 +117,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
             var result  = new List<DcDetalleImporteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT A.ASESOR,
        A.MES,
        A.COD_CLIENTE,
@@ -153,7 +131,7 @@ SELECT A.ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-          FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO = 29
            AND T.CODIGO = A.VENDEDOR
@@ -174,7 +152,7 @@ SELECT A.ASESOR,
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
                                  ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
+          FROM {S}DOCUVENT D, {S}ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
            AND I.TIPODOC = D.TIPODOC
@@ -185,7 +163,7 @@ SELECT A.ASESOR,
          GROUP BY D.COD_VENDE,
                   TO_CHAR(D.FECHA, 'YYYY/MM'),
                   D.COD_CLIENTE) B,
-       CLIENTES X
+       {S}CLIENTES X
  WHERE B.VENDEDOR(+) = A.VENDEDOR
    AND B.COD_CLIENTE(+) = A.COD_CLIENTE
    AND B.MES(+) = A.MES
@@ -235,15 +213,15 @@ SELECT A.ASESOR,
             var result  = new List<DcCantidadKgAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT T.DESCRIPCION                    ASESOR,
        TO_CHAR(C.FECHA, 'YYYY/MM')     MES,
        SUM(B.CANTIDAD * E.FACTOR)       CANTIDAD_KG
-  FROM ITEMDOCU         B,
-       DOCUVENT         C,
-       ARTICUL          A,
-       TABLAS_AUXILIARES T,
-       EQUIVALENCIA     E
+  FROM {S}ITEMDOCU         B,
+       {S}DOCUVENT         C,
+       {S}ARTICUL          A,
+       {S}TABLAS_AUXILIARES T,
+       {S}EQUIVALENCIA     E
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE = B.SERIE
    AND C.NUMERO = B.NUMERO
@@ -297,13 +275,13 @@ SELECT T.DESCRIPCION                    ASESOR,
             var result  = new List<DcNroClientesAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT T.DESCRIPCION                    ASESOR,
        COUNT(DISTINCT C.COD_CLIENTE)    NRO_CLIENTES
-  FROM DOCUVENT         C,
-       ITEMDOCU         B,
-       ARTICUL          A,
-       TABLAS_AUXILIARES T
+  FROM {S}DOCUVENT         C,
+       {S}ITEMDOCU         B,
+       {S}ARTICUL          A,
+       {S}TABLAS_AUXILIARES T
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE   = B.SERIE
    AND C.NUMERO  = B.NUMERO
@@ -354,7 +332,7 @@ SELECT T.DESCRIPCION                    ASESOR,
             var result  = new List<DcDetalleClienteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT V.ASESOR,
        V.MES,
        V.COD_CLIENTE,
@@ -369,7 +347,7 @@ SELECT V.ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-          FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO   = 29
            AND T.CODIGO = A.VENDEDOR
@@ -390,7 +368,7 @@ SELECT V.ASESOR,
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
                                  ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
+          FROM {S}DOCUVENT D, {S}ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
            AND I.TIPODOC = D.TIPODOC
@@ -405,10 +383,10 @@ SELECT V.ASESOR,
                TO_CHAR(C.FECHA, 'YYYY/MM')   MES,
                C.COD_CLIENTE,
                SUM(B.CANTIDAD * E.FACTOR)    CANTIDAD_KG
-          FROM DOCUVENT         C,
-               ITEMDOCU         B,
-               ARTICUL          A,
-               EQUIVALENCIA     E
+          FROM {S}DOCUVENT         C,
+               {S}ITEMDOCU         B,
+               {S}ARTICUL          A,
+               {S}EQUIVALENCIA     E
          WHERE C.TIPODOC = B.TIPODOC
            AND C.SERIE   = B.SERIE
            AND C.NUMERO  = B.NUMERO
@@ -421,7 +399,7 @@ SELECT V.ASESOR,
          GROUP BY C.COD_VENDE,
                   TO_CHAR(C.FECHA, 'YYYY/MM'),
                   C.COD_CLIENTE) K,
-       CLIENTES X
+       {S}CLIENTES X
  WHERE I.VENDEDOR(+)    = V.VENDEDOR
    AND I.COD_CLIENTE(+) = V.COD_CLIENTE
    AND I.MES(+)         = V.MES
@@ -476,7 +454,7 @@ SELECT V.ASESOR,
             if (string.IsNullOrEmpty(connStr)) return result;
 
             // Se obtienen todos los clientes por asesor con kilos e importe, agrupado por año
-            const string sql = @"
+            var sql = $@"
 SELECT V.ASESOR,
        X.NOMBRE                              RAZON_SOCIAL,
        NVL(K.CANTIDAD_KG, 0)                 CANTIDAD_KG,
@@ -489,7 +467,7 @@ SELECT V.ASESOR,
                SUM(DECODE(:P_MON,
                            'S', SOLES_SINANT,
                                 DOLARES_SINANT)) MONTO
-            FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+            FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
           WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
             AND T.TIPO(+)   = 29
             AND T.CODIGO(+) = A.VENDEDOR
@@ -509,7 +487,7 @@ SELECT V.ASESOR,
                            DECODE(D.MONEDA,
                                   'D', I.IMP_VVTA,
                                   ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
+          FROM {S}DOCUVENT D, {S}ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
            AND I.TIPODOC = D.TIPODOC
@@ -524,10 +502,10 @@ SELECT V.ASESOR,
                C.COD_CLIENTE,
                EXTRACT(YEAR FROM C.FECHA)    ANIO,
                SUM(B.CANTIDAD * E.FACTOR)    CANTIDAD_KG
-          FROM DOCUVENT         C,
-               ITEMDOCU         B,
-               ARTICUL          A,
-               EQUIVALENCIA     E
+          FROM {S}DOCUVENT         C,
+               {S}ITEMDOCU         B,
+               {S}ARTICUL          A,
+               {S}EQUIVALENCIA     E
          WHERE C.TIPODOC = B.TIPODOC
            AND C.SERIE   = B.SERIE
            AND C.NUMERO  = B.NUMERO
@@ -540,7 +518,7 @@ SELECT V.ASESOR,
          GROUP BY C.COD_VENDE,
                   C.COD_CLIENTE,
                   EXTRACT(YEAR FROM C.FECHA)) K,
-       CLIENTES X
+       {S}CLIENTES X
  WHERE INF.VENDEDOR(+)    = V.VENDEDOR
    AND INF.COD_CLIENTE(+) = V.COD_CLIENTE
    AND INF.ANIO(+)        = V.ANIO
@@ -621,15 +599,15 @@ SELECT V.ASESOR,
             var result  = new List<DcClienteImporteAsesorDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-                                                 const string sql = @"
+                                                 var sql = $@"
                                      SELECT BASE.COD_CLIENTE,
                                             X.RUC,
                                             X.NOMBRE                            RAZON_SOCIAL,
                                             NVL(T2.ABREVIADA, 'SIN GIRO')       GIRO,
                                             (NVL(IMP.MONTO, 0) - NVL(INAF.MONTO, 0)) IMPORTE
                                        FROM (SELECT DISTINCT C.COD_CLIENTE
-                                               FROM DOCUVENT         C,
-                                                    TABLAS_AUXILIARES T
+                                               FROM {S}DOCUVENT         C,
+                                                    {S}TABLAS_AUXILIARES T
                                               WHERE C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND C.ESTADO <> '9'
                                                 AND T.TIPO    = 29
@@ -639,7 +617,7 @@ SELECT V.ASESOR,
                                                     SUM(DECODE(:P_MON,
                                                                'S', SOLES_SINANT,
                                                                     DOLARES_SINANT)) MONTO
-                                               FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+                                               FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
                                               WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND T.TIPO = 29
                                                 AND T.CODIGO = A.VENDEDOR
@@ -654,7 +632,7 @@ SELECT V.ASESOR,
                                                                DECODE(D.MONEDA,
                                                                       'D', I.IMP_VVTA,
                                                                       ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                                               FROM DOCUVENT D, ITEMDOCU I, TABLAS_AUXILIARES T
+                                               FROM {S}DOCUVENT D, {S}ITEMDOCU I, {S}TABLAS_AUXILIARES T
                                               WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND D.ESTADO <> '9'
                                                 AND I.TIPODOC = D.TIPODOC
@@ -666,9 +644,9 @@ SELECT V.ASESOR,
                                                 AND T.CODIGO = D.COD_VENDE
                                                 AND T.DESCRIPCION = :P_ASESOR
                                               GROUP BY D.COD_CLIENTE) INAF,
-                                            CLIENTES X,
+                                            {S}CLIENTES X,
                                             (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-                                               FROM TABLAS_AUXILIARES
+                                               FROM {S}TABLAS_AUXILIARES
                                               WHERE TIPO = 27
                                               GROUP BY CODIGO) T2
                                       WHERE IMP.COD_CLIENTE(+)  = BASE.COD_CLIENTE
@@ -716,7 +694,7 @@ SELECT V.ASESOR,
             var result  = new List<DcClienteImporteTodosDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-                                                 const string sql = @"
+                                                 var sql = $@"
                                      SELECT BASE.COD_CLIENTE,
                                             BASE.ASESOR,
                                             X.RUC,
@@ -725,8 +703,8 @@ SELECT V.ASESOR,
                                             (NVL(IMP.MONTO, 0) - NVL(INAF.MONTO, 0)) IMPORTE
                                        FROM (SELECT DISTINCT C.COD_CLIENTE,
                                                     T.DESCRIPCION ASESOR
-                                               FROM DOCUVENT         C,
-                                                    TABLAS_AUXILIARES T
+                                               FROM {S}DOCUVENT         C,
+                                                    {S}TABLAS_AUXILIARES T
                                               WHERE C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND C.ESTADO <> '9'
                                                 AND T.TIPO    = 29
@@ -737,7 +715,7 @@ SELECT V.ASESOR,
                                                     SUM(DECODE(:P_MON,
                                                                'S', SOLES_SINANT,
                                                                     DOLARES_SINANT)) MONTO
-                                               FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+                                               FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
                                               WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND T.TIPO = 29
                                                 AND T.CODIGO = A.VENDEDOR
@@ -753,7 +731,7 @@ SELECT V.ASESOR,
                                                                DECODE(D.MONEDA,
                                                                       'D', I.IMP_VVTA,
                                                                       ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                                               FROM DOCUVENT D, ITEMDOCU I, TABLAS_AUXILIARES T
+                                               FROM {S}DOCUVENT D, {S}ITEMDOCU I, {S}TABLAS_AUXILIARES T
                                               WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                                                 AND D.ESTADO <> '9'
                                                 AND I.TIPODOC = D.TIPODOC
@@ -765,9 +743,9 @@ SELECT V.ASESOR,
                                                 AND T.CODIGO = D.COD_VENDE
                                                 AND UPPER(T.DESCRIPCION) <> 'OFICINA'
                                               GROUP BY D.COD_CLIENTE, T.DESCRIPCION) INAF,
-                                            CLIENTES X,
+                                            {S}CLIENTES X,
                                             (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-                                               FROM TABLAS_AUXILIARES
+                                               FROM {S}TABLAS_AUXILIARES
                                               WHERE TIPO = 27
                                               GROUP BY CODIGO) T2
                                       WHERE IMP.COD_CLIENTE(+)  = BASE.COD_CLIENTE

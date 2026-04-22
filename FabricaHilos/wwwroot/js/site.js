@@ -168,3 +168,144 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 5000);
     });
 });
+
+// =============================================
+// MODALES GLOBALES: AppAlert y AppConfirm
+// =============================================
+const AppModal = {
+    _alertModal: null,
+    _confirmModal: null,
+    _confirmResolve: null,
+
+    _getOrCreateAlert: function () {
+        let el = document.getElementById('appAlertModal');
+        if (!el) {
+            el = document.createElement('div');
+            el.innerHTML = `
+<div class="modal fade" id="appAlertModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" id="appAlertHeader">
+        <h5 class="modal-title" id="appAlertTitle">Aviso</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="appAlertMessage" class="mb-0"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aceptar</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+            document.body.appendChild(el.firstElementChild);
+            el = document.getElementById('appAlertModal');
+        }
+        return el;
+    },
+
+    _getOrCreateConfirm: function () {
+        let el = document.getElementById('appConfirmModal');
+        if (!el) {
+            el = document.createElement('div');
+            el.innerHTML = `
+<div class="modal fade" id="appConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="appConfirmTitle">Confirmar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="appConfirmMessage" class="mb-0"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="appConfirmCancel" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger"    id="appConfirmOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+            document.body.appendChild(el.firstElementChild);
+            el = document.getElementById('appConfirmModal');
+        }
+        return el;
+    }
+};
+
+/**
+ * Reemplaza alert(). Muestra un modal de aviso.
+ * @param {string} message  Texto del mensaje
+ * @param {string} [title]  Título opcional (default: "Aviso")
+ * @param {string} [type]   "info"|"warning"|"danger"|"success" (default: "info")
+ * @returns {Promise<void>} Se resuelve cuando el usuario cierra el modal
+ */
+function AppAlert(message, title, type) {
+    return new Promise(function (resolve) {
+        const el = AppModal._getOrCreateAlert();
+        const headerEl = document.getElementById('appAlertHeader');
+        const titleEl  = document.getElementById('appAlertTitle');
+        const msgEl    = document.getElementById('appAlertMessage');
+
+        titleEl.textContent = title || 'Aviso';
+        msgEl.textContent   = message || '';
+
+        // Color del header según tipo
+        const typeMap = { success: 'bg-success text-white', warning: 'bg-warning', danger: 'bg-danger text-white', info: 'bg-info text-white' };
+        headerEl.className = 'modal-header ' + (typeMap[type] || typeMap['info']);
+
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+        el.addEventListener('hidden.bs.modal', function handler() {
+            el.removeEventListener('hidden.bs.modal', handler);
+            resolve();
+        });
+        modal.show();
+    });
+}
+
+/**
+ * Reemplaza confirm(). Muestra un modal de confirmación.
+ * @param {string} message       Texto de la pregunta
+ * @param {string} [title]       Título opcional (default: "Confirmar")
+ * @param {string} [okLabel]     Texto del botón OK (default: "Confirmar")
+ * @param {string} [cancelLabel] Texto del botón Cancelar (default: "Cancelar")
+ * @returns {Promise<boolean>}   true si el usuario confirma, false si cancela
+ */
+function AppConfirm(message, title, okLabel, cancelLabel) {
+    return new Promise(function (resolve) {
+        const el      = AppModal._getOrCreateConfirm();
+        const titleEl = document.getElementById('appConfirmTitle');
+        const msgEl   = document.getElementById('appConfirmMessage');
+        const okBtn   = document.getElementById('appConfirmOk');
+        const cancelBtn = document.getElementById('appConfirmCancel');
+
+        titleEl.textContent     = title        || 'Confirmar';
+        msgEl.textContent       = message      || '¿Está seguro?';
+        okBtn.textContent       = okLabel      || 'Confirmar';
+        cancelBtn.textContent   = cancelLabel  || 'Cancelar';
+
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+
+        function onOk() {
+            cleanup();
+            modal.hide();
+            resolve(true);
+        }
+        function onCancel() {
+            cleanup();
+            resolve(false);
+        }
+        function cleanup() {
+            okBtn.removeEventListener('click', onOk);
+            el.removeEventListener('hidden.bs.modal', onCancel);
+        }
+
+        okBtn.addEventListener('click', onOk);
+        el.addEventListener('hidden.bs.modal', function handler() {
+            el.removeEventListener('hidden.bs.modal', handler);
+            onCancel();
+        });
+
+        modal.show();
+    });
+}

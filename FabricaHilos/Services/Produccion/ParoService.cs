@@ -104,36 +104,14 @@ namespace FabricaHilos.Services.Produccion
         Task<HashSet<string>>  ObtenerMaquinasConParosAsync(IEnumerable<(string tpMaq, string codMaq)> maquinas);
     }
 
-    public class ParoService : IParoService
+    public class ParoService : OracleServiceBase, IParoService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<ParoService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public ParoService(IConfiguration configuration, ILogger<ParoService> logger, IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csBuilder.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         public async Task<List<MotivoDto>> ObtenerMotivosAsync()
@@ -141,9 +119,9 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return new List<MotivoDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT CODIGO, DESCRIPCION
-                FROM H_TPROD
+                FROM {S}H_TPROD
                 WHERE TABLA = '33'
                   AND CODIGO <> '....'
                 ORDER BY CODIGO";
@@ -189,17 +167,17 @@ namespace FabricaHilos.Services.Produccion
                 filterSuffix += $" AND R.ESTADO IN ({paramNames})";
             }
 
-            var countQuery = "SELECT COUNT(*) FROM H_RPARADA R WHERE TRUNC(R.FECHA_TURNO) = TRUNC(SYSDATE)" + filterSuffix;
+            var countQuery = $"SELECT COUNT(*) FROM {S}H_RPARADA R WHERE TRUNC(R.FECHA_TURNO) = TRUNC(SYSDATE)" + filterSuffix;
 
-            var innerQuery = @"
+            var innerQuery = $@"
                 SELECT R.TP_MAQ, R.COD_MAQ, R.MOTIVO, R.FECHA_INI, R.FECHA_FIN,
                        R.ESTADO, R.TURNO, R.FECHA_TURNO, R.A_ADUSER,
                        M.DESC_MAQ,
                        M.DESC_TPMAQ,
                        MO.DESCRIPCION AS DESC_MOTIVO
-                FROM H_RPARADA R
-                LEFT JOIN V_MAQUINA M  ON M.COD_MAQ  = R.COD_MAQ AND M.AREA = '01'
-                LEFT JOIN H_TPROD MO   ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
+                FROM {S}H_RPARADA R
+                LEFT JOIN {S}V_MAQUINA M  ON M.COD_MAQ  = R.COD_MAQ AND M.AREA = '01'
+                LEFT JOIN {S}H_TPROD MO   ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
                 WHERE TRUNC(R.FECHA_TURNO) = TRUNC(SYSDATE)";
             innerQuery += filterSuffix;
             innerQuery += " ORDER BY R.FECHA_INI DESC";
@@ -279,15 +257,15 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return null;
 
-            const string query = @"
+            var query = $@"
                 SELECT R.TP_MAQ, R.COD_MAQ, R.MOTIVO, R.FECHA_INI, R.FECHA_FIN,
                        R.ESTADO, R.TURNO, R.FECHA_TURNO, R.A_ADUSER,
                        M.DESC_MAQ,
                        M.DESC_TPMAQ,
                        MO.DESCRIPCION AS DESC_MOTIVO
-                FROM H_RPARADA R
-                LEFT JOIN V_MAQUINA M  ON M.COD_MAQ  = R.COD_MAQ AND M.AREA = '01'
-                LEFT JOIN H_TPROD MO   ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
+                FROM {S}H_RPARADA R
+                LEFT JOIN {S}V_MAQUINA M  ON M.COD_MAQ  = R.COD_MAQ AND M.AREA = '01'
+                LEFT JOIN {S}H_TPROD MO   ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
                 WHERE TRIM(R.TP_MAQ)  = TRIM(:tpMaq)
                   AND TRIM(R.COD_MAQ) = TRIM(:codMaq)
                   AND TO_CHAR(R.FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') = :fechaIni
@@ -337,8 +315,8 @@ namespace FabricaHilos.Services.Produccion
             // FECHA_TURNO: usar fecha manual si se proporcionó; si no, calcular por regla de hora
             var fechaTurnoEfectiva = fechaTurno?.Date ?? (fechaIni.Hour < 7 ? fechaIni.Date.AddDays(-1) : fechaIni.Date);
 
-            const string query = @"
-                INSERT INTO H_RPARADA (
+            var query = $@"
+                INSERT INTO {S}H_RPARADA (
                     FECHA_TURNO, TP_MAQ, COD_MAQ, MOTIVO,
                     FECHA_INI, FECHA_FIN, ESTADO,
                     A_ADUSER, A_ADFECHA, TURNO
@@ -386,8 +364,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                UPDATE H_RPARADA
+            var query = $@"
+                UPDATE {S}H_RPARADA
                 SET MOTIVO      = :motivo,
                     FECHA_FIN   = :fechaFin,
                     TURNO       = :turno,
@@ -438,8 +416,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                UPDATE H_RPARADA
+            var query = $@"
+                UPDATE {S}H_RPARADA
                 SET ESTADO = '9'
                 WHERE TRIM(TP_MAQ)  = TRIM(:tpMaq)
                   AND TRIM(COD_MAQ) = TRIM(:codMaq)
@@ -478,8 +456,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString) || paros == null || paros.Count == 0) return false;
 
-            const string query = @"
-                INSERT INTO H_RPARADA (
+            var query = $@"
+                INSERT INTO {S}H_RPARADA (
                     FECHA_TURNO, TP_MAQ, COD_MAQ, MOTIVO,
                     FECHA_INI, FECHA_FIN, ESTADO,
                     A_ADUSER, A_ADFECHA, TURNO
@@ -543,8 +521,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString) || paros == null || paros.Count == 0) return false;
 
-            const string query = @"
-                UPDATE H_RPARADA
+            var query = $@"
+                UPDATE {S}H_RPARADA
                 SET MOTIVO    = :motivo,
                     FECHA_FIN = :fechaFin,
                     FECHA_INI = :nuevaFechaIni,
@@ -617,8 +595,8 @@ namespace FabricaHilos.Services.Produccion
             var query = $@"
                 SELECT R.MOTIVO, R.FECHA_INI, R.FECHA_FIN, R.ESTADO, R.TURNO,
                        MO.DESCRIPCION AS DESC_MOTIVO
-                FROM H_RPARADA R
-                LEFT JOIN H_TPROD MO ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
+                FROM {S}H_RPARADA R
+                LEFT JOIN {S}H_TPROD MO ON MO.TABLA = '33' AND MO.CODIGO = R.MOTIVO AND MO.CODIGO <> '....'
                 WHERE TRIM(R.TP_MAQ) = TRIM(:tpMaq)
                   AND TRIM(R.COD_MAQ) = TRIM(:codMaq)
                   AND R.ESTADO <> '9'
@@ -672,8 +650,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                UPDATE H_RPARADA
+            var query = $@"
+                UPDATE {S}H_RPARADA
                 SET ESTADO    = '9',
                     A_MDUSER  = :adUser,
                     A_MDFECHA = SYSDATE
@@ -712,8 +690,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                SELECT COUNT(*) FROM H_RPARADA
+            var query = $@"
+                SELECT COUNT(*) FROM {S}H_RPARADA
                 WHERE TRIM(TP_MAQ) = TRIM(:tpMaq)
                   AND TRIM(COD_MAQ) = TRIM(:codMaq)
                   AND ESTADO = '1'";
@@ -750,7 +728,7 @@ namespace FabricaHilos.Services.Produccion
 
             var query = $@"
                 SELECT DISTINCT TRIM(TP_MAQ) AS TP_MAQ, TRIM(COD_MAQ) AS COD_MAQ
-                FROM H_RPARADA
+                FROM {S}H_RPARADA
                 WHERE ({string.Join(" OR ", conditions)})
                   AND ESTADO <> '9'
                   AND TRUNC(FECHA_TURNO) = TRUNC(SYSDATE)";

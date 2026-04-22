@@ -1,0 +1,26 @@
+:root {
+    --color-primary:        #4a5568;
+    --color-primary-dark:   #2d3748;
+    --color-primary-light:  #718096;
+    --color-secondary:      #718096;
+    --color-accent:         #a0aec0;
+    --color-bg:             #1a202c;
+    --color-bg-gradient:    linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    --color-sidebar-bg:     #2d3748;
+    --color-sidebar-text:   #e2e8f0;
+    --color-sidebar-hover:  #4a5568;
+    --color-text:           #2d3748;
+    --color-white:          #ffffff;
+    --color-border:         #e2e8f0;
+    --color-success:        #48bb78;
+    --color-warning:        #ed8936;
+    --color-danger:         #fc8181;
+    --color-info:           #63b3ed;
+    --btn-primary-bg:       #4a5568;
+    --btn-primary-hover:    #2d3748;
+}
+
+body.login-page {
+    background: var(--color-bg-gradient);
+    min-height: 100vh;
+}

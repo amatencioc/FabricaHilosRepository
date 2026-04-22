@@ -1,3 +1,4 @@
+using FabricaHilos.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -29,6 +30,20 @@ namespace FabricaHilos.Controllers
 
                 context.Result = RedirectToAction("Login", "Account",
                     returnUrl != null ? new { returnUrl } : null);
+            }
+        }
+
+        /// <summary>
+        /// CodEmpresa para sistemas externos (Aquarius, etc.) según la empresa activa en sesión.
+        /// Fuente única: OracleServiceBase.GetCodEmpresaAquarius — al agregar una empresa solo
+        /// se actualiza el diccionario en OracleServiceBase.
+        /// </summary>
+        protected string CodEmpresaAquarius
+        {
+            get
+            {
+                var connKey = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+                return OracleServiceBase.GetCodEmpresaAquarius(connKey);
             }
         }
     }

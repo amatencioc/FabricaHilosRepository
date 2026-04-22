@@ -1,15 +1,20 @@
 @using FabricaHilos.Services
 @inject IMenuService MenuService
-@{ var menus = MenuService.GetMenusActuales(); }
+@inject IEmpresaTemaService EmpresaTemaService
+@{ 
+    var menus = MenuService.GetMenusActuales();
+    var tema  = EmpresaTemaService.GetTemaActual();
+}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Fábrica de Hilos</title>
+    <title>@ViewData["Title"] - @tema.TituloSistema</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/flatpickr/dist/flatpickr.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/@tema.VariablesCssPath" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
@@ -21,10 +26,10 @@
         <nav id="sidebar" class="bg-corporate text-white">
             <div class="sidebar-header p-3 border-bottom border-secondary">
                 <div class="d-flex align-items-center gap-2">
-                    <img src="~/images/logo-colonial-icon.svg" alt="La Colonial" style="height: 38px; width: auto; flex-shrink: 0;" />
+                    <img src="~/@tema.LogoIconPath" alt="@tema.LogoAlt" style="height: 38px; width: auto; flex-shrink: 0;" />
                     <div>
-                        <div class="fw-bold">La Colonial</div>
-                        <small class="text-light opacity-75">Fábrica de Hilos S.A.</small>
+                        <div class="fw-bold">@tema.NombreCorto</div>
+                        <small class="text-light opacity-75">@tema.NombreCompleto</small>
                     </div>
                 </div>
             </div>
@@ -340,7 +345,7 @@
             </main>
 
             <footer class="bg-light border-top text-center py-2">
-                <small class="text-muted">&copy; @DateTime.Now.Year Fábrica de Hilos - Sistema de Gestión Empresarial</small>
+                <small class="text-muted">&copy; @DateTime.Now.Year @tema.TextoFooter — Sistema de Gestión Empresarial</small>
             </footer>
         </div>
     </div>

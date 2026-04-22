@@ -13,5 +13,10 @@ namespace FabricaHilos.Models
         public string c_nombre { get; set; }
         public string c_costo { get; set; }
         public string acceso_web { get; set; }
+        /// <summary>
+        /// Empresa a la que pertenece el usuario: "COLONIAL" o "ARBONA".
+        /// Determina qué connection string se usará en la sesión.
+        /// </summary>
+        public string Empresa { get; set; }
     }
 }

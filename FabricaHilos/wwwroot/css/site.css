@@ -1,8 +1,10 @@
 /* =============================================
    Fábrica de Hilos - Estilos Corporativos
+   =============================================
+   Las variables CSS de color/tema se inyectan dinámicamente
+   desde _Layout.cshtml según la empresa activa (EmpresaTema en appsettings.json).
+   NO importar variables.css aquí directamente.
    ============================================= */
-
-@import url('variables.css');
 
 :root {
     /* Aliases de compatibilidad — usar las variables canónicas de variables.css */
@@ -123,14 +125,14 @@ header {
 }
 
 .table-corporate thead th {
-    background-color: #1B4D3E !important;
+    background-color: var(--color-primary) !important;
     color: #fff !important;
     font-weight: 600;
     font-size: .8125rem;
     letter-spacing: .03em;
     white-space: nowrap;
     vertical-align: middle;
-    border-color: #155235 !important;
+    border-color: var(--color-primary-dark) !important;
 }
 
 .table-corporate tbody td {

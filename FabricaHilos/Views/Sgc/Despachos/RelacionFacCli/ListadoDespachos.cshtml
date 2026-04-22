@@ -1124,7 +1124,7 @@
             }, 1500);
         }).catch(function(err) {
             console.error('Error al copiar:', err);
-            alert('No se pudo copiar el código');
+            AppAlert('No se pudo copiar el código', 'Aviso', 'warning');
         });
     }
 

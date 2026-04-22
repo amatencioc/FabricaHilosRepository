@@ -3,39 +3,17 @@ using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
 {
-    public class IndicadoresComercialesService : IIndicadoresComercialesService
+    public class IndicadoresComercialesService : OracleServiceBase, IIndicadoresComercialesService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<IndicadoresComercialesService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public IndicadoresComercialesService(
             IConfiguration configuration,
             ILogger<IndicadoresComercialesService> logger,
             IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csb = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csb.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>
@@ -57,7 +35,7 @@ namespace FabricaHilos.Services.Ventas
             var result  = new List<ImporteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT A.VENDEDOR                       COD_ASESOR,
        A.ASESOR,
        A.MES,
@@ -68,7 +46,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-                    FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+                    FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
                   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                     AND T.TIPO(+) = 29
                     AND T.CODIGO(+) = A.VENDEDOR
@@ -86,7 +64,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
                                    DECODE(D.MONEDA,
                                           'D', I.IMP_VVTA,
                                           ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                   FROM DOCUVENT D, ITEMDOCU I
+                   FROM {S}DOCUVENT D, {S}ITEMDOCU I
                   WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
                     AND D.ESTADO <> '9'
                     AND I.TIPODOC = D.TIPODOC
@@ -139,7 +117,7 @@ SELECT A.VENDEDOR                       COD_ASESOR,
             var result  = new List<DetalleImporteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT A.ASESOR,
        A.MES,
        A.COD_CLIENTE,
@@ -153,7 +131,7 @@ SELECT A.ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-          FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO = 29
            AND T.CODIGO = A.VENDEDOR
@@ -175,7 +153,7 @@ SELECT A.ASESOR,
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
                                  ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
+          FROM {S}DOCUVENT D, {S}ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
            AND I.TIPODOC = D.TIPODOC
@@ -186,7 +164,7 @@ SELECT A.ASESOR,
          GROUP BY D.COD_VENDE,
                   TO_CHAR(D.FECHA, 'YYYY/MM'),
                   D.COD_CLIENTE) B,
-       CLIENTES X
+       {S}CLIENTES X
  WHERE B.VENDEDOR(+) = A.VENDEDOR
    AND B.COD_CLIENTE(+) = A.COD_CLIENTE
    AND B.MES(+) = A.MES
@@ -236,15 +214,15 @@ SELECT A.ASESOR,
             var result  = new List<CantidadKgAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT T.DESCRIPCION                    ASESOR,
        TO_CHAR(C.FECHA, 'YYYY/MM')     MES,
        SUM(B.CANTIDAD * E.FACTOR)       CANTIDAD_KG
-  FROM ITEMDOCU         B,
-       DOCUVENT         C,
-       ARTICUL          A,
-       TABLAS_AUXILIARES T,
-       EQUIVALENCIA     E
+  FROM {S}ITEMDOCU         B,
+       {S}DOCUVENT         C,
+       {S}ARTICUL          A,
+       {S}TABLAS_AUXILIARES T,
+       {S}EQUIVALENCIA     E
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE = B.SERIE
    AND C.NUMERO = B.NUMERO
@@ -298,14 +276,14 @@ SELECT T.DESCRIPCION                    ASESOR,
             var result  = new List<NroClientesAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT T.DESCRIPCION                    ASESOR,
        TO_CHAR(C.FECHA, 'YYYY/MM')     MES,
        COUNT(DISTINCT C.COD_CLIENTE)    NRO_CLIENTES
-  FROM DOCUVENT         C,
-       ITEMDOCU         B,
-       ARTICUL          A,
-       TABLAS_AUXILIARES T
+  FROM {S}DOCUVENT         C,
+       {S}ITEMDOCU         B,
+       {S}ARTICUL          A,
+       {S}TABLAS_AUXILIARES T
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE   = B.SERIE
    AND C.NUMERO  = B.NUMERO
@@ -357,13 +335,13 @@ SELECT T.DESCRIPCION                    ASESOR,
             var result  = new List<NroClientesAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT T.DESCRIPCION                    ASESOR,
        COUNT(DISTINCT C.COD_CLIENTE)    NRO_CLIENTES
-  FROM DOCUVENT         C,
-       ITEMDOCU         B,
-       ARTICUL          A,
-       TABLAS_AUXILIARES T
+  FROM {S}DOCUVENT         C,
+       {S}ITEMDOCU         B,
+       {S}ARTICUL          A,
+       {S}TABLAS_AUXILIARES T
  WHERE C.TIPODOC = B.TIPODOC
    AND C.SERIE   = B.SERIE
    AND C.NUMERO  = B.NUMERO
@@ -414,7 +392,7 @@ SELECT T.DESCRIPCION                    ASESOR,
             var result  = new List<DetalleClienteAsesorMesDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            const string sql = @"
+            var sql = $@"
 SELECT V.ASESOR,
        V.MES,
        V.COD_CLIENTE,
@@ -429,7 +407,7 @@ SELECT V.ASESOR,
                SUM(DECODE(:P_MON,
                           'S', SOLES_SINANT,
                                DOLARES_SINANT)) MONTO
-          FROM V_DOCUVEN A, TABLAS_AUXILIARES T
+          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND T.TIPO   = 29
            AND T.CODIGO = A.VENDEDOR
@@ -451,7 +429,7 @@ SELECT V.ASESOR,
                           DECODE(D.MONEDA,
                                  'D', I.IMP_VVTA,
                                  ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM DOCUVENT D, ITEMDOCU I
+          FROM {S}DOCUVENT D, {S}ITEMDOCU I
          WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
            AND D.ESTADO <> '9'
            AND I.TIPODOC = D.TIPODOC
@@ -466,10 +444,10 @@ SELECT V.ASESOR,
                TO_CHAR(C.FECHA, 'YYYY/MM')   MES,
                C.COD_CLIENTE,
                SUM(B.CANTIDAD * E.FACTOR)    CANTIDAD_KG
-          FROM DOCUVENT         C,
-               ITEMDOCU         B,
-               ARTICUL          A,
-               EQUIVALENCIA     E
+          FROM {S}DOCUVENT         C,
+               {S}ITEMDOCU         B,
+               {S}ARTICUL          A,
+               {S}EQUIVALENCIA     E
          WHERE C.TIPODOC = B.TIPODOC
            AND C.SERIE   = B.SERIE
            AND C.NUMERO  = B.NUMERO
@@ -482,7 +460,7 @@ SELECT V.ASESOR,
          GROUP BY C.COD_VENDE,
                   TO_CHAR(C.FECHA, 'YYYY/MM'),
                   C.COD_CLIENTE) K,
-       CLIENTES X
+       {S}CLIENTES X
  WHERE I.VENDEDOR(+)    = V.VENDEDOR
    AND I.COD_CLIENTE(+) = V.COD_CLIENTE
    AND I.MES(+)         = V.MES

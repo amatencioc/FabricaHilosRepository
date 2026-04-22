@@ -1,4 +1,4 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using FabricaHilos.Models.Produccion;
 using Microsoft.AspNetCore.Http;
@@ -210,36 +210,14 @@ namespace FabricaHilos.Services.Produccion
         Task<AutoconerDetalleOracleDto?> ObtenerDetalleAutoconerAsync(string? receta, string lote, string codMaq, string titulo, DateTime fechaIni);
     }
 
-    public class RecetaService : IRecetaService
+    public class RecetaService : OracleServiceBase, IRecetaService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<RecetaService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public RecetaService(IConfiguration configuration, ILogger<RecetaService> logger, IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csBuilder.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         public async Task<List<RecetaDto>> BuscarRecetaPorCodigoAsync(string codigo)
@@ -254,13 +232,13 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Buscando receta con código: {Codigo}", codigo);
 
-            const string query = @"
+            var query = $@"
                 SELECT 
                     G.NUMERO AS NUMERO_RECETA,
                     F.ABREVIADO||' '||P.ABREVIADO||' '||V.ABREVIADO||' ('||I.COLOR_DET||')' AS DESCRIPCION_MATERIAL,
                     G.LOTE AS CODIGO_LOTE,
                     G.PROCESO
-                FROM H_RECETA_G G,
+                FROM {S}H_RECETA_G G,
                      H_FIBRA F,
                      H_PROCESOS P,
                      ITEMPED I,
@@ -334,13 +312,13 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Buscando lote con código: {Codigo}", codigo);
 
-            const string query = @"
+            var query = $@"
                 SELECT 
                     R.LOTE AS CODIGO_LOTE,
                     NULL AS NUMERO_RECETA,
                     F.ABREVIADO||' '||P.ABREVIADO||' '||V.ABREVIADO AS DESCRIPCION_MATERIAL,
                     R.PROCESO
-                FROM H_RUTA_LOTE_G R,
+                FROM {S}H_RUTA_LOTE_G R,
                      H_FIBRA F,
                      H_PROCESOS P,
                      V_VALPF V
@@ -405,7 +383,7 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Buscando partida por código de partida: {Guia}", guia);
 
-            const string query = @"
+            var query = $@"
                 SELECT V.GUIA,
                        V.PARTIDA,
                        V.SOLO_MATERIAL||' ('||V.COLOR_CLI||')' MATERIAL,
@@ -413,7 +391,7 @@ namespace FabricaHilos.Services.Produccion
                        C.NOMBRE DESC_CLIENTE,
                        I.TITULO,
                        V.PROCESO
-                FROM V_PARTIDA V,
+                FROM {S}V_PARTIDA V,
                      CLIENTES C,
                      ITEMPED I
                 WHERE V.ESTADO = '0'
@@ -430,7 +408,7 @@ namespace FabricaHilos.Services.Produccion
                        C.NOMBRE DESC_CLIENTE,
                        I.TITULO,
                        V.PROCESO
-                FROM V_PARTIDA V,
+                FROM {S}V_PARTIDA V,
                      CLIENTES C,
                      ITEMPED I
                 WHERE NVL(V.ESTADO,'0') = '7'
@@ -495,11 +473,11 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Obteniendo tipos de máquinas desde V_MAQUINA");
 
-            const string query = @"
+            var query = $@"
                 SELECT 
                     TP_MAQ,
                     MAX(DESC_TPMAQ) AS DESC_TPMAQ
-                FROM V_MAQUINA
+                FROM {S}V_MAQUINA
                 WHERE AREA = '01'
                 GROUP BY TP_MAQ
                 ORDER BY TP_MAQ";
@@ -559,11 +537,11 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Obteniendo máquinas para el tipo: {TipoMaquina}", tipoMaquina);
 
-            const string query = @"
+            var query = $@"
                 SELECT 
                     COD_MAQ,
                     DESC_MAQ
-                FROM V_MAQUINA
+                FROM {S}V_MAQUINA
                 WHERE TP_MAQ = :tipoMaquina
                   AND AREA = '01'
                 ORDER BY COD_MAQ";
@@ -619,13 +597,13 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Obteniendo títulos desde H_TITULOS");
 
-            const string query = @"
+            var query = $@"
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO BETWEEN '400' AND '499'
                 UNION
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO = '200'
                 ORDER BY 1";
 
@@ -678,21 +656,21 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Obteniendo títulos Autoconer desde H_TITULOS");
 
-            const string query = @"
+            var query = $@"
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO BETWEEN '001' AND '249'
                 UNION
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO BETWEEN '433' AND '434'
                 UNION
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO BETWEEN '620' AND '624'
                 UNION
                 SELECT T.TITULO, T.DESCRIPCION AS DESC_TITULO
-                FROM H_TITULOS T
+                FROM {S}H_TITULOS T
                 WHERE T.TITULO BETWEEN '629' AND '632'
                 ORDER BY 1";
 
@@ -742,9 +720,9 @@ namespace FabricaHilos.Services.Produccion
 
             _logger.LogInformation("Obteniendo empleados desde V_PERSONAL");
 
-            const string query = @"
+            var query = $@"
                 SELECT V.C_CODIGO, V.NOMBRE_CORTO
-                FROM V_PERSONAL V,
+                FROM {S}V_PERSONAL V,
                      V_GRAN_CCOSTO C
                 WHERE V.SITUACION = '1'
                   AND C.GRAN_CCOSTO = '01'
@@ -794,9 +772,9 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return new List<EmpleadoOracleDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT C_CODIGO, NOMBRE_CORTO
-                FROM V_PERSONAL
+                FROM {S}V_PERSONAL
                 WHERE SITUACION = '1'
                   AND (C_CODIGO LIKE :codigo || '%' OR UPPER(NOMBRE_CORTO) LIKE '%' || UPPER(:codigo) || '%')
                   AND ROWNUM <= 20
@@ -834,7 +812,7 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return codigo;
 
-            const string query = "SELECT NOMBRE_CORTO FROM V_PERSONAL WHERE C_CODIGO = :codigo AND ROWNUM = 1";
+            var query = $"SELECT NOMBRE_CORTO FROM {S}V_PERSONAL WHERE C_CODIGO = :codigo AND ROWNUM = 1";
             try
             {
                 using var connection = new OracleConnection(connectionString);
@@ -867,7 +845,7 @@ namespace FabricaHilos.Services.Produccion
                 return 0m;
             }
 
-            const string query = "SELECT PESO FROM H_TITULOS WHERE TITULO = :titulo";
+            var query = $"SELECT PESO FROM {S}H_TITULOS WHERE TITULO = :titulo";
 
             try
             {
@@ -895,8 +873,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                SELECT COUNT(*) FROM H_RPRODUC
+            var query = $@"
+                SELECT COUNT(*) FROM {S}H_RPRODUC
                 WHERE TRIM(TP_MAQ) = TRIM(:tpMaq)
                   AND TRIM(COD_MAQ) = TRIM(:codMaq)
                   AND ESTADO = '1'";
@@ -928,7 +906,7 @@ namespace FabricaHilos.Services.Produccion
                 return 0;
             }
 
-            const string query = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = :tpMaq AND COD_MAQ = :codMaq";
+            var query = $"SELECT HUSOS FROM {S}H_MAQUINAS WHERE TP_MAQ = :tpMaq AND COD_MAQ = :codMaq";
 
             try
             {
@@ -965,8 +943,8 @@ namespace FabricaHilos.Services.Produccion
             _logger.LogInformation("Insertando preparatoria en H_RPRODUC: Receta={Receta}, Lote={Lote}", 
                 orden.CodigoReceta, orden.Lote);
 
-            const string query = @"
-                INSERT INTO H_RPRODUC (
+            var query = $@"
+                INSERT INTO {S}H_RPRODUC (
                     RECETA,
                     LOTE,
                     TP_MAQ,
@@ -1088,8 +1066,8 @@ namespace FabricaHilos.Services.Produccion
             // HUSOS y HUSOS_ACT se consultan en H_MAQUINAS por la máquina seleccionada.
             // KG_UNIDAD se calcula como PESO_NETO / UNIDADES cuando ambos están disponibles.
             // GUIA = Nº Partida del formulario. PROCESO se obtiene de la búsqueda de partida. VELOCIDAD2 y PROD_TEORICO → NULL.
-            const string query = @"
-                INSERT INTO H_RPRODUC (
+            var query = $@"
+                INSERT INTO {S}H_RPRODUC (
                     RECETA, LOTE, TP_MAQ, COD_MAQ, TITULO,
                     FECHA_INI, FECHA_FIN,
                     ESTADO,
@@ -1130,7 +1108,7 @@ namespace FabricaHilos.Services.Produccion
                 // ── HUSOS totales de la máquina (H_MAQUINAS) ─────────────────────────
                 // HUSOS_INAC = 0 por definición en AUTOCONER → HUSOS_ACT = HUSOS
                 int? husosMaquina = null;
-                const string queryHusos = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
+                var queryHusos = $"SELECT HUSOS FROM {S}H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
                 using (var cmdHusos = new OracleCommand(queryHusos, connection))
                 {
                     cmdHusos.Parameters.Add(new OracleParameter(":cod", OracleDbType.Varchar2, registro.NumeroAutoconer, ParameterDirection.Input));
@@ -1286,12 +1264,12 @@ namespace FabricaHilos.Services.Produccion
                 : string.Empty;
 
             // ── CONTEO: query liviano, solo H_RPRODUC ────────────────────────────
-            var countQuery = "SELECT COUNT(*) FROM H_RPRODUC R WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY')" + baseTpFilter + filterSuffix;
+            var countQuery = $"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY')" + baseTpFilter + filterSuffix;
 
             // ── DATOS: paginación en dos fases ────────────────────────────────────
             // Fase 1: query ligero (sin subqueries correlacionadas).
             // Ordena y pagina usando solo columnas simples y JOINs directos.
-            var innerLightQuery = @"
+            var innerLightQuery = $@"
                 SELECT R.RECETA, R.LOTE, R.TP_MAQ, R.COD_MAQ, R.TITULO,
                        R.FECHA_INI, R.ESTADO, R.C_CODIGO, R.TURNO, R.PASO_MANUAR,
                        R.GUIA,
@@ -1300,10 +1278,10 @@ namespace FabricaHilos.Services.Produccion
                        P.NOMBRE_CORTO AS NOMBRE_OPERARIO,
                        R.HUSOS_ACT_T1, R.HUSOS_ACT_T2, R.HUSOS_ACT_T3,
                        R.HUSOS_ACT_T4, R.HUSOS_ACT_T5, R.HUSOS_ACT_T6
-                FROM H_RPRODUC R
-                LEFT JOIN V_MAQUINA  M ON M.COD_MAQ  = R.COD_MAQ  AND M.AREA = '01'
-                LEFT JOIN H_TITULOS  T ON T.TITULO   = R.TITULO
-                LEFT JOIN V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
+                FROM {S}H_RPRODUC R
+                LEFT JOIN {S}V_MAQUINA  M ON M.COD_MAQ  = R.COD_MAQ  AND M.AREA = '01'
+                LEFT JOIN {S}H_TITULOS  T ON T.TITULO   = R.TITULO
+                LEFT JOIN {S}V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
                      WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY')";
                 innerLightQuery += baseTpFilter;
                 innerLightQuery += filterSuffix;
@@ -1339,7 +1317,7 @@ namespace FabricaHilos.Services.Produccion
                     CASE
                         WHEN p.RECETA IS NOT NULL THEN
                             (SELECT F2.ABREVIADO||' '||P2.ABREVIADO||' '||V2.ABREVIADO||' ('||I2.COLOR_DET||')'
-                             FROM H_RECETA_G G2, H_FIBRA F2, H_PROCESOS P2, ITEMPED I2,
+                             FROM {S}H_RECETA_G G2, H_FIBRA F2, H_PROCESOS P2, ITEMPED I2,
                                   V_TFIBRA T2, V_VALPF V2, CLIENTES C2
                              WHERE TO_CHAR(G2.NUMERO) = TRIM(TO_CHAR(p.RECETA))
                                AND G2.TIPO = 'R'
@@ -1355,7 +1333,7 @@ namespace FabricaHilos.Services.Produccion
                                AND ROWNUM = 1)
                         ELSE
                             (SELECT F3.ABREVIADO||' '||PR3.ABREVIADO||' '||V3.ABREVIADO
-                             FROM H_RUTA_LOTE_G RL3, H_FIBRA F3, H_PROCESOS PR3, V_VALPF V3
+                             FROM {S}H_RUTA_LOTE_G RL3, H_FIBRA F3, H_PROCESOS PR3, V_VALPF V3
                              WHERE RL3.LOTE    = p.LOTE
                                AND RL3.ESTADO  = '0'
                                AND F3.FIBRA    = RL3.FIBRA
@@ -1477,8 +1455,8 @@ namespace FabricaHilos.Services.Produccion
             _logger.LogInformation("Cerrando preparatoria en Oracle: Receta={Receta}, Lote={Lote}, TpMaq={TpMaq}, CodMaq={CodMaq}, Titulo={Titulo}, FechaIni={FechaIni}",
                 receta, lote, tpMaq, codMaq, titulo, fechaIni);
 
-            const string query = @"
-                UPDATE H_RPRODUC SET ESTADO = '3',
+            var query = $@"
+                UPDATE {S}H_RPRODUC SET ESTADO = '3',
                                     FECHA_FIN = :fechaFin,
                                     A_MDUSER  = :mdUser,
                                     A_MDFECHA = :mdFecha,
@@ -1548,9 +1526,9 @@ namespace FabricaHilos.Services.Produccion
                 try
                 {
                     // 1. Bloquear el registro y verificar que esté en estado '1' (activo)
-                    const string querySelect = @"
+                    var querySelect = $@"
                         SELECT ESTADO 
-                        FROM H_RPRODUC
+                        FROM {S}H_RPRODUC
                         WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
                           AND TRIM(LOTE) = TRIM(:lote)
                           AND TRIM(TP_MAQ) = TRIM(:tpMaq)
@@ -1596,8 +1574,8 @@ namespace FabricaHilos.Services.Produccion
                     }
 
                     // 3. Actualizar a ESTADO='9' (anulado)
-                    const string queryUpdate = @"
-                        UPDATE H_RPRODUC 
+                    var queryUpdate = $@"
+                        UPDATE {S}H_RPRODUC 
                         SET ESTADO = '9',
                             FECHA_FIN = :fechaFin,
                             IND_SISTEMA = 'W'
@@ -1680,7 +1658,7 @@ namespace FabricaHilos.Services.Produccion
                 ? ",\n                    CONTADOR_INI = :contadorIni,\n                    HUSOS_INAC   = :husosInac"
                 : string.Empty;
             var query = $@"
-                UPDATE H_RPRODUC
+                UPDATE {S}H_RPRODUC
                 SET
                     RECETA      = :newReceta,
                     LOTE        = :newLote,
@@ -1717,9 +1695,9 @@ namespace FabricaHilos.Services.Produccion
                 try
                 {
                     // 1. Bloquear el registro antes de actualizar
-                    const string querySelect = @"
+                    var querySelect = $@"
                         SELECT ESTADO 
-                        FROM H_RPRODUC
+                        FROM {S}H_RPRODUC
                         WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:oldReceta), ' ')
                           AND TRIM(LOTE) = TRIM(:oldLote)
                           AND TRIM(TP_MAQ) = TRIM(:oldTpMaq)
@@ -1847,7 +1825,7 @@ namespace FabricaHilos.Services.Produccion
                 ? ",\n                    NRO_PARADA   = :parada,\n                    CONTADOR_FIN = :contadorFin"
                 : string.Empty;
             var query = $@"
-                UPDATE H_RPRODUC
+                UPDATE {S}H_RPRODUC
                 SET VELOCIDAD = :velocidad,
                     UNIDADES  = :unidades,
                     PESO_NETO = :kgPeso,
@@ -1879,12 +1857,12 @@ namespace FabricaHilos.Services.Produccion
                         receta, lote, tpMaq, codMaq, titulo, fechaIni.ToString("yyyy-MM-dd HH:mm:ss"));
 
                     // Diagnóstico: obtener FECHA_INI y ESTADO reales en Oracle antes del bloqueo
-                    const string diagSql = @"
+                    var diagSql = $@"
                         SELECT fecha_ini_str, estado
                         FROM (
                             SELECT TO_CHAR(FECHA_INI, 'YYYY-MM-DD HH24:MI:SS') AS fecha_ini_str,
                                    ESTADO
-                            FROM H_RPRODUC
+                            FROM {S}H_RPRODUC
                             WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:dReceta), ' ')
                               AND TRIM(LOTE)    = TRIM(:dLote)
                               AND TRIM(TP_MAQ)  = TRIM(:dTpMaq)
@@ -1922,9 +1900,9 @@ namespace FabricaHilos.Services.Produccion
                     }
 
                     // 1. Bloquear el registro y verificar que esté en estado '1' (activo)
-                    const string querySelect = @"
+                    var querySelect = $@"
                         SELECT ESTADO
-                        FROM H_RPRODUC
+                        FROM {S}H_RPRODUC
                         WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:receta), ' ')
                           AND TRIM(LOTE) = TRIM(:lote)
                           AND TRIM(TP_MAQ) = TRIM(:tpMaq)
@@ -1992,7 +1970,7 @@ namespace FabricaHilos.Services.Produccion
                         _logger.LogDebug("UPDATE ejecutado. Filas afectadas={Rows}", rowsAffected);
 
                         // 4. Ejecutar SP_CALCULAR_PROD_ESP_TEO tras el UPDATE exitoso
-                        using var procCommand = new OracleCommand("SIG.PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
+                        using var procCommand = new OracleCommand($"{S}PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
                         procCommand.Transaction = transaction;
                         procCommand.CommandType = CommandType.StoredProcedure;
                         procCommand.BindByName  = true;
@@ -2055,11 +2033,11 @@ namespace FabricaHilos.Services.Produccion
                 return null;
             }
 
-            const string query = @"
+            var query = $@"
                 SELECT VELOCIDAD, METRAJE, UNIDADES, PESO_NETO,
                        FECHA_FIN, PROD_TEORICO, PROD_ESPERADO,
                        HUSOS_INAC, NRO_PARADA, CONTADOR_INI, CONTADOR_FIN, ESTADO
-                FROM H_RPRODUC
+                FROM {S}H_RPRODUC
                 WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ')              = NVL(TRIM(:receta), ' ')
                   AND TRIM(LOTE)                                    = TRIM(:lote)
                   AND TRIM(TP_MAQ)                                  = TRIM(:tpMaq)
@@ -2145,9 +2123,9 @@ namespace FabricaHilos.Services.Produccion
                 using var connection = new OracleConnection(connectionString);
                 await connection.OpenAsync();
 
-                const string queryMaxItem = @"
+                var queryMaxItem = $@"
                     SELECT NVL(MAX(ITEM), 0) + 1 AS NEXT_ITEM
-                    FROM SIG.H_RPRODUC_ROLLO
+                    FROM {S}H_RPRODUC_ROLLO
                     WHERE FECHA_TURNO = :fechaTurno
                       AND TURNO       = :turno
                       AND TP_MAQ      = :tpMaq
@@ -2165,8 +2143,8 @@ namespace FabricaHilos.Services.Produccion
                     nextItem = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 1;
                 }
 
-                const string queryInsert = @"
-                    INSERT INTO SIG.H_RPRODUC_ROLLO (FECHA_TURNO, TURNO, TP_MAQ, COD_MAQ, ITEM, NETO, A_ADUSER, A_ADFECHA)
+                var queryInsert = $@"
+                    INSERT INTO {S}H_RPRODUC_ROLLO (FECHA_TURNO, TURNO, TP_MAQ, COD_MAQ, ITEM, NETO, A_ADUSER, A_ADFECHA)
                     VALUES (:fechaTurno, :turno, :tpMaq, :codMaq, :item, :neto, :adUser, :adFecha)";
 
                 using var cmdInsert = new OracleCommand(queryInsert, connection);
@@ -2201,9 +2179,9 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return new List<RolloDto>();
 
-            var query = @"
+            var query = $@"
                 SELECT ITEM, NETO, A_ADFECHA
-                FROM SIG.H_RPRODUC_ROLLO
+                FROM {S}H_RPRODUC_ROLLO
                 WHERE FECHA_TURNO = :fechaTurno
                   AND TURNO       = :turno
                   AND TP_MAQ      = :tpMaq
@@ -2261,7 +2239,7 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return new List<DestinoDto>();
 
-            const string query = "SELECT CODIGO, DESCRIPCION FROM H_TPROD WHERE TABLA = '63' AND ESTADO <> '9' ORDER BY CODIGO";
+            var query = $"SELECT CODIGO, DESCRIPCION FROM {S}H_TPROD WHERE TABLA = '63' AND ESTADO <> '9' ORDER BY CODIGO";
             try
             {
                 using var connection = new OracleConnection(connectionString);
@@ -2314,7 +2292,7 @@ namespace FabricaHilos.Services.Produccion
                 using var connection = new OracleConnection(connectionString);
                 await connection.OpenAsync();
 
-                using var procCommand = new OracleCommand("SIG.PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
+                using var procCommand = new OracleCommand($"{S}PKG_PROD_RUTINAS.SP_CALCULAR_PROD_ESP_TEO", connection);
                 procCommand.CommandType = CommandType.StoredProcedure;
                 procCommand.BindByName  = true;
 
@@ -2369,8 +2347,8 @@ namespace FabricaHilos.Services.Produccion
             var connectionString = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connectionString)) return false;
 
-            const string query = @"
-                UPDATE SIG.H_RPRODUC_ROLLO
+            var query = $@"
+                UPDATE {S}H_RPRODUC_ROLLO
                 SET    A_MDUSER  = :mdUser,
                        A_MDFECHA = :mdFecha
                 WHERE  FECHA_TURNO = :fechaTurno
@@ -2380,7 +2358,7 @@ namespace FabricaHilos.Services.Produccion
                   AND  A_ADFECHA   >= :fechaIni
                   AND  ITEM        = (
                            SELECT MAX(ITEM)
-                           FROM   SIG.H_RPRODUC_ROLLO
+                           FROM   {S}H_RPRODUC_ROLLO
                            WHERE  FECHA_TURNO = :fechaTurno
                              AND  TURNO       = :turno
                              AND  TP_MAQ      = :tpMaq
@@ -2432,8 +2410,8 @@ namespace FabricaHilos.Services.Produccion
                 registro.Lote, registro.NumeroAutoconer);
 
             // UPDATE completo con todos los campos específicos de Autoconer
-            const string query = @"
-                UPDATE H_RPRODUC
+            var query = $@"
+                UPDATE {S}H_RPRODUC
                 SET
                     RECETA       = :receta,
                     LOTE         = :lote,
@@ -2484,7 +2462,7 @@ namespace FabricaHilos.Services.Produccion
 
                     // 1. Obtener HUSOS de la máquina
                     int? husosMaquina = null;
-                    const string queryHusos = "SELECT HUSOS FROM H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
+                    var queryHusos = $"SELECT HUSOS FROM {S}H_MAQUINAS WHERE TP_MAQ = 'A' AND COD_MAQ = :cod";
                     using (var cmdHusos = new OracleCommand(queryHusos, connection))
                     {
                         cmdHusos.Transaction = transaction;
@@ -2495,9 +2473,9 @@ namespace FabricaHilos.Services.Produccion
                     }
 
                     // 2. Bloquear el registro antes de actualizar (FOR UPDATE NOWAIT)
-                    const string querySelect = @"
+                    var querySelect = $@"
                         SELECT ESTADO
-                        FROM H_RPRODUC
+                        FROM {S}H_RPRODUC
                         WHERE NVL(TRIM(TO_CHAR(RECETA)), ' ') = NVL(TRIM(:oldReceta), ' ')
                           AND TRIM(LOTE) = TRIM(:oldLote)
                           AND TRIM(TP_MAQ) = 'A'
@@ -2641,7 +2619,7 @@ namespace FabricaHilos.Services.Produccion
 
             // Misma lógica que ObtenerDetalleProductivoOracleAsync (misma tabla H_RPRODUC)
             // DESCRIPCION_MATERIAL se obtiene con CASE: por RECETA o por LOTE (igual que Preparatoria)
-            const string query = @"
+            var query = $@"
                 SELECT 
                     R.RECETA,
                     R.LOTE,
@@ -2673,7 +2651,7 @@ namespace FabricaHilos.Services.Produccion
                     CASE
                         WHEN R.RECETA IS NOT NULL THEN
                             (SELECT F2.ABREVIADO||' '||P2.ABREVIADO||' '||V2.ABREVIADO||' ('||I2.COLOR_DET||')'
-                             FROM H_RECETA_G G2, H_FIBRA F2, H_PROCESOS P2, ITEMPED I2,
+                             FROM {S}H_RECETA_G G2, H_FIBRA F2, H_PROCESOS P2, ITEMPED I2,
                                   V_TFIBRA T2, V_VALPF V2, CLIENTES C2
                              WHERE TO_CHAR(G2.NUMERO) = TRIM(TO_CHAR(R.RECETA))
                                AND G2.TIPO = 'R'
@@ -2689,7 +2667,7 @@ namespace FabricaHilos.Services.Produccion
                                AND ROWNUM = 1)
                         ELSE
                             (SELECT F3.ABREVIADO||' '||PR3.ABREVIADO||' '||V3.ABREVIADO
-                             FROM H_RUTA_LOTE_G RL3, H_FIBRA F3, H_PROCESOS PR3, V_VALPF V3
+                             FROM {S}H_RUTA_LOTE_G RL3, H_FIBRA F3, H_PROCESOS PR3, V_VALPF V3
                              WHERE RL3.LOTE    = R.LOTE
                                AND RL3.ESTADO  = '0'
                                AND F3.FIBRA    = RL3.FIBRA
@@ -2698,11 +2676,11 @@ namespace FabricaHilos.Services.Produccion
                                AND V3.CODIGO   = RL3.VALPF
                                AND ROWNUM = 1)
                     END AS DESCRIPCION_MATERIAL
-                FROM H_RPRODUC R
-                LEFT JOIN V_MAQUINA M ON M.COD_MAQ = R.COD_MAQ AND M.AREA = '01'
-                LEFT JOIN H_TITULOS T ON T.TITULO = R.TITULO
-                LEFT JOIN V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
-                LEFT JOIN H_TPROD D ON D.CODIGO = R.DESTINO AND D.TABLA = '63'
+                FROM {S}H_RPRODUC R
+                LEFT JOIN {S}V_MAQUINA M ON M.COD_MAQ = R.COD_MAQ AND M.AREA = '01'
+                LEFT JOIN {S}H_TITULOS T ON T.TITULO = R.TITULO
+                LEFT JOIN {S}V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
+                LEFT JOIN {S}H_TPROD D ON D.CODIGO = R.DESTINO AND D.TABLA = '63'
                 WHERE NVL(TRIM(TO_CHAR(R.RECETA)), ' ')             = NVL(TRIM(:receta), ' ')
                   AND TRIM(R.LOTE)                                   = TRIM(:lote)
                   AND TRIM(R.TP_MAQ)                                 = 'A'

@@ -1,4 +1,4 @@
-using FabricaHilos.Services.RecursosHumanos;
+﻿using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +11,6 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         private readonly IMarcacionesService _marcacionesService;
         private readonly IDepuracionJobService _depuracionJobService;
         private readonly ILogger<MarcacionesController> _logger;
-        private readonly string _codEmpresa;
         private readonly string _baseConnStr;
         private const int PageSize = 10;
 
@@ -24,7 +23,6 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             _marcacionesService    = marcacionesService;
             _depuracionJobService  = depuracionJobService;
             _logger                = logger;
-            _codEmpresa            = configuration["Aquarius:CodEmpresa"] ?? "0003";
             _baseConnStr           = configuration.GetConnectionString("AquariusConnection") ?? string.Empty;
         }
 
@@ -35,7 +33,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> Index(string? buscar, int page = 1)
         {
             page = Math.Max(1, page);
-            var (items, total) = await _marcacionesService.ListarEmpleadosAsync(_codEmpresa, buscar, page, PageSize);
+            var (items, total) = await _marcacionesService.ListarEmpleadosAsync(CodEmpresaAquarius, buscar, page, PageSize);
             ViewBag.Buscar     = buscar ?? string.Empty;
             ViewBag.Page       = page;
             ViewBag.PageSize   = PageSize;
@@ -61,7 +59,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         {
             try
             {
-                var empleados = await _marcacionesService.BuscarEmpleadoAsync(_codEmpresa, nombre);
+                var empleados = await _marcacionesService.BuscarEmpleadoAsync(CodEmpresaAquarius, nombre);
                 return Json(new { ok = true, data = empleados });
             }
             catch (Exception ex)
@@ -82,7 +80,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                  || !DateTime.TryParseExact(fechaFin,    "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtFin))
                     return Json(new { ok = false, mensaje = "Formato de fecha inválido." });
 
-                var marcaciones = await _marcacionesService.ConsultarRangoAsync(_codEmpresa, codPersonal, dtInicio, dtFin);
+                var marcaciones = await _marcacionesService.ConsultarRangoAsync(CodEmpresaAquarius, codPersonal, dtInicio, dtFin);
                 return Json(new { ok = true, data = marcaciones });
             }
             catch (Exception ex)
@@ -116,7 +114,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 connStr = csb.ToString();
             }
 
-            var jobId = _depuracionJobService.Encolar(_codEmpresa, codPersonal, dtInicio, dtFin, connStr);
+            var jobId = _depuracionJobService.Encolar(CodEmpresaAquarius, codPersonal, dtInicio, dtFin, connStr);
             return Json(new { ok = true, jobId });
         }
 

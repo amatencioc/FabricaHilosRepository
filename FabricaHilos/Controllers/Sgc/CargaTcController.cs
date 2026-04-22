@@ -123,6 +123,7 @@ namespace FabricaHilos.Controllers.Sgc
         // ========== CARGAR PDF ==========
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> CargarPdf(int numReq, IFormFile archivo, string? numCer)
         {
             try
@@ -341,6 +342,7 @@ namespace FabricaHilos.Controllers.Sgc
         // ========== ENVIAR A FACTURACIÓN ==========
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> EnviarAFacturacion(int numReq)
         {
             int? numeroVFactaut = null;

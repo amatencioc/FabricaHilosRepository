@@ -308,7 +308,7 @@
                         bootstrap.Modal.getInstance(document.getElementById('modalConfirmarEnvio')).hide();
                         window.location.href = response.redirectUrl;
                     } else {
-                        alert(response.message || 'No se pudo enviar el certificado a Facturación.');
+                        AppAlert(response.message || 'No se pudo enviar el certificado a Facturación.', 'Error', 'danger');
                         button.prop('disabled', false).html(originalHtml);
                     }
                 },
@@ -317,7 +317,7 @@
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMsg = xhr.responseJSON.message;
                     }
-                    alert(errorMsg);
+                    AppAlert(errorMsg, 'Error', 'danger');
                     button.prop('disabled', false).html(originalHtml);
                 }
             });

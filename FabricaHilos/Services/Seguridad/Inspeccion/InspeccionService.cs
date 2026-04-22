@@ -1,4 +1,4 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using System.Data;
 
 namespace FabricaHilos.Services.Seguridad.Inspeccion
@@ -80,46 +80,24 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         public string ObjetivoHallazgo { get; set; } = string.Empty;
     }
 
-    public class InspeccionService : IInspeccionService
+    public class InspeccionService : OracleServiceBase, IInspeccionService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<InspeccionService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
-        private const int CmdTimeoutSec = 15; // Timeout para comandos Oracle (evita bloqueo infinito por locks)
+        private const int CmdTimeoutSec = 15;
 
         public InspeccionService(IConfiguration configuration, ILogger<InspeccionService> logger, IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csBuilder.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         public async Task<List<ResponsableDto>> ObtenerResponsablesAreaAsync()
         {
             var resultado = new List<ResponsableDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT C_CODIGO, NOMBRE_CORTO
-                FROM V_PERSONAL
+                FROM {S}V_PERSONAL
                 WHERE SITUACION = '1'
                 ORDER BY 2";
 
@@ -153,11 +131,11 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         {
             var resultado = new List<ResponsableDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT C_CODIGO, NOMBRE_CORTO
-                FROM V_PERSONAL
+                FROM {S}V_PERSONAL
                 WHERE SITUACION = '1'
-                  AND C_CARGO IN (SELECT C_CARGO FROM T_CARGO WHERE CCOSTO = '280' AND ESTADO <> '9')
+                  AND C_CARGO IN (SELECT C_CARGO FROM {S}T_CARGO WHERE CCOSTO = '280' AND ESTADO <> '9')
                 ORDER BY 2";
 
             try
@@ -190,9 +168,9 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         {
             var resultado = new List<CentroCostoDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT CENTRO_COSTO, SUBSTR(NOMBRE, 1, 30) NOMBRE
-                FROM CENTRO_DE_COSTOS
+                FROM {S}CENTRO_DE_COSTOS
                 WHERE TIPO = 'D'
                   AND ESTADO <> '9'
                 ORDER BY 2";
@@ -227,7 +205,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         {
             var resultado = new List<InspeccionListDto>();
 
-            var query = @"
+            var query = $@"
                 SELECT 
                     i.NUMERO,
                     i.CCOSTO,
@@ -239,10 +217,10 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     i.RESP_AREA,
                     NVL(vp2.NOMBRE_CORTO, '') AS NOMBRE_RESP_AREA,
                     i.ESTADO
-                FROM SIG.SI_INSPECCION i
-                LEFT JOIN CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
-                LEFT JOIN V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
-                LEFT JOIN V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
+                FROM {S}SI_INSPECCION i
+                LEFT JOIN {S}CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
+                LEFT JOIN {S}V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
+                LEFT JOIN {S}V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
                 WHERE 1=1";
 
             if (!string.IsNullOrWhiteSpace(tipo))
@@ -331,7 +309,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
         public async Task<InspeccionListDto?> ObtenerInspeccionPorNumeroAsync(int numero)
         {
-            const string query = @"
+            var query = $@"
                 SELECT 
                     i.NUMERO,
                     i.CCOSTO,
@@ -343,10 +321,10 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     i.RESP_AREA,
                     NVL(vp2.NOMBRE_CORTO, '') AS NOMBRE_RESP_AREA,
                     i.ESTADO
-                FROM SIG.SI_INSPECCION i
-                LEFT JOIN CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
-                LEFT JOIN V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
-                LEFT JOIN V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
+                FROM {S}SI_INSPECCION i
+                LEFT JOIN {S}CENTRO_DE_COSTOS c ON i.CCOSTO = c.CENTRO_COSTO
+                LEFT JOIN {S}V_PERSONAL vp1 ON i.RESP_INSPECCION = vp1.C_CODIGO
+                LEFT JOIN {S}V_PERSONAL vp2 ON i.RESP_AREA = vp2.C_CODIGO
                 WHERE i.NUMERO = :numero";
 
             try
@@ -397,7 +375,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
         public async Task<int> ObtenerSiguienteNumeroInspeccionAsync()
         {
-            const string query = "SELECT NUMERO FROM NRODOC WHERE TIPODOC = 'IN'";
+            var query = $"SELECT NUMERO FROM {S}NRODOC WHERE TIPODOC = 'IN'";
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             try
@@ -436,7 +414,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 // 1. Obtener número Y bloquear NRODOC atómicamente (NOWAIT = falla inmediato si hay lock zombie)
-                const string queryNumero = "SELECT NUMERO FROM NRODOC WHERE TIPODOC = 'IN' FOR UPDATE NOWAIT";
+                var queryNumero = $"SELECT NUMERO FROM {S}NRODOC WHERE TIPODOC = 'IN' FOR UPDATE NOWAIT";
                 int numero;
 
                 _logger.LogWarning("▶▶ SVC RegistrarHallazgo: SELECT NRODOC FOR UPDATE NOWAIT...");
@@ -458,9 +436,9 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 // La foto se agrega después desde la ventana H / AC
 
                 // 3. Obtener cantidad de trabajadores activos
-                const string queryNroTrab = @"
+                var queryNroTrab = $@"
                     SELECT COUNT(*)
-                    FROM V_PERSONAL
+                    FROM {S}V_PERSONAL
                     WHERE SITUACION = '1'
                       AND C_ESTADO IN ('CO','ES')";
                 int nroTrab;
@@ -475,8 +453,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 _logger.LogWarning("▶▶ SVC RegistrarHallazgo: NRO_TRAB={NroTrab} ({Ms}ms)", nroTrab, sw.ElapsedMilliseconds);
 
                 // 4. Insertar cabecera en SI_INSPECCION (sin datos de foto)
-                const string queryInsertar = @"
-                    INSERT INTO SIG.SI_INSPECCION 
+                var queryInsertar = $@"
+                    INSERT INTO {S}SI_INSPECCION 
                     (NUMERO, CCOSTO, FECHA, TIPO, RESP_INSPECCION, RESP_AREA, ESTADO, NRO_TRAB, OBJETIVO, A_ADUSER, A_ADFECHA)
                     VALUES 
                     (:pNumero, :pCcosto, SYSDATE, :pTipo, :pRespInspeccion, :pRespArea, '1', :pNroTrab, :pObjetivo, :pUsuario, SYSDATE)";
@@ -499,18 +477,18 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
 
                 // 5. Actualizar el correlativo en NRODOC (+1)
-                const string queryActualizarCorrelativo = @"
-                    UPDATE NRODOC 
+                var queryActualizarCorrelativo = $@"
+                    UPDATE {S}NRODOC 
                     SET NUMERO = NUMERO + 1 
                     WHERE TIPODOC = 'IN'";
 
-                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Ejecutando UPDATE NRODOC (NUMERO+1)...");
+                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Ejecutando UPDATE {S}NRODOC (NUMERO+1)...");
                 using (var cmdActualizar = new OracleCommand(queryActualizarCorrelativo, connection))
                 {
                     cmdActualizar.Transaction = transaction;
                     cmdActualizar.CommandTimeout = CmdTimeoutSec;
                     var filasActualizadas = await cmdActualizar.ExecuteNonQueryAsync();
-                    _logger.LogWarning("▶▶ SVC RegistrarHallazgo: UPDATE NRODOC OK, filas={Filas} ({Ms}ms)", filasActualizadas, sw.ElapsedMilliseconds);
+                    _logger.LogWarning("▶▶ SVC RegistrarHallazgo: UPDATE {S}NRODOC OK, filas={Filas} ({Ms}ms)", filasActualizadas, sw.ElapsedMilliseconds);
                 }
 
                 _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Commit...");
@@ -549,8 +527,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 // 1. Verificar estado de la cabecera
-                const string queryEstado = @"
-                    SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                var queryEstado = $@"
+                    SELECT ESTADO FROM {S}SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estadoActual;
                 using (var cmdEstado = new OracleCommand(queryEstado, connection))
                 {
@@ -568,8 +546,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     throw new InvalidOperationException($"La inspección #{numero} está anulada.");
 
                 // 2. Bloquear el item de detalle y verificar que no tenga AC
-                const string querySelectF = @"
-                    SELECT RUTA_FOTO_AC FROM SIG.SI_INSPECCION_F
+                var querySelectF = $@"
+                    SELECT RUTA_FOTO_AC FROM {S}SI_INSPECCION_F
                     WHERE NUMERO = :pNumero AND ITEM = :pItem FOR UPDATE NOWAIT";
                 string? rutaAcActual;
                 using (var cmdF = new OracleCommand(querySelectF, connection))
@@ -592,8 +570,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 var nombreArchivo = $"{numero}-{item}-AC.jpg";
                 var rutaFotoCompleta = Path.Combine(rutaFoto, nombreArchivo);
 
-                const string queryUpdateF = @"
-                    UPDATE SIG.SI_INSPECCION_F
+                var queryUpdateF = $@"
+                    UPDATE {S}SI_INSPECCION_F
                     SET RUTA_FOTO_AC = :pRutaFoto,
                         FCH_FOTO_AC = SYSDATE,
                         UBICA_FOTO_AC = :pUbicaFoto,
@@ -614,8 +592,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
 
                 // 4. Verificar si todos los items tienen AC → cerrar inspección (ESTADO='6')
-                const string querySinAC = @"
-                    SELECT COUNT(*) FROM SIG.SI_INSPECCION_F
+                var querySinAC = $@"
+                    SELECT COUNT(*) FROM {S}SI_INSPECCION_F
                     WHERE NUMERO = :pNumero AND ESTADO <> '9' AND RUTA_FOTO_AC IS NULL";
                 using (var cmdCheck = new OracleCommand(querySinAC, connection))
                 {
@@ -626,8 +604,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     var pendientes = Convert.ToInt32(await cmdCheck.ExecuteScalarAsync());
                     if (pendientes == 0)
                     {
-                        const string queryCerrar = @"
-                            UPDATE SIG.SI_INSPECCION SET ESTADO = '6', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                        var queryCerrar = $@"
+                            UPDATE {S}SI_INSPECCION SET ESTADO = '6', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
                         using var cmdCerrar = new OracleCommand(queryCerrar, connection);
                         cmdCerrar.Transaction = transaction;
                         cmdCerrar.CommandTimeout = CmdTimeoutSec;
@@ -670,9 +648,9 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 // 1. Bloquear el registro y verificar estado actual
-                const string querySelect = @"
+                var querySelect = $@"
                     SELECT ESTADO 
-                    FROM SIG.SI_INSPECCION 
+                    FROM {S}SI_INSPECCION 
                     WHERE NUMERO = :pNumero 
                     FOR UPDATE NOWAIT";
 
@@ -703,8 +681,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
 
                 // 2. Anular cabecera
-                const string queryUpdate = @"
-                    UPDATE SIG.SI_INSPECCION
+                var queryUpdate = $@"
+                    UPDATE {S}SI_INSPECCION
                     SET ESTADO = '9',
                         A_MDUSER = :pUsuario,
                         A_MDFECHA = SYSDATE
@@ -721,8 +699,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 }
 
                 // 3. Anular detalle (SI_INSPECCION_F)
-                const string queryUpdateF = @"
-                    UPDATE SIG.SI_INSPECCION_F
+                var queryUpdateF = $@"
+                    UPDATE {S}SI_INSPECCION_F
                     SET ESTADO = '9',
                         A_MDUSER = :pUsuario,
                         A_MDFECHA = SYSDATE
@@ -769,7 +747,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 // Verificar estado cabecera
-                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                var queryLock = $"SELECT ESTADO FROM {S}SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estado;
                 using (var cmdLock = new OracleCommand(queryLock, connection))
                 {
@@ -791,14 +769,14 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 if (tipoFoto == "H")
                 {
                     query = rutaFotoCompleta != null
-                        ? "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, RUTA_FOTO_H = :pRuta, FCH_FOTO_H = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
-                        : "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
+                        ? $"UPDATE {S}SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, RUTA_FOTO_H = :pRuta, FCH_FOTO_H = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
+                        : $"UPDATE {S}SI_INSPECCION_F SET UBICA_FOTO_H = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
                 }
                 else
                 {
                     query = rutaFotoCompleta != null
-                        ? "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, RUTA_FOTO_AC = :pRuta, FCH_FOTO_AC = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
-                        : "UPDATE SIG.SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
+                        ? $"UPDATE {S}SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, RUTA_FOTO_AC = :pRuta, FCH_FOTO_AC = SYSDATE, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem"
+                        : $"UPDATE {S}SI_INSPECCION_F SET UBICA_FOTO_AC = :pUbica, A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero AND ITEM = :pItem";
                 }
 
                 using (var cmdUpdate = new OracleCommand(query, connection))
@@ -841,7 +819,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
 
             try
             {
-                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                var queryLock = $"SELECT ESTADO FROM {S}SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estado;
                 using (var cmdLock = new OracleCommand(queryLock, connection))
                 {
@@ -858,8 +836,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 if (estado == "9")
                     throw new InvalidOperationException($"La inspección #{numero} está anulada y no se puede editar.");
 
-                const string queryUpdate = @"
-                    UPDATE SIG.SI_INSPECCION
+                var queryUpdate = $@"
+                    UPDATE {S}SI_INSPECCION
                     SET CCOSTO = :pCcosto, TIPO = :pTipo,
                         RESP_INSPECCION = :pRespInspeccion, RESP_AREA = :pRespArea,
                         A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE
@@ -910,7 +888,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             var query = $@"
                 SELECT NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H,
                        RUTA_FOTO_AC, FCH_FOTO_AC, UBICA_FOTO_AC, ESTADO
-                FROM SIG.SI_INSPECCION_F
+                FROM {S}SI_INSPECCION_F
                 WHERE NUMERO IN ({inClause}) AND ESTADO <> '9'
                 ORDER BY NUMERO, ITEM";
 
@@ -950,10 +928,10 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
         {
             var resultado = new List<InspeccionFotoDto>();
 
-            const string query = @"
+            var query = $@"
                 SELECT NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H,
                        RUTA_FOTO_AC, FCH_FOTO_AC, UBICA_FOTO_AC, ESTADO
-                FROM SIG.SI_INSPECCION_F
+                FROM {S}SI_INSPECCION_F
                 WHERE NUMERO = :pNumero AND ESTADO <> '9'
                 ORDER BY ITEM";
 
@@ -1000,7 +978,7 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
             try
             {
                 // 1. Verificar estado cabecera
-                const string queryLock = "SELECT ESTADO FROM SIG.SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
+                var queryLock = $"SELECT ESTADO FROM {S}SI_INSPECCION WHERE NUMERO = :pNumero FOR UPDATE NOWAIT";
                 string? estado;
                 using (var cmdLock = new OracleCommand(queryLock, connection))
                 {
@@ -1018,8 +996,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     throw new InvalidOperationException($"La inspección #{numero} está anulada.");
 
                 // 2. Obtener siguiente ITEM
-                const string queryMaxItem = @"
-                    SELECT NVL(MAX(ITEM), 0) FROM SIG.SI_INSPECCION_F WHERE NUMERO = :pNumero";
+                var queryMaxItem = $@"
+                    SELECT NVL(MAX(ITEM), 0) FROM {S}SI_INSPECCION_F WHERE NUMERO = :pNumero";
                 int maxItem;
                 using (var cmdMax = new OracleCommand(queryMaxItem, connection))
                 {
@@ -1039,8 +1017,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 var rutaFotoCompleta = Path.Combine(rutaFoto, nombreArchivo);
 
                 // 4. Insertar en SI_INSPECCION_F
-                const string queryInsert = @"
-                    INSERT INTO SIG.SI_INSPECCION_F
+                var queryInsert = $@"
+                    INSERT INTO {S}SI_INSPECCION_F
                     (NUMERO, ITEM, RUTA_FOTO_H, FCH_FOTO_H, UBICA_FOTO_H, ESTADO, A_ADUSER, A_ADFECHA)
                     VALUES
                     (:pNumero, :pItem, :pRutaFoto, SYSDATE, :pUbicaFoto, '1', :pUsuario, SYSDATE)";
@@ -1060,8 +1038,8 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                 // 5. Reabrir inspección si estaba cerrada
                 if (estado == "6")
                 {
-                    const string queryReabrir = @"
-                        UPDATE SIG.SI_INSPECCION SET ESTADO = '1', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
+                    var queryReabrir = $@"
+                        UPDATE {S}SI_INSPECCION SET ESTADO = '1', A_MDUSER = :pUsuario, A_MDFECHA = SYSDATE WHERE NUMERO = :pNumero";
                     using var cmdReabrir = new OracleCommand(queryReabrir, connection);
                     cmdReabrir.Transaction = transaction;
                     cmdReabrir.CommandTimeout = CmdTimeoutSec;

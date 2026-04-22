@@ -1,4 +1,4 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using FabricaHilos.Models.Sgc;
 
@@ -25,36 +25,14 @@ namespace FabricaHilos.Services.Sgc
         Task<int> GuardarRequerimientoCertificadoAsync(List<FacturaTcDto> facturas);
     }
 
-    public class SgcService : ISgcService
+    public class SgcService : OracleServiceBase, ISgcService
     {
-        private readonly string _baseConnectionString;
         private readonly ILogger<SgcService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public SgcService(IConfiguration configuration, ILogger<SgcService> logger, IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csBuilder.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         private static string? GetStr(OracleDataReader r, string col) =>
@@ -105,7 +83,7 @@ namespace FabricaHilos.Services.Sgc
 
             string fechaFilter = hasFechas ? $@"
                       AND EXISTS (
-                          SELECT 1 FROM SIG.KARDEX_G G
+                          SELECT 1 FROM {S}KARDEX_G G
                           WHERE TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                             AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                             AND G.TIP_DOC_REF       = P.TIPO_DOCTO{fechaClause}
@@ -118,8 +96,8 @@ namespace FabricaHilos.Services.Sgc
                        PAGED.SERIE, PAGED.NUM_PED, PAGED.TIPO_DOCTO, PAGED.ESTADO, PAGED.FECHA,
                        PAGED.COD_CLIENTE, PAGED.NOMBRE, PAGED.RUC, PAGED.DETALLE,
                        PAGED.TOTAL_PEDIDO, PAGED.COD_VENDE, PAGED.MONEDA, PAGED.NRO_SUCUR,
-                       CASE WHEN EXISTS (SELECT 1 FROM SIG.ITEMPED   I  WHERE I.NUM_PED  = PAGED.NUM_PED AND I.SERIE = PAGED.SERIE) THEN 1 ELSE 0 END AS CNT_DETALLE,
-                       CASE WHEN EXISTS (SELECT 1 FROM SIG.PACKING_G PK WHERE PK.NUM_PED = PAGED.NUM_PED) THEN 1 ELSE 0 END AS CNT_PACKING
+                       CASE WHEN EXISTS (SELECT 1 FROM {S}ITEMPED   I  WHERE I.NUM_PED  = PAGED.NUM_PED AND I.SERIE = PAGED.SERIE) THEN 1 ELSE 0 END AS CNT_DETALLE,
+                       CASE WHEN EXISTS (SELECT 1 FROM {S}PACKING_G PK WHERE PK.NUM_PED = PAGED.NUM_PED) THEN 1 ELSE 0 END AS CNT_PACKING
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY P.FECHA DESC, P.NUM_PED DESC) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
@@ -130,13 +108,13 @@ namespace FabricaHilos.Services.Sgc
                            P.SERIE, P.NUM_PED, P.TIPO_DOCTO, P.ESTADO, P.FECHA,
                            P.COD_CLIENTE, P.NOMBRE, P.RUC, P.DETALLE,
                            P.TOTAL_PEDIDO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
-                    FROM SIG.PEDIDO P
+                    FROM {S}PEDIDO P
                     LEFT JOIN (
                         SELECT I.NUM_PED, I.SERIE,
                                SUM(NVL(I.CANTIDAD, 0) - NVL(CASE WHEN I.SALDO_R IS NOT NULL AND I.SALDO_R <> 0 THEN I.SALDO_R ELSE I.SALDO END, 0)) AS TOTAL_DESPACHO,
                                MIN(A.UNIDAD) AS UNIDAD_DESPACHO
-                        FROM SIG.ITEMPED I
-                        LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                        FROM {S}ITEMPED I
+                        LEFT JOIN {S}ARTICUL A ON A.COD_ART = I.COD_ART
                         GROUP BY I.NUM_PED, I.SERIE
                         ) ID ON ID.NUM_PED = P.NUM_PED AND ID.SERIE = P.SERIE
                         WHERE P.ESTADO <> '9'{buscarFilter}{fechaFilter}
@@ -211,11 +189,11 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT P.SERIE, P.NUM_PED, P.TIPO_DOCTO, P.ESTADO, P.FECHA,
                        P.COD_CLIENTE, P.NOMBRE, P.RUC, P.DETALLE,
                        P.TOTAL_PEDIDO, P.TOTAL_FACTURADO, P.COD_VENDE, P.MONEDA, P.NRO_SUCUR
-                FROM SIG.PEDIDO P
+                FROM {S}PEDIDO P
                 WHERE P.SERIE = :serie AND P.NUM_PED = :numPed";
 
             try
@@ -270,7 +248,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, SUM_CANTIDAD, SUM_PRECIO, SUM_CANT_DESPACHO, SUM_DIF_DESPACHO,
                        SERIE, NUM_PED, NRO, COD_ART, TIPO_FIBRA,
                        VALPF, CANTIDAD, PRECIO, SALDO, SALDO_R, IMP_VVB,
@@ -289,8 +267,8 @@ namespace FabricaHilos.Services.Sgc
                            I.ESTADO, I.DETALLE, I.COLOR_DET, I.HILO_DET,
                            I.PRESENTACION, I.R_TIPO, I.R_SERIE, I.R_NUMERO,
                            A.DESCRIPCION AS A_DESCRIP, A.UNIDAD AS A_UNIDAD
-                     FROM SIG.ITEMPED I
-                     LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                     FROM {S}ITEMPED I
+                     LEFT JOIN {S}ARTICUL A ON A.COD_ART = I.COD_ART
                      WHERE I.NUM_PED = :numPed
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -361,11 +339,11 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT I.SERIE, I.NUM_PED, I.NRO, I.COD_ART,
                        A.DESCRIPCION AS A_DESCRIP, A.UNIDAD AS A_UNIDAD
-                FROM SIG.ITEMPED I
-                LEFT JOIN SIG.ARTICUL A ON A.COD_ART = I.COD_ART
+                FROM {S}ITEMPED I
+                LEFT JOIN {S}ARTICUL A ON A.COD_ART = I.COD_ART
                 WHERE I.NUM_PED = :numPed AND I.NRO = :nro";
 
             try
@@ -416,7 +394,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO, FCH_TRANSAC,
                        NOMBRE, RUC, GLOSA, ESTADO, IND_FACT, PESO_TOTAL,
                        TIP_REF, SER_REF, NRO_REF, MOTIVO, MONEDA, SERIE_SUNAT, CNT_DETALLE
@@ -427,9 +405,9 @@ namespace FabricaHilos.Services.Sgc
                            G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                            G.TIP_REF, G.SER_REF, G.NRO_REF,
                            G.MOTIVO, G.MONEDA, G.SERIE_SUNAT,
-                           (SELECT COUNT(*) FROM SIG.KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
-                    FROM SIG.KARDEX_G G
-                    INNER JOIN SIG.PEDIDO P
+                           (SELECT COUNT(*) FROM {S}KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
+                    FROM {S}KARDEX_G G
+                    INNER JOIN {S}PEDIDO P
                             ON TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                            AND G.TIP_DOC_REF        = P.TIPO_DOCTO
                            AND TRIM(G.NRO_DOC_REF)  = TO_CHAR(P.NUM_PED)
@@ -474,13 +452,13 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
                        G.NOMBRE, G.RUC, G.GLOSA, G.ESTADO, G.IND_FACT, G.PESO_TOTAL,
                        G.TIP_REF, G.SER_REF, G.NRO_REF,
                        G.MOTIVO, G.MONEDA, G.SERIE_SUNAT,
-                       (SELECT COUNT(*) FROM SIG.KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
-                FROM SIG.KARDEX_G G
+                       (SELECT COUNT(*) FROM {S}KARDEX_D D WHERE D.COD_ALM = G.COD_ALM AND D.TP_TRANSAC = G.TP_TRANSAC AND D.SERIE = G.SERIE AND D.NUMERO = G.NUMERO) AS CNT_DETALLE
+                FROM {S}KARDEX_G G
                 WHERE G.COD_ALM   = :codAlm
                   AND G.TP_TRANSAC = :tpTransac
                   AND G.SERIE      = :serie
@@ -536,7 +514,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== KARDEX_D (Detalle de Guía) ==========
 
-        // NOTE: Ajuste los nombres de columna de SIG.KARDEX_D según su esquema real.
+        // NOTE: Ajuste los nombres de columna de {S}KARDEX_D según su esquema real.
         public async Task<(List<KardexDDto> Items, int TotalCount)> ObtenerDetalleGuiaAsync(string codAlm, string tpTransac, int serie, int numero, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
@@ -545,7 +523,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, COD_ALM, TP_TRANSAC, SERIE, NUMERO,
                        COD_ART, CANTIDAD, ESTADO, DETALLE, COLOR_DET, A_DESCRIP, A_UNIDAD
                 FROM (
@@ -556,12 +534,12 @@ namespace FabricaHilos.Services.Sgc
                            D.ESTADO, D.DETALLE, D.COLOR_DET,
                            A.DESCRIPCION AS A_DESCRIP,
                            A.UNIDAD      AS A_UNIDAD
-                     FROM SIG.KARDEX_D D
-                     INNER JOIN SIG.KARDEX_G G ON G.COD_ALM    = D.COD_ALM
+                     FROM {S}KARDEX_D D
+                     INNER JOIN {S}KARDEX_G G ON G.COD_ALM    = D.COD_ALM
                                               AND G.TP_TRANSAC  = D.TP_TRANSAC
                                               AND G.SERIE       = D.SERIE
                                               AND G.NUMERO      = D.NUMERO
-                     LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                     LEFT JOIN {S}ARTICUL A ON A.COD_ART = D.COD_ART
                      WHERE G.COD_ALM    = :codAlm
                        AND G.TP_TRANSAC = :tpTransac
                        AND G.SERIE      = :serie
@@ -623,7 +601,7 @@ namespace FabricaHilos.Services.Sgc
         // ========== DOCUVENT (Facturas) ==========
 
         // NOTE: Los campos C_TIPO, C_SERIE, C_NUMERO de KARDEX_G referencian a DOCUVENT.
-        //       Ajuste los nombres de columna de SIG.DOCUVENT según su esquema real.
+        //       Ajuste los nombres de columna de {S}DOCUVENT según su esquema real.
         public async Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasAsync(string? cTipo, string? cSerie, string? cNumero, int page = 1, int pageSize = 10)
         {
             if (string.IsNullOrEmpty(cTipo) || string.IsNullOrEmpty(cSerie) || string.IsNullOrEmpty(cNumero))
@@ -635,7 +613,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO, FECHA, COD_CLIENTE,
                        NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA, CNT_DETALLE
                 FROM (
@@ -644,8 +622,8 @@ namespace FabricaHilos.Services.Sgc
                            F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
                            F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
                            F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
-                           (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
-                    FROM SIG.DOCUVENT F
+                           (SELECT COUNT(*) FROM {S}ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
+                    FROM {S}DOCUVENT F
                     WHERE F.TIPODOC = :tipo
                       AND TRIM(F.SERIE)  = TRIM(:serie)
                       AND TRIM(F.NUMERO) = TRIM(:numero)
@@ -689,12 +667,12 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
                        F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
                        F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
-                       (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
-                FROM SIG.DOCUVENT F
+                       (SELECT COUNT(*) FROM {S}ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
+                FROM {S}DOCUVENT F
                 WHERE F.TIPODOC = :tipo
                   AND TRIM(F.SERIE)  = TRIM(:serie)
                   AND TRIM(F.NUMERO) = TRIM(:numero)";
@@ -745,7 +723,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== ITEMDOCU (Detalle de Factura) ==========
 
-        // NOTE: Ajuste los nombres de columna de SIG.ITEMDOCU según su esquema real.
+        // NOTE: Ajuste los nombres de columna de {S}ITEMDOCU según su esquema real.
         public async Task<(List<ItemDocuDto> Items, int TotalCount)> ObtenerDetalleFacturaAsync(string tipo, string serie, string numero, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
@@ -754,7 +732,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO,
                        COD_ART, CANTIDAD, VVTU, IMP_VVTA, DETALLE, A_DESCRIP
                 FROM (
@@ -763,11 +741,11 @@ namespace FabricaHilos.Services.Sgc
                            D.TIPODOC, D.SERIE, D.NUMERO,
                            D.COD_ART, D.CANTIDAD, D.VVTU, D.IMP_VVTA, D.DETALLE,
                            A.DESCRIPCION AS A_DESCRIP
-                    FROM SIG.ITEMDOCU D
-                    INNER JOIN SIG.DOCUVENT F ON F.TIPODOC = D.TIPODOC
+                    FROM {S}ITEMDOCU D
+                    INNER JOIN {S}DOCUVENT F ON F.TIPODOC = D.TIPODOC
                                              AND TRIM(F.SERIE)  = TRIM(D.SERIE)
                                              AND TRIM(F.NUMERO) = TRIM(D.NUMERO)
-                    LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                    LEFT JOIN {S}ARTICUL A ON A.COD_ART = D.COD_ART
                     WHERE F.TIPODOC = :tipo
                       AND TRIM(F.SERIE)  = TRIM(:serie)
                       AND TRIM(F.NUMERO) = TRIM(:numero)
@@ -824,9 +802,9 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return false;
 
-            const string sql = @"
-                SELECT COUNT(*) FROM SIG.KARDEX_G G
-                INNER JOIN SIG.PEDIDO P
+            var sql = $@"
+                SELECT COUNT(*) FROM {S}KARDEX_G G
+                INNER JOIN {S}PEDIDO P
                         ON TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                        AND G.TIP_DOC_REF        = P.TIPO_DOCTO
                        AND TRIM(G.NRO_DOC_REF)  = TO_CHAR(P.NUM_PED)
@@ -861,13 +839,13 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, TIPO, SERIE, NUMERO, OBSERVACION, SER_REF, NRO_REF, NUM_PED, NUM_ORDCOMPRA
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY P.SERIE, P.NUMERO) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
                            P.TIPO, P.SERIE, P.NUMERO, P.OBSERVACION, P.SER_REF, P.NRO_REF, P.NUM_PED, P.NUM_ORDCOMPRA
-                    FROM SIG.PACKING_G P
+                    FROM {S}PACKING_G P
                     WHERE P.NUM_PED = :pedido
                 )
                 WHERE RN BETWEEN :startRow AND :endRow";
@@ -907,9 +885,9 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT P.TIPO, P.SERIE, P.NUMERO, P.OBSERVACION, P.SER_REF, P.NRO_REF, P.NUM_PED, P.NUM_ORDCOMPRA
-                FROM SIG.PACKING_G P
+                FROM {S}PACKING_G P
                 WHERE P.TIPO   = :tipo
                   AND P.SERIE  = :serie
                   AND P.NUMERO = :numero";
@@ -947,7 +925,7 @@ namespace FabricaHilos.Services.Sgc
             int startRow = (page - 1) * pageSize + 1;
             int endRow   = page * pageSize;
 
-            const string sql = @"
+            var sql = $@"
                 SELECT RN, TOTAL_COUNT, TIPODOC, SERIE, NUMERO, FECHA, COD_CLIENTE,
                        NOMBRE, RUC, ESTADO, MONEDA, VAL_VENTA, IMP_IGV, PRECIO_VTA, CNT_DETALLE
                 FROM (
@@ -956,8 +934,8 @@ namespace FabricaHilos.Services.Sgc
                            F.TIPODOC, F.SERIE, F.NUMERO, F.FECHA, F.COD_CLIENTE,
                            F.NOMBRE, F.RUC, F.ESTADO, F.MONEDA,
                            F.VAL_VENTA, F.IMP_IGV, F.PRECIO_VTA,
-                           (SELECT COUNT(*) FROM SIG.ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
-                    FROM SIG.DOCUVENT F
+                           (SELECT COUNT(*) FROM {S}ITEMDOCU D WHERE D.TIPODOC = F.TIPODOC AND TRIM(D.SERIE) = TRIM(F.SERIE) AND TRIM(D.NUMERO) = TRIM(F.NUMERO)) AS CNT_DETALLE
+                    FROM {S}DOCUVENT F
                     WHERE F.TIP_DOC_REF = :tipo
                       AND TRIM(F.SER_DOC_REF) = TRIM(TO_CHAR(:serie))
                       AND TRIM(F.NRO_DOC_REF) = TRIM(TO_CHAR(:numero))
@@ -1015,12 +993,12 @@ namespace FabricaHilos.Services.Sgc
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return null;
 
-            const string sqlBase = @"
-                SELECT G.COD_ALM, G.TP_TRANSAC, G.SERIE, G.NUMERO, G.FCH_TRANSAC,
+            var sqlBase = $@"
+                SELECT G.COD_ALM
                        G.NOMBRE, G.RUC, G.GLOSA, G.PESO_TOTAL,
                        G.TIP_REF, G.SER_REF, G.NRO_REF, G.NRO_DOC_REF,
                        G.MOTIVO
-                FROM SIG.KARDEX_G G
+                FROM {S}KARDEX_G G
                 WHERE G.COD_ALM    = :codAlm
                   AND G.TP_TRANSAC = :tpTransac
                   AND G.SERIE      = :serie
@@ -1073,11 +1051,11 @@ namespace FabricaHilos.Services.Sgc
             // Campos extra (best-effort: si la columna no existe en el esquema se ignora)
             try
             {
-                const string sqlExtra = @"
-                    SELECT NOM_TRANSPOR, NRO_TRANSPOR, NOM_VEHICULO,
+                var sqlExtra = $@"
+                    SELECT NOM_TRANSPOR
                            DIR_PARTIDA, DIR_LLEGADA, FCH_ENTREGA,
                            NRO_BULTOS, MOD_TRASLADO
-                    FROM SIG.KARDEX_G
+                    FROM {S}KARDEX_G
                     WHERE COD_ALM    = :codAlm
                       AND TP_TRANSAC = :tpTransac
                       AND SERIE      = :serie
@@ -1117,9 +1095,9 @@ namespace FabricaHilos.Services.Sgc
             {
                 try
                 {
-                    const string sqlMotivo = @"
+                    var sqlMotivo = $@"
                         SELECT DESCRIPCION
-                        FROM SIG.TABLAS_AUXILIARES
+                        FROM {S}TABLAS_AUXILIARES
                         WHERE TIPO   = 88
                           AND CODIGO = :codigo";
 
@@ -1142,10 +1120,10 @@ namespace FabricaHilos.Services.Sgc
             // Items de detalle (sin paginación)
             try
             {
-                const string sqlItems = @"
-                    SELECT D.COD_ART, A.DESCRIPCION, A.UNIDAD, D.CANTIDAD
-                    FROM SIG.KARDEX_D D
-                    LEFT JOIN SIG.ARTICUL A ON A.COD_ART = D.COD_ART
+                var sqlItems = $@"
+                    SELECT D.COD_ART
+                    FROM {S}KARDEX_D D
+                    LEFT JOIN {S}ARTICUL A ON A.COD_ART = D.COD_ART
                     WHERE D.COD_ALM    = :codAlm
                       AND D.TP_TRANSAC = :tpTransac
                       AND D.SERIE      = :serie
@@ -1210,14 +1188,14 @@ namespace FabricaHilos.Services.Sgc
             // Filtro de certificados: función sobre el artículo + EXISTS en ITEMPED para verificar el pedido
             string certFilter = string.Empty;
             if (hasGots && hasOcs)
-                certFilter = "\n                          AND SIG.FIBRA_ORG_GOTS(A.COD_ART) = 'S' AND SIG.FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
-                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART IN ('CERTGOTS','CERTOCS'))";
+                certFilter = $"\n                          AND {S}FIBRA_ORG_GOTS(A.COD_ART) = 'S' AND {S}FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
+                             $"\n                          AND EXISTS (SELECT 1 FROM {S}ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART IN ('CERTGOTS','CERTOCS'))";
             else if (hasGots)
-                certFilter = "\n                          AND SIG.FIBRA_ORG_GOTS(A.COD_ART) = 'S'" +
-                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTGOTS')";
+                certFilter = $"\n                          AND {S}FIBRA_ORG_GOTS(A.COD_ART) = 'S'" +
+                             $"\n                          AND EXISTS (SELECT 1 FROM {S}ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTGOTS')";
             else if (hasOcs)
-                certFilter = "\n                          AND SIG.FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
-                             "\n                          AND EXISTS (SELECT 1 FROM SIG.ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
+                certFilter = $"\n                          AND {S}FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
+                             $"\n                          AND EXISTS (SELECT 1 FROM {S}ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1282,45 +1260,45 @@ namespace FabricaHilos.Services.Sgc
                             CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
                             MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
                             MAX(RC.NUM_CER)                                         AS ""NUM_CER""
-                        FROM SIG.PEDIDO P
-                        LEFT  JOIN SIG.KARDEX_G G
+                        FROM {S}PEDIDO P
+                        LEFT  JOIN {S}KARDEX_G G
                                 ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                                AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                                AND G.TIP_DOC_REF       = P.TIPO_DOCTO
                                AND G.ESTADO <> '9'
-                        LEFT  JOIN SIG.KARDEX_D D
+                        LEFT  JOIN {S}KARDEX_D D
                                 ON D.COD_ALM    = G.COD_ALM
                                AND D.TP_TRANSAC = G.TP_TRANSAC
                                AND D.SERIE      = G.SERIE
                                AND D.NUMERO     = G.NUMERO
-                        LEFT  JOIN SIG.DOCUVENT F
+                        LEFT  JOIN {S}DOCUVENT F
                                 ON F.TIPODOC       = G.TIP_REF
                                AND TRIM(F.SERIE)   = TRIM(G.SER_REF)
                                AND TRIM(F.NUMERO)  = TRIM(G.NRO_REF)
                                AND F.ESTADO <> '9'
                                AND F.TIP_DOC_REF IN ('21','23','PL')
-                        LEFT  JOIN SIG.ITEMDOCU ID
+                        LEFT  JOIN {S}ITEMDOCU ID
                                 ON ID.TIPODOC       = F.TIPODOC
                                AND TRIM(ID.SERIE)   = TRIM(F.SERIE)
                                AND TRIM(ID.NUMERO)  = TRIM(F.NUMERO)
                                AND ID.COD_ART       = D.COD_ART
-                        LEFT  JOIN SIG.ARTICUL A
+                        LEFT  JOIN {S}ARTICUL A
                                 ON A.COD_ART = ID.COD_ART
                                AND A.TP_ART = 'T'
-                        LEFT  JOIN SIG.ITEMPED I
+                        LEFT  JOIN {S}ITEMPED I
                                 ON I.NUM_PED = P.NUM_PED
                                AND I.SERIE   = P.SERIE
                                AND I.COD_ART = ID.COD_ART
-                        LEFT  JOIN SIG.REQ_CERT_D RD
+                        LEFT  JOIN {S}REQ_CERT_D RD
                                 ON RD.TIPODOC = F.TIPODOC
                                AND TRIM(RD.SERIE) = TRIM(F.SERIE)
                                AND RD.NUMERO = TO_NUMBER(TRIM(F.NUMERO))
-                        LEFT  JOIN SIG.REQ_CERT RC
+                        LEFT  JOIN {S}REQ_CERT RC
                                 ON RC.NUM_REQ = RD.NUM_REQ
                         WHERE P.ESTADO <> '9'
                           AND ID.COD_ART IS NOT NULL
                           AND I.COD_ART  IS NOT NULL
-                          AND SIG.FIBRA_ORG(A.COD_ART) = 'S'{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
+                          AND {S}FIBRA_ORG(A.COD_ART) = 'S'{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
                             F.TIPODOC,
                             F.SERIE,
@@ -1433,7 +1411,7 @@ namespace FabricaHilos.Services.Sgc
                 try
                 {
                     // 1. Obtener el siguiente número de requerimiento usando la secuencia
-                    string sqlNumReq = "SELECT SIG.SEQ_REQ_CERT.NEXTVAL FROM DUAL";
+                    string sqlNumReq = $"SELECT {S}SEQ_REQ_CERT.NEXTVAL FROM DUAL";
 
                     using (var cmdNumReq = new OracleCommand(sqlNumReq, conn))
                     {
@@ -1446,8 +1424,8 @@ namespace FabricaHilos.Services.Sgc
                     string codCliente = facturas.First().CodCliente;
                     string codArt = facturas.First().CodArt;
                     string codVende = facturas.First().CodVende;
-                    string sqlReqCer = @"
-                        INSERT INTO SIG.REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, COD_VENDE, ESTADO, A_ADUSER, A_ADFECHA)
+                    string sqlReqCer = $@"
+                        INSERT INTO {S}REQ_CERT (NUM_REQ, FECHA, COD_CLIENTE, COD_ART, COD_VENDE, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES (:numReq, SYSDATE, :codCliente, :codArt, :codVende, 1, :adUser, SYSDATE)";
 
                     using (var cmdReqCer = new OracleCommand(sqlReqCer, conn))
@@ -1463,8 +1441,8 @@ namespace FabricaHilos.Services.Sgc
                     }
 
                     // 3. Insertar en REQ_CER_D (todas las facturas)
-                    string sqlReqCerD = @"
-                        INSERT INTO SIG.REQ_CERT_D (NUM_REQ, TIPODOC, SERIE, NUMERO, A_ADUSER, A_ADFECHA)
+                    string sqlReqCerD = $@"
+                        INSERT INTO {S}REQ_CERT_D (NUM_REQ, TIPODOC, SERIE, NUMERO, A_ADUSER, A_ADFECHA)
                         VALUES (:numReq, :tipodoc, :serie, :numero, :adUser, SYSDATE)";
 
                     foreach (var factura in facturas)

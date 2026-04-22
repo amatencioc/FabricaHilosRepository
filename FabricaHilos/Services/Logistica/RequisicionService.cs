@@ -45,40 +45,19 @@ public interface IRequisicionService
         IEnumerable<(string TipDoc, int Serie, long NumReq)> claves);
 }
 
-public class RequisicionService : IRequisicionService
+public class RequisicionService : OracleServiceBase, IRequisicionService
 {
-    private readonly string _baseConnectionString;
     private readonly ILogger<RequisicionService> _logger;
-    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public RequisicionService(IConfiguration configuration,
         ILogger<RequisicionService> logger,
         IHttpContextAccessor httpContextAccessor)
+        : base(configuration, httpContextAccessor)
     {
-        _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-            ?? throw new InvalidOperationException("Oracle connection string not found.");
         _logger = logger;
-        _httpContextAccessor = httpContextAccessor;
     }
 
-    private string GetOracleConnectionString()
-    {
-        var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-        var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-        if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-        {
-            var csb = new OracleConnectionStringBuilder(_baseConnectionString)
-            {
-                UserID   = oraUser,
-                Password = oraPass
-            };
-            return csb.ToString();
-        }
-        return _baseConnectionString;
-    }
-
-    private static string?   GetStr(OracleDataReader r, string col)     => r[col] == DBNull.Value ? null : r[col]?.ToString();
+    private static string?   GetStr(OracleDataReader r, string col)      => r[col] == DBNull.Value ? null : r[col]?.ToString();
     private static decimal    GetDec(OracleDataReader r, string col)     => r[col] == DBNull.Value ? 0m   : Convert.ToDecimal(r[col]);
     private static decimal?   GetNullDec(OracleDataReader r, string col) => r[col] == DBNull.Value ? null : Convert.ToDecimal(r[col]);
     private static DateTime?  GetDt(OracleDataReader r, string col)      => r[col] == DBNull.Value ? null : Convert.ToDateTime(r[col]);
@@ -147,9 +126,9 @@ public class RequisicionService : IRequisicionService
                        R.F_RECIBE, R.RECIBE,
                        R.FCH_ENTREGA_LOGIST, R.NOTA_ANULACION,
                        R.A_ADUSER, R.A_ADFECHA, R.A_MDUSER, R.A_MDFECHA,
-                       (SELECT COUNT(*)   FROM ITEMREQ I WHERE I.TIPDOC=R.TIPDOC AND I.SERIE=R.SERIE AND I.NUMREQ=R.NUMREQ) AS TOTAL_ITEMS,
-                       (SELECT COUNT(*)   FROM ITEMREQ I WHERE I.TIPDOC=R.TIPDOC AND I.SERIE=R.SERIE AND I.NUMREQ=R.NUMREQ AND I.ID_GRUPO IS NOT NULL) AS ITEMS_CON_GRUPO
-                FROM REQUISICION R
+                              (SELECT COUNT(*)   FROM {S}ITEMREQ I WHERE I.TIPDOC=R.TIPDOC AND I.SERIE=R.SERIE AND I.NUMREQ=R.NUMREQ) AS TOTAL_ITEMS,
+                              (SELECT COUNT(*)   FROM {S}ITEMREQ I WHERE I.TIPDOC=R.TIPDOC AND I.SERIE=R.SERIE AND I.NUMREQ=R.NUMREQ AND I.ID_GRUPO IS NOT NULL) AS ITEMS_CON_GRUPO
+                       FROM {S}REQUISICION R
                 {whereClause}
             ) PAGED
             WHERE PAGED.RN BETWEEN :startRow AND :endRow";
@@ -201,7 +180,7 @@ public class RequisicionService : IRequisicionService
 
     public async Task<RequisicionDto?> ObtenerRequisicionAsync(string tipDoc, int serie, long numReq)
     {
-        const string sql = @"
+        var sql = $@"
             SELECT TIPDOC, SERIE, NUMREQ, CENTRO_COSTO, PROVEEDORES,
                    FECHA, F_ENTREGA, RESPONSABLE, PRIORIDAD, OBSERVACION,
                    ESTADO, DESTINO, IND_SERV, IMPSTO, AFECTO_IGV, AFECTO_IRENTA,
@@ -210,7 +189,7 @@ public class RequisicionService : IRequisicionService
                    F_RECIBE, RECIBE,
                    FCH_ENTREGA_LOGIST, NOTA_ANULACION,
                    A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA
-            FROM REQUISICION
+            FROM {S}REQUISICION
             WHERE TIPDOC = :tipDoc AND SERIE = :serie AND NUMREQ = :numReq";
 
         try
@@ -239,7 +218,7 @@ public class RequisicionService : IRequisicionService
 
     public async Task<List<ItemReqDto>> ObtenerItemsAsync(string tipDoc, int serie, long numReq)
     {
-        const string sql = @"
+        var sql = $@"
             SELECT I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
                    I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
                    I.MONEDA, I.PRECIO,
@@ -247,8 +226,8 @@ public class RequisicionService : IRequisicionService
                    I.ID_GRUPO, I.F_APROBADO, I.OBSERVACIONES,
                    I.A_ADUSER, I.A_ADFECHA, I.A_MDUSER, I.A_MDFECHA,
                    MAX(D.NRO_DOC_REF) AS NRO_DOC_REF
-            FROM ITEMREQ I
-            LEFT JOIN DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+            FROM {S}ITEMREQ I
+            LEFT JOIN {S}DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
             WHERE I.TIPDOC = :tipDoc AND I.SERIE = :serie AND I.NUMREQ = :numReq
             GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
                    I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
@@ -355,7 +334,7 @@ public async Task<Dictionary<string, string>> ObtenerNombresPersonalAsync(IEnume
     if (lista.Count == 0) return result;
 
     var paramNames = lista.Select((_, i) => $":c{i}").ToList();
-    var sql = $"SELECT C_CODIGO, NOMBRE_CORTO FROM V_PERSONAL WHERE SITUACION = '1' AND C_CODIGO IN ({string.Join(",", paramNames)})";
+    var sql = $"SELECT C_CODIGO, NOMBRE_CORTO FROM {S}V_PERSONAL WHERE SITUACION = '1' AND C_CODIGO IN ({string.Join(",", paramNames)})";
 
     try
     {
@@ -389,7 +368,7 @@ public async Task<Dictionary<string, string>> ObtenerDescripcionesArticulosAsync
     if (lista.Count == 0) return result;
 
     var paramNames = lista.Select((_, i) => $":c{i}").ToList();
-    var sql = $"SELECT COD_ART, DESCRIPCION FROM SIG.ARTICUL WHERE COD_ART IN ({string.Join(",", paramNames)})";
+    var sql = $"SELECT COD_ART, DESCRIPCION FROM {S}ARTICUL WHERE COD_ART IN ({string.Join(",", paramNames)})";
 
     try
     {
@@ -423,7 +402,7 @@ public async Task<Dictionary<string, string>> ObtenerDescripcionesTablaAuxiliarA
     if (lista.Count == 0) return result;
 
     var paramNames = lista.Select((_, i) => $":c{i}").ToList();
-    var sql = $"SELECT CODIGO, DESCRIPCION FROM SIG.TABLAS_AUXILIARES WHERE TIPO = :tipo AND CODIGO IN ({string.Join(",", paramNames)})";
+    var sql = $"SELECT CODIGO, DESCRIPCION FROM {S}TABLAS_AUXILIARES WHERE TIPO = :tipo AND CODIGO IN ({string.Join(",", paramNames)})";
 
     try
     {
@@ -458,7 +437,7 @@ public async Task<Dictionary<string, string>> ObtenerDescripcionesCentroCostosAs
     if (lista.Count == 0) return result;
 
     var paramNames = lista.Select((_, i) => $":c{i}").ToList();
-    var sql = $"SELECT CENTRO_COSTO, NOMBRE FROM SIG.CENTRO_DE_COSTOS WHERE CENTRO_COSTO IN ({string.Join(",", paramNames)})";
+    var sql = $"SELECT CENTRO_COSTO, NOMBRE FROM {S}CENTRO_DE_COSTOS WHERE CENTRO_COSTO IN ({string.Join(",", paramNames)})";
 
     try
     {
@@ -493,7 +472,7 @@ public async Task ActualizarIdGrupoItemsAsync(
     if (lista.Count == 0) return;
 
     var paramNames = lista.Select((_, i) => $":ord{i}").ToList();
-    var sql = $"UPDATE ITEMREQ SET ID_GRUPO = :idGrupo" +
+    var sql = $"UPDATE {S}ITEMREQ SET ID_GRUPO = :idGrupo" +
               $" WHERE TIPDOC = :tipDoc AND SERIE = :serie AND NUMREQ = :numReq" +
               $" AND ORDEN IN ({string.Join(",", paramNames)})";
 
@@ -520,20 +499,20 @@ public async Task ActualizarIdGrupoItemsAsync(
 
 public async Task<long> ObtenerSiguienteIdGrupoAsync()
 {
-    const string sql = "SELECT SIG.LG_GRUPO_SEQ.NEXTVAL FROM DUAL";
+    var sqlSeq = $"SELECT {S}LG_GRUPO_SEQ.NEXTVAL FROM DUAL";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
-        await using var cmd = new OracleCommand(sql, con);
+        await using var cmd = new OracleCommand(sqlSeq, con);
         var valor = await cmd.ExecuteScalarAsync();
         return Convert.ToInt64(valor);
     }
     catch (OracleException ex) when (ex.Number == 2289)
     {
-        _logger.LogError(ex, "La secuencia SIG.LG_GRUPO_SEQ no existe en Oracle. Ejecutar: FabricaHilos/Data/Logistica/CREATE_LG_GRUPO_SEQ.sql");
+        _logger.LogError(ex, "La secuencia LG_GRUPO_SEQ no existe en el esquema {Schema}. Ejecutar: FabricaHilos/Data/Logistica/CREATE_LG_GRUPO_SEQ.sql", S);
         throw new InvalidOperationException(
-            "La secuencia SIG.LG_GRUPO_SEQ no existe en la base de datos. " +
+            $"La secuencia {S}LG_GRUPO_SEQ no existe en la base de datos. " +
             "Solicite al DBA ejecutar el script: Data/Logistica/CREATE_LG_GRUPO_SEQ.sql", ex);
     }
     catch (Exception ex)
@@ -545,7 +524,7 @@ public async Task<long> ObtenerSiguienteIdGrupoAsync()
 
 public async Task AprobarGrupoAsync(long idGrupo)
 {
-    const string sql = "UPDATE ITEMREQ SET F_APROBADO = SYSDATE WHERE ID_GRUPO = :idGrupo";
+    var sql = $"UPDATE {S}ITEMREQ SET F_APROBADO = SYSDATE WHERE ID_GRUPO = :idGrupo";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
@@ -563,7 +542,7 @@ public async Task AprobarGrupoAsync(long idGrupo)
 
 public async Task DesaprobarGrupoAsync(long idGrupo)
 {
-    const string sql = "UPDATE ITEMREQ SET F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    var sql = $"UPDATE {S}ITEMREQ SET F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
@@ -581,7 +560,7 @@ public async Task DesaprobarGrupoAsync(long idGrupo)
 
 public async Task LimpiarIdGrupoAsync(long idGrupo)
 {
-    const string sql = "UPDATE ITEMREQ SET ID_GRUPO = NULL, F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    var sql = $"UPDATE {S}ITEMREQ SET ID_GRUPO = NULL, F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
@@ -621,7 +600,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
         FROM (
             SELECT TIPDOC, SERIE, NUMREQ, ID_GRUPO,
                    MAX(CASE WHEN F_APROBADO IS NOT NULL THEN 1 ELSE 0 END) AS APROBADO
-            FROM   ITEMREQ
+            FROM   {S}ITEMREQ
             WHERE  ({whereIn})
               AND  ID_GRUPO IS NOT NULL
             GROUP BY TIPDOC, SERIE, NUMREQ, ID_GRUPO
@@ -668,8 +647,8 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 SELECT I.TIPDOC, I.SERIE, I.NUMREQ,
                        COUNT(*)                                                            AS ITEMS_CON_OC,
                        SUM(CASE WHEN I.F_APROBADO IS NOT NULL THEN 1 ELSE 0 END)          AS ITEMS_APROBADOS
-                FROM   ITEMREQ I
-                JOIN   DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+                FROM   {S}ITEMREQ I
+                JOIN   {S}DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
                                      AND D.NRO_DOC_REF IS NOT NULL
                 WHERE  ({string.Join(" OR ", paramPairs2)})
                 GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ";
@@ -701,7 +680,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 $"(TIPDOC = :octd{i} AND SERIE = :ocsr{i} AND NUMREQ = :ocnr{i})").ToList();
             string sqlOC = $@"
                 SELECT DISTINCT TIPDOC, SERIE, NUMREQ, NRO_DOC_REF
-                FROM   DESP_ITEMREQ
+                FROM   {S}DESP_ITEMREQ
                 WHERE  NRO_DOC_REF IS NOT NULL
                   AND  ({string.Join(" OR ", paramPairsOC)})
                 ORDER BY TIPDOC, SERIE, NUMREQ, NRO_DOC_REF";
@@ -737,8 +716,8 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                        COUNT(DISTINCT D.NRO_DOC_REF)                                  AS OC_TOTAL,
                        COUNT(DISTINCT CASE WHEN RD.NUM_REF IS NOT NULL
                                            THEN D.NRO_DOC_REF END)                   AS OC_FACTURADAS
-                FROM   DESP_ITEMREQ D
-                LEFT JOIN REGISTRO_DIARIO RD
+                FROM   {S}DESP_ITEMREQ D
+                LEFT JOIN {S}REGISTRO_DIARIO RD
                        ON RD.NUM_REF = D.NRO_DOC_REF
                       AND RD.TIPO = 'RS'
                 WHERE  D.NRO_DOC_REF IS NOT NULL
@@ -776,11 +755,11 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
                        COUNT(DISTINCT RD.NUMERO)                                       AS FACT_TOTAL,
                        COUNT(DISTINCT CASE WHEN FP.SALDO = 0 THEN RD.NUMERO END)       AS FACT_PAGADAS
-                FROM   DESP_ITEMREQ D
-                JOIN   REGISTRO_DIARIO RD
+                FROM   {S}DESP_ITEMREQ D
+                JOIN   {S}REGISTRO_DIARIO RD
                        ON RD.NUM_REF = D.NRO_DOC_REF
                       AND RD.TIPO = 'RS'
-                LEFT JOIN FACTPAG FP
+                LEFT JOIN {S}FACTPAG FP
                        ON FP.TIPDOC      = RD.TIPDOC
                       AND FP.SERIE_NUM   = RD.SERIE
                       AND FP.NUMERO      = RD.NUMERO
@@ -842,7 +821,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
         FROM (
             SELECT TIPDOC, SERIE, NUMREQ, ID_GRUPO,
                    MAX(CASE WHEN F_APROBADO IS NOT NULL THEN 1 ELSE 0 END) AS APROBADO
-            FROM   ITEMREQ
+            FROM   {S}ITEMREQ
             WHERE  ({whereIn})
               AND  ID_GRUPO IS NOT NULL
             GROUP BY TIPDOC, SERIE, NUMREQ, ID_GRUPO
@@ -892,8 +871,8 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 SELECT I.TIPDOC, I.SERIE, I.NUMREQ,
                        COUNT(*)                                                            AS ITEMS_CON_OC,
                        SUM(CASE WHEN I.F_APROBADO IS NOT NULL THEN 1 ELSE 0 END)          AS ITEMS_APROBADOS
-                FROM   ITEMREQ I
-                JOIN   DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+                FROM   {S}ITEMREQ I
+                JOIN   {S}DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
                                      AND D.NRO_DOC_REF IS NOT NULL
                 WHERE  ({string.Join(" OR ", paramPairs2b)})
                 GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ";
@@ -923,7 +902,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 $"(TIPDOC = :octd{i} AND SERIE = :ocsr{i} AND NUMREQ = :ocnr{i})").ToList();
             string sqlOCb = $@"
                 SELECT DISTINCT TIPDOC, SERIE, NUMREQ, NRO_DOC_REF
-                FROM   DESP_ITEMREQ
+                FROM   {S}DESP_ITEMREQ
                 WHERE  NRO_DOC_REF IS NOT NULL
                   AND  ({string.Join(" OR ", paramPairsOCb)})
                 ORDER BY TIPDOC, SERIE, NUMREQ, NRO_DOC_REF";
@@ -958,8 +937,8 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                        COUNT(DISTINCT D.NRO_DOC_REF)                                  AS OC_TOTAL,
                        COUNT(DISTINCT CASE WHEN RD.NUM_REF IS NOT NULL
                                            THEN D.NRO_DOC_REF END)                   AS OC_FACTURADAS
-                FROM   DESP_ITEMREQ D
-                LEFT JOIN REGISTRO_DIARIO RD
+                FROM   {S}DESP_ITEMREQ D
+                LEFT JOIN {S}REGISTRO_DIARIO RD
                        ON RD.NUM_REF = D.NRO_DOC_REF
                       AND RD.TIPO = 'RS'
                 WHERE  D.NRO_DOC_REF IS NOT NULL
@@ -996,11 +975,11 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
                 SELECT D.TIPDOC, D.SERIE, D.NUMREQ,
                        COUNT(DISTINCT RD.NUMERO)                                       AS FACT_TOTAL,
                        COUNT(DISTINCT CASE WHEN FP.SALDO = 0 THEN RD.NUMERO END)       AS FACT_PAGADAS
-                FROM   DESP_ITEMREQ D
-                JOIN   REGISTRO_DIARIO RD
+                FROM   {S}DESP_ITEMREQ D
+                JOIN   {S}REGISTRO_DIARIO RD
                        ON RD.NUM_REF = D.NRO_DOC_REF
                       AND RD.TIPO = 'RS'
-                LEFT JOIN FACTPAG FP
+                LEFT JOIN {S}FACTPAG FP
                        ON FP.TIPDOC      = RD.TIPDOC
                       AND FP.SERIE_NUM   = RD.SERIE
                       AND FP.NUMERO      = RD.NUMERO

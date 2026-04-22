@@ -14,8 +14,8 @@ public class LecturaCorreosRepository : ILecturaCorreosRepository
 
     public LecturaCorreosRepository(IConfiguration configuration, ILogger<LecturaCorreosRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("OracleConnection")
-            ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'OracleConnection'.");
+        _connectionString = configuration.GetConnectionString("LaColonialConnection")
+            ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'LaColonialConnection'.");
         _logger = logger;
     }
 

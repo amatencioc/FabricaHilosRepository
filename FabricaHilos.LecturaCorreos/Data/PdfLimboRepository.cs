@@ -13,8 +13,8 @@ public class PdfLimboRepository : IPdfLimboRepository
 
     public PdfLimboRepository(IConfiguration configuration, ILogger<PdfLimboRepository> logger)
     {
-        _connStr = configuration.GetConnectionString("OracleConnection")
-            ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'OracleConnection'.");
+        _connStr = configuration.GetConnectionString("LaColonialConnection")
+            ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'LaColonialConnection'.");
         _logger = logger;
     }
 

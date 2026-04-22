@@ -13,8 +13,8 @@ public class LogisticaRepository : ILogisticaRepository
 
     public LogisticaRepository(IConfiguration configuration, ILogger<LogisticaRepository> logger)
     {
-        _connStr = configuration.GetConnectionString("OracleConnection")
-                   ?? throw new InvalidOperationException("ConnectionStrings:OracleConnection no configurada.");
+        _connStr = configuration.GetConnectionString("LaColonialConnection")
+                   ?? throw new InvalidOperationException("ConnectionStrings:LaColonialConnection no configurada.");
         _logger = logger;
     }
 

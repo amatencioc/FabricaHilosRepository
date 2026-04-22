@@ -108,6 +108,11 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(keysFolder)
     .SetApplicationName("FabricaHilos");
 
+// Registrar tema de empresa (singleton: no cambia en tiempo de ejecución)
+builder.Services.Configure<FabricaHilos.Config.EmpresaTemaOptions>(
+    builder.Configuration.GetSection(FabricaHilos.Config.EmpresaTemaOptions.SectionName));
+builder.Services.AddScoped<IEmpresaTemaService, EmpresaTemaService>();
+
 // Registrar servicios de negocio
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();

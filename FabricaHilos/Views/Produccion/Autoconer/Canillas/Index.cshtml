@@ -734,7 +734,7 @@
             if (!document.getElementById('tituloSelect').value) errores.push('Título');
 
             if (errores.length > 0) {
-                alert('Los siguientes campos son obligatorios:\\n\\n' + errores.join('\\n'));
+                AppAlert('Los siguientes campos son obligatorios:\n\n' + errores.join('\n'), 'Campos requeridos', 'warning');
                 return false;
             }
 
@@ -932,7 +932,7 @@
 
         async function guardarTodos() {
             if (registros.length === 0) {
-                alert('No hay registros para guardar.');
+                AppAlert('No hay registros para guardar.', 'Aviso', 'warning');
                 return;
             }
 
@@ -981,15 +981,15 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    alert(result.message);
+                    await AppAlert(result.message, 'Éxito', 'success');
                     registros = [];
                     actualizarTabla();
                     window.location.href = '@Url.Action("Index", "Autoconer")';
                 } else {
-                    alert('Error al guardar: ' + result.message);
+                    AppAlert('Error al guardar: ' + result.message, 'Error', 'danger');
                 }
             } catch (error) {
-                alert('Error al guardar los registros: ' + error.message);
+                AppAlert('Error al guardar los registros: ' + error.message, 'Error', 'danger');
             } finally {
                 btnGuardar.disabled = false;
                 btnGuardar.innerHTML = '<i class="bi bi-save me-2"></i>Guardar Todos los Registros';

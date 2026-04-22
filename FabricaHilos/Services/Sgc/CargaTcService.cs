@@ -1,4 +1,4 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using System.Data;
 using FabricaHilos.Models.Sgc;
 
@@ -20,38 +20,14 @@ namespace FabricaHilos.Services.Sgc
         Task<List<ReqCertOrdenCompraDto>> ObtenerOrdenesCompraPorRequerimientoAsync(int numReq);
     }
 
-    public class CargaTcService : ICargaTcService
+    public class CargaTcService : OracleServiceBase, ICargaTcService
     {
-        private readonly string _baseConnectionString;
-        private readonly IConfiguration _configuration;
         private readonly ILogger<CargaTcService> _logger;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public CargaTcService(IConfiguration configuration, ILogger<CargaTcService> logger, IHttpContextAccessor httpContextAccessor)
+            : base(configuration, httpContextAccessor)
         {
-            _baseConnectionString = configuration.GetConnectionString("OracleConnection")
-                ?? throw new InvalidOperationException("Oracle connection string not found.");
-            _configuration = configuration;
             _logger = logger;
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        private string GetOracleConnectionString()
-        {
-            var oraUser = _httpContextAccessor.HttpContext?.Session.GetString("OracleUser");
-            var oraPass = _httpContextAccessor.HttpContext?.Session.GetString("OraclePass");
-
-            if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-            {
-                var csBuilder = new OracleConnectionStringBuilder(_baseConnectionString)
-                {
-                    UserID = oraUser,
-                    Password = oraPass
-                };
-                return csBuilder.ToString();
-            }
-
-            return _baseConnectionString;
         }
 
         private static int? SafeGetInt32(OracleDataReader reader, string columnName)
@@ -150,8 +126,8 @@ namespace FabricaHilos.Services.Sgc
                                 rc.A_MDFECHA,
                                 c.NOMBRE AS RAZON_SOCIAL,
                                 c.RUC
-                            FROM SIG.REQ_CERT rc
-                            LEFT JOIN SIG.CLIENTES c ON rc.COD_CLIENTE = c.COD_CLIENTE
+                            FROM {S}REQ_CERT rc
+                            LEFT JOIN {S}CLIENTES c ON rc.COD_CLIENTE = c.COD_CLIENTE
                             WHERE 1=1{buscarFilter}{fechaFilter}
                         ) Q
                     )
@@ -215,7 +191,7 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT 
                         rc.NUM_REQ,
                         rc.FECHA,
@@ -233,8 +209,8 @@ namespace FabricaHilos.Services.Sgc
                         rc.A_MDFECHA,
                         c.NOMBRE AS RAZON_SOCIAL,
                         c.RUC
-                    FROM SIG.REQ_CERT rc
-                    LEFT JOIN SIG.CLIENTES c ON rc.COD_CLIENTE = c.COD_CLIENTE
+                    FROM {S}REQ_CERT rc
+                    LEFT JOIN {S}CLIENTES c ON rc.COD_CLIENTE = c.COD_CLIENTE
                     WHERE rc.NUM_REQ = :NumReq";
 
                 using var cmd = new OracleCommand(sql, conn);
@@ -284,7 +260,7 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT 
                         NUM_REQ,
                         TIPODOC,
@@ -294,7 +270,7 @@ namespace FabricaHilos.Services.Sgc
                         A_ADFECHA,
                         A_MDUSER,
                         A_MDFECHA
-                    FROM SIG.REQ_CERT_D
+                    FROM {S}REQ_CERT_D
                     WHERE NUM_REQ = :NumReq
                     ORDER BY TIPODOC, SERIE, NUMERO";
 
@@ -333,7 +309,7 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = "SELECT COD_CLIENTE, RUC, NOMBRE AS RAZON_SOCIAL FROM SIG.CLIENTES WHERE COD_CLIENTE = :CodCliente";
+                var sql = $"SELECT COD_CLIENTE, RUC, NOMBRE AS RAZON_SOCIAL FROM {S}CLIENTES WHERE COD_CLIENTE = :CodCliente";
 
                 using var cmd = new OracleCommand(sql, conn);
                 cmd.Parameters.Add(new OracleParameter("CodCliente", codCliente));
@@ -369,7 +345,7 @@ namespace FabricaHilos.Services.Sgc
                 try
                 {
                     // 1. Bloquear el registro antes de actualizar (FOR UPDATE NOWAIT)
-                    const string querySel = "SELECT NUM_CER FROM SIG.REQ_CERT WHERE NUM_REQ = :NumReq FOR UPDATE NOWAIT";
+                    var querySel = $"SELECT NUM_CER FROM {S}REQ_CERT WHERE NUM_REQ = :NumReq FOR UPDATE NOWAIT";
 
                     using (var cmdSel = new OracleCommand(querySel, conn))
                     {
@@ -388,8 +364,8 @@ namespace FabricaHilos.Services.Sgc
                     _logger.LogDebug("Registro NUM_REQ={NumReq} bloqueado correctamente", modelo.NumReq);
 
                     // 2. Ejecutar el UPDATE
-                    var sql = @"
-                        UPDATE SIG.REQ_CERT 
+                    var sql = $@"
+                        UPDATE {S}REQ_CERT 
                         SET 
                             NUM_CER = :NumCer,
                             A_MDUSER = :Usuario,
@@ -479,9 +455,9 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT NRO_LISTA, IMPORTE
-                    FROM SIG.LISPRED
+                    FROM {S}LISPRED
                     WHERE COD_ART = :CodArt
                     AND ROWNUM = 1";
 
@@ -518,9 +494,9 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT C_NOMBRE, C_EMAIL
-                    FROM SIG.CS_USER
+                    FROM {S}CS_USER
                     WHERE COD_ASESOR = :CodVende";
 
                 using var cmd = new OracleCommand(sql, conn);
@@ -562,9 +538,9 @@ namespace FabricaHilos.Services.Sgc
                 {
                     int nuevoNumero;
 
-                    var sqlMax = @"
+                    var sqlMax = $@"
                         SELECT NVL(MAX(NUMERO), 0) + 1 AS NUEVO_NUMERO
-                        FROM SIG.V_FACTAUT
+                        FROM {S}V_FACTAUT
                         WHERE TIPO = 'FA' AND SERIE = 1";
 
                     using (var cmdMax = new OracleCommand(sqlMax, conn))
@@ -577,8 +553,8 @@ namespace FabricaHilos.Services.Sgc
                     string tipoCertificado = codArt.Length > 4 ? codArt.Substring(4) : codArt;
                     string concepto = $"REQ. EMISION. FACT. {tipoCertificado}";
 
-                    var sqlInsert = @"
-                        INSERT INTO SIG.V_FACTAUT 
+                    var sqlInsert = $@"
+                        INSERT INTO {S}V_FACTAUT 
                         (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES 
                         ('FA', 1, :Numero, :Concepto, 'GC', :NumReq, 0, :Usuario, SYSDATE)";
@@ -622,32 +598,32 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT DISTINCT 
                         CASE 
                             WHEN P.NUM_PED IS NOT NULL AND I.NRO IS NOT NULL 
                             THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)
                             ELSE NULL 
                         END AS PEDIDO
-                    FROM SIG.REQ_CERT_D rcd
-                    INNER JOIN SIG.DOCUVENT F
+                    FROM {S}REQ_CERT_D rcd
+                    INNER JOIN {S}DOCUVENT F
                         ON F.TIPODOC = rcd.TIPODOC
                         AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
                         AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
-                    LEFT JOIN SIG.KARDEX_G G
+                    LEFT JOIN {S}KARDEX_G G
                         ON G.TIP_REF = F.TIPODOC
                         AND TRIM(G.SER_REF) = TRIM(F.SERIE)
                         AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
-                    LEFT JOIN SIG.PEDIDO P
+                    LEFT JOIN {S}PEDIDO P
                         ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                         AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                         AND G.TIP_DOC_REF = P.TIPO_DOCTO
                         AND P.ESTADO <> '9'
-                    LEFT JOIN SIG.ITEMDOCU ID
+                    LEFT JOIN {S}ITEMDOCU ID
                         ON ID.TIPODOC = F.TIPODOC
                         AND TRIM(ID.SERIE) = TRIM(F.SERIE)
                         AND TRIM(ID.NUMERO) = TRIM(F.NUMERO)
-                    LEFT JOIN SIG.ITEMPED I
+                    LEFT JOIN {S}ITEMPED I
                         ON I.NUM_PED = P.NUM_PED
                         AND I.SERIE = P.SERIE
                         AND I.COD_ART = ID.COD_ART
@@ -692,19 +668,19 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
+                var sql = $@"
                     SELECT DISTINCT 
                         P.NUMERO_REF AS ORDEN_COMPRA
-                    FROM SIG.REQ_CERT_D rcd
-                    INNER JOIN SIG.DOCUVENT F
+                    FROM {S}REQ_CERT_D rcd
+                    INNER JOIN {S}DOCUVENT F
                         ON F.TIPODOC = rcd.TIPODOC
                         AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
                         AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
-                    LEFT JOIN SIG.KARDEX_G G
+                    LEFT JOIN {S}KARDEX_G G
                         ON G.TIP_REF = F.TIPODOC
                         AND TRIM(G.SER_REF) = TRIM(F.SERIE)
                         AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
-                    LEFT JOIN SIG.PEDIDO P
+                    LEFT JOIN {S}PEDIDO P
                         ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                         AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                         AND G.TIP_DOC_REF = P.TIPO_DOCTO
@@ -743,8 +719,8 @@ namespace FabricaHilos.Services.Sgc
                 using var conn = new OracleConnection(GetOracleConnectionString());
                 await conn.OpenAsync();
 
-                var sql = @"
-                    UPDATE SIG.REQ_CERT
+                var sql = $@"
+                    UPDATE {S}REQ_CERT
                     SET ESTADO = :Estado,
                         A_MDUSER = :Usuario,
                         A_MDFECHA = SYSDATE
