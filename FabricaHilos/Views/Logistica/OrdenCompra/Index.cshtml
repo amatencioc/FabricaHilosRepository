@@ -1,0 +1,172 @@
+@model IEnumerable<FabricaHilos.Models.Logistica.OrdenCompraDto>
+
+@{
+    ViewData["Title"] = "Órdenes de Compra";
+    string? buscar      = ViewBag.Buscar      as string;
+    string? fechaInicio = ViewBag.FechaInicio as string;
+    string? fechaFin    = ViewBag.FechaFin    as string;
+    string? estado      = ViewBag.Estado      as string;
+    bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
+                       || Context.Request.Query.ContainsKey("fechaInicio") || Context.Request.Query.ContainsKey("fechaFin");
+    int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
+    int totalPages  = ViewBag.TotalPages  != null ? Convert.ToInt32(ViewBag.TotalPages)  : 1;
+    int totalCount  = ViewBag.TotalCount  != null ? Convert.ToInt32(ViewBag.TotalCount)  : 0;
+    int pgSize      = ViewBag.PageSize    != null ? Convert.ToInt32(ViewBag.PageSize)    : 20;
+    int startItem   = totalCount == 0 ? 0 : (currentPage - 1) * pgSize + 1;
+    int endItem     = Math.Min(currentPage * pgSize, totalCount);
+    var proveedores = ViewBag.Proveedores  as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var centrosCosto = ViewBag.CentrosCosto as Dictionary<string, string> ?? new Dictionary<string, string>();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">Logística</li>
+    <li class="breadcrumb-item active">Órdenes de Compra</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0"><i class="bi bi-cart-check me-2"></i>Órdenes de Compra</h4>
+    <span class="text-muted small">@totalCount registro(s) encontrado(s)</span>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="text" name="buscar" value="@buscar"
+                   class="form-control form-control-sm"
+                   placeholder="Buscar por proveedor o N° pedido..."
+                   style="max-width:260px;" />
+
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">Desde:</label>
+                <input type="date" name="fechaInicio" value="@fechaInicio"
+                       class="form-control form-control-sm" style="max-width:155px;" />
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 text-nowrap small text-muted">hasta:</label>
+                <input type="date" name="fechaFin" value="@fechaFin"
+                       class="form-control form-control-sm" style="max-width:155px;" />
+            </div>
+
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-search"></i> Buscar
+            </button>
+            @if (hayFiltros)
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+            }
+        </form>
+    </div>
+</div>
+
+<!-- Tabla -->
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center">Tipo</th>
+                        <th class="text-center">N° Pedido</th>
+                        <th>Proveedor</th>
+                        <th>C. Costo</th>
+                        <th class="text-center">Fecha</th>
+                        <th class="text-center">F. Entrega</th>
+                        <th>Detalle</th>
+                        <th class="text-center">Moneda</th>
+                        <th class="text-end">Val. Venta</th>
+                        <th class="text-end">IGV</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var oc in Model)
+                    {
+                        var nomProv = !string.IsNullOrEmpty(oc.CodProveed) && proveedores.TryGetValue(oc.CodProveed, out var np) ? np : oc.CodProveed;
+                        var ccDesc  = !string.IsNullOrEmpty(oc.CCosto) && centrosCosto.TryGetValue(oc.CCosto, out var ccd) ? ccd : oc.CCosto;
+                        <tr>
+                            <td class="text-center">@(oc.TipoDocto ?? "-")</td>
+                            <td class="text-center fw-semibold">@oc.NumPed</td>
+                            <td title="@oc.CodProveed">@(nomProv ?? "-")</td>
+                            <td title="@oc.CCosto">@(ccDesc ?? "-")</td>
+                            <td class="text-center">@(oc.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-center">@(oc.FEntrega?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="small text-muted">@(oc.Detalle ?? "-")</td>
+                            @{ var sim = oc.Moneda?.ToUpper() == "D" ? "$" : "S/"; }
+                            <td class="text-center">
+                                @if (oc.Moneda?.ToUpper() == "D")
+                                {
+                                    <span class="badge bg-success">$</span>
+                                }
+                                else if (oc.Moneda?.ToUpper() == "S")
+                                {
+                                    <span class="badge bg-primary">S/</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">@(oc.Moneda ?? "-")</span>
+                                }
+                            </td>
+                            <td class="text-end">@sim @oc.ValVenta.ToString("N2")</td>
+                            <td class="text-end">@sim @oc.ImpIgv.ToString("N2")</td>
+                            <td class="text-end fw-semibold">@sim @oc.PrecioVta.ToString("N2")</td>
+                            <td class="text-center">
+                                <a asp-action="Detalle"
+                                   asp-route-tipoDocto="@oc.TipoDocto"
+                                   asp-route-serie="@oc.Serie"
+                                   asp-route-numPed="@oc.NumPed"
+                                   asp-route-buscar="@buscar"
+                                   asp-route-fechaInicio="@fechaInicio"
+                                   asp-route-fechaFin="@fechaFin"
+                                   asp-route-estado="@estado"
+                                   asp-route-page="@currentPage"
+                                   class="btn btn-sm btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">No se encontraron órdenes de compra.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (totalPages > 1)
+    {
+        <div class="card-footer d-flex justify-content-between align-items-center py-2">
+            <small class="text-muted">Mostrando @startItem–@endItem de @totalCount</small>
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index"
+                           asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
+                           asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                           asp-route-page="@(currentPage - 1)">«</a>
+                    </li>
+                    @for (int p = Math.Max(1, currentPage - 2); p <= Math.Min(totalPages, currentPage + 2); p++)
+                    {
+                        <li class="page-item @(p == currentPage ? "active" : "")">
+                            <a class="page-link" asp-action="Index"
+                               asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
+                               asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                               asp-route-page="@p">@p</a>
+                        </li>
+                    }
+                    <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                        <a class="page-link" asp-action="Index"
+                           asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
+                           asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                           asp-route-page="@(currentPage + 1)">»</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+</div>

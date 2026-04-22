@@ -35,6 +35,19 @@ public class LogisticaController : Controller
             });
         }
 
+        if (menus.LogisticaOrdenCompra)
+        {
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Órdenes de Compra",
+                Descripcion = "Listado y detalle de órdenes de compra emitidas a proveedores.",
+                Icono       = "bi-cart-check",
+                ColorClase  = "text-success",
+                Controller  = "OrdenCompra",
+                Action      = "Index"
+            });
+        }
+
         return View("~/Views/Logistica/Index.cshtml", modulos);
     }
 }

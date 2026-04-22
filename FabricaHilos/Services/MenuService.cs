@@ -81,6 +81,7 @@ public class MenuService : IMenuService
             // Menú principal: Logística
             Logistica              = Tiene("Logistica"),
             LogisticaRequerimiento = global.LogisticaRequerimiento && Tiene("Logistica"),
+            LogisticaOrdenCompra   = global.LogisticaOrdenCompra   && Tiene("Logistica"),
         };
     }
 

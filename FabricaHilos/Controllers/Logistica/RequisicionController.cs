@@ -254,12 +254,10 @@ public class RequisicionController : OracleBaseController
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
-
         if (!System.IO.File.Exists(ruta))
             return NotFound();
 
         var contentType = ObtenerContentType(Path.GetExtension(nombreArchivo));
-        // Sin fileDownloadName → Content-Disposition: inline (el navegador lo muestra)
         return PhysicalFile(ruta, contentType);
     }
 
@@ -333,7 +331,6 @@ public class RequisicionController : OracleBaseController
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
-
         if (!System.IO.File.Exists(ruta))
             return NotFound();
 
@@ -386,29 +383,22 @@ public class RequisicionController : OracleBaseController
     // ── HELPERS ────────────────────────────────────────────────────────────────
 
     private string ObtenerCarpetaRaiz()
-    {
-        return _config["RutaRequerimientos"]
-               ?? Path.Combine(_env.WebRootPath, "uploads", "requerimientos");
-    }
+        => _config["RutaRequerimientos"]
+           ?? Path.Combine(_env.WebRootPath, "uploads", "requerimientos");
 
     private string ObtenerCarpetaPorGrupo(long idGrupo)
         => Path.Combine(ObtenerCarpetaRaiz(), idGrupo.ToString());
 
     private List<ArchivoRequisicionDto> ObtenerArchivosExistentes(IEnumerable<ItemReqDto> items)
     {
-        var grupos = items
-            .Where(i => i.IdGrupo.HasValue)
-            .GroupBy(i => i.IdGrupo!.Value)
-            .ToList();
-
+        var grupos    = items.Where(i => i.IdGrupo.HasValue).GroupBy(i => i.IdGrupo!.Value).ToList();
         var resultado = new List<ArchivoRequisicionDto>();
 
         foreach (var grupo in grupos)
         {
             var carpeta = ObtenerCarpetaPorGrupo(grupo.Key);
             if (!Directory.Exists(carpeta)) continue;
-
-            var archivos = Directory.GetFiles(carpeta)
+            resultado.AddRange(Directory.GetFiles(carpeta)
                 .Select(f => new FileInfo(f))
                 .OrderByDescending(f => f.CreationTime)
                 .Select(f => new ArchivoRequisicionDto
@@ -419,9 +409,7 @@ public class RequisicionController : OracleBaseController
                     FechaCarga    = f.CreationTime,
                     IdGrupo       = grupo.Key,
                     CarpetaGrupo  = carpeta
-                });
-
-            resultado.AddRange(archivos);
+                }));
         }
 
         return resultado.OrderByDescending(a => a.IdGrupo).ThenByDescending(a => a.FechaCarga).ToList();

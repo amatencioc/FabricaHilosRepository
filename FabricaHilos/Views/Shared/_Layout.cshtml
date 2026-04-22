@@ -281,6 +281,14 @@
                                 </a>
                             </li>
                             }
+                            @if (menus.LogisticaOrdenCompra)
+                            {
+                            <li>
+                                <a href="/Logistica/OrdenCompra" class="sidebar-link sidebar-sublink @(ctrl == "OrdenCompra" ? "active" : "")">
+                                    <i class="bi bi-cart-check"></i> Órdenes de Compra
+                                </a>
+                            </li>
+                            }
                         </ul>
                     </li>
                 }

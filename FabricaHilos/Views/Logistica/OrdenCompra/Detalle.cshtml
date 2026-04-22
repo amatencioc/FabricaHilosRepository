@@ -1,0 +1,659 @@
+@model (FabricaHilos.Models.Logistica.OrdenCompraDto Orden, List<FabricaHilos.Models.Logistica.ItemOrdDto> Items)
+
+@{
+    var oc       = Model.Orden;
+    var items    = Model.Items;
+    ViewData["Title"] = $"O/C {oc.TipoDocto}-{oc.Serie:D3}-{oc.NumPed}";
+
+    var proveedores  = ViewBag.Proveedores           as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var centrosCosto  = ViewBag.CentrosCosto          as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var descsArt      = ViewBag.DescripcionesArticulos as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var descsCondPag  = ViewBag.DescripcionesCondPag   as Dictionary<string, string> ?? new Dictionary<string, string>();
+    _ = proveedores.TryGetValue(oc.CodProveed ?? "", out var nomProv);
+    _ = centrosCosto.TryGetValue(oc.CCosto ?? "", out var nomCcosto);
+    _ = descsCondPag.TryGetValue(oc.CondPag ?? "", out var descCondPag);
+
+    var nombresUsuarios = ViewBag.NombresUsuarios as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+    Func<string?, string> formatUsuario = cod => {
+        if (string.IsNullOrEmpty(cod)) return "";
+        return nombresUsuarios.TryGetValue(cod, out var n) && n != cod ? $"{n} ({cod})" : cod;
+    };
+
+    var monedaSimbolo = (oc.Moneda ?? "").ToUpper() == "D" ? "$" : "S/";
+
+    string? retBuscar      = ViewBag.ReturnBuscar      as string;
+    string? retFechaInicio = ViewBag.ReturnFechaInicio as string;
+    string? retFechaFin    = ViewBag.ReturnFechaFin    as string;
+    string? retEstado      = ViewBag.ReturnEstado      as string;
+    int     retPage        = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
+
+    string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
+    var grupoColorMap = items
+        .Where(i => i.IdGrupo.HasValue)
+        .Select(i => i.IdGrupo!.Value)
+        .Distinct()
+        .OrderBy(g => g)
+        .Select((g, idx) => (g, _coloresGrupo[idx % _coloresGrupo.Length]))
+        .ToDictionary(x => x.g, x => x.Item2);
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Logistica" asp-action="Index">Logística</a></li>
+    <li class="breadcrumb-item">
+        <a asp-action="Index"
+           asp-route-buscar="@retBuscar"
+           asp-route-fechaInicio="@retFechaInicio"
+           asp-route-fechaFin="@retFechaFin"
+           asp-route-estado="@retEstado"
+           asp-route-page="@retPage">Órdenes de Compra</a>
+    </li>
+    <li class="breadcrumb-item active">@oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-cart-check me-2"></i>
+        Orden de Compra @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
+    </h4>
+    <a asp-action="Index"
+       asp-route-buscar="@retBuscar"
+       asp-route-fechaInicio="@retFechaInicio"
+       asp-route-fechaFin="@retFechaFin"
+       asp-route-estado="@retEstado"
+       asp-route-page="@retPage"
+       class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Cabecera -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold"><i class="bi bi-info-circle me-1"></i>Datos de la Orden</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label text-muted small mb-0">Proveedor</label>
+                <div class="fw-semibold">@(nomProv ?? oc.CodProveed ?? "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Moneda</label>
+                <div>
+                    @if (oc.Moneda?.ToUpper() == "D")
+                    {
+                        <span class="badge bg-success me-1">$</span><span>Dólares</span>
+                    }
+                    else if (oc.Moneda?.ToUpper() == "S")
+                    {
+                        <span class="badge bg-primary me-1">S/</span><span>Soles</span>
+                    }
+                    else
+                    {
+                        <span>@(oc.Moneda ?? "-")</span>
+                    }
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Cond. Pago</label>
+                <div>@(descCondPag ?? oc.CondPag ?? "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Fecha</label>
+                <div>@(oc.Fecha?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">F. Entrega</label>
+                <div>@(oc.FEntrega?.ToString("dd/MM/yyyy") ?? "-")</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label text-muted small mb-0">Centro Costo</label>
+                <div>@(nomCcosto ?? oc.CCosto ?? "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Plazo Entrega</label>
+                <div>@(oc.PlazoEntrega.HasValue ? $"{oc.PlazoEntrega} días" : "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Vendedor</label>
+                <div>@(oc.CodVende ?? "-")</div>
+            </div>
+            @if (!string.IsNullOrEmpty(oc.Detalle))
+            {
+                <div class="col-12">
+                    <label class="form-label text-muted small mb-0">Detalle / Observaciones</label>
+                    <div>@oc.Detalle</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Resumen financiero -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold"><i class="bi bi-calculator me-1"></i>Resumen Financiero</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-2 col-6 text-center">
+                <div class="text-muted small">Val. Venta</div>
+                <div class="fw-semibold">@monedaSimbolo @oc.ValVenta.ToString("N2")</div>
+            </div>
+            <div class="col-md-2 col-6 text-center">
+                <div class="text-muted small">Descuento</div>
+                <div class="fw-semibold">@monedaSimbolo @oc.ImpDescto.ToString("N2")</div>
+            </div>
+            <div class="col-md-2 col-6 text-center">
+                <div class="text-muted small">Neto</div>
+                <div class="fw-semibold">@monedaSimbolo @oc.ImpNeto.ToString("N2")</div>
+            </div>
+            <div class="col-md-2 col-6 text-center">
+                <div class="text-muted small">IGV</div>
+                <div class="fw-semibold">@monedaSimbolo @oc.ImpIgv.ToString("N2")</div>
+            </div>
+            <div class="col-md-2 col-6 text-center border-start">
+                <div class="text-muted small">Precio Venta</div>
+                <div class="fw-bold fs-5 text-primary">@monedaSimbolo @oc.PrecioVta.ToString("N2")</div>
+            </div>
+            <div class="col-md-2 col-6 text-center">
+                <div class="text-muted small">Total Facturado</div>
+                <div class="fw-semibold @(oc.TotalFacturado >= oc.PrecioVta ? "text-success" : "")">
+                    @monedaSimbolo @oc.TotalFacturado.ToString("N2")
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ítems -->
+<div class="card shadow-sm">
+    <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul me-1"></i>Ítems (@items.Count)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-center">
+                            <input type="checkbox" id="chkTodos" title="Seleccionar todos" />
+                        </th>
+                        <th class="text-center">#</th>
+                        <th class="text-center">N° Req.</th>
+                        <th>Código Art.</th>
+                        <th>Descripción</th>
+                        <th class="text-center">Unidad</th>
+                        <th class="text-end">Cantidad</th>
+                        <th class="text-end">Saldo</th>
+                        <th class="text-end">Precio</th>
+                        <th class="text-end">Importe</th>
+                        <th class="text-center">ID Grupo</th>
+                        <th class="text-center">F. Grupo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int rowNum = 0; }
+                    @foreach (var item in items)
+                    {
+                        rowNum++;
+                        var descArt = !string.IsNullOrEmpty(item.CodArt) && descsArt.TryGetValue(item.CodArt, out var da) ? da : null;
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox" class="chk-item"
+                                       value="@item.CodArt|@item.Orden"
+                                       data-idgrupo="@(item.IdGrupo?.ToString() ?? "")" />
+                            </td>
+                            <td class="text-center text-muted">@rowNum</td>
+                            <td class="text-center">
+                                @if (item.NumReq.HasValue)
+                                {
+                                    <span class="badge bg-secondary">@item.NumReq</span>
+                                    @if (item.OrdenReq.HasValue)
+                                    {
+                                        <span class="text-muted small ms-1">- @item.OrdenReq</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="fw-semibold">@(item.CodArt ?? "-")</span>
+                                @if (!string.IsNullOrEmpty(item.CodOrig) && item.CodOrig != item.CodArt)
+                                {
+                                    <br /><small class="text-muted">Orig: @item.CodOrig</small>
+                                }
+                            </td>
+                            <td>@(descArt ?? item.Descripcion ?? "-")</td>
+                            <td class="text-center">@(item.Unidad ?? "-")</td>
+                            <td class="text-end">@item.Cantidad.ToString("N2")</td>
+                            <td class="text-end @(item.Saldo > 0 ? "text-warning" : "text-muted")">@item.Saldo.ToString("N2")</td>
+                            <td class="text-end">@item.Precio.ToString("N2")</td>
+                            <td class="text-end fw-semibold">@item.ImpVvta.ToString("N2")</td>
+                            <td class="text-center">
+                                @if (item.IdGrupo.HasValue)
+                                {
+                                    var _c = grupoColorMap.TryGetValue(item.IdGrupo.Value, out var _cv) ? _cv : "secondary";
+                                    <span class="badge bg-@_c">@item.IdGrupo</span>
+                                }
+                                else { <span class="text-muted">-</span> }
+                            </td>
+                            <td class="text-center small">
+                                @if (item.FAprobado.HasValue)
+                                {
+                                    <span class="text-success" title="Aprobado"><i class="bi bi-check-circle me-1"></i>@item.FAprobado.Value.ToString("dd/MM/yyyy")</span>
+                                }
+                                else { <span class="text-muted">-</span> }
+                            </td>
+                        </tr>
+                    }
+                    @if (!items.Any())
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center text-muted py-4">Sin ítems registrados.</td>
+                        </tr>
+                    }
+                </tbody>
+                @if (items.Any())
+                {
+                    <tfoot class="table-light fw-semibold">
+                        <tr>
+                            <td colspan="9" class="text-end">Total Importe:</td>
+                            <td class="text-end">@items.Sum(i => i.ImpVvta).ToString("N2")</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Auditoría -->
+<div class="mt-3 text-muted small d-flex gap-4 flex-wrap">
+    @if (!string.IsNullOrEmpty(oc.AAduser))
+    {
+        <span><i class="bi bi-person-plus me-1"></i>Creado por <strong>@formatUsuario(oc.AAduser)</strong>@(oc.AAdfecha.HasValue ? $" el {oc.AAdfecha.Value:dd/MM/yyyy}" : "")</span>
+    }
+    @if (!string.IsNullOrEmpty(oc.AMduser))
+    {
+        <span><i class="bi bi-pencil me-1"></i>Modificado por <strong>@formatUsuario(oc.AMduser)</strong>@(oc.AMdfecha.HasValue ? $" el {oc.AMdfecha.Value:dd/MM/yyyy}" : "")</span>
+    }
+    @if (oc.AprobGerencia == "S")
+    {
+        <span><i class="bi bi-check-circle text-success me-1"></i>Aprobado gerencia@(oc.FAprobGer.HasValue ? $" el {oc.FAprobGer.Value:dd/MM/yyyy}" : "")</span>
+    }
+</div>
+
+@{
+    var archivos = ViewBag.ArchivosExistentes as List<FabricaHilos.Models.Logistica.ArchivoRequisicionDto>
+                   ?? new List<FabricaHilos.Models.Logistica.ArchivoRequisicionDto>();
+
+    Func<string, string> IconoArchivo = nombre => {
+        var ext = System.IO.Path.GetExtension(nombre).ToLower();
+        if (ext == ".pdf")  return "bi-file-earmark-pdf text-danger";
+        if (ext == ".doc" || ext == ".docx") return "bi-file-earmark-word text-primary";
+        if (ext == ".xls" || ext == ".xlsx") return "bi-file-earmark-excel text-success";
+        if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".bmp")
+            return "bi-file-earmark-image text-warning";
+        if (ext == ".zip" || ext == ".rar") return "bi-file-earmark-zip text-secondary";
+        return "bi-file-earmark text-muted";
+    };
+}
+
+<!-- ═══════════════════════════════════════════════════════════ ARCHIVOS ══ -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-2 fw-semibold">
+        <i class="bi bi-paperclip me-1"></i> Archivos Adjuntos
+        @if (archivos.Any())
+        {
+            <span class="badge bg-secondary ms-2">@archivos.Count</span>
+        }
+    </div>
+    <div class="card-body">
+
+        <!-- Subir nuevos archivos -->
+        <form asp-controller="OrdenCompra"
+              asp-action="SubirArchivos"
+              method="post"
+              enctype="multipart/form-data"
+              class="mb-3"
+              id="formSubirArchivos">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="TipoDocto" value="@oc.TipoDocto" />
+            <input type="hidden" name="Serie"     value="@oc.Serie" />
+            <input type="hidden" name="NumPed"    value="@oc.NumPed" />
+            <input type="hidden" name="ReturnBuscar"      value="@retBuscar" />
+            <input type="hidden" name="ReturnFechaInicio" value="@retFechaInicio" />
+            <input type="hidden" name="ReturnFechaFin"    value="@retFechaFin" />
+            <input type="hidden" name="ReturnEstado"      value="@retEstado" />
+            <input type="hidden" name="ReturnPage"        value="@retPage" />
+            <div id="hiddenOrdenesContainer"></div>
+
+            <div class="alert alert-info py-2 small mb-2">
+                <i class="bi bi-info-circle me-1"></i>
+                Seleccione uno o más ítems en la tabla y luego elija los archivos a adjuntar.
+                Se generará un código de grupo único que quedará registrado en los ítems seleccionados.
+            </div>
+
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <div class="flex-grow-1">
+                    <input type="file" name="Archivos" id="inputArchivos"
+                           class="form-control form-control-sm" multiple
+                           accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.bmp,.txt,.zip,.rar" />
+                    <div class="form-text text-muted">
+                        Formatos permitidos: PDF, Word, Excel, imágenes (JPG/PNG/GIF/BMP), TXT, ZIP, RAR.
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="btnCargar" disabled>
+                    <i class="bi bi-upload me-1"></i> Cargar
+                    <span id="lblItemsSel" class="badge bg-light text-dark ms-1">0 ítems</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Listado de archivos existentes agrupados por ID_GRUPO -->
+        @if (archivos.Any())
+        {
+            var gruposArchivos = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
+            var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover table-corporate mb-0">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th class="text-end">Tamaño</th>
+                            <th class="text-center">Fecha de carga</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var grupo in gruposArchivos)
+                        {
+                            var color = grupoColorMap.TryGetValue(grupo.Key, out var _gc) ? _gc : "secondary";
+                            bool grupoAprobado = grupo.Any(a => a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
+                            <tr class="table-secondary">
+                                <td colspan="4" class="py-1 px-2">
+                                    <span class="badge bg-@color me-2" style="font-size:.8rem;">Grupo @grupo.Key</span>
+                                    <small class="text-muted">@grupo.Count() archivo(s)</small>
+                                </td>
+                            </tr>
+                            @foreach (var archivo in grupo.OrderBy(a => a.NombreArchivo))
+                            {
+                                bool esAprobado    = archivo.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
+                                var  extArch       = System.IO.Path.GetExtension(archivo.NombreArchivo);
+                                bool esVisualizable = extVisualizables.Contains(extArch);
+                                var  icon          = IconoArchivo(archivo.NombreArchivo);
+                                var  urlVer        = Url.Action("Ver",       "OrdenCompra", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+                                var  urlDesc       = Url.Action("Descargar", "OrdenCompra", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+
+                                <tr class="@(esAprobado ? "table-success" : "")">
+                                    <td class="ps-4">
+                                        @if (esAprobado)
+                                        {
+                                            <i class="bi bi-patch-check-fill text-success me-1" title="Aprobado"></i>
+                                        }
+                                        <i class="bi @icon me-1"></i>
+                                        @if (esVisualizable)
+                                        {
+                                            <a href="#" class="link-primary text-decoration-none btn-ver-archivo @(esAprobado ? "fw-semibold" : "")"
+                                               data-url="@urlVer"
+                                               data-desc="@urlDesc"
+                                               data-nombre="@archivo.NombreArchivo"
+                                               data-tipo="@extArch.TrimStart('.')"
+                                               title="Haz clic para ver @archivo.NombreArchivo">
+                                                @archivo.NombreArchivo
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a href="@urlDesc" class="link-primary text-decoration-none @(esAprobado ? "fw-semibold" : "")"
+                                               title="Descargar @archivo.NombreArchivo">
+                                                @archivo.NombreArchivo
+                                            </a>
+                                        }
+                                    </td>
+                                    <td class="text-end small text-muted">
+                                        @(archivo.TamanioBytes < 1024
+                                            ? $"{archivo.TamanioBytes} B"
+                                            : archivo.TamanioBytes < 1048576
+                                                ? $"{archivo.TamanioBytes / 1024.0:N1} KB"
+                                                : $"{archivo.TamanioBytes / 1048576.0:N1} MB")
+                                    </td>
+                                    <td class="text-center small">@archivo.FechaCarga.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td class="text-center">
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            @if (!grupoAprobado)
+                                            {
+                                                <form asp-controller="OrdenCompra" asp-action="AprobarArchivo"
+                                                      method="post" class="form-confirmar"
+                                                      data-titulo="Aprobar archivo"
+                                                      data-mensaje="&iquest;Aprobar el archivo &laquo;@archivo.NombreArchivo&raquo;?">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
+                                                    <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
+                                                    <input type="hidden" name="tipoDocto"     value="@oc.TipoDocto" />
+                                                    <input type="hidden" name="serie"         value="@oc.Serie" />
+                                                    <input type="hidden" name="numPed"        value="@oc.NumPed" />
+                                                    <input type="hidden" name="retBuscar"      value="@retBuscar" />
+                                                    <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
+                                                    <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
+                                                    <input type="hidden" name="retEstado"      value="@retEstado" />
+                                                    <input type="hidden" name="retPage"        value="@retPage" />
+                                                    <button type="button" class="btn btn-sm btn-outline-success btn-abrir-confirmar"
+                                                            title="Aprobar este archivo">
+                                                        <i class="bi bi-check-circle me-1"></i>Aprobar
+                                                    </button>
+                                                </form>
+                                            }
+                                            <form asp-controller="OrdenCompra" asp-action="EliminarArchivo"
+                                                  method="post" class="form-confirmar"
+                                                  data-titulo="Eliminar archivo"
+                                                  data-mensaje="&iquest;Eliminar el archivo &laquo;@archivo.NombreArchivo&raquo;? Esta acci&oacute;n es irreversible.">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="idGrupo"        value="@archivo.IdGrupo" />
+                                                <input type="hidden" name="nombreArchivo"  value="@archivo.NombreArchivo" />
+                                                <input type="hidden" name="tipoDocto"      value="@oc.TipoDocto" />
+                                                <input type="hidden" name="serie"          value="@oc.Serie" />
+                                                <input type="hidden" name="numPed"         value="@oc.NumPed" />
+                                                <input type="hidden" name="retBuscar"      value="@retBuscar" />
+                                                <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
+                                                <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
+                                                <input type="hidden" name="retEstado"      value="@retEstado" />
+                                                <input type="hidden" name="retPage"        value="@retPage" />
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-abrir-confirmar" title="Eliminar">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-center text-muted small py-2">
+                <i class="bi bi-folder2-open me-1"></i> Aún no se han adjuntado archivos.
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+
+<!-- Modal de confirmación genérico -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><span id="modalConfirmarTitulo"></span></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmarMensaje"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="modalConfirmarOk">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal visor de archivos -->
+<div class="modal fade" id="modalVisorArchivo" tabindex="-1" aria-labelledby="modalVisorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="height:90vh;">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalVisorLabel">
+                    <i class="bi bi-file-earmark me-1"></i><span id="modalVisorNombre"></span>
+                </h6>
+                <div class="ms-auto d-flex gap-2 align-items-center">
+                    <a id="modalBtnDescargar" href="#" class="btn btn-sm btn-outline-primary" target="_blank" title="Descargar">
+                        <i class="bi bi-download"></i>
+                    </a>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:hidden;height:100%;">
+                <iframe id="visorIframe" src="" style="width:100%;height:100%;border:0;display:none;"></iframe>
+                <img    id="visorImg"    src="" class="img-fluid" style="max-height:100%;object-fit:contain;display:none;" alt="Vista previa" />
+                <div id="visorSpinner" class="text-center text-muted py-5">
+                    <div class="spinner-border text-primary mb-2"></div><br/>Cargando…
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // ── Modal de confirmación ────────────────────────────────────────────────
+    var modalConfirmar = new bootstrap.Modal(document.getElementById('modalConfirmar'));
+    var modalTitulo    = document.getElementById('modalConfirmarTitulo');
+    var modalMensaje   = document.getElementById('modalConfirmarMensaje');
+    var modalOk        = document.getElementById('modalConfirmarOk');
+    var _formPendiente = null;
+
+    document.querySelectorAll('.btn-abrir-confirmar').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            _formPendiente = btn.closest('.form-confirmar');
+            modalTitulo.textContent = _formPendiente.dataset.titulo  || 'Confirmar';
+            modalMensaje.innerHTML  = _formPendiente.dataset.mensaje  || '¿Desea continuar?';
+            modalOk.className = btn.classList.contains('btn-outline-danger')
+                ? 'btn btn-danger' : 'btn btn-success';
+            modalConfirmar.show();
+        });
+    });
+
+    modalOk.addEventListener('click', function () {
+        modalConfirmar.hide();
+        if (_formPendiente) { _formPendiente.submit(); _formPendiente = null; }
+    });
+
+    // ── Visor de archivos ────────────────────────────────────────────────────
+    var modal         = new bootstrap.Modal(document.getElementById('modalVisorArchivo'));
+    var modalNombre   = document.getElementById('modalVisorNombre');
+    var modalDescarga = document.getElementById('modalBtnDescargar');
+    var visorIframe   = document.getElementById('visorIframe');
+    var visorImg      = document.getElementById('visorImg');
+    var visorSpinner  = document.getElementById('visorSpinner');
+    var extImagen     = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+
+    document.querySelectorAll('.btn-ver-archivo').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            var url    = a.dataset.url;
+            var desc   = a.dataset.desc;
+            var nombre = a.dataset.nombre;
+            var tipo   = (a.dataset.tipo || '').toLowerCase();
+
+            modalNombre.textContent    = nombre;
+            modalDescarga.href         = desc;
+            visorIframe.style.display  = 'none';
+            visorImg.style.display     = 'none';
+            visorSpinner.style.display = 'block';
+            visorSpinner.innerHTML     = '<div class="spinner-border text-primary mb-2"></div><br/>Cargando…';
+            visorIframe.src = '';
+            visorImg.src    = '';
+
+            modal.show();
+
+            if (extImagen.indexOf(tipo) !== -1) {
+                var img = new Image();
+                img.onload  = function () { visorSpinner.style.display = 'none'; visorImg.src = url; visorImg.style.display = 'block'; };
+                img.onerror = function () { visorSpinner.innerHTML = '<span class="text-danger">No se pudo cargar la imagen.</span>'; };
+                img.src = url;
+            } else {
+                visorSpinner.style.display = 'none';
+                visorIframe.src            = url;
+                visorIframe.style.display  = 'block';
+            }
+        });
+    });
+
+    document.getElementById('modalVisorArchivo').addEventListener('hidden.bs.modal', function () {
+        visorIframe.src = '';
+        visorImg.src    = '';
+    });
+
+    // ── Upload: selección de ítems ───────────────────────────────────────────
+    var chkTodos   = document.getElementById('chkTodos');
+    var btnCargar  = document.getElementById('btnCargar');
+    var lblItems   = document.getElementById('lblItemsSel');
+    var container  = document.getElementById('hiddenOrdenesContainer');
+    var form       = document.getElementById('formSubirArchivos');
+    var inputFiles = document.getElementById('inputArchivos');
+
+    function getSeleccionados() {
+        return Array.from(document.querySelectorAll('.chk-item:checked')).map(function (c) { return c.value; });
+    }
+
+    function actualizarBoton() {
+        var sel = getSeleccionados();
+        var tieneArchivos = inputFiles.files && inputFiles.files.length > 0;
+        btnCargar.disabled = (sel.length === 0 || !tieneArchivos);
+        lblItems.textContent = sel.length + ' ítem' + (sel.length !== 1 ? 's' : '');
+    }
+
+    if (chkTodos) {
+        chkTodos.addEventListener('change', function () {
+            document.querySelectorAll('.chk-item').forEach(function (c) { c.checked = chkTodos.checked; });
+            actualizarBoton();
+        });
+    }
+
+    document.querySelectorAll('.chk-item').forEach(function (c) {
+        c.addEventListener('change', function () {
+            var total    = document.querySelectorAll('.chk-item').length;
+            var marcados = document.querySelectorAll('.chk-item:checked').length;
+            if (chkTodos) { chkTodos.indeterminate = marcados > 0 && marcados < total; chkTodos.checked = marcados === total; }
+            actualizarBoton();
+        });
+    });
+
+    inputFiles.addEventListener('change', actualizarBoton);
+
+    btnCargar.addEventListener('click', function () {
+        container.innerHTML = '';
+        var seleccionados = Array.from(document.querySelectorAll('.chk-item:checked'));
+        seleccionados.forEach(function (chk) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'SeleccionItems'; inp.value = chk.value;
+            container.appendChild(inp);
+        });
+        var gruposConValor = seleccionados.map(function (chk) { return chk.dataset.idgrupo; }).filter(function (g) { return g && g !== ''; });
+        var grupoUnico = gruposConValor.length > 0 && gruposConValor.every(function (g) { return g === gruposConValor[0]; }) ? gruposConValor[0] : null;
+        if (grupoUnico) {
+            var inpGrupo = document.createElement('input');
+            inpGrupo.type = 'hidden'; inpGrupo.name = 'ExistingIdGrupo'; inpGrupo.value = grupoUnico;
+            container.appendChild(inpGrupo);
+        }
+        form.submit();
+    });
+})();
+</script>
+}

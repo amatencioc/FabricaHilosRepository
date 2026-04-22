@@ -89,8 +89,4 @@ public abstract class OracleServiceBase
     public static string GetCodEmpresaAquarius(string connKey) =>
         _aquariusCodEmpresa.TryGetValue(connKey, out var cod) ? cod : "0003";
 
-    /// <summary>
-    /// CodEmpresa de Aquarius según la empresa activa del usuario en sesión.
-    /// </summary>
-    protected string CodEmpresaAquarius => GetCodEmpresaAquarius(GetEmpresaConnKey());
-}
+    }

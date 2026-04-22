@@ -50,6 +50,7 @@ public class MenuOptions
     // ── Menús: Logística ──────────────────────────────────────────────────
     public bool Logistica                { get; set; } = false;
     public bool LogisticaRequerimiento   { get; set; } = true;
+    public bool LogisticaOrdenCompra     { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -90,6 +91,7 @@ public class MenuOptions
 
         Logistica              = true,
         LogisticaRequerimiento = true,
+        LogisticaOrdenCompra   = true,
     };
 }
 

@@ -22,6 +22,15 @@
     int     retPage        = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
     _ = nombres.TryGetValue(cab.Autoriza ?? "", out var nomAutoriza);
 
+    string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
+    var grupoColorMap = Model.Items
+        .Where(i => i.IdGrupo.HasValue)
+        .Select(i => i.IdGrupo!.Value)
+        .Distinct()
+        .OrderBy(g => g)
+        .Select((g, idx) => (g, _coloresGrupo[idx % _coloresGrupo.Length]))
+        .ToDictionary(x => x.g, x => x.Item2);
+
     var (badgeClass, estadoTexto) = cab.Estado switch
     {
         "0" => ("bg-secondary", "Emitida"),
@@ -277,11 +286,18 @@
                                 }
                             </td>
                             <td>@((!string.IsNullOrWhiteSpace(item.Destino) && destinosItem.TryGetValue(item.Destino, out var descDestItem) && !string.IsNullOrWhiteSpace(descDestItem)) ? descDestItem : (item.Destino ?? "-"))</td>
-                            <td class="text-center">@(item.FAprobado?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td class="text-center small">
+                                @if (item.FAprobado.HasValue)
+                                {
+                                    <span class="text-success" title="Aprobado"><i class="bi bi-check-circle me-1"></i>@item.FAprobado.Value.ToString("dd/MM/yyyy")</span>
+                                }
+                                else { <span class="text-muted">-</span> }
+                            </td>
                             <td class="text-center">
                                 @if (item.IdGrupo.HasValue)
                                 {
-                                    <span class="badge bg-info text-dark" title="ID Grupo: @item.IdGrupo">@item.IdGrupo</span>
+                                    var _c = grupoColorMap.TryGetValue(item.IdGrupo.Value, out var _cv) ? _cv : "secondary";
+                                    <span class="badge bg-@_c" title="ID Grupo: @item.IdGrupo">@item.IdGrupo</span>
                                 }
                                 else
                                 {
@@ -384,8 +400,6 @@
         @if (archivos.Any())
         {
             var gruposArchivos  = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
-            string[] coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
-            int colorIdx = 0;
 
             // Tipos visualizables en el visor
             var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -407,8 +421,7 @@
                     <tbody>
                         @foreach (var grupo in gruposArchivos)
                         {
-                            var color = coloresGrupo[colorIdx % coloresGrupo.Length];
-                            colorIdx++;
+                            var color = grupoColorMap.TryGetValue(grupo.Key, out var _gc) ? _gc : "secondary";
                             bool grupoAprobado = grupo.Any(a => a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
                             <tr class="table-secondary">
                                 <td colspan="4" class="py-1 px-2">
@@ -418,12 +431,12 @@
                             </tr>
                             @foreach (var archivo in grupo.OrderBy(a => a.NombreArchivo))
                             {
-                                bool esAprobado      = archivo.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
-                                var  extArch         = System.IO.Path.GetExtension(archivo.NombreArchivo);
-                                bool esVisualizble   = extVisualizables.Contains(extArch);
-                                var  icon            = IconoArchivo(archivo.NombreArchivo);
-                                var  urlVer          = Url.Action("Ver",       "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
-                                var  urlDesc         = Url.Action("Descargar", "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+                                bool esAprobado    = archivo.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
+                                var  extArch       = System.IO.Path.GetExtension(archivo.NombreArchivo);
+                                bool esVisualizble = extVisualizables.Contains(extArch);
+                                var  icon          = IconoArchivo(archivo.NombreArchivo);
+                                var  urlVer        = Url.Action("Ver",       "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
+                                var  urlDesc       = Url.Action("Descargar", "Requisicion", new { idGrupo = archivo.IdGrupo, nombreArchivo = archivo.NombreArchivo });
 
                                 <tr class="@(esAprobado ? "table-success" : "")">
                                     <td class="ps-4">

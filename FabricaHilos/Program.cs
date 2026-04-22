@@ -129,6 +129,7 @@ builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddScoped<IRequisicionService, RequisicionService>();
+builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
