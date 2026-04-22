@@ -282,7 +282,7 @@ namespace FabricaHilos.Controllers.Sgc
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al visualizar PDF para NUM_REQ {NumReq}", numReq);
-                return Content($"<html><body><h3>Error al cargar el PDF</h3><p>{ex.Message}</p><pre>{ex.StackTrace}</pre></body></html>", "text/html");
+                return Content("<html><body><h3>Error al cargar el PDF</h3><p>Ocurrió un error al procesar el archivo. Contacte al administrador.</p></body></html>", "text/html");
             }
         }
 

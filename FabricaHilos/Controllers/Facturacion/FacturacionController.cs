@@ -12,11 +12,13 @@ public class FacturacionController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly DocumentExtractorClient _extractorClient;
+    private readonly ILogger<FacturacionController> _logger;
 
-    public FacturacionController(ApplicationDbContext context, DocumentExtractorClient extractorClient)
+    public FacturacionController(ApplicationDbContext context, DocumentExtractorClient extractorClient, ILogger<FacturacionController> logger)
     {
         _context = context;
         _extractorClient = extractorClient;
+        _logger = logger;
     }
 
     // GET: /Facturacion/Index
@@ -69,12 +71,14 @@ public class FacturacionController : Controller
         }
         catch (HttpRequestException ex) when (ex.InnerException is System.Net.Sockets.SocketException)
         {
+            _logger.LogError(ex, "No se puede conectar al servicio DocumentExtractor");
             TempData["Error"] = "No se puede conectar al servicio de extracción de documentos. Verifique que el servicio FabricaHilos.DocumentExtractor esté en ejecución.";
             return View();
         }
         catch (Exception ex)
         {
-            TempData["Error"] = $"Error al procesar el archivo: {ex.Message}";
+            _logger.LogError(ex, "Error al procesar archivo de factura");
+            TempData["Error"] = "Ocurrió un error al procesar el archivo. Contacte al administrador.";
             return View();
         }
     }
@@ -157,7 +161,8 @@ public class FacturacionController : Controller
         }
         catch (Exception ex)
         {
-            TempData["Error"] = $"Error al registrar el documento: {ex.Message}";
+            _logger.LogError(ex, "Error al registrar documento en base de datos");
+            TempData["Error"] = "Ocurrió un error al registrar el documento. Contacte al administrador.";
             return View("VistaPrevia", modelo);
         }
     }
