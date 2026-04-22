@@ -380,6 +380,178 @@ public class RequisicionController : OracleBaseController
         });
     }
 
+    // ── EXPORTAR PENDIENTES A EXCEL ────────────────────────────────────────────
+
+    [HttpGet("ExportarPendientes")]
+    public async Task<IActionResult> ExportarPendientes()
+    {
+        List<(FabricaHilos.Models.Logistica.RequisicionDto Cabecera, List<FabricaHilos.Models.Logistica.ItemReqDto> Items)> pendientes;
+        try
+        {
+            pendientes = await _service.ObtenerPendientesConItemsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener pendientes para exportar");
+            return StatusCode(500, $"Error al obtener datos: {ex.Message}");
+        }
+
+        try
+        {
+        using var wb = new ClosedXML.Excel.XLWorkbook();
+        var ws = wb.Worksheets.Add("Pendientes");
+
+        // ── Cabecera de columnas ──────────────────────────────────────────────
+        var headers = new[]
+        {
+            "N° Req.", "Estado", "Centro Costo", "Proveedor(es)", "Fecha", "F. Entrega",
+            "Orden", "Cód. Art.", "Descripción", "Unidad", "Cantidad", "Saldo",
+            "Precio", "Moneda", "O/C", "Observaciones"
+        };
+
+        int col = 1;
+        foreach (var h in headers)
+        {
+            ws.Cell(1, col).Value = h;
+            col++;
+        }
+
+        // Estilo encabezado
+        var headerRow = ws.Range(1, 1, 1, headers.Length);
+        headerRow.Style.Font.Bold = true;
+        headerRow.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromHtml("#1e3a5f");
+        headerRow.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+        headerRow.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+
+        int row = 2;
+        foreach (var (cab, items) in pendientes)
+        {
+            string estadoTxt = cab.Estado switch
+            {
+                "1" => "Autorizado",
+                "2" => "Recibido",
+                _   => cab.Estado ?? "-"
+            };
+
+            // Color de fila de agrupación por requerimiento
+            var fillColor = cab.Estado == "1"
+                ? ClosedXML.Excel.XLColor.FromHtml("#d4edda")   // verde claro = Autorizado
+                : ClosedXML.Excel.XLColor.FromHtml("#cce5ff");  // azul claro  = Recibido
+
+            if (items.Count == 0)
+            {
+                ws.Cell(row, 1).Value = (double)cab.NumReq;
+                ws.Cell(row, 2).Value = estadoTxt;
+                ws.Cell(row, 3).Value = cab.CentroCosto ?? "-";
+                ws.Cell(row, 4).Value = cab.Proveedores ?? "-";
+                ws.Cell(row, 5).Value = cab.Fecha?.ToString("dd/MM/yyyy") ?? "-";
+                ws.Cell(row, 6).Value = cab.FEntrega?.ToString("dd/MM/yyyy") ?? "-";
+                ws.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = fillColor;
+                row++;
+                continue;
+            }
+
+            foreach (var item in items)
+            {
+                ws.Cell(row, 1).Value  = (double)cab.NumReq;
+                ws.Cell(row, 2).Value  = estadoTxt;
+                ws.Cell(row, 3).Value  = cab.CentroCosto ?? "-";
+                ws.Cell(row, 4).Value  = cab.Proveedores ?? "-";
+                ws.Cell(row, 5).Value  = cab.Fecha?.ToString("dd/MM/yyyy") ?? "-";
+                ws.Cell(row, 6).Value  = cab.FEntrega?.ToString("dd/MM/yyyy") ?? "-";
+                ws.Cell(row, 7).Value  = item.Orden;
+                ws.Cell(row, 8).Value  = item.CodArt ?? "-";
+                ws.Cell(row, 9).Value  = item.Detalle ?? "-";
+                ws.Cell(row, 10).Value = item.Unidad ?? "-";
+                ws.Cell(row, 11).Value = (double)item.Cantidad;
+                ws.Cell(row, 12).Value = (double)item.Saldo;
+                ws.Cell(row, 13).Value = (double)item.Precio;
+                ws.Cell(row, 14).Value = item.Moneda ?? "-";
+                ws.Cell(row, 15).Value = item.NroDocRef ?? "-";
+                ws.Cell(row, 16).Value = item.Observaciones ?? "-";
+                ws.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = fillColor;
+                row++;
+            }
+
+            // Línea separadora entre requerimientos
+            ws.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.LightGray;
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+        ws.SheetView.FreezeRows(1);
+
+        using var ms = new System.IO.MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+
+        string fileName = $"Requerimientos_Pendientes_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+        return File(ms.ToArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar Excel de pendientes");
+            return StatusCode(500, $"Error al generar el archivo Excel: {ex.Message}");
+        }
+    }
+
+    // ── CAMBIAR ESTADO (Cerrar / Activar) ──────────────────────────────────────
+
+    [HttpPost("CambiarEstado")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CambiarEstado(
+        string accion,
+        List<string> seleccion,
+        string? buscar, string? fechaInicio, string? fechaFin,
+        string? estado, int page = 1)
+    {
+        if (seleccion == null || seleccion.Count == 0)
+        {
+            TempData["Warning"] = "No se seleccionaron requerimientos.";
+            return RedirectToAction(nameof(Index), new { buscar, fechaInicio, fechaFin, estado, page });
+        }
+
+        var claves = seleccion
+            .Select(s =>
+            {
+                var parts = s.Split('|');
+                if (parts.Length != 3) return ((string?)null, 0, 0L);
+                return (parts[0], int.TryParse(parts[1], out var sr) ? sr : 0, long.TryParse(parts[2], out var nr) ? nr : 0L);
+            })
+            .Where(c => c.Item1 != null)
+            .Select(c => (c.Item1!, c.Item2, c.Item3))
+            .ToList();
+
+        try
+        {
+            if (accion == "activar")
+            {
+                // Si tiene AUTORIZA → Estado 1 (Autorizado), si no → Estado 2 (Recibido)
+                await _service.ActivarRequisicionesAsync(claves);
+                TempData["Success"] = $"{seleccion.Count} requerimiento(s) activado(s) correctamente.";
+            }
+            else if (accion == "anular")
+            {
+                await _service.CambiarEstadoAsync(claves, "9");
+                TempData["Success"] = $"{seleccion.Count} requerimiento(s) anulado(s) correctamente.";
+            }
+            else
+            {
+                await _service.CambiarEstadoAsync(claves, "6");
+                TempData["Success"] = $"{seleccion.Count} requerimiento(s) cerrado(s) correctamente.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cambiar estado de requerimientos");
+            TempData["Error"] = $"Error al cambiar estado: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Index), new { buscar, fechaInicio, fechaFin, estado, page });
+    }
+
     // ── HELPERS ────────────────────────────────────────────────────────────────
 
     private string ObtenerCarpetaRaiz()

@@ -51,11 +51,11 @@
 
             <select name="estado" class="form-select form-select-sm" style="max-width:160px;">
                 <option value="">-- Todos los estados --</option>
-                <option value="0" selected="@(estado == "0")">Emitida</option>
-                <option value="1" selected="@(estado == "1")">Autorizada</option>
-                <option value="2" selected="@(estado == "2")">Recibida</option>
-                <option value="6" selected="@(estado == "6")">Cerrada</option>
-                <option value="9" selected="@(estado == "9")">Cancelada</option>
+                <option value="0" selected="@(estado == "0")">Emitido</option>
+                <option value="1" selected="@(estado == "1")">Autorizado</option>
+                <option value="2" selected="@(estado == "2")">Recibido</option>
+                <option value="6" selected="@(estado == "6")">Cerrado</option>
+                <option value="9" selected="@(estado == "9")">Anulado</option>
             </select>
 
             <button type="submit" class="btn btn-sm btn-outline-primary">
@@ -65,17 +65,39 @@
             {
                 <a asp-action="Index" class="btn btn-sm btn-outline-secondary">Limpiar</a>
             }
+            <button type="button" id="btnExportarPendientes"
+                    class="btn btn-sm btn-success ms-auto"
+                    title="Exporta todos los ítems de requerimientos Autorizados y Recibidos"
+                    onclick="exportarPendientes()">
+                <i class="bi bi-file-earmark-excel me-1"></i>Requerimientos Pendientes
+            </button>
         </form>
     </div>
 </div>
 
 <!-- Tabla -->
+<form id="frmCambiarEstado" method="post" asp-action="CambiarEstado">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="buscar" value="@buscar" />
+    <input type="hidden" name="fechaInicio" value="@fechaInicio" />
+    <input type="hidden" name="fechaFin" value="@fechaFin" />
+    <input type="hidden" name="estado" value="@estado" />
+    <input type="hidden" name="page" value="@currentPage" />
+    <div class="mb-2 d-flex gap-2">
+        <button type="button" id="btnAnularSeleccionados"
+                class="btn btn-sm btn-danger" @(estado == "9" || estado == "6" ? "disabled" : "")>
+            <i class="bi bi-slash-circle me-1"></i>Anular seleccionados
+        </button>
+    </div>
 <div class="card shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
+                        <th class="text-center" style="width:40px;">
+                            <input type="checkbox" id="chkAll" title="Seleccionar todos" @(estado == "9" || estado == "6" ? "disabled" : "") />
+                        </th>
                         <th class="text-center">TipDoc</th>
                         <th class="text-center">N° Req.</th>
                         <th>Centro Costo</th>
@@ -95,6 +117,18 @@
                     @foreach (var req in Model)
                     {
                         <tr>
+                            <td class="text-center">
+                                @if (req.Estado != "9")
+                                {
+                                    <input type="checkbox" name="seleccion" class="chk-req"
+                                           value="@req.TipDoc|@req.Serie|@req.NumReq"
+                                           @(estado == "9" || estado == "6" ? "disabled" : "") />
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
                             <td class="text-center">@(req.TipDoc ?? "-")</td>
                             <td class="text-center fw-semibold">@req.NumReq</td>
                             <td>
@@ -291,11 +325,11 @@
                                 @{
                                     var (badge, texto) = req.Estado switch
                                     {
-                                        "0" => ("bg-secondary", "Emitida"),
-                                        "1" => ("bg-success",   "Autorizada"),
-                                        "2" => ("bg-primary",   "Recibida"),
-                                        "6" => ("bg-dark",      "Cerrada"),
-                                        "9" => ("bg-danger",    "Cancelada"),
+                                        "0" => ("bg-secondary", "Emitido"),
+                                        "1" => ("bg-success",   "Autorizado"),
+                                        "2" => ("bg-primary",   "Recibido"),
+                                        "6" => ("bg-dark",      "Cerrado"),
+                                        "9" => ("bg-danger",    "Anulado"),
                                         _   => ("bg-light text-dark", req.Estado ?? "-")
                                     };
                                 }
@@ -315,6 +349,18 @@
                                    title="Ver detalle">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                @if (req.Estado == "9")
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success ms-1 btn-activar"
+                                            title="Activar requerimiento"
+                                            data-clave="@req.TipDoc|@req.Serie|@req.NumReq"
+                                            data-numreq="@req.NumReq">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                    <input type="checkbox" name="seleccion" value="@req.TipDoc|@req.Serie|@req.NumReq"
+                                           class="d-none chk-activar-@req.NumReq" />
+                                }
                             </td>
                         </tr>
                     }
@@ -380,6 +426,142 @@
         </nav>
     }
 </div>
+</form>
+
+<!-- Modal: Advertencia -->
+<div class="modal fade" id="modalAdvertencia" tabindex="-1" aria-labelledby="modalAdvertenciaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="modalAdvertenciaLabel"><i class="bi bi-exclamation-triangle me-2"></i>Atención</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalAdvertenciaMsg"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-warning" data-bs-dismiss="modal">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirmar Anular -->
+<div class="modal fade" id="modalCerrar" tabindex="-1" aria-labelledby="modalCerrarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalCerrarLabel"><i class="bi bi-slash-circle me-2"></i>Anular requerimientos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Está seguro de <strong>anular</strong> los requerimientos seleccionados?</p>
+                <p class="text-muted small mb-0">El estado cambiará a <span class="badge bg-danger">Anulado</span>.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarCerrar" class="btn btn-danger">
+                    <i class="bi bi-slash-circle me-1"></i>Sí, anular
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirmar Activar -->
+<div class="modal fade" id="modalActivar" tabindex="-1" aria-labelledby="modalActivarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalActivarLabel"><i class="bi bi-arrow-counterclockwise me-2"></i>Activar requerimiento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1">¿Está seguro de <strong>activar</strong> el requerimiento <strong id="modalActivarNumReq"></strong>?</p>
+                <p class="text-muted small mb-0">El estado cambiará a <span class="badge bg-success">Autorizado</span> o <span class="badge bg-primary">Recibido</span> según corresponda.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarActivar" class="btn btn-success">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Sí, activar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
+<script>
+    const modalCerrar      = new bootstrap.Modal(document.getElementById('modalCerrar'));
+    const modalActivar     = new bootstrap.Modal(document.getElementById('modalActivar'));
+    const modalAdvertencia = new bootstrap.Modal(document.getElementById('modalAdvertencia'));
+    const form = document.getElementById('frmCambiarEstado');
+
+    function mostrarAdvertencia(msg) {
+        document.getElementById('modalAdvertenciaMsg').textContent = msg;
+        modalAdvertencia.show();
+    }
+
+    function exportarPendientes() {
+        const url = '/Logistica/Requerimiento/ExportarPendientes';
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    // Seleccionar todos
+    document.getElementById('chkAll').addEventListener('change', function () {
+        document.querySelectorAll('.chk-req').forEach(c => c.checked = this.checked);
+    });
+
+    // Botón Anular seleccionados → abrir modal
+    document.getElementById('btnAnularSeleccionados').addEventListener('click', function () {
+        const seleccionados = document.querySelectorAll('.chk-req:checked');
+        if (seleccionados.length === 0) {
+            mostrarAdvertencia('Seleccione al menos un requerimiento.');
+            return;
+        }
+        modalCerrar.show();
+    });
+
+    // Confirmar anular → submit
+    document.getElementById('btnConfirmarCerrar').addEventListener('click', function () {
+        modalCerrar.hide();
+        setAccionYSubmit('anular');
+    });
+
+    // Botón Activar por fila → abrir modal
+    document.querySelectorAll('.btn-activar').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const clave  = this.dataset.clave;
+            const numreq = this.dataset.numreq;
+            document.getElementById('modalActivarNumReq').textContent = 'N° ' + numreq;
+            document.getElementById('btnConfirmarActivar').dataset.clave  = clave;
+            document.getElementById('btnConfirmarActivar').dataset.numreq = numreq;
+            modalActivar.show();
+        });
+    });
+
+    // Confirmar activar → marcar checkbox oculto y submit
+    document.getElementById('btnConfirmarActivar').addEventListener('click', function () {
+        const numreq = this.dataset.numreq;
+        const chk = document.querySelector('.chk-activar-' + numreq);
+        if (chk) chk.checked = true;
+        modalActivar.hide();
+        setAccionYSubmit('activar');
+    });
+
+    function setAccionYSubmit(accion) {
+        let input = form.querySelector('input[name="accion"]');
+        if (!input) {
+            input = document.createElement('input');
+            input.type  = 'hidden';
+            input.name  = 'accion';
+            form.appendChild(input);
+        }
+        input.value = accion;
+        form.submit();
+    }
+</script>
 }

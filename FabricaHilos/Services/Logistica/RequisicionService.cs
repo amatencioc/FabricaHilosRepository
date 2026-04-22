@@ -43,6 +43,22 @@ public interface IRequisicionService
 
     Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneralAsync_Backup(
         IEnumerable<(string TipDoc, int Serie, long NumReq)> claves);
+
+    Task CambiarEstadoAsync(
+        IEnumerable<(string TipDoc, int Serie, long NumReq)> claves, string nuevoEstado);
+
+    /// <summary>
+    /// Activa requerimientos cancelados (ESTADO=9):
+    /// Si tiene AUTORIZA → ESTADO='1' (Autorizada), si no → ESTADO='2' (Recibida).
+    /// </summary>
+    Task ActivarRequisicionesAsync(
+        IEnumerable<(string TipDoc, int Serie, long NumReq)> claves);
+
+    /// <summary>
+    /// Retorna todos los requerimientos pendientes (ESTADO='1' o '2') con sus ítems,
+    /// para exportar a Excel.
+    /// </summary>
+    Task<List<(RequisicionDto Cabecera, List<ItemReqDto> Items)>> ObtenerPendientesConItemsAsync();
 }
 
 public class RequisicionService : OracleServiceBase, IRequisicionService
@@ -90,16 +106,19 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
               "   OR UPPER(CENTRO_COSTO) LIKE '%' || UPPER(:buscar) || '%')"
             : string.Empty;
 
-        // Si hay búsqueda de texto, no aplicar filtro de fechas (se busca por cualquier fecha)
+        bool esFiltroEspecial = hasEstado && (estado == "6" || estado == "9");
+
+        // Para cerrado/anulado: respetar búsqueda y fechas igual que otros estados
+        bool aplicarBuscar = hasBuscar;
         bool aplicarFechas = !hasBuscar;
+
         string fechaIniFilter = (aplicarFechas && hasFechaIni) ? " AND TRUNC(FECHA) >= TRUNC(:fechaIni)" : string.Empty;
         string fechaFinFilter = (aplicarFechas && hasFechaFin) ? " AND TRUNC(FECHA) <= TRUNC(:fechaFin)" : string.Empty;
         string estadoFilter   = hasEstado ? " AND ESTADO = :estado" : string.Empty;
 
-        // Excluir estados cerrado/anulado salvo cuando: hay búsqueda de texto,
-        // o cuando el filtro de estado es explícitamente '6' (cerrada).
-        bool filtraCerrada = hasEstado && estado == "6";
-        string baseEstadoFilter = (hasBuscar || filtraCerrada) ? string.Empty : " AND ESTADO NOT IN ('6','9')";
+        // Por defecto (sin filtro de estado) excluir cerrado(6) y anulado(9)
+        // Cuando se elige explícitamente 6 o 9 no se aplica este filtro base
+        string baseEstadoFilter = esFiltroEspecial ? string.Empty : " AND ESTADO NOT IN ('6','9')";
 
         string whereClause = $"WHERE 1=1{baseEstadoFilter}{buscarFilter}{fechaIniFilter}{fechaFinFilter}{estadoFilter}";
 
@@ -140,7 +159,7 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
             using var cmd = new OracleCommand(sql, conn);
             cmd.BindByName = true;
 
-            if (hasBuscar)
+            if (aplicarBuscar)
                 cmd.Parameters.Add(new OracleParameter(":buscar",    OracleDbType.Varchar2, buscar,                  ParameterDirection.Input));
             if (aplicarFechas && hasFechaIni)
                 cmd.Parameters.Add(new OracleParameter(":fechaIni",  OracleDbType.Date,     fechaInicio!.Value.Date, ParameterDirection.Input));
@@ -795,6 +814,79 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
     return result;
 }
 
+public async Task CambiarEstadoAsync(
+    IEnumerable<(string TipDoc, int Serie, long NumReq)> claves, string nuevoEstado)
+{
+    var lista = claves.Distinct().ToList();
+    if (lista.Count == 0) return;
+
+    var paramPairs = lista.Select((k, i) =>
+        $"(TIPDOC = :td{i} AND SERIE = :sr{i} AND NUMREQ = :nr{i})").ToList();
+    var setClause = nuevoEstado == "9"
+        ? "ESTADO = :estado, FCH_ENTREGA_LOGIST = SYSDATE, NOTA_ANULACION = 'Anulacion Masiva'"
+        : "ESTADO = :estado";
+    var sql = $"UPDATE {S}REQUISICION SET {setClause} WHERE " + string.Join(" OR ", paramPairs);
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        cmd.Parameters.Add(new OracleParameter(":estado", OracleDbType.Varchar2) { Value = nuevoEstado });
+        for (int i = 0; i < lista.Count; i++)
+        {
+            cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+            cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+        }
+        await cmd.ExecuteNonQueryAsync();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al cambiar estado de requerimientos a {Estado}", nuevoEstado);
+        throw;
+    }
+}
+
+public async Task ActivarRequisicionesAsync(
+    IEnumerable<(string TipDoc, int Serie, long NumReq)> claves)
+{
+    var lista = claves.Distinct().ToList();
+    if (lista.Count == 0) return;
+
+    var paramPairs = lista.Select((k, i) =>
+        $"(TIPDOC = :td{i} AND SERIE = :sr{i} AND NUMREQ = :nr{i})").ToList();
+
+    // Si tiene AUTORIZA → Autorizada (1), si no → Recibida (2)
+    var sql = $"UPDATE {S}REQUISICION" +
+              " SET ESTADO = CASE" +
+              " WHEN AUTORIZA IS NOT NULL AND TRIM(AUTORIZA) != '' THEN '1'" +
+              " ELSE '2'" +
+              " END," +
+              " FCH_ENTREGA_LOGIST = SYSDATE," +
+              " NOTA_ANULACION = NOTA_ANULACION || ' - Activacion Masiva'" +
+              $" WHERE ({string.Join(" OR ", paramPairs)})";
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+        for (int i = 0; i < lista.Count; i++)
+        {
+            cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
+            cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
+            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+        }
+        await cmd.ExecuteNonQueryAsync();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al activar requerimientos");
+        throw;
+    }
+}
+
 public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneralAsync_Backup(
     IEnumerable<(string TipDoc, int Serie, long NumReq)> claves)
 {
@@ -1014,4 +1106,85 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
 
     return result;
 }
+
+public async Task<List<(RequisicionDto Cabecera, List<ItemReqDto> Items)>> ObtenerPendientesConItemsAsync()
+{
+    var resultado = new List<(RequisicionDto, List<ItemReqDto>)>();
+
+    var sqlCab = $@"
+        SELECT TIPDOC, SERIE, NUMREQ, CENTRO_COSTO, PROVEEDORES,
+               FECHA, F_ENTREGA, RESPONSABLE, PRIORIDAD, OBSERVACION,
+               ESTADO, DESTINO, IND_SERV, IMPSTO, AFECTO_IGV, AFECTO_IRENTA,
+               TIP_REF, SER_REF, NRO_REF,
+               F_AUTORIZA, AUTORIZA, USER_AUTORIZA, IP_AUTORIZA,
+               F_RECIBE, RECIBE,
+               FCH_ENTREGA_LOGIST, NOTA_ANULACION,
+               A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA
+        FROM {S}REQUISICION
+        WHERE ESTADO IN ('1','2')
+        ORDER BY FECHA DESC, NUMREQ DESC";
+
+    try
+    {
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+
+        var cabeceras = new List<RequisicionDto>();
+        await using (var cmd = new OracleCommand(sqlCab, con))
+        await using (var r = (OracleDataReader)await cmd.ExecuteReaderAsync())
+            while (await r.ReadAsync())
+                cabeceras.Add(MapRequisicion(r));
+
+        if (cabeceras.Count == 0) return resultado;
+
+        var numReqs = string.Join(",", cabeceras.Select(c => c.NumReq).Distinct());
+
+        var sqlItems = $@"
+            SELECT I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
+                   I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
+                   I.MONEDA, I.PRECIO,
+                   I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                   I.ID_GRUPO, I.F_APROBADO, I.OBSERVACIONES,
+                   I.A_ADUSER, I.A_ADFECHA, I.A_MDUSER, I.A_MDFECHA,
+                   MAX(D.NRO_DOC_REF) AS NRO_DOC_REF
+            FROM {S}ITEMREQ I
+            LEFT JOIN {S}DESP_ITEMREQ D ON D.NUMREQ = I.NUMREQ AND D.ORDEN = I.ORDEN
+            WHERE I.NUMREQ IN ({numReqs})
+              AND I.ID_GRUPO IS NULL
+              AND I.F_APROBADO IS NULL
+            GROUP BY I.TIPDOC, I.SERIE, I.NUMREQ, I.ORDEN, I.COD_ART, I.DETALLE, I.UNIDAD, I.MARCA, I.CTACTBLE,
+                     I.CANTIDAD, I.SALDO, I.STK_MIN, I.STK_HIST,
+                     I.MONEDA, I.PRECIO,
+                     I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                     I.ID_GRUPO, I.F_APROBADO, I.OBSERVACIONES,
+                     I.A_ADUSER, I.A_ADFECHA, I.A_MDUSER, I.A_MDFECHA
+            ORDER BY I.NUMREQ, I.ORDEN";
+
+        var itemsMap = new Dictionary<long, List<ItemReqDto>>();
+        await using (var cmd2 = new OracleCommand(sqlItems, con))
+        await using (var r2 = (OracleDataReader)await cmd2.ExecuteReaderAsync())
+        {
+            while (await r2.ReadAsync())
+            {
+                var item = MapItem(r2);
+                if (!itemsMap.TryGetValue(item.NumReq, out var lista))
+                {
+                    lista = new List<ItemReqDto>();
+                    itemsMap[item.NumReq] = lista;
+                }
+                lista.Add(item);
+            }
+        }
+
+        foreach (var cab in cabeceras)
+            resultado.Add((cab, itemsMap.TryGetValue(cab.NumReq, out var its) ? its : new List<ItemReqDto>()));
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener requerimientos pendientes con ítems");
+    }
+
+    return resultado;
 }
+}
+
