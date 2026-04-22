@@ -1400,6 +1400,8 @@ namespace FabricaHilos.Services.Sgc
             }
 
             string connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr))
+                throw new InvalidOperationException("No se encontró la cadena de conexión Oracle.");
             int numReq = 0;
 
             try
