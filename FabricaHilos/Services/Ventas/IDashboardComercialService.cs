@@ -4,28 +4,20 @@ namespace FabricaHilos.Services.Ventas
 {
     public interface IDashboardComercialService
     {
-        /// <summary>Query 1: Importe por Asesor / Mes (sin conceptos inafectos a comisiones)</summary>
-        Task<List<DcImporteAsesorMesDto>> ObtenerImportePorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda);
+        /// <summary>
+        /// Ejecuta el QueryPrincipal y devuelve todos los datos agregados del dashboard en un solo objeto.
+        /// </summary>
+        Task<DcDashboardDto> ObtenerDashboardAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, int top = 3);
 
-        /// <summary>Query 1.1: Detalle de Importe por Cliente por Asesor / Mes</summary>
-        Task<List<DcDetalleImporteAsesorMesDto>> ObtenerDetalleImportePorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor, string mes);
+        /// <summary>
+        /// Lista de clientes de un asesor específico con importe y KG (para detalle desde pie chart).
+        /// Derivado de los datos ya cargados, pero también disponible como endpoint independiente.
+        /// </summary>
+        Task<List<DcClienteImporteAsesorDto>> ObtenerClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor);
 
-        /// <summary>Query 2: Cantidad KG por Asesor / Mes</summary>
-        Task<List<DcCantidadKgAsesorMesDto>> ObtenerCantidadKgPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin);
-
-        /// <summary>Query 3: Nro. de Clientes por Asesor / Mes</summary>
-        Task<List<DcNroClientesAsesorMesDto>> ObtenerNroClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin);
-
-        /// <summary>Query 3.1: Detalle de Clientes por Asesor / Mes</summary>
-        Task<List<DcDetalleClienteAsesorMesDto>> ObtenerDetalleClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor, string mes);
-
-        /// <summary>Query 4: Top N clientes por Asesor (Kilos e Importe acumulado)</summary>
-        Task<List<DcTopClienteAsesorDto>> ObtenerTopClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, int top);
-
-        /// <summary>Query 5: Clientes del Asesor — Importe + Giro (período completo)</summary>
-        Task<List<DcClienteImporteAsesorDto>> ObtenerClientesImportePorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor);
-
-        /// <summary>Query 5b: Todos los Clientes — Importe + Giro por Asesor (período completo)</summary>
-        Task<List<DcClienteImporteTodosDto>> ObtenerClientesImporteTodosAsync(DateTime fechaInicio, DateTime fechaFin, string moneda);
+        /// <summary>
+        /// Diagnóstico: devuelve el número de filas que retorna el QueryPrincipal para un rango de fechas.
+        /// </summary>
+        Task<int> DiagnosticoFilasAsync(DateTime fechaInicio, DateTime fechaFin);
     }
 }

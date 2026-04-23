@@ -45,20 +45,17 @@ window.exportarClientesAsesorExcel = function () {
     URL.revokeObjectURL(url);
 };
 
-// Exportar a Excel todos los clientes de todos los asesores (llamada AJAX)
-window.exportarTodosClientesExcel = async function () {
-    var urlEndpoint = window._dcExportUrl || '';
-    if (!urlEndpoint) { console.error('URL de exportacion no configurada'); return; }
+// Exportar a Excel todos los clientes de todos los asesores (usa datos ya cargados en memoria)
+window.exportarTodosClientesExcel = function () {
     var moneda = document.getElementById('moneda');
     var monLabel = moneda && moneda.value === 'S' ? 'S/' : 'USD';
-    var p = window.buildParams ? window.buildParams() : new URLSearchParams();
+    var rows = window._clientesTodosData || [];
+    if (!rows.length) {
+        if (window.showToast) window.showToast('No hay datos para exportar.', 'warning');
+        return;
+    }
 
     try {
-        var data = await window.apiFetch(urlEndpoint + '?' + p.toString());
-        if (!data || data.length === 0) {
-            if (window.showToast) window.showToast('No hay datos para exportar.', 'warning');
-            return;
-        }
 
         var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
         html += '<head><meta charset="UTF-8"></head><body>';
@@ -67,7 +64,7 @@ window.exportarTodosClientesExcel = async function () {
         html += '<th>#</th><th>Asesor</th><th>RUC</th><th>Raz\u00f3n Social</th><th>Giro</th><th>Importe (' + monLabel + ')</th>';
         html += '</tr>';
 
-        data.forEach(function (row, i) {
+        rows.forEach(function (row, i) {
             html += '<tr>';
             html += '<td>' + (i + 1) + '</td>';
             html += '<td>' + (row.asesor || '') + '</td>';

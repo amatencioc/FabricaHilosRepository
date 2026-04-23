@@ -8,106 +8,57 @@ namespace FabricaHilos.Controllers.Ventas
     public class DashboardComercialController : OracleBaseController
     {
         private readonly IDashboardComercialService _service;
-        private readonly ILogger<DashboardComercialController> _logger;
 
-        public DashboardComercialController(
-            IDashboardComercialService service,
-            ILogger<DashboardComercialController> logger)
+        public DashboardComercialController(IDashboardComercialService service)
         {
             _service = service;
-            _logger  = logger;
         }
 
-        public IActionResult Index()
-        {
-            return View();
-        }
+        public IActionResult Index() => View();
 
-        // ─────────────────────────────────────────────────────────
-        // Endpoints JSON
-        // ─────────────────────────────────────────────────────────
-
+        // ── Endpoint principal: devuelve todo el dashboard en una sola llamada ──
         [HttpGet]
-        public async Task<IActionResult> DatosImportePorAsesor(DateTime? fechaInicio, DateTime? fechaFin, string? moneda)
+        public async Task<IActionResult> DatosDashboard(
+            DateTime? fechaInicio, DateTime? fechaFin, string? moneda, int top = 3)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerImportePorAsesorAsync(fi, ff, moneda ?? "D");
+            var data = await _service.ObtenerDashboardAsync(fi, ff, moneda ?? "D", top);
             return Json(data);
         }
 
+        // ── Endpoint de detalle: clientes de un asesor (desde clic en pie chart) ──
         [HttpGet]
-        public async Task<IActionResult> DatosDetalleImporte(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor, string? mes)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            if (string.IsNullOrEmpty(asesor) || string.IsNullOrEmpty(mes))
-                return Json(new List<object>());
-
-            var data = await _service.ObtenerDetalleImportePorAsesorAsync(fi, ff, moneda ?? "D", asesor, mes);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosCantidadKgPorAsesor(DateTime? fechaInicio, DateTime? fechaFin)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerCantidadKgPorAsesorAsync(fi, ff);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosNroClientesPorAsesor(DateTime? fechaInicio, DateTime? fechaFin)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerNroClientesPorAsesorAsync(fi, ff);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosDetalleClientes(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor, string? mes)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            if (string.IsNullOrEmpty(asesor) || string.IsNullOrEmpty(mes))
-                return Json(new List<object>());
-
-            var data = await _service.ObtenerDetalleClientesPorAsesorAsync(fi, ff, moneda ?? "D", asesor, mes);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosTopClientesPorAsesor(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, int top = 3)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerTopClientesPorAsesorAsync(fi, ff, moneda ?? "D", top);
-            return Json(data);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DatosClientesImportePorAsesor(DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor)
+        public async Task<IActionResult> DatosClientesPorAsesor(
+            DateTime? fechaInicio, DateTime? fechaFin, string? moneda, string? asesor)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
             if (string.IsNullOrEmpty(asesor))
-                return Json(new List<object>());
+                return Json(Array.Empty<object>());
 
-            var data = await _service.ObtenerClientesImportePorAsesorAsync(fi, ff, moneda ?? "D", asesor);
+            var data = await _service.ObtenerClientesPorAsesorAsync(fi, ff, moneda ?? "D", asesor);
             return Json(data);
         }
 
+        // ── Diagnóstico: contar filas del QueryPrincipal ──────────────────────
         [HttpGet]
-        public async Task<IActionResult> DatosClientesImporteTodos(DateTime? fechaInicio, DateTime? fechaFin, string? moneda)
+        public async Task<IActionResult> DiagnosticoFilas(DateTime? fechaInicio, DateTime? fechaFin)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var data = await _service.ObtenerClientesImporteTodosAsync(fi, ff, moneda ?? "D");
-            return Json(data);
+            var n = await _service.DiagnosticoFilasAsync(fi, ff);
+            return Json(new
+            {
+                fechaInicio = fi.ToString("dd/MM/yyyy"),
+                fechaFin    = ff.ToString("dd/MM/yyyy"),
+                filasOracle = n,
+                nota        = n < 0 ? "Error - revisar logs del servidor" : $"{n} filas devueltas por COUNT(*) directo en Oracle"
+            });
         }
 
-        // ─────────────────────────────────────────────────────────
-        // Helper
-        // ─────────────────────────────────────────────────────────
-        private static (DateTime fi, DateTime ff) ResolverFechas(DateTime? fechaInicio, DateTime? fechaFin)
+        private static (DateTime fi, DateTime ff) ResolverFechas(DateTime? fi, DateTime? ff)
         {
-            var ff = fechaFin    ?? DateTime.Today;
-            var fi = fechaInicio ?? new DateTime(ff.Year, 1, 1);
-            return (fi, ff);
+            var f2 = ff ?? DateTime.Today;
+            var f1 = fi ?? new DateTime(f2.Year, 1, 1);
+            return (f1, f2);
         }
     }
 }

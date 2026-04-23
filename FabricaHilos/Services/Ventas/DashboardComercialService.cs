@@ -16,775 +16,357 @@ namespace FabricaHilos.Services.Ventas
             _logger = logger;
         }
 
-        private static string? GetStr(OracleDataReader r, string col) =>
+        // ── Helpers de lectura ──────────────────────────────────────────────────
+        private static string?  GetStr(OracleDataReader r, string col) =>
             r[col] == DBNull.Value ? null : r[col]?.ToString();
-
-        private static decimal GetDec(OracleDataReader r, string col) =>
-            r[col] == DBNull.Value ? 0m : Convert.ToDecimal(r[col]);
-
-        private static int GetInt(OracleDataReader r, string col) =>
-            r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]);
-
-        // ─────────────────────────────────────────────────────────
-        // Query 1: Importe por Asesor / Mes
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcImporteAsesorMesDto>> ObtenerImportePorAsesorAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda)
+        private static decimal GetDec(OracleDataReader r, string col)
         {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcImporteAsesorMesDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            var sql = $@"
-SELECT A.VENDEDOR                       COD_ASESOR,
-       A.ASESOR,
-       A.MES,
-       (A.MONTO - NVL(B.MONTO, 0))     IMPORTE
-  FROM (SELECT A.VENDEDOR,
-               T.DESCRIPCION                   ASESOR,
-               TO_CHAR(A.FECHA, 'YYYY/MM')     MES,
-               SUM(DECODE(:P_MON,
-                          'S', SOLES_SINANT,
-                               DOLARES_SINANT)) MONTO
-                    FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-                  WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                    AND T.TIPO(+) = 29
-                    AND T.CODIGO(+) = A.VENDEDOR
-                    AND (T.DESCRIPCION IS NULL OR UPPER(T.DESCRIPCION) <> 'OFICINA')
-                  GROUP BY A.VENDEDOR,
-                           T.DESCRIPCION,
-                           TO_CHAR(A.FECHA, 'YYYY/MM')) A,
-                (SELECT D.COD_VENDE                     VENDEDOR,
-                        TO_CHAR(D.FECHA, 'YYYY/MM')     MES,
-                        SUM(DECODE(:P_MON,
-                                   'S',
-                                   DECODE(D.MONEDA,
-                                          'S', I.IMP_VVTA,
-                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                                   DECODE(D.MONEDA,
-                                          'D', I.IMP_VVTA,
-                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                   FROM {S}DOCUVENT D, {S}ITEMDOCU I
-                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                    AND D.ESTADO <> '9'
-                    AND I.TIPODOC = D.TIPODOC
-                    AND I.SERIE = D.SERIE
-                    AND I.NUMERO = D.NUMERO
-                    AND I.COD_ART IN ('9300049997', '9300049999',
-                                      '930004999A', '9300049998')
-                  GROUP BY D.COD_VENDE,
-                           TO_CHAR(D.FECHA, 'YYYY/MM')) B
-          WHERE B.VENDEDOR(+) = A.VENDEDOR
-            AND B.MES(+) = A.MES
-          ORDER BY A.ASESOR, A.MES";
-
             try
             {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DcImporteAsesorMesDto
-                    {
-                        CodAsesor = GetStr(reader, "COD_ASESOR"),
-                        Asesor    = GetStr(reader, "ASESOR"),
-                        Mes       = GetStr(reader, "MES"),
-                        Importe   = GetDec(reader, "IMPORTE")
-                    });
-                }
+                if (r[col] == DBNull.Value) return 0m;
+                var od = r.GetOracleDecimal(r.GetOrdinal(col));
+                od = Oracle.ManagedDataAccess.Types.OracleDecimal.SetPrecision(od, 28);
+                return (decimal)od;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Importe por Asesor/Mes (Dashboard Comercial)");
-            }
-
-            return result;
+            catch { return 0m; }
         }
+        private static int      GetInt(OracleDataReader r, string col) =>
+            r[col] == DBNull.Value ? 0  : Convert.ToInt32(r[col]);
 
-        // ─────────────────────────────────────────────────────────
-        // Query 1.1: Detalle de Importe por Cliente por Asesor / Mes
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcDetalleImporteAsesorMesDto>> ObtenerDetalleImportePorAsesorAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor, string mes)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcDetalleImporteAsesorMesDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            var sql = $@"
-SELECT A.ASESOR,
-       A.MES,
-       A.COD_CLIENTE,
-       X.RUC,
-       X.NOMBRE                          RAZON_SOCIAL,
-       (A.MONTO - NVL(B.MONTO, 0))      IMPORTE
-  FROM (SELECT A.VENDEDOR,
-               T.DESCRIPCION                   ASESOR,
-               TO_CHAR(A.FECHA, 'YYYY/MM')     MES,
-               A.COD_CLIENTE,
-               SUM(DECODE(:P_MON,
-                          'S', SOLES_SINANT,
-                               DOLARES_SINANT)) MONTO
-          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-         WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO = 29
-           AND T.CODIGO = A.VENDEDOR
-           AND T.DESCRIPCION = :P_ASESOR
-           AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
-         GROUP BY A.VENDEDOR,
-                  T.DESCRIPCION,
-                  TO_CHAR(A.FECHA, 'YYYY/MM'),
-                  A.COD_CLIENTE) A,
-       (SELECT D.COD_VENDE                     VENDEDOR,
-               TO_CHAR(D.FECHA, 'YYYY/MM')     MES,
-               D.COD_CLIENTE,
-               SUM(DECODE(:P_MON,
-                          'S',
-                          DECODE(D.MONEDA,
-                                 'S', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                          DECODE(D.MONEDA,
-                                 'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM {S}DOCUVENT D, {S}ITEMDOCU I
-         WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND D.ESTADO <> '9'
-           AND I.TIPODOC = D.TIPODOC
-           AND I.SERIE = D.SERIE
-           AND I.NUMERO = D.NUMERO
-           AND I.COD_ART IN ('9300049997', '9300049999',
-                             '930004999A', '9300049998')
-         GROUP BY D.COD_VENDE,
-                  TO_CHAR(D.FECHA, 'YYYY/MM'),
-                  D.COD_CLIENTE) B,
-       {S}CLIENTES X
- WHERE B.VENDEDOR(+) = A.VENDEDOR
-   AND B.COD_CLIENTE(+) = A.COD_CLIENTE
-   AND B.MES(+) = A.MES
-   AND X.COD_CLIENTE = A.COD_CLIENTE
- ORDER BY IMPORTE DESC";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
-                cmd.Parameters.Add("P_ASESOR", OracleDbType.Varchar2).Value = asesor;
-                cmd.Parameters.Add("P_MES",    OracleDbType.Varchar2).Value = mes;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DcDetalleImporteAsesorMesDto
-                    {
-                        Asesor      = GetStr(reader, "ASESOR"),
-                        Mes         = GetStr(reader, "MES"),
-                        CodCliente  = GetStr(reader, "COD_CLIENTE"),
-                        Ruc         = GetStr(reader, "RUC"),
-                        RazonSocial = GetStr(reader, "RAZON_SOCIAL"),
-                        Importe     = GetDec(reader, "IMPORTE")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Detalle Importe por Asesor/Mes (Dashboard Comercial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // Query 2: Cantidad KG por Asesor / Mes
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcCantidadKgAsesorMesDto>> ObtenerCantidadKgPorAsesorAsync(
-            DateTime fechaInicio, DateTime fechaFin)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcCantidadKgAsesorMesDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            var sql = $@"
-SELECT T.DESCRIPCION                    ASESOR,
-       TO_CHAR(C.FECHA, 'YYYY/MM')     MES,
-       SUM(B.CANTIDAD * E.FACTOR)       CANTIDAD_KG
-  FROM {S}ITEMDOCU         B,
-       {S}DOCUVENT         C,
-       {S}ARTICUL          A,
+        // ── SQL principal (único query de toda la pantalla) ─────────────────────
+        private string BuildSql() => $@"
+SELECT D.COD_CLIENTE,
+       C.NOMBRE,
+       C.GIRO,
+       T2.ABREVIADA DESC_GIRO,
+       D.COD_VENDE COD_ASESOR,
+       T.DESCRIPCION ASESOR,
+       I.TIPODOC,
+       I.SERIE,
+       I.NUMERO NUMDOC,
+       G.COD_ALM,
+       D.FECHA,
+       A.TP_ART,
+       A.COD_FAM,
+       A.COD_LIN,
+       I.COD_ART,
+       DECODE(A.DESCRIPCION,
+              'VARIOS',
+              I.DETALLE,
+              A.DESCRIPCION || ' (' || I.COLOR_DET || ')') DESCRIPCION,
+       A.UNIDAD,
+       (I.CANTIDAD * E.FACTOR) KILOS,
+       I.CANTIDAD,
+       I.IMP_VVTA,
+       DECODE(D.MONEDA, 'S', 'S', 'D') MON,
+       G.NRO_DOC_REF NUMERO1,
+       TO_CHAR(D.FECHA, 'YYYY/MM') FEC,
+       I.VVTU,
+       DECODE(D.MONEDA,
+              'S',
+              ROUND(I.IMP_VVTA *
+              ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000), 4),
+              ROUND((I.IMP_VVTA *
+              ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) *
+              D.IMPORT_CAM, 4)) SOLES,
+       DECODE(D.MONEDA,
+              'D',
+              ROUND(I.IMP_VVTA *
+              ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000), 4),
+              ROUND((I.IMP_VVTA *
+              ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) /
+              D.IMPORT_CAM, 4)) DOLAR,
+       I.POR_DESC1,
+       I.POR_DESC2
+  FROM {S}ITEMDOCU          I,
+       {S}DOCUVENT          D,
+       {S}KARDEX_G          G,
+       {S}EQUIVALENCIA      E,
+       {S}ARTICUL           A,
+       {S}CLIENTES          C,
        {S}TABLAS_AUXILIARES T,
-       {S}EQUIVALENCIA     E
- WHERE C.TIPODOC = B.TIPODOC
-   AND C.SERIE = B.SERIE
-   AND C.NUMERO = B.NUMERO
-   AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND C.ESTADO <> '9'
-   AND A.TP_ART IN ('T', 'S')
-   AND A.COD_ART = B.COD_ART
-   AND T.TIPO = 29
-   AND T.CODIGO = C.COD_VENDE
-   AND UPPER(T.DESCRIPCION) <> 'OFICINA'
-   AND E.UNIDAD = 'KG'
-   AND E.COD_ART = A.COD_ART
- GROUP BY T.DESCRIPCION,
-          TO_CHAR(C.FECHA, 'YYYY/MM')
- ORDER BY 1, 2";
+       {S}TABLAS_AUXILIARES T2
+ WHERE D.TIPODOC = I.TIPODOC
+   AND D.SERIE = I.SERIE
+   AND D.NUMERO = I.NUMERO
+   AND D.FECHA BETWEEN :FECHAI AND :FECHAF
+   AND D.ESTADO <> '9'
+   AND G.TP_TRANSAC(+) = D.TIP_DOC_REF
+   AND TO_CHAR(G.SERIE(+)) = D.SER_DOC_REF
+   AND G.NUMERO(+) = D.NRO_DOC_REF
+   AND G.COD_RELACION(+) = D.COD_CLIENTE
+   AND E.COD_ART(+) = I.COD_ART
+   AND E.UNIDAD(+) = 'KG'
+   AND A.COD_ART = I.COD_ART
+   AND C.COD_CLIENTE = D.COD_CLIENTE
+   AND T.TIPO(+) = 29
+   AND T.CODIGO(+) = D.COD_VENDE
+   AND T2.TIPO(+) = 27
+   AND T2.CODIGO(+) = C.GIRO
+   AND A.COD_FAM NOT IN ('ANT','Z01','ZVA')
+   AND TP_ART IN ('T','S')
+ ORDER BY C.NOMBRE, T.DESCRIPCION, I.TIPODOC, I.SERIE, I.NUMERO";
 
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value = fechaFin.Date;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DcCantidadKgAsesorMesDto
-                    {
-                        Asesor     = GetStr(reader, "ASESOR"),
-                        Mes        = GetStr(reader, "MES"),
-                        CantidadKg = GetDec(reader, "CANTIDAD_KG")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Cantidad KG por Asesor/Mes (Dashboard Comercial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // Query 3: Nro. de Clientes por Asesor / Mes
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcNroClientesAsesorMesDto>> ObtenerNroClientesPorAsesorAsync(
+        // ── Cargar filas crudas ─────────────────────────────────────────────────
+        private async Task<List<DcFilaRawDto>> CargarFilasAsync(
             DateTime fechaInicio, DateTime fechaFin)
         {
             var connStr = GetOracleConnectionString();
-            var result  = new List<DcNroClientesAsesorMesDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            var sql = $@"
-SELECT T.DESCRIPCION                    ASESOR,
-       COUNT(DISTINCT C.COD_CLIENTE)    NRO_CLIENTES
-  FROM {S}DOCUVENT         C,
-       {S}ITEMDOCU         B,
-       {S}ARTICUL          A,
-       {S}TABLAS_AUXILIARES T
- WHERE C.TIPODOC = B.TIPODOC
-   AND C.SERIE   = B.SERIE
-   AND C.NUMERO  = B.NUMERO
-   AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND C.ESTADO <> '9'
-   AND A.TP_ART IN ('T', 'S')
-   AND A.COD_ART = B.COD_ART
-   AND T.TIPO    = 29
-   AND T.CODIGO  = C.COD_VENDE
-   AND UPPER(T.DESCRIPCION) <> 'OFICINA'
- GROUP BY T.DESCRIPCION
- ORDER BY 1";
+            var filas   = new List<DcFilaRawDto>();
+            if (string.IsNullOrEmpty(connStr)) return filas;
 
             try
             {
-                using var conn = new OracleConnection(connStr);
+                using var conn   = new OracleConnection(connStr);
                 await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value = fechaFin.Date;
+                using var cmd    = new OracleCommand(BuildSql(), conn) { BindByName = true };
+                cmd.Parameters.Add("FECHAI", OracleDbType.Date).Value = fechaInicio.Date;
+                cmd.Parameters.Add("FECHAF", OracleDbType.Date).Value = fechaFin.Date;
 
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
-                    result.Add(new DcNroClientesAsesorMesDto
+                    var fec = GetStr(reader, "FEC");
+                    filas.Add(new DcFilaRawDto
                     {
-                        Asesor      = GetStr(reader, "ASESOR"),
-                        Mes         = null,
-                        NroClientes = GetInt(reader, "NRO_CLIENTES")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Nro Clientes por Asesor/Mes (Dashboard Comercial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // Query 3.1: Detalle de Clientes por Asesor / Mes
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcDetalleClienteAsesorMesDto>> ObtenerDetalleClientesPorAsesorAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor, string mes)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcDetalleClienteAsesorMesDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            var sql = $@"
-SELECT V.ASESOR,
-       V.MES,
-       V.COD_CLIENTE,
-       X.RUC,
-       X.NOMBRE                              RAZON_SOCIAL,
-       NVL(K.CANTIDAD_KG, 0)                 CANTIDAD_KG,
-       (V.MONTO - NVL(I.MONTO, 0))           IMPORTE
-  FROM (SELECT A.VENDEDOR,
-               T.DESCRIPCION                   ASESOR,
-               TO_CHAR(A.FECHA, 'YYYY/MM')     MES,
-               A.COD_CLIENTE,
-               SUM(DECODE(:P_MON,
-                          'S', SOLES_SINANT,
-                               DOLARES_SINANT)) MONTO
-          FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-         WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND T.TIPO   = 29
-           AND T.CODIGO = A.VENDEDOR
-           AND T.DESCRIPCION = :P_ASESOR
-           AND TO_CHAR(A.FECHA, 'YYYY/MM') = :P_MES
-         GROUP BY A.VENDEDOR,
-                  T.DESCRIPCION,
-                  TO_CHAR(A.FECHA, 'YYYY/MM'),
-                  A.COD_CLIENTE) V,
-       (SELECT D.COD_VENDE                     VENDEDOR,
-               TO_CHAR(D.FECHA, 'YYYY/MM')     MES,
-               D.COD_CLIENTE,
-               SUM(DECODE(:P_MON,
-                          'S',
-                          DECODE(D.MONEDA,
-                                 'S', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                          DECODE(D.MONEDA,
-                                 'D', I.IMP_VVTA,
-                                 ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM {S}DOCUVENT D, {S}ITEMDOCU I
-         WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND D.ESTADO <> '9'
-           AND I.TIPODOC = D.TIPODOC
-           AND I.SERIE   = D.SERIE
-           AND I.NUMERO  = D.NUMERO
-           AND I.COD_ART IN ('9300049997', '9300049999',
-                             '930004999A', '9300049998')
-         GROUP BY D.COD_VENDE,
-                  TO_CHAR(D.FECHA, 'YYYY/MM'),
-                  D.COD_CLIENTE) I,
-       (SELECT C.COD_VENDE                   VENDEDOR,
-               TO_CHAR(C.FECHA, 'YYYY/MM')   MES,
-               C.COD_CLIENTE,
-               SUM(B.CANTIDAD * E.FACTOR)    CANTIDAD_KG
-          FROM {S}DOCUVENT         C,
-               {S}ITEMDOCU         B,
-               {S}ARTICUL          A,
-               {S}EQUIVALENCIA     E
-         WHERE C.TIPODOC = B.TIPODOC
-           AND C.SERIE   = B.SERIE
-           AND C.NUMERO  = B.NUMERO
-           AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND C.ESTADO <> '9'
-           AND A.TP_ART IN ('T', 'S')
-           AND A.COD_ART = B.COD_ART
-           AND E.UNIDAD  = 'KG'
-           AND E.COD_ART = A.COD_ART
-         GROUP BY C.COD_VENDE,
-                  TO_CHAR(C.FECHA, 'YYYY/MM'),
-                  C.COD_CLIENTE) K,
-       {S}CLIENTES X
- WHERE I.VENDEDOR(+)    = V.VENDEDOR
-   AND I.COD_CLIENTE(+) = V.COD_CLIENTE
-   AND I.MES(+)         = V.MES
-   AND K.VENDEDOR(+)    = V.VENDEDOR
-   AND K.COD_CLIENTE(+) = V.COD_CLIENTE
-   AND K.MES(+)         = V.MES
-   AND X.COD_CLIENTE    = V.COD_CLIENTE
- ORDER BY IMPORTE DESC, CANTIDAD_KG DESC";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
-                cmd.Parameters.Add("P_ASESOR", OracleDbType.Varchar2).Value = asesor;
-                cmd.Parameters.Add("P_MES",    OracleDbType.Varchar2).Value = mes;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DcDetalleClienteAsesorMesDto
-                    {
-                        Asesor      = GetStr(reader, "ASESOR"),
-                        Mes         = GetStr(reader, "MES"),
                         CodCliente  = GetStr(reader, "COD_CLIENTE"),
-                        Ruc         = GetStr(reader, "RUC"),
-                        RazonSocial = GetStr(reader, "RAZON_SOCIAL"),
-                        CantidadKg  = GetDec(reader, "CANTIDAD_KG"),
-                        Importe     = GetDec(reader, "IMPORTE")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Detalle Clientes por Asesor/Mes (Dashboard Comercial)");
-            }
-
-            return result;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // Query 4: Top N clientes por Asesor (Kilos e Importe)
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcTopClienteAsesorDto>> ObtenerTopClientesPorAsesorAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda, int top)
-        {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcTopClienteAsesorDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
-
-            // Se obtienen todos los clientes por asesor con kilos e importe, agrupado por año
-            var sql = $@"
-SELECT V.ASESOR,
-       X.NOMBRE                              RAZON_SOCIAL,
-       NVL(K.CANTIDAD_KG, 0)                 CANTIDAD_KG,
-       (V.MONTO - NVL(INF.MONTO, 0))        IMPORTE,
-       V.ANIO
-  FROM (SELECT A.VENDEDOR,
-               T.DESCRIPCION                   ASESOR,
-               A.COD_CLIENTE,
-               EXTRACT(YEAR FROM A.FECHA)       ANIO,
-               SUM(DECODE(:P_MON,
-                           'S', SOLES_SINANT,
-                                DOLARES_SINANT)) MONTO
-            FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-          WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-            AND T.TIPO(+)   = 29
-            AND T.CODIGO(+) = A.VENDEDOR
-            AND (T.DESCRIPCION IS NULL OR UPPER(T.DESCRIPCION) <> 'OFICINA')
-          GROUP BY A.VENDEDOR,
-                   T.DESCRIPCION,
-                   A.COD_CLIENTE,
-                   EXTRACT(YEAR FROM A.FECHA)) V,
-       (SELECT D.COD_VENDE                     VENDEDOR,
-               D.COD_CLIENTE,
-               EXTRACT(YEAR FROM D.FECHA)       ANIO,
-               SUM(DECODE(:P_MON,
-                           'S',
-                           DECODE(D.MONEDA,
-                                  'S', I.IMP_VVTA,
-                                  ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                           DECODE(D.MONEDA,
-                                  'D', I.IMP_VVTA,
-                                  ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-          FROM {S}DOCUVENT D, {S}ITEMDOCU I
-         WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND D.ESTADO <> '9'
-           AND I.TIPODOC = D.TIPODOC
-           AND I.SERIE   = D.SERIE
-           AND I.NUMERO  = D.NUMERO
-           AND I.COD_ART IN ('9300049997', '9300049999',
-                             '930004999A', '9300049998')
-         GROUP BY D.COD_VENDE,
-                  D.COD_CLIENTE,
-                  EXTRACT(YEAR FROM D.FECHA)) INF,
-       (SELECT C.COD_VENDE                   VENDEDOR,
-               C.COD_CLIENTE,
-               EXTRACT(YEAR FROM C.FECHA)    ANIO,
-               SUM(B.CANTIDAD * E.FACTOR)    CANTIDAD_KG
-          FROM {S}DOCUVENT         C,
-               {S}ITEMDOCU         B,
-               {S}ARTICUL          A,
-               {S}EQUIVALENCIA     E
-         WHERE C.TIPODOC = B.TIPODOC
-           AND C.SERIE   = B.SERIE
-           AND C.NUMERO  = B.NUMERO
-           AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-           AND C.ESTADO <> '9'
-           AND A.TP_ART IN ('T', 'S')
-           AND A.COD_ART = B.COD_ART
-           AND E.UNIDAD  = 'KG'
-           AND E.COD_ART = A.COD_ART
-         GROUP BY C.COD_VENDE,
-                  C.COD_CLIENTE,
-                  EXTRACT(YEAR FROM C.FECHA)) K,
-       {S}CLIENTES X
- WHERE INF.VENDEDOR(+)    = V.VENDEDOR
-   AND INF.COD_CLIENTE(+) = V.COD_CLIENTE
-   AND INF.ANIO(+)        = V.ANIO
-   AND K.VENDEDOR(+)      = V.VENDEDOR
-   AND K.COD_CLIENTE(+)   = V.COD_CLIENTE
-   AND K.ANIO(+)          = V.ANIO
-   AND X.COD_CLIENTE      = V.COD_CLIENTE
- ORDER BY V.ASESOR, V.ANIO, (V.MONTO - NVL(INF.MONTO, 0)) DESC";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                var allRows = new List<DcTopClienteAsesorDto>();
-                while (await reader.ReadAsync())
-                {
-                    allRows.Add(new DcTopClienteAsesorDto
-                    {
+                        Nombre      = GetStr(reader, "NOMBRE"),
+                        DescGiro    = GetStr(reader, "DESC_GIRO"),
+                        CodAsesor   = GetStr(reader, "COD_ASESOR"),
                         Asesor      = GetStr(reader, "ASESOR"),
-                        RazonSocial = GetStr(reader, "RAZON_SOCIAL"),
-                        CantidadKg  = GetDec(reader, "CANTIDAD_KG"),
-                        Importe     = GetDec(reader, "IMPORTE"),
-                        Anio        = GetInt(reader, "ANIO")
+                        TipoDoc     = GetStr(reader, "TIPODOC"),
+                        Serie       = GetStr(reader, "SERIE"),
+                        NumDoc      = GetStr(reader, "NUMDOC"),
+                        CodAlm      = GetStr(reader, "COD_ALM"),
+                        TpArt       = GetStr(reader, "TP_ART"),
+                        CodFam      = GetStr(reader, "COD_FAM"),
+                        CodLin      = GetStr(reader, "COD_LIN"),
+                        CodArt      = GetStr(reader, "COD_ART"),
+                        Descripcion = GetStr(reader, "DESCRIPCION"),
+                        Unidad      = GetStr(reader, "UNIDAD"),
+                        Cantidad    = GetDec(reader, "CANTIDAD"),
+                        ImpVvta     = GetDec(reader, "IMP_VVTA"),
+                        Mon         = GetStr(reader, "MON"),
+                        Numero1     = GetStr(reader, "NUMERO1"),
+                        Fec         = fec,
+                        Anio        = fec != null && fec.Length >= 4 ? int.Parse(fec[..4]) : 0,
+                        Vvtu        = GetDec(reader, "VVTU"),
+                        PorDesc1    = GetDec(reader, "POR_DESC1"),
+                        PorDesc2    = GetDec(reader, "POR_DESC2"),
+                        Kilos       = GetDec(reader, "KILOS"),
+                        Soles       = GetDec(reader, "SOLES"),
+                        Dolar       = GetDec(reader, "DOLAR"),
                     });
                 }
-
-                // Excluir filas sin asesor (vendedores sin registro en TABLAS_AUXILIARES)
-                // y aplicar TOP N separado: por importe y por KG
-                var known = allRows.Where(r => r.Asesor != null).ToList();
-
-                var topImporte = known
-                    .GroupBy(r => new { r.Asesor, r.Anio })
-                    .SelectMany(g => g.OrderByDescending(r => r.Importe).Take(top).Select(r => { r.TopType = "importe"; return r; }))
-                    .ToList();
-
-                var topKg = known
-                    .GroupBy(r => new { r.Asesor, r.Anio })
-                    .SelectMany(g => g.OrderByDescending(r => r.CantidadKg).Take(top).Select(r => { r.TopType = "kg"; return r; }))
-                    .ToList();
-
-                // Marcar "both" los que aparecen en ambos rankings
-                var keysBoth = topImporte
-                    .Select(r => (r.Asesor, r.Anio, r.RazonSocial))
-                    .Intersect(topKg.Select(r => (r.Asesor, r.Anio, r.RazonSocial)))
-                    .ToHashSet();
-
-                result = topImporte
-                    .Union(topKg)
-                    .DistinctBy(r => (r.Asesor, r.Anio, r.RazonSocial))
-                    .Select(r =>
-                    {
-                        if (keysBoth.Contains((r.Asesor, r.Anio, r.RazonSocial))) r.TopType = "both";
-                        return r;
-                    })
-                    .ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener Top Clientes por Asesor (Dashboard Comercial)");
+                _logger.LogError(ex, "Error al cargar datos del Dashboard Comercial");
             }
 
-            return result;
+            return filas;
         }
 
-        // ─────────────────────────────────────────────────────────
-        // Query 5: Clientes del Asesor — Importe + Giro (período completo)
-        // ─────────────────────────────────────────────────────────
-        public async Task<List<DcClienteImporteAsesorDto>> ObtenerClientesImportePorAsesorAsync(
+        // ── Importe según moneda ────────────────────────────────────────────────
+        private static decimal Imp(DcFilaRawDto f, string moneda) =>
+            moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.Soles : f.Dolar;
+
+        // ════════════════════════════════════════════════════════════════════════
+        // ObtenerDashboardAsync — punto de entrada principal
+        // ════════════════════════════════════════════════════════════════════════
+        public async Task<DcDashboardDto> ObtenerDashboardAsync(
+            DateTime fechaInicio, DateTime fechaFin, string moneda, int top = 3)
+        {
+            var mon   = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+            var filas = await CargarFilasAsync(fechaInicio, fechaFin);
+            var dto   = new DcDashboardDto();
+
+            if (filas.Count == 0) return dto;
+
+            // ── 1. Importe por Asesor / Mes ─────────────────────────────────────
+            dto.Importe = filas
+                .GroupBy(f => new { f.CodAsesor, f.Asesor, f.Fec })
+                .Select(g => new DcImporteAsesorMesDto
+                {
+                    CodAsesor = g.Key.CodAsesor,
+                    Asesor    = g.Key.Asesor,
+                    Mes       = g.Key.Fec,
+                    Importe   = g.Sum(f => Imp(f, mon))
+                })
+                .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
+                .ToList();
+
+            // ── 2. KG por Asesor / Mes ───────────────────────────────────────────
+            dto.Kg = filas
+                .GroupBy(f => new { f.Asesor, f.Fec })
+                .Select(g => new DcCantidadKgAsesorMesDto
+                {
+                    Asesor     = g.Key.Asesor,
+                    Mes        = g.Key.Fec,
+                    CantidadKg = g.Sum(f => f.Kilos)
+                })
+                .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
+                .ToList();
+
+            // ── 3. Nro. Clientes distintos por Asesor ───────────────────────────
+            dto.Clientes = filas
+                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(f => new { f.Asesor, f.CodCliente })
+                .Select(g => new { g.Key.Asesor, g.Key.CodCliente, Imp = g.Sum(f => Imp(f, mon)) })
+                .Where(x => x.Imp > 0)
+                .GroupBy(x => x.Asesor)
+                .Select(g => new DcNroClientesAsesorMesDto
+                {
+                    Asesor      = g.Key,
+                    Mes         = null,
+                    NroClientes = g.Count()
+                })
+                .OrderBy(x => x.Asesor)
+                .ToList();
+
+            // ── 4. Todos los clientes (para Ranking, Participación y Export) ────
+            dto.ClientesTodos = filas
+                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(f => new { f.Asesor, f.CodCliente, f.Nombre, f.DescGiro })
+                .Select(g => new DcClienteImporteTodosDto
+                {
+                    Asesor      = g.Key.Asesor,
+                    CodCliente  = g.Key.CodCliente,
+                    RazonSocial = g.Key.Nombre,
+                    Giro        = string.IsNullOrEmpty(g.Key.DescGiro) ? "SIN GIRO" : g.Key.DescGiro,
+                    Importe     = g.Sum(f => Imp(f, mon)),
+                    CantidadKg  = g.Sum(f => f.Kilos)
+                })
+                .Where(x => x.Importe > 0)
+                .OrderBy(x => x.Asesor).ThenByDescending(x => x.Importe)
+                .ToList();
+
+            // ── 5. Top N clientes por Asesor / Año ──────────────────────────────
+            var porAsesorAnio = filas
+                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(f => new { f.Asesor, f.Anio, f.CodCliente, f.Nombre })
+                .Select(g => new DcTopClienteAsesorDto
+                {
+                    Asesor      = g.Key.Asesor,
+                    RazonSocial = g.Key.Nombre,
+                    Anio        = g.Key.Anio,
+                    Importe     = g.Sum(f => Imp(f, mon)),
+                    CantidadKg  = g.Sum(f => f.Kilos),
+                    TopType     = "both"
+                })
+                .Where(x => x.Asesor != null)
+                .ToList();
+
+            var topImp = porAsesorAnio
+                .GroupBy(r => new { r.Asesor, r.Anio })
+                .SelectMany(g => g.OrderByDescending(r => r.Importe).Take(top)
+                                  .Select(r => { r.TopType = "importe"; return r; }))
+                .ToList();
+
+            var topKg = porAsesorAnio
+                .GroupBy(r => new { r.Asesor, r.Anio })
+                .SelectMany(g => g.OrderByDescending(r => r.CantidadKg).Take(top)
+                                  .Select(r => { r.TopType = "kg"; return r; }))
+                .ToList();
+
+            var keysBoth = topImp
+                .Select(r => (r.Asesor, r.Anio, r.RazonSocial))
+                .Intersect(topKg.Select(r => (r.Asesor, r.Anio, r.RazonSocial)))
+                .ToHashSet();
+
+            dto.TopClientes = topImp
+                .Union(topKg)
+                .DistinctBy(r => (r.Asesor, r.Anio, r.RazonSocial))
+                .Select(r =>
+                {
+                    if (keysBoth.Contains((r.Asesor, r.Anio, r.RazonSocial))) r.TopType = "both";
+                    return r;
+                })
+                .ToList();
+
+            return dto;
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
+        // ObtenerClientesPorAsesorAsync — detalle de un asesor específico
+        // ════════════════════════════════════════════════════════════════════════
+        public async Task<List<DcClienteImporteAsesorDto>> ObtenerClientesPorAsesorAsync(
             DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor)
         {
-            var connStr = GetOracleConnectionString();
-            var result  = new List<DcClienteImporteAsesorDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
+            var mon   = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+            var filas = await CargarFilasAsync(fechaInicio, fechaFin);
 
-                                                 var sql = $@"
-                                     SELECT BASE.COD_CLIENTE,
-                                            X.RUC,
-                                            X.NOMBRE                            RAZON_SOCIAL,
-                                            NVL(T2.ABREVIADA, 'SIN GIRO')       GIRO,
-                                            (NVL(IMP.MONTO, 0) - NVL(INAF.MONTO, 0)) IMPORTE
-                                       FROM (SELECT DISTINCT C.COD_CLIENTE
-                                               FROM {S}DOCUVENT         C,
-                                                    {S}TABLAS_AUXILIARES T
-                                              WHERE C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND C.ESTADO <> '9'
-                                                AND T.TIPO    = 29
-                                                AND T.CODIGO  = C.COD_VENDE
-                                                AND T.DESCRIPCION = :P_ASESOR) BASE,
-                                            (SELECT A.COD_CLIENTE,
-                                                    SUM(DECODE(:P_MON,
-                                                               'S', SOLES_SINANT,
-                                                                    DOLARES_SINANT)) MONTO
-                                               FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-                                              WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND T.TIPO = 29
-                                                AND T.CODIGO = A.VENDEDOR
-                                                AND T.DESCRIPCION = :P_ASESOR
-                                              GROUP BY A.COD_CLIENTE) IMP,
-                                            (SELECT D.COD_CLIENTE,
-                                                    SUM(DECODE(:P_MON,
-                                                               'S',
-                                                               DECODE(D.MONEDA,
-                                                                      'S', I.IMP_VVTA,
-                                                                      ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                                                               DECODE(D.MONEDA,
-                                                                      'D', I.IMP_VVTA,
-                                                                      ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                                               FROM {S}DOCUVENT D, {S}ITEMDOCU I, {S}TABLAS_AUXILIARES T
-                                              WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND D.ESTADO <> '9'
-                                                AND I.TIPODOC = D.TIPODOC
-                                                AND I.SERIE   = D.SERIE
-                                                AND I.NUMERO  = D.NUMERO
-                                                AND I.COD_ART IN ('9300049997', '9300049999',
-                                                                  '930004999A', '9300049998')
-                                                AND T.TIPO = 29
-                                                AND T.CODIGO = D.COD_VENDE
-                                                AND T.DESCRIPCION = :P_ASESOR
-                                              GROUP BY D.COD_CLIENTE) INAF,
-                                            {S}CLIENTES X,
-                                            (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-                                               FROM {S}TABLAS_AUXILIARES
-                                              WHERE TIPO = 27
-                                              GROUP BY CODIGO) T2
-                                      WHERE IMP.COD_CLIENTE(+)  = BASE.COD_CLIENTE
-                                        AND INAF.COD_CLIENTE(+) = BASE.COD_CLIENTE
-                                        AND X.COD_CLIENTE       = BASE.COD_CLIENTE
-                                        AND T2.CODIGO(+)        = X.GIRO
-                                      ORDER BY IMPORTE DESC";
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
-                cmd.Parameters.Add("P_ASESOR", OracleDbType.Varchar2).Value = asesor;
-
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
+            return filas
+                .Where(f => string.Equals(f.Asesor, asesor, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(f => new { f.CodCliente, f.Nombre, f.DescGiro, f.Unidad })
+                .Select(g => new DcClienteImporteAsesorDto
                 {
-                    result.Add(new DcClienteImporteAsesorDto
-                    {
-                        CodCliente  = GetStr(reader, "COD_CLIENTE"),
-                        Ruc         = GetStr(reader, "RUC"),
-                        RazonSocial = GetStr(reader, "RAZON_SOCIAL"),
-                        Giro        = GetStr(reader, "GIRO"),
-                        Importe     = GetDec(reader, "IMPORTE")
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al obtener Clientes Importe por Asesor (Dashboard Comercial)");
-            }
-
-            return result;
+                    CodCliente  = g.Key.CodCliente,
+                    RazonSocial = g.Key.Nombre,
+                    Giro        = string.IsNullOrEmpty(g.Key.DescGiro) ? "SIN GIRO" : g.Key.DescGiro,
+                    Unidad      = g.Key.Unidad,
+                    CantidadKg  = g.Sum(f => f.Kilos),
+                    Importe     = g.Sum(f => Imp(f, mon)),
+                })
+                .Where(x => x.Importe > 0)
+                .OrderByDescending(x => x.Importe)
+                .ToList();
         }
 
-        /* ── Query 5b: Todos los Clientes — Importe + Giro (todos los asesores) ── */
-        public async Task<List<DcClienteImporteTodosDto>> ObtenerClientesImporteTodosAsync(
-            DateTime fechaInicio, DateTime fechaFin, string moneda)
+        // ════════════════════════════════════════════════════════════════════════
+        // DiagnosticoFilasAsync — COUNT(*) directo para comparar con Toad
+        // ════════════════════════════════════════════════════════════════════════
+        public async Task<int> DiagnosticoFilasAsync(DateTime fechaInicio, DateTime fechaFin)
         {
             var connStr = GetOracleConnectionString();
-            var result  = new List<DcClienteImporteTodosDto>();
-            if (string.IsNullOrEmpty(connStr)) return result;
+            var schema  = S;
+            int count   = 0;
 
-                                                 var sql = $@"
-                                     SELECT BASE.COD_CLIENTE,
-                                            BASE.ASESOR,
-                                            X.RUC,
-                                            X.NOMBRE                            RAZON_SOCIAL,
-                                            NVL(T2.ABREVIADA, 'SIN GIRO')       GIRO,
-                                            (NVL(IMP.MONTO, 0) - NVL(INAF.MONTO, 0)) IMPORTE
-                                       FROM (SELECT DISTINCT C.COD_CLIENTE,
-                                                    T.DESCRIPCION ASESOR
-                                               FROM {S}DOCUVENT         C,
-                                                    {S}TABLAS_AUXILIARES T
-                                              WHERE C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND C.ESTADO <> '9'
-                                                AND T.TIPO    = 29
-                                                AND T.CODIGO  = C.COD_VENDE
-                                                AND UPPER(T.DESCRIPCION) <> 'OFICINA') BASE,
-                                            (SELECT A.COD_CLIENTE,
-                                                    T.DESCRIPCION ASESOR,
-                                                    SUM(DECODE(:P_MON,
-                                                               'S', SOLES_SINANT,
-                                                                    DOLARES_SINANT)) MONTO
-                                               FROM {S}V_DOCUVEN A, {S}TABLAS_AUXILIARES T
-                                              WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND T.TIPO = 29
-                                                AND T.CODIGO = A.VENDEDOR
-                                                AND UPPER(T.DESCRIPCION) <> 'OFICINA'
-                                              GROUP BY A.COD_CLIENTE, T.DESCRIPCION) IMP,
-                                            (SELECT D.COD_CLIENTE,
-                                                    T.DESCRIPCION ASESOR,
-                                                    SUM(DECODE(:P_MON,
-                                                               'S',
-                                                               DECODE(D.MONEDA,
-                                                                      'S', I.IMP_VVTA,
-                                                                      ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
-                                                               DECODE(D.MONEDA,
-                                                                      'D', I.IMP_VVTA,
-                                                                      ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) MONTO
-                                               FROM {S}DOCUVENT D, {S}ITEMDOCU I, {S}TABLAS_AUXILIARES T
-                                              WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                                                AND D.ESTADO <> '9'
-                                                AND I.TIPODOC = D.TIPODOC
-                                                AND I.SERIE   = D.SERIE
-                                                AND I.NUMERO  = D.NUMERO
-                                                AND I.COD_ART IN ('9300049997', '9300049999',
-                                                                  '930004999A', '9300049998')
-                                                AND T.TIPO = 29
-                                                AND T.CODIGO = D.COD_VENDE
-                                                AND UPPER(T.DESCRIPCION) <> 'OFICINA'
-                                              GROUP BY D.COD_CLIENTE, T.DESCRIPCION) INAF,
-                                            {S}CLIENTES X,
-                                            (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-                                               FROM {S}TABLAS_AUXILIARES
-                                              WHERE TIPO = 27
-                                              GROUP BY CODIGO) T2
-                                      WHERE IMP.COD_CLIENTE(+)  = BASE.COD_CLIENTE
-                                        AND IMP.ASESOR(+)       = BASE.ASESOR
-                                        AND INAF.COD_CLIENTE(+) = BASE.COD_CLIENTE
-                                        AND INAF.ASESOR(+)      = BASE.ASESOR
-                                        AND X.COD_CLIENTE       = BASE.COD_CLIENTE
-                                        AND T2.CODIGO(+)        = X.GIRO
-                                      ORDER BY BASE.ASESOR, IMPORTE DESC";
+            _logger.LogWarning("[DIAG] Schema usado: '{Schema}'", schema);
+            _logger.LogWarning("[DIAG] FechaInicio: {FI:yyyy-MM-dd}  FechaFin: {FF:yyyy-MM-dd}", fechaInicio, fechaFin);
+
+            if (string.IsNullOrEmpty(connStr))
+            {
+                _logger.LogWarning("[DIAG] Sin connection string.");
+                return -1;
+            }
 
             try
             {
                 using var conn = new OracleConnection(connStr);
                 await conn.OpenAsync();
-                using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
 
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    result.Add(new DcClienteImporteTodosDto
-                    {
-                        Asesor      = GetStr(reader, "ASESOR"),
-                        CodCliente  = GetStr(reader, "COD_CLIENTE"),
-                        Ruc         = GetStr(reader, "RUC"),
-                        RazonSocial = GetStr(reader, "RAZON_SOCIAL"),
-                        Giro        = GetStr(reader, "GIRO"),
-                        Importe     = GetDec(reader, "IMPORTE")
-                    });
-                }
+                var sqlCount = $@"
+SELECT COUNT(*) FROM {schema}ITEMDOCU I, {schema}DOCUVENT D, {schema}KARDEX_G G,
+       {schema}EQUIVALENCIA E, {schema}ARTICUL A, {schema}CLIENTES C,
+       {schema}TABLAS_AUXILIARES T, {schema}TABLAS_AUXILIARES T2
+ WHERE D.TIPODOC = I.TIPODOC AND D.SERIE = I.SERIE AND D.NUMERO = I.NUMERO
+   AND D.FECHA BETWEEN :FECHAI AND :FECHAF
+   AND D.ESTADO <> '9'
+   AND G.TP_TRANSAC(+) = D.TIP_DOC_REF AND TO_CHAR(G.SERIE(+)) = D.SER_DOC_REF
+   AND G.NUMERO(+) = D.NRO_DOC_REF AND G.COD_RELACION(+) = D.COD_CLIENTE
+   AND E.COD_ART(+) = I.COD_ART AND E.UNIDAD(+) = 'KG'
+   AND A.COD_ART = I.COD_ART AND C.COD_CLIENTE = D.COD_CLIENTE
+   AND T.TIPO(+) = 29 AND T.CODIGO(+) = D.COD_VENDE
+   AND T2.TIPO(+) = 27 AND T2.CODIGO(+) = C.GIRO";
+
+                using var cmd = new OracleCommand(sqlCount, conn) { BindByName = true };
+                cmd.Parameters.Add("FECHAI", OracleDbType.Date).Value = fechaInicio.Date;
+                cmd.Parameters.Add("FECHAF", OracleDbType.Date).Value = fechaFin.Date;
+
+                var result = await cmd.ExecuteScalarAsync();
+                count = Convert.ToInt32(result);
+
+                _logger.LogWarning("[DIAG] COUNT(*) directo Oracle: {N}", count);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al obtener Clientes Importe Todos (Dashboard Comercial)");
+                _logger.LogError(ex, "[DIAG] Error en DiagnosticoFilasAsync");
+                return -1;
             }
 
-            return result;
+            return count;
         }
     }
 }
+

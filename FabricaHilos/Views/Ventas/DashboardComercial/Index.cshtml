@@ -9,6 +9,11 @@
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,.08);
         height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
     }
     .chart-card .card-header {
         background: transparent;
@@ -99,6 +104,13 @@
         </button>
     </div>
     <div class="year-check-bar" id="yearCheckBar"></div>
+    <!-- DIAGNÓSTICO DESHABILITADO — descomentar para reactivar
+    <div class="mt-2">
+        <span class="small text-muted me-1"><i class="bi bi-database me-1"></i>Diagnóstico:</span>
+        <span id="lblDiagnostico" class="small text-muted">—</span>
+    </div>
+    -->
+    <span id="lblDiagnostico" style="display:none"></span>
 </div>
 
 <!-- ── Sección 1: Cartera por Asesor ───────────────── -->
@@ -180,6 +192,8 @@
                             <th>RUC</th>
                             <th>Razón Social</th>
                             <th>Giro</th>
+                            <th class="text-end">Unidad</th>
+                            <th class="text-end">Kilos</th>
                             <th class="text-end">Importe</th>
                         </tr>
                     </thead>
@@ -215,329 +229,173 @@
 (function () {
     'use strict';
 
-    /* ── Registrar plugin datalabels globalmente ────── */
-    if (typeof ChartDataLabels !== 'undefined') {
-        Chart.register(ChartDataLabels);
-    }
+    /* ── Registrar plugin datalabels ───────────────── */
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
 
-    /* ── Formato de números ─────────────────────────── */
-    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
-    const fmt  = n => fmtPE.format(n ?? 0);
-    const fmtMil = n => {
-        n = n ?? 0;
-        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-        return fmt(n);
-    };
+    /* ── Fuente global ─────────────────────────────── */
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
 
-    /* ── Paleta de colores ──────────────────────────── */
+    /* ── Paleta ────────────────────────────────────── */
     const COLORS = [
-        '#1B4D3E', '#1565C0', '#2e7d32', '#e65100', '#6a1b9a',
-        '#00838f', '#c62828', '#4e342e', '#37474f', '#f9a825',
-        '#00695c', '#ad1457', '#283593', '#ef6c00', '#2e7d5e'
+        '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+        '#00838f','#c62828','#4e342e','#37474f','#f9a825',
+        '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
     ];
-    const YEAR_COLORS = ['#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f','#c62828'];
-    const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
-    /* ── Convertir "2026/01" → "Ene 2026" ──────────── */
-    function mesLabel(m) {
-        const parts = m.split('/');
-        if (parts.length === 2) {
-            const idx = parseInt(parts[1]) - 1;
-            return MONTH_NAMES[idx] + ' ' + parts[0];
-        }
-        return m;
-    }
-
-
+    /* ── Formato números ───────────────────────────── */
+    const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmt   = n => fmtPE.format(n ?? 0);
 
     /* ── Instancias de charts ──────────────────────── */
     const charts = {};
-    function destroyChart(key) {
-        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
-    }
+    function destroyChart(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
 
-    /* ── Spinner helpers ───────────────────────────── */
-    function showSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
-    function hideSpin(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
-
-    /* ── Toast de notificación ──────────────────────── */
+    /* ── Toast ─────────────────────────────────────── */
     function showToast(msg, type) {
         type = type || 'danger';
-        let container = document.getElementById('toastContainer');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'toastContainer';
-            container.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
-            document.body.appendChild(container);
+        let c = document.getElementById('toastContainer');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = 'toastContainer';
+            c.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;';
+            document.body.appendChild(c);
         }
-        const toast = document.createElement('div');
-        toast.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
-        toast.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
-        toast.innerHTML = msg + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
-        container.appendChild(toast);
-        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 6000);
+        const t = document.createElement('div');
+        t.className = 'alert alert-' + type + ' alert-dismissible fade show shadow';
+        t.style.cssText = 'min-width:300px;font-size:.85rem;margin-bottom:.5rem;';
+        t.innerHTML = msg + '<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>';
+        c.appendChild(t);
+        setTimeout(function() { if (t.parentNode) t.remove(); }, 6000);
     }
 
-    /* ── Años: generar checkboxes ─────────────────── */
-    function buildYearCheckboxes() {
-        const bar = document.getElementById('yearCheckBar');
-        const currentYear = new Date().getFullYear();
-        let html = '<span class="small fw-semibold text-muted me-1"><i class="bi bi-calendar3 me-1"></i>Comparar Años:</span>';
-        for (let y = currentYear; y >= currentYear - 5; y--) {
-            const chk = y === currentYear ? 'checked' : '';
-            html += '<div class="form-check form-check-inline mb-0">'
-                  + '<input class="form-check-input" type="checkbox" id="year' + y + '" value="' + y + '" ' + chk + ' onchange="onYearsChanged()">'
-                  + '<label class="form-check-label small" for="year' + y + '">' + y + '</label></div>';
-        }
-        bar.innerHTML = html;
-    }
-
-    function getSelectedYears() {
-        return Array.from(document.querySelectorAll('#yearCheckBar input:checked')).map(c => parseInt(c.value)).sort();
-    }
-
-    function isComparisonMode() { return getSelectedYears().length >= 2; }
-
-    window.onYearsChanged = function () {
-        const years = getSelectedYears();
-        const fi = document.getElementById('fechaInicio');
-        const ff = document.getElementById('fechaFin');
-        if (years.length === 0) { fpSetDisabled(fi, false); fpSetDisabled(ff, false); return; }
-        const hoy = new Date();
-        if (years.length === 1) {
-            const y = years[0];
-            fpSetDate(fi, y + '-01-01');
-            fpSetDate(ff, y === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : y + '-12-31');
-            fpSetDisabled(fi, false); fpSetDisabled(ff, false);
-            loadAll();
-            return;
-        }
-        const minY = Math.min(...years), maxY = Math.max(...years);
-        fpSetDate(fi, minY + '-01-01');
-        fpSetDate(ff, maxY === hoy.getFullYear() ? hoy.toISOString().slice(0,10) : maxY + '-12-31');
-        fpSetDisabled(fi, true); fpSetDisabled(ff, true);
-        loadAll();
-    };
-
-    /* ── Fechas por defecto (1° enero del año actual → hoy) ── */
+    /* ── Fechas por defecto ────────────────────────── */
     function setDefaultDates() {
-        const hoy = new Date();
-        const ini = new Date(hoy.getFullYear(), 0, 1);
-        const toISO = d => d.toISOString().slice(0, 10);
-        fpSetDate('#fechaInicio', toISO(ini));
-        fpSetDate('#fechaFin',    toISO(hoy));
+        var hoy = new Date();
+        var ini = new Date(hoy.getFullYear(), 0, 1);
+        var toISO = function(d) { return d.toISOString().slice(0, 10); };
+        document.getElementById('fechaInicio').value = toISO(ini);
+        document.getElementById('fechaFin').value    = toISO(hoy);
     }
 
-    /* ── Parámetros del query string ────────────────── */
+    /* ── Parámetros ────────────────────────────────── */
     function buildParams() {
-        const fi  = document.getElementById('fechaInicio').value;
-        const ff  = document.getElementById('fechaFin').value;
-        const mon = document.getElementById('moneda').value;
-        const p   = new URLSearchParams();
+        var fi  = document.getElementById('fechaInicio').value;
+        var ff  = document.getElementById('fechaFin').value;
+        var mon = document.getElementById('moneda').value;
+        var p   = new URLSearchParams();
         if (fi)  p.set('fechaInicio', fi);
         if (ff)  p.set('fechaFin',    ff);
         if (mon) p.set('moneda',      mon);
         return p;
     }
-
-    /* ── Fetch genérico ─────────────────────────────── */
-    async function apiFetch(url) {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-    }
-    window.apiFetch    = apiFetch;
     window.buildParams = buildParams;
 
+    /* ── Datos compartidos ─────────────────────────── */
+    let clientesTodosData = [];
+    let topClientesData   = [];
 
-    /* ── Datos compartidos para gráficos de resumen ── */
-    let importeData = [];
+    /* ── Export URL ────────────────────────────────── */
+    window._dcExportUrl = '@Url.Action("DatosDashboard", "DashboardComercial")';
 
-    let kgData = [];
+    /* ═══════════════════════════════════════════════
+       CHART: Total de Clientes por Asesor (pie)
+       ═══════════════════════════════════════════════ */
+    function renderClientesPie() {
+        destroyChart('clientesPie');
 
-    let clientesData = [];
-
-    /* ═════════════════════════════════════════════════
-       GRÁFICOS DE RESUMEN (calculados client-side)
-       ═════════════════════════════════════════════════ */
-
-    /* ── Ranking de Asesores (horizontal bar) ─────── */
-    function renderRanking() {
-        destroyChart('ranking');
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-        const map = {};
-        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
-        const sorted = Object.entries(map)
-            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
-            .sort((a, b) => a.total - b.total);
-
-        charts['ranking'] = new Chart(document.getElementById('chartRanking').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: sorted.map(r => r.asesor),
-                datasets: [{
-                    label: 'Importe Total',
-                    data: sorted.map(r => r.total),
-                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
-                    datalabels: {
-                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
-                        anchor: 'end', align: 'right',
-                        font: { size: 11, weight: '600' },
-                        color: '#333',
-                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
-                    }
-                },
-                layout: { padding: { right: 80 } },
-                scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } }
-            }
+        var map = {};
+        clientesTodosData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            map[key] = (map[key] || 0) + 1;
         });
-    }
+        if (Object.keys(map).length === 0) return;
 
-    /* ── Participación por Asesor (doughnut) ──────── */
-    function renderParticipacion() {
-        destroyChart('participacion');
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-        const map = {};
-        importeData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.importe ?? 0); });
-        const sorted = Object.entries(map)
-            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
-            .sort((a, b) => b.total - a.total);
-        const gran = sorted.reduce((s, r) => s + r.total, 0);
+        var sorted = Object.entries(map)
+            .map(function([a, t]) { return { asesor: a, total: t }; })
+            .sort(function(a, b) { return b.total - a.total; });
 
-        charts['participacion'] = new Chart(document.getElementById('chartParticipacion').getContext('2d'), {
+        var gran = sorted.reduce(function(s, r) { return s + r.total; }, 0);
+
+        charts['clientesPie'] = new Chart(
+            document.getElementById('chartClientesPie').getContext('2d'), {
             type: 'doughnut',
             data: {
                 labels: sorted.map(r => r.asesor),
                 datasets: [{
                     data: sorted.map(r => r.total),
-                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
-                    borderWidth: 2
+                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    borderWidth: 2,
+                    hoverOffset: 8
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
+                cutout: '55%',
                 plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 13, font: { size: 12, weight: '600' }, padding: 14 }
+                    },
                     tooltip: {
                         callbacks: {
-                            label: c => {
-                                const pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
-                                return c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + pct + '%)';
+                            label: function(c) {
+                                var pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
+                                return c.raw + ' clientes (' + pct + '%)';
                             }
                         }
                     },
                     datalabels: {
                         display: function(ctx) {
-                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
-                            return total > 0 && (ctx.dataset.data[ctx.dataIndex] / total * 100) >= 5;
+                            return gran > 0 && (ctx.dataset.data[ctx.dataIndex] / gran * 100) >= 5;
                         },
                         color: '#fff',
-                        font: { size: 12, weight: 'bold' },
+                        font: { size: 12, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                        textStrokeColor: 'rgba(0,0,0,.4)',
+                        textStrokeWidth: 2,
                         formatter: function(v, ctx) {
-                            var total = ctx.dataset.data.reduce(function(a,b){ return a + b; }, 0);
-                            return total > 0 ? (v / total * 100).toFixed(1) + '%' : '';
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-
-
-    /* ── Render todos los gráficos de resumen ─────── */
-    function renderResumen() {
-        if (importeData.length === 0 && kgData.length === 0 && clientesData.length === 0) return;
-        renderCartera();
-        renderRanking();
-        renderParticipacion();
-        renderClientesPie();
-        renderClientesPct();
-    }
-
-    /* ═════════════════════════════════════════════════
-       CHART 7a: Total de Clientes por Asesor (pie)
-       ═════════════════════════════════════════════════ */
-    function renderClientesPie() {
-        destroyChart('clientesPie');
-        // Contar clientes distintos por asesor (usar clientesData = nroClientes por asesor/mes)
-        const map = {};
-        clientesData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.nroClientes ?? 0); });
-        const sorted = Object.entries(map)
-            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', total }))
-            .sort((a, b) => b.total - a.total);
-
-        charts['clientesPie'] = new Chart(document.getElementById('chartClientesPie').getContext('2d'), {
-            type: 'pie',
-            data: {
-                labels: sorted.map(r => r.asesor),
-                datasets: [{
-                    data: sorted.map(r => r.total),
-                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
-                    tooltip: {
-                        callbacks: {
-                            label: function(c) {
-                                var gran = c.dataset.data.reduce(function(a,b){ return a+b; }, 0);
-                                var pct = gran > 0 ? (c.raw / gran * 100).toFixed(1) : 0;
-                                return c.label + ': ' + c.raw + ' clientes (' + pct + '%)';
-                            }
-                        }
-                    },
-                    datalabels: {
-                        color: '#fff',
-                        font: { size: 12, weight: 'bold' },
-                        formatter: function(v, ctx) {
-                            return ctx.chart.data.labels[ctx.dataIndex] + ', ' + v;
+                            var pct = gran > 0 ? (v / gran * 100).toFixed(1) : 0;
+                            return ctx.chart.data.labels[ctx.dataIndex] + '\n' + v + ' (' + pct + '%)';
                         }
                     }
                 },
                 onClick: function(evt, elements) {
                     if (!elements || elements.length === 0) return;
-                    var idx = elements[0].index;
-                    var asesor = sorted[idx].asesor;
-                    loadDetalleClientesAsesor(asesor);
+                    var asesor = sorted[elements[0].index].asesor;
+                    if (asesor !== 'Sin Asesor') loadDetalleClientesAsesor(asesor);
                 }
             }
         });
     }
 
-    /* ═════════════════════════════════════════════════
-       CHART 7b: % de Clientes por Asesor (horizontal bar)
-       ═════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════
+       CHART: % de Clientes por Asesor (horizontal bar)
+       ═══════════════════════════════════════════════ */
     function renderClientesPct() {
         destroyChart('clientesPct');
-        const map = {};
-        clientesData.forEach(d => { map[d.asesor] = (map[d.asesor] || 0) + (d.nroClientes ?? 0); });
-        const gran = Object.values(map).reduce((s, v) => s + v, 0);
-        const sorted = Object.entries(map)
-            .map(([asesor, total]) => ({ asesor: asesor ?? 'Sin Asesor', pct: gran > 0 ? (total / gran * 100) : 0 }))
-            .sort((a, b) => a.pct - b.pct);
 
-        charts['clientesPct'] = new Chart(document.getElementById('chartClientesPct').getContext('2d'), {
+        var map = {};
+        clientesTodosData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            map[key] = (map[key] || 0) + 1;
+        });
+        if (Object.keys(map).length === 0) return;
+
+        var gran = Object.values(map).reduce(function(s, v) { return s + v; }, 0);
+        var sorted = Object.entries(map)
+            .map(function([a, t]) { return { asesor: a, pct: gran > 0 ? (t / gran * 100) : 0 }; })
+            .sort(function(a, b) { return a.pct - b.pct; });
+
+        charts['clientesPct'] = new Chart(
+            document.getElementById('chartClientesPct').getContext('2d'), {
             type: 'bar',
             data: {
                 labels: sorted.map(r => r.asesor),
                 datasets: [{
                     label: '% de Clientes',
                     data: sorted.map(r => r.pct),
-                    backgroundColor: sorted.map((_, i) => COLORS[i % COLORS.length]),
+                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
                     borderRadius: 4
                 }]
             },
@@ -550,596 +408,492 @@
                     datalabels: {
                         display: true,
                         anchor: 'end', align: 'right',
-                        font: { size: 12, weight: '700' },
-                        color: '#333',
-                        formatter: function(v) { return v.toFixed(0) + '%'; }
+                        font: { size: 12, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                        color: '#374151',
+                        textStrokeColor: 'rgba(255,255,255,.8)',
+                        textStrokeWidth: 3,
+                        formatter: function(v, ctx) {
+                            return v.toFixed(0) + '%';
+                        }
                     }
                 },
-                layout: { padding: { right: 50 } },
-                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } } }
+                layout: { padding: { right: 160 } },
+                scales: { x: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; }, font: { size: 11 } } } }
             }
         });
     }
 
-    /* ═════════════════════════════════════════════════
-       CHART 8: Cartera por Asesor (Venta, Producción, % Participación)
-       ═════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════
+       CHART: Cartera por Asesor (mixed: bar + line)
+       ═══════════════════════════════════════════════ */
     function renderCartera() {
         destroyChart('cartera');
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
 
-        /* Normalizar asesor null/"null" */
-        const normalize = a => (!a || a === 'null') ? 'Sin Asesor' : a;
+        var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
 
-        /* Detect unique years from importeData/kgData (mes = 'YYYY/MM') */
-        const yearsSet = new Set();
-        importeData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
-        kgData.forEach(d => { if (d.mes) yearsSet.add(d.mes.substring(0, 4)); });
-        const years = [...yearsSet].sort();
-        const multiYear = years.length > 1;
-
-        if (!multiYear) {
-            /* Single year — original behavior */
-            const imp = {}, kg = {};
-            importeData.forEach(d => { const a = normalize(d.asesor); imp[a] = (imp[a] || 0) + (d.importe ?? 0); });
-            kgData.forEach(d =>       { const a = normalize(d.asesor);  kg[a]  = (kg[a]  || 0) + (d.cantidadKg ?? 0); });
-            const asesores = [...new Set([...Object.keys(imp), ...Object.keys(kg)])].sort();
-            const totalImp = Object.values(imp).reduce((s, v) => s + v, 0);
-            const ventas = asesores.map(a => imp[a] ?? 0);
-            const kilos  = asesores.map(a => kg[a]  ?? 0);
-            const pcts   = asesores.map(a => totalImp > 0 ? ((imp[a] ?? 0) / totalImp * 100) : 0);
-
-            charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: asesores,
-                    datasets: [
-                        { label: 'Venta (' + monLabel + ')', data: ventas, backgroundColor: '#1B4D3E', borderRadius: 4, yAxisID: 'y' },
-                        { label: 'Producción (kg)', data: kilos, backgroundColor: '#1565C0', borderRadius: 4, yAxisID: 'y' },
-                        {
-                            label: '% Participación', data: pcts, type: 'line',
-                            borderColor: '#e65100', borderWidth: 3, backgroundColor: '#e65100',
-                            pointRadius: 6, pointBackgroundColor: '#e65100', pointBorderColor: '#fff', pointBorderWidth: 3,
-                            tension: 0.3, yAxisID: 'y1',
-                            datalabels: {
-                                backgroundColor: 'rgba(255,255,255,.85)', borderColor: '#e65100', borderWidth: 1, borderRadius: 4,
-                                padding: { top: 2, bottom: 2, left: 4, right: 4 },
-                                font: { size: 11, weight: '700' }, color: '#e65100',
-                                formatter: function(v) { return v.toFixed(0) + '%'; }
-                            }
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(c) {
-                                    if (c.datasetIndex === 2) return c.dataset.label + ': ' + c.raw.toFixed(1) + '%';
-                                    if (c.datasetIndex === 1) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
-                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: function(ctx) {
-                                if (ctx.datasetIndex === 2) return true;
-                                return ctx.dataset.data[ctx.dataIndex] > 0;
-                            },
-                            anchor: 'end', align: 'top',
-                            font: { size: 10, weight: '600' },
-                            color: function(ctx) {
-                                if (ctx.datasetIndex === 2) return '#e65100';
-                                return ctx.datasetIndex === 0 ? '#1B4D3E' : '#1565C0';
-                            },
-                            formatter: function(v, ctx) {
-                                if (ctx.datasetIndex === 2) return v.toFixed(1) + '%';
-                                if (ctx.datasetIndex === 1) return fmtMil(v) + ' kg';
-                                return monLabel + ' ' + fmtMil(v);
-                            }
-                        }
-                    },
-                    scales: {
-                        y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Venta / Producción' }, ticks: { callback: function(v) { return fmtMil(v); } } },
-                        y1: { beginAtZero: true, position: 'right', title: { display: true, text: '% Participación' }, max: 100, ticks: { callback: function(v) { return v + '%'; } }, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
-        } else {
-            /* Multi-year — grouped bar sets per year */
-            const asesoresSet = new Set();
-            importeData.forEach(d => asesoresSet.add(normalize(d.asesor)));
-            kgData.forEach(d => asesoresSet.add(normalize(d.asesor)));
-            const asesores = [...asesoresSet].sort();
-
-            /* Build per-year, per-asesor totals */
-            const impByYr = {}, kgByYr = {};
-            years.forEach(yr => { impByYr[yr] = {}; kgByYr[yr] = {}; });
-            importeData.forEach(d => {
-                var yr = d.mes ? d.mes.substring(0, 4) : '';
-                var a = normalize(d.asesor);
-                if (impByYr[yr]) impByYr[yr][a] = (impByYr[yr][a] || 0) + (d.importe ?? 0);
-            });
-            kgData.forEach(d => {
-                var yr = d.mes ? d.mes.substring(0, 4) : '';
-                var a = normalize(d.asesor);
-                if (kgByYr[yr]) kgByYr[yr][a] = (kgByYr[yr][a] || 0) + (d.cantidadKg ?? 0);
-            });
-
-            var datasets = [];
-            var ventaColors = ['#1B4D3E', '#4CAF50', '#81C784', '#A5D6A7'];
-            var kgColors    = ['#1565C0', '#42A5F5', '#90CAF9', '#BBDEFB'];
-            years.forEach(function(yr, yi) {
-                datasets.push({
-                    label: 'Venta ' + yr + ' (' + monLabel + ')',
-                    data: asesores.map(a => impByYr[yr][a] ?? 0),
-                    backgroundColor: ventaColors[yi % ventaColors.length],
-                    borderRadius: 4, yAxisID: 'y'
-                });
-                datasets.push({
-                    label: 'Producción ' + yr + ' (kg)',
-                    data: asesores.map(a => kgByYr[yr][a] ?? 0),
-                    backgroundColor: kgColors[yi % kgColors.length],
-                    borderRadius: 4, yAxisID: 'y'
-                });
-            });
-
-            charts['cartera'] = new Chart(document.getElementById('chartCartera').getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: asesores,
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(c) {
-                                    if (c.dataset.label.indexOf('Producción') >= 0) return c.dataset.label + ': ' + fmt(c.raw) + ' kg';
-                                    return c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw);
-                                }
-                            }
-                        },
-                        datalabels: {
-                            display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
-                            anchor: 'end', align: 'top',
-                            font: { size: 9, weight: '600' },
-                            color: '#333',
-                            formatter: function(v, ctx) {
-                                if (ctx.dataset.label.indexOf('Producción') >= 0) return fmtMil(v) + ' kg';
-                                return monLabel + ' ' + fmtMil(v);
-                            }
-                        }
-                    },
-                    scales: {
-                        y:  { beginAtZero: true, position: 'left',  title: { display: true, text: 'Venta / Producción' }, ticks: { callback: function(v) { return fmtMil(v); } } },
-                        y1: { display: false }
-                    }
-                }
-            });
-        }
-    }
-
-    /* ═════════════════════════════════════════════════
-       CHART 9 & 10: Top 3 Clientes por Asesor (Kilos e Importe)
-       ═════════════════════════════════════════════════ */
-    let topClientesData = [];
-
-    function renderTopKg() {
-        destroyChart('topKg');
-        if (topClientesData.length === 0) return;
-        const normalizeA = a => (!a || a === 'null') ? 'Sin Asesor' : a;
-
-        /* Filtrar solo los del ranking KG */
-        const kgData2 = topClientesData.filter(d => !d.topType || d.topType === 'kg' || d.topType === 'both');
-        if (kgData2.length === 0) return;
-
-        /* Detect unique years */
-        const yearsSet = new Set(kgData2.map(d => d.anio));
-        const years = [...yearsSet].sort();
-        const multiYear = years.length > 1;
-
-        /* Group by asesor, then by year */
-        const grupos = {};
-        kgData2.forEach(function(d) {
-            var a = normalizeA(d.asesor);
-            if (!grupos[a]) grupos[a] = {};
-            var yr = d.anio || 0;
-            if (!grupos[a][yr]) grupos[a][yr] = [];
-            grupos[a][yr].push(d);
+        // Agregar por asesor desde clientesTodosData
+        var map = {};
+        clientesTodosData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            if (!map[key]) map[key] = { importe: 0, kg: 0 };
+            map[key].importe += (d.importe    || 0);
+            map[key].kg      += (d.cantidadKg || 0);
         });
-        const asesores = Object.keys(grupos).sort();
+        if (Object.keys(map).length === 0) return;
 
-        const labels = [];
-        const dataKg = [];
-        const bgColors = [];
-        const groupInfoKg = [];
+        var totalImp = Object.values(map).reduce(function(s, v) { return s + v.importe; }, 0);
 
-        asesores.forEach(function(asesor, ai) {
-            /* spacer between groups */
-            if (ai > 0) { labels.push(''); dataKg.push(null); bgColors.push('transparent'); }
-            var startIdx = labels.length;
-            var yrKeys = Object.keys(grupos[asesor]).sort();
-            yrKeys.forEach(function(yr, yi) {
-                /* spacer between years within same asesor */
-                if (yi > 0 && multiYear) { labels.push(''); dataKg.push(null); bgColors.push('transparent'); }
-                var clientes = grupos[asesor][yr].slice().sort(function(a, b) { return (b.cantidadKg || 0) - (a.cantidadKg || 0); });
-                clientes.forEach(function(c) {
-                    var lbl = c.razonSocial || '';
-                    if (multiYear) lbl = lbl + '\n(' + yr + ')';
-                    labels.push(lbl);
-                    dataKg.push(c.cantidadKg || 0);
-                    bgColors.push(multiYear ? YEAR_COLORS[years.indexOf(parseInt(yr)) % YEAR_COLORS.length] : COLORS[ai % COLORS.length]);
-                });
-            });
-            groupInfoKg.push({ startIdx: startIdx, endIdx: labels.length - 1, asesor: asesor });
-        });
+        var sorted = Object.entries(map)
+            .map(function([a, v]) { return { asesor: a, importe: v.importe, kg: v.kg, pct: totalImp > 0 ? (v.importe / totalImp * 100) : 0 }; })
+            .sort(function(a, b) { return b.importe - a.importe; });
 
-        var chartH = Math.max(500, labels.length * 40);
-        document.getElementById('chartTopKg').parentElement.style.height = chartH + 'px';
-
-        var topGroupPluginKg = {
-            id: 'topGroupPluginKg',
-            afterDraw: function(chart) {
-                var ctx = chart.ctx;
-                var xScale = chart.scales.x;
-                var area = chart.chartArea;
-                ctx.save();
-                /* Build separator positions between groups */
-                var separators = [];
-                for (var g = 0; g < groupInfoKg.length; g++) {
-                    var gi = groupInfoKg[g];
-                    if (gi.startIdx > 0) {
-                        var xPrev = xScale.getPixelForValue(gi.startIdx - 1);
-                        var xCur = xScale.getPixelForValue(gi.startIdx);
-                        separators.push((xPrev + xCur) / 2);
-                    }
-                }
-                var yLabel = area.bottom + (xScale.height - 4);
-                /* Draw separator lines */
-                for (var s = 0; s < separators.length; s++) {
-                    ctx.strokeStyle = '#ccc';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([4, 3]);
-                    ctx.beginPath();
-                    ctx.moveTo(separators[s], area.top);
-                    ctx.lineTo(separators[s], yLabel - 2);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                }
-                ctx.font = 'bold 12px "Segoe UI", sans-serif';
-                ctx.fillStyle = '#1B4D3E';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                for (var g = 0; g < groupInfoKg.length; g++) {
-                    var gi = groupInfoKg[g];
-                    var firstBar = xScale.getPixelForValue(gi.startIdx);
-                    var lastBar = xScale.getPixelForValue(gi.endIdx);
-                    var xCenter = (firstBar + lastBar) / 2;
-                    ctx.fillText(gi.asesor, xCenter, yLabel);
-                }
-                ctx.restore();
-            }
+        var fmtMil = function(n) {
+            n = n || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return fmtPE.format(n);
         };
 
-        /* Year legend plugin (only when multiple years) */
-        var yearLegendPluginKg = {
-            id: 'yearLegendPluginKg',
-            afterDraw: function(chart) {
-                if (!multiYear) return;
-                var ctx = chart.ctx;
-                var area = chart.chartArea;
-                ctx.save();
-                var x = area.right - 10;
-                var y = area.top + 10;
-                ctx.font = 'bold 11px "Segoe UI", sans-serif';
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'top';
-                for (var i = 0; i < years.length; i++) {
-                    var color = YEAR_COLORS[i % YEAR_COLORS.length];
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x - 50, y + i * 20, 14, 14);
-                    ctx.fillStyle = '#333';
-                    ctx.fillText(years[i].toString(), x, y + i * 20 + 2);
-                }
-                ctx.restore();
-            }
-        };
-
-        charts['topKg'] = new Chart(document.getElementById('chartTopKg').getContext('2d'), {
+        charts['cartera'] = new Chart(
+            document.getElementById('chartCartera').getContext('2d'), {
             type: 'bar',
             data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Kilos',
-                    data: dataKg,
-                    backgroundColor: bgColors,
-                    borderRadius: 4,
-                    maxBarThickness: 55,
-                    barPercentage: 0.9,
-                    categoryPercentage: 0.85
-                }]
-            },
-            plugins: [topGroupPluginKg, yearLegendPluginKg],
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30, bottom: 28 } },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        filter: function(item) { return item.raw != null; },
-                        callbacks: {
-                            title: function(items) {
-                                var i = items[0].dataIndex;
-                                var base = (labels[i] || '').replace(/\n\(\d+\)/, '');
-                                for (var g = 0; g < groupInfoKg.length; g++) {
-                                    if (i >= groupInfoKg[g].startIdx && i <= groupInfoKg[g].endIdx) {
-                                        return base + ' — ' + groupInfoKg[g].asesor;
-                                    }
-                                }
-                                return base;
-                            },
-                            label: function(c) { return fmt(c.raw) + ' KG'; }
+                labels: sorted.map(r => r.asesor),
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Venta (' + monLabel + ')',
+                        data: sorted.map(r => r.importe),
+                        backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length] + 'CC'; }),
+                        borderColor:     sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        yAxisID: 'yImp',
+                        order: 2,
+                        datalabels: {
+                            display: true,
+                            anchor: 'end', align: 'top',
+                            color: '#1B4D3E',
+                            font: { size: 11, weight: '700' },
+                            formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
                         }
                     },
-                    datalabels: {
-                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] != null && ctx.dataset.data[ctx.dataIndex] > 0; },
-                        anchor: 'end', align: 'top',
-                        font: { size: 10, weight: '700' },
-                        color: '#333',
-                        formatter: function(v) { return fmtMil(v) + ' kg'; }
+                    {
+                        type: 'bar',
+                        label: 'Producción (KG)',
+                        data: sorted.map(r => r.kg),
+                        backgroundColor: 'rgba(255,193,7,0.55)',
+                        borderColor: 'rgba(255,193,7,1)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        yAxisID: 'yKg',
+                        order: 3,
+                        datalabels: {
+                            display: true,
+                            anchor: 'end', align: 'top',
+                            color: '#b07d00',
+                            font: { size: 11, weight: '700' },
+                            formatter: function(v) { return fmtMil(v) + ' KG'; }
+                        }
+                    },
+                    {
+                        type: 'line',
+                        label: '% Participación',
+                        data: sorted.map(r => r.pct),
+                        borderColor: '#e53935',
+                        backgroundColor: 'rgba(229,57,53,.15)',
+                        borderWidth: 2,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#e53935',
+                        tension: 0.3,
+                        fill: false,
+                        yAxisID: 'yPct',
+                        order: 1,
+                        datalabels: {
+                            display: true,
+                            align: 'top',
+                            color: '#c62828',
+                            font: { size: 11, weight: '700' },
+                            formatter: function(v) { return v.toFixed(1) + '%'; }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 14, font: { size: 12 } } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(c) {
+                                if (c.dataset.label.startsWith('Venta'))        return c.dataset.label + ': ' + monLabel + ' ' + fmtPE.format(c.raw);
+                                if (c.dataset.label.startsWith('Producción'))   return c.dataset.label + ': ' + fmtMil(c.raw) + ' KG';
+                                if (c.dataset.label.startsWith('%'))            return c.dataset.label + ': ' + c.raw.toFixed(1) + '%';
+                                return c.dataset.label + ': ' + c.raw;
+                            }
+                        }
                     }
                 },
                 scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 9 },
-                            autoSkip: false,
-                            maxRotation: 0,
-                            padding: 4,
-                            callback: function(value, index) {
-                                var lbl = labels[index] || '';
-                                if (!lbl) return '';
-                                /* Split on \n first (for year suffix) then word-wrap */
-                                var parts = lbl.split('\n');
-                                var lines = [];
-                                parts.forEach(function(part) {
-                                    var words = part.split(' ');
-                                    var line = '';
-                                    for (var w = 0; w < words.length; w++) {
-                                        if (line.length + words[w].length > 12) {
-                                            if (line.trim()) lines.push(line.trim());
-                                            line = '';
-                                        }
-                                        line += words[w] + ' ';
-                                    }
-                                    if (line.trim()) lines.push(line.trim());
-                                });
-                                return lines;
-                            }
-                        },
-                        grid: { display: false }
+                    yImp: {
+                        type: 'linear', position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Venta (' + monLabel + ')', color: '#1B4D3E', font: { size: 11 } },
+                        ticks: { callback: function(v) { return fmtMil(v); }, color: '#1B4D3E' },
+                        grid: { color: 'rgba(0,0,0,.06)' }
                     },
-                    y: { beginAtZero: true, ticks: { callback: function(v) { return fmtMil(v); } } }
+                    yKg: {
+                        type: 'linear', position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'KG', color: '#f9a825', font: { size: 11 } },
+                        ticks: { callback: function(v) { return fmtMil(v); }, color: '#f9a825' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    yPct: {
+                        type: 'linear', position: 'right',
+                        beginAtZero: true, max: 100,
+                        display: false
+                    }
                 }
             }
         });
     }
 
+    /* ═══════════════════════════════════════════════
+       CHART: Participación por Asesor (%) — doughnut
+       ═══════════════════════════════════════════════ */
+    function renderParticipacion() {
+        destroyChart('participacion');
+
+        var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        var map = {};
+        clientesTodosData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            map[key] = (map[key] || 0) + (d.importe || 0);
+        });
+        if (Object.keys(map).length === 0) return;
+
+        var total = Object.values(map).reduce(function(s, v) { return s + v; }, 0);
+        var sorted = Object.entries(map)
+            .map(function([a, v]) { return { asesor: a, importe: v, pct: total > 0 ? (v / total * 100) : 0 }; })
+            .sort(function(a, b) { return b.importe - a.importe; });
+
+        var fmtMil = function(n) {
+            n = n || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return fmtPE.format(n);
+        };
+
+        charts['participacion'] = new Chart(
+            document.getElementById('chartParticipacion').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    data: sorted.map(r => r.importe),
+                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    borderWidth: 2,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '55%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 13, font: { size: 12, weight: '600' }, padding: 14 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(c) {
+                                var pct = total > 0 ? (c.raw / total * 100).toFixed(1) : 0;
+                                return monLabel + ' ' + fmtMil(c.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    },
+                    datalabels: {
+                        display: function(ctx) {
+                            return total > 0 && (ctx.dataset.data[ctx.dataIndex] / total * 100) >= 5;
+                        },
+                        color: '#fff',
+                        font: { size: 12, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                        textStrokeColor: 'rgba(0,0,0,.4)',
+                        textStrokeWidth: 2,
+                        formatter: function(v, ctx) {
+                            var pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+                            return ctx.chart.data.labels[ctx.dataIndex] + '\n' + pct + '%';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ═══════════════════════════════════════════════
+       CHART: Top N Clientes por Asesor — Importe
+       ═══════════════════════════════════════════════ */
     function renderTopImporte() {
         destroyChart('topImporte');
-        if (topClientesData.length === 0) return;
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-        const normalizeA = a => (!a || a === 'null') ? 'Sin Asesor' : a;
+        document.getElementById('spinnerTopImporte').style.display = 'none';
 
-        /* Filtrar solo los del ranking Importe */
-        const impData = topClientesData.filter(d => !d.topType || d.topType === 'importe' || d.topType === 'both');
-        if (impData.length === 0) return;
+        var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        var rows = topClientesData.filter(function(r) { return r.topType === 'importe' || r.topType === 'both'; });
+        if (!rows.length) return;
 
-        /* Detect unique years */
-        const yearsSet = new Set(impData.map(d => d.anio));
-        const years = [...yearsSet].sort();
-        const multiYear = years.length > 1;
+        var asesores = [...new Set(rows.map(r => r.asesor))].sort();
+        var clientes = [...new Set(rows.map(r => r.razonSocial))];
 
-        /* Group by asesor, then by year */
-        const grupos = {};
-        impData.forEach(function(d) {
-            var a = normalizeA(d.asesor);
-            if (!grupos[a]) grupos[a] = {};
-            var yr = d.anio || 0;
-            if (!grupos[a][yr]) grupos[a][yr] = [];
-            grupos[a][yr].push(d);
-        });
-        const asesores = Object.keys(grupos).sort();
+        var fmtMil = function(n) {
+            n = n || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return fmtPE.format(n);
+        };
 
-        const labels = [];
-        const dataImp = [];
-        const bgColors = [];
-        const groupInfoImp = [];
-
-        asesores.forEach(function(asesor, ai) {
-            /* spacer between groups */
-            if (ai > 0) { labels.push(''); dataImp.push(null); bgColors.push('transparent'); }
-            var startIdx = labels.length;
-            var yrKeys = Object.keys(grupos[asesor]).sort();
-            yrKeys.forEach(function(yr, yi) {
-                /* spacer between years within same asesor */
-                if (yi > 0 && multiYear) { labels.push(''); dataImp.push(null); bgColors.push('transparent'); }
-                var clientes = grupos[asesor][yr].slice().sort(function(a, b) { return (b.importe || 0) - (a.importe || 0); });
-                clientes.forEach(function(c) {
-                    var lbl = c.razonSocial || '';
-                    if (multiYear) lbl = lbl + '\n(' + yr + ')';
-                    labels.push(lbl);
-                    dataImp.push(c.importe || 0);
-                    bgColors.push(multiYear ? YEAR_COLORS[years.indexOf(parseInt(yr)) % YEAR_COLORS.length] : COLORS[ai % COLORS.length]);
-                });
-            });
-            groupInfoImp.push({ startIdx: startIdx, endIdx: labels.length - 1, asesor: asesor });
-        });
-
-        var chartH = Math.max(500, labels.length * 40);
-        document.getElementById('chartTopImporte').parentElement.style.height = chartH + 'px';
-
-        var topGroupPluginImp = {
-            id: 'topGroupPluginImp',
-            afterDraw: function(chart) {
-                var ctx = chart.ctx;
-                var xScale = chart.scales.x;
-                var area = chart.chartArea;
-                ctx.save();
-                /* Build separator positions between groups */
-                var separators = [];
-                for (var g = 0; g < groupInfoImp.length; g++) {
-                    var gi = groupInfoImp[g];
-                    if (gi.startIdx > 0) {
-                        var xPrev = xScale.getPixelForValue(gi.startIdx - 1);
-                        var xCur = xScale.getPixelForValue(gi.startIdx);
-                        separators.push((xPrev + xCur) / 2);
+        // Colores por posicion (1°=azul, 2°=rojo, 3°=verde) dentro de cada asesor
+        // Construir datasets por posicion (pos=0,1,2)
+        var TOP_COLORS = ['#1565C0', '#c62828', '#2e7d32'];
+        var TOP_COLORS_BG = ['rgba(21,101,192,.75)', 'rgba(198,40,40,.75)', 'rgba(46,125,50,.75)'];
+        var datasets = [0, 1, 2].map(function(pos) {
+            return {
+                label: (pos + 1) + 'º lugar',
+                data: asesores.map(function(asesor) {
+                    var clientesAsesor = rows
+                        .filter(function(r) { return r.asesor === asesor; })
+                        .sort(function(a, b) { return b.importe - a.importe; });
+                    return clientesAsesor[pos] ? clientesAsesor[pos].importe : null;
+                }),
+                backgroundColor: TOP_COLORS_BG[pos],
+                borderColor:     TOP_COLORS[pos],
+                borderWidth: 1,
+                borderRadius: 4,
+                skipNull: true,
+                datalabels: {
+                    display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                    anchor: 'end', align: 'top',
+                    color: TOP_COLORS[pos],
+                    font: { size: 10, weight: '700' },
+                    formatter: function(v, ctx) {
+                        var asesor = asesores[ctx.dataIndex];
+                        var clientesAsesor = rows
+                            .filter(function(r) { return r.asesor === asesor; })
+                            .sort(function(a, b) { return b.importe - a.importe; });
+                        var cli = clientesAsesor[pos];
+                        return cli ? cli.razonSocial.substring(0, 18) + '\n' + fmtMil(v) : fmtMil(v);
                     }
                 }
-                var yLabel = area.bottom + (xScale.height - 4);
-                /* Draw separator lines */
-                for (var s = 0; s < separators.length; s++) {
-                    ctx.strokeStyle = '#ccc';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([4, 3]);
-                    ctx.beginPath();
-                    ctx.moveTo(separators[s], area.top);
-                    ctx.lineTo(separators[s], yLabel - 2);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                }
-                ctx.font = 'bold 12px "Segoe UI", sans-serif';
-                ctx.fillStyle = '#1B4D3E';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                for (var g = 0; g < groupInfoImp.length; g++) {
-                    var gi = groupInfoImp[g];
-                    var firstBar = xScale.getPixelForValue(gi.startIdx);
-                    var lastBar = xScale.getPixelForValue(gi.endIdx);
-                    var xCenter = (firstBar + lastBar) / 2;
-                    ctx.fillText(gi.asesor, xCenter, yLabel);
-                }
-                ctx.restore();
-            }
-        };
+            };
+        });
 
-        /* Year legend plugin (only when multiple years) */
-        var yearLegendPluginImp = {
-            id: 'yearLegendPluginImp',
-            afterDraw: function(chart) {
-                if (!multiYear) return;
-                var ctx = chart.ctx;
-                var area = chart.chartArea;
-                ctx.save();
-                var x = area.right - 10;
-                var y = area.top + 10;
-                ctx.font = 'bold 11px "Segoe UI", sans-serif';
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'top';
-                for (var i = 0; i < years.length; i++) {
-                    var color = YEAR_COLORS[i % YEAR_COLORS.length];
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x - 50, y + i * 20, 14, 14);
-                    ctx.fillStyle = '#333';
-                    ctx.fillText(years[i].toString(), x, y + i * 20 + 2);
-                }
-                ctx.restore();
-            }
-        };
+        var canvasH = Math.max(380, asesores.length * 90);
+        document.getElementById('chartTopImporte').parentElement.style.minHeight = canvasH + 'px';
 
-        charts['topImporte'] = new Chart(document.getElementById('chartTopImporte').getContext('2d'), {
+        charts['topImporte'] = new Chart(
+            document.getElementById('chartTopImporte').getContext('2d'), {
             type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Importe',
-                    data: dataImp,
-                    backgroundColor: bgColors,
-                    borderRadius: 4,
-                    maxBarThickness: 55,
-                    barPercentage: 0.9,
-                    categoryPercentage: 0.85
-                }]
-            },
-            plugins: [topGroupPluginImp, yearLegendPluginImp],
+            data: { labels: asesores, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30, bottom: 28 } },
                 plugins: {
-                    legend: { display: false },
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11, weight: '600' }, padding: 10 } },
                     tooltip: {
-                        filter: function(item) { return item.raw != null; },
                         callbacks: {
                             title: function(items) {
-                                var i = items[0].dataIndex;
-                                var base = (labels[i] || '').replace(/\n\(\d+\)/, '');
-                                for (var g = 0; g < groupInfoImp.length; g++) {
-                                    if (i >= groupInfoImp[g].startIdx && i <= groupInfoImp[g].endIdx) {
-                                        return base + ' — ' + groupInfoImp[g].asesor;
-                                    }
-                                }
-                                return base;
+                                var c = items[0];
+                                var pos = c.datasetIndex;
+                                var asesor = asesores[c.dataIndex];
+                                var clientesAsesor = rows
+                                    .filter(function(r) { return r.asesor === asesor; })
+                                    .sort(function(a, b) { return b.importe - a.importe; });
+                                var cli = clientesAsesor[pos];
+                                return cli ? cli.razonSocial : asesor;
                             },
-                            label: function(c) { return monLabel + ' ' + fmt(c.raw); }
+                            label: function(c) { return c.dataset.label + ': ' + monLabel + ' ' + fmtPE.format(c.raw); }
                         }
-                    },
-                    datalabels: {
-                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] != null && ctx.dataset.data[ctx.dataIndex] > 0; },
-                        anchor: 'end', align: 'top',
-                        font: { size: 10, weight: '700' },
-                        color: '#333',
-                        formatter: function(v) { return monLabel + ' ' + fmtMil(v); }
                     }
                 },
+                layout: { padding: { top: 24 } },
                 scales: {
-                    x: {
-                        ticks: {
-                            font: { size: 9 },
-                            autoSkip: false,
-                            maxRotation: 0,
-                            padding: 4,
-                            callback: function(value, index) {
-                                var lbl = labels[index] || '';
-                                if (!lbl) return '';
-                                /* Split on \n first (for year suffix) then word-wrap */
-                                var parts = lbl.split('\n');
-                                var lines = [];
-                                parts.forEach(function(part) {
-                                    var words = part.split(' ');
-                                    var line = '';
-                                    for (var w = 0; w < words.length; w++) {
-                                        if (line.length + words[w].length > 12) {
-                                            if (line.trim()) lines.push(line.trim());
-                                            line = '';
-                                        }
-                                        line += words[w] + ' ';
-                                    }
-                                    if (line.trim()) lines.push(line.trim());
-                                });
-                                return lines;
-                            }
-                        },
-                        grid: { display: false }
-                    },
-                    y: { beginAtZero: true, ticks: { callback: function(v) { return monLabel + ' ' + fmtMil(v); } } }
+                    x: { ticks: { font: { size: 11, weight: '600' } } },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { callback: function(v) { return fmtMil(v); }, font: { size: 11 } }
+                    }
                 }
             }
         });
     }
 
-    /* ═════════════════════════════════════════════════
-       DETALLE: Clientes del Asesor — Importe (desde pie chart)
-       ═════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════
+       CHART: Top N Clientes por Asesor — Kilos
+       ═══════════════════════════════════════════════ */
+    function renderTopKg() {
+        destroyChart('topKg');
+        document.getElementById('spinnerTopKg').style.display = 'none';
+
+        var rows = topClientesData.filter(function(r) { return r.topType === 'kg' || r.topType === 'both'; });
+        if (!rows.length) return;
+
+        var asesores = [...new Set(rows.map(r => r.asesor))].sort();
+        var clientes = [...new Set(rows.map(r => r.razonSocial))];
+
+        var fmtMil = function(n) {
+            n = n || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return fmtPE.format(n);
+        };
+
+        // Colores por posicion (1°=azul, 2°=rojo, 3°=verde) dentro de cada asesor
+        var TOP_COLORS = ['#1565C0', '#c62828', '#2e7d32'];
+        var TOP_COLORS_BG = ['rgba(21,101,192,.75)', 'rgba(198,40,40,.75)', 'rgba(46,125,50,.75)'];
+        var datasets = [0, 1, 2].map(function(pos) {
+            return {
+                label: (pos + 1) + 'º lugar',
+                data: asesores.map(function(asesor) {
+                    var clientesAsesor = rows
+                        .filter(function(r) { return r.asesor === asesor; })
+                        .sort(function(a, b) { return b.cantidadKg - a.cantidadKg; });
+                    return clientesAsesor[pos] ? clientesAsesor[pos].cantidadKg : null;
+                }),
+                backgroundColor: TOP_COLORS_BG[pos],
+                borderColor:     TOP_COLORS[pos],
+                borderWidth: 1,
+                borderRadius: 4,
+                skipNull: true,
+                datalabels: {
+                    display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                    anchor: 'end', align: 'top',
+                    color: TOP_COLORS[pos],
+                    font: { size: 10, weight: '700' },
+                    formatter: function(v, ctx) {
+                        var asesor = asesores[ctx.dataIndex];
+                        var clientesAsesor = rows
+                            .filter(function(r) { return r.asesor === asesor; })
+                            .sort(function(a, b) { return b.cantidadKg - a.cantidadKg; });
+                        var cli = clientesAsesor[pos];
+                        return cli ? cli.razonSocial.substring(0, 18) + '\n' + fmtMil(v) : fmtMil(v);
+                    }
+                }
+            };
+        });
+
+        var canvasH = Math.max(380, asesores.length * 90);
+        document.getElementById('chartTopKg').parentElement.style.minHeight = canvasH + 'px';
+
+        charts['topKg'] = new Chart(
+            document.getElementById('chartTopKg').getContext('2d'), {
+            type: 'bar',
+            data: { labels: asesores, datasets: datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11, weight: '600' }, padding: 10 } },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                var c = items[0];
+                                var pos = c.datasetIndex;
+                                var asesor = asesores[c.dataIndex];
+                                var clientesAsesor = rows
+                                    .filter(function(r) { return r.asesor === asesor; })
+                                    .sort(function(a, b) { return b.cantidadKg - a.cantidadKg; });
+                                var cli = clientesAsesor[pos];
+                                return cli ? cli.razonSocial : asesor;
+                            },
+                            label: function(c) { return c.dataset.label + ': ' + fmtMil(c.raw) + ' KG'; }
+                        }
+                    }
+                },
+                layout: { padding: { top: 24 } },
+                scales: {
+                    x: { ticks: { font: { size: 11, weight: '600' } } },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { callback: function(v) { return fmtMil(v); }, font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ═══════════════════════════════════════════════
+       CHART: Ranking de Asesores
+       ═══════════════════════════════════════════════ */
+    function renderRanking() {
+        destroyChart('ranking');
+
+        var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        var map = {};
+        clientesTodosData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            map[key] = (map[key] || 0) + (d.importe || 0);
+        });
+        if (Object.keys(map).length === 0) return;
+
+        var sorted = Object.entries(map)
+            .map(function([a, t]) { return { asesor: a, total: t }; })
+            .sort(function(a, b) { return a.total - b.total; });
+
+        var fmtMil = function(n) {
+            n = n || 0;
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return fmtPE.format(n);
+        };
+
+        charts['ranking'] = new Chart(
+            document.getElementById('chartRanking').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: sorted.map(r => r.asesor),
+                datasets: [{
+                    label: 'Importe Total',
+                    data: sorted.map(r => r.total),
+                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: function(c) { return monLabel + ' ' + fmtPE.format(c.raw); } } },
+                    datalabels: {
+                        display: function(ctx) { return ctx.dataset.data[ctx.dataIndex] > 0; },
+                        anchor: 'end', align: 'right',
+                        font: { size: 12, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                        color: '#374151',
+                        textStrokeColor: 'rgba(255,255,255,.8)',
+                        textStrokeWidth: 3,
+                        formatter: function(v, ctx) {
+                            return monLabel + ' ' + fmtMil(v);
+                        }
+                    }
+                },
+                layout: { padding: { right: 200 } },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: { callback: function(v) { return fmtMil(v); }, font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ═══════════════════════════════════════════════
+       DETALLE: Clientes del Asesor
+       ═══════════════════════════════════════════════ */
     async function loadDetalleClientesAsesor(asesor) {
-        const panel  = document.getElementById('panelClientesAsesor');
-        const lbl    = document.getElementById('lblAsesorDetalle');
-        const body   = document.getElementById('bodyClientesAsesor');
-        const spin   = document.getElementById('spinnerClientesAsesor');
+        var panel = document.getElementById('panelClientesAsesor');
+        var lbl   = document.getElementById('lblAsesorDetalle');
+        var body  = document.getElementById('bodyClientesAsesor');
+        var spin  = document.getElementById('spinnerClientesAsesor');
 
         panel.style.display = 'block';
         lbl.textContent = asesor;
@@ -1147,29 +901,32 @@
         spin.style.display = 'flex';
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-        const p = buildParams();
+        var p = buildParams();
         p.set('asesor', asesor);
-        const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
 
         try {
-            const data = await apiFetch('@Url.Action("DatosClientesImportePorAsesor", "DashboardComercial")?' + p);
+            var r    = await fetch('@Url.Action("DatosClientesPorAsesor", "DashboardComercial")?' + p.toString());
+            var data = await r.json();
             if (!data || data.length === 0) {
-                body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+                body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
             } else {
+                const fmtKg = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
                 data.forEach(function(row, i) {
-                    var tr = '<tr>'
+                    body.innerHTML += '<tr>'
                         + '<td>' + (i + 1) + '</td>'
                         + '<td>' + (row.ruc || '') + '</td>'
                         + '<td>' + (row.razonSocial || '') + '</td>'
                         + '<td>' + (row.giro || '') + '</td>'
+                        + '<td class="text-end">' + (row.unidad || '') + '</td>'
+                        + '<td class="text-end">' + fmtKg.format(row.cantidadKg ?? 0) + '</td>'
                         + '<td class="text-end fw-semibold">' + monLabel + ' ' + fmt(row.importe) + '</td>'
                         + '</tr>';
-                    body.innerHTML += tr;
                 });
             }
         } catch (e) {
             console.error(e);
-            body.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
+            body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
         } finally {
             spin.style.display = 'none';
         }
@@ -1180,71 +937,52 @@
         document.getElementById('bodyClientesAsesor').innerHTML = '';
     };
 
-    /* exportarClientesAsesorExcel y exportarTodosClientesExcel definidos en dashboard-comercial-export.js */
-    window._dcExportUrl = '@Url.Action("DatosClientesImporteTodos", "DashboardComercial")';
-
-    /* ═════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════
        CARGAR TODOS LOS DATOS
-       ═════════════════════════════════════════════════ */
+       ═══════════════════════════════════════════════ */
     window.loadAll = async function () {
-        const p = buildParams();
+        // var lbl = document.getElementById('lblDiagnostico');
+        // lbl.textContent = 'Consultando...';
+        // lbl.className   = 'small text-muted';
+        var lbl = { textContent: '', className: '' }; // diagnóstico deshabilitado
 
-        /* Cerrar panel de detalle al recargar */
-        cerrarDetalleClientes();
+        var p = buildParams();
 
-        showSpin('spinnerTopKg');
-        showSpin('spinnerTopImporte');
+        try {
+            var r    = await fetch('@Url.Action("DatosDashboard", "DashboardComercial")?' + p.toString() + '&top=3');
+            var data = await r.json();
 
-        const errors = [];
+            clientesTodosData = data.clientesTodos ?? [];
+            topClientesData   = data.topClientes   ?? [];
+            window._clientesTodosData = clientesTodosData;
 
-        const [impRes, kgRes, cliRes, topRes] = await Promise.allSettled([
-            apiFetch('@Url.Action("DatosImportePorAsesor", "DashboardComercial")?' + p),
-            apiFetch('@Url.Action("DatosCantidadKgPorAsesor", "DashboardComercial")?' + p),
-            apiFetch('@Url.Action("DatosNroClientesPorAsesor", "DashboardComercial")?' + p),
-            apiFetch('@Url.Action("DatosTopClientesPorAsesor", "DashboardComercial")?' + p + '&top=3')
-        ]);
+            // lbl.textContent = 'Clientes cargados: ' + clientesTodosData.length;
+            // lbl.className   = 'small text-success fw-semibold';
 
-        if (impRes.status === 'fulfilled') {
-            importeData = impRes.value;
+            try { renderCartera();       } catch(e) { console.warn('renderCartera:', e); }
+            try { renderClientesPie();   } catch(e) { console.warn('renderClientesPie:', e); }
+            try { renderClientesPct();   } catch(e) { console.warn('renderClientesPct:', e); }
+            try { renderRanking();       } catch(e) { console.warn('renderRanking:', e); }
+            try { renderParticipacion(); } catch(e) { console.warn('renderParticipacion:', e); }
+            try { renderTopImporte();    } catch(e) { console.warn('renderTopImporte:', e); }
+            try { renderTopKg();         } catch(e) { console.warn('renderTopKg:', e); }
+
+        } catch (e) {
+            console.error(e);
+            // lbl.textContent = 'Error al cargar. Ver consola.';
+            // lbl.className   = 'small text-danger';
+            showToast('Error al cargar el dashboard. Verifique su conexión.', 'danger');
         }
-        else { console.error(impRes.reason); errors.push('Importe'); }
-
-        if (kgRes.status === 'fulfilled') {
-            kgData = kgRes.value;
-        }
-        else { console.error(kgRes.reason); errors.push('Cantidad KG'); }
-
-        if (cliRes.status === 'fulfilled') {
-            clientesData = cliRes.value;
-        }
-        else { console.error(cliRes.reason); errors.push('Nro Clientes'); }
-
-        if (topRes.status === 'fulfilled') { topClientesData = topRes.value; renderTopKg(); renderTopImporte(); }
-        else { console.error(topRes.reason); errors.push('Top Clientes'); }
-        hideSpin('spinnerTopKg');
-        hideSpin('spinnerTopImporte');
-
-        if (errors.length > 0) {
-            showToast('Error al cargar: ' + errors.join(', ') + '. Verifique su conexión.', 'danger');
-        }
-
-        // Gráficos de resumen (calculados client-side)
-        renderResumen();
     };
 
-    /* ── Limpiar filtros ──────────────────────────── */
+    /* ── Limpiar filtros ───────────────────────────── */
     window.clearFilters = function () {
         document.getElementById('moneda').value = 'D';
-        const curYear = new Date().getFullYear();
-        document.querySelectorAll('#yearCheckBar input').forEach(cb => { cb.checked = parseInt(cb.value) === curYear; });
-        fpSetDisabled('#fechaInicio', false);
-        fpSetDisabled('#fechaFin', false);
         setDefaultDates();
         loadAll();
     };
 
-    /* ── Inicio ───────────────────────────────────── */
-    buildYearCheckboxes();
+    /* ── Inicio ────────────────────────────────────── */
     setDefaultDates();
     loadAll();
 })();
