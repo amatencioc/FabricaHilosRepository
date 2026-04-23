@@ -42,4 +42,7 @@ public class EmpresaConfig
 
     /// <summary>Texto del footer.</summary>
     public string TextoFooter { get; set; } = string.Empty;
+
+    /// <summary>RUC de la empresa (ej: "20100096260").</summary>
+    public string Ruc { get; set; } = string.Empty;
 }

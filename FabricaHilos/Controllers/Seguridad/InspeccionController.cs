@@ -17,9 +17,6 @@ namespace FabricaHilos.Controllers.Seguridad
         private readonly IInspeccionService _inspeccionService;
         private readonly ILogger<InspeccionController> _logger;
         private readonly string _rutaSeguridad;
-        private readonly string? _networkUsername;
-        private readonly string? _networkPassword;
-        private readonly string? _networkDomain;
 
         public InspeccionController(
             IConfiguration configuration, 
@@ -29,10 +26,6 @@ namespace FabricaHilos.Controllers.Seguridad
             _rutaSeguridad = configuration.GetValue<string>("RutaSeguridad")
                 ?? throw new InvalidOperationException(
                     "La clave 'RutaSeguridad' no está definida en appsettings.json.");
-
-            _networkUsername = configuration["NetworkShare:Username"];
-            _networkPassword = configuration["NetworkShare:Password"];
-            _networkDomain   = configuration["NetworkShare:Domain"];
 
             _procesadorImagen = new ProcesadorImagenSeguridad(_rutaSeguridad, logger);
             _inspeccionService = inspeccionService;
@@ -189,8 +182,7 @@ namespace FabricaHilos.Controllers.Seguridad
 
                     var imgTask = Task.Run(async () =>
                     {
-                        if (OperatingSystem.IsWindows())
-                            NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
+                        EnsureNetworkShare(_rutaSeguridad);
                         using var imgStream = new MemoryStream(imgBytes, writable: false);
                         await _procesadorImagen.GuardarYOptimizarImagenAsync(imgStream, nombreArchivo);
                     });
@@ -272,8 +264,7 @@ namespace FabricaHilos.Controllers.Seguridad
 
                         var imgTask = Task.Run(async () =>
                         {
-                            if (OperatingSystem.IsWindows())
-                                NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
+                            EnsureNetworkShare(_rutaSeguridad);
                             using var imgStream = new MemoryStream(imgBytes, writable: false);
                             await _procesadorImagen.GuardarYOptimizarImagenAsync(imgStream, nombreArchivo);
                         });
@@ -429,8 +420,7 @@ namespace FabricaHilos.Controllers.Seguridad
 
             try
             {
-                if (OperatingSystem.IsWindows())
-                    NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
+                EnsureNetworkShare(rutaCompleta);
 
                 if (!System.IO.File.Exists(rutaCompleta)) return NotFound();
 
@@ -536,8 +526,7 @@ namespace FabricaHilos.Controllers.Seguridad
 
                     var imgTask = Task.Run(async () =>
                     {
-                        if (OperatingSystem.IsWindows())
-                            NetworkShareHelper.Connect(_rutaSeguridad, _networkUsername, _networkPassword, _networkDomain);
+                        EnsureNetworkShare(_rutaSeguridad);
                         using var imgStream = new MemoryStream(imgBytes, writable: false);
                         await _procesadorImagen.GuardarYOptimizarImagenAsync(imgStream, nombreArchivo);
                     });

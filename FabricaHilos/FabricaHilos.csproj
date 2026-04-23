@@ -71,5 +71,9 @@
     <ProjectReference Include="..\FabricaHilos.Notificaciones\FabricaHilos.Notificaciones.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Views\Cobranza\" />
+  </ItemGroup>
+
 
   </Project>

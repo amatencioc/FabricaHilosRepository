@@ -115,6 +115,9 @@ namespace FabricaHilos.Controllers.Sgc
 
                 var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(cliente.Ruc, requerimiento.NumCer);
 
+                // Autenticarse en el recurso de red compartido antes de leer
+                EnsureNetworkShare(rutaPdf);
+
                 if (!System.IO.File.Exists(rutaPdf))
                 {
                     _logger.LogWarning("El archivo PDF no existe en la ruta: {RutaPdf}", rutaPdf);

@@ -57,6 +57,10 @@ namespace FabricaHilos.Logica
                         SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web, 'ARBONA' AS EMPRESA
                         FROM ARBONA.CS_USER
                         WHERE c_user = :puser AND psw_sig = :ppsw
+                        UNION
+                        SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web, 'SOLSA' AS EMPRESA
+                        FROM SOLSA.CS_USER
+                        WHERE c_user = :puser AND psw_sig = :ppsw
                     )";
 
                 using var cmd = new OracleCommand(query, oconexion);

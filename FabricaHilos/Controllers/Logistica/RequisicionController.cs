@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Models.Logistica;
 using FabricaHilos.Services.Logistica;
+using FabricaHilos.Services;
 
 namespace FabricaHilos.Controllers.Logistica;
 
@@ -13,6 +14,7 @@ public class RequisicionController : OracleBaseController
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _config;
     private readonly ILogger<RequisicionController> _logger;
+    private readonly IEmpresaTemaService _empresaTema;
 
     // Extensiones permitidas para la carga de archivos
     private static readonly HashSet<string> _extPermitidas =
@@ -27,12 +29,14 @@ public class RequisicionController : OracleBaseController
         IRequisicionService service,
         IWebHostEnvironment env,
         IConfiguration config,
-        ILogger<RequisicionController> logger)
+        ILogger<RequisicionController> logger,
+        IEmpresaTemaService empresaTema)
     {
-        _service = service;
-        _env     = env;
-        _config  = config;
-        _logger  = logger;
+        _service     = service;
+        _env         = env;
+        _config      = config;
+        _logger      = logger;
+        _empresaTema = empresaTema;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -136,6 +140,7 @@ public class RequisicionController : OracleBaseController
         ViewBag.ReturnPage        = page;
 
         // Archivos ya cargados para este requerimiento (por idGrupo de los ítems)
+        EnsureNetworkShare(ObtenerCarpetaRaiz());
         ViewBag.ArchivosExistentes = ObtenerArchivosExistentes(items);
 
         var codigosPersonal = new[] { cabecera.Responsable, cabecera.Autoriza }
@@ -204,6 +209,7 @@ public class RequisicionController : OracleBaseController
             ? model.ExistingIdGrupo.Value
             : await _service.ObtenerSiguienteIdGrupoAsync();
         string carpeta = ObtenerCarpetaPorGrupo(idGrupo);
+        EnsureNetworkShare(ObtenerCarpetaRaiz());
         Directory.CreateDirectory(carpeta);
 
         var errores  = new List<string>();
@@ -254,6 +260,7 @@ public class RequisicionController : OracleBaseController
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
+        EnsureNetworkShare(ruta);
         if (!System.IO.File.Exists(ruta))
             return NotFound();
 
@@ -275,6 +282,7 @@ public class RequisicionController : OracleBaseController
         {
             nombreArchivo = Path.GetFileName(nombreArchivo);
             var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
+            EnsureNetworkShare(ObtenerCarpetaRaiz());
             bool aprobacionValida = false;
 
             if (nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase))
@@ -331,6 +339,7 @@ public class RequisicionController : OracleBaseController
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
+        EnsureNetworkShare(ruta);
         if (!System.IO.File.Exists(ruta))
             return NotFound();
 
@@ -350,6 +359,7 @@ public class RequisicionController : OracleBaseController
         nombreArchivo = Path.GetFileName(nombreArchivo);
         bool eraAprobado = nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
         var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
+        EnsureNetworkShare(ObtenerCarpetaRaiz());
         var ruta    = Path.Combine(carpeta, nombreArchivo);
 
         if (System.IO.File.Exists(ruta))
@@ -555,8 +565,14 @@ public class RequisicionController : OracleBaseController
     // ── HELPERS ────────────────────────────────────────────────────────────────
 
     private string ObtenerCarpetaRaiz()
-        => _config["RutaRequerimientos"]
-           ?? Path.Combine(_env.WebRootPath, "uploads", "requerimientos");
+    {
+        var raiz = _config["RutaRequerimientos"]
+                   ?? Path.Combine(_env.WebRootPath, "uploads", "requerimientos");
+        var ruc  = _empresaTema.GetRucActual();
+        return string.IsNullOrWhiteSpace(ruc)
+            ? raiz
+            : Path.Combine(raiz, ruc);
+    }
 
     private string ObtenerCarpetaPorGrupo(long idGrupo)
         => Path.Combine(ObtenerCarpetaRaiz(), idGrupo.ToString());

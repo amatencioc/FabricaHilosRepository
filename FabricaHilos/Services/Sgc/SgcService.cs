@@ -994,7 +994,11 @@ namespace FabricaHilos.Services.Sgc
             if (string.IsNullOrEmpty(connStr)) return null;
 
             var sqlBase = $@"
-                SELECT G.COD_ALM
+                SELECT G.COD_ALM,
+                       G.TP_TRANSAC,
+                       G.SERIE,
+                       G.NUMERO,
+                       G.FCH_TRANSAC,
                        G.NOMBRE, G.RUC, G.GLOSA, G.PESO_TOTAL,
                        G.TIP_REF, G.SER_REF, G.NRO_REF, G.NRO_DOC_REF,
                        G.MOTIVO
@@ -1052,7 +1056,8 @@ namespace FabricaHilos.Services.Sgc
             try
             {
                 var sqlExtra = $@"
-                    SELECT NOM_TRANSPOR
+                    SELECT NOM_TRANSPOR,
+                           NRO_TRANSPOR, NOM_VEHICULO,
                            DIR_PARTIDA, DIR_LLEGADA, FCH_ENTREGA,
                            NRO_BULTOS, MOD_TRASLADO
                     FROM {S}KARDEX_G

@@ -160,28 +160,11 @@ namespace FabricaHilos.Controllers.Sgc
                     return Json(new { tipo = "Advertencia", mensaje = $"El Nº Certificado no puede superar los 30 caracteres (ingresó {numCer.Length})." });
                 }
 
-                // Autenticarse en el recurso de red antes de cualquier operación
-                var rutaBase = _configuration["RutaCertificados"] ?? @"\\10.0.7.14\6-20100096260\Certificados";
-                var username = _configuration["NetworkShare:Username"];
-                var password = _configuration["NetworkShare:Password"];
-                var domain = _configuration["NetworkShare:Domain"];
-
-                try
-                {
-                    if (OperatingSystem.IsWindows())
-                    {
-                        FabricaHilos.Helpers.NetworkShareHelper.Connect(rutaBase, username, password, domain);
-                        _logger.LogInformation("Autenticación exitosa en el recurso de red: {RutaBase}", rutaBase);
-                    }
-                }
-                catch (Exception exAuth)
-                {
-                    _logger.LogError(exAuth, "Error al autenticarse en el recurso de red");
-                    return Json(new { tipo = "Error", mensaje = $"Error al conectar con el recurso de red: {exAuth.Message}" });
-                }
-
                 // Generar ruta del PDF
                 var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(cliente.Ruc, numCer);
+
+                // Autenticarse en el recurso de red compartido antes de escribir
+                EnsureNetworkShare(rutaPdf);
 
                 // Guardar el archivo
                 using (var stream = new FileStream(rutaPdf, FileMode.Create))
@@ -264,6 +247,9 @@ namespace FabricaHilos.Controllers.Sgc
 
                 _logger.LogInformation("Intentando cargar PDF desde: {RutaPdf}", rutaPdf);
 
+                // Autenticarse en el recurso de red compartido antes de leer
+                EnsureNetworkShare(rutaPdf);
+
                 if (!System.IO.File.Exists(rutaPdf))
                 {
                     _logger.LogWarning("No se encontró el archivo PDF en: {RutaPdf}", rutaPdf);
@@ -321,6 +307,9 @@ namespace FabricaHilos.Controllers.Sgc
 
                 // Generar ruta del PDF
                 var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(ruc, requerimiento.NumCer);
+
+                // Autenticarse en el recurso de red compartido antes de leer
+                EnsureNetworkShare(rutaPdf);
 
                 if (!System.IO.File.Exists(rutaPdf))
                 {

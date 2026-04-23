@@ -72,9 +72,12 @@ namespace FabricaHilos.Controllers.Account
                 if (!string.IsNullOrEmpty(usuarioOracle.c_user))
                 {
                     // Determinar connection string según la empresa del usuario
-                    var connKeyEmpresa = usuarioOracle.Empresa == "ARBONA"
-                        ? "ArbonaConnection"
-                        : "LaColonialConnection";
+                    var connKeyEmpresa = usuarioOracle.Empresa switch
+                    {
+                        "ARBONA" => "ArbonaConnection",
+                        "SOLSA"  => "SolsaConnection",
+                        _        => "LaColonialConnection"
+                    };
 
                     // Validar que las credenciales funcionen como login Oracle real
                     // contra la conexión base de su empresa.

@@ -1,0 +1,103 @@
+/* ============================================================
+   TEMA: SOLSA — Sistema de Gestión Empresarial
+   ============================================================
+   Paleta derivada del logo Cintas Solsa:
+     · Azul rey    #1B3F8C  (fondo logo)       → PRIMARY
+     · Rojo rombo  #D0202A  (rombo/diamante)   → SECONDARY
+     · Blanco      #FFFFFF  (tipografía logo)  → BASE
+   WCAG AA (ratio mínimo 4.5:1 texto normal)
+   ============================================================ */
+
+:root {
+
+  /* --- COLORES PRIMARIOS (Azul rey Solsa) --- */
+  --color-primary:        #1B3F8C;   /* Azul rey — 7.1:1 sobre blanco ✅ */
+  --color-primary-dark:   #122B63;   /* Azul oscuro hover/active      — 10.2:1 ✅ */
+  --color-primary-light:  #3560B8;   /* Azul medio — variantes        — 4.8:1 ✅ */
+
+  /* --- COLORES SECUNDARIOS (Rojo rombo) --- */
+  --color-secondary:      #D0202A;   /* Rojo Solsa — decorativo       */
+  --color-secondary-dark: #9B151D;   /* Rojo oscuro hover CTA         */
+  --color-secondary-light:#E85560;   /* Rojo claro highlights         */
+
+  /* --- ACENTOS (Azul claro complementario) --- */
+  --color-accent:         #0D5CAF;   /* Azul intermedio — 5.4:1 ✅    */
+  --color-accent-dark:    #083D7A;   /* Azul profundo hover           */
+
+  /* --- NEUTROS --- */
+  --color-white:          #FFFFFF;
+  --color-bg-light:       #F4F6FB;   /* Fondo claro con toque azul    */
+  --color-bg-medium:      #E3E9F4;   /* Fondo secciones intermedias   */
+  --color-text-dark:      #0D1A2E;   /* Texto principal      — 18:1 ✅ */
+  --color-text-medium:    #2C3E6B;   /* Texto secundario     — 9.5:1 ✅ */
+  --color-text-light:     #5A6E9E;   /* Texto terciario      — 4.6:1 ✅ */
+  --color-border:         #C5D0E8;   /* Bordes y separadores (azul suave) */
+
+  /* --- OVERLAY --- */
+  --color-overlay:        rgba(27, 63, 140, 0.72);
+  --color-overlay-light:  rgba(27, 63, 140, 0.35);
+
+  /* --- GRADIENTES --- */
+  --gradient-primary: linear-gradient(135deg, #122B63 0%, #1B3F8C 60%, #3560B8 100%);
+  --gradient-red:     linear-gradient(135deg, #9B151D 0%, #D0202A 50%, #E85560 100%);
+
+  /* --- TIPOGRAFÍA --- */
+  --font-primary:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-xs:   0.75rem;
+  --font-size-sm:   0.875rem;
+  --font-size-base: 1rem;
+  --font-size-md:   1.125rem;
+  --font-size-lg:   1.25rem;
+  --font-size-xl:   1.5rem;
+  --font-size-2xl:  2rem;
+  --font-size-3xl:  2.5rem;
+  --font-size-4xl:  3rem;
+
+  /* --- ESPACIADO --- */
+  --spacing-xs:   0.5rem;
+  --spacing-sm:   1rem;
+  --spacing-md:   1.5rem;
+  --spacing-lg:   2rem;
+  --spacing-xl:   3rem;
+  --spacing-2xl:  5rem;
+
+  /* --- BORDES Y SOMBRAS --- */
+  --border-radius-sm:   4px;
+  --border-radius-md:   8px;
+  --border-radius-lg:   16px;
+  --border-radius-xl:   24px;
+  --border-radius-full: 9999px;
+
+  --shadow-sm:  0 1px 3px rgba(27, 63, 140, 0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 12px rgba(27, 63, 140, 0.12), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg:  0 10px 30px rgba(27, 63, 140, 0.14), 0 4px 8px rgba(0,0,0,0.07);
+  --shadow-xl:  0 20px 60px rgba(27, 63, 140, 0.16), 0 8px 16px rgba(0,0,0,0.09);
+
+  /* --- TRANSICIONES --- */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --transition-slow: 0.4s  ease;
+
+  /* --- ESTADO / FEEDBACK --- */
+  --color-input-readonly: var(--color-bg-medium);
+  --color-success-light:  rgba(13, 92, 175, 0.15);
+
+  /* --- SIDEBAR --- */
+  --sidebar-width:            260px;
+  --sidebar-bg:               #122B63;
+  --sidebar-bg-dark:          #0A1C45;
+  --sidebar-text:             rgba(255, 255, 255, 0.90);
+  --sidebar-section-text:     rgba(255, 255, 255, 0.42);
+  --sidebar-sublink-text:     rgba(255, 255, 255, 0.74);
+  --sidebar-hover-bg:         rgba(255, 255, 255, 0.12);
+  --sidebar-sublink-hover-bg: rgba(255, 255, 255, 0.08);
+  --sidebar-active:           #D0202A;
+
+  /* --- HEADER --- */
+  --header-bg:   var(--color-primary);
+  --header-text: var(--color-white);
+
+  /* --- FOOTER --- */
+  --footer-bg:   #0A1C45;
+  --footer-text: rgba(255, 255, 255, 0.82);
+}

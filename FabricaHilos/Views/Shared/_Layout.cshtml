@@ -74,16 +74,22 @@
                                 <i class="bi bi-speedometer2"></i> Control Autoconer
                             </a>
                             <ul class="collapse @(ctrl == "Autoconer" ? "show" : "") list-unstyled ps-3" id="submenuAutoconer">
+                                @if (menus.ProduccionAutoconerPorPartida)
+                                {
                                 <li>
                                     <a asp-controller="Autoconer" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" && (act == "Index" || act == "Crear" || act == "Editar" || act == "Detalle") ? "active" : "")">
                                         <i class="bi bi-folder"></i> por Partida
                                     </a>
                                 </li>
+                                }
+                                @if (menus.ProduccionAutoconerPorCanillas)
+                                {
                                 <li>
                                     <a asp-controller="Autoconer" asp-action="PorCanillas" class="sidebar-link sidebar-sublink @(ctrl == "Autoconer" && act == "PorCanillas" ? "active" : "")">
                                         <i class="bi bi-list-columns"></i> por Canillas
                                     </a>
                                 </li>
+                                }
                             </ul>
                         </li>
                         }
@@ -116,16 +122,22 @@
                                 <i class="bi bi-truck"></i> Despachos
                             </a>
                             <ul class="collapse @(ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "show" : "") list-unstyled ps-3" id="submenuDespachos">
+                                @if (menus.SgcDespachosRelacionFacCli)
+                                {
                                 <li>
                                     <a asp-controller="RelacionFacCli" asp-action="ListadoDespachos" class="sidebar-link sidebar-sublink @(ctrl == "RelacionFacCli" ? "active" : "")">
                                         <i class="bi bi-file-earmark-text"></i> Relación Factura-Cliente
                                     </a>
                                 </li>
+                                }
+                                @if (menus.SgcDespachosCargarTC)
+                                {
                                 <li>
                                     <a asp-controller="CargaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTc" ? "active" : "")">
                                         <i class="bi bi-file-earmark-arrow-up"></i> Cargar TC
                                     </a>
                                 </li>
+                                }
                             </ul>
                         </li>
                         }

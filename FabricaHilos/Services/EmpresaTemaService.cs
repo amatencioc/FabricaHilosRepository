@@ -6,6 +6,7 @@ namespace FabricaHilos.Services;
 public interface IEmpresaTemaService
 {
     EmpresaConfig GetTemaActual();
+    string GetRucActual();
 }
 
 public class EmpresaTemaService : IEmpresaTemaService
@@ -25,8 +26,13 @@ public class EmpresaTemaService : IEmpresaTemaService
         var session = _httpContextAccessor.HttpContext?.Session;
         var empresaConexion = session?.GetString("EmpresaConexion");
 
-        // "ArbonaConnection" → "Arbona" | cualquier otra → "LaColonial"
-        var empresaKey = empresaConexion == "ArbonaConnection" ? "Arbona" : _options.EmpresaActiva;
+        // Mapear conexión → clave de empresa
+        var empresaKey = empresaConexion switch
+        {
+            "ArbonaConnection" => "Arbona",
+            "SolsaConnection"  => "Solsa",
+            _                  => _options.EmpresaActiva
+        };
 
         if (_options.Empresas.TryGetValue(empresaKey, out var config))
             return config;
@@ -34,4 +40,6 @@ public class EmpresaTemaService : IEmpresaTemaService
         // Fallback seguro: retornar la empresa activa por defecto
         return _options.Empresas[_options.EmpresaActiva];
     }
+
+    public string GetRucActual() => GetTemaActual().Ruc;
 }

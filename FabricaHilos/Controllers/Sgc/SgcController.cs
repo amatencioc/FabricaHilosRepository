@@ -18,10 +18,12 @@ namespace FabricaHilos.Controllers.Sgc
             private readonly IWebHostEnvironment _env;
             private readonly INavTokenService _navToken;
             private readonly IMenuService _menuService;
+            private readonly IEmpresaTemaService _empresaTema;
 
             public SgcController(ISgcService sgcService, ILogger<SgcController> logger,
                 IConfiguration configuration, ISalidaInternaPdfService salidaInternaPdf,
-                IWebHostEnvironment env, INavTokenService navToken, IMenuService menuService)
+                IWebHostEnvironment env, INavTokenService navToken, IMenuService menuService,
+                IEmpresaTemaService empresaTema)
             {
                 _sgcService       = sgcService;
                 _logger           = logger;
@@ -30,6 +32,7 @@ namespace FabricaHilos.Controllers.Sgc
                 _configuration    = configuration;
                 _navToken         = navToken;
                 _menuService      = menuService;
+                _empresaTema      = empresaTema;
             }
 
         // ========== INDEX ==========
@@ -65,24 +68,30 @@ namespace FabricaHilos.Controllers.Sgc
                 };
 
                 // SubMenú: Relación Factura-Cliente
-                moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                if (menus.SgcDespachosRelacionFacCli)
                 {
-                    Nombre = "Relación Factura-Cliente",
-                    Descripcion = "Listado de despachos con filtros por guía y pedido.",
-                    Icono = "bi-file-earmark-text",
-                    Controller = "RelacionFacCli",
-                    Action = "ListadoDespachos"
-                });
+                    moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Relación Factura-Cliente",
+                        Descripcion = "Listado de despachos con filtros por guía y pedido.",
+                        Icono = "bi-file-earmark-text",
+                        Controller = "RelacionFacCli",
+                        Action = "ListadoDespachos"
+                    });
+                }
 
                 // SubMenú: Cargar TC
-                moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                if (menus.SgcDespachosCargarTC)
                 {
-                    Nombre = "Cargar TC",
-                    Descripcion = "Gestión de requerimientos de certificados.",
-                    Icono = "bi-file-earmark-arrow-up",
-                    Controller = "CargaTc",
-                    Action = "Index"
-                });
+                    moduloDespachos.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Cargar TC",
+                        Descripcion = "Gestión de requerimientos de certificados.",
+                        Icono = "bi-file-earmark-arrow-up",
+                        Controller = "CargaTc",
+                        Action = "Index"
+                    });
+                }
 
                 modulos.Add(moduloDespachos);
             }
@@ -483,7 +492,7 @@ namespace FabricaHilos.Controllers.Sgc
                     if (datos == null)
                         return Json(new { tipo = "Error", mensaje = "No se encontraron datos para generar el reporte." });
 
-                    var rucEmpresa = _configuration["RucEmpresa"] ?? string.Empty;
+                    var rucEmpresa = _empresaTema.GetRucActual();
                     var logoPath   = Path.Combine(_env.WebRootPath, "images", "logo-colonial.png");
                     var pdfBytes   = _salidaInternaPdf.Generar(datos, rucEmpresa, logoPath);
                     var fileName   = $"SalidaInterna-{datos.Serie:D3}-{datos.Numero:D8}.pdf";
@@ -498,7 +507,7 @@ namespace FabricaHilos.Controllers.Sgc
 
             var fecha         = guia.FchTransac!.Value;
             var rutaProv      = _configuration["RutaProv"] ?? string.Empty;
-            var rucEmpresaPdf = _configuration["RucEmpresa"] ?? string.Empty;
+            var rucEmpresaPdf = _empresaTema.GetRucActual();
             var nroFormato    = guia.Numero.ToString("D8");
             var nombreArchivo = $"{rucEmpresaPdf}-09-{guia.SerieSunat}-{nroFormato}.pdf";
 
@@ -552,7 +561,7 @@ namespace FabricaHilos.Controllers.Sgc
 
             var fecha         = factura.Fecha!.Value;
             var rutaProv      = _configuration["RutaProv"] ?? string.Empty;
-            var rucEmpresa    = _configuration["RucEmpresa"] ?? string.Empty;
+            var rucEmpresa    = _empresaTema.GetRucActual();
             var nroFormato    = (factura.Numero ?? string.Empty).Trim().PadLeft(8, '0');
             var nombreArchivo = $"{rucEmpresa}-01-{factura.Serie!.Trim()}-{nroFormato}.pdf";
 
@@ -740,22 +749,5 @@ namespace FabricaHilos.Controllers.Sgc
         }
         */
 
-        private void EnsureNetworkShare(string filePath)
-        {
-            var username = _configuration["NetworkShare:Username"];
-            if (string.IsNullOrEmpty(username)) return;
-            try
-            {
-                NetworkShareHelper.Connect(
-                    filePath,
-                    username,
-                    _configuration["NetworkShare:Password"],
-                    _configuration["NetworkShare:Domain"]);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "No se pudo establecer conexión al recurso de red: {Path}", filePath);
             }
         }
-    }
-}

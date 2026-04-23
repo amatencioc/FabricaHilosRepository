@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- Fondo azul rey -->
+  <rect width="120" height="120" rx="10" fill="#1B3F8C"/>
+
+  <!-- Rombo rojo (diamante) -->
+  <polygon points="60,10 108,60 60,110 12,60" fill="#D0202A"/>
+
+  <!-- Texto "Cintas" pequeño arriba -->
+  <text x="60" y="45" text-anchor="middle" font-family="Arial, sans-serif"
+        font-size="11" font-style="italic" font-weight="600" fill="#FFFFFF" letter-spacing="0.5">Cintas</text>
+
+  <!-- Texto "Solsa" grande central -->
+  <text x="60" y="72" text-anchor="middle" font-family="Arial, sans-serif"
+        font-size="22" font-weight="900" fill="#FFFFFF" letter-spacing="1">Solsa</text>
+</svg>

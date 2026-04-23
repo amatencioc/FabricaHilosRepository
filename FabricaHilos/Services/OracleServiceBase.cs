@@ -9,6 +9,7 @@ namespace FabricaHilos.Services;
 ///   - S (propiedad): prefijo de esquema Oracle según la empresa.
 ///       LaColonial → "SIG."
 ///       Arbona     → "ARBONA."
+///       Solsa      → "SOLSA."
 /// Para referenciar una tabla en un query, usar simplemente: $"{S}TABLA"
 /// </summary>
 public abstract class OracleServiceBase
@@ -64,11 +65,12 @@ public abstract class OracleServiceBase
 
     /// <summary>
     /// Prefijo del esquema Oracle según la empresa del usuario logueado.
-    /// LaColonial → "SIG."   |   Arbona → "ARBONA."
+    /// LaColonial → "SIG."   |   Arbona → "ARBONA."   |   Solsa → "SOLSA."
     /// </summary>
     protected string S => GetEmpresaConnKey() switch
     {
         "ArbonaConnection" => "ARBONA.",
+        "SolsaConnection"  => "SOLSA.",
         _                  => "SIG."
     };
 
@@ -80,6 +82,7 @@ public abstract class OracleServiceBase
     {
         { "LaColonialConnection", "0003" },
         { "ArbonaConnection",     "0001" },
+        { "SolsaConnection",      "0002" },
     };
 
     /// <summary>
