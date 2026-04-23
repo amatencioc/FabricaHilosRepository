@@ -9,6 +9,11 @@
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,.08);
         height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
     }
     .chart-card .card-header {
         background: transparent;
@@ -50,26 +55,34 @@
     }
 
     .kpi-card {
-        border-radius: 12px;
+        border-radius: 14px;
         color: #fff;
-        box-shadow: 0 4px 15px rgba(0,0,0,.18);
-        padding: 1.25rem 1.5rem;
+        box-shadow: 0 6px 20px rgba(0,0,0,.22);
+        padding: 1.35rem 1.6rem;
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.1rem;
+        border-bottom: 4px solid rgba(255,255,255,.25);
+        transition: transform .15s, box-shadow .15s;
     }
-    .kpi-card .kpi-icon { font-size: 2.4rem; opacity: .85; }
-    .kpi-card .kpi-label { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: .5px; }
-    .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; line-height: 1.1; }
-    .kpi-card .kpi-sub   { font-size: .75rem; opacity: .8; margin-top: 2px; }
-    .bg-kpi-total  { background: linear-gradient(135deg, #1B4D3E, #2e7d5e); }
-    .bg-kpi-peru   { background: linear-gradient(135deg, #1a237e, #3949ab); }
-    .bg-kpi-latam  { background: linear-gradient(135deg, #e65100, #fb8c00); }
-    .bg-kpi-global { background: linear-gradient(135deg, #1565c0, #42a5f5); }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+    .kpi-card .kpi-icon { font-size: 2.6rem; opacity: .9; }
+    .kpi-card .kpi-label { font-size: .75rem; opacity: .8; text-transform: uppercase; letter-spacing: .7px; }
+    .kpi-card .kpi-value { font-size: 1.65rem; font-weight: 800; line-height: 1.1; letter-spacing: -.5px; }
+    .kpi-card .kpi-sub   { font-size: .73rem; opacity: .75; margin-top: 3px; }
+    .bg-kpi-total  { background: linear-gradient(135deg, #1B4D3E 0%, #2e7d5e 100%); }
+    .bg-kpi-peru   { background: linear-gradient(135deg, #1a237e 0%, #3949ab 100%); }
+    .bg-kpi-latam  { background: linear-gradient(135deg, #bf360c 0%, #f4511e 100%); }
+    .bg-kpi-global { background: linear-gradient(135deg, #0d47a1 0%, #1976d2 100%); }
 
-    #worldMap { background: linear-gradient(180deg, #d6eaf8 0%, #e8f4f8 40%, #eaf6f0 100%); border-radius: 10px; border: 1px solid #cfd8dc; }
-    .jvectormap-tip { background: rgba(30,30,30,.94) !important; color: #fff !important; border: none !important; border-radius: 8px !important; font-size: .82rem !important; padding: .55rem .85rem !important; font-family: inherit !important; box-shadow: 0 4px 12px rgba(0,0,0,.3) !important; }
-    .jvectormap-zoomin, .jvectormap-zoomout { background: #1B4D3E !important; width: 28px !important; height: 28px !important; line-height: 28px !important; font-size: 16px !important; }
+    #worldMap { background: linear-gradient(180deg, #0d1b2a 0%, #1a2f45 35%, #162535 70%, #0f1e2e 100%); border-radius: 12px; border: 1px solid #1e3a5f; box-shadow: inset 0 0 60px rgba(0,20,60,.6); }
+    .jvectormap-tip { background: rgba(15,25,40,.97) !important; color: #e8f4fd !important; border: 1px solid rgba(100,180,255,.25) !important; border-radius: 10px !important; font-size: .82rem !important; padding: .65rem 1rem !important; font-family: inherit !important; box-shadow: 0 8px 24px rgba(0,0,0,.5), 0 0 0 1px rgba(100,180,255,.1) !important; min-width: 180px !important; }
+    .jvectormap-zoomin, .jvectormap-zoomout { background: rgba(27,77,62,.9) !important; border: 1px solid rgba(255,255,255,.2) !important; width: 30px !important; height: 30px !important; line-height: 30px !important; font-size: 18px !important; border-radius: 6px !important; color: #fff !important; }
+    .map-stats-overlay { position:absolute; top:14px; left:14px; z-index:5; display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+    .map-stat-badge { background:rgba(15,25,40,.85); border:1px solid rgba(100,180,255,.2); border-radius:8px; padding:.35rem .7rem; color:#e8f4fd; font-size:.75rem; display:flex; align-items:center; gap:.5rem; backdrop-filter:blur(4px); }
+    .map-stat-badge .stat-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .map-stat-badge .stat-val { font-weight:700; font-size:.82rem; }
+    .map-stat-badge .stat-lbl { opacity:.7; font-size:.7rem; }
 
     #chartMercado { cursor: pointer; }
 
@@ -175,9 +188,10 @@
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
         <div class="card chart-card position-relative">
-            <div class="card-header small">Distribución Geográfica — Haga clic en un país para ver su detalle</div>
-            <div class="card-body d-flex flex-column align-items-center justify-content-center" style="min-height:480px">
-                <div id="worldMap" style="width:100%; height:430px;"></div>
+            <div class="card-header small" style="background:#162535; color:#a8d5f0; border-bottom:1px solid #1e3a5f;"><i class="bi bi-globe2 me-1" style="color:#4fc3f7"></i>Distribución Geográfica — <span style="opacity:.75">haga clic en un país para ver el detalle</span></div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center position-relative" style="min-height:500px; background:#0d1b2a; border-radius:0 0 12px 12px;">
+                <div class="map-stats-overlay" id="mapStatsOverlay"></div>
+                <div id="worldMap" style="width:100%; height:450px;"></div>
                 <div id="mapLegend" class="mt-2 d-flex flex-wrap justify-content-center gap-2"></div>
             </div>
         </div>
@@ -362,8 +376,8 @@
         <div class="card chart-card position-relative">
             <div id="spinnerVentasGiro" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">Ventas por Giro</div>
-            <div class="card-body p-2 d-flex align-items-center" style="height:380px">
-                <div id="funnelVentasGiro" class="w-100"></div>
+            <div class="card-body" style="height:380px">
+                <canvas id="chartVentasGiro"></canvas>
             </div>
         </div>
     </div>
@@ -371,8 +385,8 @@
         <div class="card chart-card position-relative">
             <div id="spinnerTopHiladosKg" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">TOP 5 Hilados por KG</div>
-            <div class="card-body p-0 d-flex flex-column justify-content-center" style="height:380px">
-                <div id="barsTopHiladosKg" class="px-3 py-2"></div>
+            <div class="card-body" style="height:380px">
+                <canvas id="chartTopHiladosKg"></canvas>
             </div>
         </div>
     </div>
@@ -388,6 +402,10 @@
     'use strict';
 
     if (typeof ChartDataLabels !== 'undefined') { Chart.register(ChartDataLabels); }
+
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
 
     const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
     const fmt  = n => fmtPE.format(n ?? 0);
@@ -473,12 +491,12 @@
         setKpi('Peru', getVal('Perú')); setKpi('Latam', getVal('LATAM')); setKpi('Global', getVal('Global'));
         const labels = aggData.map(d => d.mercado); const values = aggData.map(d => d.importe ?? 0); const colors = labels.map(l => MERCADO_COLORS[l] || '#999');
         charts['mercado'] = new Chart(document.getElementById('chartMercado').getContext('2d'), {
-            type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '60%', onClick: handleDonutClick,
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 12 }, padding: 18 } },
-                    tooltip: { callbacks: { label: function (ctx) { const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0; return ctx.label + ': ' + monLabel + ' ' + fmt(ctx.raw) + ' (' + pct + '%)'; } } },
-                    datalabels: { color: '#fff', font: { weight: 'bold', size: 14 }, formatter: function (v) { const pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0; return pct + '%'; } } } },
-            plugins: [{ id: 'centerText', afterDraw: function (chart) { const ctx = chart.ctx; const cx = (chart.chartArea.left + chart.chartArea.right) / 2; const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2; ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = '#333'; ctx.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 8); ctx.font = '12px sans-serif'; ctx.fillStyle = '#888'; ctx.fillText('TOTAL', cx, cy + 14); ctx.restore(); } }]
+            type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 3, borderColor: '#fff', hoverOffset: 10 }] },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '62%', onClick: handleDonutClick,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 12 }, padding: 18, usePointStyle: true, pointStyleWidth: 10 } },
+                    tooltip: { callbacks: { label: function (ctx) { const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0; return ' ' + ctx.label + ': ' + monLabel + ' ' + fmt(ctx.raw) + ' (' + pct + '%)'; } } },
+                    datalabels: { color: '#fff', font: { weight: '700', size: 13, family: "'Segoe UI', Arial, sans-serif" }, textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 3, display: ctx => ctx.dataset.data[ctx.dataIndex] / total > 0.04, formatter: function (v) { const pct = total > 0 ? ((v / total) * 100).toFixed(0) : 0; return pct + '%'; } } } },
+            plugins: [{ id: 'centerText', afterDraw: function (chart) { const ctx = chart.ctx; const cx = (chart.chartArea.left + chart.chartArea.right) / 2; const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2; ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "bold 17px 'Segoe UI', sans-serif"; ctx.fillStyle = '#1B4D3E'; ctx.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 9); ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillStyle = '#999'; ctx.fillText('TOTAL', cx, cy + 11); ctx.restore(); } }]
         });
         updateMap(data, monLabel, total); /* pasa data original (6 cat.) al mapa */
     }
@@ -503,7 +521,7 @@
     function initMap() {
         if (_mapInstance) { _mapInstance.destroy(); _mapInstance = null; }
         _mapInstance = new jsVectorMap({ selector: '#worldMap', map: 'world', zoomOnScroll: true, zoomButtons: true, showTooltip: true,
-            regionStyle: { initial: { fill: '#dde3e8', fillOpacity: 1, stroke: '#b0bec5', strokeWidth: 0.5 }, hover: { fillOpacity: 0.8, cursor: 'pointer' } },
+            regionStyle: { initial: { fill: '#1c3048', fillOpacity: 1, stroke: '#0d1b2a', strokeWidth: 0.7 }, hover: { fillOpacity: 0.75, cursor: 'pointer' } },
             onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var mapped = mapMercado(info.mercado); var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + mapped + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
             onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = mapMercado(info.mercado); var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
         });
@@ -511,29 +529,139 @@
 
     function getCountryInfo(isoCode) { const codBD = ISO_TO_BD[isoCode]; if (!codBD) return null; return _mapPaisData.find(d => d.codigoPais === codBD) || null; }
 
+    /* Convierte hex + alpha → rgba */
+    function hexAlpha(hex, a) { const r2=parseInt(hex.slice(1,3),16), g2=parseInt(hex.slice(3,5),16), b2=parseInt(hex.slice(5,7),16); return 'rgba('+r2+','+g2+','+b2+','+a+')'; }
+    /* Calcula color con intensidad proporcional al importe del país vs máximo de su mercado */
+    function colorByIntensity(hex, ratio) {
+        const minA = 0.35, maxA = 1.0;
+        const a = minA + (maxA - minA) * Math.pow(ratio, 0.45);
+        return hexAlpha(hex, a);
+    }
+
     function updateMap(dataMercado, monLabel, total) {
         const p = buildParams();
         apiFetch('/DashboardGerencial/DatosDetallePorPais?' + p).then(function (paisData) {
             _mapPaisData = paisData || [];
-            const regionColors = {}; _mapPaisData.forEach(d => { const iso = BD_TO_ISO[d.codigoPais]; if (!iso) return; regionColors[iso] = MERCADO_COLORS[mapMercado(d.mercado)] || '#999'; });
-            /* Leyenda dinámica del mapa basada en mercados presentes */
+
+            /* Máximo importe por mercado para normalizar intensidad */
+            const maxByMercado = {};
+            _mapPaisData.forEach(d => { const m = mapMercado(d.mercado); maxByMercado[m] = Math.max(maxByMercado[m] || 0, d.importe ?? 0); });
+
+            /* Total por mercado para leyenda */
+            const totByMercado = {};
+            _mapPaisData.forEach(d => { const m = mapMercado(d.mercado); totByMercado[m] = (totByMercado[m] || 0) + (d.importe ?? 0); });
+
+            /* Ranking global de países */
+            const sortedForRank = [..._mapPaisData].sort((a, b) => (b.importe ?? 0) - (a.importe ?? 0));
+            const rankMap = {}; sortedForRank.forEach((d, i) => { rankMap[d.codigoPais] = i + 1; });
+
+            /* Colores con intensidad por volumen */
+            const regionColors = {};
+            _mapPaisData.forEach(d => {
+                const iso = BD_TO_ISO[d.codigoPais]; if (!iso) return;
+                const m = mapMercado(d.mercado);
+                const baseHex = MERCADO_COLORS[m] || '#546e7a';
+                const ratio = maxByMercado[m] > 0 ? (d.importe ?? 0) / maxByMercado[m] : 0;
+                regionColors[iso] = colorByIntensity(baseHex, ratio);
+            });
+
+            /* ── Leyenda enriquecida con importes ── */
             const mapMercadosPresentes = new Set(); _mapPaisData.forEach(d => mapMercadosPresentes.add(mapMercado(d.mercado)));
             const legendEl = document.getElementById('mapLegend');
-            if (legendEl) { let lh = ''; ['Perú','LATAM','Global'].forEach(m => { if (mapMercadosPresentes.has(m)) lh += '<span class="legend-item"><span class="legend-dot" style="background:' + MERCADO_COLORS[m] + '"></span>' + m + '</span>'; }); lh += '<span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>'; legendEl.innerHTML = lh; }
+            if (legendEl) {
+                let lh = '';
+                ['Perú','LATAM','Global'].forEach(m => {
+                    if (!mapMercadosPresentes.has(m)) return;
+                    const imp = totByMercado[m] || 0;
+                    const pct = total > 0 ? ((imp/total)*100).toFixed(1) : '0.0';
+                    lh += '<span class="legend-item" style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.2rem .7rem;color:#e8f4fd;">'
+                        + '<span class="legend-dot" style="background:' + MERCADO_COLORS[m] + ';box-shadow:0 0 6px ' + MERCADO_COLORS[m] + '88"></span>'
+                        + '<span>' + m + '</span>'
+                        + '<span style="font-weight:700;margin-left:.4rem;color:#4fc3f7">' + monLabel + ' ' + fmtMil(imp) + '</span>'
+                        + '<span style="opacity:.55;font-size:.7rem;margin-left:.3rem">(' + pct + '%)</span>'
+                        + '</span>';
+                });
+                lh += '<span class="legend-item" style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.2rem .7rem;color:#90a4ae;"><span class="legend-dot" style="background:#263d50"></span>Sin datos</span>';
+                legendEl.innerHTML = lh;
+            }
+
+            /* ── Overlay: Top 3 países ── */
+            const statsEl = document.getElementById('mapStatsOverlay');
+            if (statsEl) {
+                let sh = '';
+                sortedForRank.slice(0, 3).forEach((d, i) => {
+                    const m = mapMercado(d.mercado);
+                    const hex = MERCADO_COLORS[m] || '#546e7a';
+                    const medals = ['🥇','🥈','🥉'];
+                    sh += '<div class="map-stat-badge">'
+                        + '<span style="font-size:1rem">' + medals[i] + '</span>'
+                        + '<span class="stat-dot" style="background:' + hex + ';box-shadow:0 0 5px ' + hex + '88"></span>'
+                        + '<span><div class="stat-val">' + (d.pais ?? d.codigoPais) + '</div><div class="stat-lbl">' + monLabel + ' ' + fmtMil(d.importe) + '</div></span>'
+                        + '</div>';
+                });
+                statsEl.innerHTML = sh;
+            }
+
+            /* ── Inicializar/recrear mapa ── */
             if (_mapInstance) { _mapInstance.destroy(); _mapInstance = null; }
-            _mapInstance = new jsVectorMap({ selector: '#worldMap', map: 'world', zoomOnScroll: true, zoomButtons: true, showTooltip: true,
-                regionStyle: { initial: { fill: '#dde3e8', fillOpacity: 1, stroke: '#b0bec5', strokeWidth: 0.5 }, hover: { fillOpacity: 0.8, cursor: 'pointer' } },
-                onLoaded: function () { var mapEl = document.getElementById('worldMap'); if (!mapEl) return; Object.keys(regionColors).forEach(function (iso) { var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]'); paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); }); }); },
-                onRegionTooltipShow: function (e, tip, code) { var nombreES = getNombrePais(code); var info = getCountryInfo(code); if (info) { var mapped = mapMercado(info.mercado); var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD'; tip.text(''); tip.html('<div style="text-align:center"><strong style="font-size:.9rem">' + nombreES + '</strong><br/><span style="color:#90caf9">Mercado: <b>' + mapped + '</b></span><br/><span style="color:#4dd0e1;font-weight:700;font-size:.95rem">' + ml + ' ' + fmt(info.importe) + '</span></div>'); } else { tip.text(''); tip.html('<strong>' + nombreES + '</strong><br/><span style="color:#aaa;font-size:.75rem">Sin ventas registradas</span>'); } },
-                onRegionClick: function (e, code) { var info = getCountryInfo(code); if (!info) return; var mercado = mapMercado(info.mercado); var paisBD = info.pais; var codPais = info.codigoPais; loadDetallePais(mercado, paisBD); document.getElementById('detalleDistritoPanel').style.display = 'none'; if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } } }
+            _mapInstance = new jsVectorMap({
+                selector: '#worldMap', map: 'world', zoomOnScroll: true, zoomButtons: true, showTooltip: true,
+                regionStyle: {
+                    initial: { fill: '#1c3048', fillOpacity: 1, stroke: '#0d1b2a', strokeWidth: 0.7 },
+                    hover:   { fillOpacity: 0.75, cursor: 'pointer' }
+                },
+                onLoaded: function () {
+                    var mapEl = document.getElementById('worldMap'); if (!mapEl) return;
+                    Object.keys(regionColors).forEach(function (iso) {
+                        var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]');
+                        paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); });
+                    });
+                },
+                onRegionTooltipShow: function (e, tip, code) {
+                    var nombreES = getNombrePais(code);
+                    var info = getCountryInfo(code);
+                    if (info) {
+                        var mapped = mapMercado(info.mercado);
+                        var ml = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+                        var hex = MERCADO_COLORS[mapped] || '#546e7a';
+                        var rank = rankMap[info.codigoPais] || '—';
+                        var totalLocal = total || 1;
+                        var pct = ((info.importe / totalLocal) * 100).toFixed(2);
+                        tip.html(
+                            '<div style="min-width:170px;">'
+                            + '<div style="font-size:.95rem;font-weight:700;color:#e8f4fd;margin-bottom:.35rem;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:.3rem">' + nombreES + '</div>'
+                            + '<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.25rem"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + hex + ';box-shadow:0 0 5px ' + hex + '"></span><span style="color:#90caf9;font-size:.78rem">Mercado: <b style="color:#e3f2fd">' + mapped + '</b></span></div>'
+                            + '<div style="font-size:1.05rem;font-weight:800;color:#4fc3f7;margin:.2rem 0">' + ml + ' ' + fmt(info.importe) + '</div>'
+                            + '<div style="color:#80cbc4;font-size:.75rem">' + pct + '% del total global</div>'
+                            + '<div style="color:#ffcc80;font-size:.73rem;margin-top:.15rem"># ' + rank + ' en ventas</div>'
+                            + '</div>'
+                        );
+                    } else {
+                        tip.html('<div style="color:#90a4ae;font-size:.82rem"><strong style="color:#b0bec5">' + nombreES + '</strong><br/><span style="opacity:.7">Sin ventas registradas</span></div>');
+                    }
+                },
+                onRegionClick: function (e, code) {
+                    var info = getCountryInfo(code); if (!info) return;
+                    var mercado = mapMercado(info.mercado); var paisBD = info.pais; var codPais = info.codigoPais;
+                    loadDetallePais(mercado, paisBD);
+                    document.getElementById('detalleDistritoPanel').style.display = 'none';
+                    if (mercado === 'Perú') { loadDetalleDpto(); }
+                    else { document.getElementById('detalleDptoPanel').style.display = 'none'; if (codPais && codPais !== '01') { loadCiudadesPais(codPais, paisBD); } }
+                }
             });
-            setTimeout(function () { var mapEl = document.getElementById('worldMap'); if (!mapEl) return; Object.keys(regionColors).forEach(function (iso) { var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]'); paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); }); }); }, 300);
+            setTimeout(function () {
+                var mapEl = document.getElementById('worldMap'); if (!mapEl) return;
+                Object.keys(regionColors).forEach(function (iso) {
+                    var paths = mapEl.querySelectorAll('path[data-code="' + iso + '"]');
+                    paths.forEach(function (path) { path.setAttribute('fill', regionColors[iso]); });
+                });
+            }, 350);
         }).catch(function () {});
     }
 
     initMap();
     /* Leyenda inicial del mapa (se actualiza dinámicamente con datos reales) */
-    (function () { var el = document.getElementById('mapLegend'); if (el) { var lh = ''; ['Perú','LATAM','Global'].forEach(function (m) { lh += '<span class="legend-item"><span class="legend-dot" style="background:' + MERCADO_COLORS[m] + '"></span>' + m + '</span>'; }); lh += '<span class="legend-item"><span class="legend-dot" style="background:#dde3e8"></span>Sin datos</span>'; el.innerHTML = lh; } })();
+    (function () { var el = document.getElementById('mapLegend'); if (el) { var lh = ''; ['Perú','LATAM','Global'].forEach(function (m) { lh += '<span class="legend-item" style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.2rem .7rem;color:#e8f4fd;"><span class="legend-dot" style="background:' + MERCADO_COLORS[m] + ';box-shadow:0 0 6px ' + MERCADO_COLORS[m] + '88"></span>' + m + '</span>'; }); lh += '<span class="legend-item" style="background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.2rem .7rem;color:#90a4ae;"><span class="legend-dot" style="background:#263d50"></span>Sin datos</span>'; el.innerHTML = lh; } })();
 
     function handleDonutClick(evt, elements) { if (!elements || elements.length === 0) return; const idx = elements[0].index; const mercado = charts['mercado'].data.labels[idx]; loadDetallePais(mercado); if (mercado === 'Perú') { loadDetalleDpto(); } else { document.getElementById('detalleDptoPanel').style.display = 'none'; } }
     /* Mapear mercado en drill-down: Global agrupa Europa,Asia,Oceanía,Otros */
@@ -552,7 +680,18 @@
             if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos</td></tr>'; }
             else { tbody.innerHTML = data.map((d, i) => { const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0'; const isClickable = d.codigoPais !== '01'; const isHighlight = hlNorm && (d.pais ?? '').toUpperCase().trim() === hlNorm; const classes = (isClickable ? 'clickable-row' : '') + (isHighlight ? ' highlight-row' : ''); const rowId = isHighlight ? ' id="highlightedRow"' : ''; const rowClick = isClickable ? ' onclick="loadCiudadesPais(\'' + (d.codigoPais ?? '').replace(/'/g, "\\'") + '\', \'' + (d.pais ?? '').replace(/'/g, "\\'") + '\')"' : ''; const hint = isClickable ? ' title="Clic para ver ciudades de ' + (d.pais ?? '') + '"' : ''; return '<tr' + rowId + ' class="' + classes.trim() + '"' + rowClick + hint + '><td>' + (i + 1) + '</td><td>' + (d.codigoPais ?? '') + '</td><td>' + (d.pais ?? '') + '</td><td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td><td class="text-end">' + pct + '%</td></tr>'; }).join(''); }
             destroyChart('detallePais'); const top10 = data.slice(0, 10);
-            charts['detallePais'] = new Chart(document.getElementById('chartDetallePais').getContext('2d'), { type: 'doughnut', data: { labels: top10.map(d => d.pais ?? d.codigoPais), datasets: [{ data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderWidth: 1, borderColor: '#fff' }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '45%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: c => c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } }, datalabels: { display: function (ctx) { return ctx.dataset.data[ctx.dataIndex] / total > 0.05; }, color: '#fff', font: { weight: '600', size: 10 }, formatter: function (v) { return total > 0 ? ((v / total) * 100).toFixed(0) + '%' : ''; } } } } });
+            charts['detallePais'] = new Chart(document.getElementById('chartDetallePais').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: top10.map(d => d.pais ?? d.codigoPais), datasets: [{ data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '55%',
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 }, padding: 10, usePointStyle: true, pointStyleWidth: 10 } },
+                        tooltip: { callbacks: { label: c => ' ' + c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } },
+                        datalabels: { display: ctx => ctx.dataset.data[ctx.dataIndex] / total > 0.05, color: '#fff', font: { weight: '700', size: 11, family: "'Segoe UI', Arial, sans-serif" }, textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 3, formatter: v => total > 0 ? ((v / total) * 100).toFixed(0) + '%' : '' }
+                    }
+                },
+                plugins: [{ id: 'centerText', afterDraw: chart => { const ctx2 = chart.ctx; const cx = (chart.chartArea.left + chart.chartArea.right) / 2; const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2; ctx2.save(); ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle'; ctx2.font = "bold 14px 'Segoe UI', sans-serif"; ctx2.fillStyle = '#1B4D3E'; ctx2.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 7); ctx2.font = "10px 'Segoe UI', sans-serif"; ctx2.fillStyle = '#888'; ctx2.fillText('TOTAL', cx, cy + 10); ctx2.restore(); } }]
+            });
             document.getElementById('detallePaisPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
             const hlRow = document.getElementById('highlightedRow'); if (hlRow) { setTimeout(() => hlRow.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400); }
         } catch (e) { showToast('Error al cargar detalle por país: ' + e.message); } finally { hideSpin('spinnerDetallePais'); }
@@ -570,7 +709,18 @@
             if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos de ciudades</td></tr>'; }
             else { tbody.innerHTML = data.map((d, i) => { const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0'; return '<tr><td>' + (i + 1) + '</td><td>' + (d.pais ?? '') + '</td><td>' + (d.ciudad ?? '') + '</td><td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td><td class="text-end">' + pct + '%</td></tr>'; }).join(''); }
             destroyChart('detalleCiudadPais'); const top10 = (data || []).slice(0, 10);
-            if (top10.length > 0) { charts['detalleCiudadPais'] = new Chart(document.getElementById('chartDetalleCiudadPais').getContext('2d'), { type: 'doughnut', data: { labels: top10.map(d => d.ciudad ?? 'Sin Ciudad'), datasets: [{ data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderWidth: 1, borderColor: '#fff' }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '45%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } }, tooltip: { callbacks: { label: c => c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } }, datalabels: { display: function (ctx) { return ctx.dataset.data[ctx.dataIndex] / total > 0.05; }, color: '#fff', font: { weight: '600', size: 10 }, formatter: function (v) { return total > 0 ? ((v / total) * 100).toFixed(0) + '%' : ''; } } } } }); }
+            if (top10.length > 0) { charts['detalleCiudadPais'] = new Chart(document.getElementById('chartDetalleCiudadPais').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: top10.map(d => d.ciudad ?? 'Sin Ciudad'), datasets: [{ data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderWidth: 2, borderColor: '#fff', hoverOffset: 8 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '55%',
+                    plugins: {
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 }, padding: 10, usePointStyle: true, pointStyleWidth: 10 } },
+                        tooltip: { callbacks: { label: c => ' ' + c.label + ': ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } },
+                        datalabels: { display: ctx => ctx.dataset.data[ctx.dataIndex] / total > 0.05, color: '#fff', font: { weight: '700', size: 11, family: "'Segoe UI', Arial, sans-serif" }, textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 3, formatter: v => total > 0 ? ((v / total) * 100).toFixed(0) + '%' : '' }
+                    }
+                },
+                plugins: [{ id: 'centerText', afterDraw: chart => { const ctx2 = chart.ctx; const cx = (chart.chartArea.left + chart.chartArea.right) / 2; const cy = (chart.chartArea.top + chart.chartArea.bottom) / 2; ctx2.save(); ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle'; ctx2.font = "bold 14px 'Segoe UI', sans-serif"; ctx2.fillStyle = '#1B4D3E'; ctx2.fillText(monLabel + ' ' + fmtMil(total), cx, cy - 7); ctx2.font = "10px 'Segoe UI', sans-serif"; ctx2.fillStyle = '#888'; ctx2.fillText('TOTAL', cx, cy + 10); ctx2.restore(); } }]
+            }); }
             document.getElementById('detalleCiudadPaisPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) { showToast('Error al cargar ciudades del país: ' + e.message); } finally { hideSpin('spinnerDetalleCiudadPais'); }
     };
@@ -586,7 +736,22 @@
             if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>'; }
             else { tbody.innerHTML = data.map((d, i) => { const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0'; const dptoName = (d.departamento ?? '').replace(/'/g, "\\'"); return '<tr class="clickable-row" onclick="loadDetalleDistrito(\'' + dptoName + '\')" title="Clic para ver distritos de ' + (d.departamento ?? '') + '"><td>' + (i + 1) + '</td><td>' + (d.departamento ?? '') + '</td><td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td><td class="text-end">' + pct + '%</td></tr>'; }).join(''); }
             destroyChart('detalleDpto'); const top10 = data.slice(0, 10);
-            charts['detalleDpto'] = new Chart(document.getElementById('chartDetalleDpto').getContext('2d'), { type: 'bar', data: { labels: top10.map(d => d.departamento), datasets: [{ label: 'Importe', data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } }, datalabels: { anchor: 'end', align: 'right', font: { size: 9, weight: '600' }, color: '#333', formatter: v => monLabel + ' ' + fmtMil(v) } }, scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } } } });
+            charts['detalleDpto'] = new Chart(document.getElementById('chartDetalleDpto').getContext('2d'), {
+                type: 'bar',
+                data: { labels: top10.map(d => d.departamento), datasets: [{ label: 'Importe', data: top10.map(d => d.importe ?? 0), backgroundColor: top10.map((_, i) => PAIS_COLORS[i % PAIS_COLORS.length] + '22'), borderColor: top10.map((_, i) => PAIS_COLORS[i % PAIS_COLORS.length]), borderWidth: 2, borderRadius: 6, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.85 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    layout: { padding: { right: 70 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: c => ' ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } },
+                        datalabels: { anchor: 'end', align: 'right', clip: false, font: { size: 10, weight: '700', family: "'Segoe UI', Arial, sans-serif" }, color: ctx => PAIS_COLORS[ctx.dataIndex % PAIS_COLORS.length], textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3, formatter: v => monLabel + ' ' + fmtMil(v) }
+                    },
+                    scales: {
+                        x: { display: false, beginAtZero: true },
+                        y: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#374151' } }
+                    }
+                }
+            });
             document.getElementById('detalleDptoPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) { showToast('Error al cargar detalle por departamento: ' + e.message); } finally { hideSpin('spinnerDetalleDpto'); }
     }
@@ -603,7 +768,22 @@
             if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos de distritos</td></tr>'; }
             else { tbody.innerHTML = data.map((d, i) => { const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0'; return '<tr><td>' + (i + 1) + '</td><td>' + (d.distrito ?? '') + '</td><td class="text-end">' + monLabel + ' ' + fmt(d.importe) + '</td><td class="text-end">' + pct + '%</td></tr>'; }).join(''); }
             destroyChart('detalleDistrito'); const top10 = (data || []).slice(0, 10);
-            if (top10.length > 0) { charts['detalleDistrito'] = new Chart(document.getElementById('chartDetalleDistrito').getContext('2d'), { type: 'bar', data: { labels: top10.map(d => d.distrito ?? 'Sin Distrito'), datasets: [{ label: 'Importe', data: top10.map(d => d.importe ?? 0), backgroundColor: PAIS_COLORS.slice(0, top10.length), borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } }, datalabels: { anchor: 'end', align: 'right', font: { size: 9, weight: '600' }, color: '#333', formatter: v => monLabel + ' ' + fmtMil(v) } }, scales: { x: { beginAtZero: true, ticks: { callback: v => fmtMil(v) } } } } }); }
+            if (top10.length > 0) { charts['detalleDistrito'] = new Chart(document.getElementById('chartDetalleDistrito').getContext('2d'), {
+                type: 'bar',
+                data: { labels: top10.map(d => d.distrito ?? 'Sin Distrito'), datasets: [{ label: 'Importe', data: top10.map(d => d.importe ?? 0), backgroundColor: top10.map((_, i) => PAIS_COLORS[i % PAIS_COLORS.length] + '22'), borderColor: top10.map((_, i) => PAIS_COLORS[i % PAIS_COLORS.length]), borderWidth: 2, borderRadius: 6, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.85 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    layout: { padding: { right: 70 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: c => ' ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } },
+                        datalabels: { anchor: 'end', align: 'right', clip: false, font: { size: 10, weight: '700', family: "'Segoe UI', Arial, sans-serif" }, color: ctx => PAIS_COLORS[ctx.dataIndex % PAIS_COLORS.length], textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3, formatter: v => monLabel + ' ' + fmtMil(v) }
+                    },
+                    scales: {
+                        x: { display: false, beginAtZero: true },
+                        y: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#374151' } }
+                    }
+                }
+            }); }
             document.getElementById('detalleDistritoPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch (e) { showToast('Error al cargar distritos: ' + e.message); } finally { hideSpin('spinnerDetalleDistrito'); }
     };
@@ -621,59 +801,65 @@
         const mercadoOrder = ['Perú', 'LATAM', 'Global'];
         const mercadoColors = { 'Perú': '#1a237e', 'LATAM': '#fb8c00', 'Global': '#1565c0' };
 
-        /* Reagrupar data: mapear Europa/Asia/Oceanía/Otros → Global */
         const mappedData = data.map(d => ({ ...d, mercado: mapMercado(d.mercado) }));
-        /* Sumar importes por periodo + mercado mapeado */
         const aggMap = {};
         mappedData.forEach(d => { const key = d.periodo + '|' + d.mercado; aggMap[key] = (aggMap[key] || 0) + (d.importe ?? 0); });
         const aggData = Object.entries(aggMap).map(([k, v]) => { const [periodo, mercado] = k.split('|'); return { periodo, mercado, importe: v }; });
 
-        /* Extraer años, meses y mercados */
         const years = [...new Set(aggData.map(d => d.periodo.substring(0, 4)))].sort();
         const months = [...new Set(aggData.map(d => d.periodo.substring(5, 7)))].sort();
         const allMercados = [...new Set(aggData.map(d => d.mercado))];
         const mercados = mercadoOrder.filter(m => allMercados.includes(m));
         const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
 
-        /* Mapa: periodo|mercado → importe (ya agregado) */
         const map = {};
         aggData.forEach(d => { map[d.periodo + '|' + d.mercado] = (map[d.periodo + '|' + d.mercado] || 0) + (d.importe ?? 0); });
 
-        /* Estilos de línea por año: sólida el más reciente, dash los anteriores */
-        const dashPatterns = [[],  [8, 4], [4, 4], [2, 3], [12, 4, 2, 4], [6, 2]];
-        const widths = years.map((_, i) => i === years.length - 1 ? 2.5 : 1.8);
-        const radii  = years.map((_, i) => i === years.length - 1 ? 4 : 2.5);
+        const dashPatterns = [[], [8, 4], [4, 4], [2, 3], [12, 4, 2, 4], [6, 2]];
 
-        /* Una línea por cada combinación mercado + año */
+        const ctx = document.getElementById('chartEvolucion').getContext('2d');
+
+        /* Helper gradiente */
+        function makeGrad(color, alpha) {
+            const g = ctx.createLinearGradient(0, 0, 0, 320);
+            g.addColorStop(0, color.replace(')', ',' + alpha + ')').replace('rgb', 'rgba'));
+            g.addColorStop(1, color.replace(')', ',0)').replace('rgb', 'rgba'));
+            return g;
+        }
+        /* Convertir hex → rgb para gradiente */
+        function hexToRgb(hex) { const r = parseInt(hex.slice(1,3),16), g2 = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return r+','+g2+','+b; }
+        function makeGradHex(hex, alpha) { const g = ctx.createLinearGradient(0, 0, 0, 320); g.addColorStop(0, 'rgba('+hexToRgb(hex)+','+alpha+')'); g.addColorStop(1, 'rgba('+hexToRgb(hex)+',0.02)'); return g; }
+
         const datasets = [];
         mercados.forEach(m => {
             const baseColor = mercadoColors[m] || '#999';
             years.forEach((yr, yi) => {
+                const isLatest = yi === years.length - 1;
                 const values = months.map(mo => map[yr + '-' + mo + '|' + m] ?? 0);
                 datasets.push({
                     label: m + ' ' + yr,
                     data: values,
                     borderColor: baseColor,
-                    backgroundColor: baseColor,
-                    borderWidth: widths[yi],
+                    backgroundColor: isLatest ? makeGradHex(baseColor, 0.18) : 'transparent',
+                    borderWidth: isLatest ? 3 : 2,
                     borderDash: dashPatterns[yi % dashPatterns.length],
-                    pointRadius: radii[yi],
-                    pointHoverRadius: radii[yi] + 3,
+                    pointRadius: isLatest ? 6 : 3.5,
+                    pointHoverRadius: isLatest ? 10 : 7,
                     pointBackgroundColor: baseColor,
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
-                    tension: 0.3,
-                    fill: false
+                    tension: 0.4,
+                    fill: isLatest
                 });
             });
         });
 
-        charts['evolucion'] = new Chart(document.getElementById('chartEvolucion').getContext('2d'), {
+        charts['evolucion'] = new Chart(ctx, {
             type: 'line',
             data: { labels: xLabels, datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { left: 6, right: 6 } },
+                layout: { padding: { left: 6, right: 6, top: 10 } },
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: {
@@ -700,11 +886,18 @@
                             }
                         }
                     },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    tooltip: {
+                        backgroundColor: 'rgba(30,30,40,.92)',
+                        titleColor: '#fff',
+                        bodyColor: '#e0e0e0',
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: { label: c => '  ' + c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) }
+                    },
                     datalabels: { display: false }
                 },
                 scales: {
-                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
                     x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
                 }
             }
@@ -717,45 +910,53 @@
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
         const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
         const yearColors = ['#1a237e', '#fb8c00', '#6a1b9a', '#1565c0', '#00695c', '#c62828', '#2e7d32', '#e65100'];
-        /* Agrupar: sumar todos los mercados por periodo */
         const totalMap = {};
         data.forEach(d => { totalMap[d.periodo] = (totalMap[d.periodo] || 0) + (d.importe ?? 0); });
-        /* Extraer años y meses */
         const years = [...new Set(Object.keys(totalMap).map(p => p.substring(0, 4)))].sort();
         const months = [...new Set(Object.keys(totalMap).map(p => p.substring(5, 7)))].sort();
         const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
-        /* Un dataset (línea) por cada año */
+        const ctx = document.getElementById('chartImporteTotalMes').getContext('2d');
+        function makeGradHex(hex, alpha) { const r2 = parseInt(hex.slice(1,3),16), g2 = parseInt(hex.slice(3,5),16), b2 = parseInt(hex.slice(5,7),16); const gr = ctx.createLinearGradient(0,0,0,300); gr.addColorStop(0,'rgba('+r2+','+g2+','+b2+','+alpha+')'); gr.addColorStop(1,'rgba('+r2+','+g2+','+b2+',0.02)'); return gr; }
         const datasets = years.map((yr, i) => {
             const c = yearColors[i % yearColors.length];
+            const isLatest = i === years.length - 1;
             return {
                 label: yr,
                 data: months.map(m => totalMap[yr + '-' + m] ?? 0),
                 borderColor: c,
-                backgroundColor: c,
-                borderWidth: 2.5,
-                pointRadius: 4,
-                pointHoverRadius: 7,
+                backgroundColor: isLatest ? makeGradHex(c, 0.22) : makeGradHex(c, 0.08),
+                borderWidth: isLatest ? 3 : 2,
+                pointRadius: isLatest ? 6 : 3.5,
+                pointHoverRadius: isLatest ? 10 : 7,
                 pointBackgroundColor: c,
                 pointBorderColor: '#fff',
-                pointBorderWidth: 1.5,
-                tension: 0.3,
-                fill: false
+                pointBorderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                order: years.length - i
             };
         });
-        charts['importeTotalMes'] = new Chart(document.getElementById('chartImporteTotalMes').getContext('2d'), {
+        charts['importeTotalMes'] = new Chart(ctx, {
             type: 'line',
             data: { labels: xLabels, datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { left: 6, right: 6 } },
+                layout: { padding: { left: 6, right: 6, top: 10 } },
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 12 }, padding: 18 } },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) } },
+                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 10, font: { size: 12 }, padding: 18 } },
+                    tooltip: {
+                        backgroundColor: 'rgba(30,30,40,.92)',
+                        titleColor: '#fff',
+                        bodyColor: '#e0e0e0',
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: { label: c => '  ' + c.dataset.label + ': ' + monLabel + ' ' + fmt(c.raw) }
+                    },
                     datalabels: { display: false }
                 },
                 scales: {
-                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
                     x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
                 }
             }
@@ -776,109 +977,55 @@
         const xLabels = months.map(m => MESES_CORTO[parseInt(m) - 1] || m);
         const map = {};
         data.forEach(d => { map[d.periodo] = (map[d.periodo] || 0) + (d.cantidadKg ?? 0); });
+        const ctx = document.getElementById('chartKgTotalMes').getContext('2d');
+        function makeGradHex(hex, alpha) { const r2 = parseInt(hex.slice(1,3),16), g2 = parseInt(hex.slice(3,5),16), b2 = parseInt(hex.slice(5,7),16); const gr = ctx.createLinearGradient(0,0,0,300); gr.addColorStop(0,'rgba('+r2+','+g2+','+b2+','+alpha+')'); gr.addColorStop(1,'rgba('+r2+','+g2+','+b2+',0.02)'); return gr; }
         const datasets = years.map((yr, i) => {
             const c = yearColors[i % yearColors.length];
+            const isLatest = i === years.length - 1;
             return {
                 label: yr,
                 data: months.map(m => map[yr + '-' + m] ?? 0),
-                borderColor: c, backgroundColor: c,
-                borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 7,
-                pointBackgroundColor: c, pointBorderColor: '#fff', pointBorderWidth: 1.5,
-                tension: 0.3, fill: false
+                borderColor: c,
+                backgroundColor: isLatest ? makeGradHex(c, 0.22) : makeGradHex(c, 0.08),
+                borderWidth: isLatest ? 3 : 2,
+                pointRadius: isLatest ? 6 : 3.5,
+                pointHoverRadius: isLatest ? 10 : 7,
+                pointBackgroundColor: c,
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                tension: 0.4,
+                fill: true,
+                order: years.length - i
             };
         });
-        charts['kgTotalMes'] = new Chart(document.getElementById('chartKgTotalMes').getContext('2d'), {
+        charts['kgTotalMes'] = new Chart(ctx, {
             type: 'line',
             data: { labels: xLabels, datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { left: 6, right: 6 } },
+                layout: { padding: { left: 6, right: 6, top: 10 } },
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 12 }, padding: 18 } },
-                    tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtMil(c.raw) + ' KG' } },
+                    legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 10, font: { size: 12 }, padding: 18 } },
+                    tooltip: {
+                        backgroundColor: 'rgba(30,30,40,.92)',
+                        titleColor: '#fff',
+                        bodyColor: '#e0e0e0',
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: { label: c => '  ' + c.dataset.label + ': ' + fmtMil(c.raw) + ' KG' }
+                    },
                     datalabels: { display: false }
                 },
                 scales: {
-                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#eee' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: v => fmtMil(v), font: { size: 11 }, color: '#888' } },
                     x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 12, weight: '600' }, color: '#555' } }
                 }
             }
         });
     }
 
-    /* ── Iconos por keyword para hilados ── */
-    /* IMPORTANTE: las reglas más específicas van PRIMERO para evitar
-       que un keyword genérico (TANGUIS, PIMA) capture todo. */
-    function getHiladoIcon(name) {
-        const n = (name ?? '').toUpperCase();
-        /* ── Mezclas y compuestos (antes que fibras simples) ── */
-        if (n.includes('MOULINE'))  return '🌀';
-        if (n.includes('MEZCLA') || n.includes('BLEND'))  return '🔀';
-        if (n.includes('ORGANICO') || n.includes('ORGÁNICO')) return '♻️';
-        if (n.includes('TENCEL') || n.includes('LYOCELL')) return '🌱';
-        /* ── Fibras base ── */
-        if (n.includes('TANGUIS'))  return '🌾';
-        if (n.includes('PIMA'))     return '🏅';
-        if (n.includes('ALGODON') || n.includes('ALGODÓN')) return '☁️';
-        if (n.includes('POLYESTER') || n.includes('POLIESTER') || n.includes('PET')) return '🔷';
-        if (n.includes('VISCOSA') || n.includes('RAYON') || n.includes('MODAL')) return '🍃';
-        if (n.includes('ACRIL') || n.includes('ACRYL')) return '💎';
-        if (n.includes('NYLON') || n.includes('POLIAMIDA')) return '⚡';
-        if (n.includes('LANA') || n.includes('WOOL')) return '🐑';
-        if (n.includes('SEDA') || n.includes('SILK')) return '✨';
-        if (n.includes('LYCRA') || n.includes('SPANDEX') || n.includes('ELASTAN')) return '🔄';
-        if (n.includes('CRUDO')) return '🪵';
-        if (n.includes('BLANCO')) return '⬜';
-        if (n.includes('PREMIUM')) return '⭐';
-        return '🧶';
-    }
-    /* ── Iconos por keyword para giros ── */
-    function getGiroIcon(name) {
-        const n = (name ?? '').toUpperCase();
-        if (n.includes('CHOMPER'))  return '🧥';
-        if (n.includes('PUNTO'))    return '🧶';
-        if (n.includes('MEDIER'))   return '🧦';
-        if (n.includes('COSTUR'))   return '✂️';
-        if (n.includes('LABOR'))    return '🪡';
-        if (n.includes('PLANO'))    return '🪟';
-        if (n.includes('TEJIDO'))   return '🧵';
-        if (n.includes('CALCET'))   return '🧦';
-        if (n.includes('BORDA'))    return '🎨';
-        if (n.includes('CONFEC'))   return '👔';
-        if (n.includes('TELA'))     return '🪡';
-        if (n.includes('EXPORT'))   return '🌍';
-        if (n.includes('SIN GIRO')) return '❓';
-        return '🏭';
-    }
-    /* ── Plugin: icono dentro de barras verticales ── */
-    const barIconPlugin = {
-        id: 'barIconPlugin',
-        afterDatasetDraw(chart) {
-            const { ctx, data, chartArea } = chart;
-            const meta = chart.getDatasetMeta(0);
-            const icons = data._icons;
-            if (!icons) return;
-            meta.data.forEach((bar, i) => {
-                if (!icons[i]) return;
-                const x = bar.x;
-                const y = bar.y;
-                const bottom = chartArea.bottom;
-                const barH = bottom - y;
-                if (barH < 30) return;
-                const centerY = y + barH * 0.45;
-                ctx.save();
-                ctx.font = '22px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.globalAlpha = 0.35;
-                ctx.fillText(icons[i], x, centerY);
-                ctx.restore();
-            });
-        }
-    };
-
-    /* ── TOP 5 Hilados más Facturados (barras verticales con icono) ── */
+    /* ── TOP 5 Hilados más Facturados ── */
     async function loadTopHiladosImporte() {
         showSpin('spinnerTopHiladosImporte');
         try { const p = buildParams(); p.set('top', '5'); const data = await apiFetch('/DashboardGerencial/DatosTopHiladosImporte?' + p); renderTopHiladosImporte(data); } catch (e) { showToast('Error al cargar top hilados importe: ' + e.message); } finally { hideSpin('spinnerTopHiladosImporte'); }
@@ -887,8 +1034,10 @@
         destroyChart('topHiladosImporte');
         if (!data || data.length === 0) return;
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
-        const barColors = ['#2d3436', '#3d4a4c', '#4d5c5e', '#636e72', '#7a8a8e'];
-        const icons = data.map(d => getHiladoIcon(d.familia));
+        const BAR_COLORS    = ['#1B4D3E','#1565C0','#6a1b9a','#e65100','#00838f'];
+        const BAR_COLORS_BG = ['rgba(27,77,62,.13)','rgba(21,101,192,.13)','rgba(106,27,154,.13)','rgba(230,81,0,.13)','rgba(0,131,143,.13)'];
+        const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
+
         const chartData = {
             labels: data.map(d => {
                 const lbl = (d.familia ?? '');
@@ -904,108 +1053,148 @@
             datasets: [{
                 label: 'Importe',
                 data: data.map(d => d.importe ?? 0),
-                backgroundColor: data.map((_, i) => barColors[i % barColors.length]),
-                borderRadius: 6,
-                barPercentage: 0.72,
-                categoryPercentage: 0.85
+                backgroundColor: data.map((_, i) => BAR_COLORS_BG[i % BAR_COLORS_BG.length]),
+                borderColor:     data.map((_, i) => BAR_COLORS[i % BAR_COLORS.length]),
+                borderWidth: 2,
+                borderRadius: 8,
+                barPercentage: 0.68,
+                categoryPercentage: 0.82
             }]
         };
-        chartData._icons = icons;
+
         charts['topHiladosImporte'] = new Chart(document.getElementById('chartTopHiladosImporte').getContext('2d'), {
             type: 'bar',
             data: chartData,
-            plugins: [barIconPlugin],
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30 } },
+                layout: { padding: { top: 36, left: 4, right: 4 } },
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: c => monLabel + ' ' + fmt(c.raw) } },
+                    tooltip: {
+                        callbacks: {
+                            label: c => monLabel + ' ' + fmt(c.raw),
+                            afterLabel: c => total > 0 ? ((c.raw / total) * 100).toFixed(1) + '% del total' : ''
+                        }
+                    },
                     datalabels: {
                         anchor: 'end', align: 'top', clip: false,
-                        font: { size: 12, weight: '700' },
-                        color: '#2d3436',
+                        font: { size: 12, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                        color: function(ctx) { return BAR_COLORS[ctx.dataIndex % BAR_COLORS.length]; },
+                        textStrokeColor: 'rgba(255,255,255,.7)',
+                        textStrokeWidth: 3,
                         formatter: v => monLabel + ' ' + fmtMil(v)
                     }
                 },
                 scales: {
-                    x: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 9, weight: '600' }, color: '#555', maxRotation: 0 } },
+                    x: {
+                        border: { display: false },
+                        grid: { display: false },
+                        ticks: { font: { size: 10, weight: '600' }, color: '#374151', maxRotation: 0 }
+                    },
                     y: { display: false, beginAtZero: true }
                 }
             }
         });
     }
 
-    /* ── Ventas por Giro (Funnel HTML con icono) ── */
+    /* ── Ventas por Giro (barras horizontales Chart.js) ── */
     async function loadVentasGiro() {
         showSpin('spinnerVentasGiro');
         try { const data = await apiFetch('/DashboardGerencial/DatosVentasPorGiro?' + buildParams()); renderVentasGiro(data); } catch (e) { showToast('Error al cargar ventas por giro: ' + e.message); } finally { hideSpin('spinnerVentasGiro'); }
     }
     function renderVentasGiro(data) {
-        const container = document.getElementById('funnelVentasGiro');
-        container.innerHTML = '';
-        if (!data || data.length === 0) { container.innerHTML = '<p class="text-muted text-center m-0">Sin datos</p>'; return; }
+        destroyChart('ventasGiro');
+        if (!data || data.length === 0) return;
         const monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
+        const items = data.slice(0, 8);
         const total = data.reduce((s, d) => s + (d.importe ?? 0), 0);
-        const colors = ['#1B4D3E','#265e4a','#317056','#3d8263','#4a9470','#57a67d','#65b88b','#74ca99','#84dca8','#95eeb7'];
-        const maxItems = Math.min(data.length, 8);
-        const items = data.slice(0, maxItems);
-        const widthMin = 50;
-        const widthMax = 100;
-
-        let html = '';
-        items.forEach((d, i) => {
-            const name = (d.descGiro ?? d.codigoGiro ?? 'Sin Giro').substring(0, 18);
-            const icon = getGiroIcon(name);
-            const pct = total > 0 ? ((d.importe / total) * 100).toFixed(1) : '0.0';
-            const w = widthMax - ((widthMax - widthMin) * i / Math.max(maxItems - 1, 1));
-            const bg = colors[i % colors.length];
-            const isFirst = i === 0;
-            const isLast = i === maxItems - 1;
-            const radius = isFirst ? 'border-radius: 6px 6px 0 0;' : (isLast ? 'border-radius: 0 0 6px 6px;' : '');
-            html += `<div style="width:${w}%; margin:0 auto 3px auto; background:${bg}; color:#fff; padding:9px 14px; display:flex; justify-content:space-between; align-items:center; ${radius}">
-                <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                    <span style="font-size:16px; flex-shrink:0;">${icon}</span>
-                    <span style="font-weight:700; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
-                </div>
-                <div style="text-align:right; flex-shrink:0; margin-left:8px;">
-                    <span style="font-weight:700; font-size:13px;">${fmtMil(d.importe)}</span>
-                    <span style="font-size:10px; opacity:0.8; margin-left:4px;">${pct}%</span>
-                </div>
-            </div>`;
+        const COLORS    = ['#1B4D3E','#1565C0','#6a1b9a','#c62828','#e65100','#00838f','#283593','#4e342e'];
+        const COLORS_BG = COLORS.map(c => c + '18');
+        charts['ventasGiro'] = new Chart(document.getElementById('chartVentasGiro').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: items.map(d => (d.descGiro ?? d.codigoGiro ?? 'Sin Giro')),
+                datasets: [{
+                    label: 'Importe',
+                    data: items.map(d => d.importe ?? 0),
+                    backgroundColor: items.map((_, i) => COLORS_BG[i % COLORS_BG.length]),
+                    borderColor:     items.map((_, i) => COLORS[i % COLORS.length]),
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.72,
+                    categoryPercentage: 0.85
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { right: 75 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => ' ' + monLabel + ' ' + fmt(c.raw) + ' (' + (total > 0 ? ((c.raw / total) * 100).toFixed(1) : 0) + '%)' } },
+                    datalabels: { anchor: 'end', align: 'right', clip: false, font: { size: 10, weight: '700', family: "'Segoe UI', Arial, sans-serif" }, color: ctx => COLORS[ctx.dataIndex % COLORS.length], textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3, formatter: (v, ctx) => { const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0'; return monLabel + ' ' + fmtMil(v) + '  ' + pct + '%'; } }
+                },
+                scales: {
+                    x: { display: false, beginAtZero: true },
+                    y: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 11, weight: '600' }, color: '#374151' } }
+                }
+            }
         });
-        container.innerHTML = html;
     }
 
-    /* ── TOP 5 Hilados por KG (barras HTML con icono) ── */
+    /* ── TOP 5 Hilados por KG (barras horizontales Chart.js) ── */
     async function loadTopHiladosKg() {
         showSpin('spinnerTopHiladosKg');
         try { const p = buildParams(); p.set('top', '5'); const data = await apiFetch('/DashboardGerencial/DatosTopHiladosKg?' + p); renderTopHiladosKg(data); } catch (e) { showToast('Error al cargar top hilados KG: ' + e.message); } finally { hideSpin('spinnerTopHiladosKg'); }
     }
     function renderTopHiladosKg(data) {
-        const container = document.getElementById('barsTopHiladosKg');
-        container.innerHTML = '';
-        if (!data || data.length === 0) { container.innerHTML = '<p class="text-muted text-center m-0">Sin datos</p>'; return; }
-        const maxVal = Math.max(...data.map(d => d.kilos ?? 0), 1);
-        const colors = ['#1a237e', '#283593', '#3949ab', '#5c6bc0', '#7986cb'];
-
-        let html = '';
-        data.forEach((d, i) => {
-            const name = (d.familia ?? '').substring(0, 30);
-            const icon = getHiladoIcon(d.familia);
-            const pct = Math.max(((d.kilos ?? 0) / maxVal) * 100, 8);
-            const bg = colors[i % colors.length];
-            html += `<div style="margin-bottom:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px;">
-                    <span style="font-size:12px; font-weight:600; color:#333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;">${icon} ${name}</span>
-                    <span style="font-size:12px; font-weight:700; color:${bg}; flex-shrink:0;">${fmtMil(d.kilos)} KG</span>
-                </div>
-                <div style="background:#e9ecef; border-radius:4px; height:18px; overflow:hidden;">
-                    <div style="width:${pct}%; height:100%; background:${bg}; border-radius:4px; transition:width 0.6s ease;"></div>
-                </div>
-            </div>`;
+        destroyChart('topHiladosKg');
+        if (!data || data.length === 0) return;
+        const totalKg = data.reduce((s, d) => s + (d.kilos ?? 0), 0);
+        const COLORS    = ['#1B4D3E','#1565C0','#6a1b9a','#e65100','#00838f'];
+        const COLORS_BG = COLORS.map(c => c + '18');
+        charts['topHiladosKg'] = new Chart(document.getElementById('chartTopHiladosKg').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.map(d => {
+                    const lbl = (d.familia ?? '');
+                    const words = lbl.split(' ');
+                    const lines = []; let cur = '';
+                    words.forEach(w => {
+                        if (cur && (cur + ' ' + w).length > 18) { lines.push(cur); cur = w; }
+                        else { cur = cur ? cur + ' ' + w : w; }
+                    });
+                    if (cur) lines.push(cur);
+                    return lines.length > 1 ? lines : lbl;
+                }),
+                datasets: [{
+                    label: 'KG',
+                    data: data.map(d => d.kilos ?? 0),
+                    backgroundColor: data.map((_, i) => COLORS_BG[i % COLORS_BG.length]),
+                    borderColor:     data.map((_, i) => COLORS[i % COLORS.length]),
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.72,
+                    categoryPercentage: 0.85
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                layout: { padding: { right: 80 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => ' ' + fmtMil(c.raw) + ' KG (' + (totalKg > 0 ? ((c.raw / totalKg) * 100).toFixed(1) : 0) + '%)' } },
+                    datalabels: { anchor: 'end', align: 'right', clip: false, font: { size: 10, weight: '700', family: "'Segoe UI', Arial, sans-serif" }, color: ctx => COLORS[ctx.dataIndex % COLORS.length], textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3, formatter: (v, ctx) => { const pct = totalKg > 0 ? ((v / totalKg) * 100).toFixed(1) : '0.0'; return fmtMil(v) + ' KG  ' + pct + '%'; } }
+                },
+                scales: {
+                    x: { display: false, beginAtZero: true },
+                    y: { border: { display: false }, grid: { display: false }, ticks: { font: { size: 10, weight: '600' }, color: '#374151' } }
+                }
+            }
         });
-        container.innerHTML = html;
     }
 
     /* ── Load all ── */
