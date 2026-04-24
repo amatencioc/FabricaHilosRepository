@@ -37,6 +37,7 @@ namespace FabricaHilos.Services.Ventas
         private string BuildSql() => $@"
 SELECT D.COD_CLIENTE,
        C.NOMBRE,
+       C.RUC,
        C.GIRO,
        T2.ABREVIADA DESC_GIRO,
        D.COD_VENDE COD_ASESOR,
@@ -64,18 +65,24 @@ SELECT D.COD_CLIENTE,
        I.VVTU,
        DECODE(D.MONEDA,
               'S',
-              ROUND(I.IMP_VVTA *
-              ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000), 4),
-              ROUND((I.IMP_VVTA *
-              ((100 - D.POR_DESC1) * (100 - D.POR_DESC2) / 10000)) *
-              D.IMPORT_CAM, 4)) SOLES,
+              I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000),
+              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) *
+              D.IMPORT_CAM) SOLES,
        DECODE(D.MONEDA,
               'D',
-              ROUND(I.IMP_VVTA *
-              ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000), 4),
-              ROUND((I.IMP_VVTA *
-              ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) /
-              D.IMPORT_CAM, 4)) DOLAR,
+              I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000),
+              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) /
+              NULLIF(D.IMPORT_CAM, 0)) DOLAR,
+       DECODE(D.MONEDA,
+              'S',
+              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+              ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) *
+              D.IMPORT_CAM) IGV_SOLES,
+       DECODE(D.MONEDA,
+              'D',
+              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+              ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) /
+              NULLIF(D.IMPORT_CAM, 0)) IGV_DOLAR,
        I.POR_DESC1,
        I.POR_DESC2
   FROM {S}ITEMDOCU          I,
@@ -90,7 +97,8 @@ SELECT D.COD_CLIENTE,
    AND D.SERIE = I.SERIE
    AND D.NUMERO = I.NUMERO
    AND D.FECHA BETWEEN :FECHAI AND :FECHAF
-   AND D.ESTADO <> '9'
+   AND NVL(D.ESTADO, '0') <> '9'
+   AND NVL(D.ORIGEN, '0') <> 'A'
    AND G.TP_TRANSAC(+) = D.TIP_DOC_REF
    AND TO_CHAR(G.SERIE(+)) = D.SER_DOC_REF
    AND G.NUMERO(+) = D.NRO_DOC_REF
@@ -103,7 +111,7 @@ SELECT D.COD_CLIENTE,
    AND T.CODIGO(+) = D.COD_VENDE
    AND T2.TIPO(+) = 27
    AND T2.CODIGO(+) = C.GIRO
-   AND A.COD_FAM NOT IN ('ANT','Z01','ZVA')
+   --AND A.COD_FAM NOT IN ('ANT','Z01','ZVA')
    AND TP_ART IN ('T','S')
  ORDER BY C.NOMBRE, T.DESCRIPCION, I.TIPODOC, I.SERIE, I.NUMERO";
 
@@ -156,6 +164,9 @@ SELECT D.COD_CLIENTE,
                         Kilos       = GetDec(reader, "KILOS"),
                         Soles       = GetDec(reader, "SOLES"),
                         Dolar       = GetDec(reader, "DOLAR"),
+                        IgvSoles    = GetDec(reader, "IGV_SOLES"),
+                        IgvDolar    = GetDec(reader, "IGV_DOLAR"),
+                        Ruc         = GetStr(reader, "RUC"),
                     });
                 }
             }
@@ -170,6 +181,12 @@ SELECT D.COD_CLIENTE,
         // ── Importe según moneda ────────────────────────────────────────────────
         private static decimal Imp(DcFilaRawDto f, string moneda) =>
             moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.Soles : f.Dolar;
+
+        private static decimal Igv(DcFilaRawDto f, string moneda) =>
+            moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.IgvSoles : f.IgvDolar;
+
+        private static decimal ImpTotal(DcFilaRawDto f, string moneda) =>
+            Imp(f, moneda) + Igv(f, moneda);
 
         // ════════════════════════════════════════════════════════════════════════
         // ObtenerDashboardAsync — punto de entrada principal
@@ -227,18 +244,22 @@ SELECT D.COD_CLIENTE,
             // ── 4. Todos los clientes (para Ranking, Participación y Export) ────
             dto.ClientesTodos = filas
                 .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
-                .GroupBy(f => new { f.Asesor, f.CodCliente, f.Nombre, f.DescGiro })
+                .GroupBy(f => new { f.Asesor, f.CodCliente, f.Ruc, f.Nombre, f.DescGiro })
                 .Select(g => new DcClienteImporteTodosDto
                 {
                     Asesor      = g.Key.Asesor,
                     CodCliente  = g.Key.CodCliente,
+                    Ruc         = g.Key.Ruc,
                     RazonSocial = g.Key.Nombre,
                     Giro        = string.IsNullOrEmpty(g.Key.DescGiro) ? "SIN GIRO" : g.Key.DescGiro,
+                    Moneda      = mon,
                     Importe     = g.Sum(f => Imp(f, mon)),
+                    Igv         = g.Sum(f => Igv(f, mon)),
+                    Total       = g.Sum(f => ImpTotal(f, mon)),
                     CantidadKg  = g.Sum(f => f.Kilos)
                 })
-                .Where(x => x.Importe > 0)
-                .OrderBy(x => x.Asesor).ThenByDescending(x => x.Importe)
+                .Where(x => x.Total > 0)
+                .OrderBy(x => x.Asesor).ThenByDescending(x => x.Total)
                 .ToList();
 
             // ── 5. Top N clientes por Asesor / Año ──────────────────────────────
@@ -342,7 +363,8 @@ SELECT COUNT(*) FROM {schema}ITEMDOCU I, {schema}DOCUVENT D, {schema}KARDEX_G G,
        {schema}TABLAS_AUXILIARES T, {schema}TABLAS_AUXILIARES T2
  WHERE D.TIPODOC = I.TIPODOC AND D.SERIE = I.SERIE AND D.NUMERO = I.NUMERO
    AND D.FECHA BETWEEN :FECHAI AND :FECHAF
-   AND D.ESTADO <> '9'
+   AND NVL(D.ESTADO, '0') <> '9'
+   AND NVL(D.ORIGEN, '0') <> 'A'
    AND G.TP_TRANSAC(+) = D.TIP_DOC_REF AND TO_CHAR(G.SERIE(+)) = D.SER_DOC_REF
    AND G.NUMERO(+) = D.NRO_DOC_REF AND G.COD_RELACION(+) = D.COD_CLIENTE
    AND E.COD_ART(+) = I.COD_ART AND E.UNIDAD(+) = 'KG'

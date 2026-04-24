@@ -52,20 +52,25 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
              ELSE 'Otros'
            END MERCADO,
            DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
+                   'S', DECODE(D.MONEDA,
+                               'S', D.IMP_NETO,
+                               D.IMP_NETO * D.IMPORT_CAM),
+                   DECODE(D.MONEDA,
+                          'D', D.IMP_NETO,
+                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
       FROM {S}DOCUVENT D
       JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND D.ESTADO <> '9'
-  )
+       AND NVL(D.ESTADO, '0') <> '9'
+        AND NVL(D.ORIGEN, '0') <> 'A'
+        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                      AND M2.TP_ART IN ('T', 'S'))
+   )
  GROUP BY MERCADO
  ORDER BY DECODE(MERCADO, 'Perú', 1, 'LATAM', 2, 'Europa', 3, 'Asia', 4, 'Oceanía', 5, 6)";
 
@@ -121,12 +126,12 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
            C.PAIS CODIGO_PAIS,
            NVL(TA.DESCRIPCION, C.PAIS) PAIS_NOMBRE,
            DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
+                   'S', DECODE(D.MONEDA,
+                               'S', D.IMP_NETO,
+                               D.IMP_NETO * D.IMPORT_CAM),
+                   DECODE(D.MONEDA,
+                          'D', D.IMP_NETO,
+                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
       FROM {S}DOCUVENT D
       JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1,
@@ -134,9 +139,14 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND D.ESTADO <> '9'
-  )
- WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO
+       AND NVL(D.ESTADO, '0') <> '9'
+        AND NVL(D.ORIGEN, '0') <> 'A'
+        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                      AND M2.TP_ART IN ('T', 'S'))
+   )
+  WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO
         OR (:P_MERCADO = 'Global' AND MERCADO IN ('Europa','Asia','Oceanía','Otros')))
  GROUP BY MERCADO, CODIGO_PAIS, PAIS_NOMBRE
  ORDER BY IMPORTE DESC";
@@ -194,8 +204,13 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
   JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
   LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND D.ESTADO <> '9'
-   AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+   AND NVL(D.ESTADO, '0') <> '9'
+    AND NVL(D.ORIGEN, '0') <> 'A'
+    AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+    AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                  JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                 WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                   AND M2.TP_ART IN ('T', 'S'))
  GROUP BY NVL(U.NOM_DPT, 'Sin Departamento')
  ORDER BY IMPORTE DESC";
 
@@ -240,19 +255,24 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
 SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
        NVL(U.NOM_DTT, 'Sin Distrito') DISTRITO,
        SUM(DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM {S}DOCUVENT D
-  JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
- WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND D.ESTADO <> '9'
-   AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
-    AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
+                   'S', DECODE(D.MONEDA,
+                               'S', D.IMP_NETO,
+                               D.IMP_NETO * D.IMPORT_CAM),
+                   DECODE(D.MONEDA,
+                          'D', D.IMP_NETO,
+                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0)))) IMPORTE
+   FROM {S}DOCUVENT D
+   JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
+   LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
+  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+    AND NVL(D.ESTADO, '0') <> '9'
+     AND NVL(D.ORIGEN, '0') <> 'A'
+     AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+     AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
+   AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                 JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                  AND M2.TP_ART IN ('T', 'S'))
  GROUP BY NVL(U.NOM_DPT, 'Sin Departamento'), NVL(U.NOM_DTT, 'Sin Distrito')
  ORDER BY IMPORTE DESC";
 
@@ -299,18 +319,23 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
 SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
        NVL(U.NOM_DTT, 'Sin Ciudad') CIUDAD,
        SUM(DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM {S}DOCUVENT D
-  JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
+                   'S', DECODE(D.MONEDA,
+                               'S', D.IMP_NETO,
+                               D.IMP_NETO * D.IMPORT_CAM),
+                   DECODE(D.MONEDA,
+                          'D', D.IMP_NETO,
+                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0)))) IMPORTE
+   FROM {S}DOCUVENT D
+   JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+   LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND D.ESTADO <> '9'
-   AND C.PAIS = :P_PAIS
+   AND NVL(D.ESTADO, '0') <> '9'
+    AND NVL(D.ORIGEN, '0') <> 'A'
+    AND C.PAIS = :P_PAIS
+   AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                 JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                  AND M2.TP_ART IN ('T', 'S'))
  GROUP BY NVL(U.NOM_DPT, C.PAIS), NVL(U.NOM_DTT, 'Sin Ciudad')
  ORDER BY IMPORTE DESC";
 
@@ -368,18 +393,23 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
            DECODE(:P_MON,
                   'S', DECODE(D.MONEDA,
                               'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
+                              D.IMP_NETO * D.IMPORT_CAM),
                   DECODE(D.MONEDA,
                          'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2))) IMPORTE
+                         D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
       FROM {S}DOCUVENT D
       JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
      WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND D.ESTADO <> '9'
-  )
+       AND NVL(D.ESTADO, '0') <> '9'
+        AND NVL(D.ORIGEN, '0') <> 'A'
+        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
+                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
+                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
+                      AND M2.TP_ART IN ('T', 'S'))
+   )
  GROUP BY PERIODO, MERCADO
  ORDER BY PERIODO, DECODE(MERCADO, 'Perú', 1, 'LATAM', 2, 'Europa', 3, 'Asia', 4, 'Oceanía', 5, 6)";
 
@@ -461,22 +491,17 @@ SELECT CODIGO, INDICADOR2, DESCRIPCION
             if (string.IsNullOrEmpty(connStr)) return result;
 
             var sql = $@"
-SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
-       SUM(B.CANTIDAD * E.FACTOR)   CANTIDAD_KG
-  FROM {S}ITEMDOCU         B,
-       {S}DOCUVENT         C,
-       {S}ARTICUL          A,
-       {S}EQUIVALENCIA     E
- WHERE C.TIPODOC = B.TIPODOC
-   AND C.SERIE   = B.SERIE
-   AND C.NUMERO  = B.NUMERO
-   AND C.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND C.ESTADO <> '9'
-   AND A.TP_ART IN ('T', 'S')
-   AND A.COD_ART = B.COD_ART
-   AND E.UNIDAD  = 'KG'
-   AND E.COD_ART = A.COD_ART
- GROUP BY TO_CHAR(C.FECHA, 'YYYY-MM')
+SELECT TO_CHAR(A.FECHA, 'YYYY-MM') PERIODO,
+       SUM(I.CANTIDAD * E.FACTOR)  CANTIDAD_KG
+  FROM {S}DOCUVENT A
+  LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
+  LEFT JOIN {S}EQUIVALENCIA E ON E.COD_ART = I.COD_ART AND E.UNIDAD = 'KG'
+  LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
+ WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+   AND NVL(A.ESTADO, '0') <> '9'
+    AND NVL(A.ORIGEN, '0') <> 'A'
+    AND M.TP_ART IN ('T', 'S')
+ GROUP BY TO_CHAR(A.FECHA, 'YYYY-MM')
  ORDER BY 1";
 
             try
@@ -518,27 +543,29 @@ SELECT TO_CHAR(C.FECHA, 'YYYY-MM')  PERIODO,
             var sql = $@"
 SELECT FAMILIA, IMPORTE FROM (
   SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
-               SUM(DECODE(:P_MON,
-                          'S',
-                          DECODE(D.MONEDA,
-                                 'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                                 ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
-                          DECODE(D.MONEDA,
-                                 'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                                 ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
-         FROM {S}ITEMDOCU     I,
-              {S}DOCUVENT     D,
-              {S}ARTICUL      A,
-              {S}TFAMLIN      F
-   WHERE D.TIPODOC = I.TIPODOC
-     AND D.SERIE   = I.SERIE
-     AND D.NUMERO  = I.NUMERO
-     AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-     AND D.ESTADO <> '9'
-     AND A.COD_ART = I.COD_ART
-     AND A.TP_ART IN ('T', 'S')
-     AND F.COD_FAM(+) = A.COD_FAM
-     AND F.COD_LIN(+) = A.COD_LIN
+         DECODE(:P_MON,
+           'S',
+             SUM(DECODE(A.MONEDA,
+                   'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
+           + SUM(DECODE(A.MONEDA,
+                   'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
+             SUM(DECODE(A.MONEDA,
+                   'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
+           + SUM(DECODE(A.MONEDA,
+                   'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
+         ) IMPORTE
+    FROM {S}DOCUVENT A
+    LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
+    LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
+    LEFT JOIN {S}TFAMLIN F      ON F.COD_FAM = M.COD_FAM AND F.COD_LIN = M.COD_LIN
+   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND NVL(A.ESTADO, '0') <> '9'
+      AND NVL(A.ORIGEN, '0') <> 'A'
+      AND M.TP_ART IN ('T', 'S')
    GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
    ORDER BY IMPORTE DESC
 ) WHERE ROWNUM <= :P_TOP";
@@ -582,35 +609,58 @@ SELECT FAMILIA, IMPORTE FROM (
             if (string.IsNullOrEmpty(connStr)) return result;
 
             var sql = $@"
-SELECT C.GIRO            CODIGO_GIRO,
-       NVL(T2.ABREVIADA, 'SIN GIRO') DESC_GIRO,
-       SUM(DECODE(:P_MON,
-                  'S',
-                  DECODE(D.MONEDA,
-                         'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                         ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * D.IMPORT_CAM)),
-                  DECODE(D.MONEDA,
-                         'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                         ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(D.IMPORT_CAM, 0))))) IMPORTE
-  FROM {S}ITEMDOCU          I,
-       {S}DOCUVENT          D,
-       {S}ARTICUL           A,
-       {S}CLIENTES          C,
-       (SELECT CODIGO, MAX(ABREVIADA) ABREVIADA
-          FROM {S}TABLAS_AUXILIARES
-         WHERE TIPO = 27
-         GROUP BY CODIGO) T2
- WHERE D.TIPODOC = I.TIPODOC
-   AND D.SERIE   = I.SERIE
-   AND D.NUMERO  = I.NUMERO
-   AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND D.ESTADO <> '9'
-   AND A.COD_ART = I.COD_ART
-   AND A.TP_ART IN ('T', 'S')
-   AND C.COD_CLIENTE = D.COD_CLIENTE
-   AND T2.CODIGO(+) = C.GIRO
-  GROUP BY C.GIRO, NVL(T2.ABREVIADA, 'SIN GIRO')
-  ORDER BY IMPORTE DESC";
+SELECT CODIGO_GIRO,
+       NVL((SELECT MAX(T2.ABREVIADA)
+              FROM {S}TABLAS_AUXILIARES T2
+             WHERE T2.TIPO = 27 AND T2.CODIGO = CODIGO_GIRO), 'SIN GIRO') DESC_GIRO,
+       SUM(IMPORTE_CLI) IMPORTE
+  FROM (
+    SELECT C.GIRO CODIGO_GIRO,
+           DECODE(:P_MON,
+             'S',
+               SUM(DECODE(A.MONEDA,
+                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
+             + SUM(DECODE(A.MONEDA,
+                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
+               SUM(DECODE(A.MONEDA,
+                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
+             + SUM(DECODE(A.MONEDA,
+                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
+           ) IMPORTE_CLI
+      FROM {S}DOCUVENT A
+      LEFT JOIN {S}ITEMDOCU I ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
+      LEFT JOIN {S}ARTICUL M  ON M.COD_ART = I.COD_ART
+      LEFT JOIN {S}CLIENTES C ON C.COD_CLIENTE = A.COD_CLIENTE
+     WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+       AND NVL(A.ESTADO, '0') <> '9'
+       AND NVL(A.ORIGEN, '0') <> 'A'
+       AND M.TP_ART IN ('T', 'S')
+       AND UPPER(NVL((SELECT MAX(T3.DESCRIPCION)
+                  FROM {S}TABLAS_AUXILIARES T3
+                 WHERE T3.TIPO = 29 AND T3.CODIGO = C.VENDEDOR), '')) <> 'OFICINA'
+     GROUP BY A.COD_CLIENTE, C.GIRO
+    HAVING DECODE(:P_MON,
+             'S',
+               SUM(DECODE(A.MONEDA,
+                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
+             + SUM(DECODE(A.MONEDA,
+                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
+               SUM(DECODE(A.MONEDA,
+                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
+             + SUM(DECODE(A.MONEDA,
+                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
+                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
+           ) > 0
+  )
+ GROUP BY CODIGO_GIRO
+ ORDER BY IMPORTE DESC";
 
             try
             {
@@ -652,22 +702,18 @@ SELECT C.GIRO            CODIGO_GIRO,
 
             var sql = $@"
 SELECT FAMILIA, KILOS FROM (
-  SELECT A.DESCRIPCION FAMILIA,
+  SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
          SUM(I.CANTIDAD * E.FACTOR) KILOS
-    FROM {S}ITEMDOCU     I,
-         {S}DOCUVENT     D,
-         {S}ARTICUL      A,
-         {S}EQUIVALENCIA E
-   WHERE D.TIPODOC = I.TIPODOC
-     AND D.SERIE   = I.SERIE
-     AND D.NUMERO  = I.NUMERO
-     AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-     AND D.ESTADO <> '9'
-     AND A.COD_ART = I.COD_ART
-     AND A.TP_ART IN ('T', 'S')
-     AND E.COD_ART(+) = I.COD_ART
-     AND E.UNIDAD(+)  = 'KG'
-   GROUP BY A.DESCRIPCION
+    FROM {S}DOCUVENT A
+    LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
+    LEFT JOIN {S}EQUIVALENCIA E ON E.COD_ART = I.COD_ART AND E.UNIDAD = 'KG'
+    LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
+    LEFT JOIN {S}TFAMLIN F      ON F.COD_FAM = M.COD_FAM AND F.COD_LIN = M.COD_LIN
+   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND NVL(A.ESTADO, '0') <> '9'
+      AND NVL(A.ORIGEN, '0') <> 'A'
+      AND M.TP_ART IN ('T', 'S')
+   GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
    ORDER BY KILOS DESC
 ) WHERE ROWNUM <= :P_TOP";
 

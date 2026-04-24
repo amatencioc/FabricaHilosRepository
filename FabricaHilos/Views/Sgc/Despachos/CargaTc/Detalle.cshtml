@@ -53,8 +53,8 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item">Despachos</li>
-    <li class="breadcrumb-item"><a asp-action="Index" asp-route-t="@navToken">Cargar TC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">Despachos</a></li>
+    <li class="breadcrumb-item"><a asp-controller="CargaTc" asp-action="Index" asp-route-t="@navToken">Cargar TC</a></li>
     <li class="breadcrumb-item active">Detalle #@requerimiento.NumReq</li>
 }
 

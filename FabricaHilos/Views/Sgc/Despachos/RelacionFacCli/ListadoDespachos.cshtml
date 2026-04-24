@@ -10,6 +10,7 @@
     string? fechaFin    = ViewBag.FechaFin    as string;
     bool gots           = ViewBag.Gots        ?? false;
     bool ocs            = ViewBag.Ocs         ?? false;
+    bool efisher        = ViewBag.Efisher      ?? false;
     string? navToken    = ViewBag.NavToken    as string;
     int page            = ViewBag.Page        ?? 1;
     int pageSize        = ViewBag.PageSize    ?? 10;
@@ -20,7 +21,7 @@
     decimal sumCantFacturada = Model.Sum(x => x.CantFacturada ?? 0m);
     decimal sumPrecio        = Model.Sum(x => x.Precio        ?? 0m);
 
-    string excelUrl = Url.Action("ExportarDespachosExcel", "RelacionFacCli", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs }) ?? "#";
+    string excelUrl = Url.Action("ExportarDespachosExcel", "RelacionFacCli", new { guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, efisher }) ?? "#";
 }
 
 @section Styles {
@@ -133,7 +134,7 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
-    <li class="breadcrumb-item">Despachos</li>
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">Despachos</a></li>
     <li class="breadcrumb-item active">Relación Factura-Cliente</li>
 }
 
@@ -214,11 +215,17 @@
                 </div>
             </div>
             <div class="col-auto">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" name="efisher" value="true" id="checkEfisher" @(efisher ? "checked" : "") onchange="handleFiltroChange()" />
+                    <label class="form-check-label" for="checkEfisher">EFISHER</label>
+                </div>
+            </div>
+            <div class="col-auto">
                 <button type="submit" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-search"></i> Buscar
                 </button>
             </div>
-            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(razonSocial) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin) || gots || ocs)
+            @if (!string.IsNullOrEmpty(guia) || !string.IsNullOrEmpty(pedido) || !string.IsNullOrEmpty(factura) || !string.IsNullOrEmpty(razonSocial) || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin) || gots || ocs || efisher)
             {
                 <div class="col-auto">
                     <a asp-action="ListadoDespachos" class="btn btn-sm btn-outline-secondary">

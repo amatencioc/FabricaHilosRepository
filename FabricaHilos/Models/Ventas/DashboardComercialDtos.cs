@@ -31,6 +31,9 @@ namespace FabricaHilos.Models.Ventas
         public decimal Kilos       { get; set; }
         public decimal Soles       { get; set; }
         public decimal Dolar       { get; set; }
+        public decimal IgvSoles    { get; set; }
+        public decimal IgvDolar    { get; set; }
+        public string? Ruc         { get; set; }
     }
 
     // ── DTOs de salida por gráfico ──────────────────────────────────────────────
@@ -65,9 +68,13 @@ namespace FabricaHilos.Models.Ventas
     {
         public string? Asesor      { get; set; }
         public string? CodCliente  { get; set; }
+        public string? Ruc         { get; set; }
         public string? RazonSocial { get; set; }
         public string? Giro        { get; set; }
+        public string? Moneda      { get; set; }
         public decimal Importe     { get; set; }
+        public decimal Igv         { get; set; }
+        public decimal Total       { get; set; }
         public decimal CantidadKg  { get; set; }
     }
 

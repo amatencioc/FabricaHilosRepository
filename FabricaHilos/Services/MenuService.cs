@@ -69,8 +69,9 @@ public class MenuService : IMenuService
             VentasConsultaTC             = global.VentasConsultaTC             && Tiene("Ventas"),
             VentasIndicadoresComerciales = global.VentasIndicadoresComerciales && Tiene("Ventas"),
             VentasVentasPorMercado       = global.VentasVentasPorMercado       && Tiene("Ventas"),
-            VentasDashboardComercial     = global.VentasDashboardComercial     && Tiene("Ventas"),
-            VentasDashboardGerencial     = global.VentasDashboardGerencial     && Tiene("Ventas"),
+            VentasDashboardComercial        = global.VentasDashboardComercial        && Tiene("Ventas"),
+            VentasDashboardComercialMaestro = global.VentasDashboardComercialMaestro && Tiene("Ventas"),
+            VentasDashboardGerencial        = global.VentasDashboardGerencial        && Tiene("Ventas"),
 
             // Submenus: Seguridad
             SeguridadInspecciones = global.SeguridadInspecciones && Tiene("Seguridad"),

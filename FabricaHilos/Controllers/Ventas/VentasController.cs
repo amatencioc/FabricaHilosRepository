@@ -72,6 +72,19 @@ namespace FabricaHilos.Controllers.Ventas
                 });
             }
 
+            if (menus.VentasDashboardComercialMaestro)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Dashboard Comercial Maestro",
+                    Descripcion = "Seguimiento de ventas y metas comerciales por asesor y período (maestro).",
+                    Icono = "bi-graph-up-arrow",
+                    ColorClase = "text-primary",
+                    Controller = "DashboardComercialMaestro",
+                    Action = "Index"
+                });
+            }
+
             if (menus.VentasDashboardGerencial)
             {
                 modulos.Add(new SgcModuloDto

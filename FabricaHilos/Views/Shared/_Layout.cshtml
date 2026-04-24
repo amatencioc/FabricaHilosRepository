@@ -175,7 +175,7 @@
                 {
                 <li class="sidebar-section">COMERCIAL</li>
                 <li>
-                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" || ctrl == "VentasPorMercado" || ctrl == "DashboardComercial" || ctrl == "DashboardGerencial" ? "active" : "")">
+                    <a asp-controller="Ventas" asp-action="Index" class="sidebar-link @(ctrl == "Ventas" || ctrl == "ConsultaTc" || ctrl == "IndicadoresComerciales" || ctrl == "VentasPorMercado" || ctrl == "DashboardComercial" || ctrl == "DashboardComercialMaestro" || ctrl == "DashboardGerencial" ? "active" : "")">
                         <i class="bi bi-cash-coin"></i> Ventas
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -208,6 +208,14 @@
                         <li>
                             <a asp-controller="DashboardComercial" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardComercial" ? "active" : "")">
                                 <i class="bi bi-speedometer2"></i> Dashboard Comercial
+                            </a>
+                        </li>
+                        }
+                        @if (menus.VentasDashboardComercialMaestro)
+                        {
+                        <li>
+                            <a asp-controller="DashboardComercialMaestro" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "DashboardComercialMaestro" ? "active" : "")">
+                                <i class="bi bi-graph-up-arrow"></i> Dashboard Com. Maestro
                             </a>
                         </li>
                         }

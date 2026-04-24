@@ -21,7 +21,7 @@ namespace FabricaHilos.Services.Sgc
         Task<PackingGDto?> ObtenerPackingAsync(string tipo, int serie, int numero);
         Task<(List<DocuVentDto> Items, int TotalCount)> ObtenerFacturasPorPackingAsync(string tipo, int serie, int numero, int page = 1, int pageSize = 10);
         Task<SalidaInternaDto?> ObtenerSalidaInternaAsync(string codAlm, string tpTransac, int serie, int numero);
-        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10);
+        Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, bool? efisher, int page = 1, int pageSize = 10);
         Task<int> GuardarRequerimientoCertificadoAsync(List<FacturaTcDto> facturas);
     }
 
@@ -1168,7 +1168,7 @@ namespace FabricaHilos.Services.Sgc
 
         // ========== LISTADO DE DESPACHOS ==========
 
-        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, int page = 1, int pageSize = 10)
+        public async Task<(List<DespachoListadoDto> Items, int TotalCount)> ObtenerListadoDespachosAsync(string? guia, string? pedido, string? factura, string? razonSocial, DateTime? fechaInicio, DateTime? fechaFin, bool? gots, bool? ocs, bool? efisher, int page = 1, int pageSize = 10)
         {
             var connStr = GetOracleConnectionString();
             if (string.IsNullOrEmpty(connStr)) return ([], 0);
@@ -1184,6 +1184,7 @@ namespace FabricaHilos.Services.Sgc
             bool hasFechaFin    = fechaFin.HasValue;
             bool hasGots        = gots.HasValue && gots.Value;
             bool hasOcs         = ocs.HasValue && ocs.Value;
+            bool hasEfisher     = efisher.HasValue && efisher.Value;
 
             string guiaFilter       = hasGuia        ? "\n                          AND G.NUMERO = :guia" : string.Empty;
             string pedidoFilter     = hasPedido      ? "\n                          AND TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) = :pedido" : string.Empty;
@@ -1201,6 +1202,10 @@ namespace FabricaHilos.Services.Sgc
             else if (hasOcs)
                 certFilter = $"\n                          AND {S}FIBRA_ORG_OCS(A.COD_ART) = 'S'" +
                              $"\n                          AND EXISTS (SELECT 1 FROM {S}ITEMPED ICERT WHERE ICERT.NUM_PED = P.NUM_PED AND ICERT.SERIE = P.SERIE AND ICERT.COD_ART = 'CERTOCS')";
+
+            string efisherFilter = hasEfisher
+                ? "\n                          AND P.IND_EFISHER = 'S'"
+                : string.Empty;
 
             string fechaFilter = string.Empty;
             if (hasFechaIni && hasFechaFin)
@@ -1302,9 +1307,10 @@ namespace FabricaHilos.Services.Sgc
                                 ON RC.NUM_REQ = RD.NUM_REQ
                         WHERE P.ESTADO <> '9'
                           AND ID.COD_ART IS NOT NULL
-                          AND I.COD_ART  IS NOT NULL
-                          AND {S}FIBRA_ORG(A.COD_ART) = 'S'{certFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
+                          AND I.COD_ART  IS NOT NULL{certFilter}{efisherFilter}{guiaFilter}{pedidoFilter}{facturaFilter}{razonSocialFilter}{fechaFilter}
                         GROUP BY
+                            P.NUM_PED,
+                            P.SERIE,
                             F.TIPODOC,
                             F.SERIE,
                             F.NUMERO,

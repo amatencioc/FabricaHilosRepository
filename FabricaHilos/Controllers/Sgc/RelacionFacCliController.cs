@@ -25,12 +25,12 @@ namespace FabricaHilos.Controllers.Sgc
         [HttpGet]
         public async Task<IActionResult> ListadoDespachos(string? t = null, string? guia = null, string? pedido = null, 
             string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, 
-            bool? gots = null, bool? ocs = null, int page = 1)
+            bool? gots = null, bool? ocs = null, bool? efisher = null, int page = 1)
         {
             // Cuando no hay ningún filtro (primera carga), aplicar rango de fechas por defecto (último mes)
             bool sinFiltros = string.IsNullOrEmpty(t)
                 && guia == null && pedido == null && factura == null && razonSocial == null
-                && !fechaInicio.HasValue && !fechaFin.HasValue && !gots.HasValue && !ocs.HasValue;
+                && !fechaInicio.HasValue && !fechaFin.HasValue && !gots.HasValue && !ocs.HasValue && !efisher.HasValue;
 
             if (sinFiltros)
             {
@@ -40,7 +40,7 @@ namespace FabricaHilos.Controllers.Sgc
             }
 
             // Si hay filtros nuevos sin token, crear token y redirigir
-            if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || razonSocial != null || fechaInicio.HasValue || fechaFin.HasValue || gots.HasValue || ocs.HasValue))
+            if (string.IsNullOrEmpty(t) && (guia != null || pedido != null || factura != null || razonSocial != null || fechaInicio.HasValue || fechaFin.HasValue || gots.HasValue || ocs.HasValue || efisher.HasValue))
             {
                 var token = _navToken.Protect(new Dictionary<string, string?> {
                     ["guia"]        = guia,
@@ -50,7 +50,8 @@ namespace FabricaHilos.Controllers.Sgc
                     ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
                     ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd"),
                     ["gots"]        = gots?.ToString(),
-                    ["ocs"]         = ocs?.ToString()
+                    ["ocs"]         = ocs?.ToString(),
+                    ["efisher"]     = efisher?.ToString()
                 });
                 return RedirectToAction(nameof(ListadoDespachos), new { t = token, page });
             }
@@ -66,11 +67,12 @@ namespace FabricaHilos.Controllers.Sgc
                 if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
                 if (bool.TryParse(nav.GetValueOrDefault("gots"), out var g)) gots = g;
                 if (bool.TryParse(nav.GetValueOrDefault("ocs"),  out var o)) ocs  = o;
+                if (bool.TryParse(nav.GetValueOrDefault("efisher"), out var ef)) efisher = ef;
             }
 
             const int pageSize = 10;
 
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, page, pageSize);
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, efisher, page, pageSize);
 
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(ListadoDespachos), new { t, page = 1 });
@@ -83,6 +85,7 @@ namespace FabricaHilos.Controllers.Sgc
             ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
             ViewBag.Gots        = gots;
             ViewBag.Ocs         = ocs;
+            ViewBag.Efisher     = efisher;
             ViewBag.NavToken    = t;
             ViewBag.Page        = page;
             ViewBag.PageSize    = pageSize;
@@ -95,10 +98,10 @@ namespace FabricaHilos.Controllers.Sgc
         [HttpGet]
         public async Task<IActionResult> ExportarDespachosExcel(string? guia = null, string? pedido = null, 
             string? factura = null, string? razonSocial = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, 
-            bool? gots = null, bool? ocs = null)
+            bool? gots = null, bool? ocs = null, bool? efisher = null)
         {
             // Decidir qué método llamar según si hay filtro de certificados
-            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, 1, int.MaxValue);
+            var resultado = await _sgcService.ObtenerListadoDespachosAsync(guia, pedido, factura, razonSocial, fechaInicio, fechaFin, gots, ocs, efisher, 1, int.MaxValue);
             var items = resultado.Items;
 
             using var workbook  = new ClosedXML.Excel.XLWorkbook();
