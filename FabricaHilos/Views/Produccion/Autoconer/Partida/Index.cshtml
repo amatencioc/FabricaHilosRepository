@@ -3,6 +3,7 @@
 
 @{
     ViewData["Title"] = "Control Autoconer";
+    var navToken = ViewBag.NavToken as string;
 }
 
 @section Breadcrumb {
@@ -123,7 +124,7 @@
                                         @if (item.Estado == "1")
                                         {
                                             <a asp-action="Editar" asp-route-id="@item.LocalId"
-                                               asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                               asp-route-returnUrl="@navToken"
                                                class="btn btn-sm btn-outline-primary me-1" title="Editar">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
@@ -140,7 +141,7 @@
                                         @if (item.Estado == "1")
                                         {
                                             <form asp-action="Anular" asp-route-id="@item.LocalId"
-                                                  asp-route-returnUrl="@ViewBag.ReturnUrl"
+                                                  asp-route-returnUrl="@navToken"
                                                   method="post" class="d-inline form-confirmar"
                                                   data-titulo="Anular registro"
                                                   data-mensaje="¿Está seguro de anular este registro Autoconer?">

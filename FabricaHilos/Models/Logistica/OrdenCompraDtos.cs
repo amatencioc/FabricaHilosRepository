@@ -72,9 +72,7 @@ public class ItemOrdDto
 
 public class OrdenCompraUploadModel
 {
-    public string?          TipoDocto       { get; set; }
-    public int              Serie           { get; set; }
-    public long             NumPed          { get; set; }
+    public string?          Dt              { get; set; }   // token cifrado: tipoDocto+serie+numPed
     public List<IFormFile>? Archivos        { get; set; }
     public List<string>     SeleccionItems  { get; set; } = new();   // formato: "COD_ART|ORDEN"
     public long?            ExistingIdGrupo { get; set; }

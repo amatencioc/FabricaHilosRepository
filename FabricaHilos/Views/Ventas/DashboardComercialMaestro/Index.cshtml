@@ -234,6 +234,22 @@
         '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
     ];
 
+    /* ── Mapa de color estable por asesor ──────────── */
+    // Se construye una vez con todos los asesores ordenados alfabéticamente
+    // y se reutiliza en todos los gráficos para garantizar coherencia visual.
+    const _colorAsesor = {};
+    function getColorAsesor(asesor) {
+        if (!_colorAsesor[asesor]) {
+            var idx = Object.keys(_colorAsesor).length;
+            _colorAsesor[asesor] = COLORS[idx % COLORS.length];
+        }
+        return _colorAsesor[asesor];
+    }
+    function initColorMap(asesores) {
+        // Registrar todos los asesores en orden alfabético antes de renderizar
+        asesores.slice().sort().forEach(function(a) { getColorAsesor(a); });
+    }
+
     /* ── Formato números ───────────────────────────── */
     const fmtPE = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
     const fmt   = n => fmtPE.format(n ?? 0);
@@ -315,7 +331,7 @@
                 labels: sorted.map(r => r.asesor),
                 datasets: [{
                     data: sorted.map(r => r.total),
-                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    backgroundColor: sorted.map(function(r) { return getColorAsesor(r.asesor); }),
                     borderWidth: 2,
                     hoverOffset: 8
                 }]
@@ -385,7 +401,7 @@
                 datasets: [{
                     label: '% de Clientes',
                     data: sorted.map(r => r.pct),
-                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    backgroundColor: sorted.map(function(r) { return getColorAsesor(r.asesor); }),
                     borderRadius: 4
                 }]
             },
@@ -454,8 +470,8 @@
                         type: 'bar',
                         label: 'Venta (' + monLabel + ')',
                         data: sorted.map(r => r.importe),
-                        backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length] + 'CC'; }),
-                        borderColor:     sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                        backgroundColor: sorted.map(function(r) { return getColorAsesor(r.asesor) + 'CC'; }),
+                        borderColor:     sorted.map(function(r) { return getColorAsesor(r.asesor); }),
                         borderWidth: 1,
                         borderRadius: 4,
                         yAxisID: 'yImp',
@@ -583,7 +599,7 @@
                 labels: sorted.map(r => r.asesor),
                 datasets: [{
                     data: sorted.map(r => r.importe),
-                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    backgroundColor: sorted.map(function(r) { return getColorAsesor(r.asesor); }),
                     borderWidth: 2,
                     hoverOffset: 8
                 }]
@@ -840,7 +856,7 @@
                 datasets: [{
                     label: 'Importe Total',
                     data: sorted.map(r => r.total),
-                    backgroundColor: sorted.map(function(_, i) { return COLORS[i % COLORS.length]; }),
+                    backgroundColor: sorted.map(function(r) { return getColorAsesor(r.asesor); }),
                     borderRadius: 4
                 }]
             },
@@ -943,6 +959,12 @@
             clientesTodosData = data.clientesTodos ?? [];
             topClientesData   = data.topClientes   ?? [];
             window._clientesTodosData = clientesTodosData;
+
+            // Inicializar mapa de colores con todos los asesores (orden alfabético estable)
+            var _todosAsesores = [...new Set(clientesTodosData.map(function(d) {
+                return (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            }))];
+            initColorMap(_todosAsesores);
 
             try { renderCartera();       } catch(e) { console.warn('renderCartera:', e); }
             try { renderClientesPie();   } catch(e) { console.warn('renderClientesPie:', e); }

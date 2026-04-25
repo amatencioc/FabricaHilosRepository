@@ -6,8 +6,9 @@
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
     string? estado      = ViewBag.Estado      as string;
+    string? navToken    = ViewBag.NavToken    as string;
     bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
-                       || Context.Request.Query.ContainsKey("fechaInicio") || Context.Request.Query.ContainsKey("fechaFin");
+                       || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin);
     int currentPage = ViewBag.Page      != null ? Convert.ToInt32(ViewBag.Page)      : 1;
     int totalPages  = ViewBag.TotalPages != null ? Convert.ToInt32(ViewBag.TotalPages) : 1;
     int totalCount  = ViewBag.TotalCount != null ? Convert.ToInt32(ViewBag.TotalCount) : 0;
@@ -78,10 +79,7 @@
 <!-- Tabla -->
 <form id="frmCambiarEstado" method="post" asp-action="CambiarEstado">
     @Html.AntiForgeryToken()
-    <input type="hidden" name="buscar" value="@buscar" />
-    <input type="hidden" name="fechaInicio" value="@fechaInicio" />
-    <input type="hidden" name="fechaFin" value="@fechaFin" />
-    <input type="hidden" name="estado" value="@estado" />
+    <input type="hidden" name="t" value="@navToken" />
     <input type="hidden" name="page" value="@currentPage" />
     <div class="mb-2 d-flex gap-2">
         <button type="button" id="btnAnularSeleccionados"
@@ -340,10 +338,7 @@
                                    asp-route-tipDoc="@req.TipDoc"
                                    asp-route-serie="@req.Serie"
                                    asp-route-numReq="@req.NumReq"
-                                   asp-route-buscar="@buscar"
-                                   asp-route-fechaInicio="@fechaInicio"
-                                   asp-route-fechaFin="@fechaFin"
-                                   asp-route-estado="@estado"
+                                   asp-route-t="@navToken"
                                    asp-route-page="@currentPage"
                                    class="btn btn-sm btn-outline-primary"
                                    title="Ver detalle">
@@ -391,10 +386,7 @@
                 <li class="page-item @(currentPage == 1 ? "disabled" : "")">
                     <a class="page-link"
                        asp-action="Index"
-                       asp-route-buscar="@buscar"
-                       asp-route-fechaInicio="@fechaInicio"
-                       asp-route-fechaFin="@fechaFin"
-                       asp-route-estado="@estado"
+                       asp-route-t="@navToken"
                        asp-route-page="@(currentPage - 1)">
                         <i class="bi bi-chevron-left"></i>
                     </a>
@@ -404,20 +396,14 @@
                     <li class="page-item @(pg == currentPage ? "active" : "")">
                         <a class="page-link"
                            asp-action="Index"
-                           asp-route-buscar="@buscar"
-                           asp-route-fechaInicio="@fechaInicio"
-                           asp-route-fechaFin="@fechaFin"
-                           asp-route-estado="@estado"
+                           asp-route-t="@navToken"
                            asp-route-page="@pg">@pg</a>
                     </li>
                 }
                 <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
                     <a class="page-link"
                        asp-action="Index"
-                       asp-route-buscar="@buscar"
-                       asp-route-fechaInicio="@fechaInicio"
-                       asp-route-fechaFin="@fechaFin"
-                       asp-route-estado="@estado"
+                       asp-route-t="@navToken"
                        asp-route-page="@(currentPage + 1)">
                         <i class="bi bi-chevron-right"></i>
                     </a>

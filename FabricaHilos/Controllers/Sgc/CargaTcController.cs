@@ -62,10 +62,16 @@ namespace FabricaHilos.Controllers.Sgc
             if (!resultado.Items.Any() && page > 1)
                 return RedirectToAction(nameof(Index), new { t, page = 1 });
 
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+            });
+
             ViewBag.Buscar      = buscar;
             ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
             ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
-            ViewBag.NavToken    = t;
+            ViewBag.NavToken    = navToken;
             ViewBag.Page        = page;
             ViewBag.PageSize    = pageSize;
             ViewBag.TotalCount  = resultado.TotalCount;

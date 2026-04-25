@@ -14,12 +14,9 @@
     var centrosCostoCab = ViewBag.CentrosCostoCab as Dictionary<string, string> ?? new Dictionary<string, string>();
     _ = nombres.TryGetValue(cab.Responsable ?? "", out var nomResp);
 
-    // Filtros del listado para preservar navegación
-    string? retBuscar      = ViewBag.ReturnBuscar      as string;
-    string? retFechaInicio = ViewBag.ReturnFechaInicio as string;
-    string? retFechaFin    = ViewBag.ReturnFechaFin    as string;
-    string? retEstado      = ViewBag.ReturnEstado      as string;
-    int     retPage        = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
+    // Navegación de regreso al listado
+    string? navToken = ViewBag.NavToken as string;
+    int     retPage  = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
     _ = nombres.TryGetValue(cab.Autoriza ?? "", out var nomAutoriza);
 
     string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
@@ -58,10 +55,7 @@
     <li class="breadcrumb-item"><a asp-controller="Logistica" asp-action="Index">Logística</a></li>
     <li class="breadcrumb-item">
         <a asp-action="Index"
-           asp-route-buscar="@retBuscar"
-           asp-route-fechaInicio="@retFechaInicio"
-           asp-route-fechaFin="@retFechaFin"
-           asp-route-estado="@retEstado"
+           asp-route-t="@navToken"
            asp-route-page="@retPage">Requerimientos</a>
     </li>
     <li class="breadcrumb-item active">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</li>
@@ -74,10 +68,7 @@
         &nbsp;<span class="badge @badgeClass">@estadoTexto</span>
     </h4>
     <a asp-action="Index"
-       asp-route-buscar="@retBuscar"
-       asp-route-fechaInicio="@retFechaInicio"
-       asp-route-fechaFin="@retFechaFin"
-       asp-route-estado="@retEstado"
+       asp-route-t="@navToken"
        asp-route-page="@retPage"
        class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left"></i> Volver al listado
@@ -364,11 +355,8 @@
             <input type="hidden" name="TipDoc" value="@cab.TipDoc" />
             <input type="hidden" name="Serie"  value="@cab.Serie" />
             <input type="hidden" name="NumReq" value="@cab.NumReq" />
-            <input type="hidden" name="ReturnBuscar"      value="@retBuscar" />
-            <input type="hidden" name="ReturnFechaInicio" value="@retFechaInicio" />
-            <input type="hidden" name="ReturnFechaFin"    value="@retFechaFin" />
-            <input type="hidden" name="ReturnEstado"      value="@retEstado" />
-            <input type="hidden" name="ReturnPage"        value="@retPage" />
+            <input type="hidden" name="ReturnBuscar" value="@navToken" />
+            <input type="hidden" name="ReturnPage"    value="@retPage" />
             <div id="hiddenOrdenesContainer"></div>
 
             <div class="alert alert-info py-2 small mb-2">
@@ -488,11 +476,8 @@
                                                     <input type="hidden" name="tipDoc"        value="@cab.TipDoc" />
                                                     <input type="hidden" name="serie"         value="@cab.Serie" />
                                                     <input type="hidden" name="numReq"        value="@cab.NumReq" />
-                                                    <input type="hidden" name="retBuscar"      value="@retBuscar" />
-                                                    <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
-                                                    <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
-                                                    <input type="hidden" name="retEstado"      value="@retEstado" />
-                                                    <input type="hidden" name="retPage"        value="@retPage" />
+                                                    <input type="hidden" name="retNavToken" value="@navToken" />
+                                                    <input type="hidden" name="retPage"     value="@retPage" />
                                                     <button type="button" class="btn btn-sm btn-outline-success btn-abrir-confirmar"
                                                             title="Aprobar este archivo">
                                                         <i class="bi bi-check-circle me-1"></i>Aprobar
@@ -511,11 +496,8 @@
                                                 <input type="hidden" name="tipDoc"         value="@cab.TipDoc" />
                                                 <input type="hidden" name="serie"          value="@cab.Serie" />
                                                 <input type="hidden" name="numReq"         value="@cab.NumReq" />
-                                                <input type="hidden" name="retBuscar"      value="@retBuscar" />
-                                                <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
-                                                <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
-                                                <input type="hidden" name="retEstado"      value="@retEstado" />
-                                                <input type="hidden" name="retPage"        value="@retPage" />
+                                                <input type="hidden" name="retNavToken" value="@navToken" />
+                                                <input type="hidden" name="retPage"     value="@retPage" />
                                                 <button type="button" class="btn btn-sm btn-outline-danger btn-abrir-confirmar" title="Eliminar">
                                                     <i class="bi bi-trash"></i>
                                                 </button>

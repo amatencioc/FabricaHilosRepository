@@ -22,11 +22,9 @@
 
     var monedaSimbolo = (oc.Moneda ?? "").ToUpper() == "D" ? "$" : "S/";
 
-    string? retBuscar      = ViewBag.ReturnBuscar      as string;
-    string? retFechaInicio = ViewBag.ReturnFechaInicio as string;
-    string? retFechaFin    = ViewBag.ReturnFechaFin    as string;
-    string? retEstado      = ViewBag.ReturnEstado      as string;
-    int     retPage        = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
+    string? navToken  = ViewBag.NavToken  as string;
+    string? dt        = ViewBag.Dt        as string;
+    int     retPage   = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
 
     string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
     var grupoColorMap = items
@@ -42,10 +40,7 @@
     <li class="breadcrumb-item"><a asp-controller="Logistica" asp-action="Index">Logística</a></li>
     <li class="breadcrumb-item">
         <a asp-action="Index"
-           asp-route-buscar="@retBuscar"
-           asp-route-fechaInicio="@retFechaInicio"
-           asp-route-fechaFin="@retFechaFin"
-           asp-route-estado="@retEstado"
+           asp-route-t="@navToken"
            asp-route-page="@retPage">Órdenes de Compra</a>
     </li>
     <li class="breadcrumb-item active">@oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed</li>
@@ -57,10 +52,7 @@
         Orden de Compra @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
     </h4>
     <a asp-action="Index"
-       asp-route-buscar="@retBuscar"
-       asp-route-fechaInicio="@retFechaInicio"
-       asp-route-fechaFin="@retFechaFin"
-       asp-route-estado="@retEstado"
+       asp-route-t="@navToken"
        asp-route-page="@retPage"
        class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i>Volver
@@ -319,14 +311,9 @@
               class="mb-3"
               id="formSubirArchivos">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="TipoDocto" value="@oc.TipoDocto" />
-            <input type="hidden" name="Serie"     value="@oc.Serie" />
-            <input type="hidden" name="NumPed"    value="@oc.NumPed" />
-            <input type="hidden" name="ReturnBuscar"      value="@retBuscar" />
-            <input type="hidden" name="ReturnFechaInicio" value="@retFechaInicio" />
-            <input type="hidden" name="ReturnFechaFin"    value="@retFechaFin" />
-            <input type="hidden" name="ReturnEstado"      value="@retEstado" />
-            <input type="hidden" name="ReturnPage"        value="@retPage" />
+            <input type="hidden" name="Dt"           value="@dt" />
+            <input type="hidden" name="ReturnBuscar" value="@navToken" />
+            <input type="hidden" name="ReturnPage"   value="@retPage" />
             <div id="hiddenOrdenesContainer"></div>
 
             <div class="alert alert-info py-2 small mb-2">
@@ -433,14 +420,9 @@
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="idGrupo"       value="@archivo.IdGrupo" />
                                                     <input type="hidden" name="nombreArchivo" value="@archivo.NombreArchivo" />
-                                                    <input type="hidden" name="tipoDocto"     value="@oc.TipoDocto" />
-                                                    <input type="hidden" name="serie"         value="@oc.Serie" />
-                                                    <input type="hidden" name="numPed"        value="@oc.NumPed" />
-                                                    <input type="hidden" name="retBuscar"      value="@retBuscar" />
-                                                    <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
-                                                    <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
-                                                    <input type="hidden" name="retEstado"      value="@retEstado" />
-                                                    <input type="hidden" name="retPage"        value="@retPage" />
+                                                    <input type="hidden" name="dt"            value="@dt" />
+                                                    <input type="hidden" name="retNavToken"   value="@navToken" />
+                                                    <input type="hidden" name="retPage"       value="@retPage" />
                                                     <button type="button" class="btn btn-sm btn-outline-success btn-abrir-confirmar"
                                                             title="Aprobar este archivo">
                                                         <i class="bi bi-check-circle me-1"></i>Aprobar
@@ -454,13 +436,8 @@
                                                 @Html.AntiForgeryToken()
                                                 <input type="hidden" name="idGrupo"        value="@archivo.IdGrupo" />
                                                 <input type="hidden" name="nombreArchivo"  value="@archivo.NombreArchivo" />
-                                                <input type="hidden" name="tipoDocto"      value="@oc.TipoDocto" />
-                                                <input type="hidden" name="serie"          value="@oc.Serie" />
-                                                <input type="hidden" name="numPed"         value="@oc.NumPed" />
-                                                <input type="hidden" name="retBuscar"      value="@retBuscar" />
-                                                <input type="hidden" name="retFechaInicio" value="@retFechaInicio" />
-                                                <input type="hidden" name="retFechaFin"    value="@retFechaFin" />
-                                                <input type="hidden" name="retEstado"      value="@retEstado" />
+                                                <input type="hidden" name="dt"             value="@dt" />
+                                                <input type="hidden" name="retNavToken"    value="@navToken" />
                                                 <input type="hidden" name="retPage"        value="@retPage" />
                                                 <button type="button" class="btn btn-sm btn-outline-danger btn-abrir-confirmar" title="Eliminar">
                                                     <i class="bi bi-trash"></i>

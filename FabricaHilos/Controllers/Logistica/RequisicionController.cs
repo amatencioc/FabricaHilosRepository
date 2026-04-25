@@ -15,6 +15,7 @@ public class RequisicionController : OracleBaseController
     private readonly IConfiguration _config;
     private readonly ILogger<RequisicionController> _logger;
     private readonly IEmpresaTemaService _empresaTema;
+    private readonly INavTokenService _navToken;
 
     // Extensiones permitidas para la carga de archivos
     private static readonly HashSet<string> _extPermitidas =
@@ -30,13 +31,15 @@ public class RequisicionController : OracleBaseController
         IWebHostEnvironment env,
         IConfiguration config,
         ILogger<RequisicionController> logger,
-        IEmpresaTemaService empresaTema)
+        IEmpresaTemaService empresaTema,
+        INavTokenService navToken)
     {
         _service     = service;
         _env         = env;
         _config      = config;
         _logger      = logger;
         _empresaTema = empresaTema;
+        _navToken    = navToken;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -44,19 +47,41 @@ public class RequisicionController : OracleBaseController
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string? buscar,
-        DateTime? fechaInicio,
-        DateTime? fechaFin,
-        string? estado,
+        string? t = null,
+        string? buscar = null,
+        DateTime? fechaInicio = null,
+        DateTime? fechaFin = null,
+        string? estado = null,
         int page = 1)
     {
+        // Si hay filtros nuevos sin token, crear token y redirigir
+        if (string.IsNullOrEmpty(t) && (buscar != null || fechaInicio.HasValue || fechaFin.HasValue || estado != null))
+        {
+            var token = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd"),
+                ["estado"]      = estado
+            });
+            return RedirectToAction(nameof(Index), new { t = token, page });
+        }
+
+        // Desempaquetar token
+        if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+        {
+            buscar = nav.GetValueOrDefault("buscar");
+            if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
+            if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
+            estado = nav.GetValueOrDefault("estado");
+        }
+
         // Aplicar mes actual como rango por defecto cuando no se envían fechas
         if (fechaInicio is null && fechaFin is null && string.IsNullOrWhiteSpace(buscar))
         {
             var hoy     = DateTime.Today;
-            fechaInicio = new DateTime(hoy.Year, hoy.Month, 1);           // primer día del mes
+            fechaInicio = new DateTime(hoy.Year, hoy.Month, 1);
             fechaFin    = new DateTime(hoy.Year, hoy.Month,
-                              DateTime.DaysInMonth(hoy.Year, hoy.Month)); // último día del mes
+                              DateTime.DaysInMonth(hoy.Year, hoy.Month));
         }
         const int pageSize = 10;
         var (items, total) = await _service.ObtenerRequisicionesAsync(
@@ -66,6 +91,13 @@ public class RequisicionController : OracleBaseController
         ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
         ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
         ViewBag.Estado      = estado;
+        var navToken = _navToken.Protect(new Dictionary<string, string?> {
+            ["buscar"]      = buscar,
+            ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+            ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd"),
+            ["estado"]      = estado
+        });
+        ViewBag.NavToken    = navToken;
         ViewBag.Page        = page;
         ViewBag.PageSize    = pageSize;
         ViewBag.TotalCount  = total;
@@ -103,8 +135,7 @@ public class RequisicionController : OracleBaseController
 
     [HttpGet("Detalle/{tipDoc}/{serie:int}/{numReq:long}")]
     public async Task<IActionResult> Detalle(string tipDoc, int serie, long numReq,
-        string? buscar = null, string? fechaInicio = null, string? fechaFin = null,
-        string? estado = null, int page = 1)
+        string? t = null, int page = 1)
     {
         var cabecera = await _service.ObtenerRequisicionAsync(tipDoc, serie, numReq);
         if (cabecera is null)
@@ -124,20 +155,17 @@ public class RequisicionController : OracleBaseController
                 TipDoc           = tipDoc,
                 Serie            = serie,
                 NumReq           = numReq,
-                ReturnBuscar      = buscar,
-                ReturnFechaInicio = fechaInicio,
-                ReturnFechaFin    = fechaFin,
-                ReturnEstado      = estado,
+                ReturnBuscar      = t,
+                ReturnFechaInicio = null,
+                ReturnFechaFin    = null,
+                ReturnEstado      = null,
                 ReturnPage        = page,
             }
         };
 
         // Preservar filtros para "Volver al listado" y breadcrumb
-        ViewBag.ReturnBuscar      = buscar;
-        ViewBag.ReturnFechaInicio = fechaInicio;
-        ViewBag.ReturnFechaFin    = fechaFin;
-        ViewBag.ReturnEstado      = estado;
-        ViewBag.ReturnPage        = page;
+        ViewBag.NavToken  = t;
+        ViewBag.ReturnPage = page;
 
         // Archivos ya cargados para este requerimiento (por idGrupo de los ítems)
         EnsureNetworkShare(ObtenerCarpetaRaiz());
@@ -186,8 +214,7 @@ public class RequisicionController : OracleBaseController
             return RedirectToAction(nameof(Detalle), new
             {
                 tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
-                buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
-                fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+                t           = model.ReturnBuscar,
                 page        = model.ReturnPage
             });
         }
@@ -198,8 +225,7 @@ public class RequisicionController : OracleBaseController
             return RedirectToAction(nameof(Detalle), new
             {
                 tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
-                buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
-                fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+                t           = model.ReturnBuscar,
                 page        = model.ReturnPage
             });
         }
@@ -247,13 +273,12 @@ public class RequisicionController : OracleBaseController
         return RedirectToAction(nameof(Detalle), new
         {
             tipDoc      = model.TipDoc,  serie  = model.Serie,  numReq = model.NumReq,
-            buscar      = model.ReturnBuscar,      fechaInicio = model.ReturnFechaInicio,
-            fechaFin    = model.ReturnFechaFin,    estado      = model.ReturnEstado,
+            t           = model.ReturnBuscar,
             page        = model.ReturnPage
         });
     }
 
-    // ── VER ARCHIVO INLINE (visor) ─────────────────────────────────────────────
+    // ── VER ARCHIVO INLINE (visor)
 
     [HttpGet("Ver/{idGrupo:long}/{nombreArchivo}")]
     public IActionResult Ver(long idGrupo, string nombreArchivo)
@@ -275,8 +300,7 @@ public class RequisicionController : OracleBaseController
     public async Task<IActionResult> AprobarArchivo(
         long idGrupo, string nombreArchivo,
         string tipDoc, int serie, long numReq,
-        string? retBuscar, string? retFechaInicio, string? retFechaFin,
-        string? retEstado, int retPage = 1)
+        string? retNavToken = null, int retPage = 1)
     {
         try
         {
@@ -324,15 +348,12 @@ public class RequisicionController : OracleBaseController
             tipDoc,
             serie,
             numReq,
-            buscar      = retBuscar,
-            fechaInicio = retFechaInicio,
-            fechaFin    = retFechaFin,
-            estado      = retEstado,
-            page        = retPage
+            t    = retNavToken,
+            page = retPage
         });
     }
 
-    // ── DESCARGAR ARCHIVO ──────────────────────────────────────────────────────
+    // ── DESCARGAR ARCHIVO
 
     [HttpGet("Descargar/{idGrupo:long}/{nombreArchivo}")]
     public IActionResult Descargar(long idGrupo, string nombreArchivo)
@@ -353,8 +374,7 @@ public class RequisicionController : OracleBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EliminarArchivo(long idGrupo, string nombreArchivo,
         string tipDoc, int serie, long numReq,
-        string? retBuscar = null, string? retFechaInicio = null, string? retFechaFin = null,
-        string? retEstado = null, int retPage = 1)
+        string? retNavToken = null, int retPage = 1)
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         bool eraAprobado = nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
@@ -382,11 +402,8 @@ public class RequisicionController : OracleBaseController
         return RedirectToAction(nameof(Detalle), new
         {
             tipDoc, serie, numReq,
-            buscar      = retBuscar,
-            fechaInicio = retFechaInicio,
-            fechaFin    = retFechaFin,
-            estado      = retEstado,
-            page        = retPage
+            t    = retNavToken,
+            page = retPage
         });
     }
 
@@ -514,13 +531,12 @@ public class RequisicionController : OracleBaseController
     public async Task<IActionResult> CambiarEstado(
         string accion,
         List<string> seleccion,
-        string? buscar, string? fechaInicio, string? fechaFin,
-        string? estado, int page = 1)
+        string? t = null, int page = 1)
     {
         if (seleccion == null || seleccion.Count == 0)
         {
             TempData["Warning"] = "No se seleccionaron requerimientos.";
-            return RedirectToAction(nameof(Index), new { buscar, fechaInicio, fechaFin, estado, page });
+            return RedirectToAction(nameof(Index), new { t, page });
         }
 
         var claves = seleccion
@@ -559,7 +575,7 @@ public class RequisicionController : OracleBaseController
             TempData["Error"] = $"Error al cambiar estado: {ex.Message}";
         }
 
-        return RedirectToAction(nameof(Index), new { buscar, fechaInicio, fechaFin, estado, page });
+        return RedirectToAction(nameof(Index), new { t, page });
     }
 
     // ── HELPERS ────────────────────────────────────────────────────────────────

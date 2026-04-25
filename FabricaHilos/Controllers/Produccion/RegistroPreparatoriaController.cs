@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Data;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Produccion;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 
 namespace FabricaHilos.Controllers.Produccion
@@ -16,17 +17,20 @@ namespace FabricaHilos.Controllers.Produccion
         private readonly IRecetaService _recetaService;
         private readonly IParoService   _paroService;
         private readonly ILogger<RegistroPreparatoriaController> _logger;
+        private readonly INavTokenService _navToken;
 
         public RegistroPreparatoriaController(
             ApplicationDbContext context, 
             IRecetaService recetaService,
             IParoService   paroService,
-            ILogger<RegistroPreparatoriaController> logger)
+            ILogger<RegistroPreparatoriaController> logger,
+            INavTokenService navToken)
         {
             _context       = context;
             _recetaService = recetaService;
             _paroService   = paroService;
             _logger        = logger;
+            _navToken      = navToken;
         }
 
         private static readonly HashSet<string> _apiActions = new(StringComparer.OrdinalIgnoreCase)
@@ -57,8 +61,30 @@ namespace FabricaHilos.Controllers.Produccion
             base.OnActionExecuting(context);
         }
 
-        public async Task<IActionResult> Index(string? buscar, string? maquina, string? tipoMaquina, List<string>? estado, int page = 1)
+        public async Task<IActionResult> Index(string? t = null, string? buscar = null, string? maquina = null, string? tipoMaquina = null, List<string>? estado = null, int page = 1)
         {
+            // Si hay filtros sin token → crear token y redirigir
+            if (string.IsNullOrEmpty(t) && (buscar != null || maquina != null || tipoMaquina != null || (estado != null && estado.Count > 0)))
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> {
+                    ["buscar"]      = buscar,
+                    ["maquina"]     = maquina,
+                    ["tipoMaquina"] = tipoMaquina,
+                    ["estado"]      = estado != null ? string.Join(",", estado) : null
+                });
+                return RedirectToAction(nameof(Index), new { t = token, page });
+            }
+
+            // Desempaquetar token
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                buscar      = nav.GetValueOrDefault("buscar");
+                maquina     = nav.GetValueOrDefault("maquina");
+                tipoMaquina = nav.GetValueOrDefault("tipoMaquina");
+                var estadoStr = nav.GetValueOrDefault("estado");
+                estado = string.IsNullOrEmpty(estadoStr) ? null
+                    : estadoStr.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+            }
             // Si no se indica estado, mostrar solo 'En Proceso' por defecto
             if (estado == null || estado.Count == 0) estado = new List<string> { "1" };
 
@@ -186,7 +212,14 @@ namespace FabricaHilos.Controllers.Produccion
             ViewBag.TipoMaquinaFiltro = tipoMaquina;
             ViewBag.MaquinaFiltro = maquina;
             ViewBag.EstadoFiltro = estado;
-            ViewBag.ReturnUrl = Request.Path + Request.QueryString;
+
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"]      = buscar,
+                ["maquina"]     = maquina,
+                ["tipoMaquina"] = tipoMaquina,
+                ["estado"]      = estado != null && estado.Count > 0 ? string.Join(",", estado) : null
+            });
+            ViewBag.NavToken = navToken;
 
             // Solo mostrar en el combo los tipos de máquina que realmente tienen filas en la lista actual
             var todosTipos = await _recetaService.ObtenerTiposMaquinasAsync();
@@ -334,7 +367,7 @@ namespace FabricaHilos.Controllers.Produccion
             ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(orden.EmpleadoId ?? string.Empty);
             ViewBag.TiposMaquinas = await _recetaService.ObtenerTiposMaquinasAsync();
             ViewBag.Titulos = await _recetaService.ObtenerTitulosAsync();
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.NavToken = returnUrl;
             return View(orden);
         }
 
@@ -393,12 +426,12 @@ namespace FabricaHilos.Controllers.Produccion
                 else
                     _logger.LogWarning("Preparatoria {Id} actualizada en SQLite pero falló en Oracle.", id);
 
-                return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                return RedirectToAction(nameof(Index), new { t = returnUrl });
             }
             ViewBag.Empleados = await _recetaService.ObtenerEmpleadosAsync();
             ViewBag.TiposMaquinas = await _recetaService.ObtenerTiposMaquinasAsync();
             ViewBag.Titulos = await _recetaService.ObtenerTitulosAsync();
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.NavToken = returnUrl;
             return View(model);
         }
 
@@ -413,13 +446,13 @@ namespace FabricaHilos.Controllers.Produccion
                 if (orden == null)
                 {
                     TempData["Error"] = "Preparatoria no encontrada.";
-                    return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 if (orden.Estado == EstadoOrden.Anulado)
                 {
                     TempData["Warning"] = "La preparatoria ya se encuentra anulada.";
-                    return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 // Actualizar estado local
@@ -469,7 +502,7 @@ namespace FabricaHilos.Controllers.Produccion
                 TempData["Error"] = $"Error al anular la preparatoria: {ex.Message}";
             }
 
-            return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Index), new { t = returnUrl });
         }
 
         [HttpPost]
@@ -548,7 +581,7 @@ namespace FabricaHilos.Controllers.Produccion
                 return RedirectToAction(nameof(Index));
             }
 
-            ViewBag.ReturnUrl = returnUrl;
+            ViewBag.NavToken = returnUrl;
             return View(orden);
         }
 
@@ -561,7 +594,7 @@ namespace FabricaHilos.Controllers.Produccion
             if (orden == null)
             {
                 TempData["Error"] = "Preparatoria no encontrada.";
-                return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                return RedirectToAction(nameof(Index), new { t = returnUrl });
             }
 
             var esMetrajeOpcional = orden.CodigoMaquina == "L";
@@ -570,7 +603,7 @@ namespace FabricaHilos.Controllers.Produccion
                 TempData["Error"] = !kgNeto.HasValue
                     ? "El campo Kg Neto es obligatorio."
                     : "El campo Metraje es obligatorio. Por favor edite la preparatoria para ingresar el metraje.";
-                ViewBag.ReturnUrl = returnUrl;
+                ViewBag.NavToken = returnUrl;
                 return View(orden);
             }
 
@@ -578,7 +611,7 @@ namespace FabricaHilos.Controllers.Produccion
             if (fechaFinEfectiva < orden.FechaInicio)
             {
                 TempData["Error"] = $"La Fecha Final ({fechaFinEfectiva:dd/MM/yyyy HH:mm:ss}) no puede ser anterior a la Fecha Inicial ({orden.FechaInicio:dd/MM/yyyy HH:mm:ss}).";
-                ViewBag.ReturnUrl = returnUrl;
+                ViewBag.NavToken = returnUrl;
                 return View(orden);
             }
 
@@ -588,7 +621,7 @@ namespace FabricaHilos.Controllers.Produccion
             if (tieneParosAbiertos)
             {
                 TempData["Error"] = "No se puede dar por terminada la preparatoria porque tiene paros registrados sin fecha de fin. Cierre los paros abiertos antes de continuar.";
-                ViewBag.ReturnUrl = returnUrl;
+                ViewBag.NavToken = returnUrl;
                 return View(orden);
             }
 
@@ -627,7 +660,7 @@ namespace FabricaHilos.Controllers.Produccion
                 _logger.LogWarning("DetalleProduccion {Id}: SP retornó código {Codigo}: {Mensaje}.", id, resultado.Codigo, resultado.Mensaje);
             }
 
-            return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Index), new { t = returnUrl });
         }
 
         [HttpGet]

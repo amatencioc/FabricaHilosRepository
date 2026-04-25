@@ -3,6 +3,7 @@
 
 @{
     ViewData["Title"] = "Registro de Preparatoria";
+    var navToken = ViewBag.NavToken as string;
 }
 
 @section Breadcrumb {
@@ -158,12 +159,12 @@
                                 <td>
                                     @if (item.LocalId.HasValue && item.Estado == "1")
                                         {
-                                            <a asp-action="Editar" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                                            <a asp-action="Editar" asp-route-id="@item.LocalId" asp-route-returnUrl="@navToken" class="btn btn-sm btn-outline-primary me-1" title="Editar">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
                                             @if (item.TipoMaquina != "B")
                                             {
-                                                <a asp-action="DetalleProduccion" asp-route-id="@item.LocalId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-sm btn-outline-info me-1" title="Detalle de Producción">
+                                                <a asp-action="DetalleProduccion" asp-route-id="@item.LocalId" asp-route-returnUrl="@navToken" class="btn btn-sm btn-outline-info me-1" title="Detalle de Producción">
                                                     <i class="bi bi-bar-chart-line"></i>
                                                 </a>
                                             }
@@ -216,7 +217,7 @@
                                         {
                                             <form asp-action="Anular" asp-route-id="@item.LocalId" method="post" class="d-inline" id="formAnular_@item.LocalId">
                                                 @Html.AntiForgeryToken()
-                                                <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                                                <input type="hidden" name="returnUrl" value="@navToken" />
                                                 <button type="button" class="btn btn-sm btn-outline-danger btn-anular" title="Anular Preparatoria"
                                                         data-form-id="formAnular_@item.LocalId">
                                                     <i class="bi bi-slash-circle"></i>

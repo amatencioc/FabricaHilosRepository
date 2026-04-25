@@ -1,4 +1,5 @@
 @model IEnumerable<FabricaHilos.Models.Logistica.OrdenCompraDto>
+@inject FabricaHilos.Services.INavTokenService NavTokenSvc
 
 @{
     ViewData["Title"] = "Órdenes de Compra";
@@ -6,8 +7,9 @@
     string? fechaInicio = ViewBag.FechaInicio as string;
     string? fechaFin    = ViewBag.FechaFin    as string;
     string? estado      = ViewBag.Estado      as string;
+    string? navToken    = ViewBag.NavToken    as string;
     bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
-                       || Context.Request.Query.ContainsKey("fechaInicio") || Context.Request.Query.ContainsKey("fechaFin");
+                       || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin);
     int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
     int totalPages  = ViewBag.TotalPages  != null ? Convert.ToInt32(ViewBag.TotalPages)  : 1;
     int totalCount  = ViewBag.TotalCount  != null ? Convert.ToInt32(ViewBag.TotalCount)  : 0;
@@ -85,6 +87,11 @@
                     {
                         var nomProv = !string.IsNullOrEmpty(oc.CodProveed) && proveedores.TryGetValue(oc.CodProveed, out var np) ? np : oc.CodProveed;
                         var ccDesc  = !string.IsNullOrEmpty(oc.CCosto) && centrosCosto.TryGetValue(oc.CCosto, out var ccd) ? ccd : oc.CCosto;
+                        var dtToken = NavTokenSvc.Protect(new Dictionary<string, string?> {
+                            ["tipoDocto"] = oc.TipoDocto,
+                            ["serie"]     = oc.Serie.ToString(),
+                            ["numPed"]    = oc.NumPed.ToString()
+                        });
                         <tr>
                             <td class="text-center">@(oc.TipoDocto ?? "-")</td>
                             <td class="text-center fw-semibold">@oc.NumPed</td>
@@ -108,18 +115,13 @@
                                     <span class="text-muted">@(oc.Moneda ?? "-")</span>
                                 }
                             </td>
-                            <td class="text-end">@sim @oc.ValVenta.ToString("N2")</td>
-                            <td class="text-end">@sim @oc.ImpIgv.ToString("N2")</td>
-                            <td class="text-end fw-semibold">@sim @oc.PrecioVta.ToString("N2")</td>
+                            <td class="text-end text-nowrap">@sim&nbsp;@oc.ValVenta.ToString("N2")</td>
+                            <td class="text-end text-nowrap">@sim&nbsp;@oc.ImpIgv.ToString("N2")</td>
+                            <td class="text-end text-nowrap fw-semibold">@sim&nbsp;@oc.PrecioVta.ToString("N2")</td>
                             <td class="text-center">
                                 <a asp-action="Detalle"
-                                   asp-route-tipoDocto="@oc.TipoDocto"
-                                   asp-route-serie="@oc.Serie"
-                                   asp-route-numPed="@oc.NumPed"
-                                   asp-route-buscar="@buscar"
-                                   asp-route-fechaInicio="@fechaInicio"
-                                   asp-route-fechaFin="@fechaFin"
-                                   asp-route-estado="@estado"
+                                   asp-route-dt="@dtToken"
+                                   asp-route-t="@navToken"
                                    asp-route-page="@currentPage"
                                    class="btn btn-sm btn-outline-primary" title="Ver detalle">
                                     <i class="bi bi-eye"></i>
@@ -146,23 +148,20 @@
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
                         <a class="page-link" asp-action="Index"
-                           asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
-                           asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                           asp-route-t="@navToken"
                            asp-route-page="@(currentPage - 1)">«</a>
                     </li>
                     @for (int p = Math.Max(1, currentPage - 2); p <= Math.Min(totalPages, currentPage + 2); p++)
                     {
                         <li class="page-item @(p == currentPage ? "active" : "")">
                             <a class="page-link" asp-action="Index"
-                               asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
-                               asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                               asp-route-t="@navToken"
                                asp-route-page="@p">@p</a>
                         </li>
                     }
                     <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
                         <a class="page-link" asp-action="Index"
-                           asp-route-buscar="@buscar" asp-route-fechaInicio="@fechaInicio"
-                           asp-route-fechaFin="@fechaFin" asp-route-estado="@estado"
+                           asp-route-t="@navToken"
                            asp-route-page="@(currentPage + 1)">»</a>
                     </li>
                 </ul>

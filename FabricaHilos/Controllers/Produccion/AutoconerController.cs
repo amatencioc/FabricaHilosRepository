@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Data;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Produccion;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion;
 
 namespace FabricaHilos.Controllers.Produccion
@@ -16,17 +17,20 @@ namespace FabricaHilos.Controllers.Produccion
         private readonly IRecetaService _recetaService;
         private readonly IParoService   _paroService;
         private readonly ILogger<AutoconerController> _logger;
+        private readonly INavTokenService _navToken;
 
         public AutoconerController(
             ApplicationDbContext context,
             IRecetaService recetaService,
             IParoService   paroService,
-            ILogger<AutoconerController> logger)
+            ILogger<AutoconerController> logger,
+            INavTokenService navToken)
         {
             _context       = context;
             _recetaService = recetaService;
             _paroService   = paroService;
             _logger        = logger;
+            _navToken      = navToken;
         }
 
         private static readonly HashSet<string> _apiActions = new(StringComparer.OrdinalIgnoreCase)
@@ -52,8 +56,26 @@ namespace FabricaHilos.Controllers.Produccion
         }
 
         // GET: /Autoconer
-        public async Task<IActionResult> Index(string? buscar, List<string>? estado, int page = 1)
+        public async Task<IActionResult> Index(string? t = null, string? buscar = null, List<string>? estado = null, int page = 1)
         {
+            // Si hay filtros sin token → crear token y redirigir
+            if (string.IsNullOrEmpty(t) && (buscar != null || (estado != null && estado.Count > 0)))
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> {
+                    ["buscar"] = buscar,
+                    ["estado"] = estado != null ? string.Join(",", estado) : null
+                });
+                return RedirectToAction(nameof(Index), new { t = token, page });
+            }
+
+            // Desempaquetar token
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                buscar = nav.GetValueOrDefault("buscar");
+                var estadoStr = nav.GetValueOrDefault("estado");
+                estado = string.IsNullOrEmpty(estadoStr) ? null
+                    : estadoStr.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+            }
             if (estado == null || estado.Count == 0) estado = new List<string> { "3" };
 
             const int pageSize = 10;
@@ -213,7 +235,12 @@ namespace FabricaHilos.Controllers.Produccion
 
             ViewBag.Buscar      = buscar;
             ViewBag.EstadoFiltro = estado;
-            ViewBag.ReturnUrl   = Request.Path + Request.QueryString;
+
+            var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"] = buscar,
+                ["estado"] = estado != null && estado.Count > 0 ? string.Join(",", estado) : null
+            });
+            ViewBag.NavToken    = navToken;
             ViewBag.Page        = page;
             ViewBag.PageSize    = pageSize;
             ViewBag.TotalCount  = resultado.TotalCount;
@@ -325,7 +352,7 @@ namespace FabricaHilos.Controllers.Produccion
         // GET: /Autoconer/Partida/Editar (Oracle keys)
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> Editar(string? receta, string lote, string codMaq, string titulo, string fechaIni)
+        public async Task<IActionResult> Editar(string? receta, string lote, string codMaq, string titulo, string fechaIni, string? returnUrl = null)
         {
             _logger.LogInformation("╔═══════════════════════════════════════════════════════════════════════════════╗");
             _logger.LogInformation("║ GET Editar - Parámetros Recibidos                                            ║");
@@ -433,6 +460,7 @@ namespace FabricaHilos.Controllers.Produccion
             ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
             ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
             ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
+            ViewBag.NavToken       = returnUrl;
 
             return View("Partida/Editar", registro);
         }
@@ -441,7 +469,7 @@ namespace FabricaHilos.Controllers.Produccion
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Editar(RegistroAutoconer model)
+        public async Task<IActionResult> Editar(RegistroAutoconer model, string? returnUrl = null)
         {
             if (ModelState.IsValid)
             {
@@ -456,13 +484,13 @@ namespace FabricaHilos.Controllers.Produccion
                     string.IsNullOrEmpty(oldTitulo) || string.IsNullOrEmpty(oldFechaStr))
                 {
                     TempData["Error"] = "Sesión expirada. Por favor, vuelva a cargar el formulario de edición.";
-                    return RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 if (!DateTime.TryParse(oldFechaStr, out DateTime oldFecha))
                 {
                     TempData["Error"] = "Fecha antigua inválida.";
-                    return RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 // Crear registroAntiguo con los valores originales
@@ -510,29 +538,30 @@ namespace FabricaHilos.Controllers.Produccion
                     else
                     {
                         _logger.LogInformation("Autoconer: SP_CALCULAR_PROD_ESP_TEO ejecutado correctamente tras UPDATE. Lote={Lote}", model.Lote);
-                        TempData["Success"] = "Registro Autoconer actualizado exitosamente en Oracle.";
-                    }
+                                    TempData["Success"] = "Registro Autoconer actualizado exitosamente en Oracle.";
+                                    }
 
-                    return RedirectToAction(nameof(Index));
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error al actualizar Autoconer en Oracle: Lote={Lote}, CodMaq={CodMaq}", model.Lote, model.NumeroAutoconer);
-                    TempData["Error"] = $"Error al actualizar el registro: {ex.Message}";
-                }
-            }
-            else
-            {
-                _logger.LogWarning("ModelState inválido al editar Autoconer. Errores: {Errors}",
-                    string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
-            }
+                                    return RedirectToAction(nameof(Index), new { t = returnUrl });
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Error al actualizar Autoconer en Oracle: Lote={Lote}, CodMaq={CodMaq}", model.Lote, model.NumeroAutoconer);
+                                    TempData["Error"] = $"Error al actualizar el registro: {ex.Message}";
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogWarning("ModelState inválido al editar Autoconer. Errores: {Errors}",
+                                    string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                            }
 
-            ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(model.CodigoOperador);
-            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
-            ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
-            ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
-            return View("Partida/Editar", model);
-        }
+                            ViewBag.NombreOperario = await _recetaService.ObtenerNombreEmpleadoAsync(model.CodigoOperador);
+                            ViewBag.Titulos        = await _recetaService.ObtenerTitulosAutoconerAsync();
+                            ViewBag.Maquinas       = await _recetaService.ObtenerMaquinasPorTipoAsync("A");
+                            ViewBag.Destinos       = await _recetaService.ObtenerDestinosAutoconerAsync();
+                            ViewBag.NavToken       = returnUrl;
+                            return View("Partida/Editar", model);
+                        }
 
         // GET: /Autoconer/Partida/Detalle
         [HttpGet]
@@ -613,13 +642,13 @@ namespace FabricaHilos.Controllers.Produccion
                 if (registro == null)
                 {
                     TempData["Error"] = "Registro Autoconer no encontrado.";
-                    return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 if (registro.Estado == EstadoOrden.Anulado)
                 {
                     TempData["Warning"] = "El registro ya se encuentra anulado.";
-                    return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
                 registro.Estado = EstadoOrden.Anulado;
@@ -644,7 +673,7 @@ namespace FabricaHilos.Controllers.Produccion
                 TempData["Error"] = $"Error al anular el registro: {ex.Message}";
             }
 
-            return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Index), new { t = returnUrl });
         }
 
         // ===================== API JSON =====================

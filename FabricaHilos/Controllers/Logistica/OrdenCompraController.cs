@@ -15,6 +15,7 @@ public class OrdenCompraController : OracleBaseController
     private readonly IConfiguration _config;
     private readonly ILogger<OrdenCompraController> _logger;
     private readonly IEmpresaTemaService _empresaTema;
+    private readonly INavTokenService _navToken;
 
     private static readonly HashSet<string> _extPermitidas =
         new(StringComparer.OrdinalIgnoreCase)
@@ -29,13 +30,15 @@ public class OrdenCompraController : OracleBaseController
         IWebHostEnvironment env,
         IConfiguration config,
         ILogger<OrdenCompraController> logger,
-        IEmpresaTemaService empresaTema)
+        IEmpresaTemaService empresaTema,
+        INavTokenService navToken)
     {
         _service     = service;
         _env         = env;
         _config      = config;
         _logger      = logger;
         _empresaTema = empresaTema;
+        _navToken    = navToken;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -43,12 +46,34 @@ public class OrdenCompraController : OracleBaseController
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
-        string? buscar,
-        DateTime? fechaInicio,
-        DateTime? fechaFin,
-        string? estado,
+        string? t = null,
+        string? buscar = null,
+        DateTime? fechaInicio = null,
+        DateTime? fechaFin = null,
+        string? estado = null,
         int page = 1)
     {
+        // Si hay filtros nuevos sin token, crear token y redirigir
+        if (string.IsNullOrEmpty(t) && (buscar != null || fechaInicio.HasValue || fechaFin.HasValue || estado != null))
+        {
+            var token = _navToken.Protect(new Dictionary<string, string?> {
+                ["buscar"]      = buscar,
+                ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd"),
+                ["estado"]      = estado
+            });
+            return RedirectToAction(nameof(Index), new { t = token, page });
+        }
+
+        // Desempaquetar token
+        if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+        {
+            buscar = nav.GetValueOrDefault("buscar");
+            if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
+            if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
+            estado = nav.GetValueOrDefault("estado");
+        }
+
         if (fechaInicio is null && fechaFin is null && string.IsNullOrWhiteSpace(buscar))
         {
             var hoy     = DateTime.Today;
@@ -68,10 +93,19 @@ public class OrdenCompraController : OracleBaseController
         var codigosCc = items.Select(o => o.CCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
         ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
+        // Generar token final con fechas normalizadas para paginación y Detalle
+        var navToken = _navToken.Protect(new Dictionary<string, string?> {
+            ["buscar"]      = buscar,
+            ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+            ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd"),
+            ["estado"]      = estado
+        });
+
         ViewBag.Buscar      = buscar;
         ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
         ViewBag.FechaFin    = fechaFin?.ToString("yyyy-MM-dd");
         ViewBag.Estado      = estado;
+        ViewBag.NavToken    = navToken;
         ViewBag.Page        = page;
         ViewBag.PageSize    = pageSize;
         ViewBag.TotalCount  = total;
@@ -82,11 +116,20 @@ public class OrdenCompraController : OracleBaseController
 
     // ── DETALLE ────────────────────────────────────────────────────────────────
 
-    [HttpGet("Detalle/{tipoDocto}/{serie:int}/{numPed:long}")]
+    [HttpGet("Detalle")]
     public async Task<IActionResult> Detalle(
-        string tipoDocto, int serie, long numPed,
-        string? buscar, string? fechaInicio, string? fechaFin, string? estado, int page = 1)
+        string? dt = null,
+        string? t = null, int page = 1)
     {
+        if (string.IsNullOrEmpty(dt) || !_navToken.TryUnprotect(dt, out var dtNav))
+        {
+            TempData["Error"] = "Parámetros de detalle inválidos o expirados.";
+            return RedirectToAction(nameof(Index), new { t });
+        }
+        var tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+        if (!int.TryParse(dtNav.GetValueOrDefault("serie"), out var serie)) serie = 0;
+        if (!long.TryParse(dtNav.GetValueOrDefault("numPed"), out var numPed)) numPed = 0;
+
         var orden = await _service.ObtenerOrdenAsync(tipoDocto, serie, numPed);
         if (orden is null)
             return NotFound();
@@ -114,11 +157,9 @@ public class OrdenCompraController : OracleBaseController
             .ToDictionary(x => x.Item1, x => x.n, StringComparer.OrdinalIgnoreCase);
         ViewBag.NombresUsuarios = nombresUsuarios;
 
-        ViewBag.ReturnBuscar      = buscar;
-        ViewBag.ReturnFechaInicio = fechaInicio;
-        ViewBag.ReturnFechaFin    = fechaFin;
-        ViewBag.ReturnEstado      = estado;
-        ViewBag.ReturnPage        = page;
+        ViewBag.NavToken  = t;
+        ViewBag.Dt        = dt;
+        ViewBag.ReturnPage = page;
 
         EnsureNetworkShare(ObtenerCarpetaRaiz());
         ViewBag.ArchivosExistentes = ObtenerArchivosExistentes(items);
@@ -132,9 +173,15 @@ public class OrdenCompraController : OracleBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SubirArchivos(OrdenCompraUploadModel model)
     {
-        var redir = new { tipoDocto = model.TipoDocto, serie = model.Serie, numPed = model.NumPed,
-                          buscar = model.ReturnBuscar, fechaInicio = model.ReturnFechaInicio,
-                          fechaFin = model.ReturnFechaFin, estado = model.ReturnEstado, page = model.ReturnPage };
+        // Desempaquetar dt para obtener tipoDocto/serie/numPed
+        string tipoDocto = string.Empty; int serie = 0; long numPed = 0;
+        if (!string.IsNullOrEmpty(model.Dt) && _navToken.TryUnprotect(model.Dt, out var dtNav))
+        {
+            tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+            int.TryParse(dtNav.GetValueOrDefault("serie"), out serie);
+            long.TryParse(dtNav.GetValueOrDefault("numPed"), out numPed);
+        }
+        var redir = new { dt = model.Dt, t = model.ReturnBuscar, page = model.ReturnPage };
 
         if (model.Archivos == null || model.Archivos.Count == 0)
         { TempData["Warning"] = "No se seleccionaron archivos."; return RedirectToAction(nameof(Detalle), redir); }
@@ -159,7 +206,7 @@ public class OrdenCompraController : OracleBaseController
             var ext = Path.GetExtension(archivo.FileName);
             if (!_extPermitidas.Contains(ext)) { errores.Add($"Extensión no permitida: {archivo.FileName}"); continue; }
 
-            var nombreSeguro = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{model.NumPed}_{DateTime.Now:yyyyMMdd}{ext}";
+            var nombreSeguro = $"{Path.GetFileNameWithoutExtension(archivo.FileName)}_{numPed}_{DateTime.Now:yyyyMMdd}{ext}";
             nombreSeguro = string.Concat(nombreSeguro.Split(Path.GetInvalidFileNameChars()));
             var rutaDestino = Path.Combine(carpeta, nombreSeguro);
             await using var stream = new FileStream(rutaDestino, FileMode.Create);
@@ -168,7 +215,7 @@ public class OrdenCompraController : OracleBaseController
         }
 
         if (exitosos > 0)
-            await _service.ActualizarIdGrupoItemsAsync(model.TipoDocto!, model.Serie, model.NumPed, model.SeleccionItems, idGrupo);
+            await _service.ActualizarIdGrupoItemsAsync(tipoDocto, serie, numPed, model.SeleccionItems, idGrupo);
 
         TempData[errores.Count > 0 ? "Warning" : "Success"] = errores.Count > 0
             ? $"Se cargaron {exitosos} archivo(s). Errores: {string.Join("; ", errores)}"
@@ -195,9 +242,16 @@ public class OrdenCompraController : OracleBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AprobarArchivo(
         long idGrupo, string nombreArchivo,
-        string tipoDocto, int serie, long numPed,
-        string? retBuscar, string? retFechaInicio, string? retFechaFin, string? retEstado, int retPage = 1)
+        string? dt = null,
+        string? retNavToken = null, int retPage = 1)
     {
+        string tipoDocto = string.Empty; int serie = 0; long numPed = 0;
+        if (!string.IsNullOrEmpty(dt) && _navToken.TryUnprotect(dt, out var dtNav))
+        {
+            tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+            int.TryParse(dtNav.GetValueOrDefault("serie"), out serie);
+            long.TryParse(dtNav.GetValueOrDefault("numPed"), out numPed);
+        }
         try
         {
             nombreArchivo = Path.GetFileName(nombreArchivo);
@@ -219,7 +273,7 @@ public class OrdenCompraController : OracleBaseController
         }
         catch (Exception ex) { _logger.LogError(ex, "Error al aprobar archivo grupo {IdGrupo}", idGrupo); TempData["Error"] = ex.Message; }
 
-        return RedirectToAction(nameof(Detalle), new { tipoDocto, serie, numPed, buscar = retBuscar, fechaInicio = retFechaInicio, fechaFin = retFechaFin, estado = retEstado, page = retPage });
+        return RedirectToAction(nameof(Detalle), new { dt, t = retNavToken, page = retPage });
     }
 
     // ── DESCARGAR ARCHIVO ──────────────────────────────────────────────────────
@@ -239,10 +293,16 @@ public class OrdenCompraController : OracleBaseController
     [HttpPost("EliminarArchivo")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EliminarArchivo(long idGrupo, string nombreArchivo,
-        string tipoDocto, int serie, long numPed,
-        string? retBuscar = null, string? retFechaInicio = null, string? retFechaFin = null,
-        string? retEstado = null, int retPage = 1)
+        string? dt = null,
+        string? retNavToken = null, int retPage = 1)
     {
+        string tipoDocto = string.Empty; int serie = 0; long numPed = 0;
+        if (!string.IsNullOrEmpty(dt) && _navToken.TryUnprotect(dt, out var dtNav))
+        {
+            tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+            int.TryParse(dtNav.GetValueOrDefault("serie"), out serie);
+            long.TryParse(dtNav.GetValueOrDefault("numPed"), out numPed);
+        }
         nombreArchivo = Path.GetFileName(nombreArchivo);
         bool eraAprobado = nombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase);
         var carpeta = ObtenerCarpetaPorGrupo(idGrupo);
@@ -260,7 +320,7 @@ public class OrdenCompraController : OracleBaseController
         }
 
         TempData["Success"] = $"Archivo '{nombreArchivo}' eliminado.";
-        return RedirectToAction(nameof(Detalle), new { tipoDocto, serie, numPed, buscar = retBuscar, fechaInicio = retFechaInicio, fechaFin = retFechaFin, estado = retEstado, page = retPage });
+        return RedirectToAction(nameof(Detalle), new { dt, t = retNavToken, page = retPage });
     }
 
     // ── HELPERS ────────────────────────────────────────────────────────────────

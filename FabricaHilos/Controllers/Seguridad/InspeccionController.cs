@@ -1,6 +1,7 @@
 using FabricaHilos.Filters;
 using FabricaHilos.Helpers;
 using FabricaHilos.Models.Seguridad.Inspeccion;
+using FabricaHilos.Services;
 using FabricaHilos.Services.Seguridad.Inspeccion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,11 +18,13 @@ namespace FabricaHilos.Controllers.Seguridad
         private readonly IInspeccionService _inspeccionService;
         private readonly ILogger<InspeccionController> _logger;
         private readonly string _rutaSeguridad;
+        private readonly INavTokenService _navToken;
 
         public InspeccionController(
             IConfiguration configuration, 
             IInspeccionService inspeccionService,
-            ILogger<InspeccionController> logger)
+            ILogger<InspeccionController> logger,
+            INavTokenService navToken)
         {
             _rutaSeguridad = configuration.GetValue<string>("RutaSeguridad")
                 ?? throw new InvalidOperationException(
@@ -30,6 +33,7 @@ namespace FabricaHilos.Controllers.Seguridad
             _procesadorImagen = new ProcesadorImagenSeguridad(_rutaSeguridad, logger);
             _inspeccionService = inspeccionService;
             _logger = logger;
+            _navToken = navToken;
         }
 
         // ========== LISTADO DE INSPECCIONES ==========
@@ -37,16 +41,46 @@ namespace FabricaHilos.Controllers.Seguridad
         [HttpGet]
         [Route("")]
         [Route("Index")]
-        public async Task<IActionResult> Index(string? tipo, string? estado, DateTime? fechaInicio, DateTime? fechaFin)
+        public async Task<IActionResult> Index(string? t = null, string? tipo = null, string? estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
         {
+            // Si hay filtros sin token → crear token y redirigir
+            if (string.IsNullOrEmpty(t) && (tipo != null || estado != null || fechaInicio.HasValue || fechaFin.HasValue))
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> {
+                    ["tipo"]        = tipo,
+                    ["estado"]      = estado,
+                    ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                    ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+                });
+                return RedirectToAction(nameof(Index), new { t = token });
+            }
+
+            // Desempaquetar token
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+            {
+                tipo   = nav.GetValueOrDefault("tipo");
+                estado = nav.GetValueOrDefault("estado");
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaInicio"), out var fi)) fechaInicio = fi;
+                if (DateTime.TryParse(nav.GetValueOrDefault("fechaFin"),    out var ff)) fechaFin    = ff;
+            }
+
             try
             {
                 var inspecciones = await _inspeccionService.ObtenerInspeccionesAsync(tipo, estado, fechaInicio, fechaFin);
 
-                ViewBag.TipoFiltro = tipo;
+                // Generar token con valores normalizados para la vista
+                var navToken = _navToken.Protect(new Dictionary<string, string?> {
+                    ["tipo"]        = tipo,
+                    ["estado"]      = estado,
+                    ["fechaInicio"] = fechaInicio?.ToString("yyyy-MM-dd"),
+                    ["fechaFin"]    = fechaFin?.ToString("yyyy-MM-dd")
+                });
+
+                ViewBag.NavToken     = navToken;
+                ViewBag.TipoFiltro   = tipo;
                 ViewBag.EstadoFiltro = estado;
-                ViewBag.FechaInicio = fechaInicio?.ToString("yyyy-MM-dd");
-                ViewBag.FechaFin = fechaFin?.ToString("yyyy-MM-dd");
+                ViewBag.FechaInicio  = fechaInicio?.ToString("yyyy-MM-dd");
+                ViewBag.FechaFin     = fechaFin?.ToString("yyyy-MM-dd");
 
                 return View("~/Views/Seguridad/Inspeccion/Index.cshtml", inspecciones);
             }

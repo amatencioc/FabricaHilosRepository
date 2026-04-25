@@ -1,4 +1,4 @@
-﻿@model FabricaHilos.Models.Produccion.OrdenProduccion
+@model FabricaHilos.Models.Produccion.OrdenProduccion
 
 @{
     ViewData["Title"] = "Detalle de Producción";
@@ -6,7 +6,7 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index", "RegistroPreparatoria"))">Registro de Preparatoria</a></li>
+    <li class="breadcrumb-item"><a href="@(Url.Action("Index", "RegistroPreparatoria", new { t = ViewBag.NavToken as string }))">Registro de Preparatoria</a></li>
     <li class="breadcrumb-item active">Detalle de Producción</li>
 }
 
@@ -22,7 +22,7 @@
                 <form asp-action="DetalleProduccion" method="post" id="formDetalleProduccion">
                     @Html.AntiForgeryToken()
                     <input name="id" type="hidden" value="@Model.Id" />
-                    <input type="hidden" name="returnUrl" value="@(ViewBag.ReturnUrl as string)" />
+                    <input type="hidden" name="returnUrl" value="@(ViewBag.NavToken as string)" />
 
                     <!-- Información de la Orden -->
                     <div class="row mb-4 pb-3 border-bottom">
@@ -76,7 +76,7 @@
                         <button type="button" id="btnGuardarDetalle" class="btn btn-primary px-4" tabindex="7">
                             <i class="bi bi-save me-2"></i>Guardar y Cerrar
                         </button>
-                        <a href="@(Url.IsLocalUrl(ViewBag.ReturnUrl as string) ? ViewBag.ReturnUrl as string : Url.Action("Index"))" class="btn btn-outline-secondary px-4">Cancelar</a>
+                        <a href="@(Url.Action("Index", "RegistroPreparatoria", new { t = ViewBag.NavToken as string }))" class="btn btn-outline-secondary px-4">Cancelar</a>
                     </div>
                 </form>
             </div>

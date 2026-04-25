@@ -1,4 +1,5 @@
-﻿using FabricaHilos.Services.RecursosHumanos;
+﻿using FabricaHilos.Services;
+using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,28 +13,46 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         private readonly IDepuracionJobService _depuracionJobService;
         private readonly ILogger<MarcacionesController> _logger;
         private readonly string _baseConnStr;
+        private readonly INavTokenService _navToken;
         private const int PageSize = 10;
 
         public MarcacionesController(
             IMarcacionesService marcacionesService,
             IDepuracionJobService depuracionJobService,
             ILogger<MarcacionesController> logger,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            INavTokenService navToken)
         {
             _marcacionesService    = marcacionesService;
             _depuracionJobService  = depuracionJobService;
             _logger                = logger;
             _baseConnStr           = configuration.GetConnectionString("AquariusConnection") ?? string.Empty;
+            _navToken              = navToken;
         }
 
         // ========== INDEX — Lista paginada de empleados ==========
 
         [HttpGet("")]
         [HttpGet("Index")]
-        public async Task<IActionResult> Index(string? buscar, int page = 1)
+        public async Task<IActionResult> Index(string? t = null, string? buscar = null, int page = 1)
         {
+            // Si hay filtro sin token → crear token y redirigir
+            if (string.IsNullOrEmpty(t) && buscar != null)
+            {
+                var token = _navToken.Protect(new Dictionary<string, string?> { ["buscar"] = buscar });
+                return RedirectToAction(nameof(Index), new { t = token, page });
+            }
+
+            // Desempaquetar token
+            if (!string.IsNullOrEmpty(t) && _navToken.TryUnprotect(t, out var nav))
+                buscar = nav.GetValueOrDefault("buscar");
+
             page = Math.Max(1, page);
             var (items, total) = await _marcacionesService.ListarEmpleadosAsync(CodEmpresaAquarius, buscar, page, PageSize);
+
+            var navToken = _navToken.Protect(new Dictionary<string, string?> { ["buscar"] = buscar });
+
+            ViewBag.NavToken   = navToken;
             ViewBag.Buscar     = buscar ?? string.Empty;
             ViewBag.Page       = page;
             ViewBag.PageSize   = PageSize;

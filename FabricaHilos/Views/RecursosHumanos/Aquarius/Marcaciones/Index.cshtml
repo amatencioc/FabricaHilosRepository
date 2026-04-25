@@ -3,14 +3,14 @@
 @{
     ViewData["Title"] = "Empleados — Aquarius";
     var buscar     = (string)ViewBag.Buscar;
+    var navToken   = ViewBag.NavToken as string;
     var page       = (int)ViewBag.Page;
     var pageSize   = (int)ViewBag.PageSize;
     var total      = (int)ViewBag.Total;
     var totalPages = (int)ViewBag.TotalPages;
 
-    string Url(int p, string? q = null) =>
-        $"/RecursosHumanos/Aquarius/Marcaciones?page={p}" +
-        (string.IsNullOrEmpty(q ?? buscar) ? "" : $"&buscar={Uri.EscapeDataString(q ?? buscar)}");
+    string Url(int p) =>
+        $"/RecursosHumanos/Aquarius/Marcaciones?t={Uri.EscapeDataString(navToken ?? string.Empty)}&page={p}";
 }
 
 @section Breadcrumb {
