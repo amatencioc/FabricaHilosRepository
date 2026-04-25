@@ -1,12 +1,12 @@
 @{
-    ViewData["Title"] = "Nivel de Morosidad";
+    ViewData["Title"] = "Tiempo Promedio CxC";
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item">
         <a asp-controller="CreditosCobranza" asp-action="Index">Créditos y Cobranzas</a>
     </li>
-    <li class="breadcrumb-item active">Nivel de Morosidad</li>
+    <li class="breadcrumb-item active">Tiempo Promedio CxC</li>
 }
 
 @section Styles {
@@ -91,11 +91,11 @@
         </div>
         <div class="card-body">
             <div class="row g-2 small">
-                <div class="col-md-3"><strong>Indicador:</strong> Nivel de morosidad de los clientes</div>
-                <div class="col-md-5"><strong>Objetivo:</strong> Identificar el nivel de riesgo de la continuidad del negocio a través de la morosidad</div>
-                <div class="col-md-2"><strong>Meta:</strong> ≤ 10%</div>
+                <div class="col-md-3"><strong>Indicador:</strong> Tiempo promedio de las cuentas por cobrar</div>
+                <div class="col-md-5"><strong>Objetivo:</strong> Identificar el nivel del flujo de caja para reinvertir</div>
+                <div class="col-md-2"><strong>Meta:</strong> ≤ 45 días</div>
                 <div class="col-md-2"><strong>Frecuencia:</strong> Trimestre</div>
-                <div class="col-12"><strong>Expresión matemática:</strong> <em>Carteras vencidas / Total de carteras (clientes) × 100</em></div>
+                <div class="col-12"><strong>Expresión matemática:</strong> <em>Cuentas por cobrar total / Total de ventas a crédito × 30</em></div>
             </div>
         </div>
     </div>
@@ -103,9 +103,9 @@
     <!-- Semáforo de colores -->
     <div class="row g-0 mb-3 rounded overflow-hidden border" style="font-size:.82rem;">
         <div class="col-2 text-center fw-bold p-2 border-end" style="background:#f0f0f0;">SEMÁFORO DE COLORES</div>
-        <div class="col-4 text-center fw-bold p-2 semaforo-verde">Indicador ≤ 10%</div>
+        <div class="col-4 text-center fw-bold p-2 semaforo-verde">Indicador ≤ 45 días</div>
         <div class="col-2 semaforo-amarillo p-2"></div>
-        <div class="col-4 text-center fw-bold p-2 semaforo-rojo">10% &lt; Indicador</div>
+        <div class="col-4 text-center fw-bold p-2 semaforo-rojo">45 días &lt; Indicador</div>
     </div>
 
     <!-- Filtros -->
@@ -163,15 +163,15 @@
     </div>
 
     <!-- Gráfico -->
-    <p class="section-title"><i class="bi bi-bar-chart-line me-1"></i> Indicador de Nivel de Morosidad (%)</p>
-    <p class="report-desc">Porcentaje de carteras vencidas sobre el total de carteras de clientes · Meta: ≤ 10%</p>
+    <p class="section-title"><i class="bi bi-bar-chart-line me-1"></i> Tiempo Promedio de Cuentas por Cobrar (días)</p>
+    <p class="report-desc">Días promedio de cuentas por cobrar sobre el total de ventas a crédito · Meta: ≤ 45 días</p>
     <div class="card chart-card mb-4">
         <div class="card-body" style="height:460px;">
-            <canvas id="chartMorosidad"></canvas>
+            <canvas id="chartTiempo"></canvas>
         </div>
     </div>
 
-    <!-- Tabla detalle: solo indicadores, sin montos -->
+    <!-- Tabla detalle -->
     <p class="section-title"><i class="bi bi-table me-1"></i> Detalle por Mes</p>
     <div class="card chart-card">
         <div class="card-body p-0">
@@ -181,7 +181,7 @@
                         <tr>
                             <th>Año</th>
                             <th>Mes</th>
-                            <th class="text-end">Indicador (%)</th>
+                            <th class="text-end">Indicador (días)</th>
                             <th class="text-center">Estado</th>
                         </tr>
                     </thead>
@@ -205,7 +205,7 @@
     Chart.defaults.color       = '#374151';
 
     const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SET','OCT','NOV','DIC'];
-    const META  = 10;
+    const META  = 45;
     const META_COLOR = '#BDB76B';
 
     const COLORS = [
@@ -228,7 +228,7 @@
     });
     document.getElementById('btnExportar').addEventListener('click', exportar);
 
-    function fmtPct(n) { return Number(n).toFixed(2) + '%'; }
+    function fmtDias(n) { return Number(n).toFixed(0) + ' días'; }
 
     async function consultar() {
         const fi = document.getElementById('fechaInicio').value;
@@ -238,7 +238,7 @@
         const spinner = document.getElementById('divSpinner');
         spinner.classList.remove('d-none');
         try {
-            const res  = await fetch(`/CreditosCobranza/DatosNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`);
+            const res  = await fetch(`/CreditosCobranza/DatosNivelTiempo?fechaInicio=${fi}-01&fechaFin=${ff}-28`);
             const data = await res.json();
             renderizar(data);
         } catch(e) {
@@ -261,7 +261,7 @@
         const metaLine = data.map(() => META);
         const last     = data[data.length - 1];
 
-        // ── KPIs ───────────────────────────────────────────────────────────────
+        // KPIs
         const kpiRow = document.getElementById('kpiRow');
         kpiRow.style.display = '';
 
@@ -270,31 +270,31 @@
         const ultInd = +last.indSoles;
 
         const elMax = document.getElementById('kpiIndMax');
-        elMax.textContent = fmtPct(maxInd);
+        elMax.textContent = fmtDias(maxInd);
         elMax.className   = 'kpi-value fw-bold ' + (maxInd > META ? 'text-danger' : 'text-success');
 
         const elMin = document.getElementById('kpiIndMin');
-        elMin.textContent = fmtPct(minInd);
+        elMin.textContent = fmtDias(minInd);
         elMin.className   = 'kpi-value fw-bold ' + (minInd > META ? 'text-danger' : 'text-success');
 
         const elUlt = document.getElementById('kpiIndUlt');
-        elUlt.textContent = fmtPct(ultInd);
+        elUlt.textContent = fmtDias(ultInd);
         elUlt.className   = 'kpi-value fw-bold ' + (ultInd > META ? 'text-danger' : 'text-success');
 
         document.getElementById('kpiMeses').textContent = data.length;
 
-        // ── Gráfico ────────────────────────────────────────────────────────────
+        // Gráfico
         Chart.register(ChartDataLabels);
         if (chartInstance) { chartInstance.destroy(); }
         chartInstance = new Chart(
-            document.getElementById('chartMorosidad').getContext('2d'),
+            document.getElementById('chartTiempo').getContext('2d'),
             {
                 type: 'bar',
                 data: {
                     labels,
                     datasets: [
                         {
-                            label: 'Indicador Morosidad (%)',
+                            label: 'Tiempo Promedio CxC (días)',
                             data: valores,
                             backgroundColor: bgColors,
                             borderColor: bgColors,
@@ -305,11 +305,11 @@
                                 align: 'end',
                                 color: '#1F3864',
                                 font: { weight: 'bold', size: 11 },
-                                formatter: v => Number(v).toFixed(2) + '%'
+                                formatter: v => Number(v).toFixed(0) + ' d'
                             }
                         },
                         {
-                            label: 'Meta (10%)',
+                            label: 'Meta (45 días)',
                             data: metaLine,
                             type: 'line',
                             borderColor: META_COLOR,
@@ -330,21 +330,21 @@
                         legend: { position: 'bottom' },
                         tooltip: {
                             callbacks: {
-                                label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(2)}%`
+                                label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(0)} días`
                             }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { callback: v => v + '%' }
+                            ticks: { callback: v => v + ' d' }
                         }
                     }
                 }
             }
         );
 
-        // ── Tabla (solo indicador) ─────────────────────────────────────────────
+        // Tabla
         tbody.innerHTML = data.map((d, i) => {
             const ind    = +d.indSoles;
             const color  = COLORS[i % COLORS.length];
@@ -353,7 +353,7 @@
             return `<tr>
                 <td>${d.ano}</td>
                 <td><span class="badge" style="background:${color}">${MESES[d.mes-1]}</span></td>
-                <td class="text-end fw-bold">${fmtPct(ind)}</td>
+                <td class="text-end fw-bold">${fmtDias(ind)}</td>
                 <td class="text-center"><span class="badge ${badge}">${estado}</span></td>
             </tr>`;
         }).join('');
@@ -363,11 +363,10 @@
         const fi = document.getElementById('fechaInicio').value;
         const ff = document.getElementById('fechaFin').value;
         if (!fi || !ff) return;
-        window.location.href = `/CreditosCobranza/ExportarNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`;
+        window.location.href = `/CreditosCobranza/ExportarNivelTiempo?fechaInicio=${fi}-01&fechaFin=${ff}-28`;
     }
 
     consultar();
-}());
+})();
 </script>
 }
-

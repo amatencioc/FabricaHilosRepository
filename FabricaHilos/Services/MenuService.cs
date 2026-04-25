@@ -87,6 +87,7 @@ public class MenuService : IMenuService
             // Menú principal: Créditos y Cobranzas
             CreditosCobranza = Tiene("CreditosCobranza"),
             CcNivelMorosidad = global.CcNivelMorosidad && Tiene("CreditosCobranza"),
+            CcNivelTiempo    = global.CcNivelTiempo    && Tiene("CreditosCobranza"),
         };
     }
 

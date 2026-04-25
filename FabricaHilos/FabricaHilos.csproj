@@ -73,7 +73,6 @@
 
   <ItemGroup>
     <Folder Include="Data\CreditoCobranza\" />
-    <Folder Include="Views\Cobranza\" />
   </ItemGroup>
 
 

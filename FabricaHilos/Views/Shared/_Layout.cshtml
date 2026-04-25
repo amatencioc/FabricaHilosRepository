@@ -330,6 +330,14 @@
                                 </a>
                             </li>
                             }
+                            @if (menus.CcNivelTiempo)
+                            {
+                            <li>
+                                <a asp-controller="CreditosCobranza" asp-action="NivelTiempo" class="sidebar-link sidebar-sublink @(ctrl == "CreditosCobranza" && act == "NivelTiempo" ? "active" : "")">
+                                    <i class="bi bi-clock-history"></i> Tiempo Promedio CxC
+                                </a>
+                            </li>
+                            }
                         </ul>
                     </li>
                 }

@@ -133,6 +133,7 @@ builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 builder.Services.AddScoped<INivelMorosidadService, NivelMorosidadService>();
+builder.Services.AddScoped<INivelTiempoService, NivelTiempoService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 

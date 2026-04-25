@@ -11,17 +11,20 @@ namespace FabricaHilos.Controllers.CreditosCobranza
     public class CreditosCobranzaController : OracleBaseController
     {
         private readonly INivelMorosidadService _nivelMorosidadService;
+        private readonly INivelTiempoService    _nivelTiempoService;
         private readonly IMenuService _menuService;
         private readonly ILogger<CreditosCobranzaController> _logger;
         private readonly IWebHostEnvironment _env;
 
         public CreditosCobranzaController(
             INivelMorosidadService nivelMorosidadService,
+            INivelTiempoService    nivelTiempoService,
             IMenuService menuService,
             ILogger<CreditosCobranzaController> logger,
             IWebHostEnvironment env)
         {
             _nivelMorosidadService = nivelMorosidadService;
+            _nivelTiempoService    = nivelTiempoService;
             _menuService = menuService;
             _logger = logger;
             _env = env;
@@ -92,5 +95,66 @@ namespace FabricaHilos.Controllers.CreditosCobranza
                 fileName);
         }
 
-            }
+        // ── Nivel de Tiempo Promedio ──────────────────────────────────────────────
+
+        public IActionResult NivelTiempo()
+        {
+            return View("~/Views/CreditosCobranza/NivelTiempo/Index.cshtml");
         }
+
+        [HttpGet]
+        public async Task<IActionResult> DatosNivelTiempo(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var fi = fechaInicio ?? new DateTime(DateTime.Today.Year, 1, 1);
+            var ff = fechaFin    ?? DateTime.Today;
+            var data = await _nivelTiempoService.ObtenerNivelTiempoAsync(fi, ff);
+            return Json(data);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportarNivelTiempo(DateTime? fechaInicio, DateTime? fechaFin)
+        {
+            var fi = fechaInicio ?? new DateTime(DateTime.Today.Year, 1, 1);
+            var ff = fechaFin    ?? DateTime.Today;
+            var data = await _nivelTiempoService.ObtenerNivelTiempoAsync(fi, ff);
+
+            var plantillaPath = Path.Combine(_env.ContentRootPath, "Data", "CreditoCobranza",
+                "18. Creditos y Cobranzas - (OR) Tiempo promedio de cuentas por cobrar 2026.xlsx");
+
+            using var wb = new XLWorkbook(plantillaPath);
+            var ws = wb.Worksheets.First();
+
+            // Fechas del periodo
+            ws.Cell(8,  15).Value = fi;
+            ws.Cell(10, 15).Value = ff;
+
+            // Limpiar filas de datos (22=saldo CxC, 23=ventas)
+            for (int col = 4; col <= 15; col++)
+            {
+                ws.Cell(22, col).Value = Blank.Value;
+                ws.Cell(23, col).Value = Blank.Value;
+            }
+
+            // Escribir datos: columna = mes (4=ENE, 5=FEB, ... 15=DIC)
+            foreach (var d in data)
+            {
+                int col = d.Mes + 3; // mes 1 → col 4, mes 12 → col 15
+                ws.Cell(22, col).Value = (double)d.SaldoSoles;
+                ws.Cell(23, col).Value = (double)d.VtaSoles;
+            }
+
+            // Ocultar filas de montos
+            ws.Row(22).Hide();
+            ws.Row(23).Hide();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+
+            var fileName = $"NivelTiempo_{fi:yyyyMM}_{ff:yyyyMM}.xlsx";
+            return File(ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
+    }
+}

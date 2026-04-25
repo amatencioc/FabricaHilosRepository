@@ -56,6 +56,7 @@ public class MenuOptions
     // ── Menús: Créditos y Cobranzas ───────────────────────────────────────
     public bool CreditosCobranza         { get; set; } = false;
     public bool CcNivelMorosidad         { get; set; } = true;
+    public bool CcNivelTiempo            { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -101,6 +102,7 @@ public class MenuOptions
 
         CreditosCobranza = true,
         CcNivelMorosidad = true,
+        CcNivelTiempo    = true,
     };
 }
 
