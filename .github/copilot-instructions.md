@@ -26,6 +26,7 @@
   4. Update `IMenuService` / `MenuService` to expose the new flags.
   5. Update any menu options/configuration classes (MenuOptions, etc.) with the new boolean properties.
   6. Update `appsettings-template.json` with the new flags set to `false` and no sensitive data.
+  7. Always add the corresponding card in the Home/Index dashboard (HomeController + Views/Home/Index.cshtml) when creating a new module with a sidebar menu entry. The sidebar and the dashboard cards must always be in sync.
 - Complete these steps BEFORE proceeding with the business logic of the new module.
 
 ## JSON Configuration Sync Rules

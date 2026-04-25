@@ -83,6 +83,10 @@ public class MenuService : IMenuService
             Logistica              = Tiene("Logistica"),
             LogisticaRequerimiento = global.LogisticaRequerimiento && Tiene("Logistica"),
             LogisticaOrdenCompra   = global.LogisticaOrdenCompra   && Tiene("Logistica"),
+
+            // Menú principal: Créditos y Cobranzas
+            CreditosCobranza = Tiene("CreditosCobranza"),
+            CcNivelMorosidad = global.CcNivelMorosidad && Tiene("CreditosCobranza"),
         };
     }
 

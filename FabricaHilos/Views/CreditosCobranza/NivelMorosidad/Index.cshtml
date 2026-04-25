@@ -1,0 +1,363 @@
+@{
+    ViewData["Title"] = "Nivel de Morosidad";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">
+        <a asp-controller="CreditosCobranza" asp-action="Index">Créditos y Cobranzas</a>
+    </li>
+    <li class="breadcrumb-item active">Nivel de Morosidad</li>
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+    .info-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .info-card .card-header {
+        background: #1F3864;
+        color: #fff;
+        font-weight: 600;
+        border-radius: 7px 7px 0 0;
+        padding: .5rem 1rem;
+        font-size: .85rem;
+    }
+    .info-card .card-body {
+        padding: .6rem 1rem;
+        font-size: .82rem;
+    }
+    .semaforo-verde    { background: #70AD47; color: #fff; }
+    .semaforo-rojo     { background: #FF0000; color: #fff; }
+    .semaforo-amarillo { background: #FFFF00; }
+    .kpi-box {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: 1rem 1.25rem;
+        text-align: center;
+    }
+    .kpi-box .kpi-value { font-size: 1.5rem; font-weight: 700; }
+    .kpi-box .kpi-label { font-size: .75rem; color: #637381; margin-top: .2rem; }
+</style>
+}
+
+<div class="container-fluid px-3 py-3">
+
+    <!-- Ficha técnica del indicador -->
+    <div class="card info-card mb-3">
+        <div class="card-header">
+            <i class="bi bi-info-circle me-1"></i> FICHA DEL INDICADOR — CRÉDITOS Y COBRANZAS
+        </div>
+        <div class="card-body">
+            <div class="row g-2 small">
+                <div class="col-md-3"><strong>Indicador:</strong> Nivel de morosidad de los clientes</div>
+                <div class="col-md-5"><strong>Objetivo:</strong> Identificar el nivel de riesgo de la continuidad del negocio a través de la morosidad</div>
+                <div class="col-md-2"><strong>Meta:</strong> ≤ 10%</div>
+                <div class="col-md-2"><strong>Frecuencia:</strong> Trimestre</div>
+                <div class="col-12"><strong>Expresión matemática:</strong> <em>Carteras vencidas / Total de carteras (clientes) × 100</em></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Semáforo de colores -->
+    <div class="row g-0 mb-3 rounded overflow-hidden border" style="font-size:.82rem;">
+        <div class="col-2 text-center fw-bold p-2 border-end" style="background:#f0f0f0;">SEMÁFORO DE COLORES</div>
+        <div class="col-4 text-center fw-bold p-2 semaforo-verde">Indicador ≤ 10%</div>
+        <div class="col-2 semaforo-amarillo p-2"></div>
+        <div class="col-4 text-center fw-bold p-2 semaforo-rojo">10% &lt; Indicador</div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filter-bar">
+        <div class="d-flex flex-wrap align-items-end gap-3">
+            <div>
+                <label class="form-label mb-1 small fw-semibold">Inicio de Periodo</label>
+                <input type="month" id="fechaInicio" class="form-control form-control-sm" style="min-width:140px;" />
+            </div>
+            <div>
+                <label class="form-label mb-1 small fw-semibold">Fin de Periodo</label>
+                <input type="month" id="fechaFin" class="form-control form-control-sm" style="min-width:140px;" />
+            </div>
+            <button class="btn btn-sm btn-success" id="btnConsultar">
+                <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="btnLimpiar">
+                <i class="bi bi-x-circle me-1"></i>Limpiar
+            </button>
+            <button class="btn btn-sm btn-primary" id="btnExportar">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+            </button>
+            <div id="divSpinner" class="d-none ms-1">
+                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-3 mb-4" id="kpiRow" style="display:none!important;">
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiIndMax">-</div>
+                <div class="kpi-label">Máx. Indicador</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiIndMin">-</div>
+                <div class="kpi-label">Mín. Indicador</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiIndUlt">-</div>
+                <div class="kpi-label">Último Periodo</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-box">
+                <div class="kpi-value" id="kpiMeses">-</div>
+                <div class="kpi-label">Meses consultados</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico -->
+    <p class="section-title"><i class="bi bi-bar-chart-line me-1"></i> Indicador de Nivel de Morosidad (%)</p>
+    <p class="report-desc">Porcentaje de carteras vencidas sobre el total de carteras de clientes · Meta: ≤ 10%</p>
+    <div class="card chart-card mb-4">
+        <div class="card-body" style="height:420px;">
+            <canvas id="chartMorosidad"></canvas>
+        </div>
+    </div>
+
+    <!-- Tabla detalle: solo indicadores, sin montos -->
+    <p class="section-title"><i class="bi bi-table me-1"></i> Detalle por Mes</p>
+    <div class="card chart-card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Año</th>
+                            <th>Mes</th>
+                            <th class="text-end">Indicador (%)</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SET','OCT','NOV','DIC'];
+    const META  = 10;
+    const META_COLOR = '#BDB76B';
+
+    const COLORS = [
+        '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+        '#00838f','#c62828','#4e342e','#37474f','#f9a825',
+        '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
+    ];
+
+    let chartInstance = null;
+
+    const hoy = new Date();
+    document.getElementById('fechaInicio').value = `${hoy.getFullYear()}-01`;
+    document.getElementById('fechaFin').value    = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+
+    document.getElementById('btnConsultar').addEventListener('click', consultar);
+    document.getElementById('btnLimpiar').addEventListener('click', () => {
+        document.getElementById('fechaInicio').value = `${hoy.getFullYear()}-01`;
+        document.getElementById('fechaFin').value    = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+        consultar();
+    });
+    document.getElementById('btnExportar').addEventListener('click', exportar);
+
+    function fmtPct(n) { return Number(n).toFixed(2) + '%'; }
+
+    async function consultar() {
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        if (!fi || !ff) return;
+
+        const spinner = document.getElementById('divSpinner');
+        spinner.classList.remove('d-none');
+        try {
+            const res  = await fetch(`/CreditosCobranza/DatosNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`);
+            const data = await res.json();
+            renderizar(data);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            spinner.classList.add('d-none');
+        }
+    }
+
+    function renderizar(data) {
+        const tbody = document.getElementById('tablaBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+            return;
+        }
+
+        const labels   = data.map(d => `${MESES[d.mes-1]}-${d.ano}`);
+        const valores  = data.map(d => +d.indSoles);
+        const bgColors = valores.map((_, i) => COLORS[i % COLORS.length]);
+        const metaLine = data.map(() => META);
+        const last     = data[data.length - 1];
+
+        // ── KPIs ───────────────────────────────────────────────────────────────
+        const kpiRow = document.getElementById('kpiRow');
+        kpiRow.style.display = '';
+
+        const maxInd = Math.max(...valores);
+        const minInd = Math.min(...valores);
+        const ultInd = +last.indSoles;
+
+        const elMax = document.getElementById('kpiIndMax');
+        elMax.textContent = fmtPct(maxInd);
+        elMax.className   = 'kpi-value fw-bold ' + (maxInd > META ? 'text-danger' : 'text-success');
+
+        const elMin = document.getElementById('kpiIndMin');
+        elMin.textContent = fmtPct(minInd);
+        elMin.className   = 'kpi-value fw-bold ' + (minInd > META ? 'text-danger' : 'text-success');
+
+        const elUlt = document.getElementById('kpiIndUlt');
+        elUlt.textContent = fmtPct(ultInd);
+        elUlt.className   = 'kpi-value fw-bold ' + (ultInd > META ? 'text-danger' : 'text-success');
+
+        document.getElementById('kpiMeses').textContent = data.length;
+
+        // ── Gráfico ────────────────────────────────────────────────────────────
+        if (chartInstance) { chartInstance.destroy(); }
+        chartInstance = new Chart(
+            document.getElementById('chartMorosidad').getContext('2d'),
+            {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Indicador Morosidad (%)',
+                            data: valores,
+                            backgroundColor: bgColors,
+                            borderColor: bgColors,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        },
+                        {
+                            label: 'Meta (10%)',
+                            data: metaLine,
+                            type: 'line',
+                            borderColor: META_COLOR,
+                            backgroundColor: META_COLOR,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: META_COLOR,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(2)}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: v => v + '%' }
+                        }
+                    }
+                }
+            }
+        );
+
+        // ── Tabla (solo indicador) ─────────────────────────────────────────────
+        tbody.innerHTML = data.map((d, i) => {
+            const ind    = +d.indSoles;
+            const color  = COLORS[i % COLORS.length];
+            const badge  = ind > META ? 'bg-danger' : 'bg-success';
+            const estado = ind > META ? 'Incumple' : 'Cumple';
+            return `<tr>
+                <td>${d.ano}</td>
+                <td><span class="badge" style="background:${color}">${MESES[d.mes-1]}</span></td>
+                <td class="text-end fw-bold">${fmtPct(ind)}</td>
+                <td class="text-center"><span class="badge ${badge}">${estado}</span></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function exportar() {
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        if (!fi || !ff) return;
+        window.location.href = `/CreditosCobranza/ExportarNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`;
+    }
+
+    consultar();
+}());
+</script>
+}
+

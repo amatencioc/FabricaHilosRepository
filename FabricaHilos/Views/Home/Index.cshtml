@@ -140,6 +140,24 @@
             </a>
         </div>
     }
+    @if (menus.CreditosCobranza)
+    {
+        <div class="col-sm-6 col-lg-4 col-xl-3">
+            <a asp-controller="CreditosCobranza" asp-action="Index" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm quick-access-card" style="border-left: 5px solid #C0392B !important;">
+                    <div class="card-body d-flex align-items-center gap-3 py-4">
+                        <div class="rounded p-3 d-flex align-items-center justify-content-center" style="background: rgba(192,57,43,0.10); min-width: 56px; min-height: 56px;">
+                            <i class="bi bi-graph-down-arrow fs-2" style="color: #C0392B;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold fs-6 text-dark">Créditos y Cobranzas</div>
+                            <small class="text-muted">Indicadores de morosidad</small>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
 </div>
 
 @section Scripts {

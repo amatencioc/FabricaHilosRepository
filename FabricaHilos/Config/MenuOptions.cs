@@ -53,6 +53,10 @@ public class MenuOptions
     public bool LogisticaRequerimiento   { get; set; } = true;
     public bool LogisticaOrdenCompra     { get; set; } = true;
 
+    // ── Menús: Créditos y Cobranzas ───────────────────────────────────────
+    public bool CreditosCobranza         { get; set; } = false;
+    public bool CcNivelMorosidad         { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -94,6 +98,9 @@ public class MenuOptions
         Logistica              = true,
         LogisticaRequerimiento = true,
         LogisticaOrdenCompra   = true,
+
+        CreditosCobranza = true,
+        CcNivelMorosidad = true,
     };
 }
 

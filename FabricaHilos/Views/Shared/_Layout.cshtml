@@ -312,6 +312,27 @@
                         </ul>
                     </li>
                 }
+
+                @if (menus.CreditosCobranza)
+                {
+                    <!-- CRÉDITOS Y COBRANZAS -->
+                    <li class="sidebar-section">CRÉDITOS Y COBRANZAS</li>
+                    <li>
+                        <a asp-controller="CreditosCobranza" asp-action="Index" class="sidebar-link @(ctrl == "CreditosCobranza" ? "active" : "")">
+                            <i class="bi bi-graph-down-arrow"></i> Créditos y Cobranzas
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.CcNivelMorosidad)
+                            {
+                            <li>
+                                <a asp-controller="CreditosCobranza" asp-action="NivelMorosidad" class="sidebar-link sidebar-sublink @(ctrl == "CreditosCobranza" && act == "NivelMorosidad" ? "active" : "")">
+                                    <i class="bi bi-bar-chart-line"></i> Nivel de Morosidad
+                                </a>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
             </ul>
         </nav>
 
