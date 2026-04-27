@@ -56,10 +56,15 @@
                             <div class="d-grid gap-2 mt-3">
                                 @foreach (var submodulo in modulo.SubModulos)
                                 {
-                                    @* Marcaciones usa ruta personalizada *@
-                                    var href = submodulo.Controller == "Marcaciones"
-                                        ? "/RecursosHumanos/Aquarius/Marcaciones"
-                                        : $"/{submodulo.Controller}/{submodulo.Action}";
+                                    @* Los submódulos de Aquarius usan rutas personalizadas *@
+                                    var href = submodulo.Controller switch
+                                    {
+                                        "Marcaciones"    => "/RecursosHumanos/Aquarius/Marcaciones",
+                                        "Compensaciones" => submodulo.Action == "Masiva"
+                                            ? "/RecursosHumanos/Aquarius/Compensaciones/Masiva"
+                                            : "/RecursosHumanos/Aquarius/Compensaciones",
+                                        _                => $"/{submodulo.Controller}/{submodulo.Action}"
+                                    };
                                     <a href="@href" class="btn btn-outline-secondary btn-sm text-start">
                                         <i class="bi @submodulo.Icono me-2"></i>
                                         <strong>@submodulo.Nombre</strong>

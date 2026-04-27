@@ -86,6 +86,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 // Habilitar acceso al HttpContext desde servicios y sesión por usuario
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -129,6 +130,13 @@ builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
 builder.Services.AddSingleton<DepuracionJobService>();
 builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobService>());
+builder.Services.AddScoped<ICompensacionesService, CompensacionesService>();
+builder.Services.AddSingleton<CompensacionJobService>();
+builder.Services.AddSingleton<ICompensacionJobService>(sp => sp.GetRequiredService<CompensacionJobService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CompensacionJobService>());
+builder.Services.AddSingleton<MasivaEventoJobService>();
+builder.Services.AddSingleton<IMasivaEventoJobService>(sp => sp.GetRequiredService<MasivaEventoJobService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MasivaEventoJobService>());
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();

@@ -1,7 +1,7 @@
 @using FabricaHilos.Models.RecursosHumanos
 @model List<EmpleadoDto>
 @{
-    ViewData["Title"] = "Empleados — Aquarius";
+    ViewData["Title"] = "Compensaciones — Aquarius";
     var buscar     = (string)ViewBag.Buscar;
     var navToken   = ViewBag.NavToken as string;
     var page       = (int)ViewBag.Page;
@@ -10,32 +10,32 @@
     var totalPages = (int)ViewBag.TotalPages;
 
     string Url(int p) =>
-        $"/RecursosHumanos/Aquarius/Marcaciones?t={Uri.EscapeDataString(navToken ?? string.Empty)}&page={p}";
+        $"/RecursosHumanos/Aquarius/Compensaciones?t={Uri.EscapeDataString(navToken ?? string.Empty)}&page={p}";
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
     <li class="breadcrumb-item">Aquarius</li>
-    <li class="breadcrumb-item active">Marcaciones</li>
+    <li class="breadcrumb-item active">Comp. Individual</li>
 }
 
 @section Styles {
 <style>
-    :root { --rh-primary: #1B4D3E; --rh-primary-light: #e8f5e9; }
+    :root { --comp-primary: #7B3F00; --comp-primary-light: #fef9f0; }
 
-    .rh-header {
-        background: linear-gradient(135deg, var(--rh-primary) 0%, #2d6a4f 100%);
+    .comp-header {
+        background: linear-gradient(135deg, var(--comp-primary) 0%, #a0522d 100%);
         color: #fff;
         border-radius: .5rem .5rem 0 0;
         padding: 1.1rem 1.4rem;
     }
-    .rh-header h5 { margin: 0; font-weight: 600; letter-spacing: .3px; }
-    .rh-header p  { margin: 0; opacity: .8; font-size: .82rem; }
+    .comp-header h5 { margin: 0; font-weight: 600; letter-spacing: .3px; }
+    .comp-header p  { margin: 0; opacity: .8; font-size: .82rem; }
 
     .search-bar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: .85rem 1.4rem; }
     .search-bar .form-control { border-radius: .4rem 0 0 .4rem; }
-    .search-bar .btn-search    { border-radius: 0 .4rem .4rem 0; background: var(--rh-primary); border: none; color: #fff; }
-    .search-bar .btn-search:hover { background: #2d6a4f; }
+    .search-bar .btn-search    { border-radius: 0 .4rem .4rem 0; background: var(--comp-primary); border: none; color: #fff; }
+    .search-bar .btn-search:hover { background: #a0522d; }
     .search-bar .btn-clear { background: transparent; border-color: #adb5bd; }
 
     .emp-table { margin: 0; }
@@ -51,13 +51,13 @@
         padding: .65rem 1rem;
     }
     .emp-table tbody tr { transition: background .12s; }
-    .emp-table tbody tr:hover { background: var(--rh-primary-light); }
+    .emp-table tbody tr:hover { background: var(--comp-primary-light); }
     .emp-table tbody td { vertical-align: middle; padding: .6rem 1rem; font-size: .87rem; }
 
     .avatar {
         width: 36px; height: 36px;
         border-radius: 50%;
-        background: var(--rh-primary);
+        background: var(--comp-primary);
         color: #fff;
         display: inline-flex; align-items: center; justify-content: center;
         font-weight: 700; font-size: .8rem;
@@ -66,16 +66,16 @@
     .emp-nombre { font-weight: 500; color: #212529; }
     .emp-codigo { font-size: .78rem; color: #6c757d; }
 
-    .badge-activo    { background: #d1fae5; color: #065f46; font-size: .72rem; }
-    .badge-inactivo  { background: #fee2e2; color: #991b1b; font-size: .72rem; }
-    .badge-otro      { background: #e0e7ff; color: #3730a3; font-size: .72rem; }
+    .badge-activo   { background: #d1fae5; color: #065f46; font-size: .72rem; }
+    .badge-inactivo { background: #fee2e2; color: #991b1b; font-size: .72rem; }
+    .badge-otro     { background: #e0e7ff; color: #3730a3; font-size: .72rem; }
 
-    .btn-horarios {
+    .btn-detalle {
         font-size: .78rem; padding: .3rem .7rem;
-        border-color: var(--rh-primary); color: var(--rh-primary);
+        border-color: var(--comp-primary); color: var(--comp-primary);
         border-radius: .35rem;
     }
-    .btn-horarios:hover { background: var(--rh-primary); color: #fff; }
+    .btn-detalle:hover { background: var(--comp-primary); color: #fff; }
 
     .autocomplete-wrap { position: relative; }
     .autocomplete-list {
@@ -91,11 +91,9 @@
     }
     .autocomplete-list .ac-item:last-child { border-bottom: none; }
     .autocomplete-list .ac-item:hover, .autocomplete-list .ac-item.ac-active {
-        background: var(--rh-primary-light);
+        background: var(--comp-primary-light);
     }
-    .autocomplete-list .ac-item .avatar {
-        width: 28px; height: 28px; font-size: .65rem;
-    }
+    .autocomplete-list .ac-item .avatar { width: 28px; height: 28px; font-size: .65rem; }
     .autocomplete-list .ac-name { font-weight: 500; }
     .autocomplete-list .ac-code { font-size: .75rem; color: #6c757d; margin-left: auto; }
 
@@ -107,8 +105,8 @@
         display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
     }
     .pagination-info { font-size: .82rem; color: #6c757d; }
-    .pagination .page-link { color: var(--rh-primary); font-size: .82rem; padding: .3rem .6rem; }
-    .pagination .page-item.active .page-link { background: var(--rh-primary); border-color: var(--rh-primary); color: #fff; }
+    .pagination .page-link { color: var(--comp-primary); font-size: .82rem; padding: .3rem .6rem; }
+    .pagination .page-item.active .page-link { background: var(--comp-primary); border-color: var(--comp-primary); color: #fff; }
     .pagination .page-item.disabled .page-link { color: #adb5bd; }
 
     .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
@@ -120,9 +118,9 @@
 <div class="card shadow-sm" style="border-radius:.5rem; overflow:hidden; border:none;">
 
     <!-- Encabezado -->
-    <div class="rh-header d-flex justify-content-between align-items-center">
+    <div class="comp-header d-flex justify-content-between align-items-center">
         <div>
-            <h5><i class="bi bi-people-fill me-2"></i>Empleados</h5>
+            <h5><i class="bi bi-arrow-left-right me-2"></i>Compensaciones</h5>
             <p>
                 @if (total > 0)
                 {
@@ -141,7 +139,7 @@
 
     <!-- Barra de búsqueda -->
     <div class="search-bar">
-        <form method="get" action="/RecursosHumanos/Aquarius/Marcaciones" class="d-flex gap-2 align-items-center">
+        <form method="get" action="/RecursosHumanos/Aquarius/Compensaciones" class="d-flex gap-2 align-items-center">
             <input type="hidden" name="page" value="1" />
             <div class="autocomplete-wrap" style="max-width:420px; flex:1;">
                 <div class="input-group">
@@ -157,7 +155,7 @@
             </div>
             @if (!string.IsNullOrEmpty(buscar))
             {
-                <a href="/RecursosHumanos/Aquarius/Marcaciones" class="btn btn-clear btn-sm">
+                <a href="/RecursosHumanos/Aquarius/Compensaciones" class="btn btn-clear btn-sm">
                     <i class="bi bi-x-lg me-1"></i>Limpiar
                 </a>
             }
@@ -215,9 +213,9 @@
                                 <span class="badge rounded-pill @estadoBadgeClass px-2 py-1">@estadoLabel</span>
                             </td>
                             <td class="text-center">
-                                <a href="/RecursosHumanos/Aquarius/Marcaciones/Horarios?codPersonal=@Uri.EscapeDataString(emp.Personal ?? "")&nombre=@Uri.EscapeDataString(emp.Empleado ?? "")"
-                                   class="btn btn-outline-secondary btn-horarios">
-                                    <i class="bi bi-calendar-week me-1"></i>Ver Horarios
+                                <a href="/RecursosHumanos/Aquarius/Compensaciones/Detalle?codPersonal=@Uri.EscapeDataString(emp.Personal ?? "")&nombre=@Uri.EscapeDataString(emp.Empleado ?? "")"
+                                   class="btn btn-outline-secondary btn-detalle">
+                                    <i class="bi bi-arrow-left-right me-1"></i>Ver Compensaciones
                                 </a>
                             </td>
                         </tr>
@@ -290,10 +288,10 @@
 <script>
 (function () {
     'use strict';
-    const input  = document.getElementById('txtBuscar');
-    const list   = document.getElementById('acList');
-    let timer    = null;
-    let idx      = -1;
+    const input = document.getElementById('txtBuscar');
+    const list  = document.getElementById('acList');
+    let timer   = null;
+    let idx     = -1;
 
     input.addEventListener('input', () => {
         clearTimeout(timer);
@@ -304,7 +302,7 @@
 
     async function buscar(q) {
         try {
-            const res  = await fetch(`/RecursosHumanos/Aquarius/Marcaciones/BuscarEmpleado?nombre=${encodeURIComponent(q)}`);
+            const res  = await fetch(`/RecursosHumanos/Aquarius/Compensaciones/BuscarEmpleado?nombre=${encodeURIComponent(q)}`);
             const json = await res.json();
             if (!json.ok || !json.data?.length) { cerrar(); return; }
             const items = json.data.slice(0, 5);
@@ -348,10 +346,6 @@
     function marcar(items) {
         items.forEach((el, i) => el.classList.toggle('ac-active', i === idx));
     }
-
-    document.addEventListener('click', (e) => { if (!e.target.closest('.autocomplete-wrap')) cerrar(); });
 })();
 </script>
 }
-
-

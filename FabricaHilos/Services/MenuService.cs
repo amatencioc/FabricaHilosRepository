@@ -77,7 +77,10 @@ public class MenuService : IMenuService
             SeguridadInspecciones = global.SeguridadInspecciones && Tiene("Seguridad"),
 
             // Submenus: Recursos Humanos
-            RhMarcaciones = global.RhMarcaciones && Tiene("RecursosHumanos"),
+            RhMarcaciones    = global.RhMarcaciones    && Tiene("RecursosHumanos"),
+            RhCompensaciones = global.RhCompensaciones && Tiene("RecursosHumanos"),
+            RhCompensacionesIndividual = global.RhCompensacionesIndividual && Tiene("RecursosHumanos"),
+            RhCompensacionesMasiva     = global.RhCompensacionesMasiva     && Tiene("RecursosHumanos"),
 
             // Menú principal: Logística
             Logistica              = Tiene("Logistica"),
@@ -101,7 +104,7 @@ public class MenuService : IMenuService
         if (menus.Facturacion)      return ("Facturacion", "Index", null, null);
         if (menus.Ventas)           return ("Ventas",      "Index", null, null);
         if (menus.Seguridad)        return ("Inspeccion",  "Index", null, null);
-        if (menus.RecursosHumanos)  return (null, null, null, "/RecursosHumanos/Aquarius/Marcaciones");
+        if (menus.RecursosHumanos)  return ("RecursosHumanos", "Index", null, null);
         if (menus.Logistica)        return (null, null, null, "/Logistica/Requerimiento");
         return ("RegistroPreparatoria", "Index", null, null);
     }

@@ -31,6 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="Models\RecursosHumanos\CompensacionesDtos.cs" />
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
   </ItemGroup>
 
@@ -73,6 +74,15 @@
 
   <ItemGroup>
     <Folder Include="Data\CreditoCobranza\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Individual\DetalleEmpleado.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Individual\Index.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Masiva\Index.cshtml" />
   </ItemGroup>
 
 

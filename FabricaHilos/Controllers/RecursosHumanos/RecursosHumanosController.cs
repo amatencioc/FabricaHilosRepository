@@ -41,6 +41,30 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
+            if (menus.RhCompensacionesIndividual)
+            {
+                moduloAquarius.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Compensación Individual",
+                    Descripcion = "Gestión individual de compensaciones de horas extras, faltas, tardanzas y permisos.",
+                    Icono       = "bi-arrow-left-right",
+                    Controller  = "Compensaciones",
+                    Action      = "Index"
+                });
+            }
+
+            if (menus.RhCompensacionesMasiva)
+            {
+                moduloAquarius.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Compensación Masiva",
+                    Descripcion = "Registro masivo de compensaciones por evento para múltiples empleados.",
+                    Icono       = "bi-people-fill",
+                    Controller  = "Compensaciones",
+                    Action      = "Masiva"
+                });
+            }
+
             if (moduloAquarius.SubModulos.Any())
                 modulos.Add(moduloAquarius);
 

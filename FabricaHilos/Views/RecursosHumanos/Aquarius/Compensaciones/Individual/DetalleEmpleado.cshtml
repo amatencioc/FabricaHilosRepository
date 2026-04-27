@@ -1,0 +1,1132 @@
+@{
+    ViewData["Title"] = "Compensaciones — " + ViewBag.Nombre;
+    var codPersonal = (string)ViewBag.CodPersonal;
+    var nombre      = (string)ViewBag.Nombre;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/Compensaciones">Comp. Individual</a></li>
+    <li class="breadcrumb-item active">@nombre</li>
+}
+
+@section Styles {
+<style>
+    :root { --comp-primary: #7B3F00; --comp-primary-light: #fef9f0; }
+
+    .emp-hero {
+        background: linear-gradient(135deg, var(--comp-primary) 0%, #a0522d 100%);
+        color: #fff;
+        border-radius: .5rem;
+        padding: 1.1rem 1.4rem;
+        display: flex; align-items: center; gap: 1rem;
+    }
+    .emp-hero .avatar {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: rgba(255,255,255,.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
+    }
+    .emp-hero h5 { margin: 0; font-weight: 600; }
+    .emp-hero small { opacity: .8; font-size: .82rem; }
+
+    .range-card { border: none; border-radius: .5rem; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+    .range-card .card-header {
+        background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+        font-weight: 600; font-size: .88rem;
+        padding: .7rem 1.1rem;
+    }
+
+    .btn-consultar {
+        background: var(--comp-primary); border: none; color: #fff;
+        padding: .42rem 1.2rem; border-radius: .4rem; font-size: .87rem;
+    }
+    .btn-consultar:hover { background: #a0522d; color: #fff; }
+    .btn-consultar:disabled { opacity: .6; }
+
+    .week-nav .btn { font-size: .8rem; padding: .3rem .7rem; }
+    .week-label { font-size: .85rem; font-weight: 600; color: var(--comp-primary); min-width: 220px; text-align: center; }
+
+    /* Banco de horas */
+    .banco-card {
+        border: 1px solid #e5e7eb; border-radius: .45rem;
+        background: #fff;
+    }
+    .banco-card .banco-header {
+        background: var(--comp-primary-light); border-bottom: 1px solid #e5e7eb;
+        padding: .5rem .9rem; font-size: .8rem; font-weight: 600; color: var(--comp-primary);
+    }
+    .banco-saldo { font-size: 1.1rem; font-weight: 700; color: var(--comp-primary); }
+
+    /* Tabla de compensaciones */
+    .tbl-comp { font-size: .82rem; }
+    .tbl-comp thead th {
+        background: #f1f3f5; color: #495057;
+        font-size: .72rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .4px; white-space: nowrap;
+        padding: .5rem .75rem; border-bottom: 2px solid #dee2e6;
+    }
+    .tbl-comp tbody td { padding: .5rem .75rem; vertical-align: middle; }
+    .tbl-comp tbody tr:hover { background: var(--comp-primary-light); }
+
+    .badge-aplicada  { background: #d1fae5; color: #065f46; font-size: .7rem; }
+    .badge-pendiente { background: #fee2e2; color: #991b1b; font-size: .7rem; }
+    .badge-banco     { background: #dbeafe; color: #1d4ed8; font-size: .7rem; }
+
+    /* Origen / Tipo badges */
+    .badge-ori-e { background: #fef9c3; color: #854d0e; font-size: .7rem; }
+    .badge-ori-d { background: #fce7f3; color: #9d174d; font-size: .7rem; }
+    .badge-ori-b { background: #e0e7ff; color: #3730a3; font-size: .7rem; }
+    .badge-ori-i { background: #f3f4f6; color: #374151; font-size: .7rem; }
+
+    .badge-tip-a { background: #fef3c7; color: #78350f; font-size: .7rem; }
+    .badge-tip-t { background: #fee2e2; color: #991b1b; font-size: .7rem; }
+    .badge-tip-n { background: #ede9fe; color: #5b21b6; font-size: .7rem; }
+    .badge-tip-f { background: #ffedd5; color: #9a3412; font-size: .7rem; }
+    .badge-tip-p { background: #d1fae5; color: #065f46; font-size: .7rem; }
+    .badge-tip-i { background: #f3f4f6; color: #374151; font-size: .7rem; }
+
+    #spinnerWrap { display:none; text-align:center; padding: 3rem 1rem; color: #6c757d; }
+    #panelVacio  { display:none; text-align:center; padding: 3rem 1rem; color: #9ca3af; }
+    #panelTabla  { display:none; }
+
+    /* Diagnóstico por día */
+    #panelDiagnostico { display:none; }
+    #spinnerDiag      { display:none; text-align:center; padding: 2rem 1rem; color: #6c757d; }
+    .tbl-diag { font-size: .78rem; }
+    .tbl-diag thead th {
+        background: #f1f3f5; color: #495057;
+        font-size: .69rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .3px; white-space: nowrap;
+        padding: .45rem .6rem; border-bottom: 2px solid #dee2e6;
+    }
+    .tbl-diag tbody td { padding: .42rem .6rem; vertical-align: middle; }
+    .diag-verde    { background: #bbf7d0 !important; }
+    .diag-rojo     { background: #fecaca !important; }
+    .diag-amarillo { background: #fde68a !important; }
+    .diag-gris     { background: #e5e7eb !important; color: #6b7280; }
+    .diag-hhmi     { font-weight: 600; font-size: .75rem; }
+    .diag-hhmi-empty { color: #9ca3af; }
+    .badge-diag-alerta { background:#fee2e2 !important; color:#991b1b !important; font-size:.65rem; }
+    .badge-diag-ok     { background:#d1fae5 !important; color:#065f46 !important; font-size:.65rem; }
+    .badge-diag-des    { background:#e0e7ff !important; color:#3730a3 !important; font-size:.65rem; }
+    .badge-diag-fer    { background:#fef9c3 !important; color:#854d0e !important; font-size:.65rem; }
+
+    /* Leyenda diagnóstico */
+    .diag-leyenda { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; color:#374151; }
+    .diag-leyenda .dot {
+        display: inline-block; width: 14px; height: 14px;
+        border-radius: 3px; border: 1px solid rgba(0,0,0,.15); flex-shrink:0;
+    }
+    .dot-verde    { background: #bbf7d0; }
+    .dot-rojo     { background: #fecaca; }
+    .dot-amarillo { background: #fde68a; }
+    .dot-gris     { background: #e5e7eb; }
+
+    /* Leyenda intermedia */
+    .comp-footer {
+        background: #f8f9fa;
+        border: 1px solid #e5e7eb;
+        border-radius: .45rem;
+        padding: .65rem 1rem;
+    }
+    .leyenda-section-title {
+        font-size: .7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .6px; color: #9ca3af; margin-bottom: .5rem;
+    }
+    .leyenda-item {
+        display: inline-flex; align-items: center; gap: .3rem;
+        font-size: .75rem; color: #374151; margin-right: .75rem; margin-bottom: .35rem;
+    }
+    .leyenda-badge {
+        display: inline-block; padding: .12rem .45rem;
+        border-radius: .25rem; font-size: .68rem; font-weight: 600;
+        line-height: 1.4;
+    }
+    .lb-e { background:#fef9c3; color:#854d0e; }
+    .lb-d { background:#fce7f3; color:#9d174d; }
+    .lb-b { background:#e0e7ff; color:#3730a3; }
+    .lb-i { background:#f3f4f6; color:#374151; }
+    .lb-t { background:#fee2e2; color:#991b1b; }
+    .lb-a { background:#fef3c7; color:#78350f; }
+    .lb-n { background:#ede9fe; color:#5b21b6; }
+    .lb-f { background:#ffedd5; color:#9a3412; }
+    .lb-p { background:#d1fae5; color:#065f46; }
+</style>
+}
+
+<div class="container-fluid px-2 px-md-4 py-3">
+
+    <!-- Hero del empleado -->
+    <div class="emp-hero mb-3">
+        <div class="avatar" id="heroAvatar"></div>
+        <div>
+            <h5 id="heroNombre">@nombre</h5>
+            <small>Código: <strong id="heroCodigo">@codPersonal</strong></small>
+        </div>
+        <div class="ms-auto d-flex gap-2 align-items-center">
+            <button type="button" id="btnBanco" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" title="Ver saldo banco de horas">
+                <i class="bi bi-piggy-bank me-1"></i>Banco Hrs
+            </button>
+            <a href="/RecursosHumanos/Aquarius/Compensaciones" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
+                <i class="bi bi-arrow-left me-1"></i>Volver
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtro de rango -->
+    <div class="card range-card mb-3">
+        <div class="card-header d-flex align-items-center gap-2">
+            <i class="bi bi-calendar-range" style="color:var(--comp-primary);"></i>
+            <span>Rango de consulta</span>
+        </div>
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-end gap-3">
+
+                <!-- Navegación rápida por semana -->
+                <div class="d-flex align-items-center gap-2 week-nav">
+                    <button type="button" id="btnSemAnterior" class="btn btn-outline-secondary" title="Semana anterior">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span class="week-label" id="lblSemana">—</span>
+                    <button type="button" id="btnSemSiguiente" class="btn btn-outline-secondary" title="Semana siguiente">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+
+                <div>
+                    <label class="form-label mb-1 small fw-semibold">Desde</label>
+                    <input type="date" id="fechaInicio" class="form-control form-control-sm" style="width:155px;" />
+                </div>
+                <div>
+                    <label class="form-label mb-1 small fw-semibold">Hasta</label>
+                    <input type="date" id="fechaFin" class="form-control form-control-sm" style="width:155px;" />
+                </div>
+
+                <button type="button" id="btnConsultar" class="btn btn-consultar">
+                    <i class="bi bi-search me-1"></i>Consultar
+                </button>
+
+                <button type="button" id="btnDiagnostico" class="btn btn-sm btn-outline-secondary" title="Ver diagnóstico diario">
+                    <i class="bi bi-clipboard2-pulse me-1"></i>Diagnóstico
+                </button>
+
+                <button type="button" id="btnAplicar" class="btn btn-outline-warning btn-sm ms-auto" style="display:none;">
+                    <i class="bi bi-lightning-charge me-1"></i>Aplicar
+                </button>
+                <button type="button" id="btnNuevaComp" class="btn btn-sm"
+                    style="background:var(--comp-primary);color:#fff;border:none;">
+                    <i class="bi bi-plus-circle me-1"></i>Nueva
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banco de horas (colapsable) -->
+    <div id="panelBanco" style="display:none;" class="mb-3">
+        <div class="banco-card">
+            <div class="banco-header"><i class="bi bi-piggy-bank me-1"></i>Saldo Banco de Horas</div>
+            <div class="card-body py-2">
+                <div id="bancoCuerpo" class="row g-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estados -->
+    <div id="spinnerWrap">
+        <div class="spinner-border mb-2" style="color:var(--comp-primary);" role="status"></div>
+        <p class="small">Consultando compensaciones…</p>
+    </div>
+
+    <div id="panelVacio">
+        <i class="bi bi-arrow-left-right" style="font-size:2.5rem; display:block; margin-bottom:.5rem;"></i>
+        <p class="fw-semibold mb-1">Sin compensaciones en este rango</p>
+        <p class="small">Pruebe con un rango de fechas diferente.</p>
+    </div>
+
+    <!-- Tabla -->
+    <div id="panelTabla">
+        <div class="card shadow-sm" style="border:none; border-radius:.5rem; overflow:hidden;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+                <span class="fw-semibold small"><i class="bi bi-table me-1" style="color:var(--comp-primary);"></i>Compensaciones</span>
+                <span class="badge bg-secondary" id="lblTotal" style="font-size:.75rem;"></span>
+            </div>
+            <div class="table-responsive">
+                <table class="table tbl-comp table-hover table-corporate mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>F.Origen</th>
+                            <th>F.Destino</th>
+                            <th>Origen</th>
+                            <th>Tipo</th>
+                            <th>Tiempo</th>
+                            <th>Período</th>
+                            <th>Alertas Dest.</th>
+                            <th>Alertas Ori.</th>
+                            <th>Estado</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyComp"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leyenda de códigos -->
+    <div class="comp-footer mt-3">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <div class="leyenda-section-title"><i class="bi bi-arrow-up-right-circle me-1"></i>Tipo de Origen <span style="font-weight:400;">(de dónde sale el tiempo)</span></div>
+                <div>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-e">E</span> Horas Extra</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-d">D</span> Horas Dobles Oficiales</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-b">B</span> Banco de Horas</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-i">I</span> Intercambio</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="leyenda-section-title"><i class="bi bi-arrow-down-left-circle me-1"></i>Tipo de Compensación <span style="font-weight:400;">(qué se cubre)</span></div>
+                <div>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-t">T</span> Tardanza</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-a">A</span> Antes de Salida</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-n">N</span> Horas No Trabajadas</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-f">F</span> Falta</span>
+                    <span class="leyenda-item"><span class="leyenda-badge lb-p">P</span> Permiso</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spinner diagnóstico -->
+    <div id="spinnerDiag">
+        <div class="spinner-border spinner-border-sm mb-2" style="color:var(--comp-primary);" role="status"></div>
+        <p class="small">Cargando diagnóstico diario…</p>
+    </div>
+
+    <!-- Panel Diagnóstico por día -->
+    <div id="panelDiagnostico" class="mt-2">
+        <div class="card shadow-sm" style="border:none; border-radius:.5rem; overflow:hidden;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+                <span class="fw-semibold small"><i class="bi bi-clipboard2-pulse me-1" style="color:var(--comp-primary);"></i>Diagnóstico por día</span>
+                <span class="badge bg-secondary" id="lblDiagTotal" style="font-size:.75rem;"></span>
+            </div>
+            <div class="px-3 py-2 d-flex flex-wrap gap-3">
+                <span class="diag-leyenda"><span class="dot dot-verde"></span> Solo origen</span>
+                <span class="diag-leyenda"><span class="dot dot-rojo"></span> Solo déficit</span>
+                <span class="diag-leyenda"><span class="dot dot-amarillo"></span> Ambos</span>
+                <span class="diag-leyenda"><span class="dot dot-gris"></span> Sin actividad</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table tbl-diag table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th class="text-center" colspan="3" style="border-left:2px solid #c3dafe;background:#eff6ff;">ORIGEN disponible</th>
+                            <th class="text-center" colspan="5" style="border-left:2px solid #fecaca;background:#fff5f5;">DÉFICIT a cubrir</th>
+                            <th class="text-center" colspan="2" style="border-left:2px solid #d1d5db;">Compensaciones</th>
+                            <th style="border-left:2px solid #d1d5db;">Flags</th>
+                            <th>Sugerencia</th>
+                        </tr>
+                        <tr>
+                            <th></th>
+                            <th style="background:#eff6ff;color:#1d4ed8;">HE</th>
+                            <th style="background:#eff6ff;color:#1d4ed8;">Dobles</th>
+                            <th style="background:#eff6ff;color:#1d4ed8;">Banco</th>
+                            <th style="background:#fff5f5;color:#991b1b;">Tard.</th>
+                            <th style="background:#fff5f5;color:#991b1b;">Antes Sal.</th>
+                            <th style="background:#fff5f5;color:#991b1b;">Falta</th>
+                            <th style="background:#fff5f5;color:#991b1b;">No Trab.</th>
+                            <th style="background:#fff5f5;color:#991b1b;">Permiso</th>
+                            <th>Regist.</th>
+                            <th>Aplic.</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyDiag"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Aplicar -->
+    <div class="modal fade" id="modalAplicar" tabindex="-1" aria-labelledby="modalAplicarLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" id="modalAplHeader">
+                    <h6 class="modal-title" id="modalAplicarLabel"><i class="bi bi-lightning-charge me-1"></i>Aplicar compensaciones</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body" id="modalAplBody">
+                    <p id="modalAplMsg" class="mb-0"></p>
+                </div>
+                <div class="modal-footer" id="modalAplFooter">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-warning btn-sm" id="btnConfirmarApl">
+                        <i class="bi bi-lightning-charge me-1"></i>Aplicar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Nueva Compensación -->
+    <div class="modal fade" id="modalNueva" tabindex="-1" aria-labelledby="modalNuevaLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header" id="modalNuevaHeader" style="background:var(--comp-primary);color:#fff;">
+                    <h6 class="modal-title" id="modalNuevaLabel"><i class="bi bi-plus-circle me-1"></i>Nueva Compensación</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Paso 1: Formulario -->
+                    <div id="stepForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Fecha Origen <span class="text-danger">*</span></label>
+                                <input type="date" id="nFechaOrigen" class="form-control form-control-sm" />
+                                <div class="form-text">Día con horas disponibles (extra/doble/banco)</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Tipo Origen <span class="text-danger">*</span></label>
+                                <select id="nTipoOrigen" class="form-select form-select-sm">
+                                    <option value="">— Seleccione —</option>
+                                    <option value="E">⚡ E — Horas Extra</option>
+                                    <option value="D">🔀 D — Horas Dobles</option>
+                                    <option value="B">🏦 B — Banco de Horas</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Fecha Destino <span class="text-danger">*</span></label>
+                                <input type="date" id="nFechaDestino" class="form-control form-control-sm" />
+                                <div class="form-text">Día con tardanza/falta/permiso a cubrir</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Tipo Compensación <span class="text-danger">*</span></label>
+                                <select id="nTipoCompensacion" class="form-select form-select-sm">
+                                    <option value="">— Seleccione —</option>
+                                    <option value="T">⏰ T — Tardanza</option>
+                                    <option value="A">🚪 A — Salida Anticipada</option>
+                                    <option value="N">🚫 N — Horas No Trabajadas</option>
+                                    <option value="F">📋 F — Falta</option>
+                                    <option value="P">✅ P — Permiso</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Horas (HH:MM) <span class="text-danger">*</span></label>
+                                <input type="text" id="nHoras" class="form-control form-control-sm" placeholder="08:00" maxlength="5" />
+                                <div class="form-text">Tiempo a compensar en formato HH:MM</div>
+                            </div>
+                        </div>
+                        <!-- Resultado de validación -->
+                        <div id="nValidacionResult" class="mt-3" style="display:none;"></div>
+                    </div>
+                    <!-- Paso 2: Confirmación / resultado final -->
+                    <div id="stepResultado" style="display:none;">
+                        <div id="nResultadoMsg"></div>
+                    </div>
+                </div>
+                <div class="modal-footer" id="modalNuevaFooter">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-sm" id="btnPreValidar"
+                        style="background:var(--comp-primary);color:#fff;">
+                        <i class="bi bi-check2-circle me-1"></i>Validar
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm" id="btnConfirmarRegistrar" style="display:none;">
+                        <i class="bi bi-save me-1"></i>Confirmar y Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Eliminar -->
+    <div class="modal fade" id="modalEliminar"
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h6 class="modal-title" id="modalEliminarLabel"><i class="bi bi-trash me-1"></i>Eliminar compensación</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="modalElimMsg" class="mb-0 small"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarElim">
+                        <i class="bi bi-trash me-1"></i>Eliminar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    </div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<script>
+(function () {
+    'use strict';
+
+    const codPersonal = '@Html.Raw(codPersonal)';
+    const nombre      = '@Html.Raw(System.Text.Json.JsonSerializer.Serialize(nombre))';
+    const token       = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+    // ── Avatar ────────────────────────────────────────────────────────────
+    const heroAvatar = document.getElementById('heroAvatar');
+    const partes = (JSON.parse(nombre) || '?').split(' ').filter(Boolean);
+    heroAvatar.textContent = (partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '');
+
+    // ── Refs DOM ──────────────────────────────────────────────────────────
+    const fechaInicio     = document.getElementById('fechaInicio');
+    const fechaFin        = document.getElementById('fechaFin');
+    const btnConsultar    = document.getElementById('btnConsultar');
+    const btnAplicar      = document.getElementById('btnAplicar');
+    const btnBanco        = document.getElementById('btnBanco');
+    const btnSemAnterior  = document.getElementById('btnSemAnterior');
+    const btnSemSiguiente = document.getElementById('btnSemSiguiente');
+    const lblSemana       = document.getElementById('lblSemana');
+    const spinnerWrap     = document.getElementById('spinnerWrap');
+    const panelVacio      = document.getElementById('panelVacio');
+    const panelTabla      = document.getElementById('panelTabla');
+    const panelBanco      = document.getElementById('panelBanco');
+    const tbodyComp       = document.getElementById('tbodyComp');
+    const lblTotal        = document.getElementById('lblTotal');
+    const bancoCuerpo     = document.getElementById('bancoCuerpo');
+
+    // ── Semana actual ─────────────────────────────────────────────────────
+    function lunesDeHoy() {
+        const hoy = new Date();
+        const d   = hoy.getDay();
+        const diff = d === 0 ? -6 : 1 - d;
+        const lun = new Date(hoy);
+        lun.setDate(hoy.getDate() + diff);
+        return lun;
+    }
+
+    function fmt(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function aplicarSemana(lunes) {
+        const dom = new Date(lunes);
+        dom.setDate(lunes.getDate() + 6);
+        fechaInicio.value = fmt(lunes);
+        fechaFin.value    = fmt(dom);
+        const opts = { day: '2-digit', month: 'short' };
+        lblSemana.textContent = `${lunes.toLocaleDateString('es-PE', opts)} — ${dom.toLocaleDateString('es-PE', opts)}`;
+    }
+
+    let semanaActual = lunesDeHoy();
+    aplicarSemana(semanaActual);
+
+    btnSemAnterior.addEventListener('click', () => {
+        semanaActual.setDate(semanaActual.getDate() - 7);
+        aplicarSemana(new Date(semanaActual));
+        consultar();
+        if (diagVisible) cargarDiagnostico();
+    });
+    btnSemSiguiente.addEventListener('click', () => {
+        semanaActual.setDate(semanaActual.getDate() + 7);
+        aplicarSemana(new Date(semanaActual));
+        consultar();
+        if (diagVisible) cargarDiagnostico();
+    });
+
+    fechaInicio.addEventListener('change', () => { lblSemana.textContent = 'Rango personalizado'; });
+    fechaFin.addEventListener('change',    () => {
+        lblSemana.textContent = 'Rango personalizado';
+        if (diagVisible) cargarDiagnostico();
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function badgeOrigen(t) {
+        const map = {
+            'E': ['badge-ori-e', '⚡ Extra'],
+            'D': ['badge-ori-d', '🔀 Doble'],
+            'B': ['badge-ori-b', '🏦 Banco'],
+            'I': ['badge-ori-i', '🔄 Intercambio'],
+        };
+        const [cls, lbl] = map[t] ?? ['badge-ori-i', t ?? '—'];
+        return `<span class="badge rounded-pill ${cls} px-2">${lbl}</span>`;
+    }
+
+    function badgeTipo(t) {
+        const map = {
+            'A': ['badge-tip-a', '🚪 Antes Salida'],
+            'T': ['badge-tip-t', '⏰ Tardanza'],
+            'N': ['badge-tip-n', '🚫 No Trabaj.'],
+            'F': ['badge-tip-f', '📋 Falta'],
+            'P': ['badge-tip-p', '✅ Permiso'],
+            'I': ['badge-tip-i', '🔄 Intercambio'],
+        };
+        const [cls, lbl] = map[t] ?? ['badge-tip-i', t ?? '—'];
+        return `<span class="badge rounded-pill ${cls} px-2">${lbl}</span>`;
+    }
+
+    function badgeEstado(e) {
+        if (e === 'APLICADA')  return '<span class="badge rounded-pill badge-aplicada px-2">✔ Aplicada</span>';
+        if (e === 'PENDIENTE') return '<span class="badge rounded-pill badge-pendiente px-2">⏳ Pendiente</span>';
+        if (e === 'BANCO')     return '<span class="badge rounded-pill badge-banco px-2">🏦 Banco</span>';
+        return `<span class="badge rounded-pill" style="background:#f3f4f6;color:#374151;font-size:.7rem;">${e ?? '—'}</span>`;
+    }
+
+    function alertasHtml(a02, a03, a04, a07, a09) {
+        const vals = [a02, a03, a04, a07, a09].filter(Boolean);
+        if (!vals.length) return '<span class="text-muted">—</span>';
+        return vals.map(v => `<span class="badge me-1" style="background:#e0e7ff;color:#3730a3;font-size:.68rem;">${v}</span>`).join('');
+    }
+
+    function alertasOriHtml(a06, a08) {
+        const vals = [a06, a08].filter(Boolean);
+        if (!vals.length) return '<span class="text-muted">—</span>';
+        return vals.map(v => `<span class="badge me-1" style="background:#fef9c3;color:#854d0e;font-size:.68rem;">${v}</span>`).join('');
+    }
+
+    // ── Consultar ─────────────────────────────────────────────────────────
+    async function consultar() {
+        panelTabla.style.display  = 'none';
+        panelVacio.style.display  = 'none';
+        btnAplicar.style.display  = 'none';
+        spinnerWrap.style.display = 'block';
+        btnConsultar.disabled     = true;
+
+        try {
+            const url = `/RecursosHumanos/Aquarius/Compensaciones/ConsultarRango`
+                + `?codPersonal=${encodeURIComponent(codPersonal)}`
+                + `&fechaInicio=${fechaInicio.value}&fechaFin=${fechaFin.value}`;
+
+            const res  = await fetch(url);
+            const json = await res.json();
+
+            spinnerWrap.style.display = 'none';
+
+            if (!json.ok) {
+                panelVacio.style.display = 'block';
+                return;
+            }
+            if (!json.data?.length) {
+                panelVacio.style.display = 'block';
+                return;
+            }
+
+            lblTotal.textContent = json.data.length + ' registros';
+            tbodyComp.innerHTML  = json.data.map(c => `
+                <tr>
+                    <td class="text-muted small">${c.idCompen ?? '—'}</td>
+                    <td style="white-space:nowrap;">${c.fechaOrigen ?? '—'}</td>
+                    <td style="white-space:nowrap;">${c.fechaDestino ?? '—'}</td>
+                    <td>${badgeOrigen(c.tipoOrigen)}</td>
+                    <td>${badgeTipo(c.tipoCompensacion)}</td>
+                    <td class="fw-semibold">${c.tiempoHhmi ?? '—'}</td>
+                    <td class="text-muted small">${c.periodo ?? '—'}</td>
+                    <td>${alertasHtml(c.destAlerta02, c.destAlerta03, c.destAlerta04, c.destAlerta07, c.destAlerta09)}</td>
+                    <td>${alertasOriHtml(c.oriAlerta06, c.oriAlerta08)}</td>
+                    <td>${badgeEstado(c.estadoAplicacion)}</td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2"
+                            onclick="confirmarEliminar(${c.idCompen})"
+                            title="Eliminar compensación ${c.idCompen}">
+                            <i class="bi bi-trash" style="font-size:.75rem;"></i>
+                        </button>
+                    </td>
+                </tr>`).join('');
+
+            panelTabla.style.display = 'block';
+            btnAplicar.style.display = 'inline-flex';
+
+        } catch (err) {
+            spinnerWrap.style.display = 'none';
+            panelVacio.style.display  = 'block';
+            console.error(err);
+        } finally {
+            btnConsultar.disabled = false;
+        }
+    }
+
+    btnConsultar.addEventListener('click', () => {
+        consultar();
+        if (diagVisible) cargarDiagnostico();
+    });
+
+    // ── Banco de horas ────────────────────────────────────────────────────
+    let bancoVisible = false;
+    btnBanco.addEventListener('click', async () => {
+        if (bancoVisible) {
+            panelBanco.style.display = 'none';
+            bancoVisible = false;
+            return;
+        }
+        try {
+            const res  = await fetch(`/RecursosHumanos/Aquarius/Compensaciones/ConsultarSaldoBanco?codPersonal=${encodeURIComponent(codPersonal)}`);
+            const json = await res.json();
+            if (!json.ok || !json.data?.length) {
+                bancoCuerpo.innerHTML = '<p class="text-muted small mb-0">Sin saldo registrado.</p>';
+            } else {
+                bancoCuerpo.innerHTML = json.data.map(s => `
+                    <div class="col-sm-6 col-md-4 col-lg-3">
+                        <div class="border rounded p-2 text-center">
+                            <div class="banco-saldo">${s.saldoHhmi ?? '00:00'}</div>
+                            <div style="font-size:.72rem;color:#6b7280;">
+                                ${s.tipoBanco === 'MES'
+                                    ? `Mes ${s.mesProceso}/${s.anoProceso}`
+                                    : `Sem ${s.semProceso} · ${s.mesProceso}/${s.anoProceso}`}
+                            </div>
+                            <span class="badge rounded-pill" style="font-size:.65rem;background:${s.tipoBanco === 'MES' ? '#d1fae5' : '#dbeafe'};color:${s.tipoBanco === 'MES' ? '#065f46' : '#1d4ed8'};">${s.tipoBanco}</span>
+                        </div>
+                    </div>`).join('');
+            }
+            panelBanco.style.display = 'block';
+            bancoVisible = true;
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    // ── Eliminar ──────────────────────────────────────────────────────────
+    const modalElimEl      = document.getElementById('modalEliminar');
+    const modalElim        = new bootstrap.Modal(modalElimEl);
+    const modalElimMsg     = document.getElementById('modalElimMsg');
+    const btnConfirmarElim = document.getElementById('btnConfirmarElim');
+    let _elimId = null;
+
+    window.confirmarEliminar = function(idCompen) {
+        _elimId = idCompen;
+        modalElimMsg.textContent = `¿Eliminar la compensación #${idCompen} y revertir su efecto en el tareo?`;
+        modalElim.show();
+    };
+
+    btnConfirmarElim.addEventListener('click', async () => {
+        if (!_elimId) return;
+        btnConfirmarElim.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('idCompen', _elimId);
+            fd.append('revertirTareo', 'S');
+            fd.append('__RequestVerificationToken', token);
+
+            const res  = await fetch('/RecursosHumanos/Aquarius/Compensaciones/Eliminar', { method: 'POST', body: fd });
+            const json = await res.json();
+
+            modalElim.hide();
+            if (json.ok) {
+                consultar();
+            } else {
+                alert(json.data?.motivo ?? json.mensaje ?? 'Error al eliminar.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error de comunicación al eliminar.');
+        } finally {
+            btnConfirmarElim.disabled = false;
+        }
+    });
+
+    // ── Aplicar ───────────────────────────────────────────────────────────
+    const modalAplEl      = document.getElementById('modalAplicar');
+    const modalApl        = new bootstrap.Modal(modalAplEl);
+    const modalAplMsg     = document.getElementById('modalAplMsg');
+    const modalAplHeader  = document.getElementById('modalAplHeader');
+    const modalAplFooter  = document.getElementById('modalAplFooter');
+    const btnConfirmarApl = document.getElementById('btnConfirmarApl');
+    let _aplJobId     = null;
+    let _aplPollTimer = null;
+
+    btnAplicar.addEventListener('click', () => {
+        _aplJobId = null;
+        clearInterval(_aplPollTimer);
+        modalAplMsg.textContent = `¿Aplicar compensaciones de ${JSON.parse(nombre)} del ${fechaInicio.value} al ${fechaFin.value}?`;
+        modalAplHeader.className = 'modal-header';
+        modalAplFooter.style.display = '';
+        btnConfirmarApl.style.display = '';
+        btnConfirmarApl.disabled = false;
+        modalApl.show();
+    });
+
+    btnConfirmarApl.addEventListener('click', async () => {
+        btnConfirmarApl.disabled = true;
+        btnConfirmarApl.style.display = 'none';
+        modalAplMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Enviando solicitud…</span></div>';
+
+        const fd = new FormData();
+        fd.append('codPersonal', codPersonal);
+        fd.append('fechaInicio', fechaInicio.value);
+        fd.append('fechaFin',    fechaFin.value);
+        fd.append('__RequestVerificationToken', token);
+
+        try {
+            const res  = await fetch('/RecursosHumanos/Aquarius/Compensaciones/AplicarRango', { method: 'POST', body: fd });
+            const json = await res.json();
+
+            if (!json.ok) {
+                modalAplHeader.className = 'modal-header bg-danger text-white';
+                modalAplMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>' + (json.mensaje ?? 'Error al encolar.');
+                return;
+            }
+
+            _aplJobId = json.jobId;
+            modalAplMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Aplicando compensaciones en el servidor…<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará.</small></span></div>';
+
+            _aplPollTimer = setInterval(async () => {
+                try {
+                    const pRes  = await fetch(`/RecursosHumanos/Aquarius/Compensaciones/ConsultarAplicacion?jobId=${_aplJobId}`);
+                    const pJson = await pRes.json();
+
+                    if (!pJson.completado) {
+                        modalAplMsg.innerHTML = `<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>${pJson.mensaje}<br><small class="text-muted">Puede cerrar esta ventana.</small></span></div>`;
+                        return;
+                    }
+
+                    clearInterval(_aplPollTimer);
+
+                    if (pJson.exito) {
+                        modalAplHeader.className = 'modal-header bg-success text-white';
+                        const r   = pJson.resultado;
+                        const dur = pJson.duracionSeg != null ? ` (${pJson.duracionSeg}s)` : '';
+                        const apl = (r?.totalAplicadasDestino ?? 0) + (r?.totalAplicadasOrigen ?? 0);
+                        modalAplMsg.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Completado${dur}. `
+                            + `Aplicadas: <strong>${apl}</strong> · `
+                            + `Eliminadas: <strong>${r?.totalEliminadas ?? 0}</strong> · `
+                            + `Errores: <strong>${r?.totalErrores ?? 0}</strong>`;
+                    } else {
+                        modalAplHeader.className = 'modal-header bg-danger text-white';
+                        modalAplMsg.innerHTML = `<i class="bi bi-x-circle-fill me-2"></i>${pJson.mensaje}`;
+                    }
+                } catch (pollErr) {
+                    console.warn('Error polling aplicación:', pollErr);
+                }
+            }, 2500);
+
+        } catch (err) {
+            modalAplHeader.className = 'modal-header bg-danger text-white';
+            modalAplMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Error de comunicación.';
+            console.error(err);
+        }
+    });
+
+    modalAplEl.addEventListener('hidden.bs.modal', () => {
+        if (_aplPollTimer) clearInterval(_aplPollTimer);
+        if (btnConfirmarApl.style.display === 'none') {
+            consultar();
+        }
+    });
+
+    // ── Nueva Compensación ────────────────────────────────────────────────
+    const modalNuevaEl      = document.getElementById('modalNueva');
+    const modalNueva        = new bootstrap.Modal(modalNuevaEl);
+    const btnNuevaComp      = document.getElementById('btnNuevaComp');
+    const btnPreValidar     = document.getElementById('btnPreValidar');
+    const btnConfirmarReg   = document.getElementById('btnConfirmarRegistrar');
+    const nFechaOrigen      = document.getElementById('nFechaOrigen');
+    const nFechaDestino     = document.getElementById('nFechaDestino');
+    const nTipoOrigen       = document.getElementById('nTipoOrigen');
+    const nTipoComp         = document.getElementById('nTipoCompensacion');
+    const nHoras            = document.getElementById('nHoras');
+    const nValidResult      = document.getElementById('nValidacionResult');
+    const stepForm          = document.getElementById('stepForm');
+    const stepResultado     = document.getElementById('stepResultado');
+    const nResultadoMsg     = document.getElementById('nResultadoMsg');
+    const modalNuevaFooter  = document.getElementById('modalNuevaFooter');
+
+    function resetModalNueva() {
+        nFechaOrigen.value   = '';
+        nFechaDestino.value  = '';
+        nTipoOrigen.value    = '';
+        nTipoComp.value      = '';
+        nHoras.value         = '';
+        nValidResult.style.display  = 'none';
+        nValidResult.innerHTML      = '';
+        stepForm.style.display      = 'block';
+        stepResultado.style.display = 'none';
+        btnPreValidar.style.display     = '';
+        btnConfirmarReg.style.display   = 'none';
+        btnPreValidar.disabled          = false;
+        btnPreValidar.innerHTML         = '<i class="bi bi-check2-circle me-1"></i>Validar';
+        document.getElementById('modalNuevaHeader').style.background = 'var(--comp-primary)';
+        // Restore footer buttons
+        const cancelBtn = modalNuevaFooter.querySelector('[data-bs-dismiss="modal"]');
+        if (cancelBtn) cancelBtn.style.display = '';
+    }
+
+    btnNuevaComp.addEventListener('click', () => {
+        resetModalNueva();
+        modalNueva.show();
+    });
+
+    // Formato HH:MM automático
+    nHoras.addEventListener('input', () => {
+        let v = nHoras.value.replace(/[^0-9]/g, '');
+        if (v.length >= 3) v = v.slice(0, 2) + ':' + v.slice(2, 4);
+        nHoras.value = v;
+    });
+
+    btnPreValidar.addEventListener('click', async () => {
+        const fo  = nFechaOrigen.value;
+        const fd  = nFechaDestino.value;
+        const to  = nTipoOrigen.value;
+        const tc  = nTipoComp.value;
+        const hrs = nHoras.value.trim();
+
+        if (!fo || !to || !tc || !hrs) {
+            nValidResult.innerHTML = '<div class="alert alert-warning py-2 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Complete todos los campos obligatorios.</div>';
+            nValidResult.style.display = 'block';
+            return;
+        }
+        if (!/^\d{2}:\d{2}$/.test(hrs)) {
+            nValidResult.innerHTML = '<div class="alert alert-warning py-2 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Ingrese las horas en formato HH:MM (ej: 01:30).</div>';
+            nValidResult.style.display = 'block';
+            return;
+        }
+
+        btnPreValidar.disabled = true;
+        btnPreValidar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validando…';
+
+        try {
+            const url = `/RecursosHumanos/Aquarius/Compensaciones/Validar`
+                + `?codPersonal=${encodeURIComponent(codPersonal)}`
+                + `&fechaOrigen=${fo}`
+                + (fd ? `&fechaDestino=${fd}` : '')
+                + `&tipoOrigen=${to}&tipoCompensacion=${tc}&horas=${encodeURIComponent(hrs)}`;
+
+            const res  = await fetch(url);
+            const json = await res.json();
+
+            if (!json.ok) {
+                nValidResult.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><i class="bi bi-x-circle me-1"></i>${json.mensaje ?? 'Error al validar.'}</div>`;
+                nValidResult.style.display = 'block';
+                btnPreValidar.disabled = false;
+                btnPreValidar.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Validar';
+                return;
+            }
+
+            const v = json.data;
+            if (v.puedeAplicar === 'S') {
+                nValidResult.innerHTML = `
+                    <div class="alert alert-success py-2 small mb-1">
+                        <i class="bi bi-check-circle-fill me-1"></i><strong>Validación OK</strong> — Puede registrarse.
+                    </div>
+                    <div class="row g-2 text-center" style="font-size:.78rem;">
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold" style="color:var(--comp-primary);">${minutosAHhmi(v.tiempoSolicitadoMin)}</div>
+                                <div class="text-muted">Solicitado</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold text-success">${minutosAHhmi(v.tiempoDisponibleOrigenMin)}</div>
+                                <div class="text-muted">Disponible origen</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold text-warning">${minutosAHhmi(v.tiempoDeficitDestinoMin)}</div>
+                                <div class="text-muted">Déficit destino</div>
+                            </div>
+                        </div>
+                    </div>`;
+                nValidResult.style.display = 'block';
+                btnConfirmarReg.style.display = '';
+            } else {
+                nValidResult.innerHTML = `
+                    <div class="alert alert-danger py-2 small mb-1">
+                        <i class="bi bi-x-circle-fill me-1"></i><strong>No puede aplicarse:</strong> ${v.motivo ?? '—'}
+                    </div>
+                    <div class="row g-2 text-center" style="font-size:.78rem;">
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold" style="color:var(--comp-primary);">${minutosAHhmi(v.tiempoSolicitadoMin)}</div>
+                                <div class="text-muted">Solicitado</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold text-danger">${minutosAHhmi(v.tiempoDisponibleOrigenMin)}</div>
+                                <div class="text-muted">Disponible origen</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="fw-bold text-warning">${minutosAHhmi(v.tiempoDeficitDestinoMin)}</div>
+                                <div class="text-muted">Déficit destino</div>
+                            </div>
+                        </div>
+                    </div>`;
+                nValidResult.style.display = 'block';
+                btnConfirmarReg.style.display = 'none';
+            }
+        } catch (err) {
+            nValidResult.innerHTML = '<div class="alert alert-danger py-2 small mb-0"><i class="bi bi-x-circle me-1"></i>Error de comunicación al validar.</div>';
+            nValidResult.style.display = 'block';
+        } finally {
+            btnPreValidar.disabled  = false;
+            btnPreValidar.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Validar';
+        }
+    });
+
+    btnConfirmarReg.addEventListener('click', async () => {
+        btnConfirmarReg.disabled = true;
+        btnConfirmarReg.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando…';
+
+        const fd = new FormData();
+        fd.append('codPersonal',      codPersonal);
+        fd.append('fechaOrigen',      nFechaOrigen.value);
+        fd.append('fechaDestino',     nFechaDestino.value);
+        fd.append('tipoOrigen',       nTipoOrigen.value);
+        fd.append('tipoCompensacion', nTipoComp.value);
+        fd.append('horas',            nHoras.value.trim());
+        fd.append('validar',          'S');
+        fd.append('__RequestVerificationToken', token);
+
+        try {
+            const res  = await fetch('/RecursosHumanos/Aquarius/Compensaciones/Registrar', { method: 'POST', body: fd });
+            const json = await res.json();
+
+            stepForm.style.display      = 'none';
+            stepResultado.style.display = 'block';
+            btnPreValidar.style.display     = 'none';
+            btnConfirmarReg.style.display   = 'none';
+
+            if (json.ok) {
+                document.getElementById('modalNuevaHeader').style.background = '#16a34a';
+                nResultadoMsg.innerHTML = `
+                    <div class="text-center py-2">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size:2.2rem;"></i>
+                        <p class="fw-semibold mt-2 mb-1">Compensación registrada correctamente</p>
+                        <p class="text-muted small">ID: <strong>#${json.data?.idCompen ?? '—'}</strong> · Tiempo: <strong>${json.data?.tiempoMinutos ? minutosAHhmi(json.data.tiempoMinutos) : nHoras.value}</strong></p>
+                    </div>`;
+            } else {
+                document.getElementById('modalNuevaHeader').style.background = '#dc2626';
+                nResultadoMsg.innerHTML = `
+                    <div class="alert alert-danger py-2 small mb-0">
+                        <i class="bi bi-x-circle-fill me-1"></i><strong>Error al registrar:</strong> ${json.data?.motivo ?? json.mensaje ?? 'Error desconocido.'}
+                    </div>`;
+            }
+            // Ocultar botones de acción, dejar solo Cerrar
+            btnPreValidar.style.display   = 'none';
+            btnConfirmarReg.style.display = 'none';
+        } catch (err) {
+            stepForm.style.display      = 'none';
+            stepResultado.style.display = 'block';
+            nResultadoMsg.innerHTML = '<div class="alert alert-danger py-2 small mb-0"><i class="bi bi-x-circle me-1"></i>Error de comunicación al guardar.</div>';
+            btnPreValidar.style.display   = 'none';
+            btnConfirmarReg.style.display = 'none';
+        }
+    });
+
+    modalNuevaEl.addEventListener('hidden.bs.modal', () => {
+        consultar();
+    });
+
+    function minutosAHhmi(min) {
+        if (min == null) return '00:00';
+        const h = String(Math.floor(min / 60)).padStart(2, '0');
+        const m = String(min % 60).padStart(2, '0');
+        return `${h}:${m}`;
+    }
+
+    // ── Diagnóstico por día ───────────────────────────────────────────────
+    const btnDiagnostico    = document.getElementById('btnDiagnostico');
+    const panelDiagnostico  = document.getElementById('panelDiagnostico');
+    const spinnerDiag       = document.getElementById('spinnerDiag');
+    const tbodyDiag         = document.getElementById('tbodyDiag');
+    const lblDiagTotal      = document.getElementById('lblDiagTotal');
+    let diagVisible = false;
+
+    function hhmiCell(val) {
+        if (!val || val === '00:00') return '<span class="diag-hhmi-empty">—</span>';
+        return `<span class="diag-hhmi">${val}</span>`;
+    }
+
+    function diagFlagsHtml(d) {
+        const badges = [];
+        if (d.esDescanso === 'S')  badges.push('<span class="badge rounded-pill badge-diag-des px-2">DSC</span>');
+        if (d.esFeriado  === 'S')  badges.push('<span class="badge rounded-pill badge-diag-fer px-2">FER</span>');
+        if (d.alerta01 && d.alerta01.trim()) badges.push(`<span class="badge rounded-pill badge-diag-alerta px-2">${d.alerta01.trim()}</span>`);
+        if (d.compenAplicadas > 0) badges.push(`<span class="badge rounded-pill badge-diag-ok px-2">✔${d.compenAplicadas}</span>`);
+        return badges.length ? badges.join(' ') : '<span class="text-muted">—</span>';
+    }
+
+    async function cargarDiagnostico() {
+        panelDiagnostico.style.display = 'none';
+        spinnerDiag.style.display      = 'block';
+        btnDiagnostico.disabled        = true;
+
+        try {
+            const url = `/RecursosHumanos/Aquarius/Compensaciones/DiagnosticoRango`
+                + `?codPersonal=${encodeURIComponent(codPersonal)}`
+                + `&fechaInicio=${fechaInicio.value}&fechaFin=${fechaFin.value}`;
+
+            const res  = await fetch(url);
+            const json = await res.json();
+
+            spinnerDiag.style.display = 'none';
+
+            if (!json.ok || !json.data?.length) {
+                tbodyDiag.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-3 small">Sin datos de diagnóstico para este rango.</td></tr>';
+                lblDiagTotal.textContent = '0 días';
+                panelDiagnostico.style.display = 'block';
+                diagVisible = true;
+                return;
+            }
+
+            lblDiagTotal.textContent = json.data.length + ' días';
+            tbodyDiag.innerHTML = json.data.map(d => {
+                const tieneOrigen  = d.tieneOrigen  === 'S';
+                const tieneDeficit = d.tieneDeficit === 'S';
+                let rowClass = 'diag-gris';
+                if (tieneOrigen && tieneDeficit) rowClass = 'diag-amarillo';
+                else if (tieneOrigen)            rowClass = 'diag-verde';
+                else if (tieneDeficit)           rowClass = 'diag-rojo';
+
+                return `<tr class="${rowClass}">
+                    <td style="white-space:nowrap;font-weight:600;">${d.fecha ?? '—'}</td>
+                    <td>${hhmiCell(d.heHhmi)}</td>
+                    <td>${hhmiCell(d.doblesHhmi)}</td>
+                    <td>${hhmiCell(d.bancoHhmi)}</td>
+                    <td>${hhmiCell(d.tardHhmi)}</td>
+                    <td>${hhmiCell(d.antesHhmi)}</td>
+                    <td>${hhmiCell(d.faltaHhmi)}</td>
+                    <td>${hhmiCell(d.notrabHhmi)}</td>
+                    <td>${hhmiCell(d.permisoHhmi)}</td>
+                    <td class="text-center">${d.compenRegistradas > 0 ? `<span class="fw-semibold">${d.compenRegistradas}</span>` : '<span class="text-muted">0</span>'}</td>
+                    <td class="text-center">${d.compenAplicadas > 0 ? `<span class="fw-semibold text-success">${d.compenAplicadas}</span>` : '<span class="text-muted">0</span>'}</td>
+                    <td style="white-space:nowrap;">${diagFlagsHtml(d)}</td>
+                    <td style="max-width:200px;white-space:normal;font-size:.72rem;color:#374151;">${d.sugerencia ?? '—'}</td>
+                </tr>`;
+            }).join('');
+
+            panelDiagnostico.style.display = 'block';
+            diagVisible = true;
+        } catch (err) {
+            spinnerDiag.style.display = 'none';
+            console.error('Error diagnóstico:', err);
+        } finally {
+            btnDiagnostico.disabled = false;
+        }
+    }
+
+    btnDiagnostico.addEventListener('click', () => {
+        if (diagVisible) {
+            panelDiagnostico.style.display = 'none';
+            diagVisible = false;
+            btnDiagnostico.innerHTML = '<i class="bi bi-clipboard2-pulse me-1"></i>Diagnóstico';
+        } else {
+            btnDiagnostico.innerHTML = '<i class="bi bi-clipboard2-pulse me-1"></i>Diagnóstico';
+            cargarDiagnostico();
+        }
+    });
+
+    // Consultar al cargar
+    consultar();
+})();
+</script>
+}

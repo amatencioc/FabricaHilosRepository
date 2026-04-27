@@ -1,0 +1,434 @@
+@{
+    ViewData["Title"] = "Compensación Masiva - Aquarius";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Comp. Masiva</li>
+}
+
+@section Styles {
+<style>
+    :root { --mp:#1a3a5c; --ma:#2563a8; }
+    .masiva-header { background:linear-gradient(135deg,var(--mp) 0%,var(--ma) 100%); color:#fff; border-radius:.5rem .5rem 0 0; padding:1.1rem 1.4rem; }
+    .masiva-header h5 { margin:0; font-weight:600; }
+    .masiva-header p  { margin:0; opacity:.8; font-size:.82rem; }
+    .card-masiva { border:1px solid #dce3ec; border-radius:.5rem; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+    .panel-form  { background:#f8fafc; border-bottom:1px solid #dee2e6; padding:1.2rem 1.4rem; }
+    .panel-form label { font-weight:500; font-size:.85rem; }
+    .panel-body  { padding:1.2rem 1.4rem; }
+    .btn-buscar  { background:var(--ma); border:none; color:#fff; font-weight:600; }
+    .btn-buscar:hover { background:var(--mp); color:#fff; }
+    .btn-aplicar { background:#198754; border:none; color:#fff; font-weight:600; min-width:140px; }
+    .btn-aplicar:hover { background:#157347; color:#fff; }
+    .btn-aplicar:disabled { opacity:.6; }
+    .emp-table th { background:#e9eff7; font-size:.78rem; font-weight:600; text-transform:uppercase; }
+    .emp-table td { font-size:.84rem; vertical-align:middle; }
+    .badge-hh { font-size:.76rem; background:#e3f0ff; color:#1a3a5c; border-radius:.3rem; padding:2px 6px; }
+    .badge-sel-count { background:#2563a8; color:#fff; border-radius:.3rem; padding:2px 8px; font-size:.8rem; font-weight:700; }
+    .sel-bar { background:#eef4ff; border:1px solid #c9d9f0; border-radius:.4rem; padding:.55rem 1rem; display:none; align-items:center; gap:.7rem; flex-wrap:wrap; }
+    .sel-bar.visible { display:flex; }
+    .pagination .page-link { font-size:.82rem; }
+    .stat-box { background:#f0f4fa; border-radius:.4rem; padding:.5rem .9rem; text-align:center; min-width:88px; }
+    .stat-box .sv { font-size:1.4rem; font-weight:700; line-height:1; }
+    .stat-box .sl { font-size:.7rem; color:#666; }
+    .stat-box.s-ok  { background:#e6f7ee; }
+    .stat-box.s-err { background:#fdecea; }
+    #resultado-panel { display:none; }
+    #spinner-panel { display:none; }
+    #tabla-panel { display:none; }
+</style>
+}
+
+<div class="container-fluid px-3 py-3">
+<div class="card card-masiva">
+
+    <div class="masiva-header d-flex align-items-center gap-2">
+        <i class="bi bi-people-fill fs-4"></i>
+        <div>
+            <h5>Compensación Masiva</h5>
+            <p>Seleccione empleados y aplique compensaciones en lote</p>
+        </div>
+    </div>
+
+    <!-- Formulario de filtro -->
+    <div class="panel-form">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label mb-1">Fecha Origen</label>
+                <input type="date" id="fechaOrigen" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-sm-6 col-md-3">
+                <label class="form-label mb-1">Fecha Destino</label>
+                <input type="date" id="fechaDestino" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12 col-sm-6 col-md-2">
+                <label class="form-label mb-1">Tipo Origen</label>
+                <select id="tipoOrigen" class="form-select form-select-sm">
+                    <option value="E">HE – Horas Extra</option>
+                    <option value="D">DO – Horas Dobles</option>
+                    <option value="B">BA – Banco de Horas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-2">
+                <label class="form-label mb-1">Tipo Compensación</label>
+                <select id="tipoCompensacion" class="form-select form-select-sm">
+                    <option value="T">Tardanza</option>
+                    <option value="F">Falta</option>
+                    <option value="A">Antes</option>
+                    <option value="N">No trabajó</option>
+                    <option value="P">Permiso</option>
+                    <option value="I">Inasistencia</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-2">
+                <button id="btnBuscar" class="btn btn-buscar btn-sm w-100" onclick="buscarEmpleados(1)">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-body">
+
+        <!-- Barra de selección -->
+        <div id="sel-bar" class="sel-bar mb-2">
+            <span class="badge-sel-count" id="sel-count">0</span>
+            <span style="font-size:.84rem;">empleados seleccionados</span>
+            <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="limpiarSeleccion()">
+                <i class="bi bi-x-circle me-1"></i>Limpiar selección
+            </button>
+            <button id="btnAplicar" class="btn btn-aplicar btn-sm" onclick="aplicarCompensaciones()">
+                <i class="bi bi-check2-all me-1"></i>Aplicar (<span id="sel-count2">0</span>)
+            </button>
+        </div>
+
+        <!-- Spinner de búsqueda -->
+        <div id="spinner-buscar" style="display:none;" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+            <span style="font-size:.85rem;">Buscando empleados…</span>
+        </div>
+
+        <!-- Tabla de empleados -->
+        <div id="tabla-panel">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span id="total-label" style="font-size:.82rem; color:#555;"></span>
+                <div class="form-check form-check-inline mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkTodaPagina" onchange="seleccionarPagina(this.checked)" />
+                    <label class="form-check-label" style="font-size:.82rem;" for="chkTodaPagina">Seleccionar página</label>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover table-sm emp-table mb-2">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;"></th>
+                            <th>Empleado</th>
+                            <th>Fotocheck</th>
+                            <th>H. Extra</th>
+                            <th>Dobles</th>
+                            <th>Banco</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-empleados"></tbody>
+                </table>
+            </div>
+
+            <!-- Paginación -->
+            <nav id="paginacion" aria-label="Paginación empleados"></nav>
+        </div>
+
+        <!-- Spinner de job -->
+        <div id="spinner-panel" class="text-center py-4">
+            <div class="spinner-border text-success mb-2"></div>
+            <div id="msg-job" style="font-size:.88rem;">Procesando compensaciones…</div>
+        </div>
+
+        <!-- Panel resultado -->
+        <div id="resultado-panel" class="mt-2">
+            <div id="resultado-badge" class="mb-2"></div>
+            <div id="resultado-stats" class="d-flex flex-wrap gap-2 mb-3"></div>
+            <button class="btn btn-sm btn-outline-primary" onclick="reiniciar()">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Nueva consulta
+            </button>
+        </div>
+
+    </div><!-- /.panel-body -->
+</div><!-- /.card -->
+</div><!-- /.container -->
+
+@section Scripts {
+<script>
+(function () {
+    // Estado paginación
+    let _currentPage  = 1;
+    let _totalPages   = 1;
+    let _fechaOrigen  = '';
+    let _tipoOrigen   = 'E';
+
+    // Selección persiste entre páginas: Set de cod_personal
+    const seleccion = new Set();
+
+    // ── Buscar empleados ──────────────────────────────────────────────────
+    window.buscarEmpleados = function(page) {
+        _fechaOrigen = document.getElementById('fechaOrigen').value;
+        _tipoOrigen  = document.getElementById('tipoOrigen').value;
+
+        if (!_fechaOrigen) { mostrarModal('Atención', 'Seleccione la fecha origen.'); return; }
+
+        _currentPage = page || 1;
+
+        document.getElementById('tabla-panel').style.display   = 'none';
+        document.getElementById('resultado-panel').style.display = 'none';
+        document.getElementById('spinner-panel').style.display  = 'none';
+        document.getElementById('spinner-buscar').style.display = 'block';
+
+        fetch(`/RecursosHumanos/Aquarius/Compensaciones/Masiva/EmpleadosDisponibles?fechaOrigen=${_fechaOrigen}&tipoOrigen=${_tipoOrigen}&page=${_currentPage}`)
+            .then(r => r.json())
+            .then(res => {
+                document.getElementById('spinner-buscar').style.display = 'none';
+                if (!res.ok) { mostrarModal('Error', res.mensaje); return; }
+
+                _totalPages = res.totalPages || 1;
+                renderTabla(res.data, res.total, res.page, res.totalPages);
+                document.getElementById('tabla-panel').style.display = 'block';
+            })
+            .catch(() => {
+                document.getElementById('spinner-buscar').style.display = 'none';
+                mostrarModal('Error', 'Error de conexión al buscar empleados.');
+            });
+    };
+
+    // ── Renderizar tabla ──────────────────────────────────────────────────
+    function renderTabla(items, total, page, totalPages) {
+        const tbody = document.getElementById('tbody-empleados');
+        tbody.innerHTML = '';
+
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No hay empleados con horas disponibles para la fecha y tipo seleccionados.</td></tr>';
+            document.getElementById('total-label').textContent = '';
+            document.getElementById('paginacion').innerHTML    = '';
+            document.getElementById('chkTodaPagina').checked   = false;
+            actualizarBarraSeleccion();
+            return;
+        }
+
+        document.getElementById('total-label').textContent = `${total} empleado${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`;
+
+        items.forEach(e => {
+            const checked = seleccion.has(e.codPersonal) ? 'checked' : '';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="checkbox" class="form-check-input chk-emp" value="${e.codPersonal}" ${checked}
+                    onchange="toggleSeleccion(this)" /></td>
+                <td>${e.nombre ?? e.codPersonal}</td>
+                <td>${e.fotocheck ?? ''}</td>
+                <td><span class="badge-hh">${e.hhmiHe ?? '00:00'}</span></td>
+                <td><span class="badge-hh">${e.hhmiDoble ?? '00:00'}</span></td>
+                <td><span class="badge-hh">${e.hhmiBanco ?? '00:00'}</span></td>`;
+            tbody.appendChild(tr);
+        });
+
+        // Sincronizar checkbox "seleccionar página"
+        const todosEnPagina = items.every(e => seleccion.has(e.codPersonal));
+        document.getElementById('chkTodaPagina').checked = todosEnPagina && items.length > 0;
+
+        renderPaginacion(page, totalPages);
+        actualizarBarraSeleccion();
+    }
+
+    // ── Paginación ────────────────────────────────────────────────────────
+    function renderPaginacion(page, totalPages) {
+        const nav = document.getElementById('paginacion');
+        if (totalPages <= 1) { nav.innerHTML = ''; return; }
+
+        let html = '<ul class="pagination pagination-sm mb-0">';
+        html += `<li class="page-item ${page===1?'disabled':''}"><a class="page-link" href="#" onclick="buscarEmpleados(${page-1});return false;">‹</a></li>`;
+
+        let start = Math.max(1, page - 2);
+        let end   = Math.min(totalPages, start + 4);
+        start     = Math.max(1, end - 4);
+
+        if (start > 1)  html += `<li class="page-item disabled"><span class="page-link">…</span></li>`;
+        for (let i = start; i <= end; i++) {
+            html += `<li class="page-item ${i===page?'active':''}"><a class="page-link" href="#" onclick="buscarEmpleados(${i});return false;">${i}</a></li>`;
+        }
+        if (end < totalPages) html += `<li class="page-item disabled"><span class="page-link">…</span></li>`;
+
+        html += `<li class="page-item ${page===totalPages?'disabled':''}"><a class="page-link" href="#" onclick="buscarEmpleados(${page+1});return false;">›</a></li>`;
+        html += '</ul>';
+        nav.innerHTML = html;
+    }
+
+    // ── Selección ─────────────────────────────────────────────────────────
+    window.toggleSeleccion = function(chk) {
+        if (chk.checked) seleccion.add(chk.value);
+        else             seleccion.delete(chk.value);
+        actualizarBarraSeleccion();
+        // Sincronizar "seleccionar página"
+        const todos = [...document.querySelectorAll('.chk-emp')].every(c => c.checked);
+        document.getElementById('chkTodaPagina').checked = todos;
+    };
+
+    window.seleccionarPagina = function(checked) {
+        document.querySelectorAll('.chk-emp').forEach(c => {
+            c.checked = checked;
+            if (checked) seleccion.add(c.value);
+            else         seleccion.delete(c.value);
+        });
+        actualizarBarraSeleccion();
+    };
+
+    window.limpiarSeleccion = function() {
+        seleccion.clear();
+        document.querySelectorAll('.chk-emp').forEach(c => c.checked = false);
+        document.getElementById('chkTodaPagina').checked = false;
+        actualizarBarraSeleccion();
+    };
+
+    function actualizarBarraSeleccion() {
+        const n = seleccion.size;
+        document.getElementById('sel-count').textContent  = n;
+        document.getElementById('sel-count2').textContent = n;
+        const bar = document.getElementById('sel-bar');
+        if (n > 0) bar.classList.add('visible');
+        else       bar.classList.remove('visible');
+        document.getElementById('btnAplicar').disabled = n === 0;
+    }
+
+    // ── Aplicar compensaciones (encola job) ───────────────────────────────
+    window.aplicarCompensaciones = function() {
+        if (seleccion.size === 0) { mostrarModal('Atención', 'Seleccione al menos un empleado.'); return; }
+
+        const fechaOrigen  = document.getElementById('fechaOrigen').value;
+        const fechaDestino = document.getElementById('fechaDestino').value;
+        const tipoOrigen   = document.getElementById('tipoOrigen').value;
+        const tipoComp     = document.getElementById('tipoCompensacion').value;
+
+        if (!fechaOrigen || !fechaDestino) { mostrarModal('Atención', 'Complete la fecha origen y destino.'); return; }
+
+        const lista = [...seleccion].join(',');
+
+        const form = new FormData();
+        form.append('fechaOrigen',      fechaOrigen);
+        form.append('fechaDestino',     fechaDestino);
+        form.append('tipoOrigen',       tipoOrigen);
+        form.append('tipoCompensacion', tipoComp);
+        form.append('listaPersonal',    lista);
+        form.append('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '');
+
+        document.getElementById('tabla-panel').style.display    = 'none';
+        document.getElementById('sel-bar').classList.remove('visible');
+        document.getElementById('spinner-panel').style.display  = 'flex';
+        document.getElementById('spinner-panel').style.flexDirection = 'column';
+        document.getElementById('spinner-panel').style.alignItems = 'center';
+        document.getElementById('msg-job').textContent = 'Enviando solicitud…';
+
+        fetch('/RecursosHumanos/Aquarius/Compensaciones/Masiva/EjecutarEvento', {
+            method: 'POST',
+            body: form
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok) {
+                document.getElementById('spinner-panel').style.display = 'none';
+                document.getElementById('tabla-panel').style.display   = 'block';
+                mostrarModal('Error', res.mensaje);
+                return;
+            }
+            document.getElementById('msg-job').textContent = 'Procesando compensaciones…';
+            pollJob(res.jobId);
+        })
+        .catch(() => {
+            document.getElementById('spinner-panel').style.display = 'none';
+            document.getElementById('tabla-panel').style.display   = 'block';
+            mostrarModal('Error', 'Error de conexión.');
+        });
+    };
+
+    // ── Polling ────────────────────────────────────────────────────────────
+    function pollJob(jobId) {
+        fetch(`/RecursosHumanos/Aquarius/Compensaciones/Masiva/EstadoEvento?jobId=${jobId}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.ok || !res.completado) {
+                if (res.mensaje) document.getElementById('msg-job').textContent = res.mensaje;
+                setTimeout(() => pollJob(jobId), 2000);
+                return;
+            }
+            document.getElementById('spinner-panel').style.display  = 'none';
+            mostrarResultado(res);
+        })
+        .catch(() => setTimeout(() => pollJob(jobId), 3000));
+    }
+
+    // ── Mostrar resultado ─────────────────────────────────────────────────
+    function mostrarResultado(res) {
+        const panel = document.getElementById('resultado-panel');
+        const badge = document.getElementById('resultado-badge');
+        const stats = document.getElementById('resultado-stats');
+
+        if (res.exito) {
+            badge.innerHTML = `<span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i>${res.mensaje}</span>`;
+        } else {
+            badge.innerHTML = `<span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i>${res.mensaje}</span>`;
+        }
+
+        const r = res.resultado;
+        if (r) {
+            stats.innerHTML = `
+                <div class="stat-box"><div class="sv">${r.empleadosEncontrados ?? 0}</div><div class="sl">Encontrados</div></div>
+                <div class="stat-box s-ok"><div class="sv">${r.registradasOk ?? 0}</div><div class="sl">Registradas</div></div>
+                <div class="stat-box s-ok"><div class="sv">${r.aplicadasOk ?? 0}</div><div class="sl">Aplicadas</div></div>
+                <div class="stat-box s-err"><div class="sv">${r.errores ?? 0}</div><div class="sl">Errores</div></div>
+                ${res.duracionSeg != null ? `<div class="stat-box"><div class="sv">${res.duracionSeg}s</div><div class="sl">Duración</div></div>` : ''}`;
+        }
+
+        panel.style.display = 'block';
+    }
+
+    // ── Reiniciar ─────────────────────────────────────────────────────────
+    window.reiniciar = function() {
+        seleccion.clear();
+        document.getElementById('resultado-panel').style.display = 'none';
+        document.getElementById('tabla-panel').style.display     = 'none';
+        document.getElementById('sel-bar').classList.remove('visible');
+        document.getElementById('tbody-empleados').innerHTML     = '';
+        document.getElementById('paginacion').innerHTML          = '';
+        document.getElementById('chkTodaPagina').checked         = false;
+        actualizarBarraSeleccion();
+    };
+
+    // ── Modal Bootstrap ────────────────────────────────────────────────────
+    function mostrarModal(titulo, mensaje) {
+        const existing = document.getElementById('modalMasiva');
+        if (existing) existing.remove();
+
+        const div = document.createElement('div');
+        div.id = 'modalMasiva';
+        div.innerHTML = `
+        <div class="modal fade" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">${titulo}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body"><p>${mensaje}</p></div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+        document.body.appendChild(div);
+        const modal = new bootstrap.Modal(div.querySelector('.modal'));
+        modal.show();
+        div.querySelector('.modal').addEventListener('hidden.bs.modal', () => div.remove());
+    }
+})();
+</script>
+@Html.AntiForgeryToken()
+}

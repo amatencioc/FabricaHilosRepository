@@ -45,8 +45,11 @@ public class MenuOptions
     public bool SeguridadInspecciones { get; set; } = true;
 
     // ── Menús: Recursos Humanos ───────────────────────────────────────────
-    public bool RecursosHumanos    { get; set; } = false;
-    public bool RhMarcaciones      { get; set; } = true;
+    public bool RecursosHumanos              { get; set; } = false;
+    public bool RhMarcaciones                { get; set; } = true;
+    public bool RhCompensaciones             { get; set; } = true;
+    public bool RhCompensacionesIndividual   { get; set; } = true;
+    public bool RhCompensacionesMasiva       { get; set; } = true;
 
     // ── Menús: Logística ──────────────────────────────────────────────────
     public bool Logistica                { get; set; } = false;
@@ -93,8 +96,11 @@ public class MenuOptions
 
         SeguridadInspecciones = true,
 
-        RecursosHumanos = true,
-        RhMarcaciones   = true,
+        RecursosHumanos  = true,
+        RhMarcaciones    = true,
+        RhCompensaciones = true,
+        RhCompensacionesIndividual = true,
+        RhCompensacionesMasiva     = true,
 
         Logistica              = true,
         LogisticaRequerimiento = true,

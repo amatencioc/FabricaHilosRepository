@@ -258,23 +258,39 @@
                     <!-- RECURSOS HUMANOS -->
                     <li class="sidebar-section">RECURSOS HUMANOS</li>                    <li>
                         <a asp-controller="RecursosHumanos" asp-action="Index"
-                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" ? "active" : "")">
+                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "active" : "")">
                             <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
                             <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")"
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                   aria-expanded="@(ctrl == "Marcaciones" ? "true" : "false")"
+                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "true" : "false")"
                                    aria-controls="submenuAquarius">
                                     <i class="bi bi-people-fill"></i> Aquarius
                                 </a>
-                                <ul class="collapse @(ctrl == "Marcaciones" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
                                     @if (menus.RhMarcaciones)
                                     {
                                     <li>
                                         <a href="/RecursosHumanos/Aquarius/Marcaciones" class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" ? "active" : "")">
                                             <i class="bi bi-clock-history"></i> Marcaciones
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.RhCompensacionesIndividual)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/Aquarius/Compensaciones" class="sidebar-link sidebar-sublink @(ctrl == "Compensaciones" && (ViewContext.RouteData.Values["action"]?.ToString() ?? "") != "Masiva" ? "active" : "")">
+                                            <i class="bi bi-arrow-left-right"></i> Comp. Individual
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.RhCompensacionesMasiva)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/Aquarius/Compensaciones/Masiva" class="sidebar-link sidebar-sublink @(ctrl == "Compensaciones" && (ViewContext.RouteData.Values["action"]?.ToString() ?? "") == "Masiva" ? "active" : "")">
+                                            <i class="bi bi-people-fill"></i> Comp. Masiva
                                         </a>
                                     </li>
                                     }
