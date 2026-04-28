@@ -713,6 +713,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         c_RC  CONSTANT NVARCHAR2(5)  := N'RC';
         c_DC  CONSTANT NVARCHAR2(5)  := N'DC';
         c_HE  CONSTANT NVARCHAR2(5)  := N'HE';
+        c_HX  CONSTANT NVARCHAR2(5)  := N'HX';  -- HE no oficializada por tareo (ajus=0)
         c_MF  CONSTANT NVARCHAR2(5)  := N'MF';
         c_RN  CONSTANT NVARCHAR2(5)  := N'RN';  -- Refrigerio Nocturno limpiado
         c_NC  CONSTANT NVARCHAR2(5)  := N'NC';  -- Nocturno: marca duplicada limpiada
@@ -747,6 +748,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         d_RC      CONSTANT NVARCHAR2(30) := N'Horas recalculadas';
         d_DC      CONSTANT NVARCHAR2(30) := N'Descanso: hrs recalculadas';
         d_HE      CONSTANT NVARCHAR2(30) := N'HExtra <1h limpiada';
+        d_HX      CONSTANT NVARCHAR2(30) := N'HExtra ajus reoficializada';
         d_MF      CONSTANT NVARCHAR2(30) := N'Marca faltante insertada';
         d_RN      CONSTANT NVARCHAR2(30) := N'Noct.sin refri: marca dup';
         d_NC      CONSTANT NVARCHAR2(30) := N'Noct: salida dup limpiada';
@@ -3571,9 +3573,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             -- FIX 20/04/2026: comparar solo HORA (inirefri puede tener base 01/01/1900 desde PASO 2B
             -- o fecha real desde PASO 2B-PRE; la comparacion de DATE completa falla cuando
             -- inirefri=1900-01-01 12:30 y salida=2026-04-14 12:17 -> 2026 < 1900 = FALSE)
-            -- Excluir nocturnos: salida 07:00 < inirefri 23:00 es correcto cronologicamente
             AND TO_CHAR(t.salida, 'HH24MI') < TO_CHAR(t.inirefri, 'HH24MI')
-            AND (t.entrada_fijada IS NULL OR TO_CHAR(t.entrada_fijada, 'HH24MI') < '2000')
+            -- FIX 27/04/2026: Excluir nocturnos por cruce de dia (no por hora fija >= 20).
+            -- ANTES: entrada_fijada < 20:00 -> bug en HORARIO 19-03 (ent_fij=19:00) que disparaba
+            --        SS aunque la salida real era 07:04 del dia siguiente (correcto cronologicamente).
+            -- AHORA: si salida_fijada < entrada_fijada (turno cruza medianoche) -> es nocturno;
+            --        ademas si la salida real ya es del dia siguiente (TRUNC > fechamar) tampoco
+            --        debe corregirse. Mismo criterio que PASO 3F.
+            AND (t.entrada_fijada IS NULL OR t.salida_fijada IS NULL
+                 OR t.salida_fijada > t.entrada_fijada)
+            AND TRUNC(t.salida) = t.fechamar
             -- FIX 21/04/2026: Excluir N6 (salida ya corregida al dia siguiente)
             -- Para N6: salida=18/04 07:03, HH24MI='0703' < inirefri HH24MI='2006' = TRUE
             -- pero la salida YA esta correcta; PASO 3D la sobreescribiria con teorico.
@@ -4401,6 +4410,39 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         AND NVL(t.hayhed_poraut, 'N') <> 'S';
         
         -- =====================================================================
+        -- PASO 5B-TAG2: Marcar registros con HE no oficializada por el tareo
+        -- BUG detectado 27/04/2026 (caso WILSON MELENDEZ 21/04/2026):
+        -- El tareo original calculo correctamente t.horaextra (ej: 04:08)
+        -- pero NO oficializo el ajuste: t.horaextra_ajus quedo en NULL/0,
+        -- y por consecuencia t.horaexofi1/2/3 quedaron en 0 -> reporte = 00:00
+        -- Causa raiz observada: cuando el dia tiene horas_no_trabajadas > 0
+        -- (refrigerio anomalo) el tareo omite la oficializacion.
+        -- 
+        -- Accion: Marcar codaux4='HX' para que PASO 5B-2 reoficialice
+        -- horaextra_ajus + horaexofi1/2/3 con la logica correcta.
+        -- 
+        -- TABLAS ESCRITURA: SCA_ASISTENCIA_TAREO (codaux4, codaux5)
+        -- TABLAS CONSULTA:  (ninguna adicional)
+        -- =====================================================================
+        UPDATE SCA_ASISTENCIA_TAREO t
+        SET t.codaux4 = CASE WHEN t.codaux4 IS NULL THEN c_HX ELSE t.codaux4 || c_SEP || c_HX END,
+            t.codaux5 = SUBSTR(CASE WHEN t.codaux5 IS NULL THEN d_HX ELSE t.codaux5 || c_SEP || d_HX END, 1, 50)
+        WHERE t.fechamar = v_fecha_proceso
+        AND t.cod_empresa LIKE v_empresa_filtro
+        AND t.cod_personal LIKE v_personal_filtro
+        AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+        AND t.entrada IS NOT NULL
+        AND t.salida IS NOT NULL
+        AND t.salida_fijada IS NOT NULL
+        AND t.horaextra IS NOT NULL
+        AND t.horaextra >= TO_DATE('01/01/1900 01:00','dd/MM/yyyy HH24:MI')   -- HE >= 1 hora
+        AND (t.horaextra_ajus IS NULL
+             OR t.horaextra_ajus = TO_DATE('01/01/1900','dd/MM/yyyy'))         -- ajus NO oficializado
+        AND NVL(t.descanso, 'N') <> 'S'
+        AND NVL(t.ind_cerrado, 'N') <> 'S'
+        AND NVL(t.hayhed_poraut, 'N') <> 'S';
+        
+        -- =====================================================================
         -- PASO 5B: Recalcular horas extras (despues de salida)
         -- Regla: Solo aplica si excede 1 hora despues del horario de salida
         -- Se trunca a horas completas (no se pagan minutos)
@@ -4903,6 +4945,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 THEN TO_DATE('01/01/1900', 'dd/MM/yyyy') + (t.salida - t.entrada)
                 ELSE TO_DATE('01/01/1900', 'dd/MM/yyyy') + (t.salida + 1 - t.entrada)
             END,
+            -- HORADOBLESOF (oficiales): igual a brutas en descanso/feriado.
+            -- FIX 27/04/2026: Aquarius nativo descontaba el refrigerio de horadoblesof
+            -- en descanso de obreros (mostraba 07:30 en lugar de 08:00 cuando habia refri).
+            -- En descanso/feriado el refrigerio NO debe descontar de las dobles, porque
+            -- la jornada completa se compensa o paga doble. Se sobrescribe con brutas.
+            t.horadoblesof = CASE 
+                WHEN t.salida >= t.entrada
+                THEN TO_DATE('01/01/1900', 'dd/MM/yyyy') + (t.salida - t.entrada)
+                ELSE TO_DATE('01/01/1900', 'dd/MM/yyyy') + (t.salida + 1 - t.entrada)
+            END,
             -- NUMMARCACIONES: recontar segun campos reales del tareo
             -- (PASO 0-PRE puede haber puesto valor incorrecto del historial)
             t.nummarcaciones = 
@@ -5319,7 +5371,21 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         IF SQL%ROWCOUNT > 0 THEN
             DBMS_OUTPUT.PUT_LINE('PASO 9: Marcas ocultas para UI (rondas/no asignadas) -> ' || SQL%ROWCOUNT || ' marcas');
         END IF;
-        
+
+        -- =====================================================================
+        -- PASO FINAL: REDONDEO HORA-ENTERA HE / DOBLES / BANCO
+        -- Regla: minutos < 45 baja, >= 45 sube. Se aplica DESPUES de todos
+        -- los recalculos para garantizar que los campos de horas extras,
+        -- dobles oficiales y banco de horas queden en horas enteras antes
+        -- de que las compensaciones (PASO 15 del proceso principal) los lean.
+        -- Idempotente: si ya estan en horas enteras no hace nada.
+        -- =====================================================================
+        SP_SCA_REDONDEAR_TAREO_HE(
+            p_cod_empresa  => p_cod_empresa,
+            p_cod_personal => p_cod_personal,
+            p_fecha        => v_fecha_proceso
+        );
+
         COMMIT;
         
         -- =====================================================================
@@ -6456,6 +6522,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                          AND NVL(t.descanso, 'N') <> 'S' AND NVL(t.hayhed_poraut, 'N') <> 'S'
                         THEN 'PASO 5B-TAG: HExtra <1h (' ||
                              TRIM(TO_CHAR(ROUND((t.salida - t.salida_fijada)*1440), '99')) || 'min)'
+                    -- PASO 5B-TAG2: HE calculada pero no oficializada por el tareo
+                    WHEN t.entrada IS NOT NULL AND t.salida IS NOT NULL
+                         AND t.salida_fijada IS NOT NULL
+                         AND t.horaextra IS NOT NULL
+                         AND t.horaextra >= TO_DATE('01/01/1900 01:00','dd/MM/yyyy HH24:MI')
+                         AND (t.horaextra_ajus IS NULL
+                              OR t.horaextra_ajus = TO_DATE('01/01/1900','dd/MM/yyyy'))
+                         AND NVL(t.descanso, 'N') <> 'S'
+                         AND NVL(t.ind_cerrado, 'N') <> 'S'
+                         AND NVL(t.hayhed_poraut, 'N') <> 'S'
+                        THEN 'PASO 5B-TAG2: HE no oficializada (ajus=0) -> reoficializar'
                     -- PASO 7A+7
                     WHEN t.descanso = 'S' AND t.entrada IS NOT NULL AND t.salida IS NOT NULL
                          AND t.horid IS NOT NULL AND NVL(t.hayhea_poraut, 'N') <> 'S'

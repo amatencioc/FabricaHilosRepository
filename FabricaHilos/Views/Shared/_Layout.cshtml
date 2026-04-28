@@ -258,18 +258,17 @@
                     <!-- RECURSOS HUMANOS -->
                     <li class="sidebar-section">RECURSOS HUMANOS</li>                    <li>
                         <a asp-controller="RecursosHumanos" asp-action="Index"
-                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "active" : "")">
-                            <i class="bi bi-people"></i> Recursos Humanos
+                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "active" : "")">                            <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
                             <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "active" : "")"
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "true" : "false")"
+                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "true" : "false")"
                                    aria-controls="submenuAquarius">
                                     <i class="bi bi-people-fill"></i> Aquarius
                                 </a>
-                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "Compensaciones" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
                                     @if (menus.RhMarcaciones)
                                     {
                                     <li>
@@ -278,22 +277,15 @@
                                         </a>
                                     </li>
                                     }
-                                    @if (menus.RhCompensacionesIndividual)
+                                    @if (menus.RhCompensacionDiaDia)
                                     {
                                     <li>
-                                        <a href="/RecursosHumanos/Aquarius/Compensaciones" class="sidebar-link sidebar-sublink @(ctrl == "Compensaciones" && (ViewContext.RouteData.Values["action"]?.ToString() ?? "") != "Masiva" ? "active" : "")">
-                                            <i class="bi bi-arrow-left-right"></i> Comp. Individual
+                                        <a href="/RecursosHumanos/Aquarius/CompensacionDiaDia" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDiaDia" ? "active" : "")">
+                                            <i class="bi bi-calendar2-check"></i> Compensación Día x Día
                                         </a>
                                     </li>
                                     }
-                                    @if (menus.RhCompensacionesMasiva)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/Aquarius/Compensaciones/Masiva" class="sidebar-link sidebar-sublink @(ctrl == "Compensaciones" && (ViewContext.RouteData.Values["action"]?.ToString() ?? "") == "Masiva" ? "active" : "")">
-                                            <i class="bi bi-people-fill"></i> Comp. Masiva
-                                        </a>
-                                    </li>
-                                    }
+
                                 </ul>
                             </li>
                         </ul>

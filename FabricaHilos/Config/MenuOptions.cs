@@ -47,9 +47,7 @@ public class MenuOptions
     // ── Menús: Recursos Humanos ───────────────────────────────────────────
     public bool RecursosHumanos              { get; set; } = false;
     public bool RhMarcaciones                { get; set; } = true;
-    public bool RhCompensaciones             { get; set; } = true;
-    public bool RhCompensacionesIndividual   { get; set; } = true;
-    public bool RhCompensacionesMasiva       { get; set; } = true;
+    public bool RhCompensacionDiaDia         { get; set; } = true;
 
     // ── Menús: Logística ──────────────────────────────────────────────────
     public bool Logistica                { get; set; } = false;
@@ -98,9 +96,6 @@ public class MenuOptions
 
         RecursosHumanos  = true,
         RhMarcaciones    = true,
-        RhCompensaciones = true,
-        RhCompensacionesIndividual = true,
-        RhCompensacionesMasiva     = true,
 
         Logistica              = true,
         LogisticaRequerimiento = true,

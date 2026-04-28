@@ -31,7 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="Models\RecursosHumanos\CompensacionesDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\CompensacionDiaDiaDtos.cs" />
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
   </ItemGroup>
 
@@ -77,13 +77,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Individual\DetalleEmpleado.cshtml" />
-    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Individual\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaPorDia\Index.cshtml" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Views\RecursosHumanos\Aquarius\Compensaciones\Masiva\Index.cshtml" />
-  </ItemGroup>
+
 
 
   </Project>

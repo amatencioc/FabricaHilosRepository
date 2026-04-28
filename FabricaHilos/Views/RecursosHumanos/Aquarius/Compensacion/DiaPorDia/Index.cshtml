@@ -1,0 +1,902 @@
+@{
+    ViewData["Title"] = "Compensación Día por Día — Aquarius";
+    var _hoy = DateTime.Today;
+    var _dia = (int)_hoy.DayOfWeek;
+    var _lun = _hoy.AddDays(_dia == 0 ? -6 : -(_dia - 1));
+    var _dom = _lun.AddDays(6);
+    var _desde = _lun.ToString("yyyy-MM-dd");
+    var _hasta = _dom.ToString("yyyy-MM-dd");
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Compensación Día por Día</li>
+}
+
+@section Styles {
+<style>
+    :root { --cp: #1B4D3E; }
+
+    .comp-header {
+        background: linear-gradient(135deg, var(--cp) 0%, #2d6a4f 100%);
+        color: #fff; border-radius: .5rem .5rem 0 0; padding: 1.1rem 1.4rem;
+    }
+    .comp-header h5 { margin: 0; font-weight: 600; }
+    .comp-header p  { margin: 0; opacity: .8; font-size: .82rem; }
+
+    .step-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 50%;
+        background: var(--cp); color: #fff;
+        font-weight: 700; font-size: .8rem; flex-shrink: 0;
+    }
+
+    .section-card { border: 1px solid #dee2e6; border-radius: .5rem; margin-bottom: 1.1rem; }
+    .section-card-header {
+        background: #f8f9fa; border-bottom: 1px solid #dee2e6;
+        padding: .6rem 1rem; border-radius: .5rem .5rem 0 0;
+        font-weight: 600; font-size: .87rem; color: #343a40;
+        display: flex; align-items: center; gap: .5rem;
+    }
+    .section-card-body { padding: 1rem; }
+
+    .table-comp thead th {
+        background: #f1f3f5; color: #495057;
+        font-size: .72rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: .4px;
+        border-bottom: 2px solid #dee2e6;
+        white-space: nowrap; padding: .55rem .8rem;
+    }
+    .table-comp tbody td { vertical-align: middle; padding: .45rem .8rem; font-size: .86rem; }
+    .td-sobrante { color: #b45309; font-weight: 600; }
+
+    .badge-ok        { background: #d1fae5; color: #065f46; }
+    .badge-sin       { background: #fef9c3; color: #92400e; }
+    .badge-err       { background: #fee2e2; color: #991b1b; }
+    .badge-aplicada  { background: #dbeafe; color: #1e40af; }
+    .badge-pendiente { background: #f3f4f6; color: #374151; }
+
+    .badge-he     { background: #dbeafe; color: #1e40af; }
+    .badge-dobles { background: #ede9fe; color: #5b21b6; }
+    .badge-banco  { background: #d1fae5; color: #065f46; }
+
+    #areaEmpleados  { display: none; }
+    #areaPreview    { display: none; }
+    #areaResultados { display: none; }
+</style>
+}
+
+<div class="card shadow-sm border-0">
+    <div class="comp-header">
+        <h5><i class="bi bi-calendar2-check me-2"></i>Compensación Día por Día</h5>
+        <p>Seleccione el rango (semana actual por defecto), elija empleados con horas disponibles y registre la compensación.</p>
+    </div>
+    <div class="card-body p-3">
+
+        <!-- ── PASO 1: Rango de fechas ── -->
+        <div class="section-card">
+            <div class="section-card-header">
+                <span class="step-badge">1</span> Rango de búsqueda de empleados
+            </div>
+            <div class="section-card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-sm-12 col-md-4">
+                        <label class="form-label fw-semibold small mb-1">Nombre <small class="text-muted fw-normal">(opcional)</small></label>
+                        <input type="text" id="rangoNombre" class="form-control form-control-sm" placeholder="García..." />
+                    </div>
+                    <div class="col-sm-6 col-md-2">
+                        <label class="form-label fw-semibold small mb-1">Desde</label>
+                        <input type="date" id="rangoDesde" class="form-control form-control-sm" value="@_desde" />
+                    </div>
+                    <div class="col-sm-6 col-md-2">
+                        <label class="form-label fw-semibold small mb-1">Hasta</label>
+                        <input type="date" id="rangoHasta" class="form-control form-control-sm" value="@_hasta" />
+                    </div>
+                    <div class="col-sm-6 col-md-2 d-flex align-items-end gap-2">
+                        <button id="btnBuscarEmpleados" class="btn btn-sm btn-primary flex-grow-1" onclick="buscarEmpleados(1, true)">
+                            <i class="bi bi-search me-1"></i>Buscar
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="limpiarTodo()" title="Limpiar">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                    <div class="col-sm-6 col-md-2" style="display:none;">
+                        <input type="text" id="rangoPersonal" class="form-control form-control-sm" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PASO 2: Empleados del rango con checkboxes ── -->
+        <div id="areaEmpleados" class="section-card">
+            <div class="section-card-header">
+                <span class="step-badge">2</span> Empleados con horas disponibles en el rango
+                <span id="lblEmpleadosInfo" class="ms-auto text-muted fw-normal small"></span>
+            </div>
+            <div class="p-0">
+                <div class="table-responsive">
+                    <table class="table table-comp table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">
+                                    <input type="checkbox" id="chkTodosEmp" class="form-check-input"
+                                           title="Marcar/desmarcar todos" onchange="toggleTodosEmp(this)" />
+                                </th>
+                                <th>Cód.</th>
+                                <th>Nombre</th>
+                                <th>Fecha</th>
+                                <th class="text-end">H. Trabajadas</th>
+                                <th class="text-end">HH. Extra</th>
+                                <th class="text-end">HH. Dobles</th>
+                                <th class="text-end">HH. Banco</th>
+                                <th class="text-end">Total Disp.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bodyEmpleados"></tbody>
+                    </table>
+                </div>
+                <div id="areaPaginacion" class="d-flex align-items-center gap-2 px-3 py-2 border-top" style="display:none!important;">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnPagAnt" onclick="cambiarPagina(-1)" disabled>
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <span id="lblPaginacion" class="small text-muted"></span>
+                    <button class="btn btn-sm btn-outline-secondary" id="btnPagSig" onclick="cambiarPagina(1)" disabled>
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    <span class="ms-auto small text-muted">Filas por página:</span>
+                    <select id="selTamPagina" class="form-select form-select-sm" style="width:70px;" onchange="cambiarTamPagina()">
+                        <option value="10" selected>10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="row g-2 align-items-end px-3 py-2 border-top">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small mb-1">Tipo Origen:</label>
+                        <select id="tipoOrigenEmp" class="form-select form-select-sm">
+                            <option value="E">E — Horas Extras</option>
+                            <option value="D">D — Horas Dobles</option>
+                            <option value="B">B — Banco de Horas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold small mb-1">Fecha Destino:</label>
+                        <input type="date" id="fechaDestinoEmp" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button id="btnCalcularSeleccion" class="btn btn-sm btn-outline-primary w-100" onclick="calcularSeleccion()" disabled>
+                            <i class="bi bi-calculator me-1"></i>Calcular Seleccionados
+                        </button>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <span id="lblSeleccionEmp" class="small text-muted"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PASO 3: Preview de compensación ── -->
+        <div id="areaPreview" class="section-card">
+            <div class="section-card-header">
+                <span class="step-badge">3</span> Preview de compensación — confirme y registre
+                <span id="lblPreviewInfo" class="ms-auto text-muted fw-normal small"></span>
+            </div>
+            <div class="p-0">
+                <div class="table-responsive">
+                    <table class="table table-comp table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:36px;">
+                                    <input type="checkbox" id="chkTodos" class="form-check-input"
+                                           title="Marcar/desmarcar todos" onchange="toggleTodos(this)" />
+                                </th>
+                                <th>Cód.</th>
+                                <th>Nombre</th>
+                                <th class="text-end">H. Disponibles</th>
+                                <th class="text-end">H. Jornada Destino</th>
+                                <th class="text-end">H. a Compensar</th>
+                                <th class="text-end">H. Sobrante</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bodyPreview"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex gap-2 align-items-center p-3 border-top">
+                    <button id="btnRegistrar" class="btn btn-sm btn-success" onclick="abrirModalRegistro()" disabled>
+                        <i class="bi bi-check2-circle me-1"></i>Registrar Compensación
+                    </button>
+                    <span id="lblSeleccion" class="small text-muted"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PASO 4: Resultados ── -->
+        <div id="areaResultados" class="section-card">
+            <div class="section-card-header">
+                <span class="step-badge">4</span> Resultados del registro
+                <span id="lblResultadosInfo" class="ms-auto text-muted fw-normal small"></span>
+            </div>
+            <div class="p-0">
+                <div class="table-responsive">
+                    <table class="table table-comp table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Cód.</th>
+                                <th>Nombre</th>
+                                <th class="text-end">H. Compensadas</th>
+                                <th>ID Comp.</th>
+                                <th>Estado</th>
+                                <th>Motivo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bodyResultados"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex gap-2 p-3 border-top align-items-center">
+                    <button id="btnCommit" class="btn btn-sm btn-success" onclick="hacerCommit()">
+                        <i class="bi bi-check-all me-1"></i>Confirmar (COMMIT)
+                    </button>
+                    <button id="btnRollback" class="btn btn-sm btn-outline-danger" onclick="hacerRollback()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Cancelar (ROLLBACK)
+                    </button>
+                    <span class="small text-muted ms-2">
+                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                        La transacción quedará abierta hasta que confirme o cancele.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Historial (colapsable) eliminado ── -->
+
+    </div>
+</div>
+
+<!-- ── Modal: datos adicionales para registrar ─────────────────────────── -->
+<div class="modal fade" id="modalRegistro" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:var(--cp)">
+                <h6 class="modal-title text-white"><i class="bi bi-pencil-square me-2"></i>Datos para el Registro</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Se registrará la compensación para <strong id="lblCantSeleccionados"></strong> empleado(s).<br>
+                    Complete los datos necesarios:
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold small mb-1">Tipo Compensación (destino)</label>
+                        <select id="modalTipoCompensacion" class="form-select form-select-sm">
+                            <option value="F" selected>F — Faltas</option>
+                            <option value="T">T — Tardanza</option>
+                            <option value="A">A — Antes de Salida</option>
+                            <option value="N">N — Horas No Trabajadas</option>
+                            <option value="P">P — Permisos</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold small mb-1">
+                            Horas Máx. por empleado <small class="text-muted fw-normal">(HH:MM — vacío = sin límite)</small>
+                        </label>
+                        <input type="text" id="modalHorasMax" class="form-control form-control-sm" placeholder="08:00" />
+                    </div>
+                </div>
+                <div class="alert alert-warning mt-3 py-2 small mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    La transacción quedará abierta hasta que confirme o cancele.
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-success" id="btnConfirmRegistro" onclick="ejecutarRegistro()">
+                    <i class="bi bi-check2-circle me-1"></i>Aplicar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal genérico (alertas / confirmaciones) ──────────────────────── -->
+<div class="modal fade" id="modalMsg" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalMsgTitle"></h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small" id="modalMsgBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" id="btnMsgCancel" style="display:none">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnMsgOk">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal detalle VER_ESTADO ────────────────────────────────────────── -->
+<div class="modal fade" id="modalEstado" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title"><i class="bi bi-info-circle me-2"></i>Detalle de Compensación</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalEstadoBody">
+                <div class="text-center py-4"><div class="spinner-border text-secondary"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const URL_BASE = '/RecursosHumanos/Aquarius/CompensacionDiaDia';
+
+let previewData          = [];
+let txAbierta            = false;
+let codigosSeleccionados = [];
+let seleccionEmp = {};
+
+// Estado de paginación
+let _pagActual   = 1;
+let _tamPagina   = 10;
+let _totalFilas  = 0;
+
+// ── Utilidades ────────────────────────────────────────────────────────────
+
+function toIsoLocal(d) {
+    return d.getFullYear() + '-'
+        + String(d.getMonth() + 1).padStart(2, '0') + '-'
+        + String(d.getDate()).padStart(2, '0');
+}
+
+function isoADdMmYyyy(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+function ddmmyyyyAIso(s) {
+    if (!s) return '';
+    const [d, m, y] = s.split('/');
+    return `${y}-${m}-${d}`;
+}
+
+function semanaActual() {
+    const hoy  = new Date();
+    const dia  = hoy.getDay(); // 0=dom
+    const lun  = new Date(hoy); lun.setDate(hoy.getDate() - (dia === 0 ? 6 : dia - 1));
+    const dom  = new Date(lun); dom.setDate(lun.getDate() + 6);
+    return { desde: toIsoLocal(lun), hasta: toIsoLocal(dom) };
+}
+
+function badgeEstado(e) {
+    const map = { OK: ['badge-ok','✓ OK'], SIN_HORAS: ['badge-sin','⚠ SIN HORAS'], ERR: ['badge-err','✗ ERROR'] };
+    const [cls, txt] = map[e] ?? ['badge-sin', e];
+    return `<span class="badge rounded-pill ${cls}">${txt}</span>`;
+}
+
+function badgeAplicacion(e) {
+    return `<span class="badge rounded-pill ${e === 'APLICADA' ? 'badge-aplicada' : 'badge-pendiente'}">${e}</span>`;
+}
+
+function msgModal(title, body, { confirm = false } = {}) {
+    return new Promise(resolve => {
+        document.getElementById('modalMsgTitle').textContent = title;
+        document.getElementById('modalMsgBody').innerHTML = body;
+        const btnCancel = document.getElementById('btnMsgCancel');
+        const btnOk     = document.getElementById('btnMsgOk');
+        btnCancel.style.display = confirm ? '' : 'none';
+        btnOk.textContent = confirm ? 'Confirmar' : 'Aceptar';
+        btnOk.className   = `btn btn-sm ${confirm ? 'btn-primary' : 'btn-secondary'}`;
+        const modal = new bootstrap.Modal(document.getElementById('modalMsg'));
+        btnOk.onclick = () => { modal.hide(); resolve(true); };
+        btnCancel.onclick = () => { modal.hide(); resolve(false); };
+        modal.show();
+    });
+}
+
+window.addEventListener('beforeunload', () => {
+    if (txAbierta) navigator.sendBeacon(`${URL_BASE}/Rollback`);
+});
+
+// ── PASO 1: Buscar empleados del rango ───────────────────────────────────
+
+async function buscarEmpleados(pagina, esNuevaBusqueda) {
+    const desde    = document.getElementById('rangoDesde').value;
+    const hasta    = document.getElementById('rangoHasta').value;
+    const personal = document.getElementById('rangoPersonal').value.trim();
+    const nombre   = document.getElementById('rangoNombre').value.trim();
+
+    if (!desde || !hasta) { await msgModal('Aviso', '<p>Ingrese el rango de fechas.</p>'); return; }
+
+    // Limpiar selección solo cuando es una búsqueda nueva explícita
+    if (esNuevaBusqueda) seleccionEmp = {};
+
+    _pagActual = pagina ?? 1;
+    _tamPagina = parseInt(document.getElementById('selTamPagina').value) || 10;
+
+    setBusy('btnBuscarEmpleados', true, 'Buscando...');
+    try {
+        const params = new URLSearchParams({
+            fechaInicio: isoADdMmYyyy(desde),
+            fechaFin:    isoADdMmYyyy(hasta),
+            pagina:      _pagActual,
+            tamPagina:   _tamPagina,
+            ...(personal && { codPersonal: personal }),
+            ...(nombre   && { nombre })
+        });
+        const res  = await fetch(`${URL_BASE}/ListarEmpleadosRango?${params}`);
+        const json = await res.json();
+        if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
+        _totalFilas = json.totalFilas ?? 0;
+        renderEmpleados(json.data);
+    } catch (e) {
+        await msgModal('Error de red', `<p>${e.message}</p>`);
+    } finally {
+        setBusy('btnBuscarEmpleados', false, '<i class="bi bi-search me-1"></i>Buscar');
+    }
+}
+
+function cambiarPagina(delta) {
+    const totalPags = Math.ceil(_totalFilas / _tamPagina);
+    const nueva = _pagActual + delta;
+    if (nueva < 1 || nueva > totalPags) return;
+    buscarEmpleados(nueva, false);
+}
+
+function cambiarTamPagina() {
+    buscarEmpleados(1, true);
+}
+
+function renderEmpleados(data) {
+    const tbody = document.getElementById('bodyEmpleados');
+    tbody.innerHTML = '';
+    // NO resetear seleccionEmp — persiste entre páginas
+
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">
+            Sin empleados con horas disponibles en el rango indicado.</td></tr>`;
+        document.getElementById('areaEmpleados').style.display = 'block';
+        actualizarConteoEmp();
+        return;
+    }
+
+    data.forEach((r, i) => {
+        const key = (r.codPersonal ?? '') + '|' + (r.fechamarStr ?? '');
+        const estaSeleccionado = !!seleccionEmp[key];
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td>
+              <input type="checkbox" class="form-check-input chk-emp"
+                     data-cod="${r.codPersonal ?? ''}"
+                     data-fecha="${r.fechamarStr ?? ''}"
+                     ${estaSeleccionado ? 'checked' : ''}
+                     onchange="onCheckEmp(this)" />
+            </td>
+            <td><code>${r.codPersonal}</code></td>
+            <td class="text-truncate" style="max-width:220px;" title="${r.nombreCompleto ?? ''}">${r.nombreCompleto ?? ''}</td>
+            <td><span class="badge bg-secondary">${r.fechamarStr ?? ''}</span></td>
+            <td class="text-end">
+              ${r.minTrabajadas > 0 ? `<span class="badge rounded-pill bg-info text-dark">${r.horasTrabajadas}</span>` : '<span class="text-muted">—</span>'}
+            </td>
+            <td class="text-end">
+              ${r.minHe > 0 ? `<span class="badge rounded-pill badge-he">${r.horasHe}</span>` : '<span class="text-muted">—</span>'}
+            </td>
+            <td class="text-end">
+              ${r.minDobles > 0 ? `<span class="badge rounded-pill badge-dobles">${r.horasDobles}</span>` : '<span class="text-muted">—</span>'}
+            </td>
+            <td class="text-end">
+              ${r.minBanco > 0 ? `<span class="badge rounded-pill badge-banco">${r.horasBanco}</span>` : '<span class="text-muted">—</span>'}
+            </td>
+            <td class="text-end fw-bold">${r.horasTotal ?? '00:00'}</td>
+          </tr>`);
+    });
+
+    document.getElementById('areaEmpleados').style.display = 'block';
+    document.getElementById('areaPreview').style.display = 'none';
+    document.getElementById('areaResultados').style.display = 'none';
+    actualizarConteoEmp();
+    actualizarPaginacion();
+
+    // Fecha destino: hoy por defecto
+    if (!document.getElementById('fechaDestinoEmp').value) {
+        document.getElementById('fechaDestinoEmp').value = toIsoLocal(new Date());
+    }
+}
+
+function actualizarPaginacion() {
+    const totalPags = Math.ceil(_totalFilas / _tamPagina) || 1;
+    const area = document.getElementById('areaPaginacion');
+    area.style.display = _totalFilas > 0 ? 'flex' : 'none';
+    document.getElementById('lblPaginacion').textContent =
+        `Página ${_pagActual} de ${totalPags} (${_totalFilas} filas)`;
+    document.getElementById('btnPagAnt').disabled = _pagActual <= 1;
+    document.getElementById('btnPagSig').disabled = _pagActual >= totalPags;
+}
+
+function onCheckEmp(chk) {
+    const key = chk.dataset.cod + '|' + chk.dataset.fecha;
+    if (chk.checked) {
+        seleccionEmp[key] = { cod: chk.dataset.cod, fecha: chk.dataset.fecha };
+    } else {
+        delete seleccionEmp[key];
+    }
+    actualizarConteoEmp();
+    sincronizarChkTodosEmp();
+}
+
+function toggleTodosEmp(chk) {
+    document.querySelectorAll('.chk-emp').forEach(c => {
+        c.checked = chk.checked;
+        const key = c.dataset.cod + '|' + c.dataset.fecha;
+        if (chk.checked) {
+            seleccionEmp[key] = { cod: c.dataset.cod, fecha: c.dataset.fecha };
+        } else {
+            delete seleccionEmp[key];
+        }
+    });
+    actualizarConteoEmp();
+}
+
+function sincronizarChkTodosEmp() {
+    const todos    = document.querySelectorAll('.chk-emp').length;
+    const marcados = document.querySelectorAll('.chk-emp:checked').length;
+    const chk = document.getElementById('chkTodosEmp');
+    chk.indeterminate = marcados > 0 && marcados < todos;
+    chk.checked       = todos > 0 && marcados === todos;
+}
+
+function actualizarConteoEmp() {
+    const total    = document.querySelectorAll('.chk-emp').length;
+    const marcados = Object.keys(seleccionEmp).length;
+    document.getElementById('lblEmpleadosInfo').textContent = `${total} fila(s)`;
+    document.getElementById('lblSeleccionEmp').textContent =
+        marcados > 0 ? `${marcados} seleccionado(s)` : 'Seleccione al menos un empleado';
+    document.getElementById('btnCalcularSeleccion').disabled = marcados === 0;
+    sincronizarChkTodosEmp();
+}
+
+// ── PASO 2: Calcular preview de los seleccionados ────────────────────────
+
+async function calcularSeleccion() {
+    const seleccionados = Object.values(seleccionEmp);
+    if (!seleccionados.length) return;
+
+    const tipoOrigen   = document.getElementById('tipoOrigenEmp').value;
+    const fechaDestino = document.getElementById('fechaDestinoEmp').value;
+
+    if (!fechaDestino) { await msgModal('Aviso', '<p>Ingrese la Fecha Destino.</p>'); return; }
+
+    // Agrupar por fecha de origen (seleccionEmp persiste entre páginas)
+    const grupos = {};
+    seleccionados.forEach(s => {
+        const fecha = s.fecha; // DD/MM/YYYY
+        if (!grupos[fecha]) grupos[fecha] = [];
+        grupos[fecha].push(s.cod);
+    });
+
+    setBusy('btnCalcularSeleccion', true, 'Calculando...');
+    previewData = [];
+
+    try {
+        for (const [fecha, cods] of Object.entries(grupos)) {
+            const params = new URLSearchParams({
+                fechaOrigen:     fecha,
+                fechaDestino:    isoADdMmYyyy(fechaDestino),
+                tipoOrigen,
+                listaPersonal:   cods.join(',')
+            });
+            const res  = await fetch(`${URL_BASE}/Calcular`, { method: 'POST', body: params });
+            const json = await res.json();
+            if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
+            // Enriquecer cada fila con su fecha_origen
+            json.data.forEach(r => { r.fechaOrigen = fecha; });
+            previewData.push(...json.data);
+        }
+        renderPreview(previewData);
+    } catch (e) {
+        await msgModal('Error de red', `<p>${e.message}</p>`);
+    } finally {
+        setBusy('btnCalcularSeleccion', false, '<i class="bi bi-calculator me-1"></i>Calcular Seleccionados');
+    }
+}
+
+function renderPreview(data) {
+    const tbody = document.getElementById('bodyPreview');
+    tbody.innerHTML = '';
+
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-3">
+            Sin datos para los parámetros indicados.</td></tr>`;
+        document.getElementById('areaPreview').style.display = 'block';
+        actualizarConteo();
+        return;
+    }
+
+    data.forEach((r, i) => {
+        const sinHoras = (r.minACompensar ?? 0) === 0;
+        const sobrante = (r.minSobrante  ?? 0)  > 0;
+
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr class="${sinHoras ? 'table-light text-muted' : ''}" data-idx="${i}">
+            <td>
+              <input type="checkbox" class="form-check-input chk-prev"
+                     data-cod="${r.codPersonal}"
+                     data-fecha-origen="${r.fechaOrigen ?? ''}"
+                     ${sinHoras ? 'disabled' : 'checked'}
+                     onchange="actualizarConteo()" />
+            </td>
+            <td><code>${r.codPersonal}</code></td>
+            <td class="text-truncate" style="max-width:220px;" title="${r.nombreCompleto ?? ''}">${r.nombreCompleto ?? ''}</td>
+            <td class="text-end fw-semibold">${r.horasDisponibles ?? '00:00'}</td>
+            <td class="text-end">${r.horasJornadaDestino ?? '00:00'}</td>
+            <td class="text-end text-success fw-bold">${r.horasACompensar ?? '00:00'}</td>
+            <td class="text-end ${sobrante ? 'td-sobrante' : ''}">
+              ${sobrante ? r.horasSobrante : '<span class="text-muted">—</span>'}
+            </td>
+          </tr>`);
+    });
+
+    document.getElementById('areaPreview').style.display = 'block';
+    document.getElementById('areaResultados').style.display = 'none';
+    actualizarConteo();
+    sincronizarChkTodos();
+}
+
+function toggleTodos(chk) {
+    document.querySelectorAll('.chk-prev:not(:disabled)').forEach(c => c.checked = chk.checked);
+    actualizarConteo();
+}
+
+function sincronizarChkTodos() {
+    const todos    = document.querySelectorAll('.chk-prev:not(:disabled)').length;
+    const marcados = document.querySelectorAll('.chk-prev:not(:disabled):checked').length;
+    const chkM = document.getElementById('chkTodos');
+    chkM.indeterminate = marcados > 0 && marcados < todos;
+    chkM.checked       = marcados > 0 && marcados === todos;
+}
+
+function actualizarConteo() {
+    const total    = document.querySelectorAll('.chk-prev').length;
+    const sinHoras = document.querySelectorAll('.chk-prev:disabled').length;
+    const marcados = document.querySelectorAll('.chk-prev:not(:disabled):checked').length;
+    document.getElementById('lblPreviewInfo').textContent =
+        `${total} empleado(s) — ${sinHoras} sin horas`;
+    document.getElementById('lblSeleccion').textContent =
+        marcados > 0 ? `${marcados} seleccionado(s)` : 'Seleccione al menos un empleado';
+    document.getElementById('btnRegistrar').disabled = marcados === 0;
+    sincronizarChkTodos();
+}
+
+// ── PASO 3: Abrir modal y ejecutar registro ───────────────────────────────
+
+function abrirModalRegistro() {
+    const seleccionados = [...document.querySelectorAll('.chk-prev:not(:disabled):checked')];
+    if (!seleccionados.length) return;
+
+    // Agrupar por fecha origen -> lista de codigos
+    const grupos = {};
+    seleccionados.forEach(chk => {
+        const fo = chk.dataset.fechaOrigen;
+        if (!grupos[fo]) grupos[fo] = [];
+        grupos[fo].push(chk.dataset.cod);
+    });
+    window._registroGrupos = grupos;
+
+    document.getElementById('lblCantSeleccionados').textContent = seleccionados.length;
+    document.getElementById('modalHorasMax').value = '';
+    new bootstrap.Modal(document.getElementById('modalRegistro')).show();
+}
+
+async function ejecutarRegistro() {
+    const fechaDestino     = isoADdMmYyyy(document.getElementById('fechaDestinoEmp').value);
+    const tipoOrigen       = document.getElementById('tipoOrigenEmp').value;
+    const tipoCompensacion = document.getElementById('modalTipoCompensacion').value;
+    const horasMax         = document.getElementById('modalHorasMax').value.trim();
+
+    bootstrap.Modal.getInstance(document.getElementById('modalRegistro'))?.hide();
+    setBusy('btnRegistrar', true, 'Registrando...');
+
+    const grupos  = window._registroGrupos ?? {};
+    const allData = [];
+
+    try {
+        for (const [fechaOrigen, cods] of Object.entries(grupos)) {
+            const params = new URLSearchParams({
+                fechaOrigen,
+                fechaDestino,
+                tipoOrigen,
+                tipoCompensacion,
+                listaPersonal: cods.join(','),
+                ...(horasMax && { horasMax })
+            });
+            const res  = await fetch(`${URL_BASE}/RegistrarMasivo`, { method: 'POST', body: params });
+            const json = await res.json();
+            if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
+            allData.push(...json.data);
+        }
+
+        txAbierta = true;
+        renderResultados(allData);
+        document.getElementById('areaPreview').style.display = 'none';
+    } catch (e) {
+        await msgModal('Error de red', `<p>${e.message}</p>`);
+    } finally {
+        setBusy('btnRegistrar', false, '<i class="bi bi-check2-circle me-1"></i>Registrar Compensación');
+    }
+}
+
+function renderResultados(data) {
+    const tbody = document.getElementById('bodyResultados');
+    tbody.innerHTML = '';
+    let ok = 0, sin = 0, err = 0;
+
+    data.forEach(r => {
+        if      (r.estado === 'OK')        ok++;
+        else if (r.estado === 'SIN_HORAS') sin++;
+        else                               err++;
+
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td><code>${r.codPersonal}</code></td>
+            <td class="text-truncate" style="max-width:220px;">${r.nombreCompleto ?? ''}</td>
+            <td class="text-end fw-bold">${r.horasACompensar ?? '00:00'}</td>
+            <td>${r.idCompen ? `<code class="text-success">${r.idCompen}</code>` : '<span class="text-muted">—</span>'}</td>
+            <td>${badgeEstado(r.estado)}</td>
+            <td class="small text-muted">${r.motivo ?? ''}</td>
+          </tr>`);
+    });
+
+    document.getElementById('lblResultadosInfo').textContent = `✅ ${ok} OK  ⚠️ ${sin} sin horas  ❌ ${err} error(es)`;
+    document.getElementById('areaResultados').style.display = 'block';
+    document.getElementById('areaResultados').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── PASO 4: COMMIT / ROLLBACK ─────────────────────────────────────────────
+
+async function hacerCommit() {
+    const ok = await msgModal('Confirmar', '<p>¿Confirma el <strong>COMMIT</strong>? Los cambios quedarán guardados.</p>', { confirm: true });
+    if (!ok) return;
+    try {
+        const res  = await fetch(`${URL_BASE}/Commit`, { method: 'POST' });
+        const json = await res.json();
+        if (json.ok) { txAbierta = false; await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas.</p>'); limpiarTodo(); }
+        else          await msgModal('Error', `<p>${json.error}</p>`);
+    } catch (e) { await msgModal('Error de red', `<p>${e.message}</p>`); }
+}
+
+async function hacerRollback() {
+    const ok = await msgModal('Cancelar', '<p>¿Confirma el <strong>ROLLBACK</strong>? Todos los cambios serán revertidos.</p>', { confirm: true });
+    if (!ok) return;
+    try {
+        const res  = await fetch(`${URL_BASE}/Rollback`, { method: 'POST' });
+        const json = await res.json();
+        if (json.ok) {
+            txAbierta = false;
+            document.getElementById('areaResultados').style.display = 'none';
+            if (previewData.length) renderPreview(previewData);
+            await msgModal('Cancelado', '<p>Compensaciones canceladas. Los datos NO fueron modificados.</p>');
+        } else await msgModal('Error', `<p>${json.error}</p>`);
+    } catch (e) { await msgModal('Error de red', `<p>${e.message}</p>`); }
+}
+
+// ── Historial ──────────────────────────────────────────────────────────────
+
+async function consultarRango() {
+    const personal    = document.getElementById('consPersonal').value.trim();
+    const fechaInicio = isoADdMmYyyy(document.getElementById('consFechaIni').value);
+    const fechaFin    = isoADdMmYyyy(document.getElementById('consFechaFin').value);
+    if (!fechaInicio || !fechaFin) { await msgModal('Aviso', '<p>Ingrese las fechas de consulta.</p>'); return; }
+
+    try {
+        const params = new URLSearchParams({ fechaInicio, fechaFin, ...(personal && { codPersonal: personal }) });
+        const res  = await fetch(`${URL_BASE}/ConsultarRango?${params}`);
+        const json = await res.json();
+        if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
+        renderConsulta(json.data);
+    } catch (e) { await msgModal('Error de red', `<p>${e.message}</p>`); }
+}
+
+function renderConsulta(data) {
+    const tbody = document.getElementById('bodyConsulta');
+    tbody.innerHTML = '';
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
+    } else {
+        data.forEach(r => {
+            const btnVer = r.idCompen
+                ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstado(${r.idCompen})" title="Ver detalle"><i class="bi bi-eye"></i></button>`
+                : '';
+            tbody.insertAdjacentHTML('beforeend', `
+              <tr>
+                <td><code>${r.idCompen ?? '—'}</code></td>
+                <td><code>${r.codPersonal}</code></td>
+                <td>${r.fechaOrigen ?? ''}</td>
+                <td>${r.fechaDestino ?? ''}</td>
+                <td><span class="badge bg-secondary">${r.tipoOrigen ?? ''}</span></td>
+                <td><span class="badge bg-secondary">${r.tipoCompensacion ?? ''}</span></td>
+                <td class="text-end">${r.tiempoHhMi ?? ''}</td>
+                <td>${badgeAplicacion(r.estadoAplicacion ?? 'PENDIENTE')}</td>
+                <td>${btnVer}</td>
+              </tr>`);
+        });
+    }
+    document.getElementById('areaConsulta').style.display = 'block';
+}
+
+async function verEstado(idCompen) {
+    document.getElementById('modalEstadoBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border text-secondary"></div></div>';
+    new bootstrap.Modal(document.getElementById('modalEstado')).show();
+    try {
+        const res  = await fetch(`${URL_BASE}/VerEstado/${idCompen}`);
+        const json = await res.json();
+        if (!json.ok) { document.getElementById('modalEstadoBody').innerHTML = `<div class="alert alert-danger">${json.error}</div>`; return; }
+        const d = json.data;
+        const nombre = `${d.apePaterno ?? ''} ${d.apeMaterno ?? ''} ${d.nomTrabajador ?? ''}`.trim();
+        document.getElementById('modalEstadoBody').innerHTML = `
+          <div class="row g-3 small">
+            <div class="col-12">
+              <table class="table table-sm table-borderless mb-0">
+                <tr><th class="text-muted fw-normal" style="width:130px;">ID:</th><td><code>${d.idCompen}</code></td>
+                    <th class="text-muted fw-normal ps-3">Personal:</th><td><code>${d.codPersonal}</code> — ${nombre}</td></tr>
+                <tr><th class="text-muted fw-normal">Origen:</th><td>${d.fechaOrigen ?? '—'} &nbsp; Tipo <strong>${d.tipoOrigen ?? ''}</strong></td>
+                    <th class="text-muted fw-normal ps-3">Destino:</th><td>${d.fechaDestino ?? '—'} &nbsp; Tipo <strong>${d.tipoCompensacion ?? ''}</strong></td></tr>
+                <tr><th class="text-muted fw-normal">Tiempo:</th><td colspan="3"><strong>${d.tiempoHhMi ?? ''}</strong> (${d.tiempoMin} min)</td></tr>
+              </table>
+            </div>
+          </div>`;
+    } catch (e) { document.getElementById('modalEstadoBody').innerHTML = `<div class="alert alert-danger">Error: ${e.message}</div>`; }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function limpiarTodo() {
+    if (txAbierta) {
+        msgModal('Transacción abierta', '<p>Hay una transacción en curso. ¿Desea cancelarla y limpiar?</p>', { confirm: true })
+            .then(ok => {
+                if (!ok) return;
+                fetch(`${URL_BASE}/Rollback`, { method: 'POST' });
+                txAbierta = false;
+                _limpiar();
+            });
+        return;
+    }
+    _limpiar();
+}
+
+function _limpiar() {
+    previewData = [];
+    seleccionEmp = {};
+    _pagActual  = 1;
+    _totalFilas = 0;
+    document.getElementById('areaEmpleados').style.display  = 'none';
+    document.getElementById('areaPreview').style.display    = 'none';
+    document.getElementById('areaResultados').style.display = 'none';
+    document.getElementById('bodyEmpleados').innerHTML   = '';
+    document.getElementById('bodyPreview').innerHTML     = '';
+    document.getElementById('bodyResultados').innerHTML  = '';
+    document.getElementById('lblEmpleadosInfo').textContent = '';
+    document.getElementById('lblPreviewInfo').textContent   = '';
+    document.getElementById('lblSeleccion').textContent     = '';
+    document.getElementById('btnRegistrar').disabled = true;
+    document.getElementById('btnCalcularSeleccion').disabled = true;
+    actualizarPaginacion();
+}
+
+function setBusy(id, busy, labelHtml) {
+    const btn = document.getElementById(id);
+    btn.disabled  = busy;
+    btn.innerHTML = busy ? '<span class="spinner-border spinner-border-sm me-1"></span>Espere...' : labelHtml;
+}
+
+// ── Inicialización ────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    // fechas ya seteadas por defecto en el servidor
+});
+</script>
+}

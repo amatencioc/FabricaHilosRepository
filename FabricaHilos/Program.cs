@@ -127,16 +127,10 @@ builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercial
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
+builder.Services.AddScoped<ICompensacionDiaDiaService, CompensacionDiaDiaService>();
 builder.Services.AddSingleton<DepuracionJobService>();
 builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobService>());
-builder.Services.AddScoped<ICompensacionesService, CompensacionesService>();
-builder.Services.AddSingleton<CompensacionJobService>();
-builder.Services.AddSingleton<ICompensacionJobService>(sp => sp.GetRequiredService<CompensacionJobService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<CompensacionJobService>());
-builder.Services.AddSingleton<MasivaEventoJobService>();
-builder.Services.AddSingleton<IMasivaEventoJobService>(sp => sp.GetRequiredService<MasivaEventoJobService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<MasivaEventoJobService>());
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();

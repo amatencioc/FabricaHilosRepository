@@ -77,10 +77,8 @@ public class MenuService : IMenuService
             SeguridadInspecciones = global.SeguridadInspecciones && Tiene("Seguridad"),
 
             // Submenus: Recursos Humanos
-            RhMarcaciones    = global.RhMarcaciones    && Tiene("RecursosHumanos"),
-            RhCompensaciones = global.RhCompensaciones && Tiene("RecursosHumanos"),
-            RhCompensacionesIndividual = global.RhCompensacionesIndividual && Tiene("RecursosHumanos"),
-            RhCompensacionesMasiva     = global.RhCompensacionesMasiva     && Tiene("RecursosHumanos"),
+            RhMarcaciones         = global.RhMarcaciones         && Tiene("RecursosHumanos"),
+            RhCompensacionDiaDia  = global.RhCompensacionDiaDia  && Tiene("RecursosHumanos"),
 
             // Menú principal: Logística
             Logistica              = Tiene("Logistica"),
