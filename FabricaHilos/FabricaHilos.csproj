@@ -74,6 +74,7 @@
 
   <ItemGroup>
     <Folder Include="Data\CreditoCobranza\" />
+    <Folder Include="Data\Ventas\ComercialMaestro\" />
   </ItemGroup>
 
   <ItemGroup>

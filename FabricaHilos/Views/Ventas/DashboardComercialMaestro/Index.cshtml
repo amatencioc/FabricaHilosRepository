@@ -183,8 +183,6 @@
                             <th class="text-end">N° Docs</th>
                             <th class="text-end">Kilos</th>
                             <th class="text-end">Importe</th>
-                            <th class="text-end">IGV</th>
-                            <th class="text-end">Total</th>
                         </tr>
                     </thead>
                     <tbody id="bodyClientesAsesor"></tbody>
@@ -442,7 +440,7 @@
         clientesTodosData.forEach(function(d) {
             var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
             if (!map[key]) map[key] = { importe: 0, kg: 0 };
-            map[key].importe += (d.total       || 0);
+            map[key].importe += (d.importe      || 0);
             map[key].kg      += (d.cantidadKg || 0);
         });
         if (Object.keys(map).length === 0) return;
@@ -576,7 +574,7 @@
         var map = {};
         clientesTodosData.forEach(function(d) {
             var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
-            map[key] = (map[key] || 0) + (d.total || 0);
+            map[key] = (map[key] || 0) + (d.importe || 0);
         });
         if (Object.keys(map).length === 0) return;
 
@@ -833,7 +831,7 @@
         var map = {};
         clientesTodosData.forEach(function(d) {
             var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
-            map[key] = (map[key] || 0) + (d.total || 0);
+            map[key] = (map[key] || 0) + (d.importe || 0);
         });
         if (Object.keys(map).length === 0) return;
 
@@ -912,28 +910,24 @@
             });
 
             if (!rows || rows.length === 0) {
-                body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+                body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
             } else {
                 const fmtKg = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
-                rows.forEach(function(row, i) {
-                    var igv   = row.igv   ?? 0;
-                    var total = row.total ?? 0;
-                    body.innerHTML += '<tr>'
-                        + '<td>' + (i + 1) + '</td>'
-                        + '<td>' + (row.ruc || '') + '</td>'
-                        + '<td>' + (row.razonSocial || '') + '</td>'
-                        + '<td>' + (row.giro || '') + '</td>'
-                        + '<td class="text-end">' + (row.nroDoc ?? '') + '</td>'
-                        + '<td class="text-end">' + fmtKg.format(row.cantidadKg ?? 0) + '</td>'
-                        + '<td class="text-end fw-semibold">' + monLabel + ' ' + fmt(row.importe) + '</td>'
-                        + '<td class="text-end">' + monLabel + ' ' + fmt(igv) + '</td>'
-                        + '<td class="text-end fw-bold">' + monLabel + ' ' + fmt(total) + '</td>'
-                        + '</tr>';
-                });
+                    rows.forEach(function(row, i) {
+                        body.innerHTML += '<tr>'
+                            + '<td>' + (i + 1) + '</td>'
+                            + '<td>' + (row.ruc || '') + '</td>'
+                            + '<td>' + (row.razonSocial || '') + '</td>'
+                            + '<td>' + (row.giro || '') + '</td>'
+                            + '<td class="text-end">' + (row.nroDoc ?? '') + '</td>'
+                            + '<td class="text-end">' + fmtKg.format(row.cantidadKg ?? 0) + '</td>'
+                            + '<td class="text-end fw-bold">' + monLabel + ' ' + fmt(row.importe) + '</td>'
+                            + '</tr>';
+                    });
             }
         } catch (e) {
             console.error(e);
-            body.innerHTML = '<tr><td colspan="9" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
+            body.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
         } finally {
             spin.style.display = 'none';
         }

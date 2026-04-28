@@ -13,10 +13,5 @@ namespace FabricaHilos.Services.Ventas
         /// Lista de clientes de un asesor específico (filtrado en memoria desde los datos ya cargados).
         /// </summary>
         Task<List<DcmClienteMaestroDto>> ObtenerClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor);
-
-        /// <summary>
-        /// Diagnóstico: devuelve el número de filas que retorna el query para un rango de fechas.
-        /// </summary>
-        Task<int> DiagnosticoFilasAsync(DateTime fechaInicio, DateTime fechaFin);
     }
 }

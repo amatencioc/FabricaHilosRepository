@@ -14,10 +14,5 @@ namespace FabricaHilos.Services.Ventas
         /// Derivado de los datos ya cargados, pero también disponible como endpoint independiente.
         /// </summary>
         Task<List<DcClienteImporteAsesorDto>> ObtenerClientesPorAsesorAsync(DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor);
-
-        /// <summary>
-        /// Diagnóstico: devuelve el número de filas que retorna el QueryPrincipal para un rango de fechas.
-        /// </summary>
-        Task<int> DiagnosticoFilasAsync(DateTime fechaInicio, DateTime fechaFin);
     }
 }

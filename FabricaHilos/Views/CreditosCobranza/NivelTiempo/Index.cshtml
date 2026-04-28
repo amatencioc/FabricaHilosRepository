@@ -330,7 +330,16 @@
                         legend: { position: 'bottom' },
                         tooltip: {
                             callbacks: {
-                                label: ctx => `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(0)} días`
+                                label: ctx => {
+                                    if (ctx.datasetIndex === 1) return `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(0)} días`;
+                                    const d = data[ctx.dataIndex];
+                                    const fmtMonto = n => 'S/ ' + Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    return [
+                                        `${ctx.dataset.label}: ${Number(ctx.raw).toFixed(0)} días`,
+                                        `CxC total:       ${fmtMonto(d.saldoSoles)}`,
+                                        `Ventas a crédito: ${fmtMonto(d.vtaSoles)}`
+                                    ];
+                                }
                             }
                         }
                     },

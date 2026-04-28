@@ -40,8 +40,12 @@ namespace FabricaHilos.Services.Ventas
             var result  = new List<DgVentaMercadoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con la misma lógica de BuildSql (DashboardComercialMaestroService)
+            // — opción 'CON VENDEDOR':
+            //   (SUM(V.SOLES_SINANT|V.DOLARES_SINANT) - NVL(B.IMP_ANT, 0))
+            // donde B = anticipos en los 4 COD_ART por cliente agrupado.
             var sql = $@"
-SELECT MERCADO, SUM(IMPORTE) IMPORTE
+SELECT MERCADO, SUM(IMPORTE_NETO) IMPORTE
   FROM (
     SELECT CASE
              WHEN C.PAIS = '01' THEN 'Perú'
@@ -51,25 +55,51 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
              WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
              ELSE 'Otros'
            END MERCADO,
-           DECODE(:P_MON,
-                   'S', DECODE(D.MONEDA,
-                               'S', D.IMP_NETO,
-                               D.IMP_NETO * D.IMPORT_CAM),
-                   DECODE(D.MONEDA,
-                          'D', D.IMP_NETO,
-                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
-      FROM {S}DOCUVENT D
-      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C  ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
-     WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND NVL(D.ESTADO, '0') <> '9'
-        AND NVL(D.ORIGEN, '0') <> 'A'
-        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                      AND M2.TP_ART IN ('T', 'S'))
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE)) B
+        ON B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     GROUP BY CASE
+                WHEN C.PAIS = '01' THEN 'Perú'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
+                ELSE 'Otros'
+              END,
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
    )
  GROUP BY MERCADO
  ORDER BY DECODE(MERCADO, 'Perú', 1, 'LATAM', 2, 'Europa', 3, 'Asia', 4, 'Oceanía', 5, 6)";
@@ -111,9 +141,10 @@ SELECT MERCADO, SUM(IMPORTE) IMPORTE
             var result  = new List<DgVentaMercadoPaisDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con (SOLES_SINANT - B.IMP_ANT) del Maestro.
             var sql = $@"
 SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
-       SUM(IMPORTE) IMPORTE
+       SUM(IMPORTE_NETO) IMPORTE
   FROM (
     SELECT CASE
              WHEN C.PAIS = '01' THEN 'Perú'
@@ -125,26 +156,54 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
            END MERCADO,
            C.PAIS CODIGO_PAIS,
            NVL(TA.DESCRIPCION, C.PAIS) PAIS_NOMBRE,
-           DECODE(:P_MON,
-                   'S', DECODE(D.MONEDA,
-                               'S', D.IMP_NETO,
-                               D.IMP_NETO * D.IMPORT_CAM),
-                   DECODE(D.MONEDA,
-                          'D', D.IMP_NETO,
-                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
-      FROM {S}DOCUVENT D
-      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C  ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1,
                         MAX(DESCRIPCION) DESCRIPCION
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
-     WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND NVL(D.ESTADO, '0') <> '9'
-        AND NVL(D.ORIGEN, '0') <> 'A'
-        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                      AND M2.TP_ART IN ('T', 'S'))
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE)) B
+        ON B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     GROUP BY CASE
+                WHEN C.PAIS = '01' THEN 'Perú'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
+                ELSE 'Otros'
+              END,
+              C.PAIS,
+              NVL(TA.DESCRIPCION, C.PAIS),
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
    )
   WHERE (:P_MERCADO IS NULL OR MERCADO = :P_MERCADO
         OR (:P_MERCADO = 'Global' AND MERCADO IN ('Europa','Asia','Oceanía','Otros')))
@@ -191,27 +250,50 @@ SELECT MERCADO, CODIGO_PAIS, PAIS_NOMBRE,
             var result  = new List<DgVentaMercadoDepartamentoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con (SOLES_SINANT - B.IMP_ANT) del Maestro.
             var sql = $@"
-SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
-       SUM(DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              ROUND(D.IMP_NETO * D.IMPORT_CAM, 2)),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         ROUND(D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
-  FROM {S}DOCUVENT D
-  JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
-  LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
- WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND NVL(D.ESTADO, '0') <> '9'
-    AND NVL(D.ORIGEN, '0') <> 'A'
-    AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
-    AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                  JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                 WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                   AND M2.TP_ART IN ('T', 'S'))
- GROUP BY NVL(U.NOM_DPT, 'Sin Departamento')
+SELECT DEPARTAMENTO, SUM(IMPORTE_NETO) IMPORTE
+  FROM (
+    SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C    ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+      LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE)) B
+        ON B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+       AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+     GROUP BY NVL(U.NOM_DPT, 'Sin Departamento'),
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+  )
+ GROUP BY DEPARTAMENTO
  ORDER BY IMPORTE DESC";
 
             try
@@ -251,29 +333,53 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
             var result  = new List<DgVentaMercadoDistritoDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con (SOLES_SINANT - B.IMP_ANT) del Maestro.
             var sql = $@"
-SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
-       NVL(U.NOM_DTT, 'Sin Distrito') DISTRITO,
-       SUM(DECODE(:P_MON,
-                   'S', DECODE(D.MONEDA,
-                               'S', D.IMP_NETO,
-                               D.IMP_NETO * D.IMPORT_CAM),
-                   DECODE(D.MONEDA,
-                          'D', D.IMP_NETO,
-                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0)))) IMPORTE
-   FROM {S}DOCUVENT D
-   JOIN {S}CLIENTES C    ON C.COD_CLIENTE = D.COD_CLIENTE
-   LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
-  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-    AND NVL(D.ESTADO, '0') <> '9'
-     AND NVL(D.ORIGEN, '0') <> 'A'
-     AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
-     AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
-   AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                 JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                  AND M2.TP_ART IN ('T', 'S'))
- GROUP BY NVL(U.NOM_DPT, 'Sin Departamento'), NVL(U.NOM_DTT, 'Sin Distrito')
+SELECT DEPARTAMENTO, DISTRITO, SUM(IMPORTE_NETO) IMPORTE
+  FROM (
+    SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
+           NVL(U.NOM_DTT, 'Sin Distrito') DISTRITO,
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C    ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+      LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE)) B
+        ON B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+       AND (U.PAIS = '01' OR U.COD_UBC IS NULL)
+       AND UPPER(NVL(U.NOM_DPT, 'Sin Departamento')) = UPPER(:P_DPTO)
+     GROUP BY NVL(U.NOM_DPT, 'Sin Departamento'),
+              NVL(U.NOM_DTT, 'Sin Distrito'),
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+  )
+ GROUP BY DEPARTAMENTO, DISTRITO
  ORDER BY IMPORTE DESC";
 
             try
@@ -315,28 +421,52 @@ SELECT NVL(U.NOM_DPT, 'Sin Departamento') DEPARTAMENTO,
             var result  = new List<DgVentaMercadoCiudadPaisDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con (SOLES_SINANT - B.IMP_ANT) del Maestro.
             var sql = $@"
-SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
-       NVL(U.NOM_DTT, 'Sin Ciudad') CIUDAD,
-       SUM(DECODE(:P_MON,
-                   'S', DECODE(D.MONEDA,
-                               'S', D.IMP_NETO,
-                               D.IMP_NETO * D.IMPORT_CAM),
-                   DECODE(D.MONEDA,
-                          'D', D.IMP_NETO,
-                          D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0)))) IMPORTE
-   FROM {S}DOCUVENT D
-   JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
-   LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
- WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND NVL(D.ESTADO, '0') <> '9'
-    AND NVL(D.ORIGEN, '0') <> 'A'
-    AND C.PAIS = :P_PAIS
-   AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                 JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                  AND M2.TP_ART IN ('T', 'S'))
- GROUP BY NVL(U.NOM_DPT, C.PAIS), NVL(U.NOM_DTT, 'Sin Ciudad')
+SELECT PAIS_NOMBRE, CIUDAD, SUM(IMPORTE_NETO) IMPORTE
+  FROM (
+    SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
+           NVL(U.NOM_DTT, 'Sin Ciudad') CIUDAD,
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+      LEFT JOIN {S}UBIGEO U ON U.COD_UBC = C.COD_UBC
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE)) B
+        ON B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+       AND C.PAIS = :P_PAIS
+     GROUP BY NVL(U.NOM_DPT, C.PAIS),
+              NVL(U.NOM_DTT, 'Sin Ciudad'),
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+  )
+ GROUP BY PAIS_NOMBRE, CIUDAD
  ORDER BY IMPORTE DESC";
 
             try
@@ -378,10 +508,12 @@ SELECT NVL(U.NOM_DPT, C.PAIS) PAIS_NOMBRE,
             var result  = new List<DgVentaMercadoEvolucionDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con (SOLES_SINANT - B.IMP_ANT) del Maestro.
+            // B agrupa anticipos por cliente y PERIODO para no descontar de mes equivocado.
             var sql = $@"
-SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
+SELECT PERIODO, MERCADO, SUM(IMPORTE_NETO) IMPORTE
   FROM (
-    SELECT TO_CHAR(D.FECHA, 'YYYY-MM') PERIODO,
+    SELECT TO_CHAR(V.FECHA, 'YYYY-MM') PERIODO,
            CASE
              WHEN C.PAIS = '01' THEN 'Perú'
              WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
@@ -390,25 +522,55 @@ SELECT PERIODO, MERCADO, SUM(IMPORTE) IMPORTE
              WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
              ELSE 'Otros'
            END MERCADO,
-           DECODE(:P_MON,
-                  'S', DECODE(D.MONEDA,
-                              'S', D.IMP_NETO,
-                              D.IMP_NETO * D.IMPORT_CAM),
-                  DECODE(D.MONEDA,
-                         'D', D.IMP_NETO,
-                         D.IMP_NETO / NULLIF(D.IMPORT_CAM, 0))) IMPORTE
-      FROM {S}DOCUVENT D
-      JOIN {S}CLIENTES C   ON C.COD_CLIENTE = D.COD_CLIENTE
+           DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) COD_CLI_GRP,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_NETO
+      FROM V_DOCUVEN V
+      JOIN {S}CLIENTES C  ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
       LEFT JOIN (SELECT CODIGO, MAX(INDICADOR1) INDICADOR1
                    FROM {S}TABLAS_AUXILIARES WHERE TIPO = 25
                   GROUP BY CODIGO) TA ON TA.CODIGO = C.PAIS
-     WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND NVL(D.ESTADO, '0') <> '9'
-        AND NVL(D.ORIGEN, '0') <> 'A'
-        AND EXISTS (SELECT 1 FROM {S}ITEMDOCU I2
-                     JOIN {S}ARTICUL M2 ON M2.COD_ART = I2.COD_ART
-                    WHERE I2.TIPODOC = D.TIPODOC AND I2.SERIE = D.SERIE AND I2.NUMERO = D.NUMERO
-                      AND M2.TP_ART IN ('T', 'S'))
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        TO_CHAR(D.FECHA, 'YYYY-MM') PERIODO,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
+                           TO_CHAR(D.FECHA, 'YYYY-MM')) B
+        ON  B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+        AND B.PERIODO     = TO_CHAR(V.FECHA, 'YYYY-MM')
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     GROUP BY TO_CHAR(V.FECHA, 'YYYY-MM'),
+              CASE
+                WHEN C.PAIS = '01' THEN 'Perú'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'L' THEN 'LATAM'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'E' THEN 'Europa'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'A' THEN 'Asia'
+                WHEN NVL(TA.INDICADOR1, 'X') = 'O' THEN 'Oceanía'
+                ELSE 'Otros'
+              END,
+              DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
    )
  GROUP BY PERIODO, MERCADO
  ORDER BY PERIODO, DECODE(MERCADO, 'Perú', 1, 'LATAM', 2, 'Europa', 3, 'Asia', 4, 'Oceanía', 5, 6)";
@@ -490,18 +652,32 @@ SELECT CODIGO, INDICADOR2, DESCRIPCION
             var result  = new List<DgKgMensualDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // KG calculados con la misma lógica del subquery C de BuildSql
+            // (DashboardComercialMaestroService) — opción 'CON VENDEDOR':
+            // - Mismos filtros de DOCUVENT (FECHA, ESTADO <> '9')
+            // - Excluye los 4 COD_ART de anticipos
+            // - JOIN CLIENTES + CLIENTE_RELACION para mantener consistencia
+            //   con el agrupamiento por grupo de clientes del Maestro
             var sql = $@"
-SELECT TO_CHAR(A.FECHA, 'YYYY-MM') PERIODO,
+SELECT TO_CHAR(D.FECHA, 'YYYY-MM') PERIODO,
        SUM(I.CANTIDAD * E.FACTOR)  CANTIDAD_KG
-  FROM {S}DOCUVENT A
-  LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
-  LEFT JOIN {S}EQUIVALENCIA E ON E.COD_ART = I.COD_ART AND E.UNIDAD = 'KG'
-  LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
- WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-   AND NVL(A.ESTADO, '0') <> '9'
-    AND NVL(A.ORIGEN, '0') <> 'A'
-    AND M.TP_ART IN ('T', 'S')
- GROUP BY TO_CHAR(A.FECHA, 'YYYY-MM')
+  FROM {S}DOCUVENT D
+  JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+                                  AND I.SERIE   = D.SERIE
+                                  AND I.NUMERO  = D.NUMERO
+  LEFT JOIN {S}EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
+                                  AND E.UNIDAD  = 'KG'
+  LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+  LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+               FROM {S}CLIENTE_RELACION
+              GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+ WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+   AND D.ESTADO <> '9'
+   AND I.COD_ART NOT IN ('9300049997',
+                         '9300049999',
+                         '930004999A',
+                         '9300049998')
+ GROUP BY TO_CHAR(D.FECHA, 'YYYY-MM')
  ORDER BY 1";
 
             try
@@ -540,32 +716,41 @@ SELECT TO_CHAR(A.FECHA, 'YYYY-MM') PERIODO,
             var result  = new List<DgTopHiladoImporteDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con la misma lógica de BuildSql (DashboardComercialMaestroService)
+            // — opción 'CON VENDEDOR':
+            // - I.IMP_VVTA es el importe neto valor venta (sin IGV, con descuentos aplicados),
+            //   equivalente a V.SOLES_SINANT/V.DOLARES_SINANT del Maestro (a nivel ítem).
+            // - Excluye los 4 COD_ART de anticipos (igual que subqueries B y C del Maestro).
+            // - Conversión de moneda con D.IMPORT_CAM cuando D.MONEDA difiere de :P_MON.
+            // - JOIN CLIENTES + CLIENTE_RELACION para mantener consistencia con el Maestro.
+            // - Mismos filtros de DOCUVENT (FECHA, ESTADO <> '9').
             var sql = $@"
 SELECT FAMILIA, IMPORTE FROM (
   SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
-         DECODE(:P_MON,
-           'S',
-             SUM(DECODE(A.MONEDA,
-                   'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
-           + SUM(DECODE(A.MONEDA,
-                   'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
-             SUM(DECODE(A.MONEDA,
-                   'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
-           + SUM(DECODE(A.MONEDA,
-                   'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                        ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
-         ) IMPORTE
-    FROM {S}DOCUVENT A
-    LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
-    LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
-    LEFT JOIN {S}TFAMLIN F      ON F.COD_FAM = M.COD_FAM AND F.COD_LIN = M.COD_LIN
-   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-     AND NVL(A.ESTADO, '0') <> '9'
-      AND NVL(A.ORIGEN, '0') <> 'A'
-      AND M.TP_ART IN ('T', 'S')
+         SUM(DECODE(:P_MON,
+               'S', DECODE(D.MONEDA,
+                           'S', I.IMP_VVTA,
+                           ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                    DECODE(D.MONEDA,
+                           'D', I.IMP_VVTA,
+                           ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMPORTE
+    FROM {S}DOCUVENT D
+    JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+                                    AND I.SERIE   = D.SERIE
+                                    AND I.NUMERO  = D.NUMERO
+    LEFT JOIN {S}ARTICUL M          ON  M.COD_ART = I.COD_ART
+    LEFT JOIN {S}TFAMLIN F          ON  F.COD_FAM = M.COD_FAM
+                                    AND F.COD_LIN = M.COD_LIN
+    LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+    LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                 FROM {S}CLIENTE_RELACION
+                GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+   WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND D.ESTADO <> '9'
+     AND I.COD_ART NOT IN ('9300049997',
+                           '9300049999',
+                           '930004999A',
+                           '9300049998')
    GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
    ORDER BY IMPORTE DESC
 ) WHERE ROWNUM <= :P_TOP";
@@ -608,58 +793,69 @@ SELECT FAMILIA, IMPORTE FROM (
             var result  = new List<DgVentaPorGiroDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // Importe calculado con la misma lógica de BuildSql (DashboardComercialMaestroService)
+            // — opción 'CON VENDEDOR':
+            // - V.SOLES_SINANT / V.DOLARES_SINANT  (subquery A del Maestro)
+            //   menos
+            //   B.SOLES_ANT / B.DOLAR_ANT          (subquery B = anticipos en los 4 COD_ART)
+            // - JOIN CLIENTES + CLIENTE_RELACION para agrupar por grupo de cliente
+            // - LEFT JOIN TABLAS_AUXILIARES T2 (TIPO=27) para descripción del giro
+            // - Excluye asesor 'OFICINA' (TABLAS_AUXILIARES TIPO=29)
             var sql = $@"
 SELECT CODIGO_GIRO,
-       NVL((SELECT MAX(T2.ABREVIADA)
-              FROM {S}TABLAS_AUXILIARES T2
-             WHERE T2.TIPO = 27 AND T2.CODIGO = CODIGO_GIRO), 'SIN GIRO') DESC_GIRO,
+       NVL(DESC_GIRO, 'SIN GIRO') DESC_GIRO,
        SUM(IMPORTE_CLI) IMPORTE
   FROM (
     SELECT C.GIRO CODIGO_GIRO,
-           DECODE(:P_MON,
-             'S',
-               SUM(DECODE(A.MONEDA,
-                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
-             + SUM(DECODE(A.MONEDA,
-                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
-               SUM(DECODE(A.MONEDA,
-                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
-             + SUM(DECODE(A.MONEDA,
-                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
-           ) IMPORTE_CLI
-      FROM {S}DOCUVENT A
-      LEFT JOIN {S}ITEMDOCU I ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
-      LEFT JOIN {S}ARTICUL M  ON M.COD_ART = I.COD_ART
-      LEFT JOIN {S}CLIENTES C ON C.COD_CLIENTE = A.COD_CLIENTE
-     WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-       AND NVL(A.ESTADO, '0') <> '9'
-       AND NVL(A.ORIGEN, '0') <> 'A'
-       AND M.TP_ART IN ('T', 'S')
-       AND UPPER(NVL((SELECT MAX(T3.DESCRIPCION)
-                  FROM {S}TABLAS_AUXILIARES T3
-                 WHERE T3.TIPO = 29 AND T3.CODIGO = C.VENDEDOR), '')) <> 'OFICINA'
-     GROUP BY A.COD_CLIENTE, C.GIRO
-    HAVING DECODE(:P_MON,
-             'S',
-               SUM(DECODE(A.MONEDA,
-                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM)))
-             + SUM(DECODE(A.MONEDA,
-                     'S', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) * A.IMPORT_CAM)),
-               SUM(DECODE(A.MONEDA,
-                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0))))
-             + SUM(DECODE(A.MONEDA,
-                     'D', (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV,
-                          ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV) / NULLIF(A.IMPORT_CAM, 0)))
-           ) > 0
+           T2.ABREVIADA DESC_GIRO,
+           (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) IMPORTE_CLI
+      FROM V_DOCUVEN V
+      LEFT JOIN {S}CLIENTES C          ON C.COD_CLIENTE = V.COD_CLIENTE
+      LEFT JOIN {S}TABLAS_AUXILIARES T ON T.CODIGO  = C.VENDEDOR
+                                      AND T.TIPO    = 29
+      LEFT JOIN {S}TABLAS_AUXILIARES T2 ON T2.CODIGO = C.GIRO
+                                       AND T2.TIPO   = 27
+      LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                   FROM {S}CLIENTE_RELACION
+                  GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+      LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                        C.VENDEDOR COD_ASESOR,
+                        SUM(DECODE(:P_MON,
+                              'S', DECODE(D.MONEDA,
+                                          'S', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2)),
+                                   DECODE(D.MONEDA,
+                                          'D', I.IMP_VVTA,
+                                          ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2)))) IMP_ANT
+                   FROM {S}DOCUVENT D
+                   JOIN {S}ITEMDOCU I            ON I.TIPODOC = D.TIPODOC
+                                                AND I.SERIE   = D.SERIE
+                                                AND I.NUMERO  = D.NUMERO
+                   LEFT JOIN {S}CLIENTES C       ON C.COD_CLIENTE = D.COD_CLIENTE
+                   LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                                FROM {S}CLIENTE_RELACION
+                               GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+                  WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                    AND D.ESTADO <> '9'
+                    AND I.COD_ART IN ('9300049997',
+                                      '9300049999',
+                                      '930004999A',
+                                      '9300049998')
+                  GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
+                           C.VENDEDOR) B
+        ON  B.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE)
+        AND B.COD_ASESOR  = C.VENDEDOR
+     WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+       AND UPPER(NVL(T.DESCRIPCION, '')) <> 'OFICINA'
+     GROUP BY DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE),
+              C.GIRO,
+              T2.ABREVIADA,
+              C.VENDEDOR
+    HAVING (SUM(DECODE(:P_MON, 'S', V.SOLES_SINANT, V.DOLARES_SINANT))
+            - NVL(MAX(B.IMP_ANT), 0)) > 0
   )
- GROUP BY CODIGO_GIRO
+ GROUP BY CODIGO_GIRO, DESC_GIRO
  ORDER BY IMPORTE DESC";
 
             try
@@ -700,19 +896,35 @@ SELECT CODIGO_GIRO,
             var result  = new List<DgTopHiladoKgDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
+            // KG calculados con la misma lógica del subquery C de BuildSql
+            // (DashboardComercialMaestroService) — opción 'CON VENDEDOR':
+            // - Mismos filtros de DOCUVENT (FECHA, ESTADO <> '9')
+            // - Excluye los 4 COD_ART de anticipos
+            // - JOIN CLIENTES + CLIENTE_RELACION para mantener consistencia
+            //   con el agrupamiento por grupo de clientes del Maestro
             var sql = $@"
 SELECT FAMILIA, KILOS FROM (
   SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
          SUM(I.CANTIDAD * E.FACTOR) KILOS
-    FROM {S}DOCUVENT A
-    LEFT JOIN {S}ITEMDOCU I     ON I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
-    LEFT JOIN {S}EQUIVALENCIA E ON E.COD_ART = I.COD_ART AND E.UNIDAD = 'KG'
-    LEFT JOIN {S}ARTICUL M      ON M.COD_ART = I.COD_ART
-    LEFT JOIN {S}TFAMLIN F      ON F.COD_FAM = M.COD_FAM AND F.COD_LIN = M.COD_LIN
-   WHERE A.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-     AND NVL(A.ESTADO, '0') <> '9'
-      AND NVL(A.ORIGEN, '0') <> 'A'
-      AND M.TP_ART IN ('T', 'S')
+    FROM {S}DOCUVENT D
+    JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+                                    AND I.SERIE   = D.SERIE
+                                    AND I.NUMERO  = D.NUMERO
+    LEFT JOIN {S}EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
+                                    AND E.UNIDAD  = 'KG'
+    LEFT JOIN {S}ARTICUL M          ON  M.COD_ART = I.COD_ART
+    LEFT JOIN {S}TFAMLIN F          ON  F.COD_FAM = M.COD_FAM
+                                    AND F.COD_LIN = M.COD_LIN
+    LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+    LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                 FROM {S}CLIENTE_RELACION
+                GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+   WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+     AND D.ESTADO <> '9'
+     AND I.COD_ART NOT IN ('9300049997',
+                           '9300049999',
+                           '930004999A',
+                           '9300049998')
    GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
    ORDER BY KILOS DESC
 ) WHERE ROWNUM <= :P_TOP";

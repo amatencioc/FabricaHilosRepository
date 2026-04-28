@@ -35,61 +35,104 @@ namespace FabricaHilos.Services.Ventas
         private static int GetInt(OracleDataReader r, string col) =>
             r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]);
 
-        // ── SQL principal — query agrupado por cliente/asesor/moneda ────────────
+        // ── SQL principal — query agrupado por cliente/asesor ──────────────────
+        //  IMPORTANTE: el RUC y NOMBRE se traen en una capa EXTERIOR para evitar
+        //  que duplicados en CLIENTES (RUC/NOMBRE inconsistentes para el mismo
+        //  COD_CLIENTE) inflen los montos al participar en el GROUP BY interno.
         private string BuildSql() => $@"
-SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+SELECT A.COD_CLIENTE,
        CLL.RUC,
        CLL.NOMBRE,
-       C.GIRO,
-       T2.ABREVIADA DESC_GIRO,
-       C.VENDEDOR COD_ASESOR,
-       T.DESCRIPCION ASESOR,
-       COUNT(A.NUMERO) NRODOC,
-       SUM(I.CANTIDAD * E.FACTOR) TOTUNID,
-       A.MONEDA,
-       SUM(DECODE(A.MONEDA,
-              'S',
-              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-              ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * A.IMPORT_CAM))) SOLES,
-       SUM(DECODE(A.MONEDA,
-              'D',
-              (I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)),
-              ((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) / NULLIF(A.IMPORT_CAM, 0)))) DOLAR,
-       SUM(DECODE(A.MONEDA,
-              'S',
-              (((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV)),
-              (((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV)) * A.IMPORT_CAM)) IGV_SOLES,
-       SUM(DECODE(A.MONEDA,
-              'D',
-              (((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV)),
-              (((I.IMP_VVTA * ((100 - I.POR_DESC1) * (100 - I.POR_DESC2) / 10000)) * I.P_IGV)) / NULLIF(A.IMPORT_CAM, 0))) IGV_DOLAR
-  FROM {S}DOCUVENT A
-       LEFT JOIN {S}ITEMDOCU I           ON  I.TIPODOC = A.TIPODOC
-                                         AND I.SERIE   = A.SERIE
-                                         AND I.NUMERO  = A.NUMERO
-       LEFT JOIN {S}EQUIVALENCIA E       ON  E.COD_ART = I.COD_ART
-                                         AND E.UNIDAD  = 'KG'
-       LEFT JOIN {S}ARTICUL M            ON  M.COD_ART = I.COD_ART
-       LEFT JOIN {S}CLIENTES C           ON  C.COD_CLIENTE = A.COD_CLIENTE
-       LEFT JOIN {S}TABLAS_AUXILIARES T  ON  T.CODIGO  = C.VENDEDOR
-                                         AND T.TIPO    = 29
-       LEFT JOIN {S}TABLAS_AUXILIARES T2 ON  T2.CODIGO = C.GIRO
-                                         AND T2.TIPO   = 27
-       LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
-                    FROM {S}CLIENTE_RELACION
-                   GROUP BY GRUPO) GRP   ON  GRP.GRUPO = C.GRUPO_REL
-       LEFT JOIN {S}CLIENTES CLL         ON  CLL.COD_CLIENTE = DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE)
- WHERE A.FECHA BETWEEN :FECHA1 AND :FECHA2
-   AND NVL(A.ESTADO, '0') <> '9'
-   AND NVL(A.ORIGEN, '0') <> 'A'
-   AND M.TP_ART IN ('T', 'S')
- GROUP BY A.COD_CLIENTE, CLL.NOMBRE, CLL.RUC, T.DESCRIPCION,
-          C.GIRO, T2.ABREVIADA, C.VENDEDOR, A.MONEDA, C.GRUPO_REL, GRP.MIN_CLIENTE
- ORDER BY C.VENDEDOR, C.GRUPO_REL ASC";
+       A.GIRO,
+       A.DESC_GIRO,
+       A.COD_ASESOR,
+       A.ASESOR,
+       NVL(C.NRODOC,  0)  NRODOC,
+       NVL(C.TOTUNID, 0)  TOTUNID,
+       (A.SOLES  - NVL(B.SOLES_ANT,  0)) SOLES,
+       (A.DOLAR  - NVL(B.DOLAR_ANT,  0)) DOLAR
+  FROM (SELECT DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+               C.GIRO,
+               T2.ABREVIADA DESC_GIRO,
+               C.VENDEDOR  COD_ASESOR,
+               T.DESCRIPCION ASESOR,
+               SUM(DECODE(:P_OPCION, 'TODOS', V.SOLES,   V.SOLES_SINANT))   SOLES,
+               SUM(DECODE(:P_OPCION, 'TODOS', V.DOLARES, V.DOLARES_SINANT)) DOLAR
+          FROM V_DOCUVEN V
+          LEFT JOIN CLIENTES C            ON  C.COD_CLIENTE = V.COD_CLIENTE
+          LEFT JOIN TABLAS_AUXILIARES T   ON  T.CODIGO  = C.VENDEDOR
+                                          AND T.TIPO    = 29
+          LEFT JOIN TABLAS_AUXILIARES T2  ON  T2.CODIGO = C.GIRO
+                                          AND T2.TIPO   = 27
+          LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                       FROM {S}CLIENTE_RELACION
+                      GROUP BY GRUPO) GRP ON  GRP.GRUPO = C.GRUPO_REL
+         WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+         GROUP BY DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE),
+                  C.GIRO,
+                  T2.ABREVIADA,
+                  C.VENDEDOR,
+                  T.DESCRIPCION) A
+  LEFT JOIN (SELECT COD_CLIENTE, MIN(RUC) RUC, MIN(NOMBRE) NOMBRE
+               FROM CLIENTES
+              GROUP BY COD_CLIENTE) CLL ON CLL.COD_CLIENTE = A.COD_CLIENTE
+  LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                    C.VENDEDOR COD_ASESOR,
+                    SUM(DECODE(D.MONEDA,
+                               'S', I.IMP_VVTA,
+                               ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2))) SOLES_ANT,
+                    SUM(DECODE(D.MONEDA,
+                               'D', I.IMP_VVTA,
+                               ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2))) DOLAR_ANT
+               FROM DOCUVENT D
+               JOIN ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+                                            AND I.SERIE   = D.SERIE
+                                            AND I.NUMERO  = D.NUMERO
+               LEFT JOIN CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+               LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                            FROM {S}CLIENTE_RELACION
+                           GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+              WHERE :P_OPCION <> 'TODOS'
+                AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                AND D.ESTADO <> '9'
+                AND I.COD_ART IN ('9300049997',
+                                  '9300049999',
+                                  '930004999A',
+                                  '9300049998')
+              GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
+                       C.VENDEDOR) B
+    ON  B.COD_CLIENTE = A.COD_CLIENTE
+    AND B.COD_ASESOR  = A.COD_ASESOR
+  LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
+                    C.VENDEDOR COD_ASESOR,
+                    COUNT(DISTINCT D.TIPODOC || '-' || D.SERIE || '-' || D.NUMERO) NRODOC,
+                    SUM(I.CANTIDAD * E.FACTOR) TOTUNID
+               FROM DOCUVENT D
+               JOIN ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+                                            AND I.SERIE   = D.SERIE
+                                            AND I.NUMERO  = D.NUMERO
+               LEFT JOIN EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
+                                            AND E.UNIDAD  = 'KG'
+               LEFT JOIN CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+               LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
+                            FROM {S}CLIENTE_RELACION
+                           GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
+              WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
+                AND D.ESTADO <> '9'
+                AND (:P_OPCION = 'TODOS'
+                     OR I.COD_ART NOT IN ('9300049997',
+                                          '9300049999',
+                                          '930004999A',
+                                          '9300049998'))
+              GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
+                       C.VENDEDOR) C
+    ON  C.COD_CLIENTE = A.COD_CLIENTE
+    AND C.COD_ASESOR  = A.COD_ASESOR
+ ORDER BY A.COD_ASESOR, A.COD_CLIENTE";
 
         // ── Cargar filas desde Oracle ───────────────────────────────────────────
         private async Task<List<DcmFilaRawDto>> CargarFilasAsync(
-            DateTime fechaInicio, DateTime fechaFin)
+            DateTime fechaInicio, DateTime fechaFin, string opcion = "CON VENDEDOR")
         {
             var connStr = GetOracleConnectionString();
             var filas   = new List<DcmFilaRawDto>();
@@ -99,9 +142,11 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
             {
                 using var conn   = new OracleConnection(connStr);
                 await conn.OpenAsync();
+
                 using var cmd    = new OracleCommand(BuildSql(), conn) { BindByName = true };
-                cmd.Parameters.Add("FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
-                cmd.Parameters.Add("FECHA2", OracleDbType.Date).Value = fechaFin.Date;
+                cmd.Parameters.Add("P_OPCION", OracleDbType.Varchar2).Value = opcion;
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
 
                 using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -117,18 +162,19 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                         Asesor     = GetStr(reader, "ASESOR"),
                         NroDoc     = GetInt(reader, "NRODOC"),
                         TotUnid    = GetDec(reader, "TOTUNID"),
-                        Moneda     = GetStr(reader, "MONEDA"),
                         Soles      = GetDec(reader, "SOLES"),
                         Dolar      = GetDec(reader, "DOLAR"),
-                        IgvSoles   = GetDec(reader, "IGV_SOLES"),
-                        IgvDolar   = GetDec(reader, "IGV_DOLAR"),
                     });
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al cargar datos del Dashboard Comercial Maestro");
+                return filas;
             }
+
+            _logger.LogInformation("[DCM] Filas cargadas: {N} | Opcion: {Op} | Fechas: {F1:dd/MM/yyyy}-{F2:dd/MM/yyyy}",
+                filas.Count, opcion, fechaInicio, fechaFin);
 
             return filas;
         }
@@ -137,18 +183,14 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
         private static decimal Imp(DcmFilaRawDto f, string moneda) =>
             moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.Soles : f.Dolar;
 
-        private static decimal Igv(DcmFilaRawDto f, string moneda) =>
-            moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.IgvSoles : f.IgvDolar;
-
-        // ── Total (base + IGV) — es el valor que se muestra en todos los reportes
+        // ── Total — el nuevo query devuelve el importe neto directamente (sin IGV separado)
         private static decimal ImpTotal(DcmFilaRawDto f, string moneda) =>
-            Imp(f, moneda) + Igv(f, moneda);
+            Imp(f, moneda);
 
         // ── Proyectar una fila raw al DTO de cliente maestro ────────────────────
         private static DcmClienteMaestroDto ToClienteDto(DcmFilaRawDto f, string mon)
         {
             var imp = Imp(f, mon);
-            var igv = Igv(f, mon);
             return new DcmClienteMaestroDto
             {
                 Asesor      = f.Asesor,
@@ -160,8 +202,7 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                 NroDoc      = f.NroDoc,
                 CantidadKg  = f.TotUnid,
                 Importe     = imp,
-                Igv         = igv,
-                Total       = imp + igv,
+                Total       = imp,
             };
         }
 
@@ -177,56 +218,10 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
 
             if (filas.Count == 0) return dto;
 
-            // El query puede retornar dos filas por cliente (una 'S' y una 'D').
-            // Consolidamos sumando Importe y KG por cliente según la moneda elegida.
-            var filasConsolidadas = filas
-                .GroupBy(f => new { f.CodAsesor, f.Asesor, f.CodCliente, f.Ruc, f.Nombre, f.DescGiro })
-                .Select(g => new DcmFilaRawDto
-                {
-                    CodCliente = g.Key.CodCliente,
-                    Ruc        = g.Key.Ruc,
-                    Nombre     = g.Key.Nombre,
-                    DescGiro   = g.Key.DescGiro,
-                    CodAsesor  = g.Key.CodAsesor,
-                    Asesor     = g.Key.Asesor,
-                    NroDoc     = g.Sum(f => f.NroDoc),
-                    TotUnid    = g.Sum(f => f.TotUnid),
-                    Soles      = g.Sum(f => f.Soles),
-                    Dolar      = g.Sum(f => f.Dolar),
-                    IgvSoles   = g.Sum(f => f.IgvSoles),
-                    IgvDolar   = g.Sum(f => f.IgvDolar),
-                })
-                .ToList();
+            // El query devuelve una fila por (COD_CLIENTE, COD_ASESOR) — sin duplicados.
+            var filasConsolidadas = filas;
 
-            // ── 1. Importe + KG + NroDoc por Asesor ─────────────────────────────
-            dto.Asesores = filasConsolidadas
-                .GroupBy(f => new { f.CodAsesor, f.Asesor })
-                .Select(g => new DcmImporteAsesorDto
-                {
-                    CodAsesor = g.Key.CodAsesor,
-                    Asesor    = g.Key.Asesor,
-                    Importe   = g.Sum(f => ImpTotal(f, mon)),
-                    Kilos     = g.Sum(f => f.TotUnid),
-                    NroDoc    = g.Sum(f => f.NroDoc),
-                })
-                .Where(x => x.Importe > 0)
-                .OrderByDescending(x => x.Importe)
-                .ToList();
-
-            // ── 2. Nro. Clientes distintos por Asesor ───────────────────────────
-            dto.Clientes = filasConsolidadas
-                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
-                         && ImpTotal(f, mon) > 0)
-                .GroupBy(f => f.Asesor)
-                .Select(g => new DcmNroClientesAsesorDto
-                {
-                    Asesor      = g.Key,
-                    NroClientes = g.Select(f => f.CodCliente).Distinct().Count()
-                })
-                .OrderBy(x => x.Asesor)
-                .ToList();
-
-            // ── 3. Todos los clientes (tabla maestra, ranking y exportación) ────
+            // ── 1. Todos los clientes (tabla maestra, ranking y exportación) ────
             dto.ClientesTodos = filasConsolidadas
                 .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
                          && ImpTotal(f, mon) > 0)
@@ -234,7 +229,7 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                 .OrderBy(x => x.Asesor).ThenByDescending(x => x.Total)
                 .ToList();
 
-            // ── 4. Top N clientes por Asesor (Importe y KG) ─────────────────────
+            // ── 2. Top N clientes por Asesor (Importe y KG) ─────────────────────
             var topImp = filasConsolidadas
                 .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
                          && ImpTotal(f, mon) > 0)
@@ -302,7 +297,6 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                 .Select(g =>
                 {
                     var imp = g.Sum(f => Imp(f, mon));
-                    var igv = g.Sum(f => Igv(f, mon));
                     return new DcmClienteMaestroDto
                     {
                         Asesor      = asesor,
@@ -313,8 +307,7 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                         NroDoc      = g.Sum(f => f.NroDoc),
                         CantidadKg  = g.Sum(f => f.TotUnid),
                         Importe     = imp,
-                        Igv         = igv,
-                        Total       = imp + igv,
+                        Total       = imp,
                     };
                 })
                 .Where(x => x.Total > 0)
@@ -322,60 +315,5 @@ SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                 .ToList();
         }
 
-        // ════════════════════════════════════════════════════════════════════════
-        // DiagnosticoFilasAsync
-        // ════════════════════════════════════════════════════════════════════════
-        public async Task<int> DiagnosticoFilasAsync(DateTime fechaInicio, DateTime fechaFin)
-        {
-            var connStr = GetOracleConnectionString();
-            var schema  = S;
-            int count   = 0;
-
-            _logger.LogWarning("[DIAG] Schema usado: '{Schema}'", schema);
-            _logger.LogWarning("[DIAG] FechaInicio: {FI:yyyy-MM-dd}  FechaFin: {FF:yyyy-MM-dd}", fechaInicio, fechaFin);
-
-            if (string.IsNullOrEmpty(connStr))
-            {
-                _logger.LogWarning("[DIAG] Sin connection string.");
-                return -1;
             }
-
-            try
-            {
-                using var conn = new OracleConnection(connStr);
-                await conn.OpenAsync();
-
-                var sqlCount = $@"
-SELECT COUNT(*) FROM (
-SELECT DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE, A.MONEDA
-  FROM {schema}DOCUVENT A
-       LEFT JOIN {schema}ITEMDOCU I    ON  I.TIPODOC = A.TIPODOC AND I.SERIE = A.SERIE AND I.NUMERO = A.NUMERO
-       LEFT JOIN {schema}ARTICUL M     ON  M.COD_ART = I.COD_ART
-       LEFT JOIN {schema}CLIENTES C    ON  C.COD_CLIENTE = A.COD_CLIENTE
-       LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
-                    FROM {schema}CLIENTE_RELACION GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
- WHERE A.FECHA BETWEEN :FECHA1 AND :FECHA2
-   AND NVL(A.ESTADO,'0') <> '9'
-   AND NVL(A.ORIGEN, '0') <> 'A'
-   AND M.TP_ART IN ('T','S')
- GROUP BY DECODE(C.GRUPO_REL, NULL, A.COD_CLIENTE, GRP.MIN_CLIENTE), C.VENDEDOR, A.MONEDA, C.GRUPO_REL, GRP.MIN_CLIENTE)";
-
-                using var cmd = new OracleCommand(sqlCount, conn) { BindByName = true };
-                cmd.Parameters.Add("FECHA1", OracleDbType.Date).Value = fechaInicio.Date;
-                cmd.Parameters.Add("FECHA2", OracleDbType.Date).Value = fechaFin.Date;
-
-                var result = await cmd.ExecuteScalarAsync();
-                count = Convert.ToInt32(result);
-
-                _logger.LogWarning("[DIAG] COUNT(*) directo Oracle: {N}", count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[DIAG] Error en DiagnosticoFilasAsync");
-                return -1;
-            }
-
-            return count;
         }
-    }
-}

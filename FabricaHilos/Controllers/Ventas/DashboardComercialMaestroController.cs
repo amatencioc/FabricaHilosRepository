@@ -39,21 +39,6 @@ namespace FabricaHilos.Controllers.Ventas
             return Json(data);
         }
 
-        // ── Diagnóstico: contar filas del QueryPrincipal ──────────────────────
-        [HttpGet]
-        public async Task<IActionResult> DiagnosticoFilas(DateTime? fechaInicio, DateTime? fechaFin)
-        {
-            var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var n = await _service.DiagnosticoFilasAsync(fi, ff);
-            return Json(new
-            {
-                fechaInicio = fi.ToString("dd/MM/yyyy"),
-                fechaFin    = ff.ToString("dd/MM/yyyy"),
-                filasOracle = n,
-                nota        = n < 0 ? "Error - revisar logs del servidor" : $"{n} filas devueltas por COUNT(*) directo en Oracle"
-            });
-        }
-
         private static (DateTime fi, DateTime ff) ResolverFechas(DateTime? fi, DateTime? ff)
         {
             var f2 = ff ?? DateTime.Today;

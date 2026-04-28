@@ -30,10 +30,8 @@ function _dcHeaderRow(monLabel, conAsesor) {
     html += '<th>#</th>';
     if (conAsesor) html += '<th>Asesor</th>';
     html += '<th>RUC</th><th>Raz\u00f3n Social</th><th>Giro</th>';
-    html += '<th>Moneda</th><th>Kilos</th>';
+    html += '<th>N\u00b0 Docs</th><th>Kilos</th>';
     html += '<th>Importe (' + monLabel + ')</th>';
-    html += '<th>IGV (' + monLabel + ')</th>';
-    html += '<th>Total (' + monLabel + ')</th>';
     html += '</tr>';
     return html;
 }
@@ -45,11 +43,9 @@ function _dcFila(row, idx, conAsesor) {
     html += '<td>' + (row.ruc         || '') + '</td>';
     html += '<td>' + (row.razonSocial || '') + '</td>';
     html += '<td>' + (row.giro        || '') + '</td>';
-    html += '<td>' + (row.moneda      || '') + '</td>';
+    html += '<td>' + (row.nroDoc      || 0)  + '</td>';
     html += '<td>' + (row.cantidadKg  || 0)  + '</td>';
     html += '<td>' + (row.importe     || 0)  + '</td>';
-    html += '<td>' + (row.igv         || 0)  + '</td>';
-    html += '<td>' + (row.total       || 0)  + '</td>';
     html += '</tr>';
     return html;
 }
@@ -66,7 +62,7 @@ window.exportarClientesAsesorExcel = function () {
 
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
     html += '<head><meta charset="UTF-8"></head><body><table border="1">';
-    html += '<tr><td colspan="9" style="background:#1B4D3E;color:#fff;font-weight:bold;font-size:13pt;text-align:center;padding:6px;">Clientes del Asesor: ' + asesor + '</td></tr>';
+    html += '<tr><td colspan="7" style="background:#1B4D3E;color:#fff;font-weight:bold;font-size:13pt;text-align:center;padding:6px;">Clientes del Asesor: ' + asesor + '</td></tr>';
     html += _dcHeaderRow(monLabel, false);
     rows.forEach(function (r, i) { html += _dcFila(r, i, false); });
     html += '</table></body></html>';
