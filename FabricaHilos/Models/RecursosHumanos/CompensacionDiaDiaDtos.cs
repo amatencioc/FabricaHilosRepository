@@ -61,6 +61,30 @@ public class CompensacionRangoDto
     public string? EstadoAplicacion    { get; set; }
 }
 
+// ── Resultado de CONSULTAR_EVENTO ────────────────────────────────────────────
+
+public class CompensacionEventoDto
+{
+    public long?   IdCompen            { get; set; }
+    public string? CodEmpresa          { get; set; }
+    public string? CodPersonal         { get; set; }
+    public string? NombreCompleto      { get; set; }
+    public string? FechaOrigen         { get; set; }
+    public string? FechaDestino        { get; set; }
+    public string? TipoOrigen          { get; set; }
+    public string? TipoCompensacion    { get; set; }
+    public int     TiempoMin           { get; set; }
+    public string? TiempoHhMi          { get; set; }
+    public string? EstadoAplicacion    { get; set; }
+    public string? DesAlerta02         { get; set; }
+    public string? DesAlerta03         { get; set; }
+    public string? DesAlerta04         { get; set; }
+    public string? DesAlerta07         { get; set; }
+    public string? DesAlerta09         { get; set; }
+    public string? OriAlerta06         { get; set; }
+    public string? OriAlerta08         { get; set; }
+}
+
 // ── Resultado de LISTAR_EMPLEADOS_RANGO ──────────────────────────────────────
 
 public class EmpleadoRangoDto

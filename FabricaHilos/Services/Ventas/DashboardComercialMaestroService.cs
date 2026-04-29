@@ -222,9 +222,10 @@ SELECT A.COD_CLIENTE,
             var filasConsolidadas = filas;
 
             // ── 1. Todos los clientes (tabla maestra, ranking y exportación) ────
+            // Se incluyen importes negativos (notas de crédito/devoluciones) para que
+            // los totales de los gráficos coincidan exactamente con la consulta Oracle.
             dto.ClientesTodos = filasConsolidadas
-                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
-                         && ImpTotal(f, mon) > 0)
+                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
                 .Select(f => ToClienteDto(f, mon))
                 .OrderBy(x => x.Asesor).ThenByDescending(x => x.Total)
                 .ToList();

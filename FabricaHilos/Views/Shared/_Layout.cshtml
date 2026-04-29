@@ -256,11 +256,14 @@
                 @if (menus.RecursosHumanos)
                 {
                     <!-- RECURSOS HUMANOS -->
-                    <li class="sidebar-section">RECURSOS HUMANOS</li>                    <li>
+                    <li class="sidebar-section">RECURSOS HUMANOS</li>
+                    <li>
                         <a asp-controller="RecursosHumanos" asp-action="Index"
-                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "active" : "")">                            <i class="bi bi-people"></i> Recursos Humanos
+                           class="sidebar-link @(ctrl == "RecursosHumanos" || ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "HorasExtras" ? "active" : "")">
+                            <i class="bi bi-people"></i> Recursos Humanos
                         </a>
                         <ul class="list-unstyled ps-3">
+                            <!-- Aquarius -->
                             <li>
                                 <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuAquarius" role="button"
@@ -285,9 +288,46 @@
                                         </a>
                                     </li>
                                     }
-
                                 </ul>
                             </li>
+                            <!-- Indicadores -->
+                            @if (menus.RhIndicadores)
+                            {
+                            <li>
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "HorasExtras" ? "active" : "")"
+                                   data-bs-toggle="collapse" href="#submenuRhIndicadores" role="button"
+                                   aria-expanded="@(ctrl == "HorasExtras" || ctrl == "ConcentracionSobretiempoArea" || ctrl == "EvolucionMasaSalarial" ? "true" : "false")"
+                                   aria-controls="submenuRhIndicadores">
+                                    <i class="bi bi-graph-up-arrow"></i> Indicadores
+                                </a>
+                                <ul class="collapse @(ctrl == "HorasExtras" || ctrl == "ConcentracionSobretiempoArea" || ctrl == "EvolucionMasaSalarial" ? "show" : "") list-unstyled ps-3" id="submenuRhIndicadores">
+                                    @if (menus.RhIndicadoresHorasExtras)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/HorasExtras" class="sidebar-link sidebar-sublink @(ctrl == "HorasExtras" ? "active" : "")">
+                                            <i class="bi bi-clock-fill"></i> KPI Horas Extras
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.RhIndicadoresConcentracionSobretiempo)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/ConcentracionSobretiempoArea" class="sidebar-link sidebar-sublink @(ctrl == "ConcentracionSobretiempoArea" ? "active" : "")">
+                                            <i class="bi bi-people-fill"></i> KPI Concentración HE
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.RhIndicadoresEvolucionMasaSalarial)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/EvolucionMasaSalarial" class="sidebar-link sidebar-sublink @(ctrl == "EvolucionMasaSalarial" ? "active" : "")">
+                                            <i class="bi bi-currency-dollar"></i> KPI Masa Salarial
+                                        </a>
+                                    </li>
+                                    }
+                                </ul>
+                            </li>
+                            }
                         </ul>
                     </li>
                 }

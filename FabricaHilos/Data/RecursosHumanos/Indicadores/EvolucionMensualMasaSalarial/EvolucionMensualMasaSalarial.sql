@@ -1,0 +1,126 @@
+-- ============================================================
+-- KPI #7: EVOLUCIÓN MENSUAL DE MASA SALARIAL
+-- Incluye Sobretiempo y Ratio HE / Masa Salarial por Área
+-- Parámetros: :P_ANO_INI, :P_MES_INI, :P_ANO_FIN, :P_MES_FIN
+-- ============================================================
+
+-- -------------------------------------------------------
+-- BLOQUE 1: DETALLE POR MES Y ÁREA
+-- -------------------------------------------------------
+WITH MASA AS (
+  SELECT X.ANO,
+         X.MES,
+         Y.DESC_GRAN_CCOSTO AS AREA,
+         COUNT(DISTINCT P.C_CODIGO)  NRO_TRAB,
+         ROUND(SUM(I.VALOR_CAL), 2)  MASA_SALARIAL
+  FROM PARAMPLA X,
+       PLANILLA P,
+         INGRE_PLA I,
+         T_CONCEPTO T,
+         PLA_COSTO C,
+         V_CENTRO_DE_COSTOS Y
+  WHERE (X.ANO * 100 + X.MES) BETWEEN (:P_ANO_INI * 100 + :P_MES_INI) AND (:P_ANO_FIN * 100 + :P_MES_FIN)
+    AND X.TIPO_PLA = 'N'
+    AND P.NUM_PLA = X.NUM_PLA
+    AND I.NUM_PLA = P.NUM_PLA
+    AND I.C_CODIGO = P.C_CODIGO
+    AND T.C_ID = I.C_ID
+    AND T.C_EO = I.C_EO
+    AND T.C_CONCEPTO = I.C_CONCEPTO
+    AND T.C_CODRTPS = '0121'
+    AND C.NUM_PLA = P.NUM_PLA
+    AND C.C_CODIGO = P.C_CODIGO
+    AND Y.CCOSTO_DET = C.C_COSTO
+  GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO
+),
+HE AS (
+  SELECT X.ANO,
+         X.MES,
+         Y.DESC_GRAN_CCOSTO AS AREA,
+         ROUND(SUM(I.VALOR_CAL), 2)  SOBRETIEMPO
+  FROM PARAMPLA X,
+       PLANILLA P,
+         INGRE_PLA I,
+         T_CONCEPTO T,
+         PLA_COSTO C,
+         V_CENTRO_DE_COSTOS Y
+  WHERE (X.ANO * 100 + X.MES) BETWEEN (:P_ANO_INI * 100 + :P_MES_INI) AND (:P_ANO_FIN * 100 + :P_MES_FIN)
+    AND X.TIPO_PLA = 'N'
+    AND P.NUM_PLA = X.NUM_PLA
+    AND I.NUM_PLA = P.NUM_PLA
+    AND I.C_CODIGO = P.C_CODIGO
+    AND T.C_ID = I.C_ID
+    AND T.C_EO = I.C_EO
+    AND T.C_CONCEPTO = I.C_CONCEPTO
+    AND T.C_CODRTPS IN ('0105','0106','0107')
+    AND C.NUM_PLA = P.NUM_PLA
+    AND C.C_CODIGO = P.C_CODIGO
+    AND Y.CCOSTO_DET = C.C_COSTO
+  GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO
+)
+SELECT
+  M.ANO,
+  M.MES,
+  M.AREA,
+  M.NRO_TRAB,
+  M.MASA_SALARIAL,
+  NVL(H.SOBRETIEMPO, 0)                                                    SOBRETIEMPO,
+  ROUND(NVL(H.SOBRETIEMPO, 0) / NULLIF(M.MASA_SALARIAL, 0) * 100, 2)     RATIO_HE_PCT
+FROM MASA M, HE H
+WHERE M.ANO  = H.ANO
+  AND M.MES  = H.MES
+  AND M.AREA = H.AREA
+ORDER BY M.ANO, M.MES, M.MASA_SALARIAL DESC;
+
+-- -------------------------------------------------------
+-- BLOQUE 2: RESUMEN MENSUAL EMPRESA (para gráfico de línea)
+-- -------------------------------------------------------
+WITH MASA AS (
+  SELECT X.ANO, X.MES,
+         ROUND(SUM(I.VALOR_CAL), 2) MASA_SALARIAL
+  FROM PARAMPLA X,
+       PLANILLA P,
+         INGRE_PLA I,
+         T_CONCEPTO T
+  WHERE (X.ANO * 100 + X.MES) BETWEEN (:P_ANO_INI * 100 + :P_MES_INI) AND (:P_ANO_FIN * 100 + :P_MES_FIN)
+    AND X.TIPO_PLA = 'N'
+    AND P.NUM_PLA = X.NUM_PLA
+    AND I.NUM_PLA = P.NUM_PLA
+    AND I.C_CODIGO = P.C_CODIGO
+    AND T.C_ID = I.C_ID
+    AND T.C_EO = I.C_EO
+    AND T.C_CONCEPTO = I.C_CONCEPTO
+    AND T.C_CODRTPS = '0121'
+  GROUP BY X.ANO, X.MES
+),
+HE AS (
+  SELECT X.ANO, X.MES,
+         ROUND(SUM(I.VALOR_CAL), 2) SOBRETIEMPO
+  FROM PARAMPLA X,
+       PLANILLA P,
+         INGRE_PLA I,
+         T_CONCEPTO T
+  WHERE (X.ANO * 100 + X.MES) BETWEEN (:P_ANO_INI * 100 + :P_MES_INI) AND (:P_ANO_FIN * 100 + :P_MES_FIN)
+    AND X.TIPO_PLA = 'N'
+    AND P.NUM_PLA = X.NUM_PLA
+    AND I.NUM_PLA = P.NUM_PLA
+    AND I.C_CODIGO = P.C_CODIGO
+    AND T.C_ID = I.C_ID
+    AND T.C_EO = I.C_EO
+    AND T.C_CONCEPTO = I.C_CONCEPTO
+    AND T.C_CODRTPS IN ('0105','0106','0107')
+  GROUP BY X.ANO, X.MES
+)
+SELECT
+  M.ANO,
+  M.MES,
+  M.MASA_SALARIAL,
+  NVL(H.SOBRETIEMPO, 0)                                                    SOBRETIEMPO,
+  ROUND(NVL(H.SOBRETIEMPO, 0) / NULLIF(M.MASA_SALARIAL, 0) * 100, 2)     RATIO_HE_PCT,
+  ROUND(M.MASA_SALARIAL - LAG(M.MASA_SALARIAL) OVER (ORDER BY M.ANO, M.MES), 2)  VAR_VS_MES_ANT,
+  ROUND((M.MASA_SALARIAL - LAG(M.MASA_SALARIAL) OVER (ORDER BY M.ANO, M.MES))
+        / NULLIF(LAG(M.MASA_SALARIAL) OVER (ORDER BY M.ANO, M.MES), 0) * 100, 1) VAR_PCT
+FROM MASA M, HE H
+WHERE M.ANO = H.ANO
+  AND M.MES = H.MES
+ORDER BY M.ANO, M.MES;

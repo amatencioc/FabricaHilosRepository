@@ -6,6 +6,8 @@
     var _dom = _lun.AddDays(6);
     var _desde = _lun.ToString("yyyy-MM-dd");
     var _hasta = _dom.ToString("yyyy-MM-dd");
+    var _mesInicio = new DateTime(_hoy.Year, _hoy.Month, 1).ToString("yyyy-MM-dd");
+    var _mesFin    = new DateTime(_hoy.Year, _hoy.Month, DateTime.DaysInMonth(_hoy.Year, _hoy.Month)).ToString("yyyy-MM-dd");
 }
 
 @section Breadcrumb {
@@ -105,6 +107,25 @@
                         <input type="text" id="rangoPersonal" class="form-control form-control-sm" />
                     </div>
                 </div>
+                <div class="row g-3 align-items-end mt-1">
+                    <div class="col-12">
+                        <fieldset class="border rounded px-3 pt-1 pb-2">
+                            <legend class="float-none w-auto px-2 small fw-semibold text-muted mb-0" style="font-size:.75rem;">
+                                <i class="bi bi-clock me-1"></i>Fechas para calcular las horas
+                            </legend>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-sm-6 col-md-2">
+                                    <label class="form-label fw-semibold small mb-1">Desde</label>
+                                    <input type="date" id="horasDesde" class="form-control form-control-sm" value="@_mesInicio" />
+                                    </div>
+                                    <div class="col-sm-6 col-md-2">
+                                        <label class="form-label fw-semibold small mb-1">Hasta</label>
+                                        <input type="date" id="horasHasta" class="form-control form-control-sm" value="@_mesFin" />
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -152,19 +173,19 @@
                     </select>
                 </div>
                 <div class="row g-2 align-items-end px-3 py-2 border-top">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label fw-semibold small mb-1">Tipo Origen:</label>
                         <select id="tipoOrigenEmp" class="form-select form-select-sm">
                             <option value="E">E — Horas Extras</option>
-                            <option value="D">D — Horas Dobles</option>
+                            <option value="D" selected>D — Horas Dobles</option>
                             <option value="B">B — Banco de Horas</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label fw-semibold small mb-1">Fecha Destino:</label>
-                        <input type="date" id="fechaDestinoEmp" class="form-control form-control-sm" />
+                        <input type="date" id="fechaDestinoEmp" class="form-control form-control-sm" onchange="actualizarConteoEmp()" />
                     </div>
-                    <div class="col-md-3 d-flex align-items-end">
+                    <div class="col-md-2 d-flex align-items-end">
                         <button id="btnCalcularSeleccion" class="btn btn-sm btn-outline-primary w-100" onclick="calcularSeleccion()" disabled>
                             <i class="bi bi-calculator me-1"></i>Calcular Seleccionados
                         </button>
@@ -316,6 +337,22 @@
     </div>
 </div>
 
+<!-- ── Modal resumen post-COMMIT ──────────────────────────────────────── -->
+<div class="modal fade" id="modalResumen" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:var(--cp)">
+                <h6 class="modal-title text-white"><i class="bi bi-list-check me-2"></i>Resumen de Compensaciones Registradas</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalResumenBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Modal detalle VER_ESTADO ────────────────────────────────────────── -->
 <div class="modal fade" id="modalEstado" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -339,6 +376,7 @@ let previewData          = [];
 let txAbierta            = false;
 let codigosSeleccionados = [];
 let seleccionEmp = {};
+let _lastRegistro        = null;  // { idEvento }
 
 // Estado de paginación
 let _pagActual   = 1;
@@ -410,8 +448,14 @@ async function buscarEmpleados(pagina, esNuevaBusqueda) {
     const hasta    = document.getElementById('rangoHasta').value;
     const personal = document.getElementById('rangoPersonal').value.trim();
     const nombre   = document.getElementById('rangoNombre').value.trim();
+    let horasDesde = document.getElementById('horasDesde').value;
+    let horasHasta  = document.getElementById('horasHasta').value;
 
     if (!desde || !hasta) { await msgModal('Aviso', '<p>Ingrese el rango de fechas.</p>'); return; }
+
+    // Si no se especificaron fechas de horas, usar el mismo rango de búsqueda como defecto
+    if (!horasDesde) { horasDesde = desde; document.getElementById('horasDesde').value = desde; }
+    if (!horasHasta) { horasHasta = hasta; document.getElementById('horasHasta').value = hasta; }
 
     // Limpiar selección solo cuando es una búsqueda nueva explícita
     if (esNuevaBusqueda) seleccionEmp = {};
@@ -426,8 +470,10 @@ async function buscarEmpleados(pagina, esNuevaBusqueda) {
             fechaFin:    isoADdMmYyyy(hasta),
             pagina:      _pagActual,
             tamPagina:   _tamPagina,
-            ...(personal && { codPersonal: personal }),
-            ...(nombre   && { nombre })
+            ...(personal   && { codPersonal: personal }),
+            ...(nombre     && { nombre }),
+            ...(horasDesde && { fechaHorasInicio: isoADdMmYyyy(horasDesde) }),
+            ...(horasHasta && { fechaHorasFin:    isoADdMmYyyy(horasHasta) })
         });
         const res  = await fetch(`${URL_BASE}/ListarEmpleadosRango?${params}`);
         const json = await res.json();
@@ -501,11 +547,6 @@ function renderEmpleados(data) {
     document.getElementById('areaResultados').style.display = 'none';
     actualizarConteoEmp();
     actualizarPaginacion();
-
-    // Fecha destino: hoy por defecto
-    if (!document.getElementById('fechaDestinoEmp').value) {
-        document.getElementById('fechaDestinoEmp').value = toIsoLocal(new Date());
-    }
 }
 
 function actualizarPaginacion() {
@@ -556,7 +597,8 @@ function actualizarConteoEmp() {
     document.getElementById('lblEmpleadosInfo').textContent = `${total} fila(s)`;
     document.getElementById('lblSeleccionEmp').textContent =
         marcados > 0 ? `${marcados} seleccionado(s)` : 'Seleccione al menos un empleado';
-    document.getElementById('btnCalcularSeleccion').disabled = marcados === 0;
+    const fechaDest = document.getElementById('fechaDestinoEmp').value;
+    document.getElementById('btnCalcularSeleccion').disabled = marcados === 0 || !fechaDest;
     sincronizarChkTodosEmp();
 }
 
@@ -569,7 +611,7 @@ async function calcularSeleccion() {
     const tipoOrigen   = document.getElementById('tipoOrigenEmp').value;
     const fechaDestino = document.getElementById('fechaDestinoEmp').value;
 
-    if (!fechaDestino) { await msgModal('Aviso', '<p>Ingrese la Fecha Destino.</p>'); return; }
+    if (!fechaDestino) { await msgModal('Aviso', '<p>Ingrese la <strong>Fecha Destino</strong> antes de calcular.</p>'); return; }
 
     // Agrupar por fecha de origen (seleccionEmp persiste entre páginas)
     const grupos = {};
@@ -584,11 +626,15 @@ async function calcularSeleccion() {
 
     try {
         for (const [fecha, cods] of Object.entries(grupos)) {
+            const horasDesde = document.getElementById('horasDesde').value;
+            const horasHasta  = document.getElementById('horasHasta').value;
             const params = new URLSearchParams({
-                fechaOrigen:     fecha,
-                fechaDestino:    isoADdMmYyyy(fechaDestino),
+                fechaOrigen:   fecha,
+                fechaDestino:  isoADdMmYyyy(fechaDestino),
                 tipoOrigen,
-                listaPersonal:   cods.join(',')
+                listaPersonal: cods.join(','),
+                ...(horasDesde   && { fechaHorasInicio: isoADdMmYyyy(horasDesde) }),
+                ...(horasHasta   && { fechaHorasFin:    isoADdMmYyyy(horasHasta) })
             });
             const res  = await fetch(`${URL_BASE}/Calcular`, { method: 'POST', body: params });
             const json = await res.json();
@@ -678,6 +724,12 @@ function abrirModalRegistro() {
     const seleccionados = [...document.querySelectorAll('.chk-prev:not(:disabled):checked')];
     if (!seleccionados.length) return;
 
+    const fechaDestinoVal = document.getElementById('fechaDestinoEmp').value;
+    if (!fechaDestinoVal) {
+        msgModal('Aviso', '<p>Ingrese la <strong>Fecha Destino</strong> antes de registrar.</p>');
+        return;
+    }
+
     // Agrupar por fecha origen -> lista de codigos
     const grupos = {};
     seleccionados.forEach(chk => {
@@ -706,14 +758,18 @@ async function ejecutarRegistro() {
 
     try {
         for (const [fechaOrigen, cods] of Object.entries(grupos)) {
-            const params = new URLSearchParams({
-                fechaOrigen,
-                fechaDestino,
-                tipoOrigen,
-                tipoCompensacion,
-                listaPersonal: cods.join(','),
-                ...(horasMax && { horasMax })
-            });
+            const horasDesde2 = document.getElementById('horasDesde').value;
+                const horasHasta2  = document.getElementById('horasHasta').value;
+                const params = new URLSearchParams({
+                    fechaOrigen,
+                    fechaDestino,
+                    tipoOrigen,
+                    tipoCompensacion,
+                    listaPersonal: cods.join(','),
+                    ...(horasMax    && { horasMax }),
+                    ...(horasDesde2 && { fechaHorasInicio: isoADdMmYyyy(horasDesde2) }),
+                    ...(horasHasta2 && { fechaHorasFin:    isoADdMmYyyy(horasHasta2) })
+                });
             const res  = await fetch(`${URL_BASE}/RegistrarMasivo`, { method: 'POST', body: params });
             const json = await res.json();
             if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
@@ -723,6 +779,10 @@ async function ejecutarRegistro() {
         txAbierta = true;
         renderResultados(allData);
         document.getElementById('areaPreview').style.display = 'none';
+
+        // Guardar id_evento para el resumen post-commit
+        const idEvento = allData.find(r => r.idEvento)?.idEvento ?? null;
+        _lastRegistro = idEvento ? { idEvento } : null;
     } catch (e) {
         await msgModal('Error de red', `<p>${e.message}</p>`);
     } finally {
@@ -764,9 +824,85 @@ async function hacerCommit() {
     try {
         const res  = await fetch(`${URL_BASE}/Commit`, { method: 'POST' });
         const json = await res.json();
-        if (json.ok) { txAbierta = false; await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas.</p>'); limpiarTodo(); }
-        else          await msgModal('Error', `<p>${json.error}</p>`);
+        if (json.ok) {
+            txAbierta = false;
+            mostrarResumenPostCommit();
+        } else if (json.sinTransaccion) {
+            // El servidor se reinició: la transacción Oracle ya no existe (rollback implícito)
+            txAbierta = false;
+            await msgModal('⚠️ Sesión perdida',
+                '<p>El servidor fue reiniciado y la transacción ya no existe en Oracle. ' +
+                'Los cambios <strong>NO fueron guardados</strong>. Vuelva a realizar el registro.</p>');
+            _limpiar();
+        } else {
+            await msgModal('Error', `<p>${json.error}</p>`);
+        }
     } catch (e) { await msgModal('Error de red', `<p>${e.message}</p>`); }
+}
+
+async function mostrarResumenPostCommit() {
+    if (!_lastRegistro?.idEvento) {
+        await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
+        _limpiar();
+        return;
+    }
+    try {
+        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${_lastRegistro.idEvento}`);
+        const json = await res.json();
+        if (!json.ok || !json.data?.length) {
+            await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
+            _limpiar();
+            return;
+        }
+
+        // Agrupar por codPersonal
+        const porEmp = {};
+        json.data.forEach(r => {
+            const k = r.codPersonal;
+            if (!porEmp[k]) porEmp[k] = { codPersonal: k, nombreCompleto: r.nombreCompleto, filas: [] };
+            porEmp[k].filas.push(r);
+        });
+
+        let html = '<div class="alert alert-success py-2 small mb-3"><i class="bi bi-check-circle me-1"></i><strong>Compensaciones guardadas correctamente.</strong></div>';
+        html += '<p class="small text-muted mb-2">Detalle de lo registrado por empleado:</p>';
+
+        Object.values(porEmp).forEach(emp => {
+            const totalMin = emp.filas.reduce((s, r) => s + (r.tiempoMin ?? 0), 0);
+            const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+            const mm = String(totalMin % 60).padStart(2, '0');
+
+            html += `<div class="card mb-2">`;
+            html += `<div class="card-header py-1 px-2 d-flex justify-content-between align-items-center" style="background:var(--cp10)">`;
+            html += `<span class="fw-semibold small"><code>${emp.codPersonal}</code> ${emp.nombreCompleto ?? ''}</span>`;
+            html += `<span class="badge bg-success">${hh}:${mm} compensadas</span>`;
+            html += `</div>`;
+            html += `<div class="table-responsive"><table class="table table-sm table-hover mb-0 small">`;
+            html += `<thead><tr><th>ID</th><th>Origen</th><th>Destino</th><th>Tipo Orig.</th><th>Tipo Comp.</th><th class="text-end">Tiempo</th><th>Aplicado</th></tr></thead><tbody>`;
+            emp.filas.forEach(r => {
+                const aplicado = r.estadoAplicacion === 'APLICADA'
+                    ? '<span class="badge bg-success">✔ Aplicado al tareo</span>'
+                    : '<span class="badge bg-warning text-dark" title="Guardado en Oracle. Se aplicará al tareo en el siguiente proceso.">⏳ Guardado (pendiente tareo)</span>';
+                html += `<tr>`;
+                html += `<td><code class="text-success">${r.idCompen ?? '—'}</code></td>`;
+                html += `<td>${r.fechaOrigen ?? ''}</td>`;
+                html += `<td>${r.fechaDestino ?? ''}</td>`;
+                html += `<td>${r.tipoOrigen ?? ''}</td>`;
+                html += `<td>${r.tipoCompensacion ?? ''}</td>`;
+                html += `<td class="text-end fw-bold">${r.tiempoHhMi ?? '—'}</td>`;
+                html += `<td>${aplicado}</td>`;
+                html += `</tr>`;
+            });
+            html += `</tbody></table></div></div>`;
+        });
+
+        document.getElementById('modalResumenBody').innerHTML = html;
+        const modalEl = document.getElementById('modalResumen');
+        modalEl.addEventListener('hidden.bs.modal', () => _limpiar(), { once: true });
+        new bootstrap.Modal(modalEl).show();
+    } catch {
+        await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
+        _limpiar();
+    }
 }
 
 async function hacerRollback() {
@@ -811,12 +947,14 @@ function renderConsulta(data) {
             const btnVer = r.idCompen
                 ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstado(${r.idCompen})" title="Ver detalle"><i class="bi bi-eye"></i></button>`
                 : '';
+            const fOrig = (r.fechaOrigen  ?? '').replace(/ \d{2}:\d{2}:\d{2}$/, '');
+            const fDest = (r.fechaDestino ?? '').replace(/ \d{2}:\d{2}:\d{2}$/, '');
             tbody.insertAdjacentHTML('beforeend', `
               <tr>
                 <td><code>${r.idCompen ?? '—'}</code></td>
                 <td><code>${r.codPersonal}</code></td>
-                <td>${r.fechaOrigen ?? ''}</td>
-                <td>${r.fechaDestino ?? ''}</td>
+                <td>${fOrig}</td>
+                <td>${fDest}</td>
                 <td><span class="badge bg-secondary">${r.tipoOrigen ?? ''}</span></td>
                 <td><span class="badge bg-secondary">${r.tipoCompensacion ?? ''}</span></td>
                 <td class="text-end">${r.tiempoHhMi ?? ''}</td>

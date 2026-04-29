@@ -1,0 +1,463 @@
+@{
+    ViewData["Title"] = "KPI Horas Extras por Área";
+    int anoIni = ViewBag.AnoIni;
+    int mesIni = ViewBag.MesIni;
+    int anoFin = ViewBag.AnoFin;
+    int mesFin = ViewBag.MesFin;
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .kpi-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        background: #fff;
+        text-align: center;
+        padding: 1.1rem .75rem;
+    }
+    .kpi-card .kpi-icon {
+        font-size: 2rem;
+        line-height: 1;
+        margin-bottom: .35rem;
+    }
+    .kpi-card .kpi-label {
+        font-size: .72rem;
+        color: #637381;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .kpi-card .kpi-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        line-height: 1.1;
+    }
+    .kpi-card .kpi-sub {
+        font-size: .72rem;
+        color: #9ca3af;
+        margin-top: .15rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.4rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    #kpi-container { min-height: 200px; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item active">KPI Horas Extras por Área</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <form id="frmFiltro" class="d-flex flex-wrap align-items-end gap-3" data-no-loading>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Inicio</label>
+            <input type="number" id="anoIni" name="anoIni" class="form-control form-control-sm" style="width:90px"
+                   value="@anoIni" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Inicio</label>
+            <select id="mesIni" name="mesIni" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    if (m == mesIni)
+                    {
+                        <option value="@m" selected>@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                    }
+                    else
+                    {
+                        <option value="@m">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                    }
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Fin</label>
+            <input type="number" id="anoFin" name="anoFin" class="form-control form-control-sm" style="width:90px"
+                   value="@anoFin" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Fin</label>
+            <select id="mesFin" name="mesFin" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    if (m == mesFin)
+                    {
+                        <option value="@m" selected>@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                    }
+                    else
+                    {
+                        <option value="@m">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option>
+                    }
+                }
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-success">
+            <i class="bi bi-arrow-clockwise me-1"></i>Consultar
+        </button>
+    </form>
+</div>
+
+<div id="kpi-container">
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-bar-chart-line display-4 d-block mb-2"></i>
+        Seleccione el período y presione <strong>Consultar</strong> para ver el dashboard.
+    </div>
+</div>
+
+<!-- ── Ficha Técnica del Indicador ───────────────────────────── -->
+<div class="accordion mt-4" id="accordionFicha">
+    <div class="accordion-item border-0 shadow-sm">
+        <h2 class="accordion-header" id="headingFicha">
+            <button class="accordion-button collapsed fw-semibold" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#collapseFicha"
+                    aria-expanded="false" aria-controls="collapseFicha"
+                    style="background:#f8f9fa; color:#1B4D3E; border-radius:8px;">
+                <i class="bi bi-info-circle me-2"></i> Ficha Técnica del Indicador — <span class="ms-1 text-muted fw-normal">SobreTiempoArea</span>
+            </button>
+        </h2>
+        <div id="collapseFicha" class="accordion-collapse collapse" aria-labelledby="headingFicha">
+            <div class="accordion-body pt-3" style="background:#fff; border-radius:0 0 8px 8px;">
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <p class="mb-1"><span class="fw-semibold">Nombre:</span> SobreTiempoArea</p>
+                        <p class="mb-1"><span class="fw-semibold">Tipo:</span> KPI de Gestión de Personal — Costo Laboral</p>
+                        <p class="mb-1"><span class="fw-semibold">Periodicidad:</span> Mensual</p>
+                        <p class="mb-1"><span class="fw-semibold">Dimensiones de análisis:</span> Área / Mes / Año</p>
+                        <p class="mb-0"><span class="fw-semibold">Fuente de datos:</span> Planilla mensual — conceptos RTPS <code>0105</code> (25%), <code>0106</code> (35%), <code>0107</code> (100%)</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1 fw-semibold">Definición:</p>
+                        <p class="mb-0 text-secondary small">Mide el monto total pagado en horas de sobretiempo por área en el período, junto con la cantidad de trabajadores involucrados y el costo promedio por colaborador, para controlar el gasto extraordinario de mano de obra.</p>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <p class="fw-semibold mb-2">Fórmulas:</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4 text-center">
+                        <div class="p-3 rounded" style="background:#f5f5f2;">
+                            <div class="small text-muted fw-semibold mb-2">Promedio HE por Trab</div>
+                            <div style="font-size:.95rem;">
+                                <span style="display:inline-block; text-align:center; line-height:1.4;">
+                                    <span style="display:block; border-bottom:1.5px solid #374151; padding-bottom:2px;">Total Sobretiempo (S/.)</span>
+                                    <span style="display:block; padding-top:2px;">Total Trabajadores</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="p-3 rounded" style="background:#f5f5f2;">
+                            <div class="small text-muted fw-semibold mb-2">% del Total HE</div>
+                            <div style="font-size:.95rem;">
+                                <span style="display:inline-block; text-align:center; line-height:1.4;">
+                                    <span style="display:block; border-bottom:1.5px solid #374151; padding-bottom:2px;">Sobretiempo Área</span>
+                                    <span style="display:block; padding-top:2px;">Sobretiempo Total Empresa</span>
+                                </span>
+                                &nbsp;× 100
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="p-3 rounded" style="background:#f5f5f2;">
+                            <div class="small text-muted fw-semibold mb-2">% Trab con HE</div>
+                            <div style="font-size:.95rem;">
+                                <span style="display:inline-block; text-align:center; line-height:1.4;">
+                                    <span style="display:block; border-bottom:1.5px solid #374151; padding-bottom:2px;">Trabajadores con HE &gt; 0</span>
+                                    <span style="display:block; padding-top:2px;">Total Trabajadores</span>
+                                </span>
+                                &nbsp;× 100
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Indicadores que expone + Alertas -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-5">
+                        <p class="fw-semibold mb-2">Indicadores que expone:</p>
+                        <ul class="list-unstyled small mb-0">
+                            <li class="mb-1"><code>TOTAL_SOBRETIEMPO</code> — Monto total en soles (S/.)</li>
+                            <li class="mb-1"><code>NRO_TRABAJADORES</code> — Headcount del área</li>
+                            <li class="mb-1"><code>PROM_HE_POR_TRAB</code> — Costo promedio por trabajador</li>
+                            <li class="mb-1"><code>PCT_DEL_TOTAL_HE</code> — Participación del área en el total empresa</li>
+                            <li class="mb-0"><code>TRAB_CON_HE / PCT_TRAB_CON_HE</code> — Incidencia</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-7">
+                        <p class="fw-semibold mb-2">Alertas por umbral:</p>
+                        <table class="table table-sm table-bordered small mb-0">
+                            <thead class="table-dark">
+                                <tr><th>Indicador</th><th>Alerta</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>PCT_DEL_TOTAL_HE</code> alto en pocas áreas</td>
+                                    <td>Concentración de costo — revisar operaciones</td>
+                                </tr>
+                                <tr>
+                                    <td><code>PROM_HE_POR_TRAB</code> creciente mes a mes</td>
+                                    <td>Tendencia de sobrecarga — evaluar contratación</td>
+                                </tr>
+                                <tr>
+                                    <td><code>PCT_TRAB_CON_HE</code> &gt; 60%</td>
+                                    <td>Sobretiempo sistémico en el área</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <!-- Guía de lectura de la tabla -->
+                <p class="fw-semibold mb-2"><i class="bi bi-table me-1 text-success"></i> Cómo leer la tabla principal:</p>
+                <table class="table table-sm table-bordered small mb-4">
+                    <thead style="background:#1B4D3E; color:#fff;">
+                        <tr><th>Columna</th><th>Indicador</th><th>Cómo interpretarlo</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>HE (h)</strong></td>
+                            <td><code>TOTAL_SOBRETIEMPO</code></td>
+                            <td>El área con más horas tiene la <strong>mayor carga operativa</strong>. Compara entre áreas del mismo período.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Prom.</strong></td>
+                            <td><code>PROM_HE_POR_TRAB</code></td>
+                            <td>Un promedio alto significa que <strong>pocos trabajadores cargan todo el sobretiempo</strong>. Evaluar si es concentración de personas o de carga.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>% HE</strong></td>
+                            <td><code>PCT_DEL_TOTAL_HE</code></td>
+                            <td>Indica qué parte del <strong>costo total de la empresa</strong> absorbe el área. Si 2–3 áreas superan el 50%, hay concentración.</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Guía de lectura de gráficos -->
+                <p class="fw-semibold mb-2"><i class="bi bi-bar-chart-fill me-1 text-success"></i> Cómo leer los gráficos:</p>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded border small h-100" style="background:#f8fffe;">
+                            <p class="fw-semibold mb-1" style="color:#1B4D3E;"><i class="bi bi-bar-chart me-1"></i> Gráfico izquierdo — Barras (HE Total por área)</p>
+                            <ul class="mb-0 ps-3">
+                                <li>Las áreas están ordenadas de <strong>mayor a menor</strong> — la primera barra es la de mayor costo de sobretiempo.</li>
+                                <li>Forma un <strong>diagrama de Pareto</strong>: si las primeras 2 o 3 barras acumulan más del 50% del total, hay concentración de carga operativa.</li>
+                                <li>El panel <em>"Concentración de HE (Análisis de Pareto)"</em> debajo de los gráficos calcula este porcentaje automáticamente con los datos del período consultado.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded border small h-100" style="background:#f8fffe;">
+                            <p class="fw-semibold mb-1" style="color:#1B4D3E;"><i class="bi bi-graph-up me-1"></i> Gráfico derecho — Línea (Promedio HE por trabajador)</p>
+                            <ul class="mb-0 ps-3">
+                                <li>El orden de áreas es el mismo que las barras, pero los <strong>picos no tienen por qué coincidir</strong>.</li>
+                                <li>Un área con <strong>barra baja pero línea alta</strong> → pocas HE totales pero concentradas en pocos trabajadores.</li>
+                                <li>Un área con <strong>barra alta pero línea baja</strong> → mucho sobretiempo pero bien repartido entre muchos colaboradores.</li>
+                                <li>El panel <em>"Diagnóstico por Área"</em> clasifica cada área automáticamente comparándola contra el promedio empresa.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matriz de decisión -->
+                <p class="fw-semibold mb-2"><i class="bi bi-intersect me-1 text-success"></i> Cómo combinar los dos gráficos para tomar decisiones:</p>
+                <table class="table table-sm table-bordered small mb-0">
+                    <thead style="background:#1B4D3E; color:#fff;">
+                        <tr>
+                            <th>HE Total (barras)</th>
+                            <th>Promedio HE (línea)</th>
+                            <th>Diagnóstico</th>
+                            <th>Acción sugerida</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="table-danger">
+                            <td>🔴 Alto</td>
+                            <td>🔴 Alto</td>
+                            <td><strong>Área sobrecargada</strong></td>
+                            <td>Evaluar contratación o redistribución de turnos</td>
+                        </tr>
+                        <tr class="table-warning">
+                            <td>🟠 Alto</td>
+                            <td>🟢 Bajo</td>
+                            <td><strong>Carga distribuida</strong></td>
+                            <td>Operación intensa pero controlada — monitorear tendencia</td>
+                        </tr>
+                        <tr class="table-warning">
+                            <td>🟢 Bajo</td>
+                            <td>🟠 Alto</td>
+                            <td><strong>Dependencia de personas</strong></td>
+                            <td>Pocos trabajadores hacen todo — riesgo operativo</td>
+                        </tr>
+                        <tr class="table-success">
+                            <td>🟢 Bajo</td>
+                            <td>🟢 Bajo</td>
+                            <td><strong>Sin problema</strong></td>
+                            <td>Mantener seguimiento periódico</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    document.getElementById('frmFiltro').addEventListener('submit', function (e) {
+        e.preventDefault();
+        cargarKpi();
+    });
+
+    function cargarKpi() {
+        const anoIni = document.getElementById('anoIni').value;
+        const mesIni = document.getElementById('mesIni').value;
+        const anoFin = document.getElementById('anoFin').value;
+        const mesFin = document.getElementById('mesFin').value;
+
+        const container = document.getElementById('kpi-container');
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-success" style="width:2.5rem;height:2.5rem;"></div>
+                <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
+            </div>`;
+
+        fetch(`/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}`, { noLoading: true })
+            .then(r => {
+                if (!r.ok) throw new Error('Error ' + r.status);
+                return r.text();
+            })
+            .then(html => {
+                container.innerHTML = html;
+                inicializarGraficos();
+            })
+            .catch(err => {
+                container.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>${err.message}</div>`;
+            });
+    }
+
+    function inicializarGraficos() {
+        const rawData = document.getElementById('chartRawData');
+        if (!rawData) return;
+
+        const rows = JSON.parse(rawData.value);
+        if (!rows || rows.length === 0) return;
+
+        // Períodos únicos ordenados y áreas únicas
+        const periodos = [...new Map(rows.map(r => [`${r.ano}-${r.mes}`, r])).keys()];
+        const areas    = [...new Set(rows.map(r => r.area))];
+
+        const COLORS = [
+            '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+            '#00838f','#c62828','#4e342e','#37474f','#f9a825'
+        ];
+        const meses = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                       'Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+        const labelPeriodo = k => { const [a, m] = k.split('-'); return `${meses[+m]} ${a}`; };
+
+        const baseOpts = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                datalabels: { display: false }
+            },
+            scales: {
+                x: { ticks: { maxRotation: 40, minRotation: 20, font: { size: 10 } }, grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' } }
+            }
+        };
+
+        // ── Gráfico 1: Barras agrupadas — HE Total por Área ─────────────
+        const ctxBar = document.getElementById('chartBarTotal');
+        if (ctxBar) {
+            new Chart(ctxBar.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: areas,
+                    datasets: periodos.map((p, i) => ({
+                        label: labelPeriodo(p),
+                        data: areas.map(a => { const r = rows.find(x => `${x.ano}-${x.mes}` === p && x.area === a); return r ? r.total : 0; }),
+                        backgroundColor: COLORS[i % COLORS.length],
+                        borderRadius: 4,
+                        borderSkipped: false
+                    }))
+                },
+                options: { ...baseOpts, plugins: { ...baseOpts.plugins,
+                    tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 1 })} h` } } } }
+            });
+        }
+
+        // ── Gráfico 2: Líneas — Promedio HE por Trabajador por Área ─────
+        const ctxLine = document.getElementById('chartLineProm');
+        if (ctxLine) {
+            new Chart(ctxLine.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: areas,
+                    datasets: periodos.map((p, i) => ({
+                        label: labelPeriodo(p),
+                        data: areas.map(a => { const r = rows.find(x => `${x.ano}-${x.mes}` === p && x.area === a); return r ? r.prom : 0; }),
+                        borderColor: COLORS[i % COLORS.length],
+                        backgroundColor: 'transparent',
+                        pointBackgroundColor: COLORS[i % COLORS.length],
+                        pointRadius: 4, pointHoverRadius: 6,
+                        tension: 0.3, fill: false
+                    }))
+                },
+                options: { ...baseOpts, plugins: { ...baseOpts.plugins,
+                    tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 2 })} h` } } } }
+            });
+        }
+    }
+</script>
+}
+

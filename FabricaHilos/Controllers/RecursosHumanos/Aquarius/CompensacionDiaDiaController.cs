@@ -36,7 +36,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string fechaOrigen,
             string? fechaDestino,
             string tipoOrigen,
-            string? listaPersonal)
+            string? listaPersonal,
+            string? fechaHorasInicio = null,
+            string? fechaHorasFin   = null)
         {
             try
             {
@@ -45,7 +47,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     fechaOrigen,
                     string.IsNullOrWhiteSpace(fechaDestino) ? null : fechaDestino,
                     tipoOrigen,
-                    string.IsNullOrWhiteSpace(listaPersonal) ? null : listaPersonal);
+                    string.IsNullOrWhiteSpace(listaPersonal) ? null : listaPersonal,
+                    string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -70,7 +74,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string tipoOrigen,
             string tipoCompensacion,
             string listaPersonal,
-            string? horasMax)
+            string? horasMax,
+            string? fechaHorasInicio = null,
+            string? fechaHorasFin   = null)
         {
             try
             {
@@ -81,7 +87,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     tipoOrigen,
                     tipoCompensacion,
                     listaPersonal,
-                    string.IsNullOrWhiteSpace(horasMax) ? null : horasMax);
+                    string.IsNullOrWhiteSpace(horasMax) ? null : horasMax,
+                    string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -126,6 +134,12 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 await _service.CommitAsync();
                 return Json(new { ok = true });
             }
+            catch (InvalidOperationException ex)
+            {
+                // Transacción no encontrada: servidor reiniciado o sesión expirada
+                _logger.LogWarning(ex, "Commit sin transacción activa");
+                return Json(new { ok = false, error = ex.Message, sinTransaccion = true });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en Commit CompensacionDiaDia");
@@ -159,7 +173,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string? codPersonal,
             string? nombre,
             int pagina    = 1,
-            int tamPagina = 10)
+            int tamPagina = 10,
+            string? fechaHorasInicio = null,
+            string? fechaHorasFin   = null)
         {
             try
             {
@@ -170,13 +186,32 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     string.IsNullOrWhiteSpace(codPersonal) ? null : codPersonal,
                     string.IsNullOrWhiteSpace(nombre)      ? null : nombre,
                     pagina,
-                    tamPagina);
+                    tamPagina,
+                    string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
 
                 return Json(new { ok = true, data = resultado.Items, totalFilas = resultado.Total, pagina, tamPagina });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en ListarEmpleadosRango CompensacionDiaDia");
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // ── CONSULTAR EVENTO (GET, devuelve JSON) ─────────────────────────────
+
+        [HttpGet("ConsultarEvento")]
+        public async Task<IActionResult> ConsultarEvento(long idEvento)
+        {
+            try
+            {
+                var resultado = await _service.ConsultarEventoAsync(idEvento);
+                return Json(new { ok = true, data = resultado });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ConsultarEvento id={Id}", idEvento);
                 return Json(new { ok = false, error = ex.Message });
             }
         }

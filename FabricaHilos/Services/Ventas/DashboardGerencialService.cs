@@ -896,16 +896,10 @@ SELECT CODIGO_GIRO,
             var result  = new List<DgTopHiladoKgDto>();
             if (string.IsNullOrEmpty(connStr)) return result;
 
-            // KG calculados con la misma lógica del subquery C de BuildSql
-            // (DashboardComercialMaestroService) — opción 'CON VENDEDOR':
-            // - Mismos filtros de DOCUVENT (FECHA, ESTADO <> '9')
-            // - Excluye los 4 COD_ART de anticipos
-            // - JOIN CLIENTES + CLIENTE_RELACION para mantener consistencia
-            //   con el agrupamiento por grupo de clientes del Maestro
             var sql = $@"
 SELECT FAMILIA, KILOS FROM (
-  SELECT NVL(F.DESCRIPCION, 'SIN FAMILIA') FAMILIA,
-         SUM(I.CANTIDAD * E.FACTOR) KILOS
+  SELECT NVL(M.DESCRIPCION, 'SIN ARTÍCULO') FAMILIA,
+         NVL(SUM(I.CANTIDAD * E.FACTOR), 0) KILOS
     FROM {S}DOCUVENT D
     JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
                                     AND I.SERIE   = D.SERIE
@@ -913,8 +907,6 @@ SELECT FAMILIA, KILOS FROM (
     LEFT JOIN {S}EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
                                     AND E.UNIDAD  = 'KG'
     LEFT JOIN {S}ARTICUL M          ON  M.COD_ART = I.COD_ART
-    LEFT JOIN {S}TFAMLIN F          ON  F.COD_FAM = M.COD_FAM
-                                    AND F.COD_LIN = M.COD_LIN
     LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
     LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                  FROM {S}CLIENTE_RELACION
@@ -925,7 +917,8 @@ SELECT FAMILIA, KILOS FROM (
                            '9300049999',
                            '930004999A',
                            '9300049998')
-   GROUP BY NVL(F.DESCRIPCION, 'SIN FAMILIA')
+   GROUP BY NVL(M.DESCRIPCION, 'SIN ARTÍCULO')
+  HAVING NVL(SUM(I.CANTIDAD * E.FACTOR), 0) > 0
    ORDER BY KILOS DESC
 ) WHERE ROWNUM <= :P_TOP";
 

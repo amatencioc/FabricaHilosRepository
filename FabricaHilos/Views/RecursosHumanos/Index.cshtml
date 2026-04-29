@@ -59,9 +59,12 @@
                                     @* Los submódulos de Aquarius usan rutas personalizadas *@
                                     var href = submodulo.Controller switch
                                     {
-                                        "Marcaciones"         => "/RecursosHumanos/Aquarius/Marcaciones",
-                                        "CompensacionDiaDia"  => "/RecursosHumanos/Aquarius/CompensacionDiaDia",
-                                        _                     => $"/{submodulo.Controller}/{submodulo.Action}"
+                                        "Marcaciones"                  => "/RecursosHumanos/Aquarius/Marcaciones",
+                                        "CompensacionDiaDia"           => "/RecursosHumanos/Aquarius/CompensacionDiaDia",
+                                        "HorasExtras"                  => "/RecursosHumanos/HorasExtras",
+                                        "ConcentracionSobretiempoArea" => "/RecursosHumanos/ConcentracionSobretiempoArea",
+                                        "EvolucionMasaSalarial"         => "/RecursosHumanos/EvolucionMasaSalarial",
+                                        _                              => $"/{submodulo.Controller}/{submodulo.Action}"
                                     };
                                     <a href="@href" class="btn btn-outline-secondary btn-sm text-start">
                                         <i class="bi @submodulo.Icono me-2"></i>

@@ -14,6 +14,19 @@
  *   D = Horas Dobles Of.   (campo HORADOBLESOF)
  *   B = Banco de Horas dia (campo HORABANCOH)
  *
+ * MODO MIXTO AUTOMATICO (transparente para el cliente):
+ *   En CALCULAR_HORAS_EVENTO y REGISTRAR_EVENTO_MASIVO los tipos E/D/B
+ *   funcionan como combinacion automatica de las TRES fuentes:
+ *     Disponible = Dobles_dia + Banco_dia + SUM(HE) Lun-Dom de la semana.
+ *   El parametro p_tipo_origen indica solo la FUENTE PREFERENTE (la que
+ *   se consume primero); las restantes se usan para completar hasta cubrir
+ *   la jornada destino.
+ *     'D' -> orden Dobles -> Banco -> HE
+ *     'B' -> orden Banco  -> Dobles -> HE
+ *     'E' -> orden HE     -> Dobles -> Banco
+ *   Cada fuente consumida genera UNA fila SCA_COMPENSACION con su
+ *   tipoorigen real (D/B/E) y aux1='M'||id_evento para auditoria.
+ *
  * TIPOCOMPENSACION  (a que se aplica - dia a cubrir):
  *   A = Antes de Salida    (HORAANTESALIDA)      validacion exacta
  *   T = Tardanza           (HORATARDANZA)        validacion exacta
@@ -41,6 +54,8 @@
  * REGLA DE REDONDEO (SP_SCA_REDONDEAR_TAREO_HE):
  *   Despues de aplicar/revertir, los campos HE/DOBLES/BANCO se redondean
  *   a hora entera: minutos < 45 bajan, minutos >= 45 suben.
+ *   Cuando el campo llega a cero se deja en 01/01/1900 00:00 (no NULL)
+ *   como marca visual de que de ahi se desconto la hora (columna muestra 00:00).
  *
  * Autor:   Equipo AQUARIUS
  * Fecha:   27/04/2026
@@ -95,9 +110,14 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
         - p_cod_empresa      Empresa
         - p_fecha_origen     'dd/MM/yyyy' dia trabajado (descanso/feriado)
         - p_fecha_destino    'dd/MM/yyyy' dia a compensar (NULL si tipo I)
-        - p_tipo_origen      'E'|'D'|'B'
-        - p_lista_personal   NULL = todos con horas ese dia
-                             'cod1,cod2,cod3' = solo esos empleados
+        - p_tipo_origen          'E'|'D'|'B' (fuente preferente; el SP combina
+                                 automaticamente las tres fuentes del rango)
+        - p_lista_personal       NULL = todos con horas ese dia
+                                 'cod1,cod2,cod3' = solo esos empleados
+        - p_fecha_horas_inicio   'dd/MM/yyyy' inicio rango HE/Dobles/Banco.
+                                 NULL = semana Lun-Dom que contiene p_fecha_origen.
+        - p_fecha_horas_fin      'dd/MM/yyyy' fin rango HE/Dobles/Banco.
+                                 NULL = semana Lun-Dom que contiene p_fecha_origen.
 
         CURSOR resultado (una fila por empleado):
           cod_personal, nombre_completo,
@@ -107,12 +127,14 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
           min_sobrante, horas_sobrante
     ***************************************************************************/
     PROCEDURE CALCULAR_HORAS_EVENTO(
-        p_cod_empresa     IN VARCHAR2,
-        p_fecha_origen    IN VARCHAR2,
-        p_fecha_destino   IN VARCHAR2 DEFAULT NULL,
-        p_tipo_origen     IN CHAR,
-        p_lista_personal  IN VARCHAR2 DEFAULT NULL,
-        cv_resultado      OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_origen         IN VARCHAR2,
+        p_fecha_destino        IN VARCHAR2 DEFAULT NULL,
+        p_tipo_origen          IN CHAR,
+        p_lista_personal       IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -133,11 +155,17 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
         - p_cod_empresa
         - p_fecha_origen      'dd/MM/yyyy' dia trabajado
         - p_fecha_destino     'dd/MM/yyyy' dia a compensar
-        - p_tipo_origen       'E'|'D'|'B'
+        - p_tipo_origen       'E'|'D'|'B' (fuente preferente; el SP consume
+                              automaticamente las tres fuentes en el orden
+                              que dicta el tipo recibido).
         - p_tipo_compensacion 'A'|'T'|'N'|'F'|'P'
         - p_lista_personal    'cod1,cod2,cod3'  OBLIGATORIO
-        - p_horas_max         'HH:MI' cap maximo opcional (para destinos sin
-                              tareo calculado). NULL = usa jornada del destino.
+        - p_horas_max            'HH:MI' cap maximo opcional (para destinos sin
+                                 tareo calculado). NULL = usa jornada del destino.
+        - p_fecha_horas_inicio   'dd/MM/yyyy' inicio rango HE/Dobles/Banco.
+                                 NULL = semana Lun-Dom que contiene p_fecha_origen.
+        - p_fecha_horas_fin      'dd/MM/yyyy' fin rango HE/Dobles/Banco.
+                                 NULL = semana Lun-Dom que contiene p_fecha_origen.
 
         CURSOR resultado (una fila por empleado):
           cod_personal, nombre_completo,
@@ -152,14 +180,16 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
           id_evento             -- ID de la llamada (para auditoria)
     ***************************************************************************/
     PROCEDURE REGISTRAR_EVENTO_MASIVO(
-        p_cod_empresa        IN VARCHAR2,
-        p_fecha_origen       IN VARCHAR2,
-        p_fecha_destino      IN VARCHAR2,
-        p_tipo_origen        IN CHAR,
-        p_tipo_compensacion  IN CHAR,
-        p_lista_personal     IN VARCHAR2,
-        p_horas_max          IN VARCHAR2 DEFAULT NULL,
-        cv_resultado         OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_origen         IN VARCHAR2,
+        p_fecha_destino        IN VARCHAR2,
+        p_tipo_origen          IN CHAR,
+        p_tipo_compensacion    IN CHAR,
+        p_lista_personal       IN VARCHAR2,
+        p_horas_max            IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -182,27 +212,33 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
         pantalla de Compensacion Dia por Dia.
 
         PARAMETROS:
-        - p_cod_empresa     Empresa
-        - p_fecha_inicio    'dd/MM/yyyy' inicio del rango
-        - p_fecha_fin       'dd/MM/yyyy' fin del rango
-        - p_nombre          NULL = sin filtro por nombre
-                            texto parcial (case-insensitive) sobre
-                            APE_PATERNO||APE_MATERNO||NOM_TRABAJADOR
+        - p_cod_empresa          Empresa
+        - p_fecha_inicio         'dd/MM/yyyy' inicio del rango de busqueda de empleados
+        - p_fecha_fin            'dd/MM/yyyy' fin del rango de busqueda de empleados
+        - p_nombre               NULL = sin filtro por nombre
+                                 texto parcial (case-insensitive) sobre
+                                 APE_PATERNO||APE_MATERNO||NOM_TRABAJADOR
+        - p_fecha_horas_inicio   'dd/MM/yyyy' inicio del rango para sumar HE/Dobles/Banco.
+                                 NULL = usa p_fecha_inicio.
+        - p_fecha_horas_fin      'dd/MM/yyyy' fin del rango para sumar HE/Dobles/Banco.
+                                 NULL = usa p_fecha_fin.
 
         CURSOR resultado (una fila por empleado+dia con tareo):
           cod_personal, nombre_completo, fechamar, fechamar_str,
-          min_trabajadas, horas_trabajadas  (tothoramarcas del dia origen),
-          min_he,    horas_he,
-          min_dobles, horas_dobles,
-          min_banco,  horas_banco,
-          min_total,  horas_total   (suma de los tres campos)
+          min_trabajadas, horas_trabajadas  (horaefectiva del dia),
+          min_he,    horas_he      (SUM(horaextra_ajus) en rango de horas),
+          min_dobles, horas_dobles  (SUM(horadoblesof)   en rango de horas),
+          min_banco,  horas_banco   (SUM(horabancoh)     en rango de horas),
+          min_total,  horas_total   (HE + Dobles + Banco del rango de horas)
     ***************************************************************************/
     PROCEDURE LISTAR_EMPLEADOS_RANGO(
-        p_cod_empresa     IN VARCHAR2,
-        p_fecha_inicio    IN VARCHAR2,
-        p_fecha_fin       IN VARCHAR2,
-        p_nombre          IN VARCHAR2 DEFAULT NULL,
-        cv_resultado      OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_inicio         IN VARCHAR2,
+        p_fecha_fin            IN VARCHAR2,
+        p_nombre               IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -217,6 +253,17 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
         p_cod_personal    IN VARCHAR2 DEFAULT NULL,
         p_fecha_inicio    IN VARCHAR2,
         p_fecha_fin       IN VARCHAR2,
+        cv_resultado      OUT SYS_REFCURSOR
+    );
+
+    /***************************************************************************
+        CONSULTAR_EVENTO
+        Devuelve SOLO las filas de SCA_COMPENSACION generadas por un evento
+        especifico de REGISTRAR_EVENTO_MASIVO (filtrado por aux1='M'||p_id_evento).
+        Usar para el modal post-commit en lugar de CONSULTAR_RANGO.
+    ***************************************************************************/
+    PROCEDURE CONSULTAR_EVENTO(
+        p_id_evento       IN NUMBER,
         cv_resultado      OUT SYS_REFCURSOR
     );
 
@@ -398,10 +445,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             AND   horaextra_ajus > hni;
 
             UPDATE SCA_ASISTENCIA_TAREO
-            SET horaextra_ajus = CASE WHEN horaextra_ajus = c_BASE_DATE THEN NULL
-                                      ELSE horaextra_ajus END,
-                alerta06       = CASE WHEN horaextra_ajus = c_BASE_DATE THEN 'EC'
-                                      ELSE alerta06 END
+            SET alerta06 = CASE WHEN horaextra_ajus = c_BASE_DATE THEN 'EC'
+                                ELSE alerta06 END
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
         ELSIF p_tipo_ori = 'D' THEN
@@ -410,10 +455,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
             UPDATE SCA_ASISTENCIA_TAREO
-            SET horadoblesof = CASE WHEN horadoblesof = c_BASE_DATE THEN NULL
-                                    ELSE horadoblesof END,
-                alerta08     = CASE WHEN horadoblesof = c_BASE_DATE THEN 'DC'
-                                    ELSE alerta08 END
+            SET alerta08 = CASE WHEN horadoblesof = c_BASE_DATE THEN 'DC'
+                                ELSE alerta08 END
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
         ELSIF p_tipo_ori = 'B' THEN
@@ -422,15 +465,25 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
             UPDATE SCA_ASISTENCIA_TAREO
-            SET horabancoh = CASE WHEN horabancoh = c_BASE_DATE THEN NULL
-                                  ELSE horabancoh END,
-                alerta06   = CASE WHEN horabancoh = c_BASE_DATE THEN 'EC'
-                                  ELSE alerta06 END
+            SET alerta06 = CASE WHEN horabancoh = c_BASE_DATE THEN 'EC'
+                                ELSE alerta06 END
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
         END IF;
 
         -- Redondeo hora-entera (regla negocio: <45 baja, >=45 sube)
         SP_SCA_REDONDEAR_TAREO_HE(p_emp, p_per, p_fec);
+
+        -- Post-redondeo: si el SP bajo HE a exactamente c_BASE_DATE (ej. 00:25 → 00:00),
+        -- el CASE anterior no lo detecto porque corrio antes del redondeo.
+        -- Dejar c_BASE_DATE como marca (00:00) y solo actualizar alerta EC.
+        IF p_tipo_ori = 'E' THEN
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    alerta06 = 'EC'
+            WHERE  cod_empresa  = p_emp
+            AND    cod_personal = p_per
+            AND    fechamar     = p_fec
+            AND    horaextra_ajus = c_BASE_DATE;
+        END IF;
     END prv_aplicar_origen;
 
     -- =========================================================================
@@ -644,137 +697,103 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
     -- CALCULAR_HORAS_EVENTO  (solo lectura, sin modificar BD)
     -- =========================================================================
     PROCEDURE CALCULAR_HORAS_EVENTO(
-        p_cod_empresa     IN VARCHAR2,
-        p_fecha_origen    IN VARCHAR2,
-        p_fecha_destino   IN VARCHAR2 DEFAULT NULL,
-        p_tipo_origen     IN CHAR,
-        p_lista_personal  IN VARCHAR2 DEFAULT NULL,
-        cv_resultado      OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_origen         IN VARCHAR2,
+        p_fecha_destino        IN VARCHAR2 DEFAULT NULL,
+        p_tipo_origen          IN CHAR,
+        p_lista_personal       IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     ) AS
-        c_BASE   CONSTANT DATE := TO_DATE('01/01/1900','dd/MM/yyyy');
-        v_fec_ori  DATE := TO_DATE(p_fecha_origen, 'dd/MM/yyyy');
-        v_fec_des  DATE := CASE WHEN p_fecha_destino IS NOT NULL
-                                THEN TO_DATE(p_fecha_destino,'dd/MM/yyyy')
-                                ELSE NULL END;
+        c_BASE        CONSTANT DATE := TO_DATE('01/01/1900','dd/MM/yyyy');
+        v_fec_ori     DATE := TO_DATE(p_fecha_origen, 'dd/MM/yyyy');
+        v_fec_des     DATE := CASE WHEN p_fecha_destino IS NOT NULL
+                                   THEN TO_DATE(p_fecha_destino,'dd/MM/yyyy')
+                                   ELSE NULL END;
+        -- Rango para sumar HE/Dobles/Banco. Por defecto: semana Lun-Dom de fecha_origen.
+        v_fec_hor_ini DATE := NVL(TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_origen,'dd/MM/yyyy'), 'IW'));
+        v_fec_hor_fin DATE := NVL(TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_origen,'dd/MM/yyyy'), 'IW') + 6);
     BEGIN
+        -- Siempre se calcula disponibles como Dobles_dia + Banco_dia + HE_semana
+        -- (modo mixto automatico). El parametro p_tipo_origen solo dicta el orden
+        -- de consumo en REGISTRAR_EVENTO_MASIVO; aqui no afecta el total.
         OPEN cv_resultado FOR
+            WITH base AS (
+                SELECT
+                    p.cod_empresa,
+                    p.cod_personal,
+                    p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
+                    -- minutos disponibles = SUM(HE + Dobles + Banco) en el rango de horas
+                    -- Mismo criterio que LISTAR_EMPLEADOS_RANGO para consistencia.
+                      NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                           FROM   SCA_ASISTENCIA_TAREO s
+                           WHERE  s.cod_empresa  = p.cod_empresa
+                           AND    s.cod_personal = p.cod_personal
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                           AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                           FROM   SCA_ASISTENCIA_TAREO s
+                           WHERE  s.cod_empresa  = p.cod_empresa
+                           AND    s.cod_personal = p.cod_personal
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                           AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                           FROM   SCA_ASISTENCIA_TAREO s
+                           WHERE  s.cod_empresa  = p.cod_empresa
+                           AND    s.cod_personal = p.cod_personal
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                           AND    MOD(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                                                                          AS min_disp,
+                    -- jornada destino
+                    NVL((SELECT ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440)
+                         FROM   SCA_ASISTENCIA_TAREO td
+                         WHERE  td.cod_empresa  = p.cod_empresa
+                         AND    td.cod_personal = p.cod_personal
+                         AND    td.fechamar     = v_fec_des), 0) AS min_jorn
+                FROM   PLA_PERSONAL p
+                WHERE  p.cod_empresa = p_cod_empresa
+                AND    (p_lista_personal IS NULL
+                        OR INSTR(','||p_lista_personal||',', ','||p.cod_personal||',') > 0)
+            ),
+            calc AS (
+                SELECT b.*,
+                       CASE
+                           -- Sin fecha destino (ej. tipo banco): usar todo lo disponible
+                           WHEN v_fec_des IS NULL
+                                THEN b.min_disp
+                           -- Fecha destino con tareo calculado: limitar a la jornada
+                           WHEN b.min_jorn > 0
+                                THEN LEAST(b.min_disp, b.min_jorn)
+                           -- Fecha destino indicada pero sin tareo en esa fecha:
+                           -- REGISTRAR_EVENTO_MASIVO fallaria (ERR) porque no hay
+                           -- horas_falta/tardanza/etc. que compensar. El preview
+                           -- muestra 00:00 para advertir al usuario que el destino
+                           -- aun no tiene tareo calculado.
+                           ELSE 0
+                       END AS min_usar
+                FROM   base b
+                WHERE  b.min_disp > 0
+            )
             SELECT
-                t.cod_personal,
-                p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
-                ROUND(CASE p_tipo_origen
-                    WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                    WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                    WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                    ELSE 0 END * 1440)                              AS min_disponibles,
-                LPAD(TRUNC(ROUND(CASE p_tipo_origen
-                    WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                    WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                    WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                    ELSE 0 END * 1440) / 60), 2, '0')
-                || ':' ||
-                LPAD(MOD(ROUND(CASE p_tipo_origen
-                    WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                    WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                    WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                    ELSE 0 END * 1440), 60), 2, '0')               AS horas_disponibles,
-                NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0)
-                                                                    AS min_jornada_destino,
-                LPAD(TRUNC(NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0) / 60), 2, '0')
-                || ':' ||
-                LPAD(MOD(NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0), 60), 2, '0')
-                                                                    AS horas_jornada_destino,
-                CASE
-                    WHEN v_fec_des IS NOT NULL
-                         AND NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0) > 0
-                    THEN LEAST(
-                            ROUND(CASE p_tipo_origen
-                                WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                                WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                                WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                                ELSE 0 END * 1440),
-                            ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440))
-                    ELSE ROUND(CASE p_tipo_origen
-                            WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                            WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                            WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                            ELSE 0 END * 1440)
-                END                                                 AS min_a_compensar,
-                LPAD(TRUNC(CASE
-                    WHEN v_fec_des IS NOT NULL
-                         AND NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0) > 0
-                    THEN LEAST(
-                            ROUND(CASE p_tipo_origen
-                                WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                                WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                                WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                                ELSE 0 END * 1440),
-                            ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440))
-                    ELSE ROUND(CASE p_tipo_origen
-                            WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                            WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                            WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                            ELSE 0 END * 1440)
-                END / 60), 2, '0')
-                || ':' ||
-                LPAD(MOD(CASE
-                    WHEN v_fec_des IS NOT NULL
-                         AND NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0) > 0
-                    THEN LEAST(
-                            ROUND(CASE p_tipo_origen
-                                WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                                WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                                WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                                ELSE 0 END * 1440),
-                            ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440))
-                    ELSE ROUND(CASE p_tipo_origen
-                            WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                            WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                            WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                            ELSE 0 END * 1440)
-                END, 60), 2, '0')                                   AS horas_a_compensar,
-                GREATEST(0,
-                    ROUND(CASE p_tipo_origen
-                        WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                        WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                        WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                        ELSE 0 END * 1440)
-                    - NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0)
-                )                                                   AS min_sobrante,
-                LPAD(TRUNC(GREATEST(0,
-                    ROUND(CASE p_tipo_origen
-                        WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                        WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                        WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                        ELSE 0 END * 1440)
-                    - NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0)
-                ) / 60), 2, '0')
-                || ':' ||
-                LPAD(MOD(GREATEST(0,
-                    ROUND(CASE p_tipo_origen
-                        WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE) - c_BASE)
-                        WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE) - c_BASE)
-                        WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE) - c_BASE)
-                        ELSE 0 END * 1440)
-                    - NVL(ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440), 0)
-                ), 60), 2, '0')                                     AS horas_sobrante
-            FROM  SCA_ASISTENCIA_TAREO t
-            JOIN  PLA_PERSONAL p
-                  ON  p.cod_empresa  = t.cod_empresa
-                  AND p.cod_personal = t.cod_personal
-            LEFT JOIN SCA_ASISTENCIA_TAREO td
-                  ON  td.cod_empresa  = t.cod_empresa
-                  AND td.cod_personal = t.cod_personal
-                  AND td.fechamar     = v_fec_des
-            WHERE t.cod_empresa = p_cod_empresa
-            AND   t.fechamar    = v_fec_ori
-            AND   CASE p_tipo_origen
-                      WHEN 'E' THEN CASE WHEN t.horaextra_ajus > c_BASE THEN 1 ELSE 0 END
-                      WHEN 'D' THEN CASE WHEN t.horadoblesof   > c_BASE THEN 1 ELSE 0 END
-                      WHEN 'B' THEN CASE WHEN t.horabancoh     > c_BASE THEN 1 ELSE 0 END
-                      ELSE 0 END = 1
-            AND   (p_lista_personal IS NULL
-                   OR INSTR(','||p_lista_personal||',', ','||t.cod_personal||',') > 0)
-            ORDER BY t.cod_personal;
+                cod_personal,
+                nombre_completo,
+                min_disp                                                AS min_disponibles,
+                LPAD(TRUNC(min_disp/60), 2, '0') || ':' ||
+                LPAD(MOD(min_disp, 60), 2, '0')                         AS horas_disponibles,
+                min_jorn                                                AS min_jornada_destino,
+                LPAD(TRUNC(min_jorn/60), 2, '0') || ':' ||
+                LPAD(MOD(min_jorn, 60), 2, '0')                         AS horas_jornada_destino,
+                min_usar                                                AS min_a_compensar,
+                LPAD(TRUNC(min_usar/60), 2, '0') || ':' ||
+                LPAD(MOD(min_usar, 60), 2, '0')                         AS horas_a_compensar,
+                GREATEST(0, min_disp - min_usar)                        AS min_sobrante,
+                LPAD(TRUNC(GREATEST(0, min_disp - min_usar)/60), 2, '0') || ':' ||
+                LPAD(MOD(GREATEST(0, min_disp - min_usar), 60), 2, '0') AS horas_sobrante
+            FROM   calc
+            ORDER  BY cod_personal;
     END CALCULAR_HORAS_EVENTO;
 
 
@@ -782,58 +801,137 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
     -- LISTAR_EMPLEADOS_RANGO  (solo lectura)
     -- =========================================================================
     PROCEDURE LISTAR_EMPLEADOS_RANGO(
-        p_cod_empresa     IN VARCHAR2,
-        p_fecha_inicio    IN VARCHAR2,
-        p_fecha_fin       IN VARCHAR2,
-        p_nombre          IN VARCHAR2 DEFAULT NULL,
-        cv_resultado      OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_inicio         IN VARCHAR2,
+        p_fecha_fin            IN VARCHAR2,
+        p_nombre               IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     ) AS
-        c_BASE    CONSTANT DATE := TO_DATE('01/01/1900','dd/MM/yyyy');
-        v_fec_ini DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
-        v_fec_fin DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
-        v_nombre  VARCHAR2(200) := CASE WHEN p_nombre IS NOT NULL
-                                        THEN '%' || UPPER(p_nombre) || '%'
-                                        ELSE NULL END;
+        c_BASE        CONSTANT DATE := TO_DATE('01/01/1900','dd/MM/yyyy');
+        v_fec_ini     DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
+        v_fec_fin     DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        -- Rango independiente para sumar HE/Dobles/Banco.
+        -- Por defecto usa el mismo rango de busqueda de empleados.
+        v_fec_hor_ini DATE := NVL(TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy'), TO_DATE(p_fecha_inicio, 'dd/MM/yyyy'));
+        v_fec_hor_fin DATE := NVL(TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy'), TO_DATE(p_fecha_fin,    'dd/MM/yyyy'));
+        v_nombre      VARCHAR2(200) := CASE WHEN p_nombre IS NOT NULL
+                                            THEN '%' || UPPER(p_nombre) || '%'
+                                            ELSE NULL END;
     BEGIN
         OPEN cv_resultado FOR
             SELECT
                 t.cod_personal,
                 p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
                 t.fechamar,
-                -- Horas trabajadas reales del dia origen (tothoramarcas)
-                ROUND((NVL(t.tothoramarcas, c_BASE) - c_BASE) * 1440)        AS min_trabajadas,
-                LPAD(TRUNC(ROUND((NVL(t.tothoramarcas, c_BASE) - c_BASE) * 1440) / 60), 2, '0')
+                -- Horas trabajadas efectivas del dia origen (horaefectiva = H.Efe.)
+                -- NO usar tothoramarcas: incluye HE+Dobles y da un total mayor al de jornada
+                ROUND((NVL(t.horaefectiva, c_BASE) - c_BASE) * 1440)         AS min_trabajadas,
+                LPAD(TRUNC(ROUND((NVL(t.horaefectiva, c_BASE) - c_BASE) * 1440) / 60), 2, '0')
                   || ':' ||
-                LPAD(MOD(ROUND((NVL(t.tothoramarcas, c_BASE) - c_BASE) * 1440), 60), 2, '0') AS horas_trabajadas,
-                -- HE
-                ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440)       AS min_he,
-                LPAD(TRUNC(ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440) / 60), 2, '0')
+                LPAD(MOD(ROUND((NVL(t.horaefectiva, c_BASE) - c_BASE) * 1440), 60), 2, '0')  AS horas_trabajadas,
+                -- HE: suma en el rango de horas (v_fec_hor_ini..v_fec_hor_fin)
+                NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_he,
+                LPAD(TRUNC(NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) / 60), 2, '0')
                   || ':' ||
-                LPAD(MOD(ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440), 60), 2, '0') AS horas_he,
-                -- Dobles
-                ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440)         AS min_dobles,
-                LPAD(TRUNC(ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440) / 60), 2, '0')
+                LPAD(MOD(NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0), 60), 2, '0') AS horas_he,
+                -- Dobles: suma en el rango de horas (v_fec_hor_ini..v_fec_hor_fin)
+                NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_dobles,
+                LPAD(TRUNC(NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) / 60), 2, '0')
                   || ':' ||
-                LPAD(MOD(ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440), 60), 2, '0')  AS horas_dobles,
-                -- Banco
-                ROUND((NVL(t.horabancoh, c_BASE) - c_BASE) * 1440)           AS min_banco,
-                LPAD(TRUNC(ROUND((NVL(t.horabancoh, c_BASE) - c_BASE) * 1440) / 60), 2, '0')
+                LPAD(MOD(NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0), 60), 2, '0') AS horas_dobles,
+                -- Banco: suma en el rango de horas (v_fec_hor_ini..v_fec_hor_fin)
+                NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_banco,
+                LPAD(TRUNC(NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) / 60), 2, '0')
                   || ':' ||
-                LPAD(MOD(ROUND((NVL(t.horabancoh, c_BASE) - c_BASE) * 1440), 60), 2, '0')   AS horas_banco,
-                -- Total (suma de los tres)
-                ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440)
-                  + ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440)
-                  + ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440)     AS min_total,
+                LPAD(MOD(NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0), 60), 2, '0') AS horas_banco,
+                -- Total = HE + Dobles + Banco en el rango de horas
+                NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                  + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                  + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                     FROM   SCA_ASISTENCIA_TAREO s
+                     WHERE  s.cod_empresa  = t.cod_empresa
+                     AND    s.cod_personal = t.cod_personal
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_total,
                 LPAD(TRUNC((
-                    ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440)
-                    + ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440)
-                    + ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440)
+                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                   ) / 60), 2, '0')
                   || ':' ||
                 LPAD(MOD(
-                    ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440)
-                    + ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440)
-                    + ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440)
+                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                    + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                   , 60), 2, '0')                                              AS horas_total,
                 TO_CHAR(t.fechamar, 'DD/MM/YYYY')                            AS fechamar_str
             FROM  SCA_ASISTENCIA_TAREO t
@@ -843,9 +941,22 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             WHERE t.cod_empresa = p_cod_empresa
             AND   t.fechamar BETWEEN v_fec_ini AND v_fec_fin
             AND   (
-                    ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440) > 0
-                    OR ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440) > 0
-                    OR ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440) > 0
+                    -- Al menos una fuente con horas en el rango de horas
+                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
+                    OR NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
+                    OR NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO s
+                         WHERE  s.cod_empresa  = t.cod_empresa
+                         AND    s.cod_personal = t.cod_personal
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
                   )
             AND   (v_nombre IS NULL
                    OR UPPER(p.ape_paterno || ' ' || p.ape_materno
@@ -914,17 +1025,24 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
     -- REGISTRAR_EVENTO_MASIVO  (orquestador: 1 llamada -> N empleados)
     -- =========================================================================
     PROCEDURE REGISTRAR_EVENTO_MASIVO(
-        p_cod_empresa        IN VARCHAR2,
-        p_fecha_origen       IN VARCHAR2,
-        p_fecha_destino      IN VARCHAR2,
-        p_tipo_origen        IN CHAR,
-        p_tipo_compensacion  IN CHAR,
-        p_lista_personal     IN VARCHAR2,
-        p_horas_max          IN VARCHAR2 DEFAULT NULL,
-        cv_resultado         OUT SYS_REFCURSOR
+        p_cod_empresa          IN VARCHAR2,
+        p_fecha_origen         IN VARCHAR2,
+        p_fecha_destino        IN VARCHAR2,
+        p_tipo_origen          IN CHAR,
+        p_tipo_compensacion    IN CHAR,
+        p_lista_personal       IN VARCHAR2,
+        p_horas_max            IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_inicio   IN VARCHAR2 DEFAULT NULL,
+        p_fecha_horas_fin      IN VARCHAR2 DEFAULT NULL,
+        cv_resultado           OUT SYS_REFCURSOR
     ) AS
-        v_fec_ori   DATE := TO_DATE(p_fecha_origen,  'dd/MM/yyyy');
-        v_fec_des   DATE := TO_DATE(p_fecha_destino, 'dd/MM/yyyy');
+        v_fec_ori     DATE := TO_DATE(p_fecha_origen,  'dd/MM/yyyy');
+        v_fec_des     DATE := TO_DATE(p_fecha_destino, 'dd/MM/yyyy');
+        -- Rango para sumar HE/Dobles/Banco. Por defecto: semana Lun-Dom de fecha_origen.
+        v_fec_hor_ini DATE := NVL(TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_origen,'dd/MM/yyyy'), 'IW'));
+        v_fec_hor_fin DATE := NVL(TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_origen,'dd/MM/yyyy'), 'IW') + 6);
         v_cap_max   NUMBER := CASE WHEN p_horas_max IS NULL THEN NULL
                                    ELSE fn_hhmi_a_min(p_horas_max) END;
         v_min_disp  NUMBER;
@@ -967,17 +1085,29 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         FOR e IN (
             SELECT p.cod_personal,
                    p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo,
-                   ROUND(CASE p_tipo_origen
-                       WHEN 'E' THEN (NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)
-                       WHEN 'D' THEN (NVL(t.horadoblesof,   c_BASE_DATE) - c_BASE_DATE)
-                       WHEN 'B' THEN (NVL(t.horabancoh,     c_BASE_DATE) - c_BASE_DATE)
-                       ELSE 0 END * 1440)                              AS min_disp,
+                   -- Disponibles = SUM(HE + Dobles + Banco) en el rango de horas
+                   -- (mismo criterio que LISTAR y CALCULAR para consistencia)
+                   NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440))
+                          FROM   SCA_ASISTENCIA_TAREO s
+                          WHERE  s.cod_empresa  = p.cod_empresa
+                          AND    s.cod_personal = p.cod_personal
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                          AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                 + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440))
+                          FROM   SCA_ASISTENCIA_TAREO s
+                          WHERE  s.cod_empresa  = p.cod_empresa
+                          AND    s.cod_personal = p.cod_personal
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                          AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                 + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440))
+                          FROM   SCA_ASISTENCIA_TAREO s
+                          WHERE  s.cod_empresa  = p.cod_empresa
+                          AND    s.cod_personal = p.cod_personal
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                          AND    MOD(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                                                                              AS min_disp,
                    NVL(ROUND((NVL(td.tothoras, c_BASE_DATE) - c_BASE_DATE) * 1440), 0) AS min_jorn
             FROM   PLA_PERSONAL p
-            LEFT JOIN SCA_ASISTENCIA_TAREO t
-                   ON  t.cod_empresa  = p.cod_empresa
-                   AND t.cod_personal = p.cod_personal
-                   AND t.fechamar     = v_fec_ori
             LEFT JOIN SCA_ASISTENCIA_TAREO td
                    ON  td.cod_empresa  = p.cod_empresa
                    AND td.cod_personal = p.cod_personal
@@ -1024,33 +1154,166 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
 
             IF v_min_usar = 0 THEN
                 v_estado := 'SIN_HORAS';
-                v_motivo := 'Sin horas en origen tipo '||p_tipo_origen||
-                            ' el '||p_fecha_origen||
+                v_motivo := 'Sin horas en origen ('||p_tipo_origen||
+                            ') ni Dobles/Banco/HE el '||p_fecha_origen||
                             '. Saldo banco sem: '||v_saldo_sem||' min';
-            ELSE
-                v_horas_str := fn_min_a_hhmi(v_min_usar);
-                BEGIN
-                    REGISTRAR(
-                        p_cod_empresa       => p_cod_empresa,
-                        p_cod_personal      => e.cod_personal,
-                        p_fecha_destino     => p_fecha_destino,
-                        p_fecha_origen      => p_fecha_origen,
-                        p_tipo_origen       => p_tipo_origen,
-                        p_tipo_compensacion => p_tipo_compensacion,
-                        p_horas             => v_horas_str,
-                        p_validar           => 'N',
-                        cv_resultado        => v_dummy
-                    );
-                    FETCH v_dummy INTO v_buf_id, v_buf_est, v_buf_mot, v_buf_min;
-                    CLOSE v_dummy;
-                    v_estado := v_buf_est;
-                    v_motivo := v_buf_mot;
 
-                    IF v_buf_est = 'OK' THEN
-                        APLICAR_DIA(p_cod_empresa, e.cod_personal, p_fecha_origen,  'S', v_dummy);
-                        CLOSE v_dummy;
-                        APLICAR_DIA(p_cod_empresa, e.cod_personal, p_fecha_destino, 'S', v_dummy);
-                        CLOSE v_dummy;
+            ELSE
+                -- =====================================================
+                -- MIXTO AUTOMATICO: combina HE + Dobles + Banco del
+                -- rango de horas en el orden que dicta p_tipo_origen.
+                -- Aplica destino UNA vez con el total y luego descuenta
+                -- cada fuente generando una fila SCA_COMPENSACION.
+                -- =====================================================
+                DECLARE
+                    v_def_des     NUMBER;
+                    v_horas_tot   VARCHAR2(10) := fn_min_a_hhmi(v_min_usar);
+                    v_restante    NUMBER := v_min_usar;
+                    v_consumir    NUMBER;
+                    v_id_part     NUMBER;
+                    v_partes      NUMBER := 0;
+
+                    -- Procedimientos locales para consumir cada fuente
+                    PROCEDURE consumir_dobles IS
+                    BEGIN
+                        IF v_restante <= 0 THEN RETURN; END IF;
+                        -- Itera sobre dias del rango con horadoblesof disponibles
+                        FOR rdob IN (
+                            SELECT s.fechamar,
+                                   ROUND((NVL(s.horadoblesof, c_BASE_DATE)
+                                          - c_BASE_DATE) * 1440) AS dob_min
+                            FROM   SCA_ASISTENCIA_TAREO s
+                            WHERE  s.cod_empresa  = p_cod_empresa
+                            AND    s.cod_personal = e.cod_personal
+                            AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                            AND    s.horadoblesof > c_BASE_DATE
+                            AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
+                            ORDER  BY s.fechamar
+                        ) LOOP
+                            EXIT WHEN v_restante <= 0;
+                            v_consumir := LEAST(rdob.dob_min, v_restante);
+                            INSERT INTO SCA_COMPENSACION (
+                                id_compen, cod_empresa, cod_personal,
+                                fechadestino, fechaorigen,
+                                tipoorigen, tipocompensacion, tiempo, aux1
+                            ) VALUES (
+                                id_comp_seq.NEXTVAL, p_cod_empresa, e.cod_personal,
+                                v_fec_des, rdob.fechamar,
+                                'D', p_tipo_compensacion, v_consumir, 'M'||TO_CHAR(v_id_evento)
+                            ) RETURNING id_compen INTO v_id_part;
+                            prv_aplicar_origen(p_cod_empresa, e.cod_personal, rdob.fechamar,
+                                               'D', fn_min_a_hhmi(v_consumir));
+                            v_restante := v_restante - v_consumir;
+                            v_partes   := v_partes + 1;
+                            IF v_buf_id IS NULL THEN v_buf_id := v_id_part; END IF;
+                        END LOOP;
+                    END consumir_dobles;
+
+                    PROCEDURE consumir_banco IS
+                    BEGIN
+                        IF v_restante <= 0 THEN RETURN; END IF;
+                        -- Itera sobre dias del rango con horabancoh disponibles
+                        FOR rban IN (
+                            SELECT s.fechamar,
+                                   ROUND((NVL(s.horabancoh, c_BASE_DATE)
+                                          - c_BASE_DATE) * 1440) AS ban_min
+                            FROM   SCA_ASISTENCIA_TAREO s
+                            WHERE  s.cod_empresa  = p_cod_empresa
+                            AND    s.cod_personal = e.cod_personal
+                            AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                            AND    s.horabancoh > c_BASE_DATE
+                            AND    MOD(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
+                            ORDER  BY s.fechamar
+                        ) LOOP
+                            EXIT WHEN v_restante <= 0;
+                            v_consumir := LEAST(rban.ban_min, v_restante);
+                            INSERT INTO SCA_COMPENSACION (
+                                id_compen, cod_empresa, cod_personal,
+                                fechadestino, fechaorigen,
+                                tipoorigen, tipocompensacion, tiempo, aux1
+                            ) VALUES (
+                                id_comp_seq.NEXTVAL, p_cod_empresa, e.cod_personal,
+                                v_fec_des, rban.fechamar,
+                                'B', p_tipo_compensacion, v_consumir, 'M'||TO_CHAR(v_id_evento)
+                            ) RETURNING id_compen INTO v_id_part;
+                            prv_aplicar_origen(p_cod_empresa, e.cod_personal, rban.fechamar,
+                                               'B', fn_min_a_hhmi(v_consumir));
+                            v_restante := v_restante - v_consumir;
+                            v_partes   := v_partes + 1;
+                            IF v_buf_id IS NULL THEN v_buf_id := v_id_part; END IF;
+                        END LOOP;
+                    END consumir_banco;
+
+                    PROCEDURE consumir_he IS
+                    BEGIN
+                        IF v_restante <= 0 THEN RETURN; END IF;
+                        FOR rhe IN (
+                            SELECT s.fechamar,
+                                   ROUND((NVL(s.horaextra_ajus, c_BASE_DATE)
+                                          - c_BASE_DATE) * 1440) AS he_min
+                            FROM   SCA_ASISTENCIA_TAREO s
+                            WHERE  s.cod_empresa  = p_cod_empresa
+                            AND    s.cod_personal = e.cod_personal
+                            AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                            AND    s.horaextra_ajus > c_BASE_DATE
+                            AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
+                            ORDER  BY s.fechamar
+                        ) LOOP
+                            EXIT WHEN v_restante <= 0;
+                            v_consumir := LEAST(rhe.he_min, v_restante);
+                            INSERT INTO SCA_COMPENSACION (
+                                id_compen, cod_empresa, cod_personal,
+                                fechadestino, fechaorigen,
+                                tipoorigen, tipocompensacion, tiempo, aux1
+                            ) VALUES (
+                                id_comp_seq.NEXTVAL, p_cod_empresa, e.cod_personal,
+                                v_fec_des, rhe.fechamar,
+                                'E', p_tipo_compensacion, v_consumir, 'M'||TO_CHAR(v_id_evento)
+                            ) RETURNING id_compen INTO v_id_part;
+                            prv_aplicar_origen(p_cod_empresa, e.cod_personal,
+                                               rhe.fechamar, 'E',
+                                               fn_min_a_hhmi(v_consumir));
+                            v_restante := v_restante - v_consumir;
+                            v_partes   := v_partes + 1;
+                            IF v_buf_id IS NULL THEN v_buf_id := v_id_part; END IF;
+                        END LOOP;
+                    END consumir_he;
+                BEGIN
+                    -- Validacion destino con el TOTAL combinado
+                    v_def_des := fn_tiempo_destino(p_cod_empresa, e.cod_personal,
+                                                    v_fec_des, p_tipo_compensacion);
+                    IF p_tipo_compensacion IN ('A','T','N') AND v_def_des <> v_min_usar THEN
+                        v_estado := 'ERR';
+                        v_motivo := 'Destino ('||p_tipo_compensacion||')='||v_def_des||
+                                    ' min, requerido exacto '||v_min_usar||' min';
+                    ELSIF p_tipo_compensacion IN ('F','P') AND v_def_des < v_min_usar THEN
+                        v_estado := 'ERR';
+                        v_motivo := 'Destino ('||p_tipo_compensacion||')='||v_def_des||
+                                    ' min, insuficiente para '||v_min_usar||' min';
+                    ELSE
+                        -- Aplica destino una sola vez con el total combinado
+                        prv_aplicar_destino(p_cod_empresa, e.cod_personal, v_fec_des,
+                                            p_tipo_compensacion, v_horas_tot);
+
+                        -- Orden de consumo segun fuente preferente
+                        IF p_tipo_origen = 'D' THEN
+                            consumir_dobles;
+                            consumir_banco;
+                            consumir_he;
+                        ELSIF p_tipo_origen = 'B' THEN
+                            consumir_banco;
+                            consumir_dobles;
+                            consumir_he;
+                        ELSE  -- 'E' u otro
+                            consumir_he;
+                            consumir_dobles;
+                            consumir_banco;
+                        END IF;
+
+                        v_estado := 'OK';
+                        v_motivo := 'OK: '||v_partes||' fuente(s), '||
+                                    v_min_usar||' min compensados (pref='||
+                                    p_tipo_origen||')';
                     END IF;
                 EXCEPTION WHEN OTHERS THEN
                     v_estado := 'ERR';
@@ -1088,6 +1351,59 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             ORDER  BY cod_personal;
     END REGISTRAR_EVENTO_MASIVO;
 
+
+    -- =========================================================================
+    -- CONSULTAR_EVENTO
+    -- =========================================================================
+    PROCEDURE CONSULTAR_EVENTO(
+        p_id_evento       IN NUMBER,
+        cv_resultado      OUT SYS_REFCURSOR
+    ) AS
+        v_aux VARCHAR2(20) := 'M'||TO_CHAR(p_id_evento);
+    BEGIN
+        OPEN cv_resultado FOR
+            SELECT c.id_compen,
+                   c.cod_empresa,
+                   c.cod_personal,
+                   c.fechaorigen,
+                   c.fechadestino,
+                   c.tipoorigen,
+                   c.tipocompensacion,
+                   c.tiempo                                AS tiempo_min,
+                   SUBSTR('00'||TO_CHAR(TRUNC(c.tiempo/60)),-2,2)
+                     ||':'||SUBSTR('00'||TO_CHAR(MOD(c.tiempo,60)),-2,2) AS tiempo_hhmi,
+                   -- Estado aplicacion: comprueba alerta en tareo destino
+                   CASE
+                       WHEN c.tipocompensacion = 'T' AND tdes.alerta04 = 'TC' THEN 'APLICADA'
+                       WHEN c.tipocompensacion = 'A' AND tdes.alerta07 = 'SC' THEN 'APLICADA'
+                       WHEN c.tipocompensacion = 'N' AND tdes.alerta03 = 'HC' THEN 'APLICADA'
+                       WHEN c.tipocompensacion = 'F' AND tdes.alerta02 = 'FC' THEN 'APLICADA'
+                       WHEN c.tipocompensacion = 'P' AND tdes.alerta09 = 'PC' THEN 'APLICADA'
+                       ELSE 'PENDIENTE'
+                   END                                     AS estado_aplicacion,
+                   tdes.alerta02 AS des_alerta02,
+                   tdes.alerta03 AS des_alerta03,
+                   tdes.alerta04 AS des_alerta04,
+                   tdes.alerta07 AS des_alerta07,
+                   tdes.alerta09 AS des_alerta09,
+                   tori.alerta06 AS ori_alerta06,
+                   tori.alerta08 AS ori_alerta08,
+                   p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo
+            FROM   SCA_COMPENSACION c
+            LEFT JOIN SCA_ASISTENCIA_TAREO tdes
+                   ON tdes.cod_empresa  = c.cod_empresa
+                  AND tdes.cod_personal = c.cod_personal
+                  AND tdes.fechamar     = c.fechadestino
+            LEFT JOIN SCA_ASISTENCIA_TAREO tori
+                   ON tori.cod_empresa  = c.cod_empresa
+                  AND tori.cod_personal = c.cod_personal
+                  AND tori.fechamar     = c.fechaorigen
+            LEFT JOIN PLA_PERSONAL p
+                   ON p.cod_empresa  = c.cod_empresa
+                  AND p.cod_personal = c.cod_personal
+            WHERE  c.aux1 = v_aux
+            ORDER  BY c.cod_personal, c.fechaorigen;
+    END CONSULTAR_EVENTO;
 
     -- =========================================================================
     -- VER_ESTADO

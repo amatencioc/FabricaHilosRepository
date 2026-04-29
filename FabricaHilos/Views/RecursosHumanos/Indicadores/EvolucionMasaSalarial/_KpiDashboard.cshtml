@@ -1,0 +1,366 @@
+@model FabricaHilos.Models.RecursosHumanos.EvolucionMasaSalarialViewModel
+@using System.Globalization
+@using FabricaHilos.Models.RecursosHumanos
+
+@{
+    var culture   = CultureInfo.GetCultureInfo("es-PE");
+    string NombreMes(int m) => culture.DateTimeFormat.GetMonthName(m);
+
+    string periodo = Model.AnoIni == Model.AnoFin && Model.MesIni == Model.MesFin
+        ? $"01 al {DateTime.DaysInMonth(Model.AnoFin, Model.MesFin):D2} de {NombreMes(Model.MesFin)} de {Model.AnoFin}"
+        : $"{NombreMes(Model.MesIni)} {Model.AnoIni} — {NombreMes(Model.MesFin)} {Model.AnoFin}";
+
+    // Períodos únicos ordenados (del resumen)
+    var periodos = Model.Resumen.OrderBy(r => r.Ano).ThenBy(r => r.Mes).ToList();
+
+    // Áreas únicas ordenadas por masa salarial desc (acumulada)
+    var areas = Model.Areas
+        .GroupBy(a => a.Area)
+        .OrderByDescending(g => g.Sum(x => x.MasaSalarial))
+        .Select(g => g.Key)
+        .ToList();
+
+    // Totales globales
+    decimal gMasaSalarial = periodos.Sum(r => r.MasaSalarial);
+    decimal gSobretiempo  = periodos.Sum(r => r.Sobretiempo);
+    decimal gRatioHe      = gMasaSalarial > 0 ? Math.Round(gSobretiempo / gMasaSalarial * 100, 2) : 0m;
+    int     gTotalTrab    = Model.Areas.GroupBy(a => new { a.Ano, a.Mes }).Sum(g => g.Sum(x => x.NroTrab));
+
+    EvolucionMasaSalarialAreaDto? GetArea(int ano, int mes, string area) =>
+        Model.Areas.FirstOrDefault(a => a.Ano == ano && a.Mes == mes && a.Area == area);
+
+    // JSON para gráficos
+    var chartResumen = Model.Resumen.Select(r => new {
+        ano          = r.Ano,
+        mes          = r.Mes,
+        masa         = Math.Round(r.MasaSalarial, 0),
+        he           = Math.Round(r.Sobretiempo, 0),
+        ratio        = Math.Round(r.RatioHePct, 2),
+        varPct       = Math.Round(r.VarPct, 1)
+    });
+    var chartAreas = Model.Areas.Select(a => new {
+        ano   = a.Ano,
+        mes   = a.Mes,
+        area  = a.Area,
+        masa  = Math.Round(a.MasaSalarial, 0),
+        he    = Math.Round(a.Sobretiempo, 0),
+        ratio = Math.Round(a.RatioHePct, 2)
+    });
+    var rawResumenJson = System.Text.Json.JsonSerializer.Serialize(chartResumen);
+    var rawAreasJson   = System.Text.Json.JsonSerializer.Serialize(chartAreas);
+}
+
+<!-- Datos para Chart.js -->
+<input type="hidden" id="chartResumenData" value='@rawResumenJson' />
+<input type="hidden" id="chartAreasData"   value='@rawAreasJson' />
+
+<!-- ── Título y período ─────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1B4D3E; letter-spacing:.06em; font-size:.95rem;">
+        KPI Evolución Mensual de Masa Salarial
+    </h5>
+    <p class="text-muted mb-0" style="font-size:.8rem;">Período: @periodo</p>
+</div>
+
+<!-- ── KPI Cards ─────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-label">Masa Salarial Total</div>
+            <div class="kpi-value" style="font-size:1.4rem;">S/ @gMasaSalarial.ToString("N0")</div>
+            <div class="kpi-sub">acumulado período</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card">
+            <div class="kpi-icon">⏱️</div>
+            <div class="kpi-label">Total Sobretiempo</div>
+            <div class="kpi-value" style="font-size:1.4rem;">S/ @gSobretiempo.ToString("N0")</div>
+            <div class="kpi-sub">acumulado período</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-label">Ratio HE / Masa</div>
+            <div class="kpi-value" style="color:@(gRatioHe > 10 ? "#c0392b" : gRatioHe > 5 ? "#e67e22" : "#1B4D3E");">
+                @gRatioHe.ToString("N2")%
+            </div>
+            <div class="kpi-sub">sobretiempo sobre masa salarial</div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card">
+            <div class="kpi-icon">👥</div>
+            <div class="kpi-label">Total Trabajadores</div>
+            <div class="kpi-value">@gTotalTrab</div>
+            <div class="kpi-sub">en planilla (suma períodos)</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla resumen mensual empresa ─────────────────────── -->
+<div class="section-title"><i class="bi bi-calendar-range me-1"></i>Evolución Mensual — Empresa</div>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Período</th>
+                <th class="text-end">Masa Salarial (S/.)</th>
+                <th class="text-end">Sobretiempo (S/.)</th>
+                <th class="text-end">Ratio HE %</th>
+                <th class="text-end">Var. vs Mes Ant. (S/.)</th>
+                <th class="text-end">Var. %</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in periodos)
+            {
+                string varColor = p.VarPct > 0 ? "text-danger" : p.VarPct < 0 ? "text-success" : "";
+                string varIcon  = p.VarPct > 0 ? "▲" : p.VarPct < 0 ? "▼" : "—";
+                <tr>
+                    <td class="fw-semibold">@NombreMes(p.Mes) @p.Ano</td>
+                    <td class="text-end">S/ @p.MasaSalarial.ToString("N0")</td>
+                    <td class="text-end">S/ @p.Sobretiempo.ToString("N0")</td>
+                    <td class="text-end @(p.RatioHePct > 10 ? "text-danger fw-semibold" : p.RatioHePct > 5 ? "text-warning fw-semibold" : "")">
+                        @p.RatioHePct.ToString("N2")%
+                    </td>
+                    <td class="text-end @varColor">
+                        @(p.VarVsMesAnt == 0 && p.Mes == periodos.First().Mes && p.Ano == periodos.First().Ano ? "—" : $"S/ {p.VarVsMesAnt:N0}")
+                    </td>
+                    <td class="text-end @varColor">
+                        @(p.VarPct == 0 && p.Mes == periodos.First().Mes && p.Ano == periodos.First().Ano ? "—" : $"{varIcon} {Math.Abs(p.VarPct):N1}%")
+                    </td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
+                <td>Total acumulado</td>
+                <td class="text-end">S/ @gMasaSalarial.ToString("N0")</td>
+                <td class="text-end">S/ @gSobretiempo.ToString("N0")</td>
+                <td class="text-end">@gRatioHe.ToString("N2")%</td>
+                <td class="text-end">—</td>
+                <td class="text-end">—</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- ── Tabla detalle por área ─────────────────────────────── -->
+<div class="section-title"><i class="bi bi-table me-1"></i>Detalle por Área</div>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0">
+        <thead>
+            <tr>
+                <th rowspan="2" class="align-middle">Área</th>
+                @foreach (var p in periodos)
+                {
+                    <th colspan="3" class="text-center border-start">@NombreMes(p.Mes) @p.Ano</th>
+                }
+            </tr>
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    <th class="text-end border-start" style="font-size:.75rem; white-space:nowrap;">Masa (S/.)</th>
+                    <th class="text-end"              style="font-size:.75rem; white-space:nowrap;">HE (S/.)</th>
+                    <th class="text-end"              style="font-size:.75rem; white-space:nowrap;">Ratio %</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var areaName in areas)
+            {
+                <tr>
+                    <td class="fw-semibold">@areaName</td>
+                    @foreach (var p in periodos)
+                    {
+                        var cell = GetArea(p.Ano, p.Mes, areaName);
+                        <td class="text-end border-start">@(cell is not null ? $"S/ {cell.MasaSalarial:N0}" : "—")</td>
+                        <td class="text-end">@(cell is not null ? $"S/ {cell.Sobretiempo:N0}" : "—")</td>
+                        <td class="text-end @(cell?.RatioHePct > 10 ? "text-danger fw-semibold" : cell?.RatioHePct > 5 ? "text-warning" : "")">
+                            @(cell is not null ? $"{cell.RatioHePct:N2}%" : "—")
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
+                <td>Total</td>
+                @foreach (var p in periodos)
+                {
+                    var fp     = Model.Areas.Where(a => a.Ano == p.Ano && a.Mes == p.Mes).ToList();
+                    decimal sm = fp.Sum(a => a.MasaSalarial);
+                    decimal sh = fp.Sum(a => a.Sobretiempo);
+                    decimal rt = sm > 0 ? Math.Round(sh / sm * 100, 2) : 0m;
+                    <td class="text-end border-start">S/ @sm.ToString("N0")</td>
+                    <td class="text-end">S/ @sh.ToString("N0")</td>
+                    <td class="text-end">@rt.ToString("N2")%</td>
+                }
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- ── Gráficos ───────────────────────────────────────────── -->
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Análisis Gráfico</div>
+<div class="row g-3 mb-2">
+    <div class="col-lg-8">
+        <div class="card chart-card">
+            <div class="card-header small">Evolución Masa Salarial y Sobretiempo — Empresa (S/.)</div>
+            <div class="card-body" style="height:360px;">
+                <canvas id="chartLineMasa"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card chart-card">
+            <div class="card-header small">Ratio HE / Masa Salarial (%)</div>
+            <div class="card-body" style="height:360px;">
+                <canvas id="chartBarRatio"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-12">
+        <div class="card chart-card">
+            <div class="card-header small">Masa Salarial por Área (acumulado período)</div>
+            <div class="card-body" style="height:360px;">
+                <canvas id="chartBarAreas"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Análisis Automático ────────────────────────────────── -->
+@{
+    var areasAcum = Model.Areas
+        .GroupBy(a => a.Area)
+        .Select(g => new {
+            Area         = g.Key,
+            MasaSalarial = g.Sum(x => x.MasaSalarial),
+            Sobretiempo  = g.Sum(x => x.Sobretiempo),
+            RatioHe      = g.Sum(x => x.MasaSalarial) > 0
+                           ? Math.Round(g.Sum(x => x.Sobretiempo) / g.Sum(x => x.MasaSalarial) * 100, 2)
+                           : 0m
+        })
+        .OrderByDescending(x => x.MasaSalarial)
+        .ToList();
+
+    decimal totalMasaEmp = areasAcum.Sum(x => x.MasaSalarial);
+
+    // Pareto: primeras N áreas que acumulan ≥ 50% de masa salarial
+    decimal acumPareto = 0m; int paretoN = 0;
+    foreach (var a in areasAcum)
+    {
+        acumPareto += a.MasaSalarial; paretoN++;
+        if (totalMasaEmp > 0 && acumPareto / totalMasaEmp * 100 >= 50m) break;
+    }
+    decimal paretoAcumPct = totalMasaEmp > 0 ? Math.Round(acumPareto / totalMasaEmp * 100, 1) : 0m;
+    var paretoAreas = areasAcum.Take(paretoN).Select(x => x.Area).ToList();
+
+    // Tendencia: ¿último mes mayor que el anterior?
+    bool tendenciaAlza = periodos.Count >= 2 && periodos.Last().MasaSalarial > periodos[^2].MasaSalarial;
+    decimal ultimaVar  = periodos.Count >= 2 ? periodos.Last().VarPct : 0m;
+}
+
+<div class="section-title mt-3"><i class="bi bi-cpu me-1"></i>Análisis Automático del Período</div>
+<div class="row g-3 mb-4">
+
+    <!-- Concentración masa salarial -->
+    <div class="col-md-5">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header fw-semibold small" style="background:#f0f4f0; color:#1B4D3E;">
+                <i class="bi bi-bar-chart-steps me-1"></i> Concentración de Masa Salarial (Pareto)
+            </div>
+            <div class="card-body small">
+                @if (areasAcum.Count == 0)
+                {
+                    <p class="text-muted mb-0">Sin datos para el período seleccionado.</p>
+                }
+                else
+                {
+                    <p class="mb-2">
+                        Las <strong>@paretoN área@(paretoN != 1 ? "s" : "")</strong> con mayor masa salarial
+                        (@string.Join(", ", paretoAreas)) concentran el
+                        <strong class="@(paretoAcumPct >= 50 ? "text-warning" : "text-success")">@paretoAcumPct%</strong>
+                        del total empresa.
+                    </p>
+                    @if (periodos.Count >= 2)
+                    {
+                        <div class="alert @(tendenciaAlza ? "alert-warning" : "alert-success") py-1 px-2 mb-2 small">
+                            <i class="bi bi-@(tendenciaAlza ? "arrow-up-circle-fill" : "arrow-down-circle-fill") me-1"></i>
+                            <strong>Tendencia:</strong> la masa salarial del último mes
+                            @(tendenciaAlza ? $"subió un {ultimaVar:N1}% respecto al mes anterior." : $"bajó un {Math.Abs(ultimaVar):N1}% respecto al mes anterior.")
+                        </div>
+                    }
+                    <table class="table table-sm table-bordered mb-0" style="font-size:.78rem;">
+                        <thead class="table-dark"><tr><th>#</th><th>Área</th><th class="text-end">Masa (S/.)</th><th class="text-end">% Total</th><th class="text-end">HE Ratio</th></tr></thead>
+                        <tbody>
+                            @{ decimal acumTab = 0m; int rank = 0; }
+                            @foreach (var a in areasAcum.Take(5))
+                            {
+                                rank++;
+                                decimal pct = totalMasaEmp > 0 ? Math.Round(a.MasaSalarial / totalMasaEmp * 100, 1) : 0m;
+                                acumTab += pct;
+                                <tr>
+                                    <td>@rank</td>
+                                    <td>@a.Area</td>
+                                    <td class="text-end">@a.MasaSalarial.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@acumTab.ToString("N1")%</td>
+                                    <td class="text-end @(a.RatioHe > 10 ? "text-danger fw-semibold" : a.RatioHe > 5 ? "text-warning" : "")">@a.RatioHe.ToString("N2")%</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnóstico ratio HE por área -->
+    <div class="col-md-7">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header fw-semibold small" style="background:#f0f4f0; color:#1B4D3E;">
+                <i class="bi bi-grid-3x3-gap me-1"></i> Diagnóstico por Área — Ratio HE / Masa Salarial
+            </div>
+            <div class="card-body p-2 small">
+                <p class="text-muted mb-2" style="font-size:.75rem;">
+                    Umbral: &nbsp;🟢 ≤ 5% &nbsp;|&nbsp; 🟡 5–10% &nbsp;|&nbsp; 🔴 &gt;10%
+                </p>
+                <div style="max-height:300px; overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
+                        <thead class="table-dark sticky-top">
+                            <tr><th>#</th><th>Área</th><th class="text-end">Masa (S/.)</th><th class="text-end">HE (S/.)</th><th class="text-end">Ratio HE %</th><th>Estado</th><th>Acción</th></tr>
+                        </thead>
+                        <tbody>
+                            @{ int rankD = 0; }
+                            @foreach (var a in areasAcum)
+                            {
+                                rankD++;
+                                string badge  = a.RatioHe > 10 ? "danger"  : a.RatioHe > 5 ? "warning text-dark" : "success";
+                                string icon   = a.RatioHe > 10 ? "🔴" : a.RatioHe > 5 ? "🟡" : "🟢";
+                                string label  = a.RatioHe > 10 ? "Ratio alto" : a.RatioHe > 5 ? "Ratio moderado" : "Ratio bajo";
+                                string accion = a.RatioHe > 10 ? "Revisar estructura de horas extras"
+                                              : a.RatioHe > 5  ? "Monitorear tendencia mensual"
+                                              :                   "Mantener seguimiento";
+                                <tr>
+                                    <td>@rankD</td>
+                                    <td class="fw-semibold">@a.Area</td>
+                                    <td class="text-end">@a.MasaSalarial.ToString("N0")</td>
+                                    <td class="text-end @(a.RatioHe > 10 ? "text-danger" : a.RatioHe > 5 ? "text-warning" : "")">@a.Sobretiempo.ToString("N0")</td>
+                                    <td class="text-end @(a.RatioHe > 10 ? "text-danger fw-bold" : a.RatioHe > 5 ? "text-warning fw-semibold" : "")">@a.RatioHe.ToString("N2")%</td>
+                                    <td><span class="badge bg-@badge">@icon @label</span></td>
+                                    <td class="text-muted" style="font-size:.72rem;">@accion</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

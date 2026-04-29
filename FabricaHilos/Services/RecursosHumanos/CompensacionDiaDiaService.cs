@@ -1,6 +1,7 @@
 using FabricaHilos.Models.RecursosHumanos;
 using Microsoft.Extensions.Caching.Memory;
 using Oracle.ManagedDataAccess.Client;
+using System.Collections.Concurrent;
 using System.Data;
 
 namespace FabricaHilos.Services.RecursosHumanos;
@@ -12,7 +13,9 @@ public interface ICompensacionDiaDiaService
         string fechaOrigen,
         string? fechaDestino,
         string tipoOrigen,
-        string? listaPersonal);
+        string? listaPersonal,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null);
 
     Task<List<CompensacionMasivoResultDto>> RegistrarEventoMasivoAsync(
         string codEmpresa,
@@ -21,7 +24,9 @@ public interface ICompensacionDiaDiaService
         string tipoOrigen,
         string tipoCompensacion,
         string listaPersonal,
-        string? horasMax);
+        string? horasMax,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null);
 
     Task<CompensacionEstadoDto?> VerEstadoAsync(long idCompen);
 
@@ -31,6 +36,8 @@ public interface ICompensacionDiaDiaService
         string fechaInicio,
         string fechaFin);
 
+    Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento);
+
     Task<(List<EmpleadoRangoDto> Items, int Total)> ListarEmpleadosRangoAsync(
         string codEmpresa,
         string fechaInicio,
@@ -38,7 +45,9 @@ public interface ICompensacionDiaDiaService
         string? codPersonal,
         string? nombre,
         int pagina,
-        int tamPagina);
+        int tamPagina,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null);
 
     /// <summary>Confirma la última transacción de registro masivo (COMMIT).</summary>
     Task CommitAsync();
@@ -47,7 +56,7 @@ public interface ICompensacionDiaDiaService
     Task RollbackAsync();
 }
 
-public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDisposable
+public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 {
     private const string Paquete = "AQUARIUS.PKG_SCA_COMP_DIA_DIA";
 
@@ -60,9 +69,10 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
     private static string CacheKeyRango(string emp, string ini, string fin) =>
         $"comp_rango_{emp}_{ini}_{fin}";
 
-    // Conexión abierta mantenida entre RegistrarEventoMasivo y Commit/Rollback
-    private OracleConnection?    _txConn;
-    private OracleTransaction?   _txn;
+    // Transacciones activas keyed por Session ID (persiste entre requests del mismo usuario)
+    // Incluye timestamp para permitir limpieza de transacciones huérfanas
+    internal record ActiveTxEntry(OracleConnection Conn, OracleTransaction Txn, DateTime CreatedAt);
+    internal static readonly ConcurrentDictionary<string, ActiveTxEntry> _activeTx = new();
 
     public CompensacionDiaDiaService(
         IConfiguration configuration,
@@ -79,9 +89,36 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
 
     private string GetOracleConnectionString() => _baseConnectionString;
 
+    private string GetSessionId()
+    {
+        var ctx = _httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("HttpContext no disponible.");
+        ctx.Session.LoadAsync().GetAwaiter().GetResult();
+        return ctx.Session.Id;
+    }
+
     private static string? GetStr(OracleDataReader r, string col)
     {
         try { return r[col] == DBNull.Value ? null : r[col]?.ToString(); }
+        catch { return null; }
+    }
+
+    private static string? GetDate(OracleDataReader r, string col)
+    {
+        try
+        {
+            if (r[col] == DBNull.Value) return null;
+            // Oracle DATE puede llegar como OracleDate o DateTime
+            if (r[col] is Oracle.ManagedDataAccess.Types.OracleDate od)
+                return od.Value.ToString("dd/MM/yyyy");
+            if (r[col] is DateTime dt)
+                return dt.ToString("dd/MM/yyyy");
+            // Fallback: truncar la parte de hora si viene como string
+            var s = r[col]?.ToString();
+            if (s != null && s.Length > 10 && s.Contains(' '))
+                return s[..s.IndexOf(' ')];
+            return s;
+        }
         catch { return null; }
     }
 
@@ -120,7 +157,9 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
         string fechaOrigen,
         string? fechaDestino,
         string tipoOrigen,
-        string? listaPersonal)
+        string? listaPersonal,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
@@ -136,8 +175,10 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
             cmd.Parameters.Add(new OracleParameter("p_fecha_origen",   OracleDbType.Varchar2) { Value = fechaOrigen });
             cmd.Parameters.Add(new OracleParameter("p_fecha_destino",  OracleDbType.Varchar2) { Value = (object?)fechaDestino ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("p_tipo_origen",    OracleDbType.Char)     { Value = tipoOrigen });
-            cmd.Parameters.Add(new OracleParameter("p_lista_personal", OracleDbType.Varchar2) { Value = (object?)listaPersonal ?? DBNull.Value });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",     OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal",     OracleDbType.Varchar2) { Value = (object?)listaPersonal     ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHorasInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHorasFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",         OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -170,21 +211,27 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
         string tipoOrigen,
         string tipoCompensacion,
         string listaPersonal,
-        string? horasMax)
+        string? horasMax,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null)
     {
         // Liberar transacción anterior si quedó abierta
-        await DisposeTransactionAsync();
+        var sessionId = GetSessionId();
+        await DisposeTransactionAsync(sessionId);
 
-        _txConn = new OracleConnection(GetOracleConnectionString());
-        await _txConn.OpenAsync();
-        _txn = _txConn.BeginTransaction();
+        var txConn = new OracleConnection(GetOracleConnectionString());
+        await txConn.OpenAsync();
+        var txn = txConn.BeginTransaction();
+        _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow);
 
         try
         {
             var result = new List<CompensacionMasivoResultDto>();
 
-            await using var cmd = _txConn.CreateCommand();
-            cmd.Transaction = _txn;
+            var entry = _activeTx[sessionId];
+            await using var cmd = entry.Conn.CreateCommand();
+            cmd.Transaction = entry.Txn;
+            cmd.CommandTimeout = 120;
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.CommandText = $"{Paquete}.REGISTRAR_EVENTO_MASIVO";
 
@@ -194,7 +241,9 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
             cmd.Parameters.Add(new OracleParameter("p_tipo_origen",        OracleDbType.Char)     { Value = tipoOrigen });
             cmd.Parameters.Add(new OracleParameter("p_tipo_compensacion",  OracleDbType.Char)     { Value = tipoCompensacion });
             cmd.Parameters.Add(new OracleParameter("p_lista_personal",     OracleDbType.Varchar2) { Value = listaPersonal });
-            cmd.Parameters.Add(new OracleParameter("p_horas_max",          OracleDbType.Varchar2) { Value = (object?)horasMax ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_horas_max",          OracleDbType.Varchar2) { Value = (object?)horasMax       ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHorasInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHorasFin    ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("cv_resultado",         OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -223,7 +272,7 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
         }
         catch
         {
-            await DisposeTransactionAsync();
+            await DisposeTransactionAsync(sessionId);
             throw;
         }
     }
@@ -232,10 +281,22 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
 
     public async Task CommitAsync()
     {
-        if (_txn != null)
+        var sessionId = GetSessionId();
+        if (!_activeTx.TryGetValue(sessionId, out var entry))
+            throw new InvalidOperationException("No hay transacción activa para esta sesión. Es posible que el servidor se haya reiniciado.");
+        try
         {
-            await _txn.CommitAsync();
-            await DisposeTransactionAsync();
+            await entry.Txn.CommitAsync();
+            _logger.LogInformation("COMMIT exitoso para sesión {SessionId}", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en COMMIT para sesión {SessionId}", sessionId);
+            throw;
+        }
+        finally
+        {
+            await DisposeTransactionAsync(sessionId);
         }
     }
 
@@ -243,17 +304,31 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
 
     public async Task RollbackAsync()
     {
-        if (_txn != null)
+        var sessionId = GetSessionId();
+        if (!_activeTx.TryGetValue(sessionId, out _))
+            return; // Nada que revertir
+        try
         {
-            await _txn.RollbackAsync();
-            await DisposeTransactionAsync();
+            if (_activeTx.TryGetValue(sessionId, out var entry))
+                await entry.Txn.RollbackAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error en ROLLBACK para sesión {SessionId} (puede haberse expirado)", sessionId);
+        }
+        finally
+        {
+            await DisposeTransactionAsync(sessionId);
         }
     }
 
-    private async Task DisposeTransactionAsync()
+    internal static async Task DisposeTransactionAsync(string sessionId)
     {
-        if (_txn    != null) { await _txn.DisposeAsync();    _txn    = null; }
-        if (_txConn != null) { await _txConn.DisposeAsync(); _txConn = null; }
+        if (_activeTx.TryRemove(sessionId, out var entry))
+        {
+            try { await entry.Txn.DisposeAsync(); } catch { /* ignorar */ }
+            try { await entry.Conn.DisposeAsync(); } catch { /* ignorar */ }
+        }
     }
 
     public async Task<(List<EmpleadoRangoDto> Items, int Total)> ListarEmpleadosRangoAsync(
@@ -263,13 +338,16 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
         string? codPersonal,
         string? nombre,
         int pagina,
-        int tamPagina)
+        int tamPagina,
+        string? fechaHorasInicio = null,
+        string? fechaHorasFin   = null)
     {
-        // Clave de caché por empresa+rango
-        var cacheKey = CacheKeyRango(codEmpresa, fechaInicio, fechaFin);
+        // Clave de caché por empresa+rango+fechas de horas
+        var cacheKey = CacheKeyRango(codEmpresa, fechaInicio, fechaFin)
+            + $"_{fechaHorasInicio}_{fechaHorasFin}";
         if (!_cache.TryGetValue(cacheKey, out List<EmpleadoRangoDto>? todos) || todos == null)
         {
-            todos = await CargarEmpleadosRangoOracleAsync(codEmpresa, fechaInicio, fechaFin);
+            todos = await CargarEmpleadosRangoOracleAsync(codEmpresa, fechaInicio, fechaFin, fechaHorasInicio, fechaHorasFin);
             _cache.Set(cacheKey, todos, CacheDuration);
         }
 
@@ -294,7 +372,8 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
     }
 
     private async Task<List<EmpleadoRangoDto>> CargarEmpleadosRangoOracleAsync(
-        string codEmpresa, string fechaInicio, string fechaFin)
+        string codEmpresa, string fechaInicio, string fechaFin,
+        string? fechaHorasInicio = null, string? fechaHorasFin = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
@@ -306,11 +385,13 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.CommandText = $"{Paquete}.LISTAR_EMPLEADOS_RANGO";
 
-            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = codEmpresa });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio", OracleDbType.Varchar2) { Value = fechaInicio });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",    OracleDbType.Varchar2) { Value = fechaFin });
-            cmd.Parameters.Add(new OracleParameter("p_nombre",       OracleDbType.Varchar2) { Value = DBNull.Value });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",   OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",        OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",       OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",          OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_nombre",             OracleDbType.Varchar2) { Value = DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHorasInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHorasFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",         OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -337,7 +418,6 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
         }, "LISTAR_EMPLEADOS_RANGO");
     }
 
-    public async ValueTask DisposeAsync() => await DisposeTransactionAsync();
 
     // ── VER_ESTADO ────────────────────────────────────────────────────────────
 
@@ -367,8 +447,8 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
                     NomTrabajador    = GetStr(r, "nom_trabajador"),
                     ApePaterno       = GetStr(r, "ape_paterno"),
                     ApeMaterno       = GetStr(r, "ape_materno"),
-                    FechaOrigen      = GetStr(r, "fechaorigen"),
-                    FechaDestino     = GetStr(r, "fechadestino"),
+                    FechaOrigen      = GetDate(r, "fechaorigen"),
+                    FechaDestino     = GetDate(r, "fechadestino"),
                     TipoOrigen       = GetStr(r, "tipoorigen"),
                     TipoCompensacion = GetStr(r, "tipocompensacion"),
                     TiempoMin        = GetInt(r, "tiempo_min"),
@@ -393,6 +473,53 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
             }
             return null;
         }, "VER_ESTADO");
+    }
+
+    // ── CONSULTAR_EVENTO ──────────────────────────────────────────────────────
+
+    public async Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<CompensacionEventoDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.CONSULTAR_EVENTO";
+
+            cmd.Parameters.Add(new OracleParameter("p_id_evento",  OracleDbType.Decimal)   { Value = idEvento });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new CompensacionEventoDto
+                {
+                    IdCompen         = GetNullLong(r, "id_compen"),
+                    CodEmpresa       = GetStr(r, "cod_empresa"),
+                    CodPersonal      = GetStr(r, "cod_personal"),
+                    NombreCompleto   = GetStr(r, "nombre_completo"),
+                    FechaOrigen      = GetDate(r, "fechaorigen"),
+                    FechaDestino     = GetDate(r, "fechadestino"),
+                    TipoOrigen       = GetStr(r, "tipoorigen"),
+                    TipoCompensacion = GetStr(r, "tipocompensacion"),
+                    TiempoMin        = GetInt(r, "tiempo_min"),
+                    TiempoHhMi       = GetStr(r, "tiempo_hhmi"),
+                    EstadoAplicacion = GetStr(r, "estado_aplicacion"),
+                    DesAlerta02      = GetStr(r, "des_alerta02"),
+                    DesAlerta03      = GetStr(r, "des_alerta03"),
+                    DesAlerta04      = GetStr(r, "des_alerta04"),
+                    DesAlerta07      = GetStr(r, "des_alerta07"),
+                    DesAlerta09      = GetStr(r, "des_alerta09"),
+                    OriAlerta06      = GetStr(r, "ori_alerta06"),
+                    OriAlerta08      = GetStr(r, "ori_alerta08"),
+                });
+            }
+            return result;
+        }, "CONSULTAR_EVENTO");
     }
 
     // ── CONSULTAR_RANGO ───────────────────────────────────────────────────────
@@ -428,8 +555,8 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService, IAsyncDispo
                     IdCompen         = GetNullLong(r, "id_compen"),
                     CodEmpresa       = GetStr(r, "cod_empresa"),
                     CodPersonal      = GetStr(r, "cod_personal"),
-                    FechaOrigen      = GetStr(r, "fechaorigen"),
-                    FechaDestino     = GetStr(r, "fechadestino"),
+                    FechaOrigen      = GetDate(r, "fechaorigen"),
+                    FechaDestino     = GetDate(r, "fechadestino"),
                     TipoOrigen       = GetStr(r, "tipoorigen"),
                     TipoCompensacion = GetStr(r, "tipocompensacion"),
                     TiempoMin        = GetInt(r, "tiempo_min"),
