@@ -6,6 +6,7 @@ using FabricaHilos.Services;
 namespace FabricaHilos.Controllers.RecursosHumanos
 {
     [Authorize]
+    [Route("RecursosHumanos")]
     public class RecursosHumanosController : Controller
     {
         private readonly IMenuService _menuService;
@@ -15,6 +16,8 @@ namespace FabricaHilos.Controllers.RecursosHumanos
             _menuService = menuService;
         }
 
+        [HttpGet("")]
+        [HttpGet("Index")]
         public IActionResult Index()
         {
             var menus = _menuService.GetMenusActuales();
