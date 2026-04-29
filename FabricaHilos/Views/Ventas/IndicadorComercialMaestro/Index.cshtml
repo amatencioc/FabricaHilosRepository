@@ -188,8 +188,11 @@
     }
 
     /* ── Formato ────────────────────────────────────── */
-    const fmtPE  = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
-    const fmtPE0 = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmtPE  = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtKG  = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtIMP = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Eje Y: enteros con separador de miles, sin decimales (para no saturar el eje)
+    const fmtYAxis = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     function fmtMil(n) {
         n = n || 0;
         if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
@@ -320,7 +323,7 @@
                             textStrokeColor: 'rgba(255,255,255,.8)',
                             textStrokeWidth: 3,
                             formatter: function(v, ctx) {
-                                return isKg ? fmtPE.format(v) : (monLabel + ' ' + fmtMil(v));
+                                return isKg ? fmtMil(v) + ' KG' : (monLabel + ' ' + fmtMil(v));
                             }
                         },
                         tooltip: {
@@ -328,8 +331,8 @@
                                 label: c => {
                                     const v = c.raw || 0;
                                     return isKg
-                                        ? ` ${c.dataset.label}: ${fmtPE.format(v)} KG`
-                                        : ` ${c.dataset.label}: ${monLabel} ${fmtPE.format(v)}`;
+                                        ? ` ${c.dataset.label}: ${fmtMil(v)} KG`
+                                        : ` ${c.dataset.label}: ${monLabel} ${fmtIMP.format(v)}`;
                                 }
                             }
                         }
@@ -342,7 +345,7 @@
                         y: {
                             beginAtZero: true,
                             ticks: {
-                                callback: v => isKg ? fmtPE.format(v) : fmtMil(v),
+                                callback: v => isKg ? fmtMil(v) : fmtMil(v),
                                 font: { size: 10 }
                             },
                             grid: { color: 'rgba(0,0,0,.06)' }
@@ -390,10 +393,12 @@
                 const v = r ? (isKg ? r.cantidadKg : r.importe) : 0;
                 rowTotal += v;
                 totalesMes[m] = (totalesMes[m] || 0) + v;
-                tdsMes += `<td class="text-end">${v > 0 ? monLabel2 + fmtPE.format(v) : '—'}</td>`;
+                const vFmt = isKg ? (fmtKG.format(v) + ' KG') : (monLabel2 + fmtIMP.format(v));
+                tdsMes += `<td class="text-end">${v > 0 ? vFmt : '—'}</td>`;
             });
             granTotal += rowTotal;
-            tr.innerHTML = tdAsesor + tdsMes + `<td class="text-end fw-semibold" style="background:#edf7f2;">${monLabel2}${fmtPE.format(rowTotal)}</td>`;
+            const rowFmt = isKg ? (fmtKG.format(rowTotal) + ' KG') : (monLabel2 + fmtIMP.format(rowTotal));
+            tr.innerHTML = tdAsesor + tdsMes + `<td class="text-end fw-semibold" style="background:#edf7f2;">${rowFmt}</td>`;
             tbody.appendChild(tr);
         });
 
@@ -403,12 +408,14 @@
         meses.forEach(m => {
             const td = document.createElement('td');
             td.className = 'text-end';
-            td.innerHTML = `<strong>${monLabel2}${fmtPE.format(totalesMes[m] || 0)}</strong>`;
+            const totFmt = isKg ? (fmtKG.format(totalesMes[m] || 0) + ' KG') : (monLabel2 + fmtIMP.format(totalesMes[m] || 0));
+            td.innerHTML = `<strong>${totFmt}</strong>`;
             tfoot.appendChild(td);
         });
         const tdGran = document.createElement('td');
         tdGran.className = 'text-end';
-        tdGran.innerHTML = `<strong>${monLabel2}${fmtPE.format(granTotal)}</strong>`;
+        const granFmt = isKg ? (fmtKG.format(granTotal) + ' KG') : (monLabel2 + fmtIMP.format(granTotal));
+        tdGran.innerHTML = `<strong>${granFmt}</strong>`;
         tfoot.appendChild(tdGran);
     }
 

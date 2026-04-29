@@ -169,6 +169,56 @@ SELECT A.COD_ASESOR,
             moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.Soles : f.Dolar;
 
         // ════════════════════════════════════════════════════════════════════════
+        // ObtenerTodosAsync — un solo viaje Oracle, tres resultados
+        // ════════════════════════════════════════════════════════════════════════
+        public async Task<IcmTodosDto> ObtenerTodosAsync(
+            DateTime fechaInicio, DateTime fechaFin, string moneda)
+        {
+            var mon   = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+            var filas = await CargarFilasMesAsync(fechaInicio, fechaFin);
+
+            var sinOficina = filas
+                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var importe = sinOficina
+                .GroupBy(f => new { Asesor = f.Asesor ?? "Sin Asesor", CodAsesor = f.CodAsesor, Mes = f.Mes ?? "" })
+                .Select(g => new IcmImporteAsesorMesDto
+                {
+                    CodAsesor = g.Key.CodAsesor,
+                    Asesor    = g.Key.Asesor,
+                    Mes       = g.Key.Mes,
+                    Importe   = g.Sum(f => Imp(f, mon)),
+                })
+                .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
+                .ToList();
+
+            var kg = sinOficina
+                .GroupBy(f => new { Asesor = f.Asesor ?? "Sin Asesor", Mes = f.Mes ?? "" })
+                .Select(g => new IcmKgAsesorMesDto
+                {
+                    Asesor     = g.Key.Asesor,
+                    Mes        = g.Key.Mes,
+                    CantidadKg = g.Sum(f => f.TotUnid),
+                })
+                .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
+                .ToList();
+
+            var clientes = sinOficina
+                .GroupBy(f => new { Asesor = f.Asesor ?? "Sin Asesor", Mes = f.Mes ?? "" })
+                .Select(g => new IcmClientesAsesorMesDto
+                {
+                    Asesor      = g.Key.Asesor,
+                    Mes         = g.Key.Mes,
+                    NroClientes = g.Count(),
+                })
+                .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
+                .ToList();
+
+            return new IcmTodosDto { Importe = importe, Kg = kg, Clientes = clientes };
+        }
+
+        // ════════════════════════════════════════════════════════════════════════
         // Importe neto por Asesor / Mes
         // Carga una sola vez y agrupa en C# — idéntico a cómo lo hace el dashboard
         // ════════════════════════════════════════════════════════════════════════

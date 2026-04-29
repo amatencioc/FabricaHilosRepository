@@ -1,5 +1,13 @@
 namespace FabricaHilos.Models.Ventas
 {
+    /// <summary>Resultado combinado de una sola carga Oracle (IndicadorComercialMaestro).</summary>
+    public class IcmTodosDto
+    {
+        public List<IcmImporteAsesorMesDto> Importe   { get; set; } = new();
+        public List<IcmKgAsesorMesDto>      Kg        { get; set; } = new();
+        public List<IcmClientesAsesorMesDto> Clientes { get; set; } = new();
+    }
+
     /// <summary>Importe neto por Asesor / Mes (IndicadorComercialMaestro).</summary>
     public class IcmImporteAsesorMesDto
     {

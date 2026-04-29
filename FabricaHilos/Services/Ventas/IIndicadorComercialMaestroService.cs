@@ -5,20 +5,17 @@ namespace FabricaHilos.Services.Ventas
     public interface IIndicadorComercialMaestroService
     {
         /// <summary>
-        /// Importe neto por Asesor / Mes usando CLIENTES.VENDEDOR (misma lógica que DashboardComercialMaestro).
+        /// Carga todos los datos en un único viaje Oracle y devuelve importe, KG y clientes por asesor/mes.
         /// </summary>
+        Task<IcmTodosDto> ObtenerTodosAsync(
+            DateTime fechaInicio, DateTime fechaFin, string moneda);
+
         Task<List<IcmImporteAsesorMesDto>> ObtenerImportePorAsesorMesAsync(
             DateTime fechaInicio, DateTime fechaFin, string moneda);
 
-        /// <summary>
-        /// KG vendidos por Asesor / Mes usando CLIENTES.VENDEDOR.
-        /// </summary>
         Task<List<IcmKgAsesorMesDto>> ObtenerKgPorAsesorMesAsync(
             DateTime fechaInicio, DateTime fechaFin);
 
-        /// <summary>
-        /// Nro. de clientes distintos por Asesor / Mes usando CLIENTES.VENDEDOR.
-        /// </summary>
         Task<List<IcmClientesAsesorMesDto>> ObtenerClientesPorAsesorMesAsync(
             DateTime fechaInicio, DateTime fechaFin);
     }

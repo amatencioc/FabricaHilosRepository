@@ -17,17 +17,14 @@ namespace FabricaHilos.Controllers.Ventas
         public IActionResult Index() => View();
 
         // Endpoint único: devuelve importe, kg y clientes en una sola respuesta
-        // para evitar múltiples viajes a Oracle (reutiliza la misma carga interna).
+        // con un solo viaje a Oracle gracias a ObtenerTodosAsync.
         [HttpGet]
         public async Task<IActionResult> DatosTodos(
             DateTime? fechaInicio, DateTime? fechaFin, string? moneda)
         {
             var (fi, ff) = ResolverFechas(fechaInicio, fechaFin);
-            var mon = moneda ?? "D";
-            var importe  = await _service.ObtenerImportePorAsesorMesAsync(fi, ff, mon);
-            var kg       = await _service.ObtenerKgPorAsesorMesAsync(fi, ff);
-            var clientes = await _service.ObtenerClientesPorAsesorMesAsync(fi, ff);
-            return Json(new { importe, kg, clientes });
+            var dto = await _service.ObtenerTodosAsync(fi, ff, moneda ?? "D");
+            return Json(new { importe = dto.Importe, kg = dto.Kg, clientes = dto.Clientes });
         }
 
         // Endpoints individuales mantenidos por compatibilidad
