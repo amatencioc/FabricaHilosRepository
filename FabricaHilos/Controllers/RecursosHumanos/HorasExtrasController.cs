@@ -30,17 +30,17 @@ public class HorasExtrasController : OracleBaseController
     }
 
     [HttpGet("Kpi")]
-    public async Task<IActionResult> Kpi(int anoIni, int mesIni, int anoFin, int mesFin)
+    public async Task<IActionResult> Kpi(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
     {
         try
         {
-            var vm = await _horasExtrasService.ObtenerKpiAsync(anoIni, mesIni, anoFin, mesFin);
+            var vm = await _horasExtrasService.ObtenerKpiAsync(anoIni, mesIni, anoFin, mesFin, tipo);
             return PartialView("~/Views/RecursosHumanos/Indicadores/SobreTiempoArea/_KpiDashboard.cshtml", vm);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al obtener KPI Horas Extras ({AnoIni}/{MesIni} - {AnoFin}/{MesFin})",
-                anoIni, mesIni, anoFin, mesFin);
+            _logger.LogError(ex, "Error al obtener KPI Horas Extras ({AnoIni}/{MesIni} - {AnoFin}/{MesFin} Tipo:{Tipo})",
+                anoIni, mesIni, anoFin, mesFin, tipo);
             return StatusCode(500, "Error al obtener los datos. Intente nuevamente.");
         }
     }

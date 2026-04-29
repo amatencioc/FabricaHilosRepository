@@ -126,6 +126,14 @@
                 }
             </select>
         </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Tipo</label>
+            <select id="tipo" name="tipo" class="form-select form-select-sm" style="width:140px">
+                <option value="T">Todos</option>
+                <option value="O">Obreros</option>
+                <option value="E">Empleados</option>
+            </select>
+        </div>
         <button type="submit" class="btn btn-sm btn-success">
             <i class="bi bi-arrow-clockwise me-1"></i>Consultar
         </button>
@@ -362,6 +370,7 @@
         const mesIni = document.getElementById('mesIni').value;
         const anoFin = document.getElementById('anoFin').value;
         const mesFin = document.getElementById('mesFin').value;
+        const tipo   = document.getElementById('tipo').value;
 
         const container = document.getElementById('kpi-container');
         container.innerHTML = `
@@ -370,7 +379,7 @@
                 <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
             </div>`;
 
-        fetch(`/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}`, { noLoading: true })
+        fetch(`/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${tipo}`, { noLoading: true })
             .then(r => {
                 if (!r.ok) throw new Error('Error ' + r.status);
                 return r.text();

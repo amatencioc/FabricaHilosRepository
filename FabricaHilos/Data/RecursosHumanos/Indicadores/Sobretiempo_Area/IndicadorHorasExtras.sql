@@ -1,6 +1,7 @@
 -- ============================================================
 -- KPI HORAS EXTRAS / SOBRETIEMPO POR ÁREA
 -- Parámetros: :P_ANO_INI, :P_MES_INI, :P_ANO_FIN, :P_MES_FIN
+--             :P_TIPO  →  'E' = Empleados | 'O' = Obreros | 'T' = Todos
 -- ============================================================
 
 -- -------------------------------------------------------
@@ -30,6 +31,7 @@ WITH BASE AS (
     AND C.NUM_PLA = P.NUM_PLA
     AND C.C_CODIGO = P.C_CODIGO
     AND Y.CCOSTO_DET = C.C_COSTO
+    AND (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
   GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO, P.C_CODIGO
 )
 -- RESUMEN GENERAL
@@ -73,6 +75,7 @@ WITH BASE AS (
     AND C.NUM_PLA = P.NUM_PLA
     AND C.C_CODIGO = P.C_CODIGO
     AND Y.CCOSTO_DET = C.C_COSTO
+    AND (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
   GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO, P.C_CODIGO
 )
 SELECT

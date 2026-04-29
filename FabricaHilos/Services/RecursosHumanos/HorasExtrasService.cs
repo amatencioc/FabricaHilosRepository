@@ -5,7 +5,7 @@ namespace FabricaHilos.Services.RecursosHumanos;
 
 public interface IHorasExtrasService
 {
-    Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin);
+    Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T");
 }
 
 public class HorasExtrasService : IHorasExtrasService
@@ -47,6 +47,7 @@ WITH BASE AS (
     AND C.NUM_PLA = P.NUM_PLA
     AND C.C_CODIGO = P.C_CODIGO
     AND Y.CCOSTO_DET = C.C_COSTO
+    AND (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
   GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO, P.C_CODIGO
 )
 SELECT
@@ -96,6 +97,7 @@ WITH BASE AS (
     AND C.NUM_PLA = P.NUM_PLA
     AND C.C_CODIGO = P.C_CODIGO
     AND Y.CCOSTO_DET = C.C_COSTO
+    AND (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
   GROUP BY X.ANO, X.MES, Y.DESC_GRAN_CCOSTO, P.C_CODIGO
 )
 SELECT
@@ -120,7 +122,7 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         _logger = logger;
     }
 
-    public async Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin)
+    public async Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
     {
         var vm = new HorasExtrasKpiViewModel
         {
@@ -137,7 +139,7 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = SqlResumen;
-            AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin);
+            AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin, tipo);
 
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -159,7 +161,7 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = SqlDetalle;
-            AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin);
+            AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin, tipo);
 
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -184,13 +186,14 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
 
     // ── Helpers ────────────────────────────────────────────────────────
 
-    private static void AgregarParametros(OracleCommand cmd, int anoIni, int mesIni, int anoFin, int mesFin)
+    private static void AgregarParametros(OracleCommand cmd, int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
     {
         cmd.BindByName = true;
-        cmd.Parameters.Add(new OracleParameter("P_ANO_INI", OracleDbType.Int32) { Value = anoIni });
-        cmd.Parameters.Add(new OracleParameter("P_MES_INI", OracleDbType.Int32) { Value = mesIni });
-        cmd.Parameters.Add(new OracleParameter("P_ANO_FIN", OracleDbType.Int32) { Value = anoFin });
-        cmd.Parameters.Add(new OracleParameter("P_MES_FIN", OracleDbType.Int32) { Value = mesFin });
+        cmd.Parameters.Add(new OracleParameter("P_ANO_INI", OracleDbType.Int32)  { Value = anoIni });
+        cmd.Parameters.Add(new OracleParameter("P_MES_INI", OracleDbType.Int32)  { Value = mesIni });
+        cmd.Parameters.Add(new OracleParameter("P_ANO_FIN", OracleDbType.Int32)  { Value = anoFin });
+        cmd.Parameters.Add(new OracleParameter("P_MES_FIN", OracleDbType.Int32)  { Value = mesFin });
+        cmd.Parameters.Add(new OracleParameter("P_TIPO",    OracleDbType.Varchar2) { Value = string.IsNullOrEmpty(tipo) ? "T" : tipo });
     }
 
     private static decimal GetDecimal(System.Data.Common.DbDataReader r, string col)
