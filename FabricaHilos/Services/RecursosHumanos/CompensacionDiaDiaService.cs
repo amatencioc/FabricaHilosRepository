@@ -1,5 +1,6 @@
 using FabricaHilos.Models.RecursosHumanos;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using Oracle.ManagedDataAccess.Client;
 using System.Collections.Concurrent;
 using System.Data;
@@ -38,6 +39,12 @@ public interface ICompensacionDiaDiaService
 
     Task<List<CompensacionEventoDto>> ConsultarEventoAsync(long idEvento);
 
+    Task<List<DetalleHorasEmpleadoDto>> DetalleHorasEmpleadoAsync(
+        string codEmpresa,
+        string codPersonal,
+        string fechaHorasInicio,
+        string fechaHorasFin);
+
     Task<(List<EmpleadoRangoDto> Items, int Total)> ListarEmpleadosRangoAsync(
         string codEmpresa,
         string fechaInicio,
@@ -71,8 +78,11 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
 
     // Transacciones activas keyed por Session ID (persiste entre requests del mismo usuario)
     // Incluye timestamp para permitir limpieza de transacciones huérfanas
-    internal record ActiveTxEntry(OracleConnection Conn, OracleTransaction Txn, DateTime CreatedAt);
+    internal record ActiveTxEntry(OracleConnection Conn, OracleTransaction Txn, DateTime CreatedAt, string CodEmpresa);
     internal static readonly ConcurrentDictionary<string, ActiveTxEntry> _activeTx = new();
+
+    // CancellationTokenSource por empresa para invalidar toda la caché de esa empresa en bloque
+    private static readonly ConcurrentDictionary<string, CancellationTokenSource> _cacheTokens = new();
 
     public CompensacionDiaDiaService(
         IConfiguration configuration,
@@ -88,6 +98,18 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
     }
 
     private string GetOracleConnectionString() => _baseConnectionString;
+
+    private static CancellationTokenSource GetOrCreateCacheToken(string codEmpresa)
+        => _cacheTokens.GetOrAdd(codEmpresa, _ => new CancellationTokenSource());
+
+    private static void InvalidarCacheEmpresa(string codEmpresa)
+    {
+        if (_cacheTokens.TryRemove(codEmpresa, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+    }
 
     private string GetSessionId()
     {
@@ -222,7 +244,7 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         var txConn = new OracleConnection(GetOracleConnectionString());
         await txConn.OpenAsync();
         var txn = txConn.BeginTransaction();
-        _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow);
+        _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow, codEmpresa);
 
         try
         {
@@ -287,6 +309,7 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         try
         {
             await entry.Txn.CommitAsync();
+            InvalidarCacheEmpresa(entry.CodEmpresa);
             _logger.LogInformation("COMMIT exitoso para sesión {SessionId}", sessionId);
         }
         catch (Exception ex)
@@ -348,7 +371,11 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         if (!_cache.TryGetValue(cacheKey, out List<EmpleadoRangoDto>? todos) || todos == null)
         {
             todos = await CargarEmpleadosRangoOracleAsync(codEmpresa, fechaInicio, fechaFin, fechaHorasInicio, fechaHorasFin);
-            _cache.Set(cacheKey, todos, CacheDuration);
+            var cts = GetOrCreateCacheToken(codEmpresa);
+            var cacheOpts = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(CacheDuration)
+                .AddExpirationToken(new CancellationChangeToken(cts.Token));
+            _cache.Set(cacheKey, todos, cacheOpts);
         }
 
         IEnumerable<EmpleadoRangoDto> filtrados = todos;
@@ -522,7 +549,55 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         }, "CONSULTAR_EVENTO");
     }
 
-    // ── CONSULTAR_RANGO ───────────────────────────────────────────────────────
+    // ── DETALLE_HORAS_EMPLEADO ──────────────────────────────────────────────────
+
+    public async Task<List<DetalleHorasEmpleadoDto>> DetalleHorasEmpleadoAsync(
+        string codEmpresa,
+        string codPersonal,
+        string fechaHorasInicio,
+        string fechaHorasFin)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DetalleHorasEmpleadoDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.DETALLE_HORAS_EMPLEADO";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",        OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_cod_personal",       OracleDbType.Varchar2) { Value = codPersonal });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_inicio", OracleDbType.Varchar2) { Value = fechaHorasInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_horas_fin",    OracleDbType.Varchar2) { Value = fechaHorasFin });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",         OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DetalleHorasEmpleadoDto
+                {
+                    FechamarStr = GetStr(r, "fechamar_str"),
+                    DiaSemana   = GetStr(r, "dia_semana"),
+                    MinHe       = GetInt(r, "min_he"),
+                    HorasHe     = GetStr(r, "horas_he"),
+                    MinDobles   = GetInt(r, "min_dobles"),
+                    HorasDobles = GetStr(r, "horas_dobles"),
+                    MinBanco    = GetInt(r, "min_banco"),
+                    HorasBanco  = GetStr(r, "horas_banco"),
+                    MinTotal    = GetInt(r, "min_total"),
+                    HorasTotal  = GetStr(r, "horas_total"),
+                    Alerta06    = GetStr(r, "alerta06"),
+                    Alerta08    = GetStr(r, "alerta08"),
+                });
+            }
+            return result;
+        }, "DETALLE_HORAS_EMPLEADO");
+    }
+
+    // ── CONSULTAR_RANGO ─────────────────────────────────────────────────────
 
     public async Task<List<CompensacionRangoDto>> ConsultarRangoAsync(
         string? codEmpresa,

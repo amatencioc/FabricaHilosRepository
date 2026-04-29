@@ -22,7 +22,7 @@ public class HorasExtrasController : OracleBaseController
     public IActionResult Index()
     {
         var hoy = DateTime.Today;
-        ViewBag.AnoIni = hoy.Year;
+        ViewBag.AnoIni = hoy.Year - 1;
         ViewBag.MesIni = hoy.Month;
         ViewBag.AnoFin = hoy.Year;
         ViewBag.MesFin = hoy.Month;
@@ -30,11 +30,11 @@ public class HorasExtrasController : OracleBaseController
     }
 
     [HttpGet("Kpi")]
-    public async Task<IActionResult> Kpi(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
+    public async Task<IActionResult> Kpi(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T", [FromQuery] List<string>? areas = null)
     {
         try
         {
-            var vm = await _horasExtrasService.ObtenerKpiAsync(anoIni, mesIni, anoFin, mesFin, tipo);
+            var vm = await _horasExtrasService.ObtenerKpiAsync(anoIni, mesIni, anoFin, mesFin, tipo, areas);
             return PartialView("~/Views/RecursosHumanos/Indicadores/SobreTiempoArea/_KpiDashboard.cshtml", vm);
         }
         catch (Exception ex)
@@ -42,6 +42,21 @@ public class HorasExtrasController : OracleBaseController
             _logger.LogError(ex, "Error al obtener KPI Horas Extras ({AnoIni}/{MesIni} - {AnoFin}/{MesFin} Tipo:{Tipo})",
                 anoIni, mesIni, anoFin, mesFin, tipo);
             return StatusCode(500, "Error al obtener los datos. Intente nuevamente.");
+        }
+    }
+
+    [HttpGet("Areas")]
+    public async Task<IActionResult> GetAreas(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
+    {
+        try
+        {
+            var areas = await _horasExtrasService.ObtenerAreasAsync(anoIni, mesIni, anoFin, mesFin, tipo);
+            return Json(areas);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener áreas disponibles");
+            return StatusCode(500, "Error al obtener las áreas.");
         }
     }
 }

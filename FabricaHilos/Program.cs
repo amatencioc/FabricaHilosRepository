@@ -121,6 +121,7 @@ builder.Services.AddScoped<IParoService, ParoService>();
 builder.Services.AddScoped<ISgcService, SgcService>();
 builder.Services.AddScoped<ICargaTcService, CargaTcService>();
 builder.Services.AddScoped<IIndicadoresComercialesService, IndicadoresComercialesService>();
+builder.Services.AddScoped<IIndicadorComercialMaestroService, IndicadorComercialMaestroService>();
 builder.Services.AddScoped<IVentasPorMercadoService, VentasPorMercadoService>();
 builder.Services.AddScoped<IDashboardComercialService, DashboardComercialService>();
 builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercialMaestroService>();

@@ -104,6 +104,24 @@ public class EmpleadoRangoDto
     public string? HorasTotal     { get; set; }
 }
 
+// ── Resultado de DETALLE_HORAS_EMPLEADO ──────────────────────────────────────
+
+public class DetalleHorasEmpleadoDto
+{
+    public string? FechamarStr  { get; set; }
+    public string? DiaSemana    { get; set; }
+    public int     MinHe        { get; set; }
+    public string? HorasHe      { get; set; }
+    public int     MinDobles    { get; set; }
+    public string? HorasDobles  { get; set; }
+    public int     MinBanco     { get; set; }
+    public string? HorasBanco   { get; set; }
+    public int     MinTotal     { get; set; }
+    public string? HorasTotal   { get; set; }
+    public string? Alerta06     { get; set; }
+    public string? Alerta08     { get; set; }
+}
+
 // ── Resultado de VER_ESTADO ───────────────────────────────────────────────────
 
 public class CompensacionEstadoDto

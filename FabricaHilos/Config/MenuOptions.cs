@@ -35,9 +35,7 @@ public class MenuOptions
 
     // ── Submenús: Ventas ──────────────────────────────────────────────────
     public bool VentasConsultaTC { get; set; } = true;
-    public bool VentasIndicadoresComerciales { get; set; } = false;
-    public bool VentasVentasPorMercado { get; set; } = false;
-    public bool VentasDashboardComercial { get; set; } = true;
+    public bool VentasIndicadorComercialMaestro { get; set; } = false;
     public bool VentasDashboardComercialMaestro { get; set; } = true;
     public bool VentasDashboardGerencial { get; set; } = true;
 
@@ -48,9 +46,8 @@ public class MenuOptions
     public bool RecursosHumanos              { get; set; } = false;
     public bool RhMarcaciones                { get; set; } = true;
     public bool RhCompensacionDiaDia         { get; set; } = true;
-    public bool RhHorasExtras                { get; set; } = true;
 
-    // ── Submenús: RH → Indicadores ────────────────────────────────────────
+    // ── Submenús: RH → Indicadores
     public bool RhIndicadores                              { get; set; } = true;
     public bool RhIndicadoresHorasExtras                   { get; set; } = true;
     public bool RhIndicadoresConcentracionSobretiempo      { get; set; } = true;
@@ -93,9 +90,7 @@ public class MenuOptions
         FacturacionListaDocumentos  = true,
 
         VentasConsultaTC = true,
-        VentasIndicadoresComerciales = false,
-        VentasVentasPorMercado = false,
-        VentasDashboardComercial = true,
+        VentasIndicadorComercialMaestro = true,
         VentasDashboardComercialMaestro = true,
         VentasDashboardGerencial = true,
 
@@ -103,7 +98,6 @@ public class MenuOptions
 
         RecursosHumanos  = true,
         RhMarcaciones    = true,
-        RhHorasExtras    = true,
 
         RhIndicadores            = true,
         RhIndicadoresHorasExtras = true,

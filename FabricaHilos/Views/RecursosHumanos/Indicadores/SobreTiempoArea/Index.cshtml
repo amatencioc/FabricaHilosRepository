@@ -8,71 +8,126 @@
 
 @section Styles {
 <style>
-    .chart-card {
-        border: none;
-        border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.08);
-        height: 100%;
-        background: #f5f5f2;
-    }
-    .chart-card .card-body {
-        background: #f0f0ec;
-        border-radius: 0 0 12px 12px;
-    }
-    .chart-card .card-header {
-        background: transparent;
-        color: #1B4D3E;
-        font-weight: 600;
-        border-bottom: 1px solid #e0e0e0;
-        border-radius: 12px 12px 0 0 !important;
-    }
+    /* ── Layout general ── */
+    #kpi-container { min-height: 200px; }
+
+    /* ── Barra de filtros ── */
     .filter-bar {
         background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.07);
-        padding: .85rem 1.25rem;
-        margin-bottom: 1.4rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,.08);
+        padding: .9rem 1.4rem;
+        margin-bottom: 1.5rem;
     }
+
+    /* ── KPI Cards ── */
     .kpi-card {
         border: none;
-        border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.08);
-        background: #fff;
+        border-radius: 14px;
         text-align: center;
-        padding: 1.1rem .75rem;
+        padding: 1.4rem 1rem 1.1rem;
+        position: relative;
+        overflow: hidden;
+        transition: transform .18s, box-shadow .18s;
     }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.13) !important; }
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 4px;
+        border-radius: 14px 14px 0 0;
+    }
+    /* color de acento por posición (se aplica via clases utilitarias) */
+    .kpi-card.accent-green  { box-shadow: 0 3px 14px rgba(27,77,62,.14); }
+    .kpi-card.accent-green::before  { background: linear-gradient(90deg, #1B4D3E, #2e8b6a); }
+    .kpi-card.accent-blue   { box-shadow: 0 3px 14px rgba(21,101,192,.14); }
+    .kpi-card.accent-blue::before   { background: linear-gradient(90deg, #1565C0, #42a5f5); }
+    .kpi-card.accent-purple { box-shadow: 0 3px 14px rgba(74,20,140,.14); }
+    .kpi-card.accent-purple::before { background: linear-gradient(90deg, #4A148C, #9c4dcc); }
+    .kpi-card.accent-orange { box-shadow: 0 3px 14px rgba(230,81,0,.14); }
+    .kpi-card.accent-orange::before { background: linear-gradient(90deg, #e65100, #ffa726); }
+
     .kpi-card .kpi-icon {
-        font-size: 2rem;
+        font-size: 2.1rem;
         line-height: 1;
-        margin-bottom: .35rem;
+        margin-bottom: .4rem;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,.12));
     }
     .kpi-card .kpi-label {
-        font-size: .72rem;
-        color: #637381;
-        font-weight: 600;
+        font-size: .68rem;
+        color: #6b7280;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .04em;
+        letter-spacing: .06em;
+        margin-bottom: .2rem;
     }
     .kpi-card .kpi-value {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #1B4D3E;
+        font-size: 2rem;
+        font-weight: 800;
+        color: #111827;
         line-height: 1.1;
     }
     .kpi-card .kpi-sub {
-        font-size: .72rem;
+        font-size: .7rem;
         color: #9ca3af;
-        margin-top: .15rem;
+        margin-top: .2rem;
     }
+
+    /* ── Section titles ── */
     .section-title {
-        font-size: 1rem;
+        font-size: .92rem;
         font-weight: 700;
         color: #1B4D3E;
-        margin: 1.4rem 0 .4rem;
-        border-left: 4px solid #1B4D3E;
-        padding-left: .5rem;
+        margin: 1.6rem 0 .55rem;
+        display: flex;
+        align-items: center;
+        gap: .4rem;
     }
-    #kpi-container { min-height: 200px; }
+    .section-title::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, #1B4D3E44, transparent);
+        margin-left: .3rem;
+    }
+    .section-title i { font-size: 1rem; }
+
+    /* ── Gráficos ── */
+    .chart-card {
+        border: none;
+        border-radius: 14px;
+        box-shadow: 0 3px 16px rgba(0,0,0,.09);
+        height: 100%;
+        background: #fff;
+        transition: box-shadow .18s;
+    }
+    .chart-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.13); }
+    .chart-card .card-header {
+        background: #fff;
+        border-bottom: 1px solid #f0f0f0;
+        border-radius: 14px 14px 0 0 !important;
+        padding: .7rem 1rem .55rem;
+    }
+    .chart-card .card-body {
+        background: #fff;
+        border-radius: 0 0 14px 14px;
+        padding: .75rem;
+    }
+
+    /* ── Tablas ── */
+    .table-corporate thead th {
+        background: #1B4D3E;
+        color: #fff;
+        font-size: .75rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        border: none;
+    }
+    .table-corporate tbody tr:hover { background: #f0f7f4; }
+    .table-corporate tfoot td {
+        font-size: .78rem;
+    }
 </style>
 }
 
@@ -133,6 +188,26 @@
                 <option value="O">Obreros</option>
                 <option value="E">Empleados</option>
             </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Áreas</label>
+            <div class="dropdown" id="dropdownAreas">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                        id="btnAreas" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        aria-expanded="false" style="min-width:260px; text-align:left;">
+                    <span id="lblAreas">Todas las áreas</span>
+                </button>
+                <div class="dropdown-menu p-2" id="menuAreas" style="min-width:300px; max-height:360px; overflow-y:auto;">
+                    <div class="mb-1">
+                        <button type="button" class="btn btn-xs btn-link p-0 me-2 small" onclick="seleccionarTodasAreas(true)">Todas</button>
+                        <button type="button" class="btn btn-xs btn-link p-0 small" onclick="seleccionarTodasAreas(false)">Ninguna</button>
+                    </div>
+                    <hr class="my-1">
+                    <div id="listaAreas">
+                        <span class="text-muted small">Cargando...</span>
+                    </div>
+                </div>
+            </div>
         </div>
         <button type="submit" class="btn btn-sm btn-success">
             <i class="bi bi-arrow-clockwise me-1"></i>Consultar
@@ -365,12 +440,79 @@
         cargarKpi();
     });
 
+    // Recargar la lista de áreas al cambiar tipo (sin borrar la consulta actual)
+    document.getElementById('tipo').addEventListener('change', function () {
+        areasYaCargadas = false;
+        cargarListaAreas();
+    });
+
+    // Cargar áreas la primera vez que se abre el dropdown
+    let areasYaCargadas = false;
+    document.getElementById('dropdownAreas').addEventListener('show.bs.dropdown', function () {
+        if (!areasYaCargadas) cargarListaAreas();
+    });
+
+    function obtenerAreasSeleccionadas() {
+        return [...document.querySelectorAll('#listaAreas input[type=checkbox]:checked')]
+            .map(cb => cb.value);
+    }
+
+    function actualizarEtiquetaAreas() {
+        const total = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        const sel   = document.querySelectorAll('#listaAreas input[type=checkbox]:checked').length;
+        document.getElementById('lblAreas').textContent =
+            total === 0 ? 'Todas las áreas' :
+            sel === total ? 'Todas las áreas' :
+            sel === 0 ? 'Sin áreas' :
+            sel === 1 ? document.querySelector('#listaAreas input[type=checkbox]:checked')?.closest('label')?.textContent?.trim() ?? '1 área' :
+            `${sel} áreas seleccionadas`;
+    }
+
+    function seleccionarTodasAreas(estado) {
+        document.querySelectorAll('#listaAreas input[type=checkbox]').forEach(cb => cb.checked = estado);
+        actualizarEtiquetaAreas();
+    }
+
+    function cargarListaAreas() {
+        const anoIni = document.getElementById('anoIni').value;
+        const mesIni = document.getElementById('mesIni').value;
+        const anoFin = document.getElementById('anoFin').value;
+        const mesFin = document.getElementById('mesFin').value;
+        const tipo   = document.getElementById('tipo').value;
+        const lista  = document.getElementById('listaAreas');
+        lista.innerHTML = '<span class="text-muted small">Cargando...</span>';
+        fetch(`/RecursosHumanos/HorasExtras/Areas?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${tipo}`)
+            .then(r => r.json())
+            .then(areas => {
+                if (!areas || areas.length === 0) {
+                    lista.innerHTML = '<span class="text-muted small">Sin áreas disponibles</span>';
+                    return;
+                }
+                lista.innerHTML = areas.map(a => `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="${a}" id="area_${CSS.escape(a)}" checked
+                               onchange="actualizarEtiquetaAreas()">
+                        <label class="form-check-label small" for="area_${CSS.escape(a)}">${a}</label>
+                    </div>`).join('');
+                actualizarEtiquetaAreas();
+                areasYaCargadas = true;
+            })
+            .catch(() => { lista.innerHTML = '<span class="text-muted small">Error al cargar áreas</span>'; });
+    }
+
     function cargarKpi() {
         const anoIni = document.getElementById('anoIni').value;
         const mesIni = document.getElementById('mesIni').value;
         const anoFin = document.getElementById('anoFin').value;
         const mesFin = document.getElementById('mesFin').value;
         const tipo   = document.getElementById('tipo').value;
+        const areasSeleccionadas = obtenerAreasSeleccionadas();
+        const totalAreas = document.querySelectorAll('#listaAreas input[type=checkbox]').length;
+        // Si todas están marcadas (o ninguna cargada aún) no filtrar por área
+        const areasParam = (areasSeleccionadas.length > 0 && areasSeleccionadas.length < totalAreas)
+            ? areasSeleccionadas.map(a => `areas=${encodeURIComponent(a)}`).join('&')
+            : '';
+        const url = `/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${tipo}${areasParam ? '&' + areasParam : ''}`;
 
         const container = document.getElementById('kpi-container');
         container.innerHTML = `
@@ -379,7 +521,7 @@
                 <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
             </div>`;
 
-        fetch(`/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${tipo}`, { noLoading: true })
+        fetch(url, { noLoading: true })
             .then(r => {
                 if (!r.ok) throw new Error('Error ' + r.status);
                 return r.text();
@@ -464,6 +606,196 @@
                 },
                 options: { ...baseOpts, plugins: { ...baseOpts.plugins,
                     tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 2 })} h` } } } }
+            });
+        }
+
+        // ── Gráfico 3: Eje X = meses, datasets = años, valor = suma de todas las áreas ──
+        const ctxComp = document.getElementById('chartBarComparativo');
+        if (ctxComp) {
+            // Años únicos ordenados
+            const anosUnicos = [...new Set(periodos.map(p => p.split('-')[0]))].sort();
+
+            // Meses únicos que aparecen en los datos (puede variar por año), ordenados 1-12
+            const mesesUnicos = [...new Set(periodos.map(p => +p.split('-')[1]))].sort((a, b) => a - b);
+
+            // Sumar todas las áreas por año-mes
+            const sumaPorPeriodo = {};
+            const trabPorPeriodo = {};
+            rows.forEach(r => {
+                const key = `${r.ano}-${r.mes}`;
+                sumaPorPeriodo[key] = (sumaPorPeriodo[key] || 0) + r.total;
+                trabPorPeriodo[key] = (trabPorPeriodo[key] || 0) + (r.trab || 0);
+            });
+
+            // Paleta: un color base por año, tonos más claros si hubiera más datasets
+            const COLORES_ANO = ['#1B4D3E','#1565C0','#B71C1C','#E65100','#4A148C','#00695C','#F9A825'];
+
+            const datasetsComp = anosUnicos.map((ano, i) => ({
+                label: String(ano),
+                data: mesesUnicos.map(m => {
+                    const key = `${ano}-${m}`;
+                    return Math.round((sumaPorPeriodo[key] || 0) * 10) / 10;
+                }),
+                _trab: mesesUnicos.map(m => {
+                    const key = `${ano}-${m}`;
+                    return trabPorPeriodo[key] || 0;
+                }),
+                backgroundColor: COLORES_ANO[i % COLORES_ANO.length],
+                borderRadius: 4,
+                borderSkipped: false
+            }));
+
+            new Chart(ctxComp.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: mesesUnicos.map(m => meses[m]),
+                    datasets: datasetsComp
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 48 } },
+                    clip: false,
+                    plugins: {
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'end',
+                            offset: 2,
+                            color: '#374151',
+                            font: { size: 9, weight: 'bold' },
+                            formatter: (v, ctx) => {
+                                if (v == null || v === 0) return '';
+                                const trab = ctx.dataset._trab ? ctx.dataset._trab[ctx.dataIndex] : null;
+                                const he = v.toLocaleString('es-PE', { maximumFractionDigits: 0 });
+                                return trab ? `${he}\n👥${trab}` : he;
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { boxWidth: 16, font: { size: 12, weight: 'bold' } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: c => {
+                                    const trab = c.dataset._trab ? c.dataset._trab[c.dataIndex] : null;
+                                    const he = ` ${c.dataset.label}: ${c.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 1 })} h`;
+                                    return trab ? [he, `   👥 Trabajadores: ${trab}`] : he;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { font: { size: 11 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0,0,0,.06)' },
+                            ticks: { callback: v => v.toLocaleString('es-PE') }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── Gráfico 4:
+        // Cada barra muestra el área con mayor HE en ese mes-año (nombre en tooltip)
+        const ctxTop = document.getElementById('chartTopAreas');
+        if (ctxTop) {
+            const anosUnicosT = [...new Set(periodos.map(p => p.split('-')[0]))].sort();
+            const mesesUnicosT = [...new Set(periodos.map(p => +p.split('-')[1]))].sort((a, b) => a - b);
+            const COLORES_ANO = ['#1B4D3E','#1565C0','#B71C1C','#E65100','#4A148C','#00695C','#F9A825'];
+
+            // Para cada año-mes, encontrar el área con mayor total
+            const topAreaPorPeriodo = {};
+            periodos.forEach(p => {
+                const [ano, mes] = p.split('-');
+                const filasDelPeriodo = rows.filter(r => String(r.ano) === ano && String(r.mes) === mes);
+                if (filasDelPeriodo.length === 0) return;
+                const top = filasDelPeriodo.reduce((best, r) => r.total > best.total ? r : best);
+                topAreaPorPeriodo[p] = { area: top.area, total: top.total, trab: top.trab || 0 };
+            });
+
+            const datasetsTop = anosUnicosT.map((ano, i) => ({
+                label: String(ano),
+                data: mesesUnicosT.map(m => {
+                    const key = `${ano}-${m}`;
+                    return topAreaPorPeriodo[key] ? Math.round(topAreaPorPeriodo[key].total * 10) / 10 : null;
+                }),
+                _areas: mesesUnicosT.map(m => {
+                    const key = `${ano}-${m}`;
+                    return topAreaPorPeriodo[key] ? topAreaPorPeriodo[key].area : '';
+                }),
+                _trab: mesesUnicosT.map(m => {
+                    const key = `${ano}-${m}`;
+                    return topAreaPorPeriodo[key] ? topAreaPorPeriodo[key].trab : 0;
+                }),
+                backgroundColor: COLORES_ANO[i % COLORES_ANO.length],
+                borderRadius: 4,
+                borderSkipped: false
+            }));
+
+            new Chart(ctxTop.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: mesesUnicosT.map(m => meses[m]),
+                    datasets: datasetsTop
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 48 } },
+                    clip: false,
+                    plugins: {
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'end',
+                            offset: 2,
+                            color: '#374151',
+                            font: { size: 9, weight: 'bold' },
+                            formatter: (v, ctx) => {
+                                if (v == null) return '';
+                                const area = ctx.dataset._areas[ctx.dataIndex] || '';
+                                const trab = ctx.dataset._trab ? ctx.dataset._trab[ctx.dataIndex] : null;
+                                const short = area.length > 12 ? area.substring(0, 12) + '…' : area;
+                                const he = v.toLocaleString('es-PE', { maximumFractionDigits: 0 });
+                                return trab ? `${short}\n${he} | 👥${trab}` : `${short}\n${he}`;
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { boxWidth: 16, font: { size: 12, weight: 'bold' } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: c => {
+                                    const area = c.dataset._areas[c.dataIndex] || '';
+                                    const trab = c.dataset._trab ? c.dataset._trab[c.dataIndex] : null;
+                                    const val = c.parsed.y != null ? c.parsed.y.toLocaleString('es-PE', { minimumFractionDigits: 1 }) : '—';
+                                    const lines = [` ${c.dataset.label} — ${area}: ${val} h`];
+                                    if (trab) lines.push(`   👥 Trabajadores del área: ${trab}`);
+                                    return lines;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { font: { size: 11 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0,0,0,.06)' },
+                            ticks: { callback: v => v.toLocaleString('es-PE') }
+                        }
+                    }
+                }
             });
         }
     }

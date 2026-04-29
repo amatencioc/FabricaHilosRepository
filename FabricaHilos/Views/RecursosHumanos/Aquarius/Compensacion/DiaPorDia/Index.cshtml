@@ -368,10 +368,31 @@
     </div>
 </div>
 
+<!-- ── Modal Detalle Horas Empleado ──────────────────────────────────── -->
+<div class="modal fade" id="modalDetalleHoras" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:var(--cp)">
+                <h6 class="modal-title text-white"><i class="bi bi-table me-2"></i>Detalle de Horas Disponibles</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalDetalleHorasBody">
+                <div class="text-center py-4"><div class="spinner-border text-success"></div></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
 const URL_BASE = '/RecursosHumanos/Aquarius/CompensacionDiaDia';
 
+// Guarda las fechas de horas usadas en la última búsqueda (para el drill-down)
+let _lastFechaHorasIni = null;
+let _lastFechaHorasFin = null;
 let previewData          = [];
 let txAbierta            = false;
 let codigosSeleccionados = [];
@@ -457,6 +478,10 @@ async function buscarEmpleados(pagina, esNuevaBusqueda) {
     if (!horasDesde) { horasDesde = desde; document.getElementById('horasDesde').value = desde; }
     if (!horasHasta) { horasHasta = hasta; document.getElementById('horasHasta').value = hasta; }
 
+    // Guardar para el drill-down de detalle horas
+    _lastFechaHorasIni = isoADdMmYyyy(horasDesde);
+    _lastFechaHorasFin = isoADdMmYyyy(horasHasta);
+
     // Limpiar selección solo cuando es una búsqueda nueva explícita
     if (esNuevaBusqueda) seleccionEmp = {};
 
@@ -538,7 +563,11 @@ function renderEmpleados(data) {
             <td class="text-end">
               ${r.minBanco > 0 ? `<span class="badge rounded-pill badge-banco">${r.horasBanco}</span>` : '<span class="text-muted">—</span>'}
             </td>
-            <td class="text-end fw-bold">${r.horasTotal ?? '00:00'}</td>
+            <td class="text-end fw-bold">
+              ${r.minTotal > 0
+                ? `<span class="badge bg-success" style="cursor:pointer;" title="Ver detalle por día" onclick="verDetalleHoras('${r.codPersonal ?? ''}','${r.nombreCompleto ?? ''}')">${r.horasTotal ?? '00:00'} <i class="bi bi-zoom-in ms-1"></i></span>`
+                : `<span class="text-muted">—</span>`}
+            </td>
           </tr>`);
     });
 
@@ -816,6 +845,76 @@ function renderResultados(data) {
     document.getElementById('areaResultados').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ── DETALLE HORAS EMPLEADO (drill-down desde TOTAL DISP.) ──────────────────────────────
+
+async function verDetalleHoras(codPersonal, nombreCompleto) {
+    if (!_lastFechaHorasIni || !_lastFechaHorasFin) {
+        await msgModal('Aviso', '<p>Realice primero una búsqueda para cargar el rango de horas.</p>');
+        return;
+    }
+    const body = document.getElementById('modalDetalleHorasBody');
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success"></div></div>';
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalleHoras'));
+    modal.show();
+
+    try {
+        const params = new URLSearchParams({
+            codPersonal,
+            fechaHorasInicio: _lastFechaHorasIni,
+            fechaHorasFin:    _lastFechaHorasFin
+        });
+        const res  = await fetch(`${URL_BASE}/DetalleHorasEmpleado?${params}`);
+        const json = await res.json();
+        if (!json.ok || !json.data?.length) {
+            body.innerHTML = '<p class="text-muted text-center py-3">Sin datos para el rango indicado.</p>';
+            return;
+        }
+
+        let html = `<p class="small fw-semibold mb-2">${nombreCompleto} &mdash; <span class="text-muted">${_lastFechaHorasIni} al ${_lastFechaHorasFin}</span></p>`;
+        html += '<div class="table-responsive">';
+        html += '<table class="table table-sm table-hover table-bordered small mb-0">';
+        html += '<thead style="background:var(--cp);color:#fff;"><tr>';
+        html += '<th>Fecha</th><th>Día</th>';
+        html += '<th class="text-end">HH.Extra</th>';
+        html += '<th class="text-end">HH.Dobles</th>';
+        html += '<th class="text-end">HH.Banco</th>';
+        html += '<th class="text-end">Total</th>';
+        html += '</tr></thead><tbody>';
+
+        json.data.forEach(r => {
+            const ecBadge = r.alerta06 === 'EC' ? ' <span class="badge bg-warning text-dark" title="Extras/Banco consumidos">EC</span>' : '';
+            const dcBadge = r.alerta08 === 'DC' ? ' <span class="badge bg-warning text-dark" title="Dobles consumidas">DC</span>' : '';
+            html += '<tr>';
+            html += `<td>${r.fechamarStr ?? ''}</td>`;
+            html += `<td><span class="badge bg-secondary">${r.diaSemana ?? ''}</span></td>`;
+            html += `<td class="text-end">${r.minHe    > 0 ? `<span class="badge rounded-pill badge-he">${r.horasHe}</span>${ecBadge}`    : '—'}</td>`;
+            html += `<td class="text-end">${r.minDobles > 0 ? `<span class="badge rounded-pill badge-dobles">${r.horasDobles}</span>${dcBadge}` : '—'}</td>`;
+            html += `<td class="text-end">${r.minBanco > 0 ? `<span class="badge rounded-pill badge-banco">${r.horasBanco}</span>`          : '—'}</td>`;
+            html += `<td class="text-end fw-bold">${r.horasTotal ?? '00:00'}</td>`;
+            html += '</tr>';
+        });
+
+        // Fila de totales
+        const totHe     = json.data.reduce((s, r) => s + (r.minHe     ?? 0), 0);
+        const totDobles = json.data.reduce((s, r) => s + (r.minDobles ?? 0), 0);
+        const totBanco  = json.data.reduce((s, r) => s + (r.minBanco  ?? 0), 0);
+        const totTotal  = json.data.reduce((s, r) => s + (r.minTotal  ?? 0), 0);
+        const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+        html += `<tr class="fw-bold" style="background:#f0f0ec;">`;
+        html += `<td colspan="2">TOTAL</td>`;
+        html += `<td class="text-end">${totHe     > 0 ? fmt(totHe)     : '—'}</td>`;
+        html += `<td class="text-end">${totDobles > 0 ? fmt(totDobles) : '—'}</td>`;
+        html += `<td class="text-end">${totBanco  > 0 ? fmt(totBanco)  : '—'}</td>`;
+        html += `<td class="text-end">${fmt(totTotal)}</td>`;
+        html += '</tr>';
+
+        html += '</tbody></table></div>';
+        body.innerHTML = html;
+    } catch (e) {
+        body.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    }
+}
+
 // ── PASO 4: COMMIT / ROLLBACK ─────────────────────────────────────────────
 
 async function hacerCommit() {
@@ -843,7 +942,7 @@ async function hacerCommit() {
 async function mostrarResumenPostCommit() {
     if (!_lastRegistro?.idEvento) {
         await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
-        _limpiar();
+        _limpiarYRecargar();
         return;
     }
     try {
@@ -851,7 +950,7 @@ async function mostrarResumenPostCommit() {
         const json = await res.json();
         if (!json.ok || !json.data?.length) {
             await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
-            _limpiar();
+            _limpiarYRecargar();
             return;
         }
 
@@ -897,11 +996,11 @@ async function mostrarResumenPostCommit() {
 
         document.getElementById('modalResumenBody').innerHTML = html;
         const modalEl = document.getElementById('modalResumen');
-        modalEl.addEventListener('hidden.bs.modal', () => _limpiar(), { once: true });
+        modalEl.addEventListener('hidden.bs.modal', () => _limpiarYRecargar(), { once: true });
         new bootstrap.Modal(modalEl).show();
     } catch {
         await msgModal('✅ Éxito', '<p>Compensaciones confirmadas y guardadas correctamente.</p>');
-        _limpiar();
+        _limpiarYRecargar();
     }
 }
 
@@ -1023,6 +1122,11 @@ function _limpiar() {
     document.getElementById('btnRegistrar').disabled = true;
     document.getElementById('btnCalcularSeleccion').disabled = true;
     actualizarPaginacion();
+}
+
+function _limpiarYRecargar() {
+    _limpiar();
+    buscarEmpleados(1, true);
 }
 
 function setBusy(id, busy, labelHtml) {

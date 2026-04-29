@@ -33,41 +33,15 @@ namespace FabricaHilos.Controllers.Ventas
                 });
             }
 
-            if (menus.VentasIndicadoresComerciales)
+            if (menus.VentasIndicadorComercialMaestro)
             {
                 modulos.Add(new SgcModuloDto
                 {
-                    Nombre = "Indicadores Comerciales",
-                    Descripcion = "Dashboard de indicadores: importe, KG y clientes por asesor y mes.",
-                    Icono = "bi-bar-chart-line",
+                    Nombre = "Indicador Comercial Maestro",
+                    Descripcion = "Análisis de importe y KG por asesor con gráficos de barras y cuadros comparativos mensuales.",
+                    Icono = "bi-graph-up",
                     ColorClase = "text-success",
-                    Controller = "IndicadoresComerciales",
-                    Action = "Index"
-                });
-            }
-
-            if (menus.VentasVentasPorMercado)
-            {
-                modulos.Add(new SgcModuloDto
-                {
-                    Nombre = "Ventas por Mercado",
-                    Descripcion = "Distribución de ventas por mercado geográfico: Perú, LATAM y Global.",
-                    Icono = "bi-globe-americas",
-                    ColorClase = "text-info",
-                    Controller = "VentasPorMercado",
-                    Action = "Index"
-                });
-            }
-
-            if (menus.VentasDashboardComercial)
-            {
-                modulos.Add(new SgcModuloDto
-                {
-                    Nombre = "Dashboard Comercial",
-                    Descripcion = "Seguimiento de ventas y metas comerciales por asesor y período.",
-                    Icono = "bi-graph-up-arrow",
-                    ColorClase = "text-warning",
-                    Controller = "DashboardComercial",
+                    Controller = "IndicadorComercialMaestro",
                     Action = "Index"
                 });
             }

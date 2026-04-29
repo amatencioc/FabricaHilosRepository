@@ -1,0 +1,447 @@
+@{
+    ViewData["Title"] = "Indicador Comercial Maestro";
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.2rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .9rem .65rem;
+        line-height: 1.55;
+    }
+    .table-pivot th, .table-pivot td {
+        font-size: .78rem;
+        white-space: nowrap;
+    }
+    .table-pivot thead th {
+        background: #1B4D3E;
+        color: #fff;
+        font-weight: 600;
+    }
+    .table-pivot tfoot td {
+        background: #e8f0e9;
+        font-weight: 700;
+        border-top: 2px solid #1B4D3E;
+    }
+    .table-pivot tbody tr:hover { background: #f0f7f4; }
+    .chart-spinner {
+        position: absolute;
+        inset: 0;
+        background: rgba(255,255,255,.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        z-index: 10;
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Ventas" asp-action="Index">Ventas</a></li>
+    <li class="breadcrumb-item active">Indicador Comercial Maestro</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────── -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:135px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Moneda</label>
+            <select id="moneda" class="form-select form-select-sm" style="min-width:110px">
+                <option value="D" selected>Dólares (USD)</option>
+                <option value="S">Soles (PEN)</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+</div>
+
+<!-- ── Sección 1: Indicador de Importe ─────────────────────── -->
+<div class="section-title"><i class="bi bi-currency-dollar me-1"></i>Indicador de Importe (S/. &amp; $)</div>
+<p class="report-desc">Importe de ventas por asesor agrupado por mes. Barras verticales por asesor; eje X = meses del período.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div id="spinnerImporteChart" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">IMPORTE (S/. &amp; $) POR ASESOR — Gráfico de barras verticales</div>
+            <div class="card-body" style="height:440px;">
+                <canvas id="chartImporteAsesor"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div id="spinnerImporteTabla" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Suma de IMPORTE | MESES ▼</div>
+            <div class="card-body p-2" style="overflow-x:auto; max-height:460px; overflow-y:auto;">
+                <table class="table table-sm table-hover table-pivot align-middle mb-0" id="tablaImporte">
+                    <thead><tr><th>ASESOR</th></tr></thead>
+                    <tbody></tbody>
+                    <tfoot><tr><td>Total general</td></tr></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Sección 2: Indicador de Cantidad (KG) ───────────────── -->
+<div class="section-title"><i class="bi bi-box-seam me-1"></i>Indicador de Cantidad (KG)</div>
+<p class="report-desc">Kilogramos vendidos por asesor agrupados por mes. Barras verticales por asesor; eje X = meses del período.</p>
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card chart-card position-relative">
+            <div id="spinnerKgChart" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">CANTIDAD (KG) POR ASESOR — Gráfico de barras verticales</div>
+            <div class="card-body" style="height:440px;">
+                <canvas id="chartKgAsesor"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div id="spinnerKgTabla" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+            <div class="card-header small">Suma de CANTIDAD (KG) | MESES ▼</div>
+            <div class="card-body p-2" style="overflow-x:auto; max-height:460px; overflow-y:auto;">
+                <table class="table table-sm table-hover table-pivot align-middle mb-0" id="tablaKg">
+                    <thead><tr><th>ASESOR</th></tr></thead>
+                    <tbody></tbody>
+                    <tfoot><tr><td>Total general</td></tr></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+(function () {
+    'use strict';
+
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'Segoe UI','Helvetica Neue',Arial,sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    /* ── Paleta estable por asesor ─────────────────── */
+    const COLORS = [
+        '#1B4D3E','#1565C0','#2e7d32','#e65100','#6a1b9a',
+        '#00838f','#c62828','#4e342e','#37474f','#f9a825',
+        '#00695c','#ad1457','#283593','#ef6c00','#2e7d5e'
+    ];
+    const _colorAsesor = {};
+    function getColor(asesor) {
+        if (!_colorAsesor[asesor]) {
+            _colorAsesor[asesor] = COLORS[Object.keys(_colorAsesor).length % COLORS.length];
+        }
+        return _colorAsesor[asesor];
+    }
+    function initColorMap(asesores) {
+        asesores.slice().sort().forEach(a => getColor(a));
+    }
+
+    /* ── Formato ────────────────────────────────────── */
+    const fmtPE  = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    const fmtPE0 = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
+    function fmtMil(n) {
+        n = n || 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return fmtPE.format(n);
+    }
+
+    /* ── Instancias charts ──────────────────────────── */
+    const charts = {};
+    function destroyChart(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+
+    /* ── Fechas por defecto ─────────────────────────── */
+    function setDefaultDates() {
+        const hoy = new Date();
+        const ini = new Date(hoy.getFullYear(), 0, 1);
+        const toISO = d => d.toISOString().slice(0, 10);
+        document.getElementById('fechaInicio').value = toISO(ini);
+        document.getElementById('fechaFin').value    = toISO(hoy);
+    }
+
+    /* ── Parámetros ─────────────────────────────────── */
+    function buildParams() {
+        const fi  = document.getElementById('fechaInicio').value;
+        const ff  = document.getElementById('fechaFin').value;
+        const mon = document.getElementById('moneda').value;
+        const p   = new URLSearchParams();
+        if (fi)  p.set('fechaInicio', fi);
+        if (ff)  p.set('fechaFin',    ff);
+        if (mon) p.set('moneda',      mon);
+        return p;
+    }
+
+    /* ── Spinners por chart ─────────────────────────── */
+    function showSpinners(v) {
+        ['spinnerImporteChart','spinnerImporteTabla','spinnerKgChart','spinnerKgTabla'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = v ? 'flex' : 'none';
+        });
+    }
+
+    /* ── Ordenar meses ──────────────────────────────── */
+    function sortMeses(meses) {
+        return meses.slice().sort();
+    }
+
+    /* ── Etiqueta completa de mes ───────────────────── */
+    const MESES_ES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    function labelMes(yyyymm) {
+        if (!yyyymm) return yyyymm;
+        const parts = yyyymm.split('/');
+        return MESES_ES[+parts[1]] || yyyymm;
+    }
+
+    /* ══════════════════════════════════════════════════
+       RENDER CHART + TABLA PIVOT — función genérica
+       Parámetros:
+         rows      : [{asesor, mes, valor}]
+         chartId   : id del canvas
+         tableId   : id de la tabla
+         monLabel  : prefijo moneda para tooltip ('S/' | 'USD' | 'KG')
+         isKg      : bool — cambia formato
+    ══════════════════════════════════════════════════ */
+    function renderIndicador(rows, chartId, tableId, monLabel, isKg) {
+        if (!rows || rows.length === 0) return;
+
+        const asesores = [...new Set(rows.map(r => r.asesor || 'Sin Asesor'))].sort();
+        const meses    = sortMeses([...new Set(rows.map(r => r.mes))]);
+
+        initColorMap(asesores);
+
+        /* ── Datasets: un dataset por ASESOR, labels = MESES ─ */
+        const datasets = asesores.map(asesor => ({
+            label: asesor,
+            data: meses.map(m => {
+                const r = rows.find(x => (x.asesor || 'Sin Asesor') === asesor && x.mes === m);
+                return r ? (isKg ? r.cantidadKg : r.importe) : 0;
+            }),
+            backgroundColor: getColor(asesor) + 'CC',
+            borderColor:     getColor(asesor),
+            borderWidth: 1,
+            borderRadius: 4,
+            borderSkipped: false
+        }));
+
+        /* ── Chart ─────────────────────────────────────────── */
+        destroyChart(chartId);
+        const ctx = document.getElementById(chartId);
+        if (ctx) {
+            charts[chartId] = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: meses.map(labelMes),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 30 } },
+                    clip: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'right',
+                            labels: {
+                                boxWidth: 13,
+                                font: { size: 12, weight: '600', family: "'Segoe UI', Arial, sans-serif" },
+                                padding: 12,
+                                generateLabels: function(chart) {
+                                    return chart.data.datasets.map((ds, i) => ({
+                                        text: ds.label.toUpperCase(),
+                                        fillStyle: ds.borderColor,
+                                        strokeStyle: ds.borderColor,
+                                        lineWidth: 0,
+                                        hidden: !chart.isDatasetVisible(i),
+                                        datasetIndex: i
+                                    }));
+                                }
+                            }
+                        },
+                        datalabels: {
+                            display: function(ctx) {
+                                return ctx.dataset.data[ctx.dataIndex] > 0;
+                            },
+                            anchor: 'end', align: 'top',
+                            color: function(ctx) { return getColor(ctx.dataset.label); },
+                            font: { size: 11, weight: '700', family: "'Segoe UI', Arial, sans-serif" },
+                            textStrokeColor: 'rgba(255,255,255,.8)',
+                            textStrokeWidth: 3,
+                            formatter: function(v, ctx) {
+                                return isKg ? fmtPE.format(v) : (monLabel + ' ' + fmtMil(v));
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: c => {
+                                    const v = c.raw || 0;
+                                    return isKg
+                                        ? ` ${c.dataset.label}: ${fmtPE.format(v)} KG`
+                                        : ` ${c.dataset.label}: ${monLabel} ${fmtPE.format(v)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { font: { size: 11, weight: '600' } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: v => isKg ? fmtPE.format(v) : fmtMil(v),
+                                font: { size: 10 }
+                            },
+                            grid: { color: 'rgba(0,0,0,.06)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        /* ── Tabla pivot: filas=asesores, columnas=meses ───── */
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        const monLabel2 = isKg ? '' : (monLabel + ' ');
+
+        // Cabecera
+        const thead = table.querySelector('thead tr');
+        thead.innerHTML = '<th>ASESOR</th>';
+        meses.forEach(m => {
+            const th = document.createElement('th');
+            th.className = 'text-end';
+            th.textContent = labelMes(m).toUpperCase();
+            thead.appendChild(th);
+        });
+        const thTot = document.createElement('th');
+        thTot.className = 'text-end';
+        thTot.textContent = 'Total general';
+        thead.appendChild(thTot);
+
+        // Cuerpo
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+
+        const totalesMes = {};
+        meses.forEach(m => { totalesMes[m] = 0; });
+        let granTotal = 0;
+
+        asesores.forEach(asesor => {
+            const tr = document.createElement('tr');
+            let rowTotal = 0;
+            let tdAsesor = `<td class="fw-semibold">${asesor}</td>`;
+            let tdsMes = '';
+            meses.forEach(m => {
+                const r = rows.find(x => (x.asesor || 'Sin Asesor') === asesor && x.mes === m);
+                const v = r ? (isKg ? r.cantidadKg : r.importe) : 0;
+                rowTotal += v;
+                totalesMes[m] = (totalesMes[m] || 0) + v;
+                tdsMes += `<td class="text-end">${v > 0 ? monLabel2 + fmtPE.format(v) : '—'}</td>`;
+            });
+            granTotal += rowTotal;
+            tr.innerHTML = tdAsesor + tdsMes + `<td class="text-end fw-semibold" style="background:#edf7f2;">${monLabel2}${fmtPE.format(rowTotal)}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        // Pie
+        const tfoot = table.querySelector('tfoot tr');
+        tfoot.innerHTML = '<td class="fw-bold">Total general</td>';
+        meses.forEach(m => {
+            const td = document.createElement('td');
+            td.className = 'text-end';
+            td.innerHTML = `<strong>${monLabel2}${fmtPE.format(totalesMes[m] || 0)}</strong>`;
+            tfoot.appendChild(td);
+        });
+        const tdGran = document.createElement('td');
+        tdGran.className = 'text-end';
+        tdGran.innerHTML = `<strong>${monLabel2}${fmtPE.format(granTotal)}</strong>`;
+        tfoot.appendChild(tdGran);
+    }
+
+    /* ══════════════════════════════════════════════════
+       CARGA PRINCIPAL — un solo fetch a DatosTodos
+    ══════════════════════════════════════════════════ */
+    async function loadAll() {
+        showSpinners(true);
+        const params  = buildParams();
+        const moneda  = document.getElementById('moneda').value;
+        const monLabel = moneda === 'S' ? 'S/' : 'USD';
+
+        try {
+            const data = await fetch('/IndicadorComercialMaestro/DatosTodos?' + params).then(r => r.json());
+
+            renderIndicador(data.importe,  'chartImporteAsesor', 'tablaImporte', monLabel, false);
+            renderIndicador(data.kg,       'chartKgAsesor',      'tablaKg',      'KG',     true);
+        } catch (e) {
+            console.error('Error al cargar datos:', e);
+        } finally {
+            showSpinners(false);
+        }
+    }
+
+    window.loadAll      = loadAll;
+    window.clearFilters = function () { setDefaultDates(); loadAll(); };
+
+    /* ── Al cambiar moneda recargar solo importe ────── */
+    document.getElementById('moneda').addEventListener('change', loadAll);
+
+    /* ── Init ───────────────────────────────────────── */
+    setDefaultDates();
+    loadAll();
+}());
+</script>
+}

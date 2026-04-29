@@ -216,6 +216,30 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             }
         }
 
+        // ── DETALLE HORAS EMPLEADO (GET, devuelve JSON) ───────────────────────
+
+        [HttpGet("DetalleHorasEmpleado")]
+        public async Task<IActionResult> DetalleHorasEmpleado(
+            string codPersonal,
+            string fechaHorasInicio,
+            string fechaHorasFin)
+        {
+            try
+            {
+                var resultado = await _service.DetalleHorasEmpleadoAsync(
+                    CodEmpresaAquarius,
+                    codPersonal,
+                    fechaHorasInicio,
+                    fechaHorasFin);
+                return Json(new { ok = true, data = resultado });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en DetalleHorasEmpleado cod={Cod}", codPersonal);
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
         // ── CONSULTAR RANGO (GET, devuelve JSON) ──────────────────────────────
 
         [HttpGet("ConsultarRango")]

@@ -5,7 +5,8 @@ namespace FabricaHilos.Services.RecursosHumanos;
 
 public interface IHorasExtrasService
 {
-    Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T");
+    Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T", IEnumerable<string>? areas = null);
+    Task<List<string>> ObtenerAreasAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T");
 }
 
 public class HorasExtrasService : IHorasExtrasService
@@ -122,8 +123,56 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         _logger = logger;
     }
 
-    public async Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
+    public async Task<List<string>> ObtenerAreasAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
     {
+        const string sql = @"
+SELECT DISTINCT Y.DESC_GRAN_CCOSTO AS AREA
+FROM PARAMPLA X,
+     PLANILLA P,
+     INGRE_PLA I,
+     T_CONCEPTO T,
+     PLA_COSTO C,
+     V_CENTRO_DE_COSTOS Y
+WHERE X.ANO BETWEEN :P_ANO_INI AND :P_ANO_FIN
+  AND (
+      (:P_ANO_INI = :P_ANO_FIN AND X.MES BETWEEN :P_MES_INI AND :P_MES_FIN)
+      OR (:P_ANO_INI <> :P_ANO_FIN AND (
+          (X.ANO = :P_ANO_INI AND X.MES BETWEEN 1 AND :P_MES_INI)
+          OR (X.ANO > :P_ANO_INI AND X.ANO < :P_ANO_FIN)
+          OR (X.ANO = :P_ANO_FIN AND X.MES BETWEEN 1 AND :P_MES_FIN)
+      ))
+  )
+  AND X.TIPO_PLA = 'N'
+  AND P.NUM_PLA = X.NUM_PLA
+  AND I.NUM_PLA = P.NUM_PLA
+  AND I.C_CODIGO = P.C_CODIGO
+  AND T.C_ID = I.C_ID
+  AND T.C_EO = I.C_EO
+  AND T.C_CONCEPTO = I.C_CONCEPTO
+  AND T.C_CODRTPS IN ('0107','0105','0106')
+  AND C.NUM_PLA = P.NUM_PLA
+  AND C.C_CODIGO = P.C_CODIGO
+  AND Y.CCOSTO_DET = C.C_COSTO
+  AND (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
+ORDER BY AREA";
+
+        var result = new List<string>();
+        await using var conn = new OracleConnection(_connStr);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin, tipo);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            result.Add(r["AREA"]?.ToString() ?? string.Empty);
+        return result.Where(a => !string.IsNullOrEmpty(a)).ToList();
+    }
+
+    public async Task<HorasExtrasKpiViewModel> ObtenerKpiAsync(int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T", IEnumerable<string>? areas = null)
+    {
+        var areasFiltro = areas?.Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
+        bool filtrarAreas = areasFiltro != null && areasFiltro.Count > 0;
+
         var vm = new HorasExtrasKpiViewModel
         {
             AnoIni = anoIni,
@@ -138,8 +187,11 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         // ── BLOQUE 1 ───────────────────────────────────────────────────
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = SqlResumen;
+            cmd.CommandText = filtrarAreas
+                ? BuildSqlConFiltroAreas(SqlResumen, areasFiltro!)
+                : SqlResumen;
             AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin, tipo);
+            if (filtrarAreas) AgregarParametrosAreas(cmd, areasFiltro!);
 
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -160,8 +212,11 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
         // ── BLOQUE 2 ───────────────────────────────────────────────────
         await using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = SqlDetalle;
+            cmd.CommandText = filtrarAreas
+                ? BuildSqlConFiltroAreas(SqlDetalle, areasFiltro!)
+                : SqlDetalle;
             AgregarParametros(cmd, anoIni, mesIni, anoFin, mesFin, tipo);
+            if (filtrarAreas) AgregarParametrosAreas(cmd, areasFiltro!);
 
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -185,6 +240,39 @@ ORDER BY ANO, MES, TOTAL_SOBRETIEMPO DESC";
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
+
+    // Inyecta un AND AREA IN (:A0,:A1,...) en la cláusula HAVING/WHERE del SELECT externo
+    // Las consultas usan WITH BASE AS (...) SELECT ... FROM BASE GROUP BY ... ORDER BY ...
+    // Insertamos la condición añadiendo un WHERE antes del GROUP BY del SELECT externo
+    private static string BuildSqlConFiltroAreas(string baseSql, List<string> areasFiltro)
+    {
+        var inParams = string.Join(",", areasFiltro.Select((_, i) => $":PAREA{i}"));
+        // Buscar "FROM BASE" y luego el primer GROUP BY después de él
+        int fromBase = baseSql.IndexOf("FROM BASE", StringComparison.OrdinalIgnoreCase);
+        if (fromBase < 0)
+        {
+            // fallback: insertar antes del ORDER BY
+            int lastOrder = baseSql.LastIndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase);
+            return lastOrder < 0
+                ? baseSql + $"\nWHERE AREA IN ({inParams})"
+                : baseSql.Insert(lastOrder, $"WHERE AREA IN ({inParams})\n");
+        }
+        int groupBy = baseSql.IndexOf("GROUP BY", fromBase, StringComparison.OrdinalIgnoreCase);
+        if (groupBy < 0)
+        {
+            int lastOrder = baseSql.LastIndexOf("ORDER BY", StringComparison.OrdinalIgnoreCase);
+            return lastOrder < 0
+                ? baseSql + $"\nWHERE AREA IN ({inParams})"
+                : baseSql.Insert(lastOrder, $"WHERE AREA IN ({inParams})\n");
+        }
+        return baseSql.Insert(groupBy, $"WHERE AREA IN ({inParams})\n");
+    }
+
+    private static void AgregarParametrosAreas(OracleCommand cmd, List<string> areasFiltro)
+    {
+        for (int i = 0; i < areasFiltro.Count; i++)
+            cmd.Parameters.Add(new OracleParameter($"PAREA{i}", OracleDbType.Varchar2) { Value = areasFiltro[i] });
+    }
 
     private static void AgregarParametros(OracleCommand cmd, int anoIni, int mesIni, int anoFin, int mesFin, string tipo = "T")
     {

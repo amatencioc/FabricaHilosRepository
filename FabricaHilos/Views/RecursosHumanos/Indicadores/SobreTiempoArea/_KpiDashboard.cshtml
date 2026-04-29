@@ -12,23 +12,35 @@
 
     // Períodos únicos ordenados
     var periodos = Model.Resumen.OrderBy(r => r.Ano).ThenBy(r => r.Mes).ToList();
-    // Áreas únicas ordenadas por total desc (tomando la suma de todos los períodos)
+    // Áreas únicas ordenadas alfabéticamente
     var areas = Model.Areas
         .GroupBy(a => a.Area)
-        .OrderByDescending(g => g.Sum(x => x.TotalHorasExtras))
+        .OrderBy(g => g.Key)
         .Select(g => g.Key)
         .ToList();
 
     // Totales globales (suma de todos los períodos)
-    decimal gTotalHE   = periodos.Sum(r => r.TotalHorasExtras);
-    int     gTotalTrab = periodos.Sum(r => r.TotalTrabajadores);
-    decimal gPromHE    = gTotalTrab > 0 ? Math.Round(gTotalHE / gTotalTrab, 2) : 0m;
+    decimal gTotalHE      = periodos.Sum(r => r.TotalHorasExtras);
+    int     gTotalTrabSum = periodos.Sum(r => r.TotalTrabajadores);   // para cálculos internos
+    int     gPromTrab     = periodos.Count > 0
+                            ? (int)Math.Round(periodos.Average(r => (double)r.TotalTrabajadores))
+                            : 0;
+    decimal gPromHE    = gTotalTrabSum > 0 ? Math.Round(gTotalHE / gTotalTrabSum, 2) : 0m;
     int     gTrabConHE = periodos.Sum(r => r.TrabajadoresConHe);
-    decimal gPctConHE  = gTotalTrab > 0 ? Math.Round((decimal)gTrabConHE / gTotalTrab * 100, 1) : 0m;
+    decimal gPctConHE  = gTotalTrabSum > 0 ? Math.Round((decimal)gTrabConHE / gTotalTrabSum * 100, 1) : 0m;
 
     // Helper: buscar fila de área en período
     HorasExtrasAreaDto? GetArea(int ano, int mes, string area) =>
         Model.Areas.FirstOrDefault(a => a.Ano == ano && a.Mes == mes && a.Area == area);
+
+    // Paleta suave por año (hasta 5 años) — diccionarios para acceso en todo el archivo
+    var anosUnicos = periodos.Select(p => p.Ano).Distinct().OrderBy(a => a).ToList();
+    string[] _bgRow    = ["#eaf4f0","#eaf0fb","#fdf3e7","#fce8e8","#f3eafd"];
+    string[] _bgHeader = ["#c8e6da","#c5d9f7","#fde8c8","#fac5c5","#dfc8f7"];
+    string[] _border   = ["#1B4D3E","#1565C0","#e65100","#c62828","#6a1b9a"];
+    var yearBgRowMap    = anosUnicos.Select((ano,i) => (ano, c:_bgRow[i%_bgRow.Length])).ToDictionary(x=>x.ano, x=>x.c);
+    var yearBgHeaderMap = anosUnicos.Select((ano,i) => (ano, c:_bgHeader[i%_bgHeader.Length])).ToDictionary(x=>x.ano, x=>x.c);
+    var yearBorderMap   = anosUnicos.Select((ano,i) => (ano, c:_border[i%_border.Length])).ToDictionary(x=>x.ano, x=>x.c);
 
     // JSON para gráficos comparativos
     var chartRows = Model.Areas.Select(a => new {
@@ -36,7 +48,8 @@
         mes   = a.Mes,
         area  = a.Area,
         total = Math.Round(a.TotalHorasExtras, 1),
-        prom  = Math.Round(a.PromHorasExtrasTrab, 2)
+        prom  = Math.Round(a.PromHorasExtrasTrab, 2),
+        trab  = a.TotalTrabajadores
     });
     var rawJson = System.Text.Json.JsonSerializer.Serialize(chartRows);
 }
@@ -55,35 +68,35 @@
 <!-- ── KPI Cards (totales acumulados) ───────────────────────────────── -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-xl-3">
-        <div class="kpi-card">
+        <div class="kpi-card accent-green">
             <div class="kpi-icon">⏱️</div>
             <div class="kpi-label">Total Horas Extras</div>
-            <div class="kpi-value">@gTotalHE.ToString("N1")</div>
-            <div class="kpi-sub">horas</div>
+            <div class="kpi-value" style="color:#1B4D3E;">@gTotalHE.ToString("N1")</div>
+            <div class="kpi-sub">horas acumuladas</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card">
+        <div class="kpi-card accent-blue">
             <div class="kpi-icon">👥</div>
-            <div class="kpi-label">Total Trabajadores</div>
-            <div class="kpi-value">@gTotalTrab</div>
-            <div class="kpi-sub">colaboradores</div>
+            <div class="kpi-label">Promedio Trabajadores</div>
+            <div class="kpi-value" style="color:#1565C0;">@gPromTrab</div>
+            <div class="kpi-sub">colaboradores / mes</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card">
+        <div class="kpi-card accent-purple">
             <div class="kpi-icon">📊</div>
             <div class="kpi-label">Promedio HE / Colaborador</div>
-            <div class="kpi-value">@gPromHE.ToString("N2")</div>
+            <div class="kpi-value" style="color:#4A148C;">@gPromHE.ToString("N2")</div>
             <div class="kpi-sub">horas por colaborador</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card">
+        <div class="kpi-card accent-orange">
             <div class="kpi-icon">📈</div>
             <div class="kpi-label">% Colaboradores con HE</div>
-            <div class="kpi-value">@gPctConHE.ToString("N1")%</div>
-            <div class="kpi-sub">del total</div>
+            <div class="kpi-value" style="color:#e65100;">@gPctConHE.ToString("N1")%</div>
+            <div class="kpi-sub">del total del período</div>
         </div>
     </div>
 </div>
@@ -107,7 +120,7 @@
             <tbody>
                 @foreach (var p in periodos)
                 {
-                    <tr>
+                    <tr style="background:@yearBgRowMap[p.Ano]; border-left:3px solid @yearBorderMap[p.Ano];">
                         <td class="fw-semibold">@NombreMes(p.Mes) @p.Ano</td>
                         <td class="text-end">@p.TotalHorasExtras.ToString("N1")</td>
                         <td class="text-center">@p.TotalTrabajadores</td>
@@ -121,7 +134,7 @@
                 <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
                     <td>Total acumulado</td>
                     <td class="text-end">@gTotalHE.ToString("N1")</td>
-                    <td class="text-center">@gTotalTrab</td>
+                    <td class="text-center">@gPromTrab <small class="text-muted fw-normal">(prom.)</small></td>
                     <td class="text-end">@gPromHE.ToString("N2")</td>
                     <td class="text-center">@gTrabConHE</td>
                     <td class="text-end">@gPctConHE.ToString("N1")%</td>
@@ -136,28 +149,57 @@
 <div class="table-responsive mb-4">
     <table class="table table-sm table-hover table-corporate align-middle mb-0">
         <thead>
+            @{
+                // Agrupar períodos por año para la cabecera de año
+                var periodosPorAno = periodos.GroupBy(p => p.Ano).OrderBy(g => g.Key).ToList();
+            }
+            <!-- Fila 1: Año -->
             <tr>
-                <th rowspan="2" class="align-middle">Área</th>
-                @foreach (var p in periodos)
+                <th rowspan="3" class="align-middle" style="min-width:160px;">Área</th>
+                @foreach (var grp in periodosPorAno)
                 {
-                    <th colspan="3" class="text-center border-start">@NombreMes(p.Mes) @p.Ano</th>
+                    var bgH = yearBgHeaderMap[grp.Key];
+                    var bdr = yearBorderMap[grp.Key];
+                    <th colspan="@(grp.Count() * 3)" class="text-center"
+                        style="background:@bgH; border-left:3px solid @bdr; font-size:.8rem; font-weight:700; letter-spacing:.04em;">
+                        @grp.Key
+                    </th>
                 }
                 @if (periodos.Count > 1)
                 {
-                    <th colspan="2" class="text-center border-start" style="background:#e8f0e9;">Acumulado</th>
+                    <th colspan="2" class="text-center" style="background:#e8f0e9; border-left:2px solid #1B4D3E;">Acumulado</th>
                 }
             </tr>
+            <!-- Fila 2: Mes -->
             <tr>
                 @foreach (var p in periodos)
                 {
-                    <th class="text-end border-start" style="font-size:.75rem; white-space:nowrap;">HE (h)</th>
-                    <th class="text-end" style="font-size:.75rem; white-space:nowrap;">Prom.</th>
-                    <th class="text-end" style="font-size:.75rem; white-space:nowrap;">% HE</th>
+                    var bgH = yearBgHeaderMap[p.Ano];
+                    var bdr = yearBorderMap[p.Ano];
+                    <th colspan="3" class="text-center"
+                        style="background:@bgH; border-left:2px solid @bdr; font-size:.74rem; font-weight:600;">
+                        @NombreMes(p.Mes)
+                    </th>
                 }
                 @if (periodos.Count > 1)
                 {
-                    <th class="text-end border-start" style="font-size:.75rem; background:#e8f0e9; white-space:nowrap;">HE (h)</th>
-                    <th class="text-end" style="font-size:.75rem; background:#e8f0e9; white-space:nowrap;">% del Total</th>
+                    <th colspan="2" class="text-center" style="background:#e8f0e9;"></th>
+                }
+            </tr>
+            <!-- Fila 3: Columnas -->
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    var bgH = yearBgHeaderMap[p.Ano];
+                    var bdr = yearBorderMap[p.Ano];
+                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH; border-left:2px solid @bdr;">HE (h)</th>
+                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH;">Prom.</th>
+                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH;">% HE</th>
+                }
+                @if (periodos.Count > 1)
+                {
+                    <th class="text-end" style="font-size:.72rem; background:#e8f0e9; border-left:2px solid #1B4D3E; white-space:nowrap;">HE (h)</th>
+                    <th class="text-end" style="font-size:.72rem; background:#e8f0e9; white-space:nowrap;">% Total</th>
                 }
             </tr>
         </thead>
@@ -175,31 +217,35 @@
                     {
                         var cell = GetArea(p.Ano, p.Mes, areaName);
                         sumHE += cell?.TotalHorasExtras ?? 0m;
-                        <td class="text-end border-start">@(cell?.TotalHorasExtras.ToString("N1") ?? "—")</td>
-                        <td class="text-end">@(cell?.PromHorasExtrasTrab.ToString("N2") ?? "—")</td>
-                        <td class="text-end">@(cell is not null ? cell.PctTotalHorasExtras.ToString("N1") + "%" : "—")</td>
+                        var bgR = yearBgRowMap[p.Ano];
+                        var bdr = yearBorderMap[p.Ano];
+                        <td class="text-end" style="background:@bgR; border-left:2px solid @bdr;">@(cell?.TotalHorasExtras.ToString("N1") ?? "—")</td>
+                        <td class="text-end" style="background:@bgR;">@(cell?.PromHorasExtrasTrab.ToString("N2") ?? "—")</td>
+                        <td class="text-end" style="background:@bgR;">@(cell is not null ? cell.PctTotalHorasExtras.ToString("N1") + "%" : "—")</td>
                     }
                     @if (periodos.Count > 1)
                     {
                         decimal pctGlobal = totalGlobal > 0 ? Math.Round(sumHE / totalGlobal * 100, 1) : 0m;
-                        <td class="text-end border-start fw-semibold" style="background:#f5f9f5;">@sumHE.ToString("N1")</td>
-                        <td class="text-end" style="background:#f5f9f5;">@pctGlobal.ToString("N1")%</td>
+                        <td class="text-end fw-semibold" style="background:#edf7f2; border-left:2px solid #1B4D3E;">@sumHE.ToString("N1")</td>
+                        <td class="text-end" style="background:#edf7f2;">@pctGlobal.ToString("N1")%</td>
                     }
                 </tr>
             }
         </tbody>
         <tfoot>
-            <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
-                <td>Total</td>
+            <tr style="font-weight:700; border-top:2px solid #1B4D3E;">
+                <td style="background:#e8f0e9;">Total</td>
                 @foreach (var p in periodos)
                 {
                     var rowTotal = Model.Areas.Where(a => a.Ano == p.Ano && a.Mes == p.Mes).ToList();
                     decimal sumHEp = rowTotal.Sum(a => a.TotalHorasExtras);
                     int     sumTrp = rowTotal.Sum(a => a.TotalTrabajadores);
                     decimal promP  = sumTrp > 0 ? Math.Round(sumHEp / sumTrp, 2) : 0m;
-                    <td class="text-end border-start">@sumHEp.ToString("N1")</td>
-                    <td class="text-end">@promP.ToString("N2")</td>
-                    <td class="text-end">100%</td>
+                    var bgF = yearBgHeaderMap[p.Ano];
+                    var bdF = yearBorderMap[p.Ano];
+                    <td class="text-end" style="background:@bgF; border-left:2px solid @bdF;">@sumHEp.ToString("N1")</td>
+                    <td class="text-end" style="background:@bgF;">@promP.ToString("N2")</td>
+                    <td class="text-end" style="background:@bgF;">100%</td>
                 }
                 @if (periodos.Count > 1)
                 {
@@ -213,10 +259,39 @@
 
 <!-- ── Gráficos comparativos ─────────────────────────────── -->
 <div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Análisis Gráfico Comparativo</div>
+<!-- Fila superior: Comparativo mensual + Top áreas por sobretiempo -->
 <div class="row g-3 mb-2">
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
-            <div class="card-header small">Horas Extras por Área (Total)</div>
+            <div class="card-header">
+                <div class="fw-semibold" style="font-size:.82rem;">📊 Comparativo Mensual de Sobretiempo Total</div>
+                <div class="text-muted" style="font-size:.72rem;">Suma de horas extras de todas las áreas, agrupadas por mes y comparadas entre años del período seleccionado.</div>
+            </div>
+            <div class="card-body" style="height:420px;">
+                <canvas id="chartBarComparativo"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card chart-card position-relative">
+            <div class="card-header">
+                <div class="fw-semibold" style="font-size:.82rem;">🏆 Área Líder en Sobretiempo por Mes y Año</div>
+                <div class="text-muted" style="font-size:.72rem;">Por cada mes, muestra el área que registró el mayor total de horas extras. Permite identificar focos de presión operativa recurrentes.</div>
+            </div>
+            <div class="card-body" style="height:420px;">
+                <canvas id="chartTopAreas"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Fila inferior: Total por área + Promedio por trabajador -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card chart-card position-relative">
+            <div class="card-header">
+                <div class="fw-semibold" style="font-size:.82rem;">📦 Sobretiempo Total por Área y Período</div>
+                <div class="text-muted" style="font-size:.72rem;">Detalle de horas extras acumuladas por área en cada período del rango. Permite comparar la carga entre áreas mes a mes.</div>
+            </div>
             <div class="card-body" style="height:360px;">
                 <canvas id="chartBarTotal"></canvas>
             </div>
@@ -224,7 +299,10 @@
     </div>
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
-            <div class="card-header small">Horas Extras por Trabajador (Promedio)</div>
+            <div class="card-header">
+                <div class="fw-semibold" style="font-size:.82rem;">👤 Promedio de Sobretiempo por Trabajador y Área</div>
+                <div class="text-muted" style="font-size:.72rem;">Horas extras promedio por colaborador en cada área. Indica si la carga está distribuida o concentrada en pocas personas.</div>
+            </div>
             <div class="card-body" style="height:360px;">
                 <canvas id="chartLineProm"></canvas>
             </div>
@@ -294,7 +372,7 @@
     <div class="col-md-5">
         <div class="card h-100 border-0 shadow-sm">
             <div class="card-header fw-semibold small" style="background:#f0f4f0; color:#1B4D3E;">
-                <i class="bi bi-bar-chart-steps me-1"></i> Concentración de HE (Análisis de Pareto)
+                <i class="bi bi-bar-chart-steps me-1"></i> Concentración de HE — Análisis de Pareto (80/20)
             </div>
             <div class="card-body small">
                 @if (areasAcum.Count == 0)
@@ -303,24 +381,33 @@
                 }
                 else
                 {
+                    <p class="mb-1 text-muted" style="font-size:.74rem;">
+                        <strong>¿Qué es el análisis de Pareto?</strong> Identifica las pocas áreas que concentran la mayor parte del sobretiempo total.
+                        Si pocas áreas absorben más del 50% del costo, la empresa tiene un riesgo operativo concentrado que requiere atención inmediata.
+                        El sobretiempo total acumulado del período es <strong>@totalEmpresa.ToString("N1") h</strong>.
+                    </p>
                     <p class="mb-2">
                         Las <strong>@paretoN área@(paretoN != 1 ? "s" : "")</strong> con mayor sobretiempo
-                        (@string.Join(", ", paretoAreas)) concentran el
+                        (<em>@string.Join(", ", paretoAreas)</em>) acumulan el
                         <strong class="@(paretoAcumPct >= 50 ? "text-danger" : "text-success")">@paretoAcumPct%</strong>
-                        del costo total de sobretiempo de la empresa.
+                        del total de horas extras de la empresa en el período.
+                        @if (paretoN <= 2) { <text>Esto indica una concentración <strong>extrema</strong>: con solo @paretoN área@(paretoN != 1 ? "s" : "") se explica más de la mitad del costo.</text> }
+                        else { <text>El resto de las áreas distribuye el <strong>@((100 - paretoAcumPct).ToString("N1"))%</strong> restante entre @(areasAcum.Count - paretoN) área@(areasAcum.Count - paretoN != 1 ? "s" : "").</text> }
                     </p>
                     @if (paretoAcumPct >= 50 && paretoN <= 3)
                     {
                         <div class="alert alert-danger py-1 px-2 mb-2 small">
                             <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                            <strong>Alta concentración:</strong> @paretoN área@(paretoN != 1 ? "s" : "") absorben más del 50% del costo — revisar operaciones.
+                            <strong>Alta concentración detectada:</strong> Solo @paretoN área@(paretoN != 1 ? "s" : "") (@string.Join(", ", paretoAreas)) absorben más del 50% del sobretiempo.
+                            Se recomienda revisar causas raíz: dotación insuficiente, picos de producción, ausentismo o procesos sin automatizar.
                         </div>
                     }
                     else
                     {
                         <div class="alert alert-success py-1 px-2 mb-2 small">
                             <i class="bi bi-check-circle-fill me-1"></i>
-                            La carga está distribuida entre varias áreas.
+                            <strong>Carga bien distribuida:</strong> El sobretiempo se reparte entre varias áreas, lo que reduce el riesgo operativo concentrado.
+                            Aun así, se recomienda monitorear las áreas del top 5 para detectar tendencias al alza.
                         </div>
                     }
                     <table class="table table-sm table-bordered mb-0" style="font-size:.78rem;">
@@ -351,12 +438,25 @@
     <div class="col-md-7">
         <div class="card h-100 border-0 shadow-sm">
             <div class="card-header fw-semibold small" style="background:#f0f4f0; color:#1B4D3E;">
-                <i class="bi bi-grid-3x3-gap me-1"></i> Diagnóstico por Área (HE Total vs. Promedio)
+                <i class="bi bi-grid-3x3-gap me-1"></i> Diagnóstico por Área — Matriz HE Total vs. Promedio por Trabajador
             </div>
             <div class="card-body small p-2">
-                <p class="text-muted mb-2" style="font-size:.75rem;">
-                    Umbral promedio empresa — HE Total: <strong>@avgTotal.ToString("N1") h</strong> &nbsp;|&nbsp;
-                    Prom./Trab: <strong>@avgProm.ToString("N2") h</strong>
+                <p class="mb-1" style="font-size:.74rem; color:#374151;">
+                    <strong>¿Cómo funciona esta matriz?</strong> Compara cada área contra el umbral promedio de la empresa
+                    en dos dimensiones: <em>HE Total</em> (volumen de sobretiempo del área) y <em>HE Promedio por trabajador</em>
+                    (intensidad individual). La combinación de ambas define 4 categorías de diagnóstico:
+                </p>
+                <ul class="mb-2" style="font-size:.73rem; padding-left:1.1rem; color:#374151;">
+                    <li><span class="badge bg-danger">🔴 Área sobrecargada</span> — HE Total <em>y</em> Promedio por encima del umbral: el área genera mucho sobretiempo <em>y</em> cada trabajador trabaja horas extras en exceso. Prioridad alta de intervención.</li>
+                    <li><span class="badge bg-warning text-dark">🟠 Carga distribuida</span> — HE Total alta pero Promedio bajo: el área genera mucho sobretiempo pero repartido entre muchos trabajadores. Revisar si se puede optimizar procesos o turnos.</li>
+                    <li><span class="badge bg-warning text-dark">🟠 Dependencia de personas</span> — HE Total baja pero Promedio alto: pocos trabajadores cargan con todo el sobretiempo del área. Riesgo de fatiga y rotación; revisar concentración.</li>
+                    <li><span class="badge bg-success">🟢 Sin problema</span> — Ambos indicadores bajo el umbral: el área opera dentro de los parámetros normales. Mantener seguimiento preventivo.</li>
+                </ul>
+                <p class="text-muted mb-2" style="font-size:.74rem;">
+                    <strong>Umbral empresa (promedio entre todas las áreas):</strong>
+                    HE Total = <strong>@avgTotal.ToString("N1") h</strong> &nbsp;|&nbsp;
+                    HE Prom./Trab. = <strong>@avgProm.ToString("N2") h</strong>.
+                    Áreas que superan <em>cualquiera</em> de estos valores aparecen resaltadas en rojo.
                 </p>
                 <div style="max-height:280px; overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
@@ -377,10 +477,10 @@
                                 var label = BadgeLabel(diag);
                                 var icon  = BadgeIcon(diag);
                                 string accion = diag switch {
-                                    "sobrecargada"         => "Evaluar contratación o redistribución",
-                                    "carga-distribuida"    => "Monitorear tendencia mensual",
-                                    "dependencia-personas" => "Revisar concentración de personas",
-                                    _                      => "Mantener seguimiento"
+                                    "sobrecargada"         => "Revisar dotación, redistribuir carga o evaluar contratación urgente",
+                                    "carga-distribuida"    => "Optimizar turnos o procesos; analizar si el volumen es estructural",
+                                    "dependencia-personas" => "Identificar trabajadores críticos; redistribuir o capacitar relevo",
+                                    _                      => "Mantener seguimiento mensual; vigilar si supera el umbral"
                                 };
                                 <tr>
                                     <td class="fw-semibold">@a.Area</td>
@@ -397,3 +497,4 @@
         </div>
     </div>
 </div>
+

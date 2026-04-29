@@ -267,6 +267,38 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DIA_DIA AS
         cv_resultado      OUT SYS_REFCURSOR
     );
 
+    /***************************************************************************
+        DETALLE_HORAS_EMPLEADO
+        Solo lectura. Drill-down del grid de LISTAR_EMPLEADOS_RANGO:
+        devuelve una fila por DIA dentro del rango de horas para un empleado,
+        con el desglose de HE / Dobles / Banco de cada dia.
+
+        Uso tipico: tooltip/modal al hacer clic en HH.EXTRA, HH.DOBLES
+        o HH.BANCO en el grid de la pantalla Compensacion Dia por Dia.
+
+        PARAMETROS:
+        - p_cod_empresa          Empresa
+        - p_cod_personal         Codigo del empleado
+        - p_fecha_horas_inicio   'dd/MM/yyyy' inicio del rango de horas
+        - p_fecha_horas_fin      'dd/MM/yyyy' fin del rango de horas
+
+        CURSOR resultado (una fila por dia con al menos una fuente > 0):
+          fechamar, fechamar_str,
+          dia_semana           (LUN/MAR/.../DOM),
+          min_he,    horas_he,
+          min_dobles, horas_dobles,
+          min_banco,  horas_banco,
+          min_total,  horas_total,
+          alerta06, alerta08    (alertas del dia: EC/DC)
+    ***************************************************************************/
+    PROCEDURE DETALLE_HORAS_EMPLEADO(
+        p_cod_empresa        IN VARCHAR2,
+        p_cod_personal       IN VARCHAR2,
+        p_fecha_horas_inicio IN VARCHAR2,
+        p_fecha_horas_fin    IN VARCHAR2,
+        cv_resultado         OUT SYS_REFCURSOR
+    );
+
 END PKG_SCA_COMP_DIA_DIA;
 /
 
@@ -1452,6 +1484,76 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                   AND p.cod_personal = c.cod_personal
             WHERE  c.id_compen = p_id_compen;
     END VER_ESTADO;
+
+
+    -- =========================================================================
+    -- DETALLE_HORAS_EMPLEADO  (solo lectura - drill-down por dia)
+    -- =========================================================================
+    PROCEDURE DETALLE_HORAS_EMPLEADO(
+        p_cod_empresa        IN VARCHAR2,
+        p_cod_personal       IN VARCHAR2,
+        p_fecha_horas_inicio IN VARCHAR2,
+        p_fecha_horas_fin    IN VARCHAR2,
+        cv_resultado         OUT SYS_REFCURSOR
+    ) AS
+        v_fec_ini DATE := TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy');
+        v_fec_fin DATE := TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy');
+    BEGIN
+        OPEN cv_resultado FOR
+            SELECT
+                t.fechamar,
+                TO_CHAR(t.fechamar, 'DD/MM/YYYY') AS fechamar_str,
+                DECODE(TO_CHAR(t.fechamar,'D',
+                               'NLS_DATE_LANGUAGE=SPANISH'),
+                       '1','DOM','2','LUN','3','MAR','4','MIE',
+                       '5','JUE','6','VIE','7','SAB') AS dia_semana,
+                -- HE
+                ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440) AS min_he,
+                LPAD(TRUNC(ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440)/60),2,'0')
+                  ||':'||
+                LPAD(MOD(ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440),60),2,'0')
+                  AS horas_he,
+                -- Dobles
+                ROUND((NVL(t.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440) AS min_dobles,
+                LPAD(TRUNC(ROUND((NVL(t.horadoblesof, c_BASE_DATE) - c_BASE_DATE)*1440)/60),2,'0')
+                  ||':'||
+                LPAD(MOD(ROUND((NVL(t.horadoblesof, c_BASE_DATE) - c_BASE_DATE)*1440),60),2,'0')
+                  AS horas_dobles,
+                -- Banco
+                ROUND((NVL(t.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440) AS min_banco,
+                LPAD(TRUNC(ROUND((NVL(t.horabancoh, c_BASE_DATE) - c_BASE_DATE)*1440)/60),2,'0')
+                  ||':'||
+                LPAD(MOD(ROUND((NVL(t.horabancoh, c_BASE_DATE) - c_BASE_DATE)*1440),60),2,'0')
+                  AS horas_banco,
+                -- Total dia
+                ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horadoblesof, c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horabancoh,   c_BASE_DATE) - c_BASE_DATE)*1440) AS min_total,
+                LPAD(TRUNC((
+                    ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horadoblesof,   c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horabancoh,      c_BASE_DATE) - c_BASE_DATE)*1440)
+                )/60),2,'0')
+                  ||':'||
+                LPAD(MOD(
+                    ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horadoblesof,   c_BASE_DATE) - c_BASE_DATE)*1440)
+                  + ROUND((NVL(t.horabancoh,      c_BASE_DATE) - c_BASE_DATE)*1440)
+                ,60),2,'0') AS horas_total,
+                -- Alertas del dia (EC = HE/Banco consumidos, DC = Dobles consumidas)
+                t.alerta06,
+                t.alerta08
+            FROM  SCA_ASISTENCIA_TAREO t
+            WHERE t.cod_empresa  = p_cod_empresa
+              AND t.cod_personal = p_cod_personal
+              AND t.fechamar BETWEEN v_fec_ini AND v_fec_fin
+              AND (
+                    ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440) > 0
+                 OR ROUND((NVL(t.horadoblesof,   c_BASE_DATE) - c_BASE_DATE)*1440) > 0
+                 OR ROUND((NVL(t.horabancoh,      c_BASE_DATE) - c_BASE_DATE)*1440) > 0
+                  )
+            ORDER BY t.fechamar;
+    END DETALLE_HORAS_EMPLEADO;
 
 END PKG_SCA_COMP_DIA_DIA;
 /

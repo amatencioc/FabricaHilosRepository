@@ -66,10 +66,8 @@ public class MenuService : IMenuService
             FacturacionListaDocumentos  = global.FacturacionListaDocumentos  && Tiene("Facturacion"),
 
             // Submenus: Ventas
-            VentasConsultaTC             = global.VentasConsultaTC             && Tiene("Ventas"),
-            VentasIndicadoresComerciales = global.VentasIndicadoresComerciales && Tiene("Ventas"),
-            VentasVentasPorMercado       = global.VentasVentasPorMercado       && Tiene("Ventas"),
-            VentasDashboardComercial        = global.VentasDashboardComercial        && Tiene("Ventas"),
+            VentasConsultaTC                = global.VentasConsultaTC                && Tiene("Ventas"),
+            VentasIndicadorComercialMaestro = global.VentasIndicadorComercialMaestro && Tiene("Ventas"),
             VentasDashboardComercialMaestro = global.VentasDashboardComercialMaestro && Tiene("Ventas"),
             VentasDashboardGerencial        = global.VentasDashboardGerencial        && Tiene("Ventas"),
 
@@ -79,7 +77,6 @@ public class MenuService : IMenuService
             // Submenus: Recursos Humanos
             RhMarcaciones         = global.RhMarcaciones         && Tiene("RecursosHumanos"),
             RhCompensacionDiaDia  = global.RhCompensacionDiaDia  && Tiene("RecursosHumanos"),
-            RhHorasExtras         = global.RhHorasExtras         && Tiene("RecursosHumanos"),
 
             RhIndicadores                         = global.RhIndicadores                         && Tiene("RecursosHumanos"),
             RhIndicadoresHorasExtras              = global.RhIndicadoresHorasExtras              && Tiene("RecursosHumanos"),
