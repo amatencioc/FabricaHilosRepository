@@ -80,7 +80,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Data\CreditoCobranza\" />
+    <Content Include="Data\CreditoCobranza\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\EvolucionMensualMasaSalarial\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
