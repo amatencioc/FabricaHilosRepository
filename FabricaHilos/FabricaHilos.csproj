@@ -50,6 +50,8 @@
     <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\_KpiDashboard.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\Index.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\_KpiDashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\_KpiDashboard.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -82,18 +84,10 @@
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\EvolucionMensualMasaSalarial\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
-    <Folder Include="Views\RecursosHumanos\Indicadores\Concentraci�nSobretiempoArea\" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaPorDia\Index.cshtml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\Index.cshtml" />
-    <None Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\_KpiDashboard.cshtml" />
-    <None Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\Index.cshtml" />
-    <None Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\_KpiDashboard.cshtml" />
   </ItemGroup>
 
 

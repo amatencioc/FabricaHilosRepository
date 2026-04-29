@@ -125,7 +125,7 @@
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <p class="mb-1"><span class="fw-semibold">Nombre:</span> ConcentraciónSobretiempoArea</p>
+                        <p class="mb-1"><span class="fw-semibold">Nombre:</span> Concentración de Sobretiempo por Área</p>
                         <p class="mb-1"><span class="fw-semibold">Tipo:</span> KPI de Gestión de Personal — Eficiencia Laboral</p>
                         <p class="mb-1"><span class="fw-semibold">Periodicidad:</span> Mensual</p>
                         <p class="mb-1"><span class="fw-semibold">Dimensiones de análisis:</span> Área / Mes / Año</p>
@@ -157,6 +157,16 @@
 
                 <div class="row g-3 mb-4">
                     <div class="col-md-5">
+                        <p class="fw-semibold mb-2">Indicadores que expone:</p>
+                        <ul class="list-unstyled small mb-0">
+                            <li class="mb-1"><code>TOTAL_TRAB</code> — Headcount del área en planilla</li>
+                            <li class="mb-1"><code>CON_HE</code> — Trabajadores que cobraron sobretiempo</li>
+                            <li class="mb-1"><code>SIN_HE</code> — Trabajadores que no cobraron sobretiempo</li>
+                            <li class="mb-1"><code>PCT_CON_HE</code> — Indicador principal (%)</li>
+                            <li class="mb-0"><code>PCT_SIN_HE</code> — Complemento (siempre suma 100%)</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-7">
                         <p class="fw-semibold mb-2">Escala de semáforo:</p>
                         <table class="table table-sm table-bordered small mb-0">
                             <thead class="table-dark"><tr><th>Rango %</th><th>Semáforo</th><th>Lectura</th></tr></thead>
@@ -166,16 +176,6 @@
                                 <tr class="table-danger" ><td>61 – 100%</td><td>🔴 Rojo</td><td>HE sistémica, posible déficit de personal</td></tr>
                             </tbody>
                         </table>
-                    </div>
-                    <div class="col-md-7">
-                        <p class="fw-semibold mb-2">Indicadores que expone:</p>
-                        <ul class="list-unstyled small mb-0">
-                            <li class="mb-1"><code>TOTAL_TRAB</code> — Headcount del área en planilla</li>
-                            <li class="mb-1"><code>CON_HE</code> — Trabajadores que cobraron sobretiempo</li>
-                            <li class="mb-1"><code>SIN_HE</code> — Trabajadores que no cobraron sobretiempo</li>
-                            <li class="mb-1"><code>PCT_CON_HE</code> — Indicador principal (%)</li>
-                            <li class="mb-0"><code>PCT_SIN_HE</code> — Complemento (siempre suma 100%)</li>
-                        </ul>
                     </div>
                 </div>
 
