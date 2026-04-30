@@ -10,9 +10,9 @@ namespace FabricaHilos.Controllers.Sistemas;
 public class AnularDocumentoController : OracleBaseController
 {
     private readonly IAnularDocumentoService            _service;
+    private readonly AnularDocumentoJobManager          _jobManager;
     private readonly ILogger<AnularDocumentoController> _logger;
 
-    // Serie fija por tipo de documento
     private static readonly Dictionary<string, string> _series = new(StringComparer.OrdinalIgnoreCase)
     {
         { "01", "F001" },
@@ -21,10 +21,12 @@ public class AnularDocumentoController : OracleBaseController
 
     public AnularDocumentoController(
         IAnularDocumentoService            service,
+        AnularDocumentoJobManager          jobManager,
         ILogger<AnularDocumentoController> logger)
     {
-        _service = service;
-        _logger  = logger;
+        _service    = service;
+        _jobManager = jobManager;
+        _logger     = logger;
     }
 
     [HttpGet("")]
@@ -32,21 +34,15 @@ public class AnularDocumentoController : OracleBaseController
     public IActionResult Index() =>
         View("~/Views/Sistemas/Requerimientos/AnularDocumento/Index.cshtml");
 
-    /// <summary>
-    /// Devuelve la serie correspondiente a un tipo de documento.
-    /// GET /Sistemas/Requerimientos/AnularDocumento/Serie?tipoDoc=01
-    /// </summary>
     [HttpGet("Serie")]
-    public IActionResult Serie([FromQuery] string tipoDoc)
-    {
-        if (_series.TryGetValue(tipoDoc, out var serie))
-            return Json(new { serie });
-        return Json(new { serie = "" });
-    }
+    public IActionResult Serie([FromQuery] string tipoDoc) =>
+        _series.TryGetValue(tipoDoc, out var serie)
+            ? Json(new { serie })
+            : Json(new { serie = "" });
 
     /// <summary>
-    /// Busca el documento y retorna el resultado completo en JSON.
-    /// GET /Sistemas/Requerimientos/AnularDocumento/Buscar?tipoDoc=01&serie=F001&numero=00000001
+    /// Busca el documento y retorna datos en JSON.
+    /// GET /Sistemas/Requerimientos/AnularDocumento/Buscar
     /// </summary>
     [HttpGet("Buscar")]
     public async Task<IActionResult> Buscar(
@@ -72,11 +68,12 @@ public class AnularDocumentoController : OracleBaseController
     }
 
     /// <summary>
-    /// Ejecuta los 4 pasos de restablecimiento en streaming (SSE).
-    /// GET /Sistemas/Requerimientos/AnularDocumento/RestablecerStream
+    /// Inicia el job de Restablecer en el servidor y devuelve el jobId.
+    /// El proceso continúa aunque el navegador se cierre.
+    /// POST /Sistemas/Requerimientos/AnularDocumento/IniciarRestablecer
     /// </summary>
-    [HttpGet("RestablecerStream")]
-    public async Task RestablecerStream(
+    [HttpPost("IniciarRestablecer")]
+    public IActionResult IniciarRestablecer(
         [FromQuery] string tipoDoc,
         [FromQuery] string serie,
         [FromQuery] string numero,
@@ -86,70 +83,30 @@ public class AnularDocumentoController : OracleBaseController
         [FromQuery] string mes,
         [FromQuery] string libro)
     {
-        Response.ContentType = "text/event-stream; charset=utf-8";
-        Response.Headers["Cache-Control"]      = "no-cache, no-store";
-        Response.Headers["X-Accel-Buffering"]  = "no";
-        Response.Headers["Connection"]         = "keep-alive";
-
-        async Task Emit(object payload)
-        {
-            var json = System.Text.Json.JsonSerializer.Serialize(payload,
-                new System.Text.Json.JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                });
-            await Response.WriteAsync($"data: {json}\n\n");
-            await Response.Body.FlushAsync();
-        }
-
-        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(serie) ||
-            string.IsNullOrWhiteSpace(numero)   || string.IsNullOrWhiteSpace(numeroBusqueda) ||
+        if (string.IsNullOrWhiteSpace(tipoDoc)        || string.IsNullOrWhiteSpace(serie)  ||
+            string.IsNullOrWhiteSpace(numero)          || string.IsNullOrWhiteSpace(numeroBusqueda) ||
             string.IsNullOrWhiteSpace(voucherBusqueda))
-        {
-            await Emit(new { paso = 0, estado = "aborted", mensaje = "Faltan parámetros requeridos." });
-            return;
-        }
+            return BadRequest(new { error = "Faltan parámetros requeridos." });
 
-        try
-        {
-            // ── Paso 1: DELETE DOCUVENT ─────────────────────────────────────
-            await Emit(new { paso = 1, estado = "running", mensaje = "Ejecutando DELETE en DOCUVENT..." });
-            var p1 = await _service.Paso1DeleteDocumentAsync(tipoDoc, serie, numero);
-            await Emit(new { paso = 1, estado = p1.Ok ? "ok" : "error", mensaje = p1.Ok ? p1.Mensaje : p1.Error, filas = p1.Filas });
-            if (!p1.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
+        // Capturar conexión y schema AHORA (mientras tenemos HttpContext y sesión activa)
+        var connString = GetConnString();
+        var schema     = GetSchema();
 
-            // ── Paso 2: ESPERAR MOVGLOS ESTADO=9, luego DELETE MOVGLOS ──────
-            await Emit(new { paso = 2, estado = "running", mensaje = "Esperando que MOVGLOS alcance ESTADO = 9 (disparadores en curso)..." });
-            var p2 = await _service.Paso2EsperarYDeleteMovGlosAsync(tipoDoc, serie, numero, timeoutSegundos: 5);
-            await Emit(new { paso = 2, estado = p2.Ok ? "ok" : "error", mensaje = p2.Ok ? p2.Mensaje : p2.Error, filas = p2.Filas });
-            if (!p2.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
+        var job = _jobManager.IniciarRestablecer(
+            connString, schema,
+            tipoDoc, serie, numero,
+            numeroBusqueda, voucherBusqueda,
+            ano ?? "", mes ?? "", libro ?? "");
 
-            // ── Paso 3: UPDATE NRODOC ───────────────────────────────────────
-            await Emit(new { paso = 3, estado = "running", mensaje = $"Actualizando NRODOC.NUMERO = {numeroBusqueda}..." });
-            var p3 = await _service.Paso3UpdateNroDocAsync(tipoDoc, serie, numeroBusqueda);
-            await Emit(new { paso = 3, estado = p3.Ok ? "ok" : "error", mensaje = p3.Ok ? p3.Mensaje : p3.Error, filas = p3.Filas });
-            if (!p3.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
-
-            // ── Paso 4: UPDATE NROLIBR ──────────────────────────────────────
-            await Emit(new { paso = 4, estado = "running", mensaje = $"Actualizando NROLIBR.NUMERO = {voucherBusqueda}..." });
-            var p4 = await _service.Paso4UpdateNroLibrAsync(ano, mes, libro, voucherBusqueda);
-            await Emit(new { paso = 4, estado = p4.Ok ? "ok" : "error", mensaje = p4.Ok ? p4.Mensaje : p4.Error, filas = p4.Filas });
-
-            await Emit(new { paso = 0, estado = "done" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error en AnularDocumento/RestablecerStream");
-            await Emit(new { paso = 0, estado = "aborted", mensaje = ex.Message });
-        }
+        return Json(new { jobId = job.JobId });
     }
 
     /// <summary>
-    /// Revierte NRODOC y NROLIBR a los valores anteriores (deshace la restauración).
-    /// POST /Sistemas/Requerimientos/AnularDocumento/Revertir
+    /// Inicia el job de Revertir en el servidor y devuelve el jobId.
+    /// POST /Sistemas/Requerimientos/AnularDocumento/IniciarRevertir
     /// </summary>
-    [HttpPost("Revertir")]
-    public async Task<IActionResult> Revertir(
+    [HttpPost("IniciarRevertir")]
+    public IActionResult IniciarRevertir(
         [FromQuery] string tipoDoc,
         [FromQuery] string serie,
         [FromQuery] string numeroAnterior,
@@ -159,17 +116,94 @@ public class AnularDocumentoController : OracleBaseController
         [FromQuery] string voucherAnterior)
     {
         if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(serie))
-            return BadRequest(new { ok = false, error = "Faltan parámetros requeridos." });
+            return BadRequest(new { error = "Faltan parámetros requeridos." });
 
-        try
+        var connString = GetConnString();
+        var schema     = GetSchema();
+
+        var job = _jobManager.IniciarRevertir(
+            connString, schema,
+            tipoDoc, serie,
+            numeroAnterior ?? "",
+            ano ?? "", mes ?? "", libro ?? "",
+            voucherAnterior ?? "");
+
+        return Json(new { jobId = job.JobId });
+    }
+
+    /// <summary>
+    /// Polling: devuelve el estado actual del job.
+    /// GET /Sistemas/Requerimientos/AnularDocumento/EstadoJob?jobId=...
+    /// </summary>
+    [HttpGet("EstadoJob")]
+    public IActionResult EstadoJob([FromQuery] string jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return BadRequest(new { error = "jobId requerido." });
+
+        var job = _jobManager.Get(jobId);
+        if (job is null)
+            return NotFound(new { error = "Job no encontrado." });
+
+        return Json(new
         {
-            var result = await _service.RevertirAsync(tipoDoc, serie, numeroAnterior, ano, mes, libro, voucherAnterior);
-            return Json(result);
-        }
-        catch (Exception ex)
+            jobId        = job.JobId,
+            tipo         = job.Tipo,
+            estado       = job.Estado,
+            error        = job.Error,
+            creadoEn     = job.CreadoEn,
+            finalizadoEn = job.FinalizadoEn,
+            pasos        = job.Pasos.Select(p => new
+            {
+                numero  = p.Numero,
+                estado  = p.Estado,
+                mensaje = p.Mensaje,
+                error   = p.Error,
+                filas   = p.Filas
+            })
+        });
+    }
+
+    // ── Helpers: capturar conexión y schema desde la sesión activa ─────────────
+
+    private string GetConnString()
+    {
+        // Reutiliza la misma lógica de OracleServiceBase pero desde el controller,
+        // ya que el servicio es Scoped y el jobManager es Singleton (sin HttpContext)
+        var session  = HttpContext.Session;
+        var connKey  = session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+        var baseConn = HttpContext.RequestServices
+                           .GetRequiredService<IConfiguration>()
+                           .GetConnectionString(connKey)
+                       ?? HttpContext.RequestServices
+                           .GetRequiredService<IConfiguration>()
+                           .GetConnectionString("LaColonialConnection")!;
+
+        var oraUser = session.GetString("OracleUser");
+        var oraPass = session.GetString("OraclePass");
+
+        if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
         {
-            _logger.LogError(ex, "Error en AnularDocumento/Revertir");
-            return StatusCode(500, new { ok = false, error = ex.Message });
+            var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(baseConn)
+            {
+                UserID   = oraUser,
+                Password = oraPass
+            };
+            return csb.ToString();
         }
+
+        return baseConn;
+    }
+
+    private string GetSchema()
+    {
+        var connKey = HttpContext.Session.GetString("EmpresaConexion") ?? "LaColonialConnection";
+        return connKey switch
+        {
+            "ArbonaConnection" => "ARBONA.",
+            "SolsaConnection"  => "SOLSA.",
+            _                  => "SIG."
+        };
     }
 }
+

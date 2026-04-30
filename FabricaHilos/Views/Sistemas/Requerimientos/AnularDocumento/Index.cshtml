@@ -587,71 +587,41 @@
         bootstrap.Modal.getInstance(document.getElementById('modalConfirmarRestablecer')).hide();
 
         // Mostrar panel de progreso y resetear badges
-        const panelProgreso = document.getElementById('panelProgreso');
-        panelProgreso.style.display = 'block';
+        document.getElementById('panelProgreso').style.display = 'block';
         document.getElementById('btnRestablecerFactura').disabled = true;
         [1,2,3,4].forEach(n => {
             document.getElementById(`pasoBadge${n}`).className = 'step-badge step-warn flex-shrink-0';
-            document.getElementById(`pasoMsg${n}`).textContent  = '';
+            document.getElementById(`pasoMsg${n}`).textContent  = 'Esperando...';
         });
 
-        const params = new URLSearchParams({
-            tipoDoc:         _tipoDoc,
-            serie:           _serie,
-            numero:          _numeroBusqueda,
-            numeroBusqueda:  _numeroBusquedaDisplay,
-            voucherBusqueda: _voucherBusqueda,
-            ano:             _ano,
-            mes:             _mes,
-            libro:           _libro
-        });
+        try {
+            const params = new URLSearchParams({
+                tipoDoc:         _tipoDoc,
+                serie:           _serie,
+                numero:          _numeroBusqueda,
+                numeroBusqueda:  _numeroBusquedaDisplay,
+                voucherBusqueda: _voucherBusqueda,
+                ano:             _ano,
+                mes:             _mes,
+                libro:           _libro
+            });
 
-        const es = new EventSource(`/Sistemas/Requerimientos/AnularDocumento/RestablecerStream?${params}`,
-                                    { withCredentials: true });
-        let abortado = false;
-        let cerrado  = false;
+            // Iniciar job en el servidor (sigue corriendo aunque cierres el navegador)
+            const res = await fetch(
+                `/Sistemas/Requerimientos/AnularDocumento/IniciarRestablecer?${params}`,
+                { method: 'POST', cache: 'no-store' });
 
-        function cerrarEs() {
-            if (!cerrado) { cerrado = true; es.close(); }
-        }
-
-        es.onmessage = function (e) {
-            const d = JSON.parse(e.data);
-
-            if (d.paso === 0) {
-                cerrarEs();
-                if (d.estado === 'done') {
-                    new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
-                    // Mostrar botón Revertir
-                    document.getElementById('contenedorBtnRevertir').style.display = 'block';
-                } else if (d.estado === 'aborted') {
-                    mostrarError(d.mensaje || 'La operación fue abortada.');
-                    document.getElementById('btnRestablecerFactura').disabled = false;
-                }
-                return;
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt);
             }
+            const { jobId } = await res.json();
+            await pollJob(jobId, 4);
 
-            const badge = document.getElementById(`pasoBadge${d.paso}`);
-            const msg   = document.getElementById(`pasoMsg${d.paso}`);
-
-            if (d.estado === 'running') {
-                badge.className = 'step-badge step-warn flex-shrink-0';
-                msg.textContent = d.mensaje;
-            } else if (d.estado === 'ok') {
-                badge.className = 'step-badge step-ok flex-shrink-0';
-                msg.textContent = d.mensaje;
-            } else if (d.estado === 'error') {
-                badge.className = 'step-badge step-err flex-shrink-0';
-                msg.textContent = d.error || d.mensaje;
-                abortado = true;
-            }
-        };
-
-        es.onerror = function () {
-            cerrarEs();
-            if (!abortado) mostrarError('Error de conexión con el servidor durante la operación.');
+        } catch (e) {
+            mostrarError(e.message || String(e));
             document.getElementById('btnRestablecerFactura').disabled = false;
-        };
+        }
     });
 
     // ── Botón Revertir ──────────────────────────────────────────────────────
@@ -673,40 +643,113 @@
 
         try {
             const params = new URLSearchParams({
-                tipoDoc:        _tipoDoc,
-                serie:          _serie,
-                numeroAnterior: _numeroAnterior,
-                ano:            _ano,
-                mes:            _mes,
-                libro:          _libro,
+                tipoDoc:         _tipoDoc,
+                serie:           _serie,
+                numeroAnterior:  _numeroAnterior,
+                ano:             _ano,
+                mes:             _mes,
+                libro:           _libro,
                 voucherAnterior: _voucherAnterior
             });
-            const res  = await fetch(`/Sistemas/Requerimientos/AnularDocumento/Revertir?${params}`,
-                                     { method: 'POST', cache: 'no-store' });
-            const data = await res.json();
 
-            if (!res.ok || !data.ok) {
-                mostrarError(data.error || 'Error al revertir.');
-                this.disabled = false;
-                return;
+            const res = await fetch(
+                `/Sistemas/Requerimientos/AnularDocumento/IniciarRevertir?${params}`,
+                { method: 'POST', cache: 'no-store' });
+
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt);
             }
+            const { jobId } = await res.json();
+            await pollJobRevertir(jobId);
 
-            document.getElementById('cuerpoExitoRevertir').innerHTML =
-                `<p class="mb-2">✔ Valores restaurados correctamente.</p>
-                 <table class="table table-sm table-bordered small mb-0">
-                   <tbody>
-                     <tr><td>NRODOC.NUMERO</td><td><strong>${_numeroAnterior}</strong></td></tr>
-                     <tr><td>NROLIBR.NUMERO</td><td><strong>${_voucherAnterior}</strong></td></tr>
-                     <tr><td>Filas afectadas</td><td><strong>${data.filas}</strong></td></tr>
-                   </tbody>
-                 </table>`;
-            new bootstrap.Modal(document.getElementById('modalExitoRevertir')).show();
-            document.getElementById('contenedorBtnRevertir').style.display = 'none';
         } catch (e) {
             mostrarError(e.message || String(e));
             this.disabled = false;
         }
     });
+
+    // ── Polling genérico para el job de Restablecer ─────────────────────────
+    async function pollJob(jobId, totalPasos) {
+        return new Promise((resolve) => {
+            const intervalo = setInterval(async () => {
+                try {
+                    const r = await fetch(
+                        `/Sistemas/Requerimientos/AnularDocumento/EstadoJob?jobId=${jobId}`,
+                        { cache: 'no-store' });
+                    if (!r.ok) return;
+
+                    const d = await r.json();
+
+                    // Actualizar badges de pasos
+                    (d.pasos || []).forEach(p => {
+                        const badge = document.getElementById(`pasoBadge${p.numero}`);
+                        const msg   = document.getElementById(`pasoMsg${p.numero}`);
+                        if (!badge) return;
+                        if (p.estado === 'running') {
+                            badge.className = 'step-badge step-warn flex-shrink-0';
+                            msg.textContent = p.mensaje || 'En proceso...';
+                        } else if (p.estado === 'ok') {
+                            badge.className = 'step-badge step-ok flex-shrink-0';
+                            msg.textContent = p.mensaje || 'Completado';
+                        } else if (p.estado === 'error') {
+                            badge.className = 'step-badge step-err flex-shrink-0';
+                            msg.textContent = p.error  || 'Error';
+                        }
+                    });
+
+                    // ¿Terminó?
+                    if (d.estado === 'done') {
+                        clearInterval(intervalo);
+                        new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
+                        document.getElementById('contenedorBtnRevertir').style.display = 'block';
+                        resolve();
+                    } else if (d.estado === 'aborted') {
+                        clearInterval(intervalo);
+                        mostrarError(d.error || 'La operación fue abortada en el servidor.');
+                        document.getElementById('btnRestablecerFactura').disabled = false;
+                        resolve();
+                    }
+                } catch (_) { /* red inestable: seguir intentando */ }
+            }, 2000);
+        });
+    }
+
+    // ── Polling para el job de Revertir ─────────────────────────────────────
+    async function pollJobRevertir(jobId) {
+        return new Promise((resolve) => {
+            const intervalo = setInterval(async () => {
+                try {
+                    const r = await fetch(
+                        `/Sistemas/Requerimientos/AnularDocumento/EstadoJob?jobId=${jobId}`,
+                        { cache: 'no-store' });
+                    if (!r.ok) return;
+
+                    const d = await r.json();
+
+                    if (d.estado === 'done') {
+                        clearInterval(intervalo);
+                        document.getElementById('cuerpoExitoRevertir').innerHTML =
+                            `<p class="mb-2">✔ Valores restaurados correctamente.</p>
+                             <table class="table table-sm table-bordered small mb-0">
+                               <tbody>
+                                 <tr><td>NRODOC.NUMERO</td><td><strong>${_numeroAnterior}</strong></td></tr>
+                                 <tr><td>NROLIBR.NUMERO</td><td><strong>${_voucherAnterior}</strong></td></tr>
+                               </tbody>
+                             </table>`;
+                        new bootstrap.Modal(document.getElementById('modalExitoRevertir')).show();
+                        document.getElementById('contenedorBtnRevertir').style.display = 'none';
+                        resolve();
+                    } else if (d.estado === 'aborted') {
+                        clearInterval(intervalo);
+                        mostrarError(d.error || 'Error al revertir en el servidor.');
+                        document.getElementById('btnConfirmarRevertir').disabled = false;
+                        resolve();
+                    }
+                } catch (_) { /* red inestable: seguir intentando */ }
+            }, 2000);
+        });
+    }
 })();
 </script>
 }

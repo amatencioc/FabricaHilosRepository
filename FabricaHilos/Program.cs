@@ -147,6 +147,7 @@ builder.Services.AddScoped<DesarrolloExcelService>();
 builder.Services.AddScoped<IIncidenciaService, IncidenciaService>();
 builder.Services.AddScoped<ISeguimientoDevService, SeguimientoDevService>();
 builder.Services.AddScoped<IAnularDocumentoService, AnularDocumentoService>();
+builder.Services.AddSingleton<AnularDocumentoJobManager>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
