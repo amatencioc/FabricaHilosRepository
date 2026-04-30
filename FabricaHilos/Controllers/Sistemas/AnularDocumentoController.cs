@@ -72,29 +72,63 @@ public class AnularDocumentoController : OracleBaseController
     }
 
     /// <summary>
-    /// Restablece NRODOC.NUMERO al valor anterior (el número del documento buscado).
-    /// POST /Sistemas/Requerimientos/AnularDocumento/Restablecer
+    /// Ejecuta los 4 pasos de restablecimiento en streaming (SSE).
+    /// GET /Sistemas/Requerimientos/AnularDocumento/RestablecerStream
     /// </summary>
-    [HttpPost("Restablecer")]
-    public async Task<IActionResult> Restablecer(
+    [HttpGet("RestablecerStream")]
+    public async Task RestablecerStream(
         [FromQuery] string tipoDoc,
         [FromQuery] string serie,
-        [FromQuery] string numeroAnterior)
+        [FromQuery] string numero,
+        [FromQuery] string numeroBusqueda,
+        [FromQuery] string voucherBusqueda,
+        [FromQuery] string ano,
+        [FromQuery] string mes,
+        [FromQuery] string libro)
     {
-        if (string.IsNullOrWhiteSpace(tipoDoc) ||
-            string.IsNullOrWhiteSpace(serie)   ||
-            string.IsNullOrWhiteSpace(numeroAnterior))
-            return BadRequest(new { error = "Debe indicar TipoDoc, Serie y NumeroAnterior." });
+        Response.ContentType  = "text/event-stream";
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["X-Accel-Buffering"] = "no";
+
+        async Task Emit(object payload)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(payload,
+                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            await Response.WriteAsync($"data: {json}\n\n");
+            await Response.Body.FlushAsync();
+        }
 
         try
         {
-            var result = await _service.RestablecerFacturaAsync(tipoDoc, serie, numeroAnterior);
-            return Json(result);
+            // ── Paso 1: DELETE DOCUVENT ─────────────────────────────────────
+            await Emit(new { paso = 1, estado = "running", mensaje = "Ejecutando DELETE en DOCUVENT..." });
+            var p1 = await _service.Paso1DeleteDocumentAsync(tipoDoc, serie, numero);
+            await Emit(new { paso = 1, estado = p1.Ok ? "ok" : "error", mensaje = p1.Ok ? p1.Mensaje : p1.Error, filas = p1.Filas });
+            if (!p1.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
+
+            // ── Paso 2: ESPERAR MOVGLOS ESTADO=9, luego DELETE MOVGLOS ──────
+            await Emit(new { paso = 2, estado = "running", mensaje = "Esperando que MOVGLOS alcance ESTADO = 9 (disparadores en curso)..." });
+            var p2 = await _service.Paso2EsperarYDeleteMovGlosAsync(tipoDoc, serie, numero);
+            await Emit(new { paso = 2, estado = p2.Ok ? "ok" : "error", mensaje = p2.Ok ? p2.Mensaje : p2.Error, filas = p2.Filas });
+            if (!p2.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
+
+            // ── Paso 3: UPDATE NRODOC ───────────────────────────────────────
+            await Emit(new { paso = 3, estado = "running", mensaje = $"Actualizando NRODOC.NUMERO = {numeroBusqueda}..." });
+            var p3 = await _service.Paso3UpdateNroDocAsync(tipoDoc, serie, numeroBusqueda);
+            await Emit(new { paso = 3, estado = p3.Ok ? "ok" : "error", mensaje = p3.Ok ? p3.Mensaje : p3.Error, filas = p3.Filas });
+            if (!p3.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
+
+            // ── Paso 4: UPDATE NROLIBR ──────────────────────────────────────
+            await Emit(new { paso = 4, estado = "running", mensaje = $"Actualizando NROLIBR.NUMERO = {voucherBusqueda}..." });
+            var p4 = await _service.Paso4UpdateNroLibrAsync(ano, mes, libro, voucherBusqueda);
+            await Emit(new { paso = 4, estado = p4.Ok ? "ok" : "error", mensaje = p4.Ok ? p4.Mensaje : p4.Error, filas = p4.Filas });
+
+            await Emit(new { paso = 0, estado = "done" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error en AnularDocumento/Restablecer");
-            return StatusCode(500, new { error = ex.Message });
+            _logger.LogError(ex, "Error en AnularDocumento/RestablecerStream");
+            await Emit(new { paso = 0, estado = "aborted", mensaje = ex.Message });
         }
     }
 }

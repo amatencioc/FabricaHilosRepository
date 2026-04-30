@@ -190,6 +190,27 @@
             <button id="btnRestablecerFactura" class="btn btn-warning btn-sm fw-bold" onclick="abrirRestablecer()">
                 <i class="bi bi-arrow-counterclockwise me-1"></i>Restablecer Factura
             </button>
+
+            <!-- ── Panel de progreso por pasos (oculto hasta ejecutar) ────── -->
+            <div id="panelProgreso" style="display:none" class="mt-3">
+                <div class="fw-semibold small mb-2" style="color:#1B4D3E">Progreso de ejecución:</div>
+                <div id="pasoItem1" class="d-flex align-items-start gap-2 mb-2 small">
+                    <span id="pasoBadge1" class="step-badge step-warn flex-shrink-0">1</span>
+                    <div><strong>DELETE DOCUVENT</strong><br><span id="pasoMsg1" class="text-muted"></span></div>
+                </div>
+                <div id="pasoItem2" class="d-flex align-items-start gap-2 mb-2 small">
+                    <span id="pasoBadge2" class="step-badge step-warn flex-shrink-0">2</span>
+                    <div><strong>Esperar MOVGLOS = 9 → DELETE MOVGLOS</strong><br><span id="pasoMsg2" class="text-muted"></span></div>
+                </div>
+                <div id="pasoItem3" class="d-flex align-items-start gap-2 mb-2 small">
+                    <span id="pasoBadge3" class="step-badge step-warn flex-shrink-0">3</span>
+                    <div><strong>UPDATE NRODOC</strong><br><span id="pasoMsg3" class="text-muted"></span></div>
+                </div>
+                <div id="pasoItem4" class="d-flex align-items-start gap-2 mb-2 small">
+                    <span id="pasoBadge4" class="step-badge step-warn flex-shrink-0">4</span>
+                    <div><strong>UPDATE NROLIBR</strong><br><span id="pasoMsg4" class="text-muted"></span></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -291,6 +312,7 @@
     let _numeroAnterior        = '';   // NRODOC.NUMERO actual (el valor a restaurar)
     let _voucherBusqueda = '';   // últimos 3 dígitos del Voucher de MOVGLOS
     let _voucherAnterior = '';   // NROLIBR.NUMERO (el valor a restaurar en el libro)
+    let _ano = '', _mes = '', _libro = '';   // de MOVGLOS, necesarios para NROLIBR
 
     function actualizarSerie() {
         const td = document.getElementById('selTipoDoc').value;
@@ -304,7 +326,7 @@
         document.getElementById('txtNumero').value  = '';
         document.getElementById('resultadoContainer').style.display = 'none';
         document.getElementById('panelRestablecer').style.display   = 'none';
-        _tipoDoc = _serie = _numeroBusqueda = _numeroBusquedaDisplay = _numeroAnterior = _voucherBusqueda = _voucherAnterior = '';
+        _tipoDoc = _serie = _numeroBusqueda = _numeroBusquedaDisplay = _numeroAnterior = _voucherBusqueda = _voucherAnterior = _ano = _mes = _libro = '';
     }
     window.limpiar = limpiar;
 
@@ -397,6 +419,9 @@
         // Paso 2 — MOVGLOS
         const b2 = document.getElementById('badge2');
         b2.className = 'step-badge ' + badgeClass(d.existeMovGlos);
+        _ano   = d.ano   ?? '';
+        _mes   = d.mes   ?? '';
+        _libro = d.libro ?? '';
         document.getElementById('bodyMovGlos').innerHTML = d.existeMovGlos
             ? fila('Año',     d.ano)
             + fila('Mes',     d.mes)
@@ -509,35 +534,65 @@
     document.getElementById('btnConfirmarRestablecer').addEventListener('click', async function () {
         bootstrap.Modal.getInstance(document.getElementById('modalConfirmarRestablecer')).hide();
 
-        try {
-            const url = `/Sistemas/Requerimientos/AnularDocumento/Restablecer?tipoDoc=${encodeURIComponent(_tipoDoc)}&serie=${encodeURIComponent(_serie)}&numeroAnterior=${encodeURIComponent(_numeroBusquedaDisplay)}`;
-            const res = await fetch(url, { method: 'POST', cache: 'no-store' });
-            const data = await res.json();
+        // Mostrar panel de progreso y resetear badges
+        const panelProgreso = document.getElementById('panelProgreso');
+        panelProgreso.style.display = 'block';
+        document.getElementById('btnRestablecerFactura').disabled = true;
+        [1,2,3,4].forEach(n => {
+            document.getElementById(`pasoBadge${n}`).className = 'step-badge step-warn flex-shrink-0';
+            document.getElementById(`pasoMsg${n}`).textContent  = '';
+        });
 
-            if (!res.ok || !data.ok) {
-                mostrarError(data.error || 'Error al restablecer.');
+        const params = new URLSearchParams({
+            tipoDoc:         _tipoDoc,
+            serie:           _serie,
+            numero:          _numeroBusqueda,
+            numeroBusqueda:  _numeroBusquedaDisplay,
+            voucherBusqueda: _voucherBusqueda,
+            ano:             _ano,
+            mes:             _mes,
+            libro:           _libro
+        });
+
+        const es = new EventSource(`/Sistemas/Requerimientos/AnularDocumento/RestablecerStream?${params}`);
+        let abortado = false;
+
+        es.onmessage = function (e) {
+            const d = JSON.parse(e.data);
+
+            if (d.paso === 0) {
+                es.close();
+                if (d.estado === 'done') {
+                    new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
+                    document.getElementById('panelRestablecer').style.display = 'none';
+                } else if (d.estado === 'aborted') {
+                    mostrarError(d.mensaje || 'La operación fue abortada.');
+                    document.getElementById('btnRestablecerFactura').disabled = false;
+                }
                 return;
             }
 
-            document.getElementById('cuerpoExitoRestablecer').innerHTML =
-                `<p class="mb-2">✔ <strong>NRODOC</strong> actualizado correctamente.</p>
-                 <table class="table table-sm table-bordered small mb-0">
-                   <tbody>
-                     <tr><td>TipoDoc</td><td><strong>${_tipoDoc}</strong></td></tr>
-                     <tr><td>Serie</td><td><strong>${_serie}</strong></td></tr>
-                     <tr class="table-primary"><td>Número Búsqueda (era)</td><td><strong>${_numeroBusquedaDisplay}</strong></td></tr>
-                     <tr class="table-success"><td>Número Anterior (grabado)</td><td><strong>${_numeroAnterior}</strong></td></tr>
-                     <tr class="table-primary"><td>Voucher Búsqueda (últimos 3)</td><td><strong>${_voucherBusqueda}</strong></td></tr>
-                     <tr class="table-success"><td>Voucher Anterior</td><td><strong>${_voucherAnterior}</strong></td></tr>
-                     <tr><td>Filas afectadas</td><td><strong>${data.filas}</strong></td></tr>
-                   </tbody>
-                 </table>`;
-            new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
-            document.getElementById('panelRestablecer').style.display = 'none';
+            const badge = document.getElementById(`pasoBadge${d.paso}`);
+            const msg   = document.getElementById(`pasoMsg${d.paso}`);
 
-        } catch (e) {
-            mostrarError(e.message || String(e));
-        }
+            if (d.estado === 'running') {
+                badge.className = 'step-badge step-warn flex-shrink-0';
+                msg.textContent = d.mensaje;
+            } else if (d.estado === 'ok') {
+                badge.className = 'step-badge step-ok flex-shrink-0';
+                msg.textContent = d.mensaje;
+            } else if (d.estado === 'error') {
+                badge.className = 'step-badge step-err flex-shrink-0';
+                msg.textContent = d.error || d.mensaje;
+                abortado = true;
+            }
+        };
+
+        es.onerror = function () {
+            es.close();
+            if (!abortado) mostrarError('Error de conexión con el servidor.');
+            document.getElementById('btnRestablecerFactura').disabled = false;
+        };
     });
 })();
 </script>
