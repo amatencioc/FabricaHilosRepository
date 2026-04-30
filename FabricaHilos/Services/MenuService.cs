@@ -92,6 +92,11 @@ public class MenuService : IMenuService
             CreditosCobranza = Tiene("CreditosCobranza"),
             CcNivelMorosidad = global.CcNivelMorosidad && Tiene("CreditosCobranza"),
             CcNivelTiempo    = global.CcNivelTiempo    && Tiene("CreditosCobranza"),
+
+            // Menú principal: Sistemas
+            Sistemas                      = Tiene("Sistemas"),
+            SistemasIndicadores           = global.SistemasIndicadores           && Tiene("Sistemas"),
+            SistemasIndicadoresDesarrollo = global.SistemasIndicadoresDesarrollo && Tiene("Sistemas"),
         };
     }
 
@@ -107,6 +112,7 @@ public class MenuService : IMenuService
         if (menus.Seguridad)        return ("Inspeccion",  "Index", null, null);
         if (menus.RecursosHumanos)  return ("RecursosHumanos", "Index", null, null);
         if (menus.Logistica)        return (null, null, null, "/Logistica/Requerimiento");
+        if (menus.Sistemas)         return ("Sistemas", "Index", null, null);
         return ("RegistroPreparatoria", "Index", null, null);
     }
 }

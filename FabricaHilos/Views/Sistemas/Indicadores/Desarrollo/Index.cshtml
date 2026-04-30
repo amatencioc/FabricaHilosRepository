@@ -1,0 +1,824 @@
+@{
+    ViewData["Title"] = "KPI Desarrollo - Sistemas";
+}
+
+@section Styles {
+<style>
+    /* ── layout general ─────────────────────────── */
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        background: #f5f5f2;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 700;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+        font-size: .9rem;
+        padding: .65rem 1rem;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-spinner {
+        position: absolute; inset: 0;
+        background: rgba(255,255,255,.78);
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 12px; z-index: 10;
+    }
+    /* ── sección ─────────────────────────────────── */
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.6rem 0 .25rem;
+        border-left: 4px solid #c8a84b;
+        padding-left: .55rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .85rem .65rem;
+        line-height: 1.55;
+    }
+    /* ── KPI cards ───────────────────────────────── */
+    .kpi-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        text-align: center;
+        padding: 1.1rem .8rem;
+        background: #fff;
+    }
+    .kpi-card .kpi-icon  { font-size: 1.8rem; }
+    .kpi-card .kpi-label { font-size: .67rem; color: #637381; font-weight: 700; text-transform: uppercase; margin: .15rem 0; }
+    .kpi-card .kpi-value { font-size: 2rem; font-weight: 700; }
+    /* ── tabla pivot ─────────────────────────────── */
+    .tabla-pivot           { font-size: .79rem; }
+    .tabla-pivot th,
+    .tabla-pivot td        { vertical-align: middle !important; }
+    .tabla-pivot thead th  { text-align: center; }
+    .tabla-pivot td.area   { font-weight: 600; padding-left: .75rem; }
+    .tabla-pivot td.num    { text-align: center; }
+    .tabla-pivot tfoot td  { font-weight: bold; text-align: center; background: #e8f5e9; }
+    /* ── tabla mensual ───────────────────────────── */
+    .tabla-mes th,
+    .tabla-mes td          { vertical-align: middle !important; text-align: center; font-size: .79rem; }
+    .tabla-mes td:first-child { text-align: left; font-weight: 600; padding-left: .75rem; }
+    .tabla-mes tfoot td    { font-weight: bold; background: #e8f5e9; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/Sistemas">Sistemas</a></li>
+    <li class="breadcrumb-item active">KPI Desarrollo</li>
+}
+
+<!-- ══ FILTROS ════════════════════════════════════════════ -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+        <button class="btn btn-sm btn-outline-success" id="btnExportar" onclick="exportarExcel()" disabled>
+            <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+        </button>
+    </div>
+</div>
+
+<!-- ══ KPI CARDS ══════════════════════════════════════════ -->
+<div class="row g-3 mb-4" id="kpiCards"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 1 — Requerimientos por Área (tabla pivot)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-table me-1"></i>Requerimientos por Área</div>
+<p class="report-desc">
+    Muestra cuántos requerimientos recibió cada área en cada año del período consultado
+    y cuántos de ellos ya fueron entregados (cerrados). La diferencia entre PEND y ENTR
+    son los que aún están en atención.
+</p>
+<div class="card chart-card position-relative mb-4">
+    <div id="spinnerPivot" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+    <div class="card-header"><i class="bi bi-grid-3x2-gap me-1"></i>Detalle por Área y Año</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered tabla-pivot mb-0" id="tablaPivot">
+                <thead></thead><tbody></tbody><tfoot></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 2 — Atención mensual (tabla + gráfico)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-calendar3 me-1"></i>Atención mensual <span id="lblAnoAt"></span></div>
+<p class="report-desc">
+    Seguimiento mes a mes de los requerimientos del año más reciente del rango:
+    cuántos se resolvieron en el mismo mes en que se crearon, cuántos en un mes posterior
+    y cuántos siguen pendientes. El <strong>%</strong> indica la tasa de atención inmediata.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-table me-1"></i>Tabla de atención mensual</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Requerimientos creados cada mes, indicando si fueron atendidos en el mismo mes, en un mes posterior o siguen abiertos. El % refleja la velocidad de respuesta del equipo.
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered tabla-mes mb-0" id="tablaMes">
+                        <thead></thead><tbody></tbody><tfoot></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-bar-chart-steps me-1"></i>Evolución mensual: atendidos, pendientes y % de resolución inmediata</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Las barras apiladas muestran cuántos requerimientos de cada mes fueron resueltos (azul = mismo mes, verde = mes siguiente, naranja = pendientes). La línea verde indica el porcentaje resuelto en el mismo mes.
+            </div>
+            <div class="card-body" style="height:370px">
+                <canvas id="chartMes"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 3 — Recibidos por Año  |  Dona de estado
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Análisis comparativo</div>
+<p class="report-desc">
+    Comparación del volumen de requerimientos agrupado por año y estado global del período consultado.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-lg-7">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>¿Cuántos requerimientos se crearon cada año?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Muestra el total de requerimientos registrados (naranja) y los ya entregados (azul) agrupados por año. Permite ver cómo evoluciona la carga de trabajo y la capacidad de atención a lo largo del tiempo.
+            </div>
+            <div class="card-body" style="height:360px">
+                <canvas id="chartAno"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-pie-chart-fill me-1"></i>¿Cuánto del total está entregado?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Proporción global entre requerimientos ya entregados (azul) y los que siguen abiertos (naranja). El porcentaje dentro de la dona indica qué fracción representa cada grupo sobre el total.
+            </div>
+            <div class="card-body" style="height:310px; display:flex; align-items:center; justify-content:center;">
+                <canvas id="chartDona"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 4 — Áreas: requerimientos y cerrados (fila completa, altura dinámica)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-diagram-3 me-1"></i>Requerimientos por Área</div>
+<p class="report-desc">
+    Cada barra horizontal representa un área. La barra naranja indica el total de requerimientos recibidos;
+    la azul, cuántos ya fueron entregados. Áreas ordenadas alfabéticamente.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>¿Qué áreas tienen más requerimientos y cuántos ya están cerrados?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada barra horizontal representa un área. La barra naranja indica el total de requerimientos recibidos; la azul, cuántos ya fueron entregados. Áreas ordenadas alfabéticamente.
+            </div>
+            <div class="card-body p-2">
+                <div id="wrapperArea" style="position:relative">
+                    <canvas id="chartArea"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 5 — Avance por Área (fila completa, altura dinámica)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-speedometer2 me-1"></i>Avance de Entrega por Área</div>
+<p class="report-desc">
+    Indica qué porcentaje de sus requerimientos ya entregó cada área respecto al total que recibió.
+    Verde ≥ 80 %, naranja ≥ 50 %, rojo &lt; 50 %. Áreas ordenadas alfabéticamente.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-speedometer2 me-1"></i>% de avance por área — ¿qué tan adelantada está cada área?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Indica qué porcentaje de sus requerimientos ya entregó cada área respecto al total que recibió. Verde ≥ 80 %, naranja ≥ 50 %, rojo &lt; 50 %. Áreas ordenadas alfabéticamente.
+            </div>
+            <div class="card-body p-2">
+                <div id="wrapperAvance" style="position:relative">
+                    <canvas id="chartAvance"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de error -->
+<div class="modal fade" id="modalErrorDev" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Error al cargar el dashboard</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1 text-muted small">Se produjo un error al obtener los datos desde el servidor. Detalle:</p>
+                <pre id="modalErrorDetalle" class="bg-light border rounded p-2 small mb-0" style="white-space:pre-wrap; max-height:260px; overflow:auto"></pre>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+(function () {
+    'use strict';
+
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'Segoe UI','Helvetica Neue',Arial,sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    /* ── Paleta ───────────────────────────────── */
+    const COLORS = [
+        '#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f',
+        '#c62828','#4e342e','#37474f','#f9a825','#ad1457',
+        '#283593','#ef6c00','#2e7d5e','#00695c','#558b2f'
+    ];
+    const AÑO_BG      = ['#d1e9ff','#d4edda','#fff3cd','#f8d7da','#e2d9f3'];
+    const AÑO_ENTR_BG = ['#1565C0','#28a745','#e65100','#dc3545','#7c4dff'];
+
+    const charts = {};
+    const destroy = k => { if (charts[k]) { charts[k].destroy(); delete charts[k]; } };
+
+    /* ── Fechas por defecto ───────────────────── */
+    function setDefaultDates() {
+        const hoy = new Date(), ini = new Date(hoy.getFullYear(), 0, 1);
+        const iso = d => d.toISOString().slice(0, 10);
+        document.getElementById('fechaInicio').value = iso(ini);
+        document.getElementById('fechaFin').value    = iso(hoy);
+    }
+
+    function buildParams() {
+        const p = new URLSearchParams();
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        if (fi) p.set('fechaInicio', fi);
+        if (ff) p.set('fechaFin',    ff);
+        return p;
+    }
+
+    /* ══════════════════════════════════════════
+       KPI CARDS
+    ══════════════════════════════════════════ */
+    function renderKpis(d) {
+        const cards = [
+            { icon: '📋', label: 'Total Recibidos',     value: d.totalRecibidos,  color: '#1B4D3E' },
+            { icon: '⏳', label: 'Pendientes Abiertos', value: d.totalPendientes, color: '#e65100' },
+            { icon: '✅', label: 'Total Entregados',    value: d.totalEntregados, color: '#1565C0' },
+            { icon: '📊', label: '% Atención ' + d.anoAtencion, value: d.pctAtencionAno + '%', color: '#2e7d32' },
+        ];
+        document.getElementById('kpiCards').innerHTML = cards.map(c => `
+            <div class="col-6 col-xl-3">
+                <div class="kpi-card" style="border-top:4px solid ${c.color}">
+                    <div class="kpi-icon">${c.icon}</div>
+                    <div class="kpi-label">${c.label}</div>
+                    <div class="kpi-value" style="color:${c.color}">${c.value}</div>
+                </div>
+            </div>`).join('');
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 1 — Tabla pivot (colores por año)
+    ══════════════════════════════════════════ */
+    function renderPivot(d) {
+        const t = document.getElementById('tablaPivot');
+        const a = d.anos || [];
+
+        // THEAD — fila 1: años | fila 2: PEND/ENTR
+        let h1 = `<tr>
+            <th rowspan="2" class="text-start align-middle ps-3"
+                style="background:#e8eaf6; min-width:190px;">ÁREA</th>`;
+        a.forEach((an, i) => {
+            h1 += `<th colspan="2" class="text-center"
+                       style="background:${AÑO_BG[i % AÑO_BG.length]};
+                              border-bottom:3px solid ${AÑO_ENTR_BG[i % AÑO_ENTR_BG.length]};">
+                       <strong>${an}</strong></th>`;
+        });
+        h1 += `<th rowspan="2" class="text-center align-middle"
+                   style="background:#c8e6da; color:#1B4D3E; min-width:72px;">Total<br>PEND</th>
+               <th rowspan="2" class="text-center align-middle"
+                   style="background:#bbdefb; color:#1565C0; min-width:72px;">Total<br>ENTR</th></tr>`;
+
+        let h2 = '<tr>';
+        a.forEach((_, i) => {
+            const bg = AÑO_BG[i % AÑO_BG.length];
+            h2 += `<th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">PEND</th>
+                   <th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">ENTR</th>`;
+        });
+        h2 += '</tr>';
+        t.tHead.innerHTML = h1 + h2;
+
+        // TBODY
+        t.tBodies[0].innerHTML = (d.filas || []).map(f => {
+            let row = `<tr><td class="area">${f.area}</td>`;
+            f.anos.forEach((c, i) => {
+                const bg = AÑO_BG[i % AÑO_BG.length];
+                const ec = AÑO_ENTR_BG[i % AÑO_ENTR_BG.length];
+                row += `<td class="num" style="background:${bg}44">${c.pendiente || ''}</td>`;
+                row += `<td class="num" style="background:${bg}44; color:${ec}; font-weight:600">${c.entregado || ''}</td>`;
+            });
+            row += `<td class="num" style="background:#eafaf1; color:#1B4D3E; font-weight:700">${f.totalPendiente || ''}</td>
+                    <td class="num" style="background:#e3f2fd; color:#1565C0; font-weight:700">${f.totalEntregado || ''}</td>`;
+            return row + '</tr>';
+        }).join('');
+
+        // TFOOT
+        let foot = '<tr><td class="text-center fw-bold">Total general</td>';
+        (d.totalesAno || []).forEach((c, i) => {
+            const bg = AÑO_BG[i % AÑO_BG.length];
+            const ec = AÑO_ENTR_BG[i % AÑO_ENTR_BG.length];
+            foot += `<td style="background:${bg}66">${c.pendiente || ''}</td>
+                     <td style="background:${bg}66; color:${ec}; font-weight:700">${c.entregado || ''}</td>`;
+        });
+        foot += `<td style="color:#1B4D3E; font-weight:700">${d.gtPendiente || ''}</td>
+                 <td style="color:#1565C0; font-weight:700">${d.gtEntregado || ''}</td></tr>`;
+        t.tFoot.innerHTML = foot;
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 2 — Tabla mensual + Chart mixto
+    ══════════════════════════════════════════ */
+    function renderMes(d) {
+        document.getElementById('lblAnoAt').textContent = d.anoAtencion;
+        const data = d.atencionMes || [];
+
+        // Tabla
+        const tab = document.getElementById('tablaMes');
+        tab.tHead.innerHTML = `
+            <tr style="background:#c5d9f7">
+                <th rowspan="2" class="text-start align-middle ps-2" style="min-width:88px">MES</th>
+                <th rowspan="2" class="align-middle">REQ</th>
+                <th colspan="2" class="text-center" style="background:#9fbef0">ATENCIÓN</th>
+                <th rowspan="2" class="align-middle" style="background:#fde8c8">PEND</th>
+                <th rowspan="2" class="align-middle">%</th>
+            </tr>
+            <tr style="background:#bcd1f0">
+                <th>MES</th><th>SIG.MES</th>
+            </tr>`;
+
+        tab.tBodies[0].innerHTML = data.map(r => {
+            const color = r.pctMismoMes >= 80 ? '#2e7d32' : r.pctMismoMes >= 50 ? '#e65100' : '#c62828';
+            return `<tr>
+                <td class="text-start">${r.etiqueta}</td>
+                <td>${r.recibidos}</td>
+                <td style="color:#1565C0; font-weight:700">${r.atMismoMes || ''}</td>
+                <td style="color:#1B4D3E">${r.atSigMes || ''}</td>
+                <td style="color:#e65100; font-weight:700">${r.pendientes || ''}</td>
+                <td><span class="badge" style="background:${color}; font-size:.72rem">${r.pctMismoMes}%</span></td>
+            </tr>`;
+        }).join('');
+
+        const tot = data.reduce((s, r) => ({
+            rec: s.rec + r.recibidos, mismo: s.mismo + r.atMismoMes,
+            sig: s.sig + r.atSigMes, pend: s.pend + r.pendientes
+        }), { rec: 0, mismo: 0, sig: 0, pend: 0 });
+        const totColor = d.pctAtencionAno >= 80 ? '#2e7d32' : d.pctAtencionAno >= 50 ? '#e65100' : '#c62828';
+        tab.tFoot.innerHTML = `
+            <tr>
+                <td class="text-start">TOTAL</td>
+                <td>${tot.rec}</td>
+                <td style="color:#1565C0; font-weight:700">${tot.mismo}</td>
+                <td style="color:#1B4D3E">${tot.sig}</td>
+                <td style="color:#e65100; font-weight:700">${tot.pend || ''}</td>
+                <td><span class="badge" style="background:${totColor}; font-size:.78rem">${d.pctAtencionAno}%</span></td>
+            </tr>`;
+
+        // Chart mixto barras apiladas + línea %
+        destroy('mes');
+        if (!data.length) return;
+        charts.mes = new Chart(document.getElementById('chartMes').getContext('2d'), {
+            data: {
+                labels: data.map(r => r.etiqueta),
+                datasets: [
+                    {
+                        type: 'bar', label: 'Atendidos mismo mes',
+                        data: data.map(r => r.atMismoMes),
+                        backgroundColor: 'rgba(21,101,192,0.82)',
+                        borderColor: '#1565C0', borderWidth: 1,
+                        stack: 'a', yAxisID: 'y',
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            anchor: 'center', align: 'center',
+                            color: '#fff', font: { size: 11, weight: '700' },
+                            textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                            formatter: v => v
+                        }
+                    },
+                    {
+                        type: 'bar', label: 'Atendidos mes siguiente',
+                        data: data.map(r => r.atSigMes),
+                        backgroundColor: 'rgba(27,77,62,0.72)',
+                        borderColor: '#1B4D3E', borderWidth: 1,
+                        stack: 'a', yAxisID: 'y',
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            anchor: 'center', align: 'center',
+                            color: '#fff', font: { size: 11, weight: '700' },
+                            textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                            formatter: v => v
+                        }
+                    },
+                    {
+                        type: 'bar', label: 'Pendientes',
+                        data: data.map(r => r.pendientes),
+                        backgroundColor: 'rgba(230,81,0,0.82)',
+                        borderColor: '#e65100', borderWidth: 1,
+                        stack: 'a', yAxisID: 'y',
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            anchor: 'center', align: 'center',
+                            color: '#fff', font: { size: 11, weight: '700' },
+                            textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                            formatter: v => v
+                        }
+                    },
+                    {
+                        type: 'line', label: '% Atendidos en el mismo mes',
+                        data: data.map(r => r.pctMismoMes),
+                        borderColor: '#111', backgroundColor: 'rgba(0,0,0,0.06)',
+                        borderWidth: 2.5, pointRadius: 6,
+                        pointBackgroundColor: '#111', pointBorderColor: '#fff', pointBorderWidth: 2,
+                        tension: 0.3, yAxisID: 'y1',
+                        datalabels: {
+                            display: true, anchor: 'top', align: 'top',
+                            color: '#000', font: { size: 11, weight: '700' },
+                            borderColor: '#fff', borderWidth: 1, borderRadius: 3,
+                            backgroundColor: 'rgba(255,255,255,0.75)',
+                            padding: { top: 1, bottom: 1, left: 3, right: 3 },
+                            formatter: v => v + '%'
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } },
+                    datalabels: {}
+                },
+                layout: { padding: { top: 30 } },
+                scales: {
+                    y:  { beginAtZero: true, stacked: true, ticks: { stepSize: 3 },
+                          title: { display: true, text: 'Cantidad', font: { size: 11 } },
+                          grid: { color: 'rgba(0,0,0,.06)' } },
+                    y1: { beginAtZero: true, max: 100, position: 'right',
+                          grid: { drawOnChartArea: false },
+                          ticks: { callback: v => v + '%', stepSize: 10 },
+                          title: { display: true, text: '% Atención', font: { size: 11 } } },
+                    x:  { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 3a — Recibidos por Año
+    ══════════════════════════════════════════ */
+    function renderChartAno(d) {
+        destroy('ano');
+        const data = (d.porAno || []).filter(x => x.pendiente > 0 || x.entregado > 0);
+        if (!data.length) return;
+        charts.ano = new Chart(document.getElementById('chartAno').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.map(r => String(r.ano)),
+                datasets: [
+                    {
+                        label: 'Recibidos (total)',
+                        data: data.map(r => r.pendiente),
+                        backgroundColor: data.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
+                        borderColor:     data.map((_, i) => COLORS[i % COLORS.length]),
+                        borderWidth: 1, borderRadius: 5,
+                        datalabels: {
+                            display: true, anchor: 'end', align: 'top',
+                            color: '#374151', font: { size: 12, weight: '700' },
+                            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
+                            formatter: v => v
+                        }
+                    },
+                    {
+                        label: 'Entregados',
+                        data: data.map(r => r.entregado),
+                        backgroundColor: 'rgba(21,101,192,0.75)',
+                        borderColor: '#1565C0', borderWidth: 1, borderRadius: 5,
+                        datalabels: {
+                            display: true, anchor: 'end', align: 'top',
+                            color: '#1565C0', font: { size: 12, weight: '700' },
+                            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
+                            formatter: v => v
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } } },
+                layout: { padding: { top: 30 } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 7 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 3b — Pendientes vs Entregados x Área
+    ══════════════════════════════════════════ */
+    function renderChartArea(d) {
+        destroy('area');
+        const data = [...(d.porArea || [])].sort((a, b) => a.area.localeCompare(b.area, 'es')).slice(0, 50);
+        if (!data.length) return;
+
+        const rowH   = 38;   // px por barra
+        const minH   = 220;
+        const height = Math.max(minH, data.length * rowH + 60);
+        const wrapper = document.getElementById('wrapperArea');
+        wrapper.style.height = height + 'px';
+
+        charts.area = new Chart(document.getElementById('chartArea').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.map(r => r.area),
+                datasets: [
+                    {
+                        label: 'Recibidos (total)',
+                        data: data.map(r => r.totalPendiente),
+                        backgroundColor: 'rgba(230,81,0,0.82)',
+                        borderColor: '#e65100', borderWidth: 1, borderRadius: 3,
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            anchor: 'end', align: 'right',
+                            color: '#374151', font: { size: 11, weight: '700' },
+                            textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3,
+                            formatter: v => v
+                        }
+                    },
+                    {
+                        label: 'Entregados',
+                        data: data.map(r => r.totalEntregado),
+                        backgroundColor: 'rgba(21,101,192,0.82)',
+                        borderColor: '#1565C0', borderWidth: 1, borderRadius: 3,
+                        datalabels: {
+                            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                            anchor: 'end', align: 'right',
+                            color: '#1565C0', font: { size: 11, weight: '700' },
+                            textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3,
+                            formatter: v => v
+                        }
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } },
+                           tooltip: { mode: 'nearest', intersect: true } },
+                layout: { padding: { right: 40 } },
+                scales: {
+                    x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 4a — Dona: estado global
+       Muestra la proporción total Entregados / Abiertos
+    ══════════════════════════════════════════ */
+    function renderChartDona(d) {
+        destroy('dona');
+        const entr  = d.totalEntregados  || 0;
+        const pend  = d.totalPendientes  || 0;
+        if (entr + pend === 0) return;
+
+        const gran = entr + pend;
+        charts.dona = new Chart(document.getElementById('chartDona').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Entregados', 'Pendientes abiertos'],
+                datasets: [{
+                    data: [entr, pend],
+                    backgroundColor: ['rgba(21,101,192,0.82)', 'rgba(230,81,0,0.82)'],
+                    borderColor:     ['#1565C0', '#e65100'],
+                    borderWidth: 2, hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 13, padding: 14 } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.label}: ${ctx.raw} (${(ctx.raw / gran * 100).toFixed(1)}%)`
+                        }
+                    },
+                    datalabels: {
+                        display: true, color: '#fff',
+                        font: { size: 13, weight: '700' },
+                        textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                        formatter: (v, ctx) => {
+                            const pct = gran > 0 ? (v / gran * 100).toFixed(0) : 0;
+                            return pct >= 8 ? pct + '%' : '';
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 4b — Barras horizontales: % avance x área
+       % avance = Entregados / Recibidos × 100
+    ══════════════════════════════════════════ */
+    function renderChartAvance(d) {
+        destroy('avance');
+        const data = [...(d.porArea || [])]
+            .filter(r => r.totalPendiente > 0)
+            .map(r => ({
+                area: r.area,
+                pct:  r.totalPendiente > 0
+                    ? Math.round(r.totalEntregado / r.totalPendiente * 100)
+                    : 0
+            }))
+            .sort((a, b) => a.area.localeCompare(b.area, 'es'));
+        if (!data.length) return;
+
+        const rowH    = 38;
+        const minH    = 220;
+        const height  = Math.max(minH, data.length * rowH + 60);
+        const wrapper = document.getElementById('wrapperAvance');
+        wrapper.style.height = height + 'px';
+
+        charts.avance = new Chart(document.getElementById('chartAvance').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.map(r => r.area),
+                datasets: [{
+                    label: '% Entregado',
+                    data: data.map(r => r.pct),
+                    backgroundColor: data.map(r =>
+                        r.pct >= 80 ? 'rgba(46,125,50,0.82)'
+                       : r.pct >= 50 ? 'rgba(230,81,0,0.78)'
+                       :               'rgba(198,40,40,0.78)'),
+                    borderColor: data.map(r =>
+                        r.pct >= 80 ? '#2e7d32' : r.pct >= 50 ? '#e65100' : '#c62828'),
+                    borderWidth: 1, borderRadius: 4,
+                    datalabels: {
+                        display: true, anchor: 'end', align: 'right',
+                        color: '#374151', font: { size: 11, weight: '700' },
+                        textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3,
+                        formatter: v => v + '%'
+                    }
+                }]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `Avance: ${ctx.raw}%` } }
+                },
+                layout: { padding: { right: 50 } },
+                scales: {
+                    x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' },
+                         grid: { color: 'rgba(0,0,0,.06)' } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       Carga global
+    ══════════════════════════════════════════ */
+    async function loadAll() {
+        document.getElementById('spinnerPivot').style.display = 'flex';
+        try {
+            const url = '/Sistemas/Desarrollo/DatosDashboard?' + buildParams().toString();
+            const r   = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) throw new Error(await r.text());
+            const d = await r.json();
+
+            renderKpis(d);
+            renderPivot(d);       // Sección 1
+            renderMes(d);         // Sección 2
+            renderChartAno(d);    // Sección 3a
+            renderChartArea(d);   // Sección 3b
+            renderChartDona(d);   // Sección 4a
+            renderChartAvance(d); // Sección 4b
+
+            document.getElementById('btnExportar').disabled = false;
+        } catch (e) {
+            console.error(e);
+            document.getElementById('modalErrorDetalle').textContent = e.message || String(e);
+            new bootstrap.Modal(document.getElementById('modalErrorDev')).show();
+        } finally {
+            document.getElementById('spinnerPivot').style.display = 'none';
+        }
+    }
+    window.loadAll = loadAll;
+
+    /* ══════════════════════════════════════════
+       Exportar gráficos al Excel plantilla
+    ══════════════════════════════════════════ */
+    async function exportarExcel() {
+        const btn = document.getElementById('btnExportar');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
+
+        try {
+            // Capturar todos los canvas visibles como PNG base64
+            const canvasIds = ['chartMes', 'chartAno', 'chartDona', 'chartArea', 'chartAvance'];
+            const imagenes  = canvasIds
+                .map(id => document.getElementById(id))
+                .filter(c => c)
+                .map(c => c.toDataURL('image/png'));
+
+            const fi = document.getElementById('fechaInicio').value;
+            const ff = document.getElementById('fechaFin').value;
+            const fmtDate = v => v ? new Date(v + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
+            const periodo = (fi && ff) ? `${fmtDate(fi)} — ${fmtDate(ff)}` : '';
+
+            const resp = await fetch('/Sistemas/Desarrollo/ExportarExcel', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ imagenes, periodo })
+            });
+
+            if (!resp.ok) throw new Error(await resp.text());
+
+            // Descargar el archivo
+            const blob = await resp.blob();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `Indicador_Desarrollo_${fi || 'export'}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('modalErrorDetalle').textContent = e.message || String(e);
+            new bootstrap.Modal(document.getElementById('modalErrorDev')).show();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel';
+        }
+    }
+    window.exportarExcel = exportarExcel;
+
+    setDefaultDates();
+    loadAll();
+})();
+</script>
+}

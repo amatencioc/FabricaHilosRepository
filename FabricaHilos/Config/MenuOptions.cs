@@ -63,6 +63,11 @@ public class MenuOptions
     public bool CcNivelMorosidad         { get; set; } = true;
     public bool CcNivelTiempo            { get; set; } = true;
 
+    // ── Menús: Sistemas ──────────────────────────────────────────────────
+    public bool Sistemas                          { get; set; } = false;
+    public bool SistemasIndicadores               { get; set; } = true;
+    public bool SistemasIndicadoresDesarrollo     { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -109,6 +114,10 @@ public class MenuOptions
         CreditosCobranza = true,
         CcNivelMorosidad = true,
         CcNivelTiempo    = true,
+
+        Sistemas                      = true,
+        SistemasIndicadores           = true,
+        SistemasIndicadoresDesarrollo = true,
     };
 }
 

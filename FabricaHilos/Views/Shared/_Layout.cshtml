@@ -373,6 +373,40 @@
                         </ul>
                     </li>
                 }
+
+                @if (menus.Sistemas)
+                {
+                    <!-- SISTEMAS -->
+                    <li class="sidebar-section">SISTEMAS</li>
+                    <li>
+                        <a href="/Sistemas" class="sidebar-link @(ctrl == "Sistemas" ? "active" : "")">
+                            <i class="bi bi-pc-display"></i> Sistemas
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.SistemasIndicadores)
+                            {
+                            <li>
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" ? "active" : "")"
+                                   data-bs-toggle="collapse" href="#submenuSistemasInd" role="button"
+                                   aria-expanded="@(ctrl == "Desarrollo" ? "true" : "false")"
+                                   aria-controls="submenuSistemasInd">
+                                    <i class="bi bi-graph-up-arrow"></i> Indicadores
+                                </a>
+                                <ul class="collapse @(ctrl == "Desarrollo" ? "show" : "") list-unstyled ps-3" id="submenuSistemasInd">
+                                    @if (menus.SistemasIndicadoresDesarrollo)
+                                    {
+                                    <li>
+                                        <a href="/Sistemas/Desarrollo" class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" ? "active" : "")">
+                                            <i class="bi bi-kanban-fill"></i> KPI Desarrollo
+                                        </a>
+                                    </li>
+                                    }
+                                </ul>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
             </ul>
         </nav>
 

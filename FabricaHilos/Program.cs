@@ -19,6 +19,7 @@ using System.Threading.RateLimiting;
 using QuestPDF.Infrastructure;
 using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
+using FabricaHilos.Services.Sistemas;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -141,6 +142,8 @@ builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
 builder.Services.AddScoped<INivelMorosidadService, NivelMorosidadService>();
 builder.Services.AddScoped<INivelTiempoService, NivelTiempoService>();
+builder.Services.AddScoped<IDesarrolloService, DesarrolloService>();
+builder.Services.AddScoped<DesarrolloExcelService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 
@@ -174,6 +177,8 @@ builder.Services.AddControllersWithViews()
         options.ViewLocationFormats.Add("/Views/Seguridad/{1}/{0}.cshtml");
         // Permite que Views/CreditosCobranza/{Controller}/{Action}.cshtml sea encontrado automáticamente
         options.ViewLocationFormats.Add("/Views/CreditosCobranza/{1}/{0}.cshtml");
+        // Permite que Views/Sistemas/{Controller}/{Action}.cshtml sea encontrado automáticamente
+        options.ViewLocationFormats.Add("/Views/Sistemas/{1}/{0}.cshtml");
     });
 
 // Rate Limiting: protege /Account/Login contra fuerza bruta
