@@ -86,16 +86,28 @@ public class AnularDocumentoController : OracleBaseController
         [FromQuery] string mes,
         [FromQuery] string libro)
     {
-        Response.ContentType  = "text/event-stream";
-        Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["X-Accel-Buffering"] = "no";
+        Response.ContentType = "text/event-stream; charset=utf-8";
+        Response.Headers["Cache-Control"]      = "no-cache, no-store";
+        Response.Headers["X-Accel-Buffering"]  = "no";
+        Response.Headers["Connection"]         = "keep-alive";
 
         async Task Emit(object payload)
         {
             var json = System.Text.Json.JsonSerializer.Serialize(payload,
-                new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                });
             await Response.WriteAsync($"data: {json}\n\n");
             await Response.Body.FlushAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(serie) ||
+            string.IsNullOrWhiteSpace(numero)   || string.IsNullOrWhiteSpace(numeroBusqueda) ||
+            string.IsNullOrWhiteSpace(voucherBusqueda))
+        {
+            await Emit(new { paso = 0, estado = "aborted", mensaje = "Faltan parámetros requeridos." });
+            return;
         }
 
         try
@@ -108,7 +120,7 @@ public class AnularDocumentoController : OracleBaseController
 
             // ── Paso 2: ESPERAR MOVGLOS ESTADO=9, luego DELETE MOVGLOS ──────
             await Emit(new { paso = 2, estado = "running", mensaje = "Esperando que MOVGLOS alcance ESTADO = 9 (disparadores en curso)..." });
-            var p2 = await _service.Paso2EsperarYDeleteMovGlosAsync(tipoDoc, serie, numero);
+            var p2 = await _service.Paso2EsperarYDeleteMovGlosAsync(tipoDoc, serie, numero, timeoutSegundos: 5);
             await Emit(new { paso = 2, estado = p2.Ok ? "ok" : "error", mensaje = p2.Ok ? p2.Mensaje : p2.Error, filas = p2.Filas });
             if (!p2.Ok) { await Emit(new { paso = 0, estado = "aborted" }); return; }
 
@@ -129,6 +141,35 @@ public class AnularDocumentoController : OracleBaseController
         {
             _logger.LogError(ex, "Error en AnularDocumento/RestablecerStream");
             await Emit(new { paso = 0, estado = "aborted", mensaje = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Revierte NRODOC y NROLIBR a los valores anteriores (deshace la restauración).
+    /// POST /Sistemas/Requerimientos/AnularDocumento/Revertir
+    /// </summary>
+    [HttpPost("Revertir")]
+    public async Task<IActionResult> Revertir(
+        [FromQuery] string tipoDoc,
+        [FromQuery] string serie,
+        [FromQuery] string numeroAnterior,
+        [FromQuery] string ano,
+        [FromQuery] string mes,
+        [FromQuery] string libro,
+        [FromQuery] string voucherAnterior)
+    {
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(serie))
+            return BadRequest(new { ok = false, error = "Faltan parámetros requeridos." });
+
+        try
+        {
+            var result = await _service.RevertirAsync(tipoDoc, serie, numeroAnterior, ano, mes, libro, voucherAnterior);
+            return Json(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en AnularDocumento/Revertir");
+            return StatusCode(500, new { ok = false, error = ex.Message });
         }
     }
 }

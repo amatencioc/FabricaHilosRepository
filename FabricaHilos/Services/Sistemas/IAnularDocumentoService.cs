@@ -16,4 +16,8 @@ public interface IAnularDocumentoService
 
     /// <summary>Paso 4: UPDATE NROLIBR SET NUMERO = voucherBusqueda.</summary>
     Task<RestablecerPasoDto> Paso4UpdateNroLibrAsync(string ano, string mes, string libro, string voucherBusqueda);
+
+    /// <summary>Revierte: UPDATE NRODOC y NROLIBR a los valores anteriores (antes de la restauración).</summary>
+    Task<RestablecerPasoDto> RevertirAsync(string tipoDoc, string serie, string numeroAnterior,
+                                           string ano, string mes, string libro, string voucherAnterior);
 }

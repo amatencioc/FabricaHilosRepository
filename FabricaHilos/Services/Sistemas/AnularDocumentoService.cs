@@ -167,9 +167,6 @@ public class AnularDocumentoService : OracleServiceBase, IAnularDocumentoService
     {
         try
         {
-            await using var con = new OracleConnection(GetOracleConnectionString());
-            await con.OpenAsync();
-
             const string sqlCheck =
                 @"SELECT COUNT(1) FROM {0}MOVGLOS
                    WHERE TIPO_REFERENCIA = :tipoDoc
@@ -177,12 +174,16 @@ public class AnularDocumentoService : OracleServiceBase, IAnularDocumentoService
                      AND NRO_REFERENCIA  = :numero
                      AND ESTADO         = '9'";
 
-            var deadline = DateTime.UtcNow.AddSeconds(timeoutSegundos);
+            var deadline  = DateTime.UtcNow.AddSeconds(timeoutSegundos);
             bool encontrado = false;
 
+            // Cada iteración abre su propia conexión para evitar timeouts
+            // de inactividad en Oracle 10g durante el período de espera.
             while (DateTime.UtcNow < deadline)
             {
-                await using var cmdCheck = new OracleCommand(string.Format(sqlCheck, S), con);
+                await using var conCheck = new OracleConnection(GetOracleConnectionString());
+                await conCheck.OpenAsync();
+                await using var cmdCheck = new OracleCommand(string.Format(sqlCheck, S), conCheck);
                 cmdCheck.Parameters.Add("tipoDoc", OracleDbType.Varchar2).Value = tipoDoc;
                 cmdCheck.Parameters.Add("serie",   OracleDbType.Varchar2).Value = serie;
                 cmdCheck.Parameters.Add("numero",  OracleDbType.Varchar2).Value = numero;
@@ -196,8 +197,8 @@ public class AnularDocumentoService : OracleServiceBase, IAnularDocumentoService
             if (!encontrado)
                 return new RestablecerPasoDto
                 {
-                    Ok     = false,
-                    Error  = $"Timeout ({timeoutSegundos}s): MOVGLOS nunca alcanzó ESTADO = 9."
+                    Ok    = false,
+                    Error = $"Timeout ({timeoutSegundos}s): MOVGLOS nunca alcanzó ESTADO = 9."
                 };
 
             const string sqlDelete =
@@ -206,7 +207,9 @@ public class AnularDocumentoService : OracleServiceBase, IAnularDocumentoService
                      AND SERIE           = :serie
                      AND NRO_REFERENCIA  = :numero";
 
-            await using var cmdDel = new OracleCommand(string.Format(sqlDelete, S), con);
+            await using var conDel = new OracleConnection(GetOracleConnectionString());
+            await conDel.OpenAsync();
+            await using var cmdDel = new OracleCommand(string.Format(sqlDelete, S), conDel);
             cmdDel.Parameters.Add("tipoDoc", OracleDbType.Varchar2).Value = tipoDoc;
             cmdDel.Parameters.Add("serie",   OracleDbType.Varchar2).Value = serie;
             cmdDel.Parameters.Add("numero",  OracleDbType.Varchar2).Value = numero;
@@ -291,6 +294,64 @@ public class AnularDocumentoService : OracleServiceBase, IAnularDocumentoService
                 Ok      = filas > 0,
                 Filas   = filas,
                 Mensaje = $"UPDATE NROLIBR ejecutado. NUMERO = {voucherBusqueda}. Filas: {filas}."
+            };
+        }
+        catch (Exception ex)
+        {
+            return new RestablecerPasoDto { Ok = false, Error = ex.Message };
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  REVERTIR — Restaura NRODOC y NROLIBR a los valores anteriores
+    // ══════════════════════════════════════════════════════════════════════════
+    public async Task<RestablecerPasoDto> RevertirAsync(
+        string tipoDoc, string serie, string numeroAnterior,
+        string ano, string mes, string libro, string voucherAnterior)
+    {
+        try
+        {
+            await using var con = new OracleConnection(GetOracleConnectionString());
+            await con.OpenAsync();
+
+            // NRODOC
+            const string sqlNroDoc =
+                @"UPDATE {0}NRODOC
+                     SET NUMERO  = :numeroAnterior
+                   WHERE TIPODOC = :tipoDoc
+                     AND SERIE   = :serie";
+
+            await using (var cmd = new OracleCommand(string.Format(sqlNroDoc, S), con))
+            {
+                cmd.Parameters.Add("numeroAnterior", OracleDbType.Varchar2).Value = numeroAnterior;
+                cmd.Parameters.Add("tipoDoc",        OracleDbType.Varchar2).Value = tipoDoc;
+                cmd.Parameters.Add("serie",          OracleDbType.Varchar2).Value = serie;
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // NROLIBR
+            const string sqlNroLibr =
+                @"UPDATE {0}NROLIBR
+                     SET NUMERO = :voucherAnterior
+                   WHERE ANO    = :ano
+                     AND MES    = :mes
+                     AND LIBRO  = :libro";
+
+            int filas;
+            await using (var cmd = new OracleCommand(string.Format(sqlNroLibr, S), con))
+            {
+                cmd.Parameters.Add("voucherAnterior", OracleDbType.Varchar2).Value = voucherAnterior;
+                cmd.Parameters.Add("ano",             OracleDbType.Varchar2).Value = ano;
+                cmd.Parameters.Add("mes",             OracleDbType.Varchar2).Value = mes;
+                cmd.Parameters.Add("libro",           OracleDbType.Varchar2).Value = libro;
+                filas = await cmd.ExecuteNonQueryAsync();
+            }
+
+            return new RestablecerPasoDto
+            {
+                Ok      = true,
+                Filas   = filas,
+                Mensaje = $"Revertido. NRODOC.NUMERO = {numeroAnterior}, NROLIBR.NUMERO = {voucherAnterior}."
             };
         }
         catch (Exception ex)

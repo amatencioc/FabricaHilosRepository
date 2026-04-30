@@ -210,6 +210,12 @@
                     <span id="pasoBadge4" class="step-badge step-warn flex-shrink-0">4</span>
                     <div><strong>UPDATE NROLIBR</strong><br><span id="pasoMsg4" class="text-muted"></span></div>
                 </div>
+                <!-- Botón Revertir: aparece sólo tras completar exitosamente -->
+                <div id="contenedorBtnRevertir" style="display:none" class="mt-2">
+                    <button class="btn btn-sm btn-outline-secondary fw-bold" onclick="abrirRevertir()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Revertir cambios
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -292,6 +298,52 @@
             <div class="modal-body small" id="cuerpoExitoRestablecer"></div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-success" data-bs-dismiss="modal">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal confirmación Revertir -->
+<div class="modal fade" id="modalConfirmarRevertir" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-secondary">
+            <div class="modal-header py-2 bg-secondary text-white">
+                <h6 class="modal-title">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Confirmar Revertir
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small">
+                <p class="mb-2">¿Está seguro de <strong>revertir</strong> los cambios realizados?</p>
+                <div class="bg-light border rounded p-2 small" id="resumenRevertir"></div>
+                <div class="alert alert-secondary py-1 mt-2 mb-0 small">
+                    <i class="bi bi-info-circle-fill me-1"></i>
+                    Esto restaurará <code>NRODOC.NUMERO</code> y <code>NROLIBR.NUMERO</code> a sus valores anteriores.
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-secondary fw-bold" id="btnConfirmarRevertir">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Sí, Revertir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal éxito Revertir -->
+<div class="modal fade" id="modalExitoRevertir" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-secondary">
+            <div class="modal-header py-2 bg-secondary text-white">
+                <h6 class="modal-title">
+                    <i class="bi bi-check-circle-fill me-2"></i>Revertido exitosamente
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small" id="cuerpoExitoRevertir"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Aceptar</button>
             </div>
         </div>
     </div>
@@ -554,17 +606,24 @@
             libro:           _libro
         });
 
-        const es = new EventSource(`/Sistemas/Requerimientos/AnularDocumento/RestablecerStream?${params}`);
+        const es = new EventSource(`/Sistemas/Requerimientos/AnularDocumento/RestablecerStream?${params}`,
+                                    { withCredentials: true });
         let abortado = false;
+        let cerrado  = false;
+
+        function cerrarEs() {
+            if (!cerrado) { cerrado = true; es.close(); }
+        }
 
         es.onmessage = function (e) {
             const d = JSON.parse(e.data);
 
             if (d.paso === 0) {
-                es.close();
+                cerrarEs();
                 if (d.estado === 'done') {
                     new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
-                    document.getElementById('panelRestablecer').style.display = 'none';
+                    // Mostrar botón Revertir
+                    document.getElementById('contenedorBtnRevertir').style.display = 'block';
                 } else if (d.estado === 'aborted') {
                     mostrarError(d.mensaje || 'La operación fue abortada.');
                     document.getElementById('btnRestablecerFactura').disabled = false;
@@ -589,10 +648,64 @@
         };
 
         es.onerror = function () {
-            es.close();
-            if (!abortado) mostrarError('Error de conexión con el servidor.');
+            cerrarEs();
+            if (!abortado) mostrarError('Error de conexión con el servidor durante la operación.');
             document.getElementById('btnRestablecerFactura').disabled = false;
         };
+    });
+
+    // ── Botón Revertir ──────────────────────────────────────────────────────
+    window.abrirRevertir = function () {
+        document.getElementById('resumenRevertir').innerHTML =
+            `<table class="table table-sm table-bordered mb-0 small">
+               <thead><tr><th>Campo</th><th>Se restaurará a</th></tr></thead>
+               <tbody>
+                 <tr><td>NRODOC.NUMERO</td><td><strong class="text-success">${_numeroAnterior}</strong></td></tr>
+                 <tr><td>NROLIBR.NUMERO</td><td><strong class="text-success">${_voucherAnterior}</strong></td></tr>
+               </tbody>
+             </table>`;
+        new bootstrap.Modal(document.getElementById('modalConfirmarRevertir')).show();
+    };
+
+    document.getElementById('btnConfirmarRevertir').addEventListener('click', async function () {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarRevertir')).hide();
+        this.disabled = true;
+
+        try {
+            const params = new URLSearchParams({
+                tipoDoc:        _tipoDoc,
+                serie:          _serie,
+                numeroAnterior: _numeroAnterior,
+                ano:            _ano,
+                mes:            _mes,
+                libro:          _libro,
+                voucherAnterior: _voucherAnterior
+            });
+            const res  = await fetch(`/Sistemas/Requerimientos/AnularDocumento/Revertir?${params}`,
+                                     { method: 'POST', cache: 'no-store' });
+            const data = await res.json();
+
+            if (!res.ok || !data.ok) {
+                mostrarError(data.error || 'Error al revertir.');
+                this.disabled = false;
+                return;
+            }
+
+            document.getElementById('cuerpoExitoRevertir').innerHTML =
+                `<p class="mb-2">✔ Valores restaurados correctamente.</p>
+                 <table class="table table-sm table-bordered small mb-0">
+                   <tbody>
+                     <tr><td>NRODOC.NUMERO</td><td><strong>${_numeroAnterior}</strong></td></tr>
+                     <tr><td>NROLIBR.NUMERO</td><td><strong>${_voucherAnterior}</strong></td></tr>
+                     <tr><td>Filas afectadas</td><td><strong>${data.filas}</strong></td></tr>
+                   </tbody>
+                 </table>`;
+            new bootstrap.Modal(document.getElementById('modalExitoRevertir')).show();
+            document.getElementById('contenedorBtnRevertir').style.display = 'none';
+        } catch (e) {
+            mostrarError(e.message || String(e));
+            this.disabled = false;
+        }
     });
 })();
 </script>
