@@ -144,6 +144,9 @@ builder.Services.AddScoped<INivelMorosidadService, NivelMorosidadService>();
 builder.Services.AddScoped<INivelTiempoService, NivelTiempoService>();
 builder.Services.AddScoped<IDesarrolloService, DesarrolloService>();
 builder.Services.AddScoped<DesarrolloExcelService>();
+builder.Services.AddScoped<IIncidenciaService, IncidenciaService>();
+builder.Services.AddScoped<ISeguimientoDevService, SeguimientoDevService>();
+builder.Services.AddScoped<IAnularDocumentoService, AnularDocumentoService>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 

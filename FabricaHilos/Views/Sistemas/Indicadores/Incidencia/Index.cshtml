@@ -1,5 +1,5 @@
 @{
-    ViewData["Title"] = "KPI Desarrollo - Sistemas";
+    ViewData["Title"] = "KPI Incidencias - Sistemas";
 }
 
 @section Styles {
@@ -82,22 +82,23 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a href="/Sistemas">Sistemas</a></li>
-    <li class="breadcrumb-item active">KPI Desarrollo</li>
+    <li class="breadcrumb-item active">KPI Incidencias</li>
 }
 
 <!-- ══ DESCRIPCIÓN GENERAL ══════════════════════════════════ -->
-<div class="alert mb-3 border-0 rounded-3 shadow-sm" style="background:#e8f5e9; border-left:5px solid #1B4D3E !important; padding:1rem 1.25rem">
+<div class="alert mb-3 border-0 rounded-3 shadow-sm" style="background:#fff3e0; border-left:5px solid #e65100 !important; padding:1rem 1.25rem">
     <div class="d-flex align-items-start gap-2">
-        <span style="font-size:1.6rem; line-height:1">🛠️</span>
+        <span style="font-size:1.6rem; line-height:1">🔔</span>
         <div>
-            <div class="fw-bold" style="color:#1B4D3E; font-size:.95rem">¿Qué mide este indicador?</div>
+            <div class="fw-bold" style="color:#e65100; font-size:.95rem">¿Qué mide este indicador?</div>
             <div class="mt-1" style="font-size:.8rem; color:#374151; line-height:1.65">
-                El indicador <strong>KPI Desarrollo</strong> centraliza el seguimiento de todos los requerimientos de desarrollo de software
-                gestionados por el equipo de Sistemas. Muestra <strong>cuántos requerimientos se crearon</strong> por área y año,
-                <strong>cuántos ya fueron entregados</strong> (ESTADO = 2) y <strong>cuántos siguen pendientes</strong>.<br>
-                El filtro de <strong>Fecha Inicio / Fin</strong> delimita el período de análisis según la fecha de creación del requerimiento.
+                El indicador <strong>KPI Incidencias</strong> centraliza el seguimiento de todos los tickets de soporte e incidencias
+                gestionados por el equipo de Sistemas. Muestra <strong>cuántas incidencias se crearon</strong> por área y año,
+                <strong>cuántas ya fueron resueltas</strong> y <strong>cuántas siguen pendientes</strong>.
+                Además incluye el <strong>promedio de minutos de atención</strong> por mes, que mide la agilidad del equipo para cerrar tickets.<br>
+                Los tickets con motivo 11 o 16 (Desarrollo) y los anulados (ESTADO = 9) son excluidos del cálculo de tiempos.<br>
+                El filtro de <strong>Fecha Inicio / Fin</strong> delimita el período de análisis según la fecha de creación de la incidencia.
                 Todos los gráficos y tablas se actualizan al presionar <em>Actualizar</em>.
-                El botón <em>Exportar Excel</em> permite descargar el detalle completo del período consultado.
             </div>
         </div>
     </div>
@@ -117,31 +118,29 @@
         <button class="btn btn-sm btn-success" onclick="loadAll()">
             <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
         </button>
-        <button class="btn btn-sm btn-outline-success" id="btnExportar" onclick="exportarExcel()" disabled>
-            <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
-        </button>
     </div>
 </div>
 
 <!-- ══ KPI CARDS ══════════════════════════════════════════ -->
 <p class="report-desc mt-1 mb-2" style="font-size:.78rem; color:#637381">
     <i class="bi bi-info-circle me-1"></i>
-    Resumen numérico del período consultado. <strong>Total Req.</strong> = todos los requerimientos creados en el rango.
-    <strong>Entregados</strong> = los ya cerrados con ESTADO = 2. <strong>Pendientes</strong> = los que aún están en proceso.
-    <strong>Áreas</strong> indica cuántos centros de costo generaron requerimientos. Cambian al modificar las fechas y pulsar Actualizar.
+    Resumen numérico del período consultado. <strong>Total Incidencias</strong> = todos los tickets creados en el rango.
+    <strong>Resueltas</strong> = las ya cerradas. <strong>Pendientes</strong> = las que aún están abiertas.
+    <strong>Prom. Min.</strong> = promedio de minutos de atención de los tickets cerrados (excluye motivos 11/16 y anulados).
+    <strong>Áreas</strong> indica cuántos centros de costo generaron incidencias. Cambian al modificar las fechas y pulsar Actualizar.
 </p>
 <div class="row g-3 mb-4" id="kpiCards"></div>
 
 <!-- ══════════════════════════════════════════════════════
-     SECCIÓN 1 — Requerimientos por Área (tabla pivot)
+     SECCIÓN 1 — Incidencias por Área (tabla pivot)
 ════════════════════════════════════════════════════════ -->
-<div class="section-title"><i class="bi bi-table me-1"></i>Requerimientos por Área</div>
+<div class="section-title"><i class="bi bi-table me-1"></i>Incidencias por Área</div>
 <p class="report-desc">
     Tabla dinámica que cruza <strong>áreas (filas)</strong> con <strong>años (columnas)</strong>. Por cada celda se muestran dos valores:
-    <strong>PEND</strong> (total de requerimientos recibidos) y <strong>ENTR</strong> (los ya entregados).
-    La diferencia PEND − ENTR revela el backlog pendiente de atención de cada área en cada año.<br>
-    La columna <em>Total PEND / ENTR</em> acumula todos los años visibles. La fila <em>Total general</em> suma todas las áreas por año.<br>
-    <strong>Filtro Fechas:</strong> define qué años aparecen como columnas según la fecha de creación del requerimiento.
+    <strong>PEND</strong> (total de incidencias recibidas) y <strong>RESU</strong> (las ya resueltas).
+    La diferencia PEND − RESU indica las incidencias que siguen abiertas en ese área y año.<br>
+    La columna <em>Total PEND / RESU</em> acumula todos los años visibles. La fila <em>Total general</em> suma todas las áreas.<br>
+    <strong>Filtro Fechas:</strong> define qué años aparecen como columnas según la fecha de creación de la incidencia.
 </p>
 <div class="card chart-card position-relative mb-4">
     <div id="spinnerPivot" class="chart-spinner"><div class="spinner-border text-success"></div></div>
@@ -160,11 +159,12 @@
 ════════════════════════════════════════════════════════ -->
 <div class="section-title"><i class="bi bi-calendar3 me-1"></i>Atención mensual <span id="lblAnoAt"></span></div>
 <p class="report-desc">
-    Detalle mes a mes de los requerimientos del <strong>año más reciente</strong> del rango seleccionado.
+    Detalle mes a mes de las incidencias del <strong>año más reciente</strong> del rango seleccionado.
     Permite detectar meses de alta carga, cuellos de botella o mejoras en la velocidad de respuesta del equipo.<br>
-    Cada mes muestra tres categorías: <strong>mismo mes</strong> (resueltos en el mes que se crearon),
-    <strong>mes posterior</strong> (cerrados después del mes de creación) y <strong>pendientes</strong> (aún sin cerrar).
-    El <strong>%</strong> indica la tasa de resolución inmediata: valores altos indican mayor agilidad del equipo.<br>
+    Cada mes muestra tres categorías: <strong>mismo mes</strong> (resueltas en el mes que se crearon),
+    <strong>mes posterior</strong> (cerradas después del mes de creación) y <strong>pendientes</strong> (aún sin cerrar).
+    El <strong>%</strong> indica la tasa de resolución inmediata: cuanto mayor, mayor es la agilidad del equipo.<br>
+    La columna <strong>Prom. Min.</strong> muestra el tiempo promedio de atención de las incidencias cerradas de ese mes; permite identificar si ciertos meses son más lentos que otros.<br>
     <strong>Filtro Fechas:</strong> al ampliar el rango, el gráfico siempre muestra el año más reciente incluido.
 </p>
 <div class="row g-3 mb-4">
@@ -172,8 +172,8 @@
         <div class="card chart-card">
             <div class="card-header"><i class="bi bi-table me-1"></i>Tabla de atención mensual</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Requerimientos creados cada mes, clasificados por momento de cierre: mismo mes (resolución rápida), mes posterior (atención diferida) o pendientes (aún abiertos).
-                El <strong>%</strong> muestra qué proporción fue resuelta de forma inmediata; cuanto mayor, mejor es la capacidad de respuesta.
+                Incidencias creadas cada mes, clasificadas por momento de cierre: mismo mes (resolución rápida), mes posterior (atención diferida) o pendientes (aún abiertas).
+                El <strong>%</strong> muestra qué proporción fue resuelta de forma inmediata. <strong>Prom. Min.</strong> es el tiempo promedio de resolución ese mes.
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -186,14 +186,35 @@
     </div>
     <div class="col-lg-7">
         <div class="card chart-card">
-            <div class="card-header"><i class="bi bi-bar-chart-steps me-1"></i>Evolución mensual: atendidos, pendientes y % de resolución inmediata</div>
+            <div class="card-header"><i class="bi bi-bar-chart-steps me-1"></i>Evolución mensual: resueltos, pendientes y % de resolución inmediata</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Barras apiladas por mes: <strong>azul</strong> = resuelto en el mismo mes, <strong>verde</strong> = resuelto en mes posterior, <strong>naranja</strong> = pendiente.
-                La <strong>línea verde</strong> superpuesta muestra el <strong>% de resolución inmediata</strong> de ese mes (escala derecha).
-                Un mes con barra muy naranja indica un volumen alto de requerimientos sin cerrar.
+                Barras apiladas por mes: <strong>azul</strong> = resuelta en el mismo mes, <strong>verde</strong> = resuelta en mes posterior, <strong>naranja</strong> = pendiente.
+                La <strong>línea</strong> superpuesta muestra el <strong>% de resolución inmediata</strong> de ese mes (escala derecha).
+                Un mes con barra muy naranja indica incidencias acumuladas sin cerrar.
             </div>
             <div class="card-body" style="height:370px">
                 <canvas id="chartMes"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 2b — Promedio de minutos de atención por mes
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-stopwatch me-1"></i>Promedio de minutos de atención mensual <span id="lblAnoMin"></span></div>
+<p class="report-desc">
+    Mide la <strong>agilidad de respuesta</strong> del equipo: promedio de minutos que tomó resolver cada incidencia en el mes consultado.
+    Valores altos indican meses con incidencias complejas o carga elevada; valores bajos reflejan mayor eficiencia operativa.<br>
+    <strong>Exclusiones:</strong> se excluyen las incidencias con motivo 11 o 16 (clasificadas como Desarrollo en el indicador de Seguimiento) y las anuladas (ESTADO = 9), ya que no representan tiempos de atención reales.<br>
+    <strong>Filtro Fechas:</strong> al ampliar el rango, el gráfico siempre muestra el año más reciente del rango.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-clock-history me-1"></i>Promedio de minutos de atención por mes</div>
+            <div class="card-body" style="height:320px">
+                <canvas id="chartMinutos"></canvas>
             </div>
         </div>
     </div>
@@ -204,17 +225,17 @@
 ════════════════════════════════════════════════════════ -->
 <div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Análisis comparativo</div>
 <p class="report-desc">
-    Visión macro del período: volumen de requerimientos por año y proporción global entre entregados y pendientes.
-    Permite identificar tendencias de crecimiento o reducción de la carga de trabajo, y evaluar el porcentaje de cumplimiento acumulado.<br>
+    Visión macro del período: volumen de incidencias por año y proporción global entre resueltas y pendientes.
+    Permite identificar tendencias de crecimiento o reducción de la carga de soporte, y evaluar el porcentaje de cumplimiento acumulado.<br>
     <strong>Filtro Fechas:</strong> al ampliar el rango se agregan nuevos años en el gráfico de barras y el cálculo de la dona se recalcula con el total del período.
 </p>
 <div class="row g-3 mb-4">
     <div class="col-lg-7">
         <div class="card chart-card">
-            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>¿Cuántos requerimientos se crearon cada año?</div>
+            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>¿Cuántas incidencias se crearon cada año?</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Cada grupo de barras representa un año. La barra <strong>naranja</strong> = total de requerimientos registrados; la <strong>azul</strong> = ya entregados.
-                Si ambas barras son iguales, todos los requerimientos de ese año están cerrados. Si la naranja supera a la azul, hay backlog pendiente.
+                Cada grupo de barras representa un año. La barra <strong>naranja</strong> = total de incidencias registradas; la <strong>azul</strong> = ya resueltas.
+                Si ambas barras son iguales, todas las incidencias de ese año están cerradas. Si la naranja supera a la azul, hay incidencias pendientes de ese año.
             </div>
             <div class="card-body" style="height:360px">
                 <canvas id="chartAno"></canvas>
@@ -223,11 +244,11 @@
     </div>
     <div class="col-lg-5">
         <div class="card chart-card">
-            <div class="card-header"><i class="bi bi-pie-chart-fill me-1"></i>¿Cuánto del total está entregado?</div>
+            <div class="card-header"><i class="bi bi-pie-chart-fill me-1"></i>¿Cuánto del total está resuelto?</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Proporción global del período completo: <strong>azul</strong> = entregados, <strong>naranja</strong> = pendientes.
-                El porcentaje dentro de cada segmento indica su peso sobre el total de requerimientos registrados en el rango de fechas consultado.
-                Un segmento azul mayoritario indica un alto nivel de cumplimiento del equipo.
+                Proporción global del período completo: <strong>azul</strong> = resueltas, <strong>naranja</strong> = pendientes.
+                El porcentaje dentro de cada segmento indica su peso sobre el total de incidencias registradas en el rango consultado.
+                Un segmento azul mayoritario indica un alto nivel de resolución del equipo de soporte.
             </div>
             <div class="card-body" style="height:310px; display:flex; align-items:center; justify-content:center;">
                 <canvas id="chartDona"></canvas>
@@ -237,22 +258,22 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════
-     SECCIÓN 4 — Áreas: requerimientos y cerrados (fila completa, altura dinámica)
+     SECCIÓN 4 — Áreas: incidencias y resueltas
 ════════════════════════════════════════════════════════ -->
-<div class="section-title"><i class="bi bi-diagram-3 me-1"></i>Requerimientos por Área</div>
+<div class="section-title"><i class="bi bi-diagram-3 me-1"></i>Incidencias por Área</div>
 <p class="report-desc">
-    Ranking horizontal que permite ver, para cada área, cuántos requerimientos recibieron y cuántos ya fueron cerrados.
-    Identifica las áreas con mayor volumen de demanda y las que tienen mayor backlog pendiente.<br>
-    <strong>Filtro Fechas:</strong> restringe el análisis a los requerimientos creados en el período indicado.
+    Ranking horizontal que permite ver, para cada área, cuántas incidencias recibieron y cuántas ya fueron cerradas.
+    Identifica las áreas con mayor volumen de soporte y las que tienen mayor cantidad de tickets pendientes.<br>
+    <strong>Filtro Fechas:</strong> restringe el análisis a las incidencias creadas en el período indicado.
 </p>
 <div class="row g-3 mb-4">
     <div class="col-12">
         <div class="card chart-card">
-            <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>¿Qué áreas tienen más requerimientos y cuántos ya están cerrados?</div>
+            <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>¿Qué áreas tienen más incidencias y cuántas ya están cerradas?</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Cada fila es un área. La barra <strong>naranja</strong> = total recibido; la <strong>azul</strong> = ya entregado.
-                Si la barra azul alcanza la naranja, el área no tiene backlog. Una gran diferencia entre ambas indica trabajo pendiente significativo.
-                Las áreas sin requerimientos no aparecen. Ordenadas alfabéticamente para facilitar la búsqueda.
+                Cada fila es un área. La barra <strong>naranja</strong> = total recibido; la <strong>azul</strong> = ya resuelto.
+                Si la barra azul alcanza la naranja, el área no tiene incidencias pendientes. Una gran diferencia entre ambas indica tickets sin atender.
+                Las áreas sin incidencias no aparecen. Ordenadas alfabéticamente para facilitar la búsqueda.
             </div>
             <div class="card-body p-2">
                 <div id="wrapperArea" style="position:relative">
@@ -264,12 +285,12 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════
-     SECCIÓN 5 — Avance por Área (fila completa, altura dinámica)
+     SECCIÓN 5 — Avance por Área
 ════════════════════════════════════════════════════════ -->
-<div class="section-title"><i class="bi bi-speedometer2 me-1"></i>Avance de Entrega por Área</div>
+<div class="section-title"><i class="bi bi-speedometer2 me-1"></i>Avance de Resolución por Área</div>
 <p class="report-desc">
-    Mide el <strong>porcentaje de cumplimiento</strong> de cada área: cuántos de sus requerimientos ya fueron entregados respecto al total que ingresó.
-    Un valor alto indica que el área está prãcticamente al día; un valor bajo señala una deuda técnica o pendiente importante.<br>
+    Mide el <strong>porcentaje de cumplimiento</strong> de cada área: cuántas de sus incidencias ya fueron resueltas respecto al total que ingresó.
+    Un valor alto indica que el área está prácticamente al día en soporte; un valor bajo señala una cola de tickets pendientes significativa.<br>
     <strong>Semaforizado:</strong> <span style="color:#2e7d32; font-weight:700">■ Verde ≥ 80 %</span> (buen avance),
     <span style="color:#e65100; font-weight:700">■ Naranja ≥ 50 %</span> (en progreso),
     <span style="color:#c62828; font-weight:700">■ Rojo &lt; 50 %</span> (rezago crítico).
@@ -280,7 +301,7 @@
         <div class="card chart-card">
             <div class="card-header"><i class="bi bi-speedometer2 me-1"></i>% de avance por área — ¿qué tan adelantada está cada área?</div>
             <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
-                Cada barra representa el porcentaje de requerimientos ya entregados por área. El color cambia según el umbral:
+                Cada barra representa el porcentaje de incidencias ya resueltas por área. El color cambia según el umbral:
                 <strong style="color:#2e7d32">verde</strong> ≥ 80 %, <strong style="color:#e65100">naranja</strong> ≥ 50 %, <strong style="color:#c62828">rojo</strong> &lt; 50 %.
                 El número al extremo de cada barra indica el porcentaje exacto. Áreas ordenadas alfabéticamente.
             </div>
@@ -294,7 +315,7 @@
 </div>
 
 <!-- Modal de error -->
-<div class="modal fade" id="modalErrorDev" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="modalErrorInc" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-danger">
             <div class="modal-header bg-danger text-white py-2">
@@ -357,9 +378,9 @@
     ══════════════════════════════════════════ */
     function renderKpis(d) {
         const cards = [
-            { icon: '📋', label: 'Total Recibidos',     value: d.totalRecibidos,  color: '#1B4D3E' },
-            { icon: '⏳', label: 'Pendientes Abiertos', value: d.totalPendientes, color: '#e65100' },
-            { icon: '✅', label: 'Total Entregados',    value: d.totalEntregados, color: '#1565C0' },
+            { icon: '🔔', label: 'Total Recibidas',      value: d.totalRecibidos,  color: '#1B4D3E' },
+            { icon: '⏳', label: 'Pendientes Abiertas',  value: d.totalPendientes, color: '#e65100' },
+            { icon: '✅', label: 'Total Resueltas',       value: d.totalEntregados, color: '#1565C0' },
             { icon: '📊', label: '% Atención ' + d.anoAtencion, value: d.pctAtencionAno + '%', color: '#2e7d32' },
         ];
         document.getElementById('kpiCards').innerHTML = cards.map(c => `
@@ -379,7 +400,6 @@
         const t = document.getElementById('tablaPivot');
         const a = d.anos || [];
 
-        // THEAD — fila 1: años | fila 2: PEND/ENTR
         let h1 = `<tr>
             <th rowspan="2" class="text-start align-middle ps-3"
                 style="background:#e8eaf6; min-width:190px;">ÁREA</th>`;
@@ -392,18 +412,17 @@
         h1 += `<th rowspan="2" class="text-center align-middle"
                    style="background:#c8e6da; color:#1B4D3E; min-width:72px;">Total<br>PEND</th>
                <th rowspan="2" class="text-center align-middle"
-                   style="background:#bbdefb; color:#1565C0; min-width:72px;">Total<br>ENTR</th></tr>`;
+                   style="background:#bbdefb; color:#1565C0; min-width:72px;">Total<br>RESU</th></tr>`;
 
         let h2 = '<tr>';
         a.forEach((_, i) => {
             const bg = AÑO_BG[i % AÑO_BG.length];
             h2 += `<th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">PEND</th>
-                   <th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">ENTR</th>`;
+                   <th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">RESU</th>`;
         });
         h2 += '</tr>';
         t.tHead.innerHTML = h1 + h2;
 
-        // TBODY
         t.tBodies[0].innerHTML = (d.filas || []).map(f => {
             let row = `<tr><td class="area">${f.area}</td>`;
             f.anos.forEach((c, i) => {
@@ -417,7 +436,6 @@
             return row + '</tr>';
         }).join('');
 
-        // TFOOT
         let foot = '<tr><td class="text-center fw-bold">Total general</td>';
         (d.totalesAno || []).forEach((c, i) => {
             const bg = AÑO_BG[i % AÑO_BG.length];
@@ -434,10 +452,10 @@
        SECCIÓN 2 — Tabla mensual + Chart mixto
     ══════════════════════════════════════════ */
     function renderMes(d) {
-        document.getElementById('lblAnoAt').textContent = d.anoAtencion;
+        document.getElementById('lblAnoAt').textContent  = d.anoAtencion;
+        document.getElementById('lblAnoMin').textContent = d.anoAtencion;
         const data = d.atencionMes || [];
 
-        // Tabla
         const tab = document.getElementById('tablaMes');
         tab.tHead.innerHTML = `
             <tr style="background:#c5d9f7">
@@ -465,7 +483,7 @@
 
         const tot = data.reduce((s, r) => ({
             rec: s.rec + r.recibidos, mismo: s.mismo + r.atMismoMes,
-            sig: s.sig + r.atSigMes, pend: s.pend + r.pendientes
+            sig: s.sig + r.atSigMes,  pend: s.pend + r.pendientes
         }), { rec: 0, mismo: 0, sig: 0, pend: 0 });
         const totColor = d.pctAtencionAno >= 80 ? '#2e7d32' : d.pctAtencionAno >= 50 ? '#e65100' : '#c62828';
         tab.tFoot.innerHTML = `
@@ -486,7 +504,7 @@
                 labels: data.map(r => r.etiqueta),
                 datasets: [
                     {
-                        type: 'bar', label: 'Atendidos mismo mes',
+                        type: 'bar', label: 'Resueltas mismo mes',
                         data: data.map(r => r.atMismoMes),
                         backgroundColor: 'rgba(21,101,192,0.82)',
                         borderColor: '#1565C0', borderWidth: 1,
@@ -500,7 +518,7 @@
                         }
                     },
                     {
-                        type: 'bar', label: 'Atendidos mes siguiente',
+                        type: 'bar', label: 'Resueltas mes siguiente',
                         data: data.map(r => r.atSigMes),
                         backgroundColor: 'rgba(27,77,62,0.72)',
                         borderColor: '#1B4D3E', borderWidth: 1,
@@ -528,7 +546,7 @@
                         }
                     },
                     {
-                        type: 'line', label: '% Atendidos en el mismo mes',
+                        type: 'line', label: '% Resueltas en el mismo mes',
                         data: data.map(r => r.pctMismoMes),
                         borderColor: '#111', backgroundColor: 'rgba(0,0,0,0.06)',
                         borderWidth: 2.5, pointRadius: 6,
@@ -565,6 +583,39 @@
                 }
             }
         });
+
+        // Chart promedio de minutos — usa d.minutosMes (query 2 independiente)
+        destroy('minutos');
+        const datMin = (d.minutosMes || []).filter(r => r.promedioMinutos > 0);
+        if (!datMin.length) return;
+        charts.minutos = new Chart(document.getElementById('chartMinutos').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: datMin.map(r => r.etiqueta),
+                datasets: [{
+                    label: 'Promedio minutos de atención',
+                    data: datMin.map(r => r.promedioMinutos),
+                    backgroundColor: 'rgba(27,77,62,0.75)',
+                    borderColor: '#1B4D3E', borderWidth: 1, borderRadius: 5,
+                    datalabels: {
+                        display: true, anchor: 'end', align: 'top',
+                        color: '#374151', font: { size: 11, weight: '700' },
+                        textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
+                        formatter: v => v.toLocaleString('es-PE')
+                    }
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } } },
+                layout: { padding: { top: 30 } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' },
+                         title: { display: true, text: 'Minutos', font: { size: 11 } } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
     }
 
     /* ══════════════════════════════════════════
@@ -580,7 +631,7 @@
                 labels: data.map(r => String(r.ano)),
                 datasets: [
                     {
-                        label: 'Recibidos (total)',
+                        label: 'Recibidas (total)',
                         data: data.map(r => r.pendiente),
                         backgroundColor: data.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
                         borderColor:     data.map((_, i) => COLORS[i % COLORS.length]),
@@ -593,7 +644,7 @@
                         }
                     },
                     {
-                        label: 'Entregados',
+                        label: 'Resueltas',
                         data: data.map(r => r.entregado),
                         backgroundColor: 'rgba(21,101,192,0.75)',
                         borderColor: '#1565C0', borderWidth: 1, borderRadius: 5,
@@ -619,14 +670,14 @@
     }
 
     /* ══════════════════════════════════════════
-       SECCIÓN 3b — Pendientes vs Entregados x Área
+       SECCIÓN 3b — Pendientes vs Resueltas x Área
     ══════════════════════════════════════════ */
     function renderChartArea(d) {
         destroy('area');
         const data = [...(d.porArea || [])].sort((a, b) => a.area.localeCompare(b.area, 'es')).slice(0, 50);
         if (!data.length) return;
 
-        const rowH   = 38;   // px por barra
+        const rowH   = 38;
         const minH   = 220;
         const height = Math.max(minH, data.length * rowH + 60);
         const wrapper = document.getElementById('wrapperArea');
@@ -638,7 +689,7 @@
                 labels: data.map(r => r.area),
                 datasets: [
                     {
-                        label: 'Recibidos (total)',
+                        label: 'Recibidas (total)',
                         data: data.map(r => r.totalPendiente),
                         backgroundColor: 'rgba(230,81,0,0.82)',
                         borderColor: '#e65100', borderWidth: 1, borderRadius: 3,
@@ -651,7 +702,7 @@
                         }
                     },
                     {
-                        label: 'Entregados',
+                        label: 'Resueltas',
                         data: data.map(r => r.totalEntregado),
                         backgroundColor: 'rgba(21,101,192,0.82)',
                         borderColor: '#1565C0', borderWidth: 1, borderRadius: 3,
@@ -679,20 +730,19 @@
     }
 
     /* ══════════════════════════════════════════
-       SECCIÓN 4a — Dona: estado global
-       Muestra la proporción total Entregados / Abiertos
+       SECCIÓN 3b — Dona: estado global
     ══════════════════════════════════════════ */
     function renderChartDona(d) {
         destroy('dona');
-        const entr  = d.totalEntregados  || 0;
-        const pend  = d.totalPendientes  || 0;
+        const entr  = d.totalEntregados || 0;
+        const pend  = d.totalPendientes || 0;
         if (entr + pend === 0) return;
 
         const gran = entr + pend;
         charts.dona = new Chart(document.getElementById('chartDona').getContext('2d'), {
             type: 'doughnut',
             data: {
-                labels: ['Entregados', 'Pendientes abiertos'],
+                labels: ['Resueltas', 'Pendientes abiertas'],
                 datasets: [{
                     data: [entr, pend],
                     backgroundColor: ['rgba(21,101,192,0.82)', 'rgba(230,81,0,0.82)'],
@@ -725,8 +775,7 @@
     }
 
     /* ══════════════════════════════════════════
-       SECCIÓN 4b — Barras horizontales: % avance x área
-       % avance = Entregados / Recibidos × 100
+       SECCIÓN 5 — Barras horizontales: % avance x área
     ══════════════════════════════════════════ */
     function renderChartAvance(d) {
         destroy('avance');
@@ -752,7 +801,7 @@
             data: {
                 labels: data.map(r => r.area),
                 datasets: [{
-                    label: '% Entregado',
+                    label: '% Resuelto',
                     data: data.map(r => r.pct),
                     backgroundColor: data.map(r =>
                         r.pct >= 80 ? 'rgba(46,125,50,0.82)'
@@ -791,77 +840,27 @@
     async function loadAll() {
         document.getElementById('spinnerPivot').style.display = 'flex';
         try {
-            const url = '/Sistemas/Desarrollo/DatosDashboard?' + buildParams().toString();
+            const url = '/Sistemas/Incidencia/DatosDashboard?' + buildParams().toString();
             const r   = await fetch(url, { cache: 'no-store' });
             if (!r.ok) throw new Error(await r.text());
             const d = await r.json();
 
             renderKpis(d);
             renderPivot(d);       // Sección 1
-            renderMes(d);         // Sección 2
+            renderMes(d);         // Sección 2 + promedio minutos
             renderChartAno(d);    // Sección 3a
             renderChartArea(d);   // Sección 3b
-            renderChartDona(d);   // Sección 4a
-            renderChartAvance(d); // Sección 4b
-
-            document.getElementById('btnExportar').disabled = false;
+            renderChartDona(d);   // Sección 3c
+            renderChartAvance(d); // Sección 5
         } catch (e) {
             console.error(e);
             document.getElementById('modalErrorDetalle').textContent = e.message || String(e);
-            new bootstrap.Modal(document.getElementById('modalErrorDev')).show();
+            new bootstrap.Modal(document.getElementById('modalErrorInc')).show();
         } finally {
             document.getElementById('spinnerPivot').style.display = 'none';
         }
     }
     window.loadAll = loadAll;
-
-    /* ══════════════════════════════════════════
-       Exportar gráficos al Excel plantilla
-    ══════════════════════════════════════════ */
-    async function exportarExcel() {
-        const btn = document.getElementById('btnExportar');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
-
-        try {
-            // Capturar todos los canvas visibles como PNG base64
-            const canvasIds = ['chartMes', 'chartAno', 'chartDona', 'chartArea', 'chartAvance'];
-            const imagenes  = canvasIds
-                .map(id => document.getElementById(id))
-                .filter(c => c)
-                .map(c => c.toDataURL('image/png'));
-
-            const fi = document.getElementById('fechaInicio').value;
-            const ff = document.getElementById('fechaFin').value;
-            const fmtDate = v => v ? new Date(v + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }) : '';
-            const periodo = (fi && ff) ? `${fmtDate(fi)} — ${fmtDate(ff)}` : '';
-
-            const resp = await fetch('/Sistemas/Desarrollo/ExportarExcel', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ imagenes, periodo })
-            });
-
-            if (!resp.ok) throw new Error(await resp.text());
-
-            // Descargar el archivo
-            const blob = await resp.blob();
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `Indicador_Desarrollo_${fi || 'export'}.xlsx`;
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch (e) {
-            console.error(e);
-            document.getElementById('modalErrorDetalle').textContent = e.message || String(e);
-            new bootstrap.Modal(document.getElementById('modalErrorDev')).show();
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel';
-        }
-    }
-    window.exportarExcel = exportarExcel;
 
     setDefaultDates();
     loadAll();

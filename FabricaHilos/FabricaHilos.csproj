@@ -37,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Data\Sistemas\SeguimientoDev\ind_seguimientoDev.sql" />
     <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\Index.cshtml" />
   </ItemGroup>
 

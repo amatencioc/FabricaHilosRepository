@@ -64,9 +64,13 @@ public class MenuOptions
     public bool CcNivelTiempo            { get; set; } = true;
 
     // ── Menús: Sistemas ──────────────────────────────────────────────────
-    public bool Sistemas                          { get; set; } = false;
-    public bool SistemasIndicadores               { get; set; } = true;
-    public bool SistemasIndicadoresDesarrollo     { get; set; } = true;
+    public bool Sistemas                                    { get; set; } = false;
+    public bool SistemasIndicadores                         { get; set; } = true;
+    public bool SistemasIndicadoresDesarrollo               { get; set; } = true;
+    public bool SistemasIndicadoresIncidencia               { get; set; } = true;
+    public bool SistemasIndicadoresSeguimientoDev           { get; set; } = true;
+    public bool SistemasRequerimientos                      { get; set; } = true;
+    public bool SistemasRequerimientosAnularDocumento       { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -115,9 +119,13 @@ public class MenuOptions
         CcNivelMorosidad = true,
         CcNivelTiempo    = true,
 
-        Sistemas                      = true,
-        SistemasIndicadores           = true,
-        SistemasIndicadoresDesarrollo = true,
+        Sistemas                              = true,
+        SistemasIndicadores                   = true,
+        SistemasIndicadoresDesarrollo         = true,
+        SistemasIndicadoresIncidencia         = true,
+        SistemasIndicadoresSeguimientoDev     = true,
+        SistemasRequerimientos                = true,
+        SistemasRequerimientosAnularDocumento = true,
     };
 }
 

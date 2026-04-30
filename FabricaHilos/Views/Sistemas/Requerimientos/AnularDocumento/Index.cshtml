@@ -1,0 +1,544 @@
+@{
+    ViewData["Title"] = "Anular Documento - Sistemas";
+}
+
+@section Styles {
+<style>
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .result-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        background: #fff;
+    }
+    .result-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 700;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+        font-size: .9rem;
+        padding: .65rem 1rem;
+    }
+    .step-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.65rem; height: 1.65rem;
+        border-radius: 50%;
+        font-size: .75rem;
+        font-weight: 700;
+        margin-right: .4rem;
+    }
+    .step-ok   { background: #d4edda; color: #155724; }
+    .step-warn { background: #fff3cd; color: #856404; }
+    .step-err  { background: #f8d7da; color: #721c24; }
+    .field-row {
+        display: flex;
+        align-items: baseline;
+        gap: .5rem;
+        padding: .3rem 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: .84rem;
+    }
+    .field-row:last-child { border-bottom: none; }
+    .field-label { color: #637381; font-weight: 600; min-width: 160px; }
+    .field-value { color: #111; font-weight: 700; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/Sistemas">Sistemas</a></li>
+    <li class="breadcrumb-item active">Anular Documento</li>
+}
+
+<!-- ══ DESCRIPCIÓN GENERAL ══════════════════════════════════ -->
+<div class="alert mb-3 border-0 rounded-3 shadow-sm"
+     style="background:#fff3e0; border-left:5px solid #e65100 !important; padding:1rem 1.25rem">
+    <div class="d-flex align-items-start gap-2">
+        <span style="font-size:1.6rem; line-height:1">🚫</span>
+        <div>
+            <div class="fw-bold" style="color:#e65100; font-size:.95rem">¿Qué hace esta herramienta?</div>
+            <div class="mt-1" style="font-size:.8rem; color:#374151; line-height:1.65">
+                Permite verificar los datos de un documento (<strong>Boleta</strong> o <strong>Factura</strong>) antes de anularlo.
+                Ingresa el <strong>Tipo de Documento</strong> y el <strong>Número</strong>; la <strong>Serie</strong> se asigna automáticamente.<br>
+                La herramienta consulta en secuencia las tablas <code>DOCUVENT</code>, <code>MOVGLOS</code>, <code>NRODOC</code> y <code>NROLIBR</code>,
+                mostrando el resultado de cada paso.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ FORMULARIO ════════════════════════════════════════════ -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Tipo Documento</label>
+            <select id="selTipoDoc" class="form-select form-select-sm" style="min-width:160px" onchange="actualizarSerie()">
+                <option value="">— Seleccionar —</option>
+                <option value="03">03 — Boleta</option>
+                <option value="01">01 — Factura</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Serie</label>
+            <input type="text" id="txtSerie" class="form-control form-control-sm"
+                   style="min-width:110px" disabled readonly placeholder="Automático">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Número</label>
+            <input type="text" id="txtNumero" class="form-control form-control-sm"
+                   style="min-width:150px" placeholder="Ej: 00000001" maxlength="20">
+        </div>
+        <button class="btn btn-sm btn-success" onclick="buscar()">
+            <i class="bi bi-search me-1"></i>Buscar
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="limpiar()">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+</div>
+
+<!-- ══ RESULTADO ══════════════════════════════════════════════ -->
+<div id="resultadoContainer" style="display:none">
+<div class="row g-3">
+
+    <!-- ── Columna izquierda: pasos ─────────────────────── -->
+    <div class="col-12 col-lg-7">
+
+    <!-- Paso 1: DOCUVENT -->
+    <div class="card result-card mb-3">
+        <div class="card-header">
+            <span id="badge1" class="step-badge step-warn">1</span>
+            DOCUVENT — Existencia del documento
+        </div>
+        <div class="card-body py-2 px-3" id="bodyDocuvent">
+            <p class="text-muted small mb-0">Sin datos.</p>
+        </div>
+    </div>
+
+    <!-- Paso 2: MOVGLOS -->
+    <div class="card result-card mb-3">
+        <div class="card-header">
+            <span id="badge2" class="step-badge step-warn">2</span>
+            MOVGLOS — Año / Mes / Libro / Voucher
+        </div>
+        <div class="card-body py-2 px-3" id="bodyMovGlos">
+            <p class="text-muted small mb-0">Sin datos.</p>
+        </div>
+    </div>
+
+    <!-- Paso 3: NRODOC -->
+    <div class="card result-card mb-3">
+        <div class="card-header">
+            <span id="badge3" class="step-badge step-warn">3</span>
+            NRODOC — Número de documento
+        </div>
+        <div class="card-body py-2 px-3" id="bodyNroDoc">
+            <p class="text-muted small mb-0">Sin datos.</p>
+        </div>
+    </div>
+
+    <!-- Paso 4: NROLIBR -->
+    <div class="card result-card mb-3">
+        <div class="card-header">
+            <span id="badge4" class="step-badge step-warn">4</span>
+            NROLIBR — Número de libro
+        </div>
+        <div class="card-body py-2 px-3" id="bodyNroLibr">
+            <p class="text-muted small mb-0">Sin datos.</p>
+        </div>
+    </div>
+
+    </div><!-- /col izquierda -->
+
+    <!-- ── Columna derecha: panel Restablecer ───────────── -->
+    <div class="col-12 col-lg-5">
+
+    <!-- Panel: Restablecer Factura (siempre visible tras búsqueda) -->
+    <div id="panelRestablecer" style="display:none" class="card mb-3">
+        <div class="card-header fw-700" id="headerRestablecer">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>
+            <span id="lblHeaderRestablecer">Acción disponible</span>
+        </div>
+        <div class="card-body py-2 px-3">
+            <!-- Aviso cuando DOCUVENT ≠ 9 -->
+            <div id="avisoDocNoAnulado" class="alert alert-danger py-1 mb-2 small" style="display:none">
+                <i class="bi bi-lock-fill me-1"></i>
+                <strong>Bloqueado:</strong> el documento <strong>no está Anulado</strong> en DOCUVENT (ESTADO ≠ 9).
+                Solo se puede restablecer si el documento fue anulado.
+            </div>
+            <!-- Aviso cuando DOCUVENT = 9 pero MOVGLOS ≠ 9 -->
+            <div id="avisoMovGlosNoAnulado" class="alert alert-danger py-1 mb-2 small" style="display:none">
+                <i class="bi bi-lock-fill me-1"></i>
+                <strong>Bloqueado:</strong> el estado de MOVGLOS no es <strong>Anulado (9)</strong>.
+                Ambos estados deben ser 9 para poder restablecer.
+            </div>
+            <p class="mb-2 small" id="textoRestablecer">
+                Se cambiará <code>NRODOC.NUMERO</code> de
+                <strong id="lblNumeroAnteriorPanel">—</strong>
+                → <strong id="lblNumeroBusquedaPanel">—</strong>.
+            </p>
+            <!-- Resumen de variables -->
+            <div id="resumenVariables" class="bg-light border rounded p-2 mb-2 small"></div>
+            <button id="btnRestablecerFactura" class="btn btn-warning btn-sm fw-bold" onclick="abrirRestablecer()">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Restablecer Factura
+            </button>
+        </div>
+    </div>
+
+    </div><!-- /col derecha -->
+
+</div><!-- /row -->
+</div>
+
+<!-- Spinner de carga -->
+<div id="spinnerBuscar" style="display:none" class="text-center py-4">
+    <div class="spinner-border text-success"></div>
+    <p class="mt-2 small text-muted">Consultando...</p>
+</div>
+
+<!-- Modal de error -->
+<div class="modal fade" id="modalErrorAD" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Error al consultar
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1 text-muted small">Detalle del error:</p>
+                <pre id="modalErrorDetalleAD"
+                     class="bg-light border rounded p-2 small mb-0"
+                     style="white-space:pre-wrap; max-height:260px; overflow:auto"></pre>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación Restablecer -->
+<div class="modal fade" id="modalConfirmarRestablecer" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-warning">
+            <div class="modal-header py-2" style="background:#fff3cd">
+                <h6 class="modal-title text-dark">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Confirmar Restablecimiento
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2" style="font-size:.9rem">
+                    ¿Está seguro de restablecer <strong>NRODOC</strong>?
+                </p>
+                <div class="bg-light border rounded p-2 small" id="resumenRestablecer"></div>
+                <div class="alert alert-warning py-1 mt-2 mb-0 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    Esta acción actualizará <code>NRODOC.NUMERO</code> al valor del documento anulado.
+                    Solo proceda si ambos estados (DOCUVENT y MOVGLOS) son <strong>Anulado (9)</strong>.
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold" id="btnConfirmarRestablecer">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Sí, Restablecer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal éxito Restablecer -->
+<div class="modal fade" id="modalExitoRestablecer" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-success">
+            <div class="modal-header py-2" style="background:#d4edda">
+                <h6 class="modal-title text-success">
+                    <i class="bi bi-check-circle-fill me-2"></i>Restablecimiento exitoso
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small" id="cuerpoExitoRestablecer"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-success" data-bs-dismiss="modal">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    const SERIES = { '01': 'F001', '03': 'B001' };
+
+    // Variables de estado para Restablecer
+    let _tipoDoc         = '';
+    let _serie           = '';
+    let _numeroBusqueda        = '';   // número ingresado en la caja (el que se va a cambiar)
+    let _numeroBusquedaDisplay = '';   // _numeroBusqueda - 1 (valor que se muestra y usa en la operación)
+    let _numeroAnterior        = '';   // NRODOC.NUMERO actual (el valor a restaurar)
+    let _voucherBusqueda = '';   // últimos 3 dígitos del Voucher de MOVGLOS
+    let _voucherAnterior = '';   // NROLIBR.NUMERO (el valor a restaurar en el libro)
+
+    function actualizarSerie() {
+        const td = document.getElementById('selTipoDoc').value;
+        document.getElementById('txtSerie').value = SERIES[td] || '';
+    }
+    window.actualizarSerie = actualizarSerie;
+
+    function limpiar() {
+        document.getElementById('selTipoDoc').value = '';
+        document.getElementById('txtSerie').value   = '';
+        document.getElementById('txtNumero').value  = '';
+        document.getElementById('resultadoContainer').style.display = 'none';
+        document.getElementById('panelRestablecer').style.display   = 'none';
+        _tipoDoc = _serie = _numeroBusqueda = _numeroBusquedaDisplay = _numeroAnterior = _voucherBusqueda = _voucherAnterior = '';
+    }
+    window.limpiar = limpiar;
+
+    function badgeClass(existe) {
+        return existe ? 'step-ok' : 'step-err';
+    }
+
+    function fila(label, value) {
+        return `<div class="field-row">
+                    <span class="field-label">${label}</span>
+                    <span class="field-value">${value ?? '—'}</span>
+                </div>`;
+    }
+
+    function filaHtml(label, html) {
+        return `<div class="field-row">
+                    <span class="field-label">${label}</span>
+                    <span class="field-value">${html}</span>
+                </div>`;
+    }
+
+    function filaResumen(label, value, color) {
+        return `<span class="field-label" style="color:#637381">${label}:</span>
+                <span class="fw-bold" style="color:${color ?? '#111'}">${value || '—'}</span>`;
+    }
+
+    function alertaNoEncontrado(tabla) {
+        return `<div class="alert alert-warning py-1 mb-0 small">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    No se encontró registro en <strong>${tabla}</strong>.
+                </div>`;
+    }
+
+    async function buscar() {
+        const tipoDoc = document.getElementById('selTipoDoc').value;
+        const serie   = document.getElementById('txtSerie').value;
+        const numero  = document.getElementById('txtNumero').value.trim();
+
+        if (!tipoDoc) {
+            mostrarError('Debe seleccionar el Tipo de Documento.');
+            return;
+        }
+        if (!numero) {
+            mostrarError('Debe ingresar el Número del documento.');
+            return;
+        }
+
+        // Guardar en variables de módulo
+        _tipoDoc        = tipoDoc;
+        _serie          = serie;
+        _numeroBusqueda = numero;
+
+        document.getElementById('resultadoContainer').style.display = 'none';
+        document.getElementById('panelRestablecer').style.display   = 'none';
+        document.getElementById('spinnerBuscar').style.display = 'block';
+
+        try {
+            const url = `/Sistemas/Requerimientos/AnularDocumento/Buscar?tipoDoc=${encodeURIComponent(tipoDoc)}&serie=${encodeURIComponent(serie)}&numero=${encodeURIComponent(numero)}`;
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt);
+            }
+            const d = await res.json();
+            renderResultado(d, tipoDoc, serie, numero);
+        } catch (e) {
+            mostrarError(e.message || String(e));
+        } finally {
+            document.getElementById('spinnerBuscar').style.display = 'none';
+        }
+    }
+    window.buscar = buscar;
+
+    function estadoBadge(estado) {
+        if (estado === '9') return `<span class="badge" style="background:#dc3545">🚫 Anulado (${estado})</span>`;
+        if (estado === '0') return `<span class="badge" style="background:#198754">✔ Emitido (${estado})</span>`;
+        return estado ? `<span class="badge bg-secondary">${estado}</span>` : '';
+    }
+
+    function renderResultado(d, tipoDoc, serie, numero) {
+        // Paso 1 — DOCUVENT
+        const b1 = document.getElementById('badge1');
+        b1.className = 'step-badge ' + badgeClass(d.existeDocumento);
+        document.getElementById('bodyDocuvent').innerHTML = d.existeDocumento
+            ? fila('Tipo Documento', tipoDoc) + fila('Serie', serie) + fila('Número', numero)
+            + filaHtml('Estado', estadoBadge(d.estadoDocumento))
+            + `<div class="mt-1"><span class="badge bg-success">✔ Documento encontrado en DOCUVENT</span></div>`
+            : alertaNoEncontrado('DOCUVENT');
+
+        // Paso 2 — MOVGLOS
+        const b2 = document.getElementById('badge2');
+        b2.className = 'step-badge ' + badgeClass(d.existeMovGlos);
+        document.getElementById('bodyMovGlos').innerHTML = d.existeMovGlos
+            ? fila('Año',     d.ano)
+            + fila('Mes',     d.mes)
+            + fila('Libro',   d.libro)
+            + fila('Voucher', d.voucher)
+            + filaHtml('Estado', estadoBadge(d.estadoMovGlos))
+            : alertaNoEncontrado('MOVGLOS');
+
+        // Paso 3 — NRODOC
+        const b3 = document.getElementById('badge3');
+        b3.className = 'step-badge ' + badgeClass(d.existeNroDoc);
+        _numeroAnterior = d.nroDoc ?? '';
+        document.getElementById('bodyNroDoc').innerHTML = d.existeNroDoc
+            ? fila('Número (NRODOC)', d.nroDoc)
+            : alertaNoEncontrado('NRODOC');
+
+        // Paso 4 — NROLIBR
+        const b4 = document.getElementById('badge4');
+        b4.className = 'step-badge ' + badgeClass(d.existeNroLibr);
+        _voucherAnterior = d.nroLibr ?? '';
+        document.getElementById('bodyNroLibr').innerHTML = d.existeNroLibr
+            ? fila('Número (NROLIBR)', d.nroLibr)
+            : alertaNoEncontrado('NROLIBR');
+
+        // voucherBusqueda = últimos 3 dígitos del Voucher de MOVGLOS
+        const voucherStr  = String(d.voucher ?? '');
+        _voucherBusqueda  = voucherStr.length >= 3 ? voucherStr.slice(-3) : voucherStr;
+
+        // numeroBusquedaDisplay = número ingresado - 1
+        const parsedNum = parseInt(_numeroBusqueda, 10);
+        _numeroBusquedaDisplay = isNaN(parsedNum) ? _numeroBusqueda : String(parsedNum - 1);
+
+        // ── Panel Restablecer: siempre visible tras búsqueda ─────────────────────────────
+        const panel             = document.getElementById('panelRestablecer');
+        const btnRest           = document.getElementById('btnRestablecerFactura');
+        const avisoDocNoAnulado = document.getElementById('avisoDocNoAnulado');
+        const avisoMovGlos      = document.getElementById('avisoMovGlosNoAnulado');
+        const headerRest        = document.getElementById('headerRestablecer');
+        const textoRest         = document.getElementById('textoRestablecer');
+        document.getElementById('lblNumeroAnteriorPanel').textContent  = _numeroAnterior;
+        document.getElementById('lblNumeroBusquedaPanel').textContent  = _numeroBusquedaDisplay;
+        document.getElementById('resumenVariables').innerHTML =
+            `<div class="mb-1">${filaResumen('🔢 Número Búsqueda (a cambiar)',  _numeroBusquedaDisplay, '#1565C0')}</div>
+             <div class="mb-1">${filaResumen('✅ Número Anterior (se restaura)', _numeroAnterior,        '#1B4D3E')}</div>
+             <div class="mb-1">${filaResumen('📖 Voucher Búsqueda (últimos 3)', _voucherBusqueda,       '#6a1b9a')}</div>
+             <div         >${filaResumen('✅ Voucher Anterior (se restaura)', _voucherAnterior,       '#1B4D3E')}</div>`;
+
+        const docAnulado     = d.existeDocumento && String(d.estadoDocumento ?? '').trim() === '9';
+        const movGlosAnulado = d.existeMovGlos   && String(d.estadoMovGlos   ?? '').trim() === '9';
+
+        panel.style.display = 'block';
+
+        if (!docAnulado) {
+            // DOCUVENT ≠ 9: bloqueado total
+            panel.className                  = 'card border-danger mb-3';
+            headerRest.style.cssText         = 'background:#f8d7da; color:#721c24; font-weight:700';
+            document.getElementById('lblHeaderRestablecer').textContent = 'Acción no disponible — Documento no Anulado';
+            avisoDocNoAnulado.style.display  = 'block';
+            avisoMovGlos.style.display       = 'none';
+            textoRest.style.display          = 'none';
+            btnRest.disabled                 = true;
+            btnRest.title                    = 'El documento no está Anulado (9) en DOCUVENT';
+        } else if (!movGlosAnulado) {
+            // DOCUVENT = 9 pero MOVGLOS ≠ 9: bloqueado parcial
+            panel.className                  = 'card border-danger mb-3';
+            headerRest.style.cssText         = 'background:#fff3cd; color:#856404; font-weight:700';
+            document.getElementById('lblHeaderRestablecer').textContent = 'Acción bloqueada — MOVGLOS no Anulado';
+            avisoDocNoAnulado.style.display  = 'none';
+            avisoMovGlos.style.display       = 'block';
+            textoRest.style.display          = 'block';
+            btnRest.disabled                 = true;
+            btnRest.title                    = 'Bloqueado: MOVGLOS no está Anulado (9)';
+        } else {
+            // Ambos = 9: habilitado
+            panel.className                  = 'card border-warning mb-3';
+            headerRest.style.cssText         = 'background:#fff3cd; color:#856404; font-weight:700';
+            document.getElementById('lblHeaderRestablecer').textContent = 'Acción disponible — Documento Anulado';
+            avisoDocNoAnulado.style.display  = 'none';
+            avisoMovGlos.style.display       = 'none';
+            textoRest.style.display          = 'block';
+            btnRest.disabled                 = false;
+            btnRest.title                    = '';
+        }
+
+        document.getElementById('resultadoContainer').style.display = 'block';
+    }
+
+    function mostrarError(msg) {
+        document.getElementById('modalErrorDetalleAD').textContent = msg;
+        new bootstrap.Modal(document.getElementById('modalErrorAD')).show();
+    }
+
+    // ── Botón Restablecer Factura ───────────────────────────────────────────
+    window.abrirRestablecer = function () {
+        document.getElementById('resumenRestablecer').innerHTML =
+            `<table class="table table-sm table-bordered mb-0 small">
+               <thead><tr><th>Variable</th><th>Valor</th></tr></thead>
+               <tbody>
+                 <tr><td>Tipo Doc</td><td><strong>${_tipoDoc}</strong></td></tr>
+                 <tr><td>Serie</td><td><strong>${_serie}</strong></td></tr>
+                 <tr class="table-primary"><td>🔢 Número Búsqueda</td><td><strong>${_numeroBusquedaDisplay}</strong></td></tr>
+                 <tr class="table-success"><td>✅ Número Anterior</td><td><strong>${_numeroAnterior}</strong></td></tr>
+                 <tr class="table-primary"><td>📖 Voucher Búsqueda</td><td><strong>${_voucherBusqueda}</strong></td></tr>
+                 <tr class="table-success"><td>✅ Voucher Anterior</td><td><strong>${_voucherAnterior}</strong></td></tr>
+               </tbody>
+             </table>`;
+        new bootstrap.Modal(document.getElementById('modalConfirmarRestablecer')).show();
+    };
+
+    document.getElementById('btnConfirmarRestablecer').addEventListener('click', async function () {
+        bootstrap.Modal.getInstance(document.getElementById('modalConfirmarRestablecer')).hide();
+
+        try {
+            const url = `/Sistemas/Requerimientos/AnularDocumento/Restablecer?tipoDoc=${encodeURIComponent(_tipoDoc)}&serie=${encodeURIComponent(_serie)}&numeroAnterior=${encodeURIComponent(_numeroBusquedaDisplay)}`;
+            const res = await fetch(url, { method: 'POST', cache: 'no-store' });
+            const data = await res.json();
+
+            if (!res.ok || !data.ok) {
+                mostrarError(data.error || 'Error al restablecer.');
+                return;
+            }
+
+            document.getElementById('cuerpoExitoRestablecer').innerHTML =
+                `<p class="mb-2">✔ <strong>NRODOC</strong> actualizado correctamente.</p>
+                 <table class="table table-sm table-bordered small mb-0">
+                   <tbody>
+                     <tr><td>TipoDoc</td><td><strong>${_tipoDoc}</strong></td></tr>
+                     <tr><td>Serie</td><td><strong>${_serie}</strong></td></tr>
+                     <tr class="table-primary"><td>Número Búsqueda (era)</td><td><strong>${_numeroBusquedaDisplay}</strong></td></tr>
+                     <tr class="table-success"><td>Número Anterior (grabado)</td><td><strong>${_numeroAnterior}</strong></td></tr>
+                     <tr class="table-primary"><td>Voucher Búsqueda (últimos 3)</td><td><strong>${_voucherBusqueda}</strong></td></tr>
+                     <tr class="table-success"><td>Voucher Anterior</td><td><strong>${_voucherAnterior}</strong></td></tr>
+                     <tr><td>Filas afectadas</td><td><strong>${data.filas}</strong></td></tr>
+                   </tbody>
+                 </table>`;
+            new bootstrap.Modal(document.getElementById('modalExitoRestablecer')).show();
+            document.getElementById('panelRestablecer').style.display = 'none';
+
+        } catch (e) {
+            mostrarError(e.message || String(e));
+        }
+    });
+})();
+</script>
+}

@@ -94,9 +94,13 @@ public class MenuService : IMenuService
             CcNivelTiempo    = global.CcNivelTiempo    && Tiene("CreditosCobranza"),
 
             // Menú principal: Sistemas
-            Sistemas                      = Tiene("Sistemas"),
-            SistemasIndicadores           = global.SistemasIndicadores           && Tiene("Sistemas"),
-            SistemasIndicadoresDesarrollo = global.SistemasIndicadoresDesarrollo && Tiene("Sistemas"),
+            Sistemas                              = Tiene("Sistemas"),
+            SistemasIndicadores                   = global.SistemasIndicadores                   && Tiene("Sistemas"),
+            SistemasIndicadoresDesarrollo         = global.SistemasIndicadoresDesarrollo         && Tiene("Sistemas"),
+            SistemasIndicadoresIncidencia         = global.SistemasIndicadoresIncidencia         && Tiene("Sistemas"),
+            SistemasIndicadoresSeguimientoDev     = global.SistemasIndicadoresSeguimientoDev     && Tiene("Sistemas"),
+            SistemasRequerimientos                = global.SistemasRequerimientos                && Tiene("Sistemas"),
+            SistemasRequerimientosAnularDocumento = global.SistemasRequerimientosAnularDocumento && Tiene("Sistemas"),
         };
     }
 

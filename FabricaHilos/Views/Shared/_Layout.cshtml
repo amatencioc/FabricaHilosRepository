@@ -386,13 +386,13 @@
                             @if (menus.SistemasIndicadores)
                             {
                             <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" ? "active" : "")"
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuSistemasInd" role="button"
-                                   aria-expanded="@(ctrl == "Desarrollo" ? "true" : "false")"
+                                   aria-expanded="@(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "true" : "false")"
                                    aria-controls="submenuSistemasInd">
                                     <i class="bi bi-graph-up-arrow"></i> Indicadores
                                 </a>
-                                <ul class="collapse @(ctrl == "Desarrollo" ? "show" : "") list-unstyled ps-3" id="submenuSistemasInd">
+                                <ul class="collapse @(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "show" : "") list-unstyled ps-3" id="submenuSistemasInd">
                                     @if (menus.SistemasIndicadoresDesarrollo)
                                     {
                                     <li>
@@ -401,12 +401,49 @@
                                         </a>
                                     </li>
                                     }
-                                </ul>
-                            </li>
-                            }
-                        </ul>
-                    </li>
-                }
+                                    @if (menus.SistemasIndicadoresIncidencia)
+                                    {
+                                    <li>
+                                        <a href="/Sistemas/Incidencia" class="sidebar-link sidebar-sublink @(ctrl == "Incidencia" ? "active" : "")">
+                                            <i class="bi bi-bell-fill"></i> KPI Incidencias
+                                        </a>
+                                    </li>
+                                    }
+                                        @if (menus.SistemasIndicadoresSeguimientoDev)
+                                                        {
+                                                        <li>
+                                                            <a href="/Sistemas/SeguimientoDev" class="sidebar-link sidebar-sublink @(ctrl == "SeguimientoDev" ? "active" : "")">
+                                                                <i class="bi bi-clipboard2-check-fill"></i> Seguimiento Dev
+                                                            </a>
+                                                        </li>
+                                                        }
+                                                    </ul>
+                                                </li>
+                                                }
+                                                @if (menus.SistemasRequerimientos)
+                                                {
+                                                <li>
+                                                    <a class="sidebar-link sidebar-sublink @(ctrl == "AnularDocumento" ? "active" : "")"
+                                                       data-bs-toggle="collapse" href="#submenuSistemasReq" role="button"
+                                                       aria-expanded="@(ctrl == "AnularDocumento" ? "true" : "false")"
+                                                       aria-controls="submenuSistemasReq">
+                                                        <i class="bi bi-file-earmark-text"></i> Requerimientos
+                                                    </a>
+                                                    <ul class="collapse @(ctrl == "AnularDocumento" ? "show" : "") list-unstyled ps-3" id="submenuSistemasReq">
+                                                        @if (menus.SistemasRequerimientosAnularDocumento)
+                                                        {
+                                                        <li>
+                                                            <a href="/Sistemas/Requerimientos/AnularDocumento" class="sidebar-link sidebar-sublink @(ctrl == "AnularDocumento" ? "active" : "")">
+                                                                <i class="bi bi-file-earmark-x-fill"></i> Anular Documento
+                                                            </a>
+                                                        </li>
+                                                        }
+                                                    </ul>
+                                                </li>
+                                                }
+                                            </ul>
+                                        </li>
+                                    }
             </ul>
         </nav>
 

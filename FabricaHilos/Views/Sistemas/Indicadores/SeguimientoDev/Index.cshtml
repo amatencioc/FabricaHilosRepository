@@ -1,0 +1,831 @@
+@{
+    ViewData["Title"] = "Seguimiento de Desarrollo - Sistemas";
+}
+
+@section Styles {
+<style>
+    /* ── layout general ─────────────────────────── */
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        background: #f5f5f2;
+    }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 700;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+        font-size: .9rem;
+        padding: .65rem 1rem;
+    }
+    .chart-card .card-body {
+        background: #f0f0ec;
+        border-radius: 0 0 12px 12px;
+    }
+    .chart-spinner {
+        position: absolute; inset: 0;
+        background: rgba(255,255,255,.78);
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 12px; z-index: 10;
+    }
+    /* ── sección ─────────────────────────────────── */
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.6rem 0 .25rem;
+        border-left: 4px solid #c8a84b;
+        padding-left: .55rem;
+    }
+    .report-desc {
+        font-size: .78rem;
+        color: #637381;
+        margin: 0 0 .85rem .65rem;
+        line-height: 1.55;
+    }
+    /* ── KPI cards ───────────────────────────────── */
+    .kpi-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        text-align: center;
+        padding: 1.1rem .8rem;
+        background: #fff;
+    }
+    .kpi-card .kpi-icon  { font-size: 1.8rem; }
+    .kpi-card .kpi-label { font-size: .67rem; color: #637381; font-weight: 700; text-transform: uppercase; margin: .15rem 0; }
+    .kpi-card .kpi-value { font-size: 2rem; font-weight: 700; }
+    /* ── tabla pivot ─────────────────────────────── */
+    .tabla-pivot           { font-size: .79rem; }
+    .tabla-pivot th,
+    .tabla-pivot td        { vertical-align: middle !important; }
+    .tabla-pivot thead th  { text-align: center; }
+    .tabla-pivot td.resp   { font-weight: 600; padding-left: .75rem; }
+    .tabla-pivot td.num    { text-align: center; }
+    .tabla-pivot tfoot td  { font-weight: bold; text-align: center; background: #e8f5e9; }
+    /* ── tabla mensual ───────────────────────────── */
+    .tabla-mes th,
+    .tabla-mes td          { vertical-align: middle !important; text-align: center; font-size: .79rem; }
+    .tabla-mes td:first-child { text-align: left; font-weight: 600; padding-left: .75rem; }
+    .tabla-mes tfoot td    { font-weight: bold; background: #e8f5e9; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/Sistemas">Sistemas</a></li>
+    <li class="breadcrumb-item active">Seguimiento de Desarrollo</li>
+}
+
+<!-- ══ DESCRIPCIÓN GENERAL ══════════════════════════════════ -->
+<div class="alert mb-3 border-0 rounded-3 shadow-sm" style="background:#e8f5e9; border-left:5px solid #1B4D3E !important; padding:1rem 1.25rem">
+    <div class="d-flex align-items-start gap-2">
+        <span style="font-size:1.6rem; line-height:1">📊</span>
+        <div>
+            <div class="fw-bold" style="color:#1B4D3E; font-size:.95rem">¿Qué mide este indicador?</div>
+            <div class="mt-1" style="font-size:.8rem; color:#374151; line-height:1.65">
+                El <strong>Seguimiento de Desarrollo</strong> consolida todos los requerimientos de software <strong>entregados</strong> (ESTADO = 2)
+                por el equipo de Sistemas en el período seleccionado. Cada ticket se clasifica en dos categorías:
+                <span class="badge" style="background:#1B4D3E">🛠️ Desarrollo</span> (motivos 11 y 16 — nuevas funcionalidades o mejoras)
+                y <span class="badge" style="background:#e65100">🔔 Incidencia</span> (cualquier otro motivo — problemas, soporte, correctivos).<br>
+                Los <strong>filtros de fecha</strong> delimitan el período de análisis por fecha de cierre del ticket.
+                El filtro <strong>Responsable</strong> restringe todos los gráficos y tablas al analista seleccionado.
+                El filtro <strong>Tipo</strong> muestra únicamente Desarrollo, únicamente Incidencia, o <em>Todos</em> con diferenciación visual entre ambas categorías.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ FILTROS ════════════════════════════════════════════ -->
+<div class="filter-bar">
+    <div class="d-flex flex-wrap align-items-end gap-3">
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Inicio</label>
+            <input type="date" id="fechaInicio" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Fecha Fin</label>
+            <input type="date" id="fechaFin" class="form-control form-control-sm" style="min-width:140px">
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Responsable</label>
+            <select id="selResponsable" class="form-select form-select-sm" style="min-width:190px">
+                <option value="">— Todos —</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Tipo</label>
+            <select id="selTipo" class="form-select form-select-sm" style="min-width:155px">
+                <option value="">Todos</option>
+                <option value="desarrollo">🛠️ Desarrollo</option>
+                <option value="incidencia">🔔 Incidencia</option>
+            </select>
+        </div>
+        <button class="btn btn-sm btn-success" onclick="loadAll()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+        </button>
+    </div>
+</div>
+
+<!-- ══ KPI CARDS ══════════════════════════════════════════ -->
+<p class="report-desc mt-1 mb-2" style="font-size:.78rem; color:#637381">
+    <i class="bi bi-info-circle me-1"></i>
+    Resumen numérico del período y filtros activos. <strong>Total Entregados</strong> = suma de todos los tickets cerrados en el rango.
+    <strong>Desarrollo</strong> e <strong>Incidencia</strong> muestran el desglose por categoría.
+    <strong>Responsables</strong> y <strong>Áreas</strong> indican cuántos analistas y centros de costo participaron.
+    Al cambiar cualquier filtro, estos valores se recalculan automáticamente.
+</p>
+<div class="row g-3 mb-4" id="kpiCards"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 1 — Entregados por Responsable (tabla pivot)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-table me-1"></i>Entregados por Responsable</div>
+<p class="report-desc">
+    Tabla dinámica que cruza <strong>analistas (filas)</strong> con <strong>años (columnas)</strong>, mostrando cuántos tickets entregó cada persona por año.
+    La columna <em>Total ENTR</em> es la suma de todos los años visibles. La fila <em>Total general</em> suma todos los analistas por año.<br>
+    <strong>Filtro Responsable:</strong> al seleccionar un analista, la tabla mostrará solo su fila.<br>
+    <strong>Filtro Tipo:</strong> restringe el conteo a Desarrollo, Incidencia o ambos.<br>
+    <strong>Filtro Fechas:</strong> define qué años aparecen como columnas según la fecha de cierre de cada ticket.
+</p>
+<div class="card chart-card position-relative mb-4">
+    <div id="spinnerPivot" class="chart-spinner"><div class="spinner-border text-success"></div></div>
+    <div class="card-header"><i class="bi bi-grid-3x2-gap me-1"></i>Detalle por Responsable y Año</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered tabla-pivot mb-0" id="tablaPivot">
+                <thead></thead><tbody></tbody><tfoot></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 2 — Entregas mes a mes
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-calendar3 me-1"></i>Entregas mensuales <span id="lblAnoAt"></span></div>
+<p class="report-desc">
+    Detalle mes a mes de los tickets entregados durante el <strong>año más reciente</strong> del rango de fechas seleccionado.
+    Permite identificar meses de mayor o menor actividad del equipo.<br>
+    <strong>Filtro Tipo = Todos:</strong> el gráfico de barras mostrará dos barras por mes (🛠️ Desarrollo en verde y 🔔 Incidencia en naranja) para comparar la composición mensual.<br>
+    <strong>Filtro Tipo = Desarrollo o Incidencia:</strong> se muestra una sola barra por mes con el total de esa categoría.<br>
+    <strong>Filtro Responsable:</strong> restringe el análisis a los tickets del analista seleccionado.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-table me-1"></i>Tabla de entregas mensuales</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Total de tickets cerrados (entregados) por mes en el año de referencia. La fila <em>TOTAL</em> suma todos los meses visibles.
+                Si el rango de fechas abarca varios años, solo se muestra el año más reciente.
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered tabla-mes mb-0" id="tablaMes">
+                        <thead></thead><tbody></tbody><tfoot></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-bar-chart-steps me-1"></i>Evolución mensual de entregas</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada barra representa un mes. En modo <strong>Todos</strong>, se muestran dos barras por mes diferenciando 🛠️ Desarrollo (verde) y 🔔 Incidencia (naranja).
+                Los meses sin entregas no aparecen. El número sobre cada barra indica el total exacto.
+            </div>
+            <div class="card-body" style="height:370px">
+                <canvas id="chartMes"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 3 — Entregados por Año  |  Distribución por Área (barras)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-bar-chart-line me-1"></i>Análisis comparativo</div>
+<p class="report-desc">
+    Perspectiva anual y por área del volumen de entregas en el período consultado.
+    Estos gráficos responden a: ¿cuánto se entregó cada año? y ¿qué peso tiene cada área?<br>
+    <strong>Filtro Tipo = Todos:</strong> ambos gráficos muestran el desglose 🛠️ Desarrollo vs 🔔 Incidencia.
+    <strong>Filtro Tipo específico:</strong> se muestra solo la categoría seleccionada.
+    <strong>Filtro Responsable:</strong> limita el análisis a los tickets del analista elegido.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-calendar4-range me-1"></i>¿Cuántos requerimientos se entregaron cada año?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada barra agrupa los tickets entregados en un año calendar. Útil para comparar la productividad anual del equipo.
+                En modo <strong>Todos</strong> aparecen dos barras por año (🛠️ Desarrollo / 🔔 Incidencia) para ver cómo evoluciona cada categoría.
+            </div>
+            <div class="card-body" style="height:360px">
+                <canvas id="chartAno"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-bar-chart-fill me-1"></i>Distribución por Área</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada segmento representa el peso proporcional (%) de un área sobre el total de entregas.
+                En modo <strong>Todos</strong>, la dona muestra solo 2 segmentos: 🛠️ Desarrollo vs 🔔 Incidencia, revelando cuál categoría domina el período.
+                En modo <strong>Desarrollo</strong> o <strong>Incidencia</strong>, muestra el reparto entre las diferentes áreas para esa categoría.
+                La leyenda lateral identifica cada segmento; el porcentaje aparece dentro si supera el 5%.
+            </div>
+            <div class="card-body p-2">
+                <div id="wrapperDona" style="position:relative">
+                    <canvas id="chartDona"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 4 — Entregados por Área (barras horizontales)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-diagram-3 me-1"></i>Entregados por Área</div>
+<p class="report-desc">
+    Ranking horizontal de áreas según el número de tickets entregados. Permite identificar qué centros de costo generan más demanda al equipo de Sistemas.<br>
+    <strong>Filtro Tipo = Todos:</strong> cada área muestra dos barras separadas (🛠️ Desarrollo en verde / 🔔 Incidencia en naranja), permitiendo ver si el área genera principalmente desarrollo o soporte.<br>
+    <strong>Filtro Responsable:</strong> muestra solo las áreas atendidas por el analista seleccionado.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-diagram-3 me-1"></i>¿Qué áreas acumulan más entregas?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada fila es un área de la empresa. La longitud de la barra indica el volumen de entregas.
+                En modo <strong>Todos</strong>, la barra verde es Desarrollo y la naranja es Incidencia — ambas se muestran juntas para cada área.
+                El número al final de cada barra indica el total exacto. Ordenado alfabéticamente para facilitar la búsqueda.
+            </div>
+            <div class="card-body p-2">
+                <div id="wrapperArea" style="position:relative">
+                    <canvas id="chartArea"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN 5 — Entregados por Responsable (barras horizontales)
+════════════════════════════════════════════════════════ -->
+<div class="section-title"><i class="bi bi-person-lines-fill me-1"></i>Productividad por Responsable</div>
+<p class="report-desc">
+    Compara el volumen de trabajo entregado por cada analista del equipo de Sistemas en el período seleccionado. Ordenado de mayor a menor.<br>
+    <strong>Filtro Responsable = Todos o Filtro Tipo = Todos:</strong> cada analista muestra dos barras (🛠️ Desarrollo en verde y 🔔 Incidencia en naranja), permitiendo ver si cada persona se dedica más a desarrollo o a soporte.<br>
+    <strong>Filtro Responsable específico:</strong> muestra solo al analista elegido, con el desglose por tipo si aplica.<br>
+    <strong>Filtro Tipo específico:</strong> con un responsable seleccionado, se muestra una barra única para esa categoría.
+</p>
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header"><i class="bi bi-person-lines-fill me-1"></i>¿Quién entregó más requerimientos?</div>
+            <div class="px-3 pt-2 pb-0" style="font-size:.74rem; color:#637381; line-height:1.5">
+                Cada fila es un analista. La longitud de la barra indica sus entregas totales en el período.
+                Cuando se ven todos los responsables o se usa el modo <strong>Todos</strong>, aparecen dos barras por persona: verde (🛠️ Desarrollo) y naranja (🔔 Incidencia).
+                El número al extremo derecho de cada barra indica el total exacto de esa categoría.
+            </div>
+            <div class="card-body p-2">
+                <div id="wrapperResp" style="position:relative">
+                    <canvas id="chartResp"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de error -->
+<div class="modal fade" id="modalErrorSD" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Error al cargar el dashboard</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-1 text-muted small">Se produjo un error al obtener los datos desde el servidor. Detalle:</p>
+                <pre id="modalErrorDetalle" class="bg-light border rounded p-2 small mb-0" style="white-space:pre-wrap; max-height:260px; overflow:auto"></pre>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+(function () {
+    'use strict';
+
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'Segoe UI','Helvetica Neue',Arial,sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    /* ── Paleta ───────────────────────────────── */
+    const COLORS = [
+        '#1B4D3E','#1565C0','#e65100','#6a1b9a','#00838f',
+        '#c62828','#4e342e','#37474f','#f9a825','#ad1457',
+        '#283593','#ef6c00','#2e7d5e','#00695c','#558b2f'
+    ];
+    const AÑO_BG      = ['#d1e9ff','#d4edda','#fff3cd','#f8d7da','#e2d9f3'];
+    const AÑO_ENTR_BG = ['#1565C0','#28a745','#e65100','#dc3545','#7c4dff'];
+
+    const charts = {};
+    const destroy = k => { if (charts[k]) { charts[k].destroy(); delete charts[k]; } };
+
+    /* ── Fechas por defecto ───────────────────── */
+    function setDefaultDates() {
+        const hoy = new Date(), ini = new Date(hoy.getFullYear(), 0, 1);
+        const iso = d => d.toISOString().slice(0, 10);
+        document.getElementById('fechaInicio').value = iso(ini);
+        document.getElementById('fechaFin').value    = iso(hoy);
+    }
+
+    function buildParams() {
+        const p = new URLSearchParams();
+        const fi = document.getElementById('fechaInicio').value;
+        const ff = document.getElementById('fechaFin').value;
+        const rp = document.getElementById('selResponsable').value;
+        const tp = document.getElementById('selTipo').value;
+        if (fi) p.set('fechaInicio', fi);
+        if (ff) p.set('fechaFin',    ff);
+        if (rp) p.set('responsable', rp);
+        if (tp) p.set('tipoMotivo',  tp);
+        return p;
+    }
+
+    function poblarSelector(responsables) {
+        const sel = document.getElementById('selResponsable');
+        const actual = sel.value;
+        sel.innerHTML = '<option value="">\u2014 Todos \u2014</option>';
+        (responsables || []).forEach(r => {
+            const op = document.createElement('option');
+            op.value = r; op.textContent = r;
+            if (r === actual) op.selected = true;
+            sel.appendChild(op);
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       KPI CARDS
+    ══════════════════════════════════════════ */
+    function renderKpis(d) {
+        const cards = [
+            { icon: '✅', label: 'Total Entregados',    value: d.totalEntregados,   color: '#1565C0' },
+            { icon: '🛠️', label: 'Desarrollo',         value: d.totalDesarrollo,   color: '#1B4D3E' },
+            { icon: '🔔', label: 'Incidencia',         value: d.totalIncidencia,   color: '#e65100' },
+            { icon: '👤', label: 'Responsables',        value: d.totalResponsables, color: '#6a1b9a' },
+            { icon: '🏢', label: 'Áreas atendidas',     value: d.totalAreas,        color: '#00838f' },
+            { icon: '📅', label: 'Año en seguimiento',  value: d.anoAtencion,       color: '#2e7d32' },
+        ];
+        document.getElementById('kpiCards').innerHTML = cards.map(c => `
+            <div class="col-6 col-xl-2">
+                <div class="kpi-card" style="border-top:4px solid ${c.color}">
+                    <div class="kpi-icon">${c.icon}</div>
+                    <div class="kpi-label">${c.label}</div>
+                    <div class="kpi-value" style="color:${c.color}">${c.value}</div>
+                </div>
+            </div>`).join('');
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 1 — Tabla pivot por responsable y año
+    ══════════════════════════════════════════ */
+    function renderPivot(d) {
+        const t = document.getElementById('tablaPivot');
+        const a = d.anos || [];
+
+        let h1 = `<tr>
+            <th rowspan="2" class="text-start align-middle ps-3"
+                style="background:#e8eaf6; min-width:190px;">RESPONSABLE</th>`;
+        a.forEach((an, i) => {
+            h1 += `<th class="text-center"
+                       style="background:${AÑO_BG[i % AÑO_BG.length]};
+                              border-bottom:3px solid ${AÑO_ENTR_BG[i % AÑO_ENTR_BG.length]};">
+                       <strong>${an}</strong></th>`;
+        });
+        h1 += `<th rowspan="2" class="text-center align-middle"
+                   style="background:#bbdefb; color:#1565C0; min-width:72px;">Total<br>ENTR</th></tr>`;
+
+        let h2 = '<tr>';
+        a.forEach((_, i) => {
+            const bg = AÑO_BG[i % AÑO_BG.length];
+            h2 += `<th class="text-center" style="background:${bg}; font-size:.74rem; min-width:52px;">ENTR</th>`;
+        });
+        h2 += '</tr>';
+        t.tHead.innerHTML = h1 + h2;
+
+        t.tBodies[0].innerHTML = (d.filas || []).map(f => {
+            let row = `<tr><td class="resp">${f.responsable}</td>`;
+            f.anos.forEach((c, i) => {
+                const bg = AÑO_BG[i % AÑO_BG.length];
+                const ec = AÑO_ENTR_BG[i % AÑO_ENTR_BG.length];
+                row += `<td class="num" style="background:${bg}44; color:${ec}; font-weight:600">${c.entregado || ''}</td>`;
+            });
+            row += `<td class="num" style="background:#e3f2fd; color:#1565C0; font-weight:700">${f.totalEntregado || ''}</td>`;
+            return row + '</tr>';
+        }).join('');
+
+        let foot = '<tr><td class="text-center fw-bold">Total general</td>';
+        (d.totalesAno || []).forEach((c, i) => {
+            const bg = AÑO_BG[i % AÑO_BG.length];
+            const ec = AÑO_ENTR_BG[i % AÑO_ENTR_BG.length];
+            foot += `<td style="background:${bg}66; color:${ec}; font-weight:700">${c.entregado || ''}</td>`;
+        });
+        foot += `<td style="color:#1565C0; font-weight:700">${d.gtEntregado || ''}</td></tr>`;
+        t.tFoot.innerHTML = foot;
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 2 — Tabla mensual + Chart barras
+    ══════════════════════════════════════════ */
+    function renderMes(d) {
+        document.getElementById('lblAnoAt').textContent = d.anoAtencion;
+        const data = d.entregaMes || [];
+
+        const tab = document.getElementById('tablaMes');
+        tab.tHead.innerHTML = `
+            <tr style="background:#c5d9f7">
+                <th class="text-start align-middle ps-2" style="min-width:88px">MES</th>
+                <th class="align-middle">ENTREGADOS</th>
+            </tr>`;
+
+        tab.tBodies[0].innerHTML = data.map(r => `
+            <tr>
+                <td class="text-start">${r.etiqueta}</td>
+                <td style="color:#1565C0; font-weight:700">${r.entregados}</td>
+            </tr>`).join('');
+
+        const totEnt = data.reduce((s, r) => s + r.entregados, 0);
+        tab.tFoot.innerHTML = `
+            <tr>
+                <td class="text-start">TOTAL</td>
+                <td style="color:#1565C0; font-weight:700">${totEnt}</td>
+            </tr>`;
+
+        destroy('mes');
+        if (!data.length) return;
+
+        const esTodos = document.getElementById('selTipo').value === '';
+        const datalabelsCfg = {
+            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+            anchor: 'end', align: 'top',
+            font: { size: 11, weight: '700' },
+            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
+            formatter: v => v
+        };
+        const mesMeses = [...new Set([
+            ...(d.entregaMesDesarrollo || []).map(r => r.etiqueta),
+            ...(d.entregaMesIncidencia || []).map(r => r.etiqueta)
+        ])];
+        const mesLabels = esTodos ? mesMeses : data.map(r => r.etiqueta);
+        const findEnt   = (arr, etiq) => (arr.find(r => r.etiqueta === etiq) || {}).entregados || 0;
+
+        const mesDatasets = esTodos
+            ? [
+                { label: '🛠️ Desarrollo', data: mesLabels.map(e => findEnt(d.entregaMesDesarrollo || [], e)),
+                  backgroundColor: 'rgba(27,77,62,0.82)', borderColor: '#1B4D3E', borderWidth: 1, borderRadius: 5,
+                  datalabels: { ...datalabelsCfg, color: '#1B4D3E' } },
+                { label: '🔔 Incidencia', data: mesLabels.map(e => findEnt(d.entregaMesIncidencia || [], e)),
+                  backgroundColor: 'rgba(230,81,0,0.82)', borderColor: '#e65100', borderWidth: 1, borderRadius: 5,
+                  datalabels: { ...datalabelsCfg, color: '#e65100' } }
+              ]
+            : [{ label: 'Entregados', data: data.map(r => r.entregados),
+                 backgroundColor: 'rgba(21,101,192,0.82)', borderColor: '#1565C0', borderWidth: 1, borderRadius: 5,
+                 datalabels: { ...datalabelsCfg, color: '#1565C0' } }];
+
+        charts.mes = new Chart(document.getElementById('chartMes').getContext('2d'), {
+            type: 'bar',
+            data: { labels: mesLabels, datasets: mesDatasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } },
+                    datalabels: {}
+                },
+                layout: { padding: { top: 30 } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 3 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 3a — Entregados por Año
+    ══════════════════════════════════════════ */
+    function renderChartAno(d) {
+        destroy('ano');
+        const esTodos = document.getElementById('selTipo').value === '';
+        const data = (d.totalesAno || []).filter(x => x.entregado > 0);
+        if (!data.length) return;
+
+        const datalabelsCfg = {
+            display: true, anchor: 'end', align: 'top',
+            font: { size: 11, weight: '700' },
+            textStrokeColor: 'rgba(255,255,255,.9)', textStrokeWidth: 3,
+            formatter: v => v > 0 ? v : ''
+        };
+
+        const anoDatasets = esTodos
+            ? [
+                { label: '🛠️ Desarrollo',
+                  data: (d.totalesAnoDesarrollo || []).map(r => r.entregado),
+                  backgroundColor: 'rgba(27,77,62,0.82)', borderColor: '#1B4D3E', borderWidth: 1, borderRadius: 5,
+                  datalabels: { ...datalabelsCfg, color: '#1B4D3E' } },
+                { label: '🔔 Incidencia',
+                  data: (d.totalesAnoIncidencia || []).map(r => r.entregado),
+                  backgroundColor: 'rgba(230,81,0,0.82)', borderColor: '#e65100', borderWidth: 1, borderRadius: 5,
+                  datalabels: { ...datalabelsCfg, color: '#e65100' } }
+              ]
+            : [{ label: 'Entregados',
+                 data: data.map(r => r.entregado),
+                 backgroundColor: data.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
+                 borderColor: data.map((_, i) => COLORS[i % COLORS.length]),
+                 borderWidth: 1, borderRadius: 5,
+                 datalabels: { ...datalabelsCfg, color: '#374151' } }];
+
+        charts.ano = new Chart(document.getElementById('chartAno').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: (d.totalesAno || []).filter(x => x.entregado > 0).map(r => String(r.ano)),
+                datasets: anoDatasets
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } }, datalabels: {} },
+                layout: { padding: { top: 30 } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { stepSize: 5 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 3b — Dona por Área
+    ══════════════════════════════════════════ */
+    function renderChartDona(d) {
+        destroy('dona');
+        const esTodos = document.getElementById('selTipo').value === '';
+
+        if (esTodos) {
+            // En modo Todos: dona de 2 segmentos Desarrollo / Incidencia
+            const devTotal = d.totalDesarrollo || 0;
+            const incTotal = d.totalIncidencia || 0;
+            const gran     = devTotal + incTotal;
+            if (gran === 0) return;
+            charts.dona = new Chart(document.getElementById('chartDona').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['🛠️ Desarrollo', '🔔 Incidencia'],
+                    datasets: [{
+                        data: [devTotal, incTotal],
+                        backgroundColor: ['rgba(27,77,62,0.85)', 'rgba(230,81,0,0.85)'],
+                        borderColor:     ['#1B4D3E', '#e65100'],
+                        borderWidth: 2, hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: { position: 'right', align: 'center',
+                                  labels: { boxWidth: 14, padding: 12, font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.label}: ${ctx.raw} (${(ctx.raw / gran * 100).toFixed(1)}%)`
+                            }
+                        },
+                        datalabels: {
+                            display: true, color: '#fff',
+                            font: { size: 13, weight: '700' },
+                            textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                            formatter: (v) => {
+                                const pct = gran > 0 ? (v / gran * 100).toFixed(0) : 0;
+                                return pct >= 5 ? pct + '%' : '';
+                            }
+                        }
+                    }
+                }
+            });
+        } else {
+            const data = (d.porArea || []).filter(a => a.totalEntregado > 0).slice(0, 12);
+            if (!data.length) return;
+            const gran = data.reduce((s, a) => s + a.totalEntregado, 0);
+            charts.dona = new Chart(document.getElementById('chartDona').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(a => a.area),
+                    datasets: [{
+                        data: data.map(a => a.totalEntregado),
+                        backgroundColor: COLORS.map(c => c + 'CC'),
+                        borderColor:     COLORS,
+                        borderWidth: 2, hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: { position: 'right', align: 'center',
+                                  labels: { boxWidth: 14, padding: 10, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.label}: ${ctx.raw} (${(ctx.raw / gran * 100).toFixed(1)}%)`
+                            }
+                        },
+                        datalabels: {
+                            display: true, color: '#fff',
+                            font: { size: 12, weight: '700' },
+                            textStrokeColor: 'rgba(0,0,0,.4)', textStrokeWidth: 2,
+                            formatter: (v) => {
+                                const pct = gran > 0 ? (v / gran * 100).toFixed(0) : 0;
+                                return pct >= 6 ? pct + '%' : '';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 4 — Barras horizontales por Área
+    ══════════════════════════════════════════ */
+    function renderChartArea(d) {
+        destroy('area');
+        const esTodos = document.getElementById('selTipo').value === '';
+        const data = [...(d.porArea || [])]
+            .filter(a => a.totalEntregado > 0)
+            .sort((a, b) => a.area.localeCompare(b.area, 'es'))
+            .slice(0, 50);
+        if (!data.length) return;
+
+        const rowH   = 38;
+        const minH   = 220;
+        const height = Math.max(minH, data.length * rowH + 60);
+        document.getElementById('wrapperArea').style.height = height + 'px';
+
+        const findArea = (arr, area) => (arr.find(r => r.area === area) || {}).totalEntregado || 0;
+        const datalabelsCfg = {
+            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+            anchor: 'end', align: 'right',
+            font: { size: 11, weight: '700' },
+            textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3,
+            formatter: v => v
+        };
+
+        const areaDatasets = esTodos
+            ? [
+                { label: '🛠️ Desarrollo',
+                  data: data.map(r => findArea(d.porAreaDesarrollo || [], r.area)),
+                  backgroundColor: 'rgba(27,77,62,0.82)', borderColor: '#1B4D3E', borderWidth: 1, borderRadius: 3,
+                  datalabels: { ...datalabelsCfg, color: '#1B4D3E' } },
+                { label: '🔔 Incidencia',
+                  data: data.map(r => findArea(d.porAreaIncidencia || [], r.area)),
+                  backgroundColor: 'rgba(230,81,0,0.82)', borderColor: '#e65100', borderWidth: 1, borderRadius: 3,
+                  datalabels: { ...datalabelsCfg, color: '#e65100' } }
+              ]
+            : [{ label: 'Entregados',
+                 data: data.map(r => r.totalEntregado),
+                 backgroundColor: 'rgba(21,101,192,0.82)', borderColor: '#1565C0', borderWidth: 1, borderRadius: 3,
+                 datalabels: { ...datalabelsCfg, color: '#374151' } }];
+
+        charts.area = new Chart(document.getElementById('chartArea').getContext('2d'), {
+            type: 'bar',
+            data: { labels: data.map(r => r.area), datasets: areaDatasets },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } },
+                           tooltip: { mode: 'nearest', intersect: true } },
+                layout: { padding: { right: 40 } },
+                scales: {
+                    x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       SECCIÓN 5 — Barras horizontales por Responsable
+    ══════════════════════════════════════════ */
+    function renderChartResp(d) {
+        destroy('resp');
+        // Mostrar split Dev/Inc siempre que se vean todos los responsables, o cuando tipo = Todos
+        const esTodos = document.getElementById('selTipo').value === ''
+                     || document.getElementById('selResponsable').value === '';
+        const data = [...(d.porResponsable || [])]
+            .filter(r => r.totalEntregado > 0)
+            .slice(0, 30);
+        if (!data.length) return;
+
+        const rowH   = 38;
+        const minH   = 200;
+        const height = Math.max(minH, data.length * rowH + 60);
+        document.getElementById('wrapperResp').style.height = height + 'px';
+
+        const findResp = (arr, resp) => (arr.find(r => r.responsable === resp) || {}).totalEntregado || 0;
+        const datalabelsCfg = {
+            display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+            anchor: 'end', align: 'right',
+            font: { size: 11, weight: '700' },
+            textStrokeColor: 'rgba(255,255,255,.8)', textStrokeWidth: 3,
+            formatter: v => v
+        };
+
+        const respDatasets = esTodos
+            ? [
+                { label: '🛠️ Desarrollo',
+                  data: data.map(r => findResp(d.porResponsableDesarrollo || [], r.responsable)),
+                  backgroundColor: 'rgba(27,77,62,0.82)', borderColor: '#1B4D3E', borderWidth: 1, borderRadius: 3,
+                  datalabels: { ...datalabelsCfg, color: '#1B4D3E' } },
+                { label: '🔔 Incidencia',
+                  data: data.map(r => findResp(d.porResponsableIncidencia || [], r.responsable)),
+                  backgroundColor: 'rgba(230,81,0,0.82)', borderColor: '#e65100', borderWidth: 1, borderRadius: 3,
+                  datalabels: { ...datalabelsCfg, color: '#e65100' } }
+              ]
+            : [{ label: 'Entregados',
+                 data: data.map(r => r.totalEntregado),
+                 backgroundColor: data.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
+                 borderColor: data.map((_, i) => COLORS[i % COLORS.length]),
+                 borderWidth: 1, borderRadius: 3,
+                 datalabels: { ...datalabelsCfg, color: '#374151' } }];
+
+        charts.resp = new Chart(document.getElementById('chartResp').getContext('2d'), {
+            type: 'bar',
+            data: { labels: data.map(r => r.responsable), datasets: respDatasets },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 13, padding: 12 } },
+                           tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}` } } },
+                layout: { padding: { right: 40 } },
+                scales: {
+                    x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(0,0,0,.06)' } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════
+       Carga global
+    ══════════════════════════════════════════ */
+    let _primeraVez = true;
+
+    async function loadAll() {
+        document.getElementById('spinnerPivot').style.display = 'flex';
+        try {
+            const url = '/Sistemas/SeguimientoDev/DatosDashboard?' + buildParams().toString();
+            const r   = await fetch(url, { cache: 'no-store' });
+            if (!r.ok) throw new Error(await r.text());
+            const d = await r.json();
+
+            // Poblar selector solo la primera carga (para no pisar selección del usuario)
+            if (_primeraVez) {
+                poblarSelector(d.responsables || []);
+                _primeraVez = false;
+            }
+
+            renderKpis(d);
+            renderPivot(d);     // Sección 1
+            renderMes(d);       // Sección 2
+            renderChartAno(d);  // Sección 3a
+            renderChartDona(d); // Sección 3b — barras por área
+            renderChartArea(d); // Sección 4
+            renderChartResp(d); // Sección 5
+        } catch (e) {
+            console.error(e);
+            document.getElementById('modalErrorDetalle').textContent = e.message || String(e);
+            new bootstrap.Modal(document.getElementById('modalErrorSD')).show();
+        } finally {
+            document.getElementById('spinnerPivot').style.display = 'none';
+        }
+    }
+    window.loadAll = loadAll;
+
+    /* ── Init ─────────────────────────────────── */
+    setDefaultDates();
+    loadAll();
+})();
+</script>
+}
