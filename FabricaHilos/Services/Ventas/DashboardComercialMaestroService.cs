@@ -58,11 +58,11 @@ SELECT A.COD_CLIENTE,
                T.DESCRIPCION ASESOR,
                SUM(DECODE(:P_OPCION, 'TODOS', V.SOLES,   V.SOLES_SINANT))   SOLES,
                SUM(DECODE(:P_OPCION, 'TODOS', V.DOLARES, V.DOLARES_SINANT)) DOLAR
-          FROM V_DOCUVEN V
-          LEFT JOIN CLIENTES C            ON  C.COD_CLIENTE = V.COD_CLIENTE
-          LEFT JOIN TABLAS_AUXILIARES T   ON  T.CODIGO  = C.VENDEDOR
+          FROM {S}V_DOCUVEN V
+          LEFT JOIN {S}CLIENTES C            ON  C.COD_CLIENTE = V.COD_CLIENTE
+          LEFT JOIN {S}TABLAS_AUXILIARES T   ON  T.CODIGO  = C.VENDEDOR
                                           AND T.TIPO    = 29
-          LEFT JOIN TABLAS_AUXILIARES T2  ON  T2.CODIGO = C.GIRO
+          LEFT JOIN {S}TABLAS_AUXILIARES T2  ON  T2.CODIGO = C.GIRO
                                           AND T2.TIPO   = 27
           LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                        FROM {S}CLIENTE_RELACION
@@ -74,7 +74,7 @@ SELECT A.COD_CLIENTE,
                   C.VENDEDOR,
                   T.DESCRIPCION) A
   LEFT JOIN (SELECT COD_CLIENTE, MIN(RUC) RUC, MIN(NOMBRE) NOMBRE
-               FROM CLIENTES
+               FROM {S}CLIENTES
               GROUP BY COD_CLIENTE) CLL ON CLL.COD_CLIENTE = A.COD_CLIENTE
   LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
                     C.VENDEDOR COD_ASESOR,
@@ -84,11 +84,11 @@ SELECT A.COD_CLIENTE,
                     SUM(DECODE(D.MONEDA,
                                'D', I.IMP_VVTA,
                                ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2))) DOLAR_ANT
-               FROM DOCUVENT D
-               JOIN ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+               FROM {S}DOCUVENT D
+               JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
                                             AND I.SERIE   = D.SERIE
                                             AND I.NUMERO  = D.NUMERO
-               LEFT JOIN CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+               LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
                LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                             FROM {S}CLIENTE_RELACION
                            GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
@@ -107,13 +107,13 @@ SELECT A.COD_CLIENTE,
                     C.VENDEDOR COD_ASESOR,
                     COUNT(DISTINCT D.TIPODOC || '-' || D.SERIE || '-' || D.NUMERO) NRODOC,
                     SUM(I.CANTIDAD * E.FACTOR) TOTUNID
-               FROM DOCUVENT D
-               JOIN ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
+               FROM {S}DOCUVENT D
+               JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
                                             AND I.SERIE   = D.SERIE
                                             AND I.NUMERO  = D.NUMERO
-               LEFT JOIN EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
+               LEFT JOIN {S}EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
                                             AND E.UNIDAD  = 'KG'
-               LEFT JOIN CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
+               LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
                LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                             FROM {S}CLIENTE_RELACION
                            GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL

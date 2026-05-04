@@ -39,7 +39,8 @@ namespace FabricaHilos.Services.Ventas
         // - Subquery B : Artículos de servicio a descontar (IN list)
         // - Subquery C : KG por EQUIVALENCIA (misma exclusión por COD_ART)
         private string BuildSqlMes() => $@"
-SELECT A.COD_ASESOR,
+SELECT A.COD_CLIENTE_K,
+       A.COD_ASESOR,
        A.ASESOR,
        A.MES,
        NVL(C.TOTUNID, 0)                          TOTUNID,
@@ -72,8 +73,8 @@ SELECT A.COD_ASESOR,
                                ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2))) DOLAR_ANT
                FROM {S}DOCUVENT D
                JOIN {S}ITEMDOCU I         ON I.TIPODOC = D.TIPODOC
-                                        AND I.SERIE   = D.SERIE
-                                        AND I.NUMERO  = D.NUMERO
+                                         AND I.SERIE   = D.SERIE
+                                         AND I.NUMERO  = D.NUMERO
                LEFT JOIN {S}CLIENTES CL  ON CL.COD_CLIENTE = D.COD_CLIENTE
                LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                             FROM {S}CLIENTE_RELACION GROUP BY GRUPO) GRP
@@ -94,10 +95,10 @@ SELECT A.COD_ASESOR,
                     SUM(I.CANTIDAD * E.FACTOR)       TOTUNID
                FROM {S}DOCUVENT D
                JOIN {S}ITEMDOCU I          ON I.TIPODOC = D.TIPODOC
-                                         AND I.SERIE   = D.SERIE
-                                         AND I.NUMERO  = D.NUMERO
+                                          AND I.SERIE   = D.SERIE
+                                          AND I.NUMERO  = D.NUMERO
                LEFT JOIN {S}EQUIVALENCIA E ON E.COD_ART = I.COD_ART
-                                         AND E.UNIDAD  = 'KG'
+                                          AND E.UNIDAD  = 'KG'
                LEFT JOIN {S}CLIENTES CL   ON CL.COD_CLIENTE = D.COD_CLIENTE
                LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
                             FROM {S}CLIENTE_RELACION GROUP BY GRUPO) GRP
@@ -117,12 +118,13 @@ SELECT A.COD_ASESOR,
         // ── Fila interna (un registro por cliente+asesor+mes) ─────────────────
         private sealed class FilaMesRaw
         {
-            public string? CodAsesor { get; set; }
-            public string? Asesor    { get; set; }
-            public string? Mes       { get; set; }
-            public decimal TotUnid   { get; set; }
-            public decimal Soles     { get; set; }
-            public decimal Dolar     { get; set; }
+            public string? CodCliente { get; set; }
+            public string? CodAsesor  { get; set; }
+            public string? Asesor     { get; set; }
+            public string? Mes        { get; set; }
+            public decimal TotUnid    { get; set; }
+            public decimal Soles      { get; set; }
+            public decimal Dolar      { get; set; }
         }
 
         // ── Carga desde Oracle — un registro por (cliente, asesor, mes) ───────
@@ -145,12 +147,13 @@ SELECT A.COD_ASESOR,
                 {
                     filas.Add(new FilaMesRaw
                     {
-                        CodAsesor = GetStr(reader, "COD_ASESOR"),
-                        Asesor    = GetStr(reader, "ASESOR"),
-                        Mes       = GetStr(reader, "MES"),
-                        TotUnid   = GetDec(reader, "TOTUNID"),
-                        Soles     = GetDec(reader, "SOLES"),
-                        Dolar     = GetDec(reader, "DOLAR"),
+                        CodCliente = GetStr(reader, "COD_CLIENTE_K"),
+                        CodAsesor  = GetStr(reader, "COD_ASESOR"),
+                        Asesor     = GetStr(reader, "ASESOR"),
+                        Mes        = GetStr(reader, "MES"),
+                        TotUnid    = GetDec(reader, "TOTUNID"),
+                        Soles      = GetDec(reader, "SOLES"),
+                        Dolar      = GetDec(reader, "DOLAR"),
                     });
                 }
             }
@@ -210,7 +213,7 @@ SELECT A.COD_ASESOR,
                 {
                     Asesor      = g.Key.Asesor,
                     Mes         = g.Key.Mes,
-                    NroClientes = g.Count(),
+                    NroClientes = g.Select(f => f.CodCliente).Distinct().Count(),
                 })
                 .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
                 .ToList();
@@ -293,7 +296,7 @@ SELECT A.COD_ASESOR,
                 {
                     Asesor      = g.Key.Asesor,
                     Mes         = g.Key.Mes,
-                    NroClientes = g.Count(),
+                    NroClientes = g.Select(f => f.CodCliente).Distinct().Count(),
                 })
                 .OrderBy(x => x.Asesor).ThenBy(x => x.Mes)
                 .ToList();
