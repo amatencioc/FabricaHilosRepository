@@ -241,6 +241,7 @@
     HE = Hora extra < 1h limpiada (tareo calculaba extras incorrectos)
     MF = Marca faltante insertada en SCA_HISTORIAL desde tareo
     RN = Nocturno sin entrada anticipada: refrigerio limpiado (marca duplicada)
+    HF = H.efectiva faltante: asignada desde tothoras del horario
     
     TABLAS:
     =======
@@ -464,6 +465,28 @@
                       horiniref este disponible. Igual asimetria que tenia PASO 3B.
                       Fix: mismo CASE WHEN totref / ELSE (horfinref-horiniref) + misma
                       condicion OR en WHERE que se aplico a PASO 3B el 21/04.
+    04/05/2026 - NEW: PASO 9-POST: Re-sincronizar NUMMARCACIONES/ALERTA01 tras PASO 9
+                      BUG: PASO 9 oculta marcas extra (ind_anulado='A') pero no actualiza
+                      nummarcaciones ni alerta01. PASO 8 excluye tareos con los 4 campos
+                      completos y requiere codaux4 IS NOT NULL. Resultado: tareo con E+IR+FR+S
+                      correcto pero nummarcaciones=5 impar -> UI muestra MARCACION IMPAR.
+                      Fix: nuevo PASO entre PASO 9 y PASO FINAL que recuenta SCA_HISTORIAL
+                      visible para cualquier tareo con mismatch.
+                      Detectado: emp 004056 (GUTIERREZ PINTO) 29/04/2026.
+    04/05/2026 - NEW: PASO 7A-HIS: Actualizar marca entrada en SCA_HISTORIAL tras PASO 7A
+                      BUG: PASO 7A (entrada anticipada en descanso, -15min) ajustaba
+                      t.entrada en el tareo pero no actualizaba SCA_HISTORIAL. PASO 9
+                      luego ocultaba la marca original (ej: 06:35) porque no coincidia
+                      con el nuevo valor del tareo (06:45). Resultado: la marca de ingreso
+                      desaparecia de la UI. Mismo patron que PASO 1B-HIS pero para descanso.
+                      Detectado: emp 002421 (ZAPATA BERECHE MIGUEL ANGEL) 26/04/2026.
+    04/05/2026 - NEW: PASO 5-HEFE: Safety net horaefectiva = 00:00 con entrada/salida OK
+                      BUG: SP_SCA_PROCESO_TRABAJADOR deja horaefectiva=NULL/00:00 en ciertos
+                      empleados TERCER TURNO con entrada levemente anticipada (<2h) y sin
+                      marcas intermedias. PASO 5 los omite (requiere codaux4 IS NOT NULL).
+                      Fix: nuevo PASO entre PASO 5 y PASO 5A que asigna horaefectiva = tothoras
+                      cuando es NULL/base-date pero entrada+salida son validos.
+                      Codigo: HF. Detectado: emp 000533 (VICENTE ORELLANA JULIO) 27/04/2026.
     23/04/2026 - FIX: PASO 2B-PRE segunda marca excluye near-duplicados de la primera
                       Caso: 5 marcas (08:51, 12:44, 12:45, 13:18, 18:03); 12:44/12:45 a 1 min.
                       PASO 2B-PRE elegia 12:45 como finrefri (15 min de horfinref=13:00)
@@ -674,6 +697,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_recalculo NUMBER := 0;
         v_count_historial NUMBER := 0;
         v_count_5g        NUMBER := 0;  -- Contador para PASO 5G (3er turno anticipado)
+        v_count_hefe      NUMBER := 0;  -- Contador para PASO 5-HEFE (h.efectiva faltante)
         v_count_rn        NUMBER := 0;  -- Contador para PASO 0-NOC-REF (nocturno sin refrigerio)
         v_count_ss        NUMBER := 0;  -- Contador para PASO 3D (salida imposible corregida)
         v_count_ri        NUMBER := 0;  -- Contador para PASO 3E (refrigerio anterior a entrada)
@@ -700,6 +724,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         c_N7  CONSTANT NVARCHAR2(5)  := N'N7';
         c_E1  CONSTANT NVARCHAR2(5)  := N'E1';
         c_E2  CONSTANT NVARCHAR2(5)  := N'E2';
+        c_E2H CONSTANT NVARCHAR2(5)  := N'E2H'; -- Entrada con HE anticipada (>=1h), no ajustada
         c_E3  CONSTANT NVARCHAR2(5)  := N'E3';
         c_E4  CONSTANT NVARCHAR2(5)  := N'E4';
         c_S1  CONSTANT NVARCHAR2(5)  := N'S1';
@@ -722,6 +747,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         c_RI  CONSTANT NVARCHAR2(5)  := N'RI';  -- Refrigerio Imposible: anterior a entrada, limpiado
         c_RT  CONSTANT NVARCHAR2(5)  := N'RT';  -- Refrigerio Truncado: salida antes de finrefri, limpiado
         c_PH  CONSTANT NVARCHAR2(5)  := N'PH';  -- Phantom: descanso con marcas fantasma limpiadas
+        c_HF  CONSTANT NVARCHAR2(5)  := N'HF';  -- Horas efectivas Faltantes: asignadas desde tothoras
         c_SEP CONSTANT NVARCHAR2(5)  := N'|';
         
         -- Descripciones de depuracion (CODAUX5) - max 30 chars
@@ -735,6 +761,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         d_N7      CONSTANT NVARCHAR2(30) := N'Entrada corregida marca previa';
         d_E1      CONSTANT NVARCHAR2(30) := N'Entrada teorica';
         d_E2      CONSTANT NVARCHAR2(30) := N'Entrada ajustada -15min';
+        d_E2H     CONSTANT NVARCHAR2(30) := N'Entrada anticipada >=1h (HE)';
         d_E3      CONSTANT NVARCHAR2(30) := N'Salida por entrada duplicada';
         d_E4      CONSTANT NVARCHAR2(30) := N'Entrada noct. marca mañana';
         d_S1      CONSTANT NVARCHAR2(30) := N'Salida teorica';
@@ -753,6 +780,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         d_RN      CONSTANT NVARCHAR2(30) := N'Noct.sin refri: marca dup';
         d_NC      CONSTANT NVARCHAR2(30) := N'Noct: salida dup limpiada';
         d_PH      CONSTANT NVARCHAR2(30) := N'Descanso: fantasma limpiado';
+        d_HF      CONSTANT NVARCHAR2(30) := N'H.efectiva faltante asignada';
         d_SS      CONSTANT NVARCHAR2(30) := N'Salida imposible -> teorico';
         d_SSR     CONSTANT NVARCHAR2(30) := N'Salida real oculta restaurada';
         d_RI      CONSTANT NVARCHAR2(30) := N'Refri anterior a entrada';
@@ -2571,33 +2599,54 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         END IF;
         
         -- =====================================================================
-        -- PASO 1B: Ajustar ENTRADA ANTICIPADA (CASO 3)
-        -- Si llego MAS DE 15 MIN antes de hora, ajustar a ENTRADA_FIJADA - 15 min
-        -- Ejemplo: Horario 19:00, llego 18:23 -> Se pone 18:45 (19:00 - 15min)
-        -- 
-        -- HORAANTESENTRADA = Tiempo que llego antes (para registro)
-        -- HORAEXTANTES = HE por entrada anticipada (solo si >= 1 hora antes)
-        -- Se trunca a horas completas (no se pagan minutos)
-        -- HORAEXTRA y TOTALHORASEXTRAS se recalculan en PASO 5B
+        -- PASO 1B-HE: Entrada anticipada >= 1 HORA → registrar como HE, NO ajustar
+        -- Regla (05/05/2026): Si el trabajador llego con 1h o mas de anticipacion,
+        -- esa diferencia es hora extra antes del turno. La entrada permanece en la
+        -- hora biometrica original (Fotocheck intacto). Solo se calculan
+        -- horaantesentrada y horaextantes; NO se modifica SCA_HISTORIAL.
+        -- =====================================================================
+        UPDATE SCA_ASISTENCIA_TAREO t
+        SET
+            t.horaantesentrada = TO_DATE('01/01/1900', 'dd/MM/yyyy') +
+                                 (t.entrada_fijada - t.entrada),
+            t.horaextantes = TO_DATE('01/01/1900', 'dd/MM/yyyy') +
+                             TRUNC((t.entrada_fijada - t.entrada) * 24) / 24,
+            t.horaextantesofi = TO_DATE('01/01/1900', 'dd/MM/yyyy') +
+                                TRUNC((t.entrada_fijada - t.entrada) * 24) / 24,
+            t.codaux4 = CASE WHEN t.codaux4 IS NULL THEN c_E2H ELSE t.codaux4 || c_SEP || c_E2H END,
+            t.codaux5 = SUBSTR(CASE WHEN t.codaux5 IS NULL THEN d_E2H ELSE t.codaux5 || c_SEP || d_E2H END, 1, 50)
+        WHERE t.fechamar = v_fecha_proceso
+        AND t.cod_empresa LIKE v_empresa_filtro
+        AND t.cod_personal LIKE v_personal_filtro
+        AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+        AND t.entrada IS NOT NULL
+        AND t.entrada_fijada IS NOT NULL
+        AND t.entrada < t.entrada_fijada - (1/24)         -- Llego 1 hora o mas antes
+        AND NVL(t.descanso, 'N') <> 'S'
+        AND NVL(t.ind_cerrado, 'N') <> 'S'
+        AND NVL(t.hayhea_poraut, 'N') <> 'S'
+        -- Mantener exclusion del 3er turno con >= 2h (PASO 5G lo maneja)
+        AND NOT (
+            TO_CHAR(t.entrada_fijada, 'HH24MI') >= '2200'
+            AND t.entrada < t.entrada_fijada - (2/24)
+        );
+
+        -- =====================================================================
+        -- PASO 1B: Ajustar ENTRADA ANTICIPADA entre 15min y 1h (CASO 3)
+        -- Si llego entre 15min y menos de 1h antes, ajustar a ENTRADA_FIJADA - 15min
+        -- Ejemplo: Horario 07:00, llego 06:23 (37min antes) -> Se pone 06:45
+        --
+        -- A diferencia de PASO 1B-HE, aqui NO hay hora extra. La entrada se ajusta
+        -- y la marca original Fotocheck se anula en SCA_HISTORIAL (PASO 1B-HIS),
+        -- insertando una nueva marca Manual al tiempo ajustado.
         -- =====================================================================
         UPDATE SCA_ASISTENCIA_TAREO t
         SET 
-            -- Guardar cuanto llego antes (para auditoría)
+            -- Guardar cuanto llego antes (para auditoría, no hay HE en este rango)
             t.horaantesentrada = TO_DATE('01/01/1900', 'dd/MM/yyyy') + 
                                  (t.entrada_fijada - t.entrada),
-            -- HE antes: solo si llego 1+ hora antes, truncar a horas completas
-            t.horaextantes = CASE 
-                WHEN (t.entrada_fijada - t.entrada) * 24 >= 1
-                THEN TO_DATE('01/01/1900', 'dd/MM/yyyy') + 
-                     TRUNC((t.entrada_fijada - t.entrada) * 24) / 24
-                ELSE TO_DATE('01/01/1900 00:00', 'dd/MM/yyyy HH24:MI')
-            END,
-            t.horaextantesofi = CASE 
-                WHEN (t.entrada_fijada - t.entrada) * 24 >= 1
-                THEN TO_DATE('01/01/1900', 'dd/MM/yyyy') + 
-                     TRUNC((t.entrada_fijada - t.entrada) * 24) / 24
-                ELSE TO_DATE('01/01/1900 00:00', 'dd/MM/yyyy HH24:MI')
-            END,
+            t.horaextantes    = TO_DATE('01/01/1900 00:00', 'dd/MM/yyyy HH24:MI'),
+            t.horaextantesofi = TO_DATE('01/01/1900 00:00', 'dd/MM/yyyy HH24:MI'),
             -- Ajustar entrada a 15 min antes de la hora teorica
             t.entrada = t.entrada_fijada - (15/1440),
             t.codaux4 = CASE WHEN t.codaux4 IS NULL THEN c_E2 ELSE t.codaux4 || c_SEP || c_E2 END,
@@ -2608,7 +2657,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
         AND t.entrada IS NOT NULL
         AND t.entrada_fijada IS NOT NULL
-        AND t.entrada < t.entrada_fijada - (15/1440)  -- Llego mas de 15 min antes
+        AND t.entrada < t.entrada_fijada - (15/1440)      -- Llego mas de 15 min antes
+        AND t.entrada >= t.entrada_fijada - (1/24)        -- Pero menos de 1 hora antes
         AND NVL(t.descanso, 'N') <> 'S'
         AND NVL(t.ind_cerrado, 'N') <> 'S'
         -- Solo ajustar si NO tiene horas extras antes autorizadas
@@ -2623,32 +2673,27 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_anticipada := SQL%ROWCOUNT;
         
         -- =====================================================================
-        -- PASO 1B-HIS: Actualizar marca de entrada anticipada en SCA_HISTORIAL
-        -- FIX 15/04/2026: Cuando PASO 1B ajusta entrada (ej: 14:13 -> 14:45),
-        -- la marca original (14:13) queda en SCA_HISTORIAL. PASO 8-PRE luego
-        -- inserta la nueva (14:45), creando 2 marcas de entrada = marcacion impar.
-        -- Fix: Actualizar la hora de la marca vieja al nuevo valor ajustado.
-        -- Calculo hora original: entrada_fijada - (horaantesentrada - 01/01/1900)
-        -- Ejemplo: entrada_fijada=15:00, horaantesentrada=00:47 -> 15:00-00:47 = 14:13
+        -- PASO 1B-HIS: Corregir historial para entrada ajustada (<1h, CASO 3)
+        -- FIX 05/05/2026: En lugar de sobreescribir la hora de la marca Fotocheck
+        -- (lo que mantenia TIPOREG=1 con una hora falsa), ahora:
+        --   1. Se ANULA la marca Fotocheck original (IND_ANULADO='A') para que no
+        --      aparezca en el .NET pero quede como audit trail.
+        --   2. Se INSERTA una nueva marca Manual (TIPOREG='3') con la hora ajustada.
+        -- Regla: Solo aplica para los ajustados por PASO 1B (codaux4 LIKE '%E2%').
+        --        Los ajustados por PASO 1B-HE (codaux4 'E2H') NO se tocan aqui
+        --        porque su marca Fotocheck original es correcta y debe permanecer.
         --
-        -- TABLAS ESCRITURA: SCA_HISTORIAL (UPDATE hora)
+        -- TABLAS ESCRITURA: SCA_HISTORIAL (UPDATE anulacion + INSERT manual)
         -- TABLAS CONSULTA:  SCA_ASISTENCIA_TAREO
         -- =====================================================================
         IF v_count_anticipada > 0 THEN
+            -- Paso 1: Anular la marca Fotocheck original (la hora real del trabajador)
             UPDATE SCA_HISTORIAL h
-            SET h.hora = (
-                SELECT TO_CHAR(t.entrada, 'HH24:MI:SS')
-                FROM SCA_ASISTENCIA_TAREO t
-                WHERE t.num_fotocheck = h.idtarjeta
-                AND t.fechamar = h.fec_equiv
-                AND t.fechamar = v_fecha_proceso
-                AND t.cod_empresa LIKE v_empresa_filtro
-                AND t.cod_personal LIKE v_personal_filtro
-                AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
-                AND t.codaux4 LIKE '%' || c_E2 || '%'
-            )
+            SET h.ind_anulado = 'A',
+                h.motivo = 'DEPURACION: Entrada anticipada <1h ajustada (ver marca manual)'
             WHERE h.fec_equiv = v_fecha_proceso
-            AND NVL(h.ind_anulado, 'N') <> 'S'
+            AND NVL(h.ind_anulado, 'N') <> 'A'
+            AND NVL(h.ind_noprocesar, 0) <> 1
             AND EXISTS (
                 SELECT 1 FROM SCA_ASISTENCIA_TAREO t
                 WHERE t.num_fotocheck = h.idtarjeta
@@ -2657,16 +2702,49 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 AND t.cod_personal LIKE v_personal_filtro
                 AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
                 AND t.codaux4 LIKE '%' || c_E2 || '%'
-                -- Match: la marca SCA_HIS esta en la hora de entrada ORIGINAL (antes del ajuste)
-                -- hora_original = entrada_fijada - (horaantesentrada - 01/01/1900)
+                -- Coincidir con la hora ORIGINAL (antes del ajuste):
+                -- hora_original = entrada_fijada - horaantesentrada
                 AND RTRIM(h.hora) = TO_CHAR(
                     t.entrada_fijada - (t.horaantesentrada - TO_DATE('01/01/1900', 'dd/MM/yyyy')),
                     'HH24:MI:SS'
                 )
             );
-            
+
             IF SQL%ROWCOUNT > 0 THEN
-                DBMS_OUTPUT.PUT_LINE('PASO 1B-HIS: Actualizadas ' || SQL%ROWCOUNT || ' marcas de entrada anticipada en SCA_HISTORIAL');
+                DBMS_OUTPUT.PUT_LINE('PASO 1B-HIS: Anuladas ' || SQL%ROWCOUNT || ' marcas Fotocheck de entrada anticipada (<1h) en SCA_HISTORIAL');
+            END IF;
+
+            -- Paso 2: Insertar nueva marca Manual con la hora ajustada
+            INSERT INTO SCA_HISTORIAL (idcod, idlectora, idtarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            SELECT id_cod_seq.NEXTVAL,
+                   '000',
+                   t.num_fotocheck,
+                   TO_CHAR(t.fechamar, 'DD/MM/YYYY'),
+                   TO_CHAR(t.entrada, 'HH24:MI:SS'),
+                   '3',
+                   SYSDATE,
+                   t.fechamar,
+                   'DEPURACION: Entrada ajustada -15min (anticipada <1h)',
+                   NULL
+            FROM SCA_ASISTENCIA_TAREO t
+            WHERE t.fechamar = v_fecha_proceso
+            AND t.cod_empresa LIKE v_empresa_filtro
+            AND t.cod_personal LIKE v_personal_filtro
+            AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+            AND t.codaux4 LIKE '%' || c_E2 || '%'
+            AND t.num_fotocheck IS NOT NULL
+            -- No duplicar si ya existe una marca manual a esa hora
+            AND NOT EXISTS (
+                SELECT 1 FROM SCA_HISTORIAL h
+                WHERE h.idtarjeta = t.num_fotocheck
+                AND h.fec_equiv = t.fechamar
+                AND RTRIM(h.hora) = TO_CHAR(t.entrada, 'HH24:MI:SS')
+                AND NVL(h.ind_anulado, 'N') <> 'A'
+            );
+
+            v_count_historial := v_count_historial + SQL%ROWCOUNT;
+            IF SQL%ROWCOUNT > 0 THEN
+                DBMS_OUTPUT.PUT_LINE('PASO 1B-HIS: Insertadas ' || SQL%ROWCOUNT || ' marcas Manual de entrada ajustada en SCA_HISTORIAL');
             END IF;
         END IF;
         
@@ -4341,6 +4419,42 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_recalculo := SQL%ROWCOUNT;
         
         -- =====================================================================
+        -- PASO 5-HEFE: Safety net horaefectiva = 00:00 con entrada/salida OK
+        -- BUG (04/05/2026): SP_SCA_PROCESO_TRABAJADOR deja horaefectiva=NULL/00:00
+        -- en ciertos empleados TERCER TURNO con entrada levemente anticipada y
+        -- sin marcas intermedias (ej: entrada 22:53, salida 07:02, codaux4=NULL).
+        -- PASO 5 no los corrige porque requiere codaux4 IS NOT NULL.
+        -- FIX: Si tiene entrada+salida validos pero horaefectiva=0, asignar tothoras
+        -- (horas del horario = lo que el usuario espera: 8h redondeadas).
+        --
+        -- TABLAS ESCRITURA: SCA_ASISTENCIA_TAREO
+        -- TABLAS CONSULTA:  (ninguna adicional)
+        -- =====================================================================
+        UPDATE SCA_ASISTENCIA_TAREO t
+        SET    t.horaefectiva = NVL(t.tothoras, TO_DATE('01/01/1900', 'dd/MM/yyyy')),
+               t.codaux4 = CASE WHEN t.codaux4 IS NULL THEN c_HF ELSE t.codaux4 || c_SEP || c_HF END,
+               t.codaux5 = SUBSTR(CASE WHEN t.codaux5 IS NULL THEN d_HF ELSE t.codaux5 || c_SEP || d_HF END, 1, 50)
+        WHERE  t.fechamar          = v_fecha_proceso
+        AND    t.cod_empresa       LIKE v_empresa_filtro
+        AND    t.cod_personal      LIKE v_personal_filtro
+        AND    (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+        AND    t.entrada           IS NOT NULL
+        AND    t.salida            IS NOT NULL
+        AND    (t.horaefectiva IS NULL
+                OR t.horaefectiva  = TO_DATE('01/01/1900', 'dd/MM/yyyy'))
+        AND    t.tothoras          IS NOT NULL
+        AND    t.tothoras          > TO_DATE('01/01/1900', 'dd/MM/yyyy')
+        AND    NVL(t.descanso, 'N')    <> 'S'
+        AND    NVL(t.ind_cerrado, 'N') <> 'S';
+        
+        v_count_hefe      := SQL%ROWCOUNT;
+        v_count_recalculo := v_count_recalculo + v_count_hefe;
+        
+        IF v_count_hefe > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('PASO 5-HEFE: horaefectiva faltante asignada -> ' || v_count_hefe || ' registros');
+        END IF;
+        
+        -- =====================================================================
         -- PASO 5A: Hora nocturna oficial con redondeo
         -- Replica PASO 12 de sp_SCA_Proceso_Total (hora nocturna oficial)
         -- Requiere que tothoranocturna ya haya sido actualizada en PASO 5
@@ -4897,6 +5011,60 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         END IF;
         
         -- =====================================================================
+        -- PASO 7A-HIS: Actualizar marca de entrada en SCA_HISTORIAL tras PASO 7A
+        -- BUG (04/05/2026): PASO 7A ajusta t.entrada (ej: 06:35 -> 06:45) pero NO
+        -- actualiza la hora de la marca en SCA_HISTORIAL. PASO 9 luego oculta
+        -- la marca original (06:35) porque no coincide con el campo entrada del
+        -- tareo (06:45). Resultado: la marca de ingreso desaparece de la UI.
+        -- Fix: actualizar h.hora al nuevo valor de entrada, igual que PASO 1B-HIS.
+        -- Calculo hora original = entrada_fijada - (horaantesentrada - 01/01/1900)
+        --
+        -- TABLAS ESCRITURA: SCA_HISTORIAL (UPDATE hora)
+        -- TABLAS CONSULTA:  SCA_ASISTENCIA_TAREO
+        -- =====================================================================
+        UPDATE SCA_HISTORIAL h
+        SET h.hora = (
+            SELECT TO_CHAR(t.entrada, 'HH24:MI:SS')
+            FROM SCA_ASISTENCIA_TAREO t
+            WHERE t.num_fotocheck = h.idtarjeta
+            AND t.fechamar = h.fec_equiv
+            AND t.fechamar = v_fecha_proceso
+            AND t.cod_empresa LIKE v_empresa_filtro
+            AND t.cod_personal LIKE v_personal_filtro
+            AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+            AND t.codaux4 LIKE '%' || c_E2 || '%'
+        )
+        WHERE h.fec_equiv = v_fecha_proceso
+        AND NVL(h.ind_anulado, 'N') NOT IN ('A', 'S')
+        AND NVL(h.ind_noprocesar, 0) = 0
+        AND EXISTS (
+            SELECT 1 FROM SCA_ASISTENCIA_TAREO t
+            WHERE t.num_fotocheck = h.idtarjeta
+            AND t.fechamar = h.fec_equiv
+            AND t.cod_empresa LIKE v_empresa_filtro
+            AND t.cod_personal LIKE v_personal_filtro
+            AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+            AND t.codaux4 LIKE '%' || c_E2 || '%'
+            -- La hora del descanso (E2) fue la entrada original antes del ajuste:
+            -- hora_original = entrada_fijada - (horaantesentrada - base)
+            AND RTRIM(h.hora) = TO_CHAR(
+                t.entrada_fijada - (t.horaantesentrada - TO_DATE('01/01/1900', 'dd/MM/yyyy')),
+                'HH24:MI:SS'
+            )
+            -- Solo descanso (condicion de disparo de PASO 7A)
+            AND (t.descanso = 'S' OR EXISTS (
+                SELECT 1 FROM SCA_HORARIO_DET dd
+                WHERE dd.horid = t.horid
+                AND dd.diaid = ProcessDay(t.fechamar)
+                AND NVL(dd.descanso, 'N') = 'S'
+            ))
+        );
+        
+        IF SQL%ROWCOUNT > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('PASO 7A-HIS: Marca entrada descanso actualizada en SCA_HISTORIAL -> ' || SQL%ROWCOUNT || ' marcas');
+        END IF;
+        
+        -- =====================================================================
         -- PASO 7: Descanso con marcaciones reales
         -- Cuando: el dia es descanso (tareo.descanso='S' O el horario para ese
         -- dia de la semana tiene SCA_HORARIO_DET.descanso='S') y el empleado
@@ -5370,6 +5538,61 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         IF SQL%ROWCOUNT > 0 THEN
             DBMS_OUTPUT.PUT_LINE('PASO 9: Marcas ocultas para UI (rondas/no asignadas) -> ' || SQL%ROWCOUNT || ' marcas');
+        END IF;
+
+        -- =====================================================================
+        -- PASO 9-POST: Re-sincronizar NUMMARCACIONES/ALERTA01 tras PASO 9
+        -- BUG (04/05/2026): PASO 9 oculta marcas extra (ind_anulado='A') pero
+        -- no actualiza nummarcaciones ni alerta01. PASO 8 no cubre todos los casos:
+        -- - Requiere codaux4 IS NOT NULL (empleados sin cambios previos son omitidos)
+        -- - Excluye tareos con los 4 campos completos (E+IR+FR+S)
+        -- Resultado: tareo con los 4 campos ok pero nummarcaciones=5 impar -> UI
+        -- muestra MARCACION IMPAR aunque las 4 marcas asignadas sean correctas.
+        -- Ejemplo: emp 004056 (GUTIERREZ PINTO) 29/04/2026, 5 marcas -> PASO 9
+        -- oculta 13:05, pero nummarcaciones queda en 5.
+        --
+        -- Fix: recuenta para cualquier tareo donde el conteo real difiere.
+        -- Condicion: solo si hay mismatch (evita UPDATEs innecesarios).
+        -- Usa misma condicion de visibilidad que PASO 9: NOT IN ('A','S').
+        --
+        -- TABLAS ESCRITURA: SCA_ASISTENCIA_TAREO
+        -- TABLAS CONSULTA:  SCA_HISTORIAL
+        -- =====================================================================
+        UPDATE SCA_ASISTENCIA_TAREO t
+        SET t.nummarcaciones = (
+                SELECT COUNT(*) FROM SCA_HISTORIAL h
+                WHERE h.idtarjeta = t.num_fotocheck
+                AND h.fec_equiv = t.fechamar
+                AND NVL(h.ind_anulado, 'N') NOT IN ('A','S')
+                AND NVL(h.ind_noprocesar, 0) = 0
+            ),
+            t.alerta01 = CASE
+                WHEN MOD((
+                    SELECT COUNT(*) FROM SCA_HISTORIAL h
+                    WHERE h.idtarjeta = t.num_fotocheck
+                    AND h.fec_equiv = t.fechamar
+                    AND NVL(h.ind_anulado, 'N') NOT IN ('A','S')
+                    AND NVL(h.ind_noprocesar, 0) = 0
+                ), 2) = 0 THEN NULL
+                ELSE 'MI'
+            END
+        WHERE t.fechamar = v_fecha_proceso
+        AND t.cod_empresa LIKE v_empresa_filtro
+        AND t.cod_personal LIKE v_personal_filtro
+        AND (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+        AND t.num_fotocheck IS NOT NULL
+        AND NVL(t.ind_cerrado, 'N') <> 'S'
+        -- Solo corregir donde hay mismatch real
+        AND t.nummarcaciones <> (
+            SELECT COUNT(*) FROM SCA_HISTORIAL h
+            WHERE h.idtarjeta = t.num_fotocheck
+            AND h.fec_equiv = t.fechamar
+            AND NVL(h.ind_anulado, 'N') NOT IN ('A','S')
+            AND NVL(h.ind_noprocesar, 0) = 0
+        );
+
+        IF SQL%ROWCOUNT > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('PASO 9-POST: NUMMARCACIONES re-sincronizado tras PASO 9 -> ' || SQL%ROWCOUNT || ' registros');
         END IF;
 
         -- =====================================================================

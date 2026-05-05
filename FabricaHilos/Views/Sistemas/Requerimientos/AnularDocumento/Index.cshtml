@@ -161,7 +161,7 @@
     <!-- ── Columna derecha: panel Restablecer ───────────── -->
     <div class="col-12 col-lg-5">
 
-    <!-- Panel: Restablecer Factura (siempre visible tras búsqueda) -->
+    <!-- Panel: Restaurar Documento (siempre visible tras búsqueda) -->
     <div id="panelRestablecer" style="display:none" class="card mb-3">
         <div class="card-header fw-700" id="headerRestablecer">
             <i class="bi bi-arrow-counterclockwise me-1"></i>
@@ -174,11 +174,8 @@
                 <strong>Bloqueado:</strong> el documento <strong>no está Anulado</strong> en DOCUVENT (ESTADO ≠ 9).
                 Solo se puede restablecer si el documento fue anulado.
             </div>
-            <!-- Aviso cuando DOCUVENT = 9 pero MOVGLOS ≠ 9 -->
+            <!-- Aviso cuando DOCUVENT = 9 pero MOVGLOS ≠ 9 (oculto: ya no se bloquea por MOVGLOS) -->
             <div id="avisoMovGlosNoAnulado" class="alert alert-danger py-1 mb-2 small" style="display:none">
-                <i class="bi bi-lock-fill me-1"></i>
-                <strong>Bloqueado:</strong> el estado de MOVGLOS no es <strong>Anulado (9)</strong>.
-                Ambos estados deben ser 9 para poder restablecer.
             </div>
             <p class="mb-2 small" id="textoRestablecer">
                 Se cambiará <code>NRODOC.NUMERO</code> de
@@ -188,7 +185,7 @@
             <!-- Resumen de variables -->
             <div id="resumenVariables" class="bg-light border rounded p-2 mb-2 small"></div>
             <button id="btnRestablecerFactura" class="btn btn-warning btn-sm fw-bold" onclick="abrirRestablecer()">
-                <i class="bi bi-arrow-counterclockwise me-1"></i>Restablecer Factura
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar Documento
             </button>
 
             <!-- ── Panel de progreso por pasos (oculto hasta ejecutar) ────── -->
@@ -200,7 +197,7 @@
                 </div>
                 <div id="pasoItem2" class="d-flex align-items-start gap-2 mb-2 small">
                     <span id="pasoBadge2" class="step-badge step-warn flex-shrink-0">2</span>
-                    <div><strong>Esperar MOVGLOS = 9 → DELETE MOVGLOS</strong><br><span id="pasoMsg2" class="text-muted"></span></div>
+                    <div><strong>DELETE MOVGLOS</strong><br><span id="pasoMsg2" class="text-muted"></span></div>
                 </div>
                 <div id="pasoItem3" class="d-flex align-items-start gap-2 mb-2 small">
                     <span id="pasoBadge3" class="step-badge step-warn flex-shrink-0">3</span>
@@ -260,25 +257,25 @@
         <div class="modal-content border-warning">
             <div class="modal-header py-2" style="background:#fff3cd">
                 <h6 class="modal-title text-dark">
-                    <i class="bi bi-arrow-counterclockwise me-2"></i>Confirmar Restablecimiento
-                </h6>
+                            <i class="bi bi-arrow-counterclockwise me-2"></i>Confirmar Restauración
+                        </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <p class="mb-2" style="font-size:.9rem">
-                    ¿Está seguro de restablecer <strong>NRODOC</strong>?
+                    ¿Está seguro de restaurar el documento?
                 </p>
                 <div class="bg-light border rounded p-2 small" id="resumenRestablecer"></div>
                 <div class="alert alert-warning py-1 mt-2 mb-0 small">
                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
                     Esta acción actualizará <code>NRODOC.NUMERO</code> al valor del documento anulado.
-                    Solo proceda si ambos estados (DOCUVENT y MOVGLOS) son <strong>Anulado (9)</strong>.
+                    Solo proceda si el estado en DOCUVENT es <strong>Anulado (9)</strong>.
                 </div>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-sm btn-warning fw-bold" id="btnConfirmarRestablecer">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Sí, Restablecer
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Sí, Restaurar
                 </button>
             </div>
         </div>
@@ -291,7 +288,7 @@
         <div class="modal-content border-success">
             <div class="modal-header py-2" style="background:#d4edda">
                 <h6 class="modal-title text-success">
-                    <i class="bi bi-check-circle-fill me-2"></i>Restablecimiento exitoso
+                    <i class="bi bi-check-circle-fill me-2"></i>Restauración exitosa
                 </h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -452,10 +449,24 @@
     }
     window.buscar = buscar;
 
+    const ESTADO_DESC = {
+        '0': { label: 'Emitido',      bg: '#198754' },
+        '1': { label: 'Registrado',   bg: '#0d6efd' },
+        '2': { label: 'Contabilizado',bg: '#0d6efd' },
+        '3': { label: 'Pagado',       bg: '#0d6efd' },
+        '8': { label: 'Reversado',    bg: '#fd7e14' },
+        '9': { label: 'Anulado',      bg: '#dc3545' },
+    };
+
     function estadoBadge(estado) {
-        if (estado === '9') return `<span class="badge" style="background:#dc3545">🚫 Anulado (${estado})</span>`;
-        if (estado === '0') return `<span class="badge" style="background:#198754">✔ Emitido (${estado})</span>`;
-        return estado ? `<span class="badge bg-secondary">${estado}</span>` : '';
+        if (!estado && estado !== '0') return '';
+        const e = String(estado).trim();
+        const info = ESTADO_DESC[e];
+        if (info) {
+            const emoji = e === '9' ? '🚫 ' : e === '0' ? '✔ ' : '';
+            return `<span class="badge" style="background:${info.bg}">${emoji}${info.label} (${e})</span>`;
+        }
+        return `<span class="badge bg-secondary">${e}</span>`;
     }
 
     function renderResultado(d, tipoDoc, serie, numero) {
@@ -521,38 +532,26 @@
              <div class="mb-1">${filaResumen('📖 Voucher Búsqueda (últimos 3)', _voucherBusqueda,       '#6a1b9a')}</div>
              <div         >${filaResumen('✅ Voucher Anterior (se restaura)', _voucherAnterior,       '#1B4D3E')}</div>`;
 
-        const docAnulado     = d.existeDocumento && String(d.estadoDocumento ?? '').trim() === '9';
-        const movGlosAnulado = d.existeMovGlos   && String(d.estadoMovGlos   ?? '').trim() === '9';
+        const docAnulado = d.existeDocumento && String(d.estadoDocumento ?? '').trim() === '9';
 
         panel.style.display = 'block';
+        avisoMovGlos.style.display = 'none';
 
         if (!docAnulado) {
-            // DOCUVENT ≠ 9: bloqueado total
+            // DOCUVENT ≠ 9: bloqueado
             panel.className                  = 'card border-danger mb-3';
             headerRest.style.cssText         = 'background:#f8d7da; color:#721c24; font-weight:700';
             document.getElementById('lblHeaderRestablecer').textContent = 'Acción no disponible — Documento no Anulado';
             avisoDocNoAnulado.style.display  = 'block';
-            avisoMovGlos.style.display       = 'none';
             textoRest.style.display          = 'none';
             btnRest.disabled                 = true;
             btnRest.title                    = 'El documento no está Anulado (9) en DOCUVENT';
-        } else if (!movGlosAnulado) {
-            // DOCUVENT = 9 pero MOVGLOS ≠ 9: bloqueado parcial
-            panel.className                  = 'card border-danger mb-3';
-            headerRest.style.cssText         = 'background:#fff3cd; color:#856404; font-weight:700';
-            document.getElementById('lblHeaderRestablecer').textContent = 'Acción bloqueada — MOVGLOS no Anulado';
-            avisoDocNoAnulado.style.display  = 'none';
-            avisoMovGlos.style.display       = 'block';
-            textoRest.style.display          = 'block';
-            btnRest.disabled                 = true;
-            btnRest.title                    = 'Bloqueado: MOVGLOS no está Anulado (9)';
         } else {
-            // Ambos = 9: habilitado
+            // DOCUVENT = 9: habilitado
             panel.className                  = 'card border-warning mb-3';
             headerRest.style.cssText         = 'background:#fff3cd; color:#856404; font-weight:700';
             document.getElementById('lblHeaderRestablecer').textContent = 'Acción disponible — Documento Anulado';
             avisoDocNoAnulado.style.display  = 'none';
-            avisoMovGlos.style.display       = 'none';
             textoRest.style.display          = 'block';
             btnRest.disabled                 = false;
             btnRest.title                    = '';

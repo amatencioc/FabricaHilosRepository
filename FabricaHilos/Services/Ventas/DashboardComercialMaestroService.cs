@@ -1,4 +1,5 @@
 using Oracle.ManagedDataAccess.Client;
+using System.Data;
 using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
@@ -16,7 +17,7 @@ namespace FabricaHilos.Services.Ventas
             _logger = logger;
         }
 
-        // ── Helpers de lectura ──────────────────────────────────────────────────
+        // ── Helpers de lectura ─────────────────────────────────────────────────
         private static string? GetStr(OracleDataReader r, string col) =>
             r[col] == DBNull.Value ? null : r[col]?.ToString();
 
@@ -32,225 +33,209 @@ namespace FabricaHilos.Services.Ventas
             catch { return 0m; }
         }
 
-        private static int GetInt(OracleDataReader r, string col) =>
-            r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]);
+        // ── Fila cabecera (P_TIPO='C'): DESCRIPCION, PERIODO, TOTUNID, MONTO ──
+        private sealed class FilaCabeceraRaw
+        {
+            public string? Asesor  { get; set; }
+            public decimal TotUnid { get; set; }
+            public decimal Monto   { get; set; }
+        }
 
-        // ── SQL principal — query agrupado por cliente/asesor ──────────────────
-        //  IMPORTANTE: el RUC y NOMBRE se traen en una capa EXTERIOR para evitar
-        //  que duplicados en CLIENTES (RUC/NOMBRE inconsistentes para el mismo
-        //  COD_CLIENTE) inflen los montos al participar en el GROUP BY interno.
-        private string BuildSql() => $@"
-SELECT A.COD_CLIENTE,
-       CLL.RUC,
-       CLL.NOMBRE,
-       A.GIRO,
-       A.DESC_GIRO,
-       A.COD_ASESOR,
-       A.ASESOR,
-       NVL(C.NRODOC,  0)  NRODOC,
-       NVL(C.TOTUNID, 0)  TOTUNID,
-       (A.SOLES  - NVL(B.SOLES_ANT,  0)) SOLES,
-       (A.DOLAR  - NVL(B.DOLAR_ANT,  0)) DOLAR
-  FROM (SELECT DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
-               C.GIRO,
-               T2.ABREVIADA DESC_GIRO,
-               C.VENDEDOR  COD_ASESOR,
-               T.DESCRIPCION ASESOR,
-               SUM(DECODE(:P_OPCION, 'TODOS', V.SOLES,   V.SOLES_SINANT))   SOLES,
-               SUM(DECODE(:P_OPCION, 'TODOS', V.DOLARES, V.DOLARES_SINANT)) DOLAR
-          FROM {S}V_DOCUVEN V
-          LEFT JOIN {S}CLIENTES C            ON  C.COD_CLIENTE = V.COD_CLIENTE
-          LEFT JOIN {S}TABLAS_AUXILIARES T   ON  T.CODIGO  = C.VENDEDOR
-                                          AND T.TIPO    = 29
-          LEFT JOIN {S}TABLAS_AUXILIARES T2  ON  T2.CODIGO = C.GIRO
-                                          AND T2.TIPO   = 27
-          LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
-                       FROM {S}CLIENTE_RELACION
-                      GROUP BY GRUPO) GRP ON  GRP.GRUPO = C.GRUPO_REL
-         WHERE V.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-         GROUP BY DECODE(C.GRUPO_REL, NULL, V.COD_CLIENTE, GRP.MIN_CLIENTE),
-                  C.GIRO,
-                  T2.ABREVIADA,
-                  C.VENDEDOR,
-                  T.DESCRIPCION) A
-  LEFT JOIN (SELECT COD_CLIENTE, MIN(RUC) RUC, MIN(NOMBRE) NOMBRE
-               FROM {S}CLIENTES
-              GROUP BY COD_CLIENTE) CLL ON CLL.COD_CLIENTE = A.COD_CLIENTE
-  LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
-                    C.VENDEDOR COD_ASESOR,
-                    SUM(DECODE(D.MONEDA,
-                               'S', I.IMP_VVTA,
-                               ROUND(I.IMP_VVTA * D.IMPORT_CAM, 2))) SOLES_ANT,
-                    SUM(DECODE(D.MONEDA,
-                               'D', I.IMP_VVTA,
-                               ROUND(I.IMP_VVTA / NULLIF(D.IMPORT_CAM, 0), 2))) DOLAR_ANT
-               FROM {S}DOCUVENT D
-               JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
-                                            AND I.SERIE   = D.SERIE
-                                            AND I.NUMERO  = D.NUMERO
-               LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
-               LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
-                            FROM {S}CLIENTE_RELACION
-                           GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
-              WHERE :P_OPCION <> 'TODOS'
-                AND D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                AND D.ESTADO <> '9'
-                AND I.COD_ART IN ('9300049997',
-                                  '9300049999',
-                                  '930004999A',
-                                  '9300049998')
-              GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
-                       C.VENDEDOR) B
-    ON  B.COD_CLIENTE = A.COD_CLIENTE
-    AND B.COD_ASESOR  = A.COD_ASESOR
-  LEFT JOIN (SELECT DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE) AS COD_CLIENTE,
-                    C.VENDEDOR COD_ASESOR,
-                    COUNT(DISTINCT D.TIPODOC || '-' || D.SERIE || '-' || D.NUMERO) NRODOC,
-                    SUM(I.CANTIDAD * E.FACTOR) TOTUNID
-               FROM {S}DOCUVENT D
-               JOIN {S}ITEMDOCU I              ON  I.TIPODOC = D.TIPODOC
-                                            AND I.SERIE   = D.SERIE
-                                            AND I.NUMERO  = D.NUMERO
-               LEFT JOIN {S}EQUIVALENCIA E     ON  E.COD_ART = I.COD_ART
-                                            AND E.UNIDAD  = 'KG'
-               LEFT JOIN {S}CLIENTES C         ON  C.COD_CLIENTE = D.COD_CLIENTE
-               LEFT JOIN (SELECT GRUPO, MIN(COD_CLIENTE) AS MIN_CLIENTE
-                            FROM {S}CLIENTE_RELACION
-                           GROUP BY GRUPO) GRP ON GRP.GRUPO = C.GRUPO_REL
-              WHERE D.FECHA BETWEEN :P_FECHA1 AND :P_FECHA2
-                AND D.ESTADO <> '9'
-                AND (:P_OPCION = 'TODOS'
-                     OR I.COD_ART NOT IN ('9300049997',
-                                          '9300049999',
-                                          '930004999A',
-                                          '9300049998'))
-              GROUP BY DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE, GRP.MIN_CLIENTE),
-                       C.VENDEDOR) C
-    ON  C.COD_CLIENTE = A.COD_CLIENTE
-    AND C.COD_ASESOR  = A.COD_ASESOR
- ORDER BY A.COD_ASESOR, A.COD_CLIENTE";
+        // ── Fila detalle (P_TIPO='D'): por cliente/mes ─────────────────────────
+        private sealed class FilaDetalleRaw
+        {
+            public string? CodCliente { get; set; }
+            public string? Nombre     { get; set; }
+            public string? Ruc        { get; set; }
+            public string? Giro       { get; set; }
+            public string? Asesor     { get; set; }
+            public decimal TotUnid    { get; set; }
+            public decimal Monto      { get; set; }
+        }
 
-        // ── Cargar filas desde Oracle ───────────────────────────────────────────
-        private async Task<List<DcmFilaRawDto>> CargarFilasAsync(
-            DateTime fechaInicio, DateTime fechaFin, string opcion = "CON VENDEDOR")
+        // ── Llama al paquete con el P_TIPO indicado ────────────────────────────
+        private async Task<List<T>> EjecutarPaqueteAsync<T>(
+            DateTime fechaInicio, DateTime fechaFin, string moneda, string tipo,
+            Func<OracleDataReader, T> mapper)
         {
             var connStr = GetOracleConnectionString();
-            var filas   = new List<DcmFilaRawDto>();
+            var filas   = new List<T>();
             if (string.IsNullOrEmpty(connStr)) return filas;
 
             try
             {
-                using var conn   = new OracleConnection(connStr);
+                using var conn = new OracleConnection(connStr);
                 await conn.OpenAsync();
 
-                using var cmd    = new OracleCommand(BuildSql(), conn) { BindByName = true };
-                cmd.Parameters.Add("P_OPCION", OracleDbType.Varchar2).Value = opcion;
-                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value     = fechaInicio.Date;
-                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value     = fechaFin.Date;
+                using var cmd = new OracleCommand(
+                    $"{S}PKG_VEND_GRUPO_MAESTROCLIENTE.SP_REPORTE", conn)
+                {
+                    CommandType = CommandType.StoredProcedure,
+                    BindByName  = true
+                };
+
+                cmd.Parameters.Add("P_FECHA1", OracleDbType.Date).Value      = fechaInicio.Date;
+                cmd.Parameters.Add("P_FECHA2", OracleDbType.Date).Value      = fechaFin.Date;
+                cmd.Parameters.Add("P_MON",    OracleDbType.Varchar2).Value  = moneda;
+                cmd.Parameters.Add("P_TIPO",   OracleDbType.Char).Value      = tipo;
+                cmd.Parameters.Add("P_CURSOR", OracleDbType.RefCursor).Direction = ParameterDirection.Output;
 
                 using var reader = await cmd.ExecuteReaderAsync();
+                bool logged = false;
                 while (await reader.ReadAsync())
                 {
-                    filas.Add(new DcmFilaRawDto
+                    if (!logged)
                     {
-                        CodCliente = GetStr(reader, "COD_CLIENTE"),
-                        Ruc        = GetStr(reader, "RUC"),
-                        Nombre     = GetStr(reader, "NOMBRE"),
-                        Giro       = GetStr(reader, "GIRO"),
-                        DescGiro   = GetStr(reader, "DESC_GIRO"),
-                        CodAsesor  = GetStr(reader, "COD_ASESOR"),
-                        Asesor     = GetStr(reader, "ASESOR"),
-                        NroDoc     = GetInt(reader, "NRODOC"),
-                        TotUnid    = GetDec(reader, "TOTUNID"),
-                        Soles      = GetDec(reader, "SOLES"),
-                        Dolar      = GetDec(reader, "DOLAR"),
-                    });
+                        var cols = new string[reader.FieldCount];
+                        for (int i = 0; i < reader.FieldCount; i++) cols[i] = reader.GetName(i);
+                        _logger.LogInformation("[DCM] P_TIPO={Tipo} columnas: {Cols}", tipo, string.Join(", ", cols));
+                        logged = true;
+                    }
+                    filas.Add(mapper(reader));
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error al cargar datos del Dashboard Comercial Maestro");
-                return filas;
+                _logger.LogError(ex, "[DCM] Error PKG_VEND_GRUPO_MAESTROCLIENTE.SP_REPORTE P_TIPO={Tipo}", tipo);
             }
 
-            _logger.LogInformation("[DCM] Filas cargadas: {N} | Opcion: {Op} | Fechas: {F1:dd/MM/yyyy}-{F2:dd/MM/yyyy}",
-                filas.Count, opcion, fechaInicio, fechaFin);
-
+            _logger.LogInformation("[DCM] P_TIPO={Tipo} filas={N} | {F1:dd/MM/yyyy}-{F2:dd/MM/yyyy} | {Mon}",
+                tipo, filas.Count, fechaInicio, fechaFin, moneda);
             return filas;
         }
 
-        // ── Importe e IGV según moneda seleccionada ─────────────────────────────
-        private static decimal Imp(DcmFilaRawDto f, string moneda) =>
-            moneda.Equals("S", StringComparison.OrdinalIgnoreCase) ? f.Soles : f.Dolar;
-
-        // ── Total — el nuevo query devuelve el importe neto directamente (sin IGV separado)
-        private static decimal ImpTotal(DcmFilaRawDto f, string moneda) =>
-            Imp(f, moneda);
-
-        // ── Proyectar una fila raw al DTO de cliente maestro ────────────────────
-        private static DcmClienteMaestroDto ToClienteDto(DcmFilaRawDto f, string mon)
+        // ── Proyectar al DTO de cliente maestro ────────────────────────────────
+        private static DcmClienteMaestroDto ToClienteDto(
+            string asesor, string? codCliente, string? ruc, string? nombre, string? giro,
+            decimal monto, decimal totUnid)
         {
-            var imp = Imp(f, mon);
             return new DcmClienteMaestroDto
             {
-                Asesor      = f.Asesor,
-                CodAsesor   = f.CodAsesor,
-                CodCliente  = f.CodCliente,
-                Ruc         = f.Ruc,
-                RazonSocial = f.Nombre,
-                Giro        = string.IsNullOrEmpty(f.DescGiro) ? "SIN GIRO" : f.DescGiro,
-                NroDoc      = f.NroDoc,
-                CantidadKg  = f.TotUnid,
-                Importe     = imp,
-                Total       = imp,
+                Asesor      = asesor,
+                CodCliente  = codCliente,
+                Ruc         = ruc,
+                RazonSocial = nombre,
+                Giro        = string.IsNullOrEmpty(giro) ? "SIN GIRO" : giro,
+                CantidadKg  = totUnid,
+                Importe     = monto,
+                Total       = monto,
             };
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        // ObtenerDashboardAsync — punto de entrada principal
+        // ObtenerDashboardAsync
+        //   · Cabecera (P_TIPO='C') → gráfico "Cartera por Asesor"
+        //   · Detalle  (P_TIPO='D') → gráficos "Top N Clientes por Asesor"
         // ════════════════════════════════════════════════════════════════════════
         public async Task<DcmDashboardDto> ObtenerDashboardAsync(
             DateTime fechaInicio, DateTime fechaFin, string moneda, int top = 3)
         {
-            var mon   = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-            var filas = await CargarFilasAsync(fechaInicio, fechaFin);
-            var dto   = new DcmDashboardDto();
+            var mon = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+            var dto = new DcmDashboardDto();
 
-            if (filas.Count == 0) return dto;
+            // Ambas llamadas en paralelo para no duplicar el tiempo de espera
+            var taskCab = EjecutarPaqueteAsync(
+                fechaInicio, fechaFin, mon, "C",
+                r => new FilaCabeceraRaw
+                {
+                    Asesor  = GetStr(r, "DESCRIPCION"),
+                    TotUnid = GetDec(r, "TOTUNID"),
+                    Monto   = GetDec(r, "MONTO"),
+                });
 
-            // El query devuelve una fila por (COD_CLIENTE, COD_ASESOR) — sin duplicados.
-            var filasConsolidadas = filas;
+            var taskDet = EjecutarPaqueteAsync(
+                fechaInicio, fechaFin, mon, "D",
+                r => new FilaDetalleRaw
+                {
+                    Asesor     = GetStr(r, "DESCRIPCION"),
+                    CodCliente = GetStr(r, "COD_CLIENTE"),
+                    Nombre     = GetStr(r, "NOMBRE"),
+                    Ruc        = GetStr(r, "RUC"),
+                    Giro       = GetStr(r, "GIRO"),
+                    TotUnid    = GetDec(r, "TOTUNID"),
+                    Monto      = GetDec(r, "MONTO"),
+                });
 
-            // ── 1. Todos los clientes (tabla maestra, ranking y exportación) ────
-            // Se incluyen importes negativos (notas de crédito/devoluciones) para que
-            // los totales de los gráficos coincidan exactamente con la consulta Oracle.
-            dto.ClientesTodos = filasConsolidadas
-                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase))
-                .Select(f => ToClienteDto(f, mon))
-                .OrderBy(x => x.Asesor).ThenByDescending(x => x.Total)
+            await Task.WhenAll(taskCab, taskDet);
+
+            var filasCab = taskCab.Result;
+            var filasDet = taskDet.Result;
+
+            // ── 1. Cartera completa de clientes por Asesor (para la grilla y el export) ──
+            // Se construye desde filasDet para conservar Ruc, RazonSocial, CantidadKg e Importe
+            // por cada combinación (Asesor, Cliente).
+            var consolidado = filasDet
+                .GroupBy(f => new { f.Asesor, f.CodCliente, f.Nombre, f.Ruc, f.Giro })
+                .Select(g => new FilaDetalleRaw
+                {
+                    Asesor     = g.Key.Asesor,
+                    CodCliente = g.Key.CodCliente,
+                    Nombre     = g.Key.Nombre,
+                    Ruc        = g.Key.Ruc,
+                    Giro       = g.Key.Giro,
+                    TotUnid    = g.Sum(f => f.TotUnid),
+                    Monto      = g.Sum(f => f.Monto),
+                })
                 .ToList();
 
-            // ── 2. Top N clientes por Asesor (Importe y KG) ─────────────────────
-            var topImp = filasConsolidadas
-                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
-                         && ImpTotal(f, mon) > 0)
+            dto.ClientesTodos = consolidado
+                .Select(f => new DcmClienteMaestroDto
+                {
+                    Asesor      = f.Asesor ?? "Sin Asesor",
+                    Ruc         = f.Ruc,
+                    RazonSocial = f.Nombre,
+                    CantidadKg  = f.TotUnid,
+                    Importe     = f.Monto,
+                    Total       = f.Monto,
+                })
+                .OrderBy(x => x.Asesor)
+                .ThenByDescending(x => x.Importe)
+                .ToList();
+
+            // ── 2. Top N clientes por Asesor — a nivel cliente (detalle) ────────
+
+            // ── 3. Conteo de clientes distintos por asesor (pie chart) ───────────
+            // Solo clientes con ventas reales (igual que la grilla: Total > 0)
+            dto.ClientesPorAsesor = consolidado
+                .Where(f => f.Monto > 0)
+                .GroupBy(f => f.Asesor ?? "Sin Asesor")
+                .Select(g => new DcmClientesCountDto
+                {
+                    Asesor        = g.Key,
+                    TotalClientes = g.Count(),
+                })
+                .OrderBy(x => x.Asesor)
+                .ToList();
+
+            // ── 4. Ventas por asesor (ranking + participación) desde detalle ─────
+            dto.VentasPorAsesor = consolidado
+                .GroupBy(f => f.Asesor ?? "Sin Asesor")
+                .Select(g => new DcmVentaAsesorDto
+                {
+                    Asesor     = g.Key,
+                    Importe    = g.Sum(f => f.Monto),
+                    CantidadKg = g.Sum(f => f.TotUnid),
+                })
+                .OrderBy(x => x.Asesor)
+                .ToList();
+
+            var topImp = consolidado
+                .Where(f => f.Monto > 0)
                 .GroupBy(f => f.Asesor)
-                .SelectMany(g => g.OrderByDescending(f => ImpTotal(f, mon)).Take(top)
+                .SelectMany(g => g.OrderByDescending(f => f.Monto).Take(top)
                     .Select(f => new DcmTopClienteAsesorDto
                     {
                         Asesor      = f.Asesor,
                         CodCliente  = f.CodCliente,
                         RazonSocial = f.Nombre,
                         CantidadKg  = f.TotUnid,
-                        Importe     = ImpTotal(f, mon),
-                        NroDoc      = f.NroDoc,
+                        Importe     = f.Monto,
                         TopType     = "importe",
                     }))
                 .ToList();
 
-            var topKg = filasConsolidadas
-                .Where(f => !string.Equals(f.Asesor, "OFICINA", StringComparison.OrdinalIgnoreCase)
-                         && f.TotUnid > 0)
+            var topKg = consolidado
+                .Where(f => f.TotUnid > 0)
                 .GroupBy(f => f.Asesor)
                 .SelectMany(g => g.OrderByDescending(f => f.TotUnid).Take(top)
                     .Select(f => new DcmTopClienteAsesorDto
@@ -259,8 +244,7 @@ SELECT A.COD_CLIENTE,
                         CodCliente  = f.CodCliente,
                         RazonSocial = f.Nombre,
                         CantidadKg  = f.TotUnid,
-                        Importe     = ImpTotal(f, mon),
-                        NroDoc      = f.NroDoc,
+                        Importe     = f.Monto,
                         TopType     = "kg",
                     }))
                 .ToList();
@@ -284,37 +268,35 @@ SELECT A.COD_CLIENTE,
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        // ObtenerClientesPorAsesorAsync — clientes de un asesor (filtrado en memoria)
+        // ObtenerClientesPorAsesorAsync — detalle clientes (P_TIPO='D')
         // ════════════════════════════════════════════════════════════════════════
         public async Task<List<DcmClienteMaestroDto>> ObtenerClientesPorAsesorAsync(
             DateTime fechaInicio, DateTime fechaFin, string moneda, string asesor)
         {
-            var mon   = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
-            var filas = await CargarFilasAsync(fechaInicio, fechaFin);
+            var mon = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
+
+            var filas = await EjecutarPaqueteAsync(
+                fechaInicio, fechaFin, mon, "D",
+                r => new FilaDetalleRaw
+                {
+                    Asesor     = GetStr(r, "DESCRIPCION"),
+                    CodCliente = GetStr(r, "COD_CLIENTE"),
+                    Nombre     = GetStr(r, "NOMBRE"),
+                    Ruc        = GetStr(r, "RUC"),
+                    Giro       = GetStr(r, "GIRO"),
+                    TotUnid    = GetDec(r, "TOTUNID"),
+                    Monto      = GetDec(r, "MONTO"),
+                });
 
             return filas
                 .Where(f => string.Equals(f.Asesor, asesor, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(f => new { f.CodCliente, f.Ruc, f.Nombre, f.DescGiro })
-                .Select(g =>
-                {
-                    var imp = g.Sum(f => Imp(f, mon));
-                    return new DcmClienteMaestroDto
-                    {
-                        Asesor      = asesor,
-                        CodCliente  = g.Key.CodCliente,
-                        Ruc         = g.Key.Ruc,
-                        RazonSocial = g.Key.Nombre,
-                        Giro        = string.IsNullOrEmpty(g.Key.DescGiro) ? "SIN GIRO" : g.Key.DescGiro,
-                        NroDoc      = g.Sum(f => f.NroDoc),
-                        CantidadKg  = g.Sum(f => f.TotUnid),
-                        Importe     = imp,
-                        Total       = imp,
-                    };
-                })
+                .GroupBy(f => new { f.CodCliente, f.Ruc, f.Nombre, f.Giro })
+                .Select(g => ToClienteDto(asesor, g.Key.CodCliente, g.Key.Ruc,
+                                          g.Key.Nombre, g.Key.Giro,
+                                          g.Sum(f => f.Monto), g.Sum(f => f.TotUnid)))
                 .Where(x => x.Total > 0)
                 .OrderByDescending(x => x.Total)
                 .ToList();
         }
-
-            }
-        }
+    }
+}

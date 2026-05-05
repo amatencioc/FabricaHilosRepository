@@ -58,9 +58,30 @@ namespace FabricaHilos.Models.Ventas
     public class DcmDashboardDto
     {
         /// <summary>Todos los clientes con detalle completo (tabla, exportación y ranking).</summary>
-        public List<DcmClienteMaestroDto>   ClientesTodos { get; set; } = [];
+        public List<DcmClienteMaestroDto>   ClientesTodos     { get; set; } = [];
 
         /// <summary>Top N clientes por asesor (Importe y KG).</summary>
-        public List<DcmTopClienteAsesorDto> TopClientes   { get; set; } = [];
+        public List<DcmTopClienteAsesorDto> TopClientes       { get; set; } = [];
+
+        /// <summary>Conteo de clientes distintos por asesor (para el pie chart).</summary>
+        public List<DcmClientesCountDto>    ClientesPorAsesor { get; set; } = [];
+
+        /// <summary>Totales de venta e importe por asesor derivados del detalle (ranking y participación).</summary>
+        public List<DcmVentaAsesorDto>      VentasPorAsesor   { get; set; } = [];
+    }
+
+    /// <summary>Cantidad de clientes distintos por asesor.</summary>
+    public class DcmClientesCountDto
+    {
+        public string? Asesor        { get; set; }
+        public int     TotalClientes { get; set; }
+    }
+
+    /// <summary>Totales de importe y KG por asesor (del detalle P_TIPO='D').</summary>
+    public class DcmVentaAsesorDto
+    {
+        public string? Asesor     { get; set; }
+        public decimal Importe    { get; set; }
+        public decimal CantidadKg { get; set; }
     }
 }
