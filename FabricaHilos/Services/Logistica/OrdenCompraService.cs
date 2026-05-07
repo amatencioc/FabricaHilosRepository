@@ -164,7 +164,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
             cmd.Parameters.Add("tipoDocto", OracleDbType.Varchar2).Value = tipoDocto;
             cmd.Parameters.Add("serie",     OracleDbType.Int32).Value    = serie;
-            cmd.Parameters.Add("numPed",    OracleDbType.Int64).Value    = numPed;
+            cmd.Parameters.Add("numPed",    OracleDbType.Decimal).Value    = numPed;
             await using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
                 return MapOrden((OracleDataReader)reader);
@@ -201,7 +201,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
             cmd.Parameters.Add("tipoDocto", OracleDbType.Varchar2).Value = tipoDocto;
             cmd.Parameters.Add("serie",     OracleDbType.Int32).Value    = serie;
-            cmd.Parameters.Add("numPed",    OracleDbType.Int64).Value    = numPed;
+            cmd.Parameters.Add("numPed",    OracleDbType.Decimal).Value    = numPed;
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -463,10 +463,10 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             try
             {
                 await using var cmd1 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
-                cmd1.Parameters.Add(new OracleParameter(":idGrupo",   OracleDbType.Int64)    { Value = idGrupo   });
+                cmd1.Parameters.Add(new OracleParameter(":idGrupo",   OracleDbType.Decimal)  { Value = idGrupo   });
                 cmd1.Parameters.Add(new OracleParameter(":tipoDocto", OracleDbType.Varchar2) { Value = tipoDocto });
                 cmd1.Parameters.Add(new OracleParameter(":serie",     OracleDbType.Int32)    { Value = serie     });
-                cmd1.Parameters.Add(new OracleParameter(":numPed",    OracleDbType.Int64)    { Value = numPed    });
+                cmd1.Parameters.Add(new OracleParameter(":numPed",    OracleDbType.Decimal)  { Value = numPed    });
                 for (int i = 0; i < pares.Count; i++)
                 {
                     cmd1.Parameters.Add(new OracleParameter($":ca{i}", OracleDbType.Varchar2) { Value = pares[i].CodArt });
@@ -475,8 +475,8 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                 await cmd1.ExecuteNonQueryAsync();
 
                 await using var cmd2 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
-                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
-                cmd2.Parameters.Add(new OracleParameter(":numPed",  OracleDbType.Int64) { Value = numPed  });
+                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+                cmd2.Parameters.Add(new OracleParameter(":numPed",  OracleDbType.Decimal) { Value = numPed  });
                 for (int i = 0; i < pares.Count; i++)
                     cmd2.Parameters.Add(new OracleParameter($":ca{i}", OracleDbType.Varchar2) { Value = pares[i].CodArt });
                 await cmd2.ExecuteNonQueryAsync();
@@ -535,11 +535,11 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             try
             {
                 await using var cmd1 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
-                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd1.ExecuteNonQueryAsync();
 
                 await using var cmd2 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
-                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd2.ExecuteNonQueryAsync();
 
                 trx.Commit();
@@ -572,11 +572,11 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             try
             {
                 await using var cmd1 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
-                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd1.ExecuteNonQueryAsync();
 
                 await using var cmd2 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
-                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd2.ExecuteNonQueryAsync();
 
                 trx.Commit();
@@ -610,12 +610,12 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             {
                 // Primero ITEMREQ (mientras ITEMORD.ID_GRUPO aún existe para el JOIN)
                 await using var cmd1 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
-                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd1.ExecuteNonQueryAsync();
 
                 // Luego ITEMORD
                 await using var cmd2 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
-                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+                cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
                 await cmd2.ExecuteNonQueryAsync();
 
                 trx.Commit();

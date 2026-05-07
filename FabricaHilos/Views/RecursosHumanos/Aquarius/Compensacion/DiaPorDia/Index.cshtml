@@ -143,9 +143,10 @@
                                 <th style="width:36px;">
                                     <input type="checkbox" id="chkTodosEmp" class="form-check-input"
                                            title="Marcar/desmarcar todos" onchange="toggleTodosEmp(this)" />
-                                </th>
-                                <th>Cód.</th>
-                                <th>Nombre</th>
+                                 </th>
+                                <th style="display:none;">Cód.</th>
+                                <th id="thFotocheck" style="cursor:pointer;user-select:none;" onclick="sortEmpleados('fotocheck')">Fotocheck <span id="sortIconFotocheck">⇅</span></th>
+                                <th id="thNombre" style="cursor:pointer;user-select:none;" onclick="sortEmpleados('nombre')">Nombre <span id="sortIconNombre">⇅</span></th>
                                 <th>Fecha</th>
                                 <th class="text-end">H. Trabajadas</th>
                                 <th class="text-end">HH. Extra</th>
@@ -464,6 +465,33 @@ window.addEventListener('beforeunload', () => {
 
 // ── PASO 1: Buscar empleados del rango ───────────────────────────────────
 
+let _sortBy  = 'nombre';
+let _sortDir = 'asc';
+
+function sortEmpleados(col) {
+    if (_sortBy === col) {
+        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _sortBy  = col;
+        _sortDir = 'asc';
+    }
+    actualizarIconosSort();
+    buscarEmpleados(_pagActual, false);
+}
+
+function actualizarIconosSort() {
+    const cols = ['fotocheck', 'nombre'];
+    cols.forEach(c => {
+        const el = document.getElementById('sortIcon' + c.charAt(0).toUpperCase() + c.slice(1));
+        if (!el) return;
+        if (_sortBy === c) {
+            el.textContent = _sortDir === 'asc' ? '↑' : '↓';
+        } else {
+            el.textContent = '⇅';
+        }
+    });
+}
+
 async function buscarEmpleados(pagina, esNuevaBusqueda) {
     const desde    = document.getElementById('rangoDesde').value;
     const hasta    = document.getElementById('rangoHasta').value;
@@ -498,7 +526,9 @@ async function buscarEmpleados(pagina, esNuevaBusqueda) {
             ...(personal   && { codPersonal: personal }),
             ...(nombre     && { nombre }),
             ...(horasDesde && { fechaHorasInicio: isoADdMmYyyy(horasDesde) }),
-            ...(horasHasta && { fechaHorasFin:    isoADdMmYyyy(horasHasta) })
+            ...(horasHasta && { fechaHorasFin:    isoADdMmYyyy(horasHasta) }),
+            sortBy:  _sortBy,
+            sortDir: _sortDir
         });
         const res  = await fetch(`${URL_BASE}/ListarEmpleadosRango?${params}`);
         const json = await res.json();
@@ -548,7 +578,8 @@ function renderEmpleados(data) {
                      ${estaSeleccionado ? 'checked' : ''}
                      onchange="onCheckEmp(this)" />
             </td>
-            <td><code>${r.codPersonal}</code></td>
+            <td style="display:none;"><code>${r.codPersonal}</code></td>
+            <td>${r.numFotocheck ?? ''}</td>
             <td class="text-truncate" style="max-width:220px;" title="${r.nombreCompleto ?? ''}">${r.nombreCompleto ?? ''}</td>
             <td><span class="badge bg-secondary">${r.fechamarStr ?? ''}</span></td>
             <td class="text-end">

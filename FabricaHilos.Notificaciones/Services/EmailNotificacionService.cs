@@ -38,11 +38,13 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
             mensaje.From.Add(new MailboxAddress(_settings.NombreEnvio, _settings.UsuarioEnvio));
             mensaje.To.Add(new MailboxAddress(payload.NombreDestinatario, payload.CorreoDestinatario));
 
-            // Agregar CC si está disponible (solo para EnvioCertificadoFacturacionPayload)
-            if (payload is FabricaHilos.Notificaciones.Models.Payloads.EnvioCertificadoFacturacionPayload certPayload 
-                && !string.IsNullOrEmpty(certPayload.CorreoCopia))
+            // Agregar CC y BCC si están disponibles (solo para EnvioCertificadoFacturacionPayload)
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.EnvioCertificadoFacturacionPayload certPayload)
             {
-                mensaje.Cc.Add(new MailboxAddress("Copia", certPayload.CorreoCopia));
+                if (!string.IsNullOrEmpty(certPayload.CorreoCopia))
+                    mensaje.Cc.Add(new MailboxAddress("Copia", certPayload.CorreoCopia));
+                if (!string.IsNullOrEmpty(certPayload.CorreoCopiaOculta))
+                    mensaje.Bcc.Add(new MailboxAddress("Copia Oculta", certPayload.CorreoCopiaOculta));
             }
 
             mensaje.Subject = ObtenerAsunto(payload);

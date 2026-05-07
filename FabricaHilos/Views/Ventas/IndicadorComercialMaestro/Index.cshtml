@@ -107,20 +107,20 @@
 <div class="section-title"><i class="bi bi-currency-dollar me-1"></i>Indicador de Importe (S/. &amp; $)</div>
 <p class="report-desc">Importe de ventas por asesor agrupado por mes. Barras verticales por asesor; eje X = meses del período.</p>
 <div class="row g-3 mb-3">
-    <div class="col-lg-7">
+    <div class="col-12">
         <div class="card chart-card position-relative">
             <div id="spinnerImporteChart" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">IMPORTE (S/. &amp; $) POR ASESOR — Gráfico de barras verticales</div>
-            <div class="card-body" style="height:440px;">
+            <div class="card-body" style="height:380px;">
                 <canvas id="chartImporteAsesor"></canvas>
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
+    <div class="col-12">
         <div class="card chart-card">
             <div id="spinnerImporteTabla" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">Suma de IMPORTE | MESES ▼</div>
-            <div class="card-body p-2" style="overflow-x:auto; max-height:460px; overflow-y:auto;">
+            <div class="card-body p-2" style="overflow-x:auto;">
                 <table class="table table-sm table-hover table-pivot align-middle mb-0" id="tablaImporte">
                     <thead><tr><th>ASESOR</th></tr></thead>
                     <tbody></tbody>
@@ -135,20 +135,20 @@
 <div class="section-title"><i class="bi bi-box-seam me-1"></i>Indicador de Cantidad (KG)</div>
 <p class="report-desc">Kilogramos vendidos por asesor agrupados por mes. Barras verticales por asesor; eje X = meses del período.</p>
 <div class="row g-3 mb-3">
-    <div class="col-lg-7">
+    <div class="col-12">
         <div class="card chart-card position-relative">
             <div id="spinnerKgChart" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">CANTIDAD (KG) POR ASESOR — Gráfico de barras verticales</div>
-            <div class="card-body" style="height:440px;">
+            <div class="card-body" style="height:380px;">
                 <canvas id="chartKgAsesor"></canvas>
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
+    <div class="col-12">
         <div class="card chart-card">
             <div id="spinnerKgTabla" class="chart-spinner"><div class="spinner-border text-success"></div></div>
             <div class="card-header small">Suma de CANTIDAD (KG) | MESES ▼</div>
-            <div class="card-body p-2" style="overflow-x:auto; max-height:460px; overflow-y:auto;">
+            <div class="card-body p-2" style="overflow-x:auto;">
                 <table class="table table-sm table-hover table-pivot align-middle mb-0" id="tablaKg">
                     <thead><tr><th>ASESOR</th></tr></thead>
                     <tbody></tbody>
@@ -296,11 +296,11 @@
                     plugins: {
                         legend: {
                             display: true,
-                            position: 'right',
+                            position: 'bottom',
                             labels: {
                                 boxWidth: 13,
                                 font: { size: 12, weight: '600', family: "'Segoe UI', Arial, sans-serif" },
-                                padding: 12,
+                                padding: 16,
                                 generateLabels: function(chart) {
                                     return chart.data.datasets.map((ds, i) => ({
                                         text: ds.label.toUpperCase(),

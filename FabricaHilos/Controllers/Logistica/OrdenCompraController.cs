@@ -87,10 +87,11 @@ public class OrdenCompraController : OracleBaseController
 
         var codigos = items.Select(o => o.CodProveed)
             .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Distinct()!;
+            .Select(c => c!)
+            .Distinct();
         ViewBag.Proveedores  = await _service.ObtenerNombresProveedoresAsync(codigos);
 
-        var codigosCc = items.Select(o => o.CCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosCc = items.Select(o => o.CCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
         // Generar token final con fechas normalizadas para paginación y Detalle
@@ -136,21 +137,21 @@ public class OrdenCompraController : OracleBaseController
 
         var items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
 
-        var codigos = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigos = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.Proveedores  = await _service.ObtenerNombresProveedoresAsync(codigos);
 
-        var codigosCc = new[] { orden.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosCc = new[] { orden.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
-        var codigosCondPag = new[] { orden.CondPag }.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosCondPag = new[] { orden.CondPag }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.DescripcionesCondPag = await _service.ObtenerDescripcionesCondPagAsync(codigosCondPag);
 
-        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
 
         // Nombres de usuarios de auditoría
         var usuariosAuditoria = new[] { orden.AAduser, orden.AMduser }
-            .Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         var tareasNombres = usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u!));
         var nombresResultado = await Task.WhenAll(tareasNombres);
         var nombresUsuarios = usuariosAuditoria.Zip(nombresResultado, (u, n) => (u!, n))

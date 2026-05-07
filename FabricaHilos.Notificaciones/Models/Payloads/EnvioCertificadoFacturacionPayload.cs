@@ -13,6 +13,7 @@ public class EnvioCertificadoFacturacionPayload : INotificacionPayload
     public required string  CorreoDestinatario { get; set; }
     public required string  NombreDestinatario { get; set; }
     public string? CorreoCopia { get; set; }
+    public string? CorreoCopiaOculta { get; set; }
 
     public required string NumRequerimiento     { get; set; }
     public required string FechaRequerimiento   { get; set; }

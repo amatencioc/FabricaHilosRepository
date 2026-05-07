@@ -227,7 +227,7 @@ namespace FabricaHilos.Services.Produccion
             if (string.IsNullOrEmpty(connectionString))
             {
                 _logger.LogWarning("Oracle connection string not configured");
-                return null;
+                return new List<RecetaDto>();
             }
 
             _logger.LogInformation("Buscando receta con código: {Codigo}", codigo);
@@ -307,7 +307,7 @@ namespace FabricaHilos.Services.Produccion
             if (string.IsNullOrEmpty(connectionString))
             {
                 _logger.LogWarning("Oracle connection string not configured");
-                return null;
+                return new List<LoteDto>();
             }
 
             _logger.LogInformation("Buscando lote con código: {Codigo}", codigo);
@@ -2733,17 +2733,6 @@ namespace FabricaHilos.Services.Produccion
                 {
                     var ord = r.GetOrdinal(col);
                     return r.IsDBNull(ord) ? null : Convert.ToDateTime(r.GetValue(ord));
-                }
-                static bool Bool(IDataReader r, string col)
-                {
-                    var ord = r.GetOrdinal(col);
-                    if (r.IsDBNull(ord)) return false;
-                    var val = r.GetValue(ord);
-                    if (val is string s)
-                        return s.Trim().Equals("S", StringComparison.OrdinalIgnoreCase);
-                    if (val is decimal d)
-                        return d > 0;
-                    return Convert.ToBoolean(val);
                 }
 
                 var detalle = new AutoconerDetalleOracleDto

@@ -54,7 +54,9 @@ public interface ICompensacionDiaDiaService
         int pagina,
         int tamPagina,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null);
+        string? fechaHorasFin   = null,
+        string? sortBy           = null,
+        string? sortDir          = null);
 
     /// <summary>Confirma la última transacción de registro masivo (COMMIT).</summary>
     Task CommitAsync();
@@ -363,7 +365,9 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
         int pagina,
         int tamPagina,
         string? fechaHorasInicio = null,
-        string? fechaHorasFin   = null)
+        string? fechaHorasFin   = null,
+        string? sortBy           = null,
+        string? sortDir          = null)
     {
         // Clave de caché por empresa+rango+fechas de horas
         var cacheKey = CacheKeyRango(codEmpresa, fechaInicio, fechaFin)
@@ -392,7 +396,15 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
                 (e.CodPersonal   ?? string.Empty).ToUpperInvariant().Contains(q));
         }
 
-        var lista = filtrados.ToList();
+        bool desc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        IEnumerable<EmpleadoRangoDto> ordenados = string.Equals(sortBy, "fotocheck", StringComparison.OrdinalIgnoreCase)
+            ? (desc
+                ? filtrados.OrderByDescending(e => e.NumFotocheck ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                : filtrados.OrderBy(e => e.NumFotocheck ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            : (desc
+                ? filtrados.OrderByDescending(e => e.NombreCompleto ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                : filtrados.OrderBy(e => e.NombreCompleto ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+        var lista = ordenados.ToList();
         var total = lista.Count;
         var items = lista.Skip((pagina - 1) * tamPagina).Take(tamPagina).ToList();
         return (items, total);
@@ -427,6 +439,7 @@ public class CompensacionDiaDiaService : ICompensacionDiaDiaService
                 result.Add(new EmpleadoRangoDto
                 {
                     CodPersonal     = GetStr(r, "cod_personal"),
+                    NumFotocheck    = GetStr(r, "num_fotocheck"),
                     NombreCompleto  = GetStr(r, "nombre_completo"),
                     FechamarStr     = GetStr(r, "fechamar_str"),
                     MinTrabajadas   = GetInt(r, "min_trabajadas"),

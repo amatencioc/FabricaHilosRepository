@@ -90,6 +90,7 @@ public class CompensacionEventoDto
 public class EmpleadoRangoDto
 {
     public string? CodPersonal      { get; set; }
+    public string? NumFotocheck     { get; set; }
     public string? NombreCompleto   { get; set; }
     public string? FechamarStr      { get; set; }
     public int     MinTrabajadas    { get; set; }

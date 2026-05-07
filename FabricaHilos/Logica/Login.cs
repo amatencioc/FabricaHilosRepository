@@ -16,11 +16,11 @@ namespace FabricaHilos.Logica
     /// </summary>
     public class Login
     {
-        private readonly string _conexion;
-        private readonly ILogger _logger;
+        private readonly string? _conexion;
+        private readonly ILogger? _logger;
         private const int TimeoutSegundos = 8;
 
-        public Login(IConfiguration configuration, ILogger logger = null)
+        public Login(IConfiguration configuration, ILogger? logger = null)
         {
             // El UNION siempre se ejecuta contra LaColonialConnection porque
             // tiene acceso a ARBONA.CS_USER mediante database link.
@@ -74,13 +74,13 @@ namespace FabricaHilos.Logica
 
                 if (await dr.ReadAsync(cts.Token))
                 {
-                    objeto.c_user     = dr["c_user"]?.ToString();
-                    objeto.c_codigo   = dr["c_codigo"]?.ToString();
-                    objeto.c_nombre   = dr["c_nombre"]?.ToString();
-                    objeto.c_costo    = dr["c_costo"]?.ToString();
-                    objeto.acceso_web = dr["acceso_web"]?.ToString();
+                    objeto.c_user     = dr["c_user"].ToString();
+                    objeto.c_codigo   = dr["c_codigo"].ToString();
+                    objeto.c_nombre   = dr["c_nombre"].ToString();
+                    objeto.c_costo    = dr["c_costo"].ToString();
+                    objeto.acceso_web = dr["acceso_web"].ToString();
                     objeto.psw_sig    = psw;
-                    objeto.Empresa    = dr["EMPRESA"]?.ToString();  // "COLONIAL" o "ARBONA"
+                    objeto.Empresa    = dr["EMPRESA"].ToString();  // "COLONIAL" o "ARBONA"
 
                     _logger?.LogInformation(
                         "✅ Usuario encontrado: {CUser} — Empresa: {Empresa}",

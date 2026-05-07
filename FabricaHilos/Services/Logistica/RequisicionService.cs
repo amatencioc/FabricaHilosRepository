@@ -219,7 +219,7 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
             cmd.BindByName = true;
             cmd.Parameters.Add(new OracleParameter(":tipDoc", OracleDbType.Varchar2, tipDoc, ParameterDirection.Input));
             cmd.Parameters.Add(new OracleParameter(":serie",  OracleDbType.Int32,    serie,  ParameterDirection.Input));
-            cmd.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int64,    numReq, ParameterDirection.Input));
+            cmd.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Decimal,    numReq, ParameterDirection.Input));
 
             using var r = await cmd.ExecuteReaderAsync() as OracleDataReader
                 ?? throw new InvalidOperationException("OracleDataReader expected");
@@ -265,7 +265,7 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
             cmd.BindByName = true;
             cmd.Parameters.Add(new OracleParameter(":tipDoc", OracleDbType.Varchar2, tipDoc, ParameterDirection.Input));
             cmd.Parameters.Add(new OracleParameter(":serie",  OracleDbType.Int32,    serie,  ParameterDirection.Input));
-            cmd.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Int64,    numReq, ParameterDirection.Input));
+            cmd.Parameters.Add(new OracleParameter(":numReq", OracleDbType.Decimal,    numReq, ParameterDirection.Input));
 
             using var r = await cmd.ExecuteReaderAsync() as OracleDataReader
                 ?? throw new InvalidOperationException("OracleDataReader expected");
@@ -500,10 +500,10 @@ public async Task ActualizarIdGrupoItemsAsync(
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
         await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64)   { Value = idGrupo });
+        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal)  { Value = idGrupo });
         cmd.Parameters.Add(new OracleParameter(":tipDoc",  OracleDbType.Varchar2) { Value = tipDoc  });
         cmd.Parameters.Add(new OracleParameter(":serie",   OracleDbType.Int32)    { Value = serie   });
-        cmd.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Int64)    { Value = numReq  });
+        cmd.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal)  { Value = numReq  });
         for (int i = 0; i < lista.Count; i++)
             cmd.Parameters.Add(new OracleParameter($":ord{i}", OracleDbType.Int32) { Value = lista[i] });
 
@@ -549,7 +549,7 @@ public async Task AprobarGrupoAsync(long idGrupo)
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
         await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
         await cmd.ExecuteNonQueryAsync();
     }
     catch (Exception ex)
@@ -567,7 +567,7 @@ public async Task DesaprobarGrupoAsync(long idGrupo)
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
         await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
         await cmd.ExecuteNonQueryAsync();
     }
     catch (Exception ex)
@@ -585,7 +585,7 @@ public async Task LimpiarIdGrupoAsync(long idGrupo)
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
         await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Int64) { Value = idGrupo });
+        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
         await cmd.ExecuteNonQueryAsync();
     }
     catch (Exception ex)
@@ -641,7 +641,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -677,7 +677,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmdE2.Parameters.Add(new OracleParameter($":e2td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmdE2.Parameters.Add(new OracleParameter($":e2sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmdE2.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmdE2.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var rE2 = (OracleDataReader)await cmdE2.ExecuteReaderAsync();
             while (await rE2.ReadAsync())
@@ -709,7 +709,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmdOC.Parameters.Add(new OracleParameter($":octd{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmdOC.Parameters.Add(new OracleParameter($":ocsr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmdOC.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmdOC.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var rOC = (OracleDataReader)await cmdOC.ExecuteReaderAsync();
             while (await rOC.ReadAsync())
@@ -748,7 +748,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd3.Parameters.Add(new OracleParameter($":e3td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd3.Parameters.Add(new OracleParameter($":e3sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r3 = (OracleDataReader)await cmd3.ExecuteReaderAsync();
             while (await r3.ReadAsync())
@@ -792,7 +792,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd4.Parameters.Add(new OracleParameter($":e4td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd4.Parameters.Add(new OracleParameter($":e4sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r4 = (OracleDataReader)await cmd4.ExecuteReaderAsync();
             while (await r4.ReadAsync())
@@ -837,7 +837,7 @@ public async Task CambiarEstadoAsync(
         {
             cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
             cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
         }
         await cmd.ExecuteNonQueryAsync();
     }
@@ -876,7 +876,7 @@ public async Task ActivarRequisicionesAsync(
         {
             cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
             cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+            cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
         }
         await cmd.ExecuteNonQueryAsync();
     }
@@ -938,7 +938,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd.Parameters.Add(new OracleParameter($":td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd.Parameters.Add(new OracleParameter($":sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd.Parameters.Add(new OracleParameter($":nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
@@ -974,7 +974,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmdE2b.Parameters.Add(new OracleParameter($":e2td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmdE2b.Parameters.Add(new OracleParameter($":e2sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmdE2b.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmdE2b.Parameters.Add(new OracleParameter($":e2nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var rE2b = (OracleDataReader)await cmdE2b.ExecuteReaderAsync();
             while (await rE2b.ReadAsync())
@@ -1004,7 +1004,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmdOCb.Parameters.Add(new OracleParameter($":octd{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmdOCb.Parameters.Add(new OracleParameter($":ocsr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmdOCb.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmdOCb.Parameters.Add(new OracleParameter($":ocnr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var rOCb = (OracleDataReader)await cmdOCb.ExecuteReaderAsync();
             while (await rOCb.ReadAsync())
@@ -1042,7 +1042,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd3.Parameters.Add(new OracleParameter($":e3td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd3.Parameters.Add(new OracleParameter($":e3sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd3.Parameters.Add(new OracleParameter($":e3nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r3 = (OracleDataReader)await cmd3.ExecuteReaderAsync();
             while (await r3.ReadAsync())
@@ -1085,7 +1085,7 @@ public async Task<Dictionary<string, ProgresoGeneralDto>> ObtenerProgresoGeneral
             {
                 cmd4.Parameters.Add(new OracleParameter($":e4td{i}", OracleDbType.Varchar2) { Value = lista[i].TipDoc });
                 cmd4.Parameters.Add(new OracleParameter($":e4sr{i}", OracleDbType.Int32)    { Value = lista[i].Serie  });
-                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Int64)    { Value = lista[i].NumReq });
+                cmd4.Parameters.Add(new OracleParameter($":e4nr{i}", OracleDbType.Decimal)    { Value = lista[i].NumReq });
             }
             await using var r4 = (OracleDataReader)await cmd4.ExecuteReaderAsync();
             while (await r4.ReadAsync())

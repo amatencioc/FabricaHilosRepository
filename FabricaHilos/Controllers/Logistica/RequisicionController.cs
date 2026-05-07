@@ -106,13 +106,13 @@ public class RequisicionController : OracleBaseController
         var codigos = items
             .SelectMany(r => new[] { r.Responsable, r.Autoriza })
             .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Distinct()!;
+            .Select(c => c!);
         ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigos);
 
-        var codigosPrio = items.Select(r => r.Prioridad).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosPrio = items.Select(r => r.Prioridad).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!);
         ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70", codigosPrio);
 
-        var codigosCc = items.Select(r => r.CentroCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosCc = items.Select(r => r.CentroCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!);
         ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
         // Progreso general: 4 etapas del flujo logístico
@@ -174,21 +174,22 @@ public class RequisicionController : OracleBaseController
         var codigosPersonal = new[] { cabecera.Responsable, cabecera.Autoriza }
             .Concat(items.Select(i => i.CodSolicita))
             .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Distinct()!;
+            .Select(c => c!)
+            .Distinct();
         ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigosPersonal);
 
-        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
 
         ViewBag.Destinos   = await _service.ObtenerDescripcionesTablaAuxiliarAsync("85",
-            new[] { cabecera.Destino }.Where(c => !string.IsNullOrWhiteSpace(c))!);
+            new[] { cabecera.Destino }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
         ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70",
-            new[] { cabecera.Prioridad }.Where(c => !string.IsNullOrWhiteSpace(c))!);
+            new[] { cabecera.Prioridad }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
 
-        var codigosCc = items.Select(i => i.Destino).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct()!;
+        var codigosCc = items.Select(i => i.Destino).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         ViewBag.DestinosItem = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
 
-        var codigosCabCc = new[] { cabecera.CentroCosto }.Where(c => !string.IsNullOrWhiteSpace(c))!;
+        var codigosCabCc = new[] { cabecera.CentroCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!);
         ViewBag.CentrosCostoCab = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCabCc);
 
         // Órdenes de compra distintas para mostrar en el detalle

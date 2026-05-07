@@ -66,11 +66,13 @@ namespace FabricaHilos.Controllers
             if (string.IsNullOrEmpty(username)) return;
             try
             {
+#pragma warning disable CA1416
                 NetworkShareHelper.Connect(
                     filePath,
                     username,
                     Configuration["NetworkShare:Password"],
                     Configuration["NetworkShare:Domain"]);
+#pragma warning restore CA1416
             }
             catch (Exception ex)
             {

@@ -175,7 +175,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             int pagina    = 1,
             int tamPagina = 10,
             string? fechaHorasInicio = null,
-            string? fechaHorasFin   = null)
+            string? fechaHorasFin   = null,
+            string? sortBy           = null,
+            string? sortDir          = null)
         {
             try
             {
@@ -188,7 +190,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     pagina,
                     tamPagina,
                     string.IsNullOrWhiteSpace(fechaHorasInicio) ? null : fechaHorasInicio,
-                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin);
+                    string.IsNullOrWhiteSpace(fechaHorasFin)   ? null : fechaHorasFin,
+                    string.IsNullOrWhiteSpace(sortBy)  ? null : sortBy,
+                    string.IsNullOrWhiteSpace(sortDir) ? null : sortDir);
 
                 return Json(new { ok = true, data = resultado.Items, totalFilas = resultado.Total, pagina, tamPagina });
             }

@@ -224,7 +224,6 @@
     document.getElementById('btnLimpiar').addEventListener('click', () => {
         document.getElementById('fechaInicio').value = `${hoy.getFullYear()}-01`;
         document.getElementById('fechaFin').value    = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-        consultar();
     });
     document.getElementById('btnExportar').addEventListener('click', exportar);
 
@@ -235,10 +234,13 @@
         const ff = document.getElementById('fechaFin').value;
         if (!fi || !ff) return;
 
+        const [ffY, ffM] = ff.split('-').map(Number);
+        const ultimoDia  = new Date(ffY, ffM, 0).getDate();
+
         const spinner = document.getElementById('divSpinner');
         spinner.classList.remove('d-none');
         try {
-            const res  = await fetch(`/CreditosCobranza/DatosNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`);
+            const res  = await fetch(`/CreditosCobranza/DatosNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-${ultimoDia}`);
             const data = await res.json();
             renderizar(data);
         } catch(e) {
@@ -257,7 +259,7 @@
 
         const labels   = data.map(d => `${MESES[d.mes-1]}-${d.ano}`);
         const valores  = data.map(d => +d.indSoles);
-        const bgColors = valores.map((_, i) => COLORS[i % COLORS.length]);
+        const bgColors = valores.map(v => v <= META ? '#2e7d32' : '#c62828');
         const metaLine = data.map(() => META);
         const last     = data[data.length - 1];
 
@@ -372,10 +374,11 @@
         const fi = document.getElementById('fechaInicio').value;
         const ff = document.getElementById('fechaFin').value;
         if (!fi || !ff) return;
-        window.location.href = `/CreditosCobranza/ExportarNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-28`;
+        const [ffY, ffM] = ff.split('-').map(Number);
+        const ultimoDia  = new Date(ffY, ffM, 0).getDate();
+        window.location.href = `/CreditosCobranza/ExportarNivelMorosidad?fechaInicio=${fi}-01&fechaFin=${ff}-${ultimoDia}`;
     }
 
-    consultar();
 }());
 </script>
 }

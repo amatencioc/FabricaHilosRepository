@@ -106,6 +106,10 @@ namespace FabricaHilos.Controllers.Sgc
                 }
 
                 // Obtener la ruta del PDF
+                if (string.IsNullOrEmpty(requerimiento.CodCliente))
+                {
+                    return Content("<html><body><h3>El requerimiento no tiene código de cliente.</h3></body></html>", "text/html");
+                }
                 var cliente = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
                 if (cliente == null || string.IsNullOrEmpty(cliente.Ruc))
                 {

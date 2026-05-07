@@ -505,7 +505,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         -- Redondeo hora-entera (regla negocio: <45 baja, >=45 sube)
         SP_SCA_REDONDEAR_TAREO_HE(p_emp, p_per, p_fec);
 
-        -- Post-redondeo: si el SP bajo HE a exactamente c_BASE_DATE (ej. 00:25 → 00:00),
+        -- Post-redondeo: si el SP bajo HE a exactamente c_BASE_DATE (ej. 00:25 ? 00:00),
         -- el CASE anterior no lo detecto porque corrio antes del redondeo.
         -- Dejar c_BASE_DATE como marca (00:00) y solo actualizar alerta EC.
         IF p_tipo_ori = 'E' THEN
@@ -855,6 +855,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         OPEN cv_resultado FOR
             SELECT
                 t.cod_personal,
+                f.num_fotocheck,
                 p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
                 t.fechamar,
                 -- Horas trabajadas efectivas del dia origen (horaefectiva = H.Efe.)
@@ -970,6 +971,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             JOIN  PLA_PERSONAL p
                   ON  p.cod_empresa  = t.cod_empresa
                   AND p.cod_personal = t.cod_personal
+            LEFT JOIN SCA_FOTOCHECK f
+                  ON  f.cod_empresa  = t.cod_empresa
+                  AND f.cod_personal = t.cod_personal
+                  AND f.act_fotocheck = 1
             WHERE t.cod_empresa = p_cod_empresa
             AND   t.fechamar BETWEEN v_fec_ini AND v_fec_fin
             AND   (

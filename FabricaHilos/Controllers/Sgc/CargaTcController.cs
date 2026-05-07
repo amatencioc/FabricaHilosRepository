@@ -404,14 +404,16 @@ namespace FabricaHilos.Controllers.Sgc
                 var tipoCertificado = requerimiento.CodArt.Replace("CERT", "");
                 string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
 
-                var destinatarioFacturacion = _configuration["CorreoFacturacion"] ?? "iramirez@colonial.com.pe";
-                var copiaFacturacion = _configuration["CorreoFacturacionCopia"];
+                var destinatarioFacturacion = _configuration["CorreosFacturacion:Destinatario"] ?? "iramirez@colonial.com.pe";
+                var copiaFacturacion = _configuration["CorreosFacturacion:Copia"];
+                var copiaOcultaFacturacion = _configuration["CorreosFacturacion:CopiaOculta"];
 
                 var payload = new EnvioCertificadoFacturacionPayload
                 {
                     CorreoDestinatario = destinatarioFacturacion,
                     NombreDestinatario = "Facturación",
-                    CorreoCopia = copiaFacturacion,
+                    CorreoCopia = string.IsNullOrWhiteSpace(copiaFacturacion) ? null : copiaFacturacion,
+                    CorreoCopiaOculta = string.IsNullOrWhiteSpace(copiaOcultaFacturacion) ? null : copiaOcultaFacturacion,
                     NumRequerimiento = requerimiento.NumReq.ToString(),
                     FechaRequerimiento = requerimiento.Fecha?.ToString("dd/MM/yyyy") ?? "N/A",
                     TipoCertificado = tipoCertificado,

@@ -482,13 +482,13 @@ namespace FabricaHilos.Services.Seguridad.Inspeccion
                     SET NUMERO = NUMERO + 1 
                     WHERE TIPODOC = 'IN'";
 
-                _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Ejecutando UPDATE {S}NRODOC (NUMERO+1)...");
+                _logger.LogWarning("\u25b6\u25b6 SVC RegistrarHallazgo: Ejecutando UPDATE {Tabla} (NUMERO+1)...", $"{S}NRODOC");
                 using (var cmdActualizar = new OracleCommand(queryActualizarCorrelativo, connection))
                 {
                     cmdActualizar.Transaction = transaction;
                     cmdActualizar.CommandTimeout = CmdTimeoutSec;
                     var filasActualizadas = await cmdActualizar.ExecuteNonQueryAsync();
-                    _logger.LogWarning("▶▶ SVC RegistrarHallazgo: UPDATE {S}NRODOC OK, filas={Filas} ({Ms}ms)", filasActualizadas, sw.ElapsedMilliseconds);
+                    _logger.LogWarning("\u25b6\u25b6 SVC RegistrarHallazgo: UPDATE {Tabla} OK, filas={Filas} ({Ms}ms)", $"{S}NRODOC", filasActualizadas, sw.ElapsedMilliseconds);
                 }
 
                 _logger.LogWarning("▶▶ SVC RegistrarHallazgo: Commit...");

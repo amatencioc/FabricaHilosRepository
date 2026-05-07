@@ -1,3 +1,4 @@
+using System.Data;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.CreditosCobranza;
 
@@ -22,54 +23,13 @@ public class NivelTiempoService : OracleServiceBase, INivelTiempoService
         var connStr = GetOracleConnectionString();
         if (string.IsNullOrEmpty(connStr)) return result;
 
-        var sql = @"SELECT XC.ANO,
-       XC.MES,
-       XC.SALDO_SOLES,
-       FC.VTA_SOLES,
-         ROUND((XC.SALDO_SOLES/FC.VTA_SOLES)*30,0) IND_SOLES,
-       XC.SALDO_DOLAR,
-       FC.VTA_DOLAR,
-         ROUND((XC.SALDO_DOLAR/FC.VTA_DOLAR)*30,0) IND_DOLAR
-  FROM (SELECT S.ANO,
-               S.MES,
-               ROUND(SUM(DECODE(S.MONEDA, 'D', S.SALDO * S.TCAM_SAL, S.SALDO)),2) SALDO_SOLES,
-               ROUND(SUM(DECODE(S.MONEDA, 'D', S.SALDO, S.SALDO / S.TCAM_SAL)),2) SALDO_DOLAR
-          FROM SALDOS_CXC S, FACTCOB F
-         WHERE S.TIPDOC NOT IN ('A1')
-           AND SUBSTR(S.CTACTBLE, 5, 2) IN ('12', '13')
-           AND S.ANO = TO_NUMBER(TO_CHAR(:FECHAF, 'YYYY'))
-           AND S.MES <= TO_NUMBER(TO_CHAR(:FECHAF, 'MM'))
-           AND F.TIPDOC = S.TIPDOC
-           AND F.SERIE_NUM = S.SERIE_NUM
-           AND F.NUMERO = S.NUMERO
-         GROUP BY S.ANO, S.MES) XC,
-       (SELECT TO_NUMBER(TO_CHAR(D.FECHA, 'YYYY')) ANO,
-               TO_NUMBER(TO_CHAR(D.FECHA, 'MM')) MES,
-               SUM(DECODE(D.MONEDA,
-                          'S',
-                          D.PRECIO_VTA,
-                          ROUND(D.PRECIO_VTA * X.IMPORT_CAM, 2))) VTA_SOLES,
-               SUM(DECODE(D.MONEDA,
-                          'D',
-                          D.PRECIO_VTA,
-                          ROUND(D.PRECIO_VTA / X.IMPORT_CAM, 2))) VTA_DOLAR
-          FROM DOCUVENT D, CLIENTES C, PLANCTA P, CAMBDOL X
-         WHERE D.ESTADO <> '9'
-           AND D.FECHA BETWEEN :FECHAI AND :FECHAF
-           AND C.COD_CLIENTE = D.COD_CLIENTE
-           AND P.CUENTA = D.CTA_PVTA
-           AND X.TIPO_CAMBIO = P.TIPO
-           AND X.FECHA = LAST_DAY(D.FECHA)
-         GROUP BY TO_NUMBER(TO_CHAR(D.FECHA, 'YYYY')),
-                  TO_NUMBER(TO_CHAR(D.FECHA, 'MM'))) FC
- WHERE FC.ANO = XC.ANO
-   AND FC.MES = XC.MES";
-
         try
         {
+            // Iterar mes a mes: el paquete filtra ventas BETWEEN p_fechai y p_fechaf
+            // y saldos acumulados hasta p_fechaf
             var fechas = new List<DateTime>();
             var cur = new DateTime(fechaInicio.Year, fechaInicio.Month, 1);
-            var end = new DateTime(fechaFin.Year,    fechaFin.Month,    1);
+            var end = new DateTime(fechaFin.Year, fechaFin.Month, 1);
             while (cur <= end)
             {
                 fechas.Add(new DateTime(cur.Year, cur.Month, DateTime.DaysInMonth(cur.Year, cur.Month)));
@@ -83,12 +43,15 @@ public class NivelTiempoService : OracleServiceBase, INivelTiempoService
             foreach (var fecha in fechas)
             {
                 var mesInicio = new DateTime(fecha.Year, fecha.Month, 1);
-                var mesFin    = fecha; // último día del mes
 
-                await using var cmd = new OracleCommand(sql, conn);
-                cmd.BindByName = true;
-                cmd.Parameters.Add(new OracleParameter("FECHAI", OracleDbType.Date) { Value = mesInicio });
-                cmd.Parameters.Add(new OracleParameter("FECHAF", OracleDbType.Date) { Value = mesFin });
+                await using var cmd = new OracleCommand($"{S}PKG_COBRANZA.ObtenerReporte", conn);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.BindByName  = true;
+                cmd.Parameters.Add(new OracleParameter("p_tipo",   OracleDbType.Char)     { Value = "T" });
+                cmd.Parameters.Add(new OracleParameter("p_fecha",  OracleDbType.Date)     { Value = fecha });
+                cmd.Parameters.Add(new OracleParameter("p_fechai", OracleDbType.Date)     { Value = mesInicio });
+                cmd.Parameters.Add(new OracleParameter("p_fechaf", OracleDbType.Date)     { Value = fecha });
+                cmd.Parameters.Add(new OracleParameter("p_cursor", OracleDbType.RefCursor, ParameterDirection.Output));
 
                 await using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -101,8 +64,8 @@ public class NivelTiempoService : OracleServiceBase, INivelTiempoService
                         seen.Add(key);
                         result.Add(new NivelTiempoDto
                         {
-                            Ano       = ano,
-                            Mes       = mes,
+                            Ano        = ano,
+                            Mes        = mes,
                             SaldoSoles = reader["SALDO_SOLES"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["SALDO_SOLES"]),
                             VtaSoles   = reader["VTA_SOLES"]   == DBNull.Value ? 0m : Convert.ToDecimal(reader["VTA_SOLES"]),
                             IndSoles   = reader["IND_SOLES"]   == DBNull.Value ? 0m : Convert.ToDecimal(reader["IND_SOLES"]),
@@ -112,6 +75,20 @@ public class NivelTiempoService : OracleServiceBase, INivelTiempoService
                         });
                     }
                 }
+            }
+
+            result = result.OrderBy(x => x.Ano).ThenBy(x => x.Mes).ToList();
+
+            // Rellenar meses sin datos del rango con valores en cero
+            var cur2 = new DateTime(fechaInicio.Year, fechaInicio.Month, 1);
+            var end2 = new DateTime(fechaFin.Year,    fechaFin.Month,    1);
+            while (cur2 <= end2)
+            {
+                if (!result.Any(r => r.Ano == cur2.Year && r.Mes == cur2.Month))
+                {
+                    result.Add(new NivelTiempoDto { Ano = cur2.Year, Mes = cur2.Month });
+                }
+                cur2 = cur2.AddMonths(1);
             }
 
             result = result.OrderBy(x => x.Ano).ThenBy(x => x.Mes).ToList();

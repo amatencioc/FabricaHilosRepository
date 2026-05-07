@@ -2,7 +2,8 @@
 
 @{
     ViewData["Title"] = "Detalle de Requerimiento TC";
-    var requerimiento = ViewBag.Requerimiento as FabricaHilos.Models.Sgc.ReqCertDto;
+    var requerimiento = ViewBag.Requerimiento as FabricaHilos.Models.Sgc.ReqCertDto
+        ?? new FabricaHilos.Models.Sgc.ReqCertDto();
     string? navToken = ViewBag.NavToken as string;
 }
 

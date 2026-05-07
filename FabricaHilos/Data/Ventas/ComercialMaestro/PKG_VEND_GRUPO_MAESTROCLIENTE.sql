@@ -519,6 +519,15 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
   -- ----------------------------------------------------------
   -- TOP N articulos por kilogramos
   -- CLIENTES/GRP no necesarios: GROUP BY es solo por ARTICULO
+  --
+  -- NOTA: se usa DOCUVENT directamente (no V_DOCUVEN) porque la
+  -- vista consolida montos a nivel de comprobante y NO expone
+  -- ITEMDOCU.CANTIDAD por articulo, necesaria para calcular KG.
+  -- Para mantener consistencia con los importes de V_DOCUVEN se
+  -- replican los mismos filtros de exclusion que aplica la vista
+  -- internamente en SOLES_SINANT / DOLARES_SINANT:
+  --   D.ORIGEN <> 'A'        -> excluye abonos
+  --   NVL(D.TGRAT,'N') <> 'S' -> excluye gratitudes
   -- ----------------------------------------------------------
   PROCEDURE SP_TOP_HILADOS_KG(
     P_FECHA1  IN DATE,
@@ -538,6 +547,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
                , ARTICUL M
            WHERE D.FECHA    BETWEEN P_FECHA1 AND P_FECHA2
              AND D.ESTADO   <> '9'
+             AND D.ORIGEN   <> 'A'
+             AND NVL(D.TGRAT,'N') <> 'S'
              AND I.TIPODOC   = D.TIPODOC
              AND I.SERIE     = D.SERIE
              AND I.NUMERO    = D.NUMERO
@@ -938,6 +949,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
 
   -- ----------------------------------------------------------
   -- Kilogramos facturados por mes
+  --
+  -- NOTA: mismo caso que SP_TOP_HILADOS_KG: se usa DOCUVENT
+  -- directamente porque V_DOCUVEN no expone ITEMDOCU.CANTIDAD.
+  -- Filtros replicados de V_DOCUVEN para coherencia con importes:
+  --   D.ORIGEN <> 'A'        -> excluye abonos
+  --   NVL(D.TGRAT,'N') <> 'S' -> excluye gratitudes
   -- ----------------------------------------------------------
   PROCEDURE SP_KG_MENSUAL(
     P_FECHA1  IN DATE,
@@ -957,6 +974,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
                ON GRP.GRUPO=C.GRUPO_REL
        WHERE D.FECHA BETWEEN P_FECHA1 AND P_FECHA2
          AND D.ESTADO <> '9'
+         AND D.ORIGEN <> 'A'
+         AND NVL(D.TGRAT,'N') <> 'S'
          AND I.COD_ART NOT IN ('9300049997','9300049999','930004999A','9300049998')
        GROUP BY TO_CHAR(D.FECHA,'YYYY-MM')
        ORDER BY 1;
