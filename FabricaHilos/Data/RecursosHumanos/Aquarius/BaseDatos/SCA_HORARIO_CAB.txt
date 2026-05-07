@@ -1,0 +1,79 @@
+
+CREATE TABLE SCA_HORARIO_CAB
+(
+  HORID               CHAR(4 BYTE),
+  HORDES              CHAR(60 BYTE),
+  HORTIP              VARCHAR2(50 BYTE),
+  HORRESTAREF         CHAR(1 BYTE),
+  REGGID              CHAR(5 BYTE),
+  REGTID              CHAR(5 BYTE),
+  REGHEID             CHAR(5 BYTE),
+  HORCLA              CHAR(20 BYTE),
+  HORREFREAL          DATE,
+  IND_BAJA            CHAR(1 BYTE),
+  FEC_BAJA            DATE,
+  IND_EMP_ASUM_REFRI  CHAR(1 BYTE),
+  IND_RECURRENCIA     CHAR(1 BYTE),
+  IND_ROTATIVO        CHAR(1 BYTE),
+  IND_FLEXIBLE        CHAR(1 BYTE),
+  HORTUR              CHAR(20 BYTE),
+  TIEMPOTRANSITO      INTEGER,
+  DESCANSOROTATIVO    CHAR(1 BYTE)
+)
+TABLESPACE AQUARIUST
+PCTUSED    0
+PCTFREE    10
+INITRANS   1
+MAXTRANS   255
+STORAGE    (
+            INITIAL          64K
+            NEXT             1M
+            MINEXTENTS       1
+            MAXEXTENTS       2147483645
+            PCTINCREASE      0
+            BUFFER_POOL      DEFAULT
+           )
+LOGGING 
+NOCACHE
+NOPARALLEL
+MONITORING;
+
+
+CREATE UNIQUE INDEX PK_SCA_HORARIO_CAB ON SCA_HORARIO_CAB
+(HORID)
+LOGGING
+TABLESPACE AQUARIUSI
+PCTFREE    10
+INITRANS   2
+MAXTRANS   255
+STORAGE    (
+            INITIAL          64K
+            NEXT             1M
+            MINEXTENTS       1
+            MAXEXTENTS       2147483645
+            PCTINCREASE      0
+            BUFFER_POOL      DEFAULT
+           )
+NOPARALLEL;
+
+
+CREATE PUBLIC SYNONYM SCA_HORARIO_CAB FOR SCA_HORARIO_CAB;
+
+
+ALTER TABLE SCA_HORARIO_CAB ADD (
+  CONSTRAINT PK_SCA_HORARIO_CAB PRIMARY KEY (HORID)
+    USING INDEX 
+    TABLESPACE AQUARIUSI
+    PCTFREE    10
+    INITRANS   2
+    MAXTRANS   255
+    STORAGE    (
+                INITIAL          64K
+                NEXT             1M
+                MINEXTENTS       1
+                MAXEXTENTS       2147483645
+                PCTINCREASE      0
+               ));
+
+
+

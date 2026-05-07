@@ -1,0 +1,100 @@
+
+CREATE TABLE SCA_HORARIO_DET
+(
+  HORID               CHAR(4 BYTE),
+  DIAID               CHAR(1 BYTE),
+  HORING              DATE,
+  HORSAL              DATE,
+  TOTHORAS            DATE,
+  HORINIREF           DATE,
+  HORFINREF           DATE,
+  TOTREF              DATE,
+  HORCLADET           VARCHAR2(20 BYTE),
+  H_INI_PROC          DATE,
+  H_FIN_PROC          DATE,
+  H_INI_PROC_REFRI    DATE,
+  H_FIN_PROC_REFRI    DATE,
+  H_SALREF_DIGI       DATE,
+  HORTIP              VARCHAR2(50 BYTE),
+  REGTID              CHAR(5 BYTE),
+  REGHEID             CHAR(5 BYTE),
+  H_EQUIV             DATE,
+  H_DIA_INI           CHAR(2 BYTE),
+  IND_EMP_ASUM_REFRI  CHAR(1 BYTE),
+  DESCANSO            CHAR(1 BYTE),
+  HORINIREF2          DATE,
+  HORFINREF2          DATE,
+  HORTUR              VARCHAR2(20 BYTE),
+  IND_RESREF          CHAR(1 BYTE),
+  IND_RESREFDES       CHAR(1 BYTE),
+  HORSAL_RESREFDES    DATE                      NOT NULL,
+  TIEDES_RESREFDES    DATE                      NOT NULL,
+  APLICAREF           CHAR(1 BYTE)              NOT NULL,
+  APLICA              CHAR(1 BYTE),
+  IND_LACTANCIA       CHAR(1 BYTE),
+  HOR_LACTANCIA       DATE
+)
+TABLESPACE AQUARIUST
+PCTUSED    0
+PCTFREE    10
+INITRANS   1
+MAXTRANS   255
+STORAGE    (
+            INITIAL          64K
+            NEXT             1M
+            MINEXTENTS       1
+            MAXEXTENTS       2147483645
+            PCTINCREASE      0
+            BUFFER_POOL      DEFAULT
+           )
+LOGGING 
+NOCACHE
+NOPARALLEL
+MONITORING;
+
+
+CREATE UNIQUE INDEX PK_SCA_HORARIO_DET ON SCA_HORARIO_DET
+(HORID, DIAID)
+LOGGING
+TABLESPACE AQUARIUSI
+PCTFREE    10
+INITRANS   2
+MAXTRANS   255
+STORAGE    (
+            INITIAL          64K
+            NEXT             1M
+            MINEXTENTS       1
+            MAXEXTENTS       2147483645
+            PCTINCREASE      0
+            BUFFER_POOL      DEFAULT
+           )
+NOPARALLEL;
+
+
+CREATE PUBLIC SYNONYM SCA_HORARIO_DET FOR SCA_HORARIO_DET;
+
+
+ALTER TABLE SCA_HORARIO_DET ADD (
+  CONSTRAINT PK_SCA_HORARIO_DET PRIMARY KEY (HORID, DIAID)
+    USING INDEX 
+    TABLESPACE AQUARIUSI
+    PCTFREE    10
+    INITRANS   2
+    MAXTRANS   255
+    STORAGE    (
+                INITIAL          64K
+                NEXT             1M
+                MINEXTENTS       1
+                MAXEXTENTS       2147483645
+                PCTINCREASE      0
+               ));
+
+
+ALTER TABLE SCA_HORARIO_DET ADD (
+  CONSTRAINT FK_SCA_HOR_CAB_SCA_HORARIO_DET FOREIGN KEY (HORID) 
+    REFERENCES SCA_HORARIO_CAB (HORID));
+
+
+GRANT SELECT ON  SCA_HORARIO_DET TO ARBONA;
+
+
