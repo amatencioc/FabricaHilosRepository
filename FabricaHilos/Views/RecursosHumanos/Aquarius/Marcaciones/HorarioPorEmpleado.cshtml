@@ -13,10 +13,23 @@
 
 @section Styles {
 <style>
-    :root { --rh-primary: #1B4D3E; --rh-primary-light: #e8f5e9; }
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
 
     .emp-hero {
-        background: linear-gradient(135deg, var(--rh-primary) 0%, #2d6a4f 100%);
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
         color: #fff;
         border-radius: .5rem;
         padding: 1.1rem 1.4rem;
@@ -39,14 +52,20 @@
     }
 
     .btn-consultar {
-        background: var(--rh-primary); border: none; color: #fff;
+        background: var(--aq); border: none; color: #fff;
         padding: .42rem 1.2rem; border-radius: .4rem; font-size: .87rem;
     }
-    .btn-consultar:hover { background: #2d6a4f; color: #fff; }
+    .btn-consultar:hover { background: var(--aq-dk); color: #fff; }
     .btn-consultar:disabled { opacity: .6; }
 
+    .btn-depurar {
+        color: var(--aq-err); border-color: var(--aq-err);
+        font-size: .82rem;
+    }
+    .btn-depurar:hover { background: var(--aq-err); color: #fff; border-color: var(--aq-err); }
+
     .week-nav .btn { font-size: .8rem; padding: .3rem .7rem; }
-    .week-label { font-size: .85rem; font-weight: 600; color: var(--rh-primary); min-width: 220px; text-align: center; }
+    .week-label { font-size: .85rem; font-weight: 600; color: var(--aq); min-width: 220px; text-align: center; }
 
     /* Tabla de horarios */
     .tbl-hor { font-size: .82rem; }
@@ -54,23 +73,25 @@
         background: #f1f3f5; color: #495057;
         font-size: .72rem; font-weight: 600; text-transform: uppercase;
         letter-spacing: .4px; white-space: nowrap;
-        padding: .5rem .75rem; border-bottom: 2px solid #dee2e6;
+        padding: .5rem .75rem; border-bottom: 2px solid var(--aq-mid);
     }
     .tbl-hor tbody td { padding: .5rem .75rem; vertical-align: middle; }
-    .tbl-hor tbody tr:hover { background: var(--rh-primary-light); }
+    .tbl-hor tbody tr:hover { background: var(--aq-lt); }
 
-    .row-descanso  { background: #eff6ff !important; }
-    .row-permiso   { background: #fffbeb !important; }
-    .row-pendiente { background: #fff1f2 !important; }
+    .row-descanso  { background: #FDF6EE !important; }
+    .row-permiso   { background: var(--aq-wlt) !important; }
+    .row-pendiente { background: var(--aq-elt) !important; }
 
-    .hora-auto { color: #f97316; font-style: italic; }
-    .hora-real { color: #16a34a; font-weight: 500; }
+    .hora-auto { color: var(--aq); font-style: italic; }
+    .hora-real { color: var(--aq-ok); font-weight: 500; }
     .hora-nd   { color: #9ca3af; }
 
-    .badge-descanso  { background: #dbeafe; color: #1d4ed8; font-size: .7rem; }
-    .badge-permiso   { background: #fef3c7; color: #92400e; font-size: .7rem; }
-    .badge-pendiente { background: #fee2e2; color: #991b1b; font-size: .7rem; }
-    .badge-ok        { background: #f3f4f6; color: #374151; font-size: .7rem; }
+    .badge-descanso  { background: var(--aq-lt);  color: var(--aq-dk);   font-size: .7rem; }
+    .badge-permiso   { background: var(--aq-wlt); color: var(--aq-warn); font-size: .7rem; }
+    .badge-pendiente { background: var(--aq-elt); color: var(--aq-err);  font-size: .7rem; }
+    .badge-ok        { background: var(--aq-ok-lt); color: var(--aq-ok); font-size: .7rem; }
+
+    .badge-total { background: var(--aq); color: #fff; font-size: .75rem; cursor: default; }
 
     .resultado-dep { display: none; border-radius: .4rem; overflow: hidden; }
     .stat-box { background: #fff; border: 1px solid #e5e7eb; border-radius: .4rem; text-align: center; padding: .7rem; }
@@ -80,6 +101,15 @@
     #spinnerWrap { display:none; text-align:center; padding: 3rem 1rem; color: #6c757d; }
     #panelVacio  { display:none; text-align:center; padding: 3rem 1rem; color: #9ca3af; }
     #panelTabla  { display:none; }
+
+    .aq-modal-header { background: var(--aq); color: #fff; }
+    .aq-modal-ok     { background: var(--aq-ok); color: #fff; }
+    .aq-modal-err    { background: var(--aq-err); color: #fff; }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
 </style>
 }
 
@@ -102,7 +132,7 @@
     <!-- Filtro de rango -->
     <div class="card range-card mb-3">
         <div class="card-header d-flex align-items-center gap-2">
-            <i class="bi bi-calendar-range text-success"></i>
+            <i class="bi bi-calendar-range" style="color:var(--aq)"></i>
             <span>Rango de consulta</span>
         </div>
         <div class="card-body py-3">
@@ -133,7 +163,7 @@
                     <i class="bi bi-search me-1"></i>Consultar
                 </button>
 
-                <button type="button" id="btnDepurar" class="btn btn-outline-danger btn-sm ms-auto" style="display:none;">
+                <button type="button" id="btnDepurar" class="btn btn-depurar btn-sm ms-auto" style="display:none;">
                     <i class="bi bi-lightning-charge me-1"></i>Depurar
                 </button>
             </div>
@@ -142,7 +172,7 @@
 
     <!-- Estados -->
     <div id="spinnerWrap">
-        <div class="spinner-border text-success mb-2" role="status"></div>
+    <div class="spinner-border mb-2" style="color:var(--aq)" role="status"></div>
         <p class="small">Consultando horarios…</p>
     </div>
 
@@ -156,8 +186,8 @@
     <div id="panelTabla">
         <div class="card shadow-sm" style="border:none; border-radius:.5rem; overflow:hidden;">
             <div class="card-header d-flex justify-content-between align-items-center" style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
-                <span class="fw-semibold small"><i class="bi bi-table me-1 text-success"></i>Horarios y Marcaciones</span>
-                <span class="badge bg-secondary" id="lblTotalDias" style="font-size:.75rem;"></span>
+                <span class="fw-semibold small"><i class="bi bi-table me-1" style="color:var(--aq)"></i>Horarios y Marcaciones</span>
+                <span class="badge" id="lblTotalDias" style="background:var(--aq);font-size:.75rem;"></span>
             </div>
             <div class="table-responsive">
                 <table class="table tbl-hor table-hover table-corporate mb-0">
@@ -195,16 +225,16 @@
     <div class="modal fade" id="modalDepurar" tabindex="-1" aria-labelledby="modalDepurarLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header" id="modalDepHeader">
+                <div class="modal-header aq-modal-header" id="modalDepHeader">
                     <h6 class="modal-title" id="modalDepurarLabel"><i class="bi bi-lightning-charge me-1"></i>Depurar marcaciones</h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body" id="modalDepBody">
                     <p id="modalDepMsg" class="mb-0"></p>
                 </div>
                 <div class="modal-footer" id="modalDepFooter">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarDep">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-sm" id="btnConfirmarDep" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);">
                         <i class="bi bi-lightning-charge me-1"></i>Depurar
                     </button>
                 </div>
@@ -371,8 +401,8 @@
                     <td>${hh(m.salida)}</td>
                     <td class="text-center">${(() => {
                         const v = m.pendiente ?? '—';
-                        if (v === 'S') return '<span class="badge" style="background:#f59e0b;color:#fff;">S</span>';
-                        if (v === 'D') return '<span class="badge" style="background:#16a34a;color:#fff;">D</span>';
+                        if (v === 'S') return '<span class="badge" style="background:var(--aq-warn);color:#fff;">S</span>';
+                        if (v === 'D') return '<span class="badge" style="background:var(--aq-ok);color:#fff;">D</span>';
                         if (v === 'N') return '<span class="text-muted">N</span>';
                         return v;
                     })()}</td>
@@ -411,7 +441,7 @@
         _depJobId = null;
         clearInterval(_depPollTimer);
         modalDepMsg.textContent = `¿Depurar marcaciones de ${JSON.parse(nombre)} del ${fechaInicio.value} al ${fechaFin.value}?`;
-        modalDepHeader.className = 'modal-header';
+        modalDepHeader.className = 'modal-header aq-modal-header';
         modalDepFooter.style.display = '';
         btnConfirmarDep.style.display = '';
         btnConfirmarDep.disabled = false;
@@ -421,7 +451,7 @@
     btnConfirmarDep.addEventListener('click', async () => {
         btnConfirmarDep.disabled = true;
         btnConfirmarDep.style.display = 'none';
-        modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Enviando solicitud…</span></div>';
+        modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm" style="color:var(--aq)"></div><span>Enviando solicitud…</span></div>';
 
         const fd = new FormData();
         fd.append('codPersonal', codPersonal);
@@ -434,14 +464,14 @@
             const json = await res.json();
 
             if (!json.ok) {
-                modalDepHeader.className = 'modal-header bg-danger text-white';
+                modalDepHeader.className = 'modal-header aq-modal-err';
                 modalDepMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>' + (json.mensaje ?? 'Error al encolar la depuración.');
                 return;
             }
 
             // Job encolado: iniciar polling
             _depJobId = json.jobId;
-            modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>Depuración en proceso en el servidor…<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará hasta completarse.</small></span></div>';
+            modalDepMsg.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm" style="color:var(--aq)"></div><span>Depuración en proceso en el servidor…<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará hasta completarse.</small></span></div>';
 
             _depPollTimer = setInterval(async () => {
                 try {
@@ -450,18 +480,18 @@
 
                     if (!pJson.completado) {
                         // Todavía corriendo — actualizar mensaje
-                        modalDepMsg.innerHTML = `<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm text-warning"></div><span>${pJson.mensaje}<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará.</small></span></div>`;
+                        modalDepMsg.innerHTML = `<div class="d-flex align-items-center gap-2"><div class="spinner-border spinner-border-sm" style="color:var(--aq)"></div><span>${pJson.mensaje}<br><small class="text-muted">Puede cerrar esta ventana — el proceso continuará.</small></span></div>`;
                         return;
                     }
 
                     clearInterval(_depPollTimer);
 
                     if (pJson.exito) {
-                        modalDepHeader.className = 'modal-header bg-success text-white';
+                        modalDepHeader.className = 'modal-header aq-modal-ok';
                         const dur = pJson.duracionSeg != null ? ` (${pJson.duracionSeg}s)` : '';
                         modalDepMsg.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Depuración completada correctamente${dur}.`;
                     } else {
-                        modalDepHeader.className = 'modal-header bg-danger text-white';
+                        modalDepHeader.className = 'modal-header aq-modal-err';
                         modalDepMsg.innerHTML = `<i class="bi bi-x-circle-fill me-2"></i>${pJson.mensaje}`;
                     }
                 } catch (pollErr) {
@@ -470,7 +500,7 @@
             }, 2500);
 
         } catch (err) {
-            modalDepHeader.className = 'modal-header bg-danger text-white';
+            modalDepHeader.className = 'modal-header aq-modal-err';
             modalDepMsg.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Error de comunicación al enviar la solicitud.';
             console.error(err);
         }

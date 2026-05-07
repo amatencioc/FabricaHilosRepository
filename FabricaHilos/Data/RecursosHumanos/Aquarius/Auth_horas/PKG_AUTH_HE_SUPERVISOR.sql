@@ -125,6 +125,47 @@ CREATE OR REPLACE PACKAGE PKG_AUTH_HE_SUPERVISOR AS
         cv_1            OUT SYS_REFCURSOR
     );
 
+    -- ------------------------------------------------------
+    -- 5. LISTA DE SUPERVISORES (solo para administradores)
+    --    Retorna los usuarios tipo 'Usu' que tienen acceso
+    --    a la empresa en el módulo de Control de Asistencia.
+    --    El administrador usa esta lista para elegir un
+    --    supervisor y ver sus empleados en sp_read_resumen_he.
+    --
+    --    Retorna: cod_usuario, nom_usuario
+    -- ------------------------------------------------------
+    PROCEDURE sp_read_supervisores(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+    -- ------------------------------------------------------
+    -- 6. RESUMEN DE HE POR EMPLEADO (Autorizadas / Pendientes)
+    --    Para cada empleado visible al usuario en la empresa,
+    --    agrega sus horas extras del período e indica cuántas
+    --    están autorizadas y cuántas siguen pendientes.
+    --
+    --    v_cod_usuario: supervisor = sus propios empleados;
+    --                   admin = pasa cod_usuario del supervisor
+    --                   elegido en sp_read_supervisores.
+    --
+    --    Retorna por empleado:
+    --      cod_personal, nombre_completo, num_fotocheck
+    --      cod_c_costos, des_c_costos
+    --      dias_con_he, dias_pendientes, dias_autorizados
+    --      min_hed / min_hea / min_heo   (minutos HE crudos)
+    --      min_hed_aut / min_hea_aut / min_heo_aut (autorizados)
+    --      estado: 'SIN_HE' | 'PENDIENTE' | 'PARCIAL' | 'COMPLETO'
+    -- ------------------------------------------------------
+    PROCEDURE sp_read_resumen_he(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_fecha_inicio  IN  VARCHAR2,   -- 'dd/MM/yyyy'
+        v_fecha_final   IN  VARCHAR2,   -- 'dd/MM/yyyy'
+        cv_1            OUT SYS_REFCURSOR
+    );
+
 END PKG_AUTH_HE_SUPERVISOR;
 /
 
@@ -352,6 +393,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                 p.cod_tipo_planilla,
                 NVL(tp.des_tipo_planilla, p.cod_tipo_planilla)                     des_tipo_planilla,
                 p.tip_estado,
+                -- Fotocheck más reciente (activo o no)
+                (SELECT f.num_fotocheck
+                 FROM   SCA_FOTOCHECK f
+                 WHERE  f.cod_empresa  = p.cod_empresa
+                   AND  f.cod_personal = p.cod_personal
+                   AND  f.id_fotocheck = (SELECT MAX(f2.id_fotocheck)
+                                         FROM   SCA_FOTOCHECK f2
+                                         WHERE  f2.cod_empresa  = p.cod_empresa
+                                           AND  f2.cod_personal = p.cod_personal)
+                ) num_fotocheck,
                 -- Horario vigente a hoy
                 hor.horid,
                 hor.hordes,
@@ -387,7 +438,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                  AND hor.cod_personal = p.cod_personal
             -- Seguridad: empresa habilitada
             WHERE p.cod_empresa = v_cod_empresa
-              AND p.tip_estado <> 'C'   -- excluir cesados
+              AND p.tip_estado = 'AC'  -- solo activos ('AC'; cesados = 'CE')
               AND p.cod_empresa IN (
                     SELECT cod_empresa
                     FROM   MAE_USUARIO_EMP
@@ -754,6 +805,256 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
             v_err_msg := SQLERRM;
             OPEN cv_1 FOR SELECT 'ERROR' resultado, v_err_msg mensaje FROM DUAL;
     END sp_grabar_autorizacion;
+
+
+    -- =========================================================
+    -- 5. LISTA DE SUPERVISORES
+    --    Solo accesible para administradores ('Adm').
+    --    Si el caller no es Adm en esa empresa → cursor vacío.
+    -- =========================================================
+    PROCEDURE sp_read_supervisores(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+        v_es_admin NUMBER := 0;
+    BEGIN
+        -- Verificar que el caller sea administrador en esta empresa
+        SELECT COUNT(*) INTO v_es_admin
+        FROM   MAE_USUARIO_EMP
+        WHERE  cod_usuario    = v_cod_usuario
+          AND  cod_empresa    = v_cod_empresa
+          AND  cod_grupo_menu = c_grupo
+          AND  tip_usuario    = 'Adm';
+
+        IF v_es_admin = 0 THEN
+            -- No es admin → devolver cursor vacío sin error
+            OPEN cv_1 FOR
+                SELECT cod_usuario, nom_usuario
+                FROM   MAE_USUARIO
+                WHERE  1 = 0;
+            RETURN;
+        END IF;
+
+        OPEN cv_1 FOR
+            SELECT u.cod_usuario,
+                   u.nom_usuario
+            FROM   MAE_USUARIO u
+            WHERE  NVL(u.ind_baja,'N') <> 'S'
+              AND  EXISTS (
+                       SELECT 1
+                       FROM   MAE_USUARIO_EMP ue
+                       WHERE  ue.cod_usuario    = u.cod_usuario
+                         AND  ue.cod_empresa    = v_cod_empresa
+                         AND  ue.cod_grupo_menu = c_grupo
+                         AND  ue.tip_usuario    = 'Usu'
+                   )
+            ORDER BY u.nom_usuario;
+    END sp_read_supervisores;
+
+
+    -- =========================================================
+    -- 6. RESUMEN DE HE POR EMPLEADO (Autorizadas / Pendientes)
+    -- =========================================================
+    PROCEDURE sp_read_resumen_he(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_fecha_inicio  IN  VARCHAR2,
+        v_fecha_final   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+        v_fec_ini DATE;
+        v_fec_fin DATE;
+        v_base    DATE;
+    BEGIN
+        v_fec_ini := TO_DATE(v_fecha_inicio, 'dd/MM/yyyy');
+        v_fec_fin := TO_DATE(v_fecha_final,  'dd/MM/yyyy');
+        v_base    := TO_DATE('01/01/1900',   'dd/MM/yyyy');
+
+        OPEN cv_1 FOR
+            SELECT
+                sq.cod_personal,
+                sq.nombre_completo,
+                sq.cod_c_costos,
+                sq.des_c_costos,
+                sq.num_fotocheck,
+                sq.dias_con_he,
+                sq.dias_pendientes,
+                sq.dias_autorizados,
+                sq.min_hed,
+                sq.min_hea,
+                sq.min_heo,
+                sq.min_hed_aut,
+                sq.min_hea_aut,
+                sq.min_heo_aut,
+                CASE
+                    WHEN sq.dias_con_he    = 0 THEN 'SIN_HE'
+                    WHEN sq.dias_pendientes = 0 THEN 'COMPLETO'
+                    WHEN sq.dias_autorizados > 0 THEN 'PARCIAL'
+                    ELSE                              'PENDIENTE'
+                END  estado
+            FROM (
+                SELECT
+                    p.cod_personal,
+                    p.ape_paterno || ' ' || p.ape_materno || ', ' || p.nom_trabajador  nombre_completo,
+                    p.cod_c_costos,
+                    NVL(cc.des_c_costos, p.cod_c_costos)  des_c_costos,
+                    -- Fotocheck más reciente
+                    (SELECT f.num_fotocheck
+                     FROM   SCA_FOTOCHECK f
+                     WHERE  f.cod_empresa  = p.cod_empresa
+                       AND  f.cod_personal = p.cod_personal
+                       AND  f.id_fotocheck = (SELECT MAX(f2.id_fotocheck)
+                                              FROM   SCA_FOTOCHECK f2
+                                              WHERE  f2.cod_empresa  = p.cod_empresa
+                                                AND  f2.cod_personal = p.cod_personal)
+                    ) num_fotocheck,
+                    -- Días con HE de cualquier tipo en el período
+                    (SELECT COUNT(*)
+                     FROM   SCA_ASISTENCIA_TAREO t
+                     WHERE  t.cod_empresa  = p.cod_empresa
+                       AND  t.cod_personal = p.cod_personal
+                       AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
+                       AND  (   t.horaextra     > v_base
+                             OR t.horaextantes  > v_base
+                             OR t.horadobles    > v_base)
+                    ) dias_con_he,
+                    -- Días con HE sin ninguna autorización (pendientes)
+                    (SELECT COUNT(*)
+                     FROM   SCA_ASISTENCIA_TAREO t
+                     WHERE  t.cod_empresa  = p.cod_empresa
+                       AND  t.cod_personal = p.cod_personal
+                       AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
+                       AND  (   t.horaextra    > v_base
+                             OR t.horaextantes > v_base
+                             OR t.horadobles   > v_base)
+                       AND  NOT EXISTS (
+                                SELECT 1
+                                FROM   SCA_AUTORIZACION a
+                                WHERE  a.cod_empresa  = p.cod_empresa
+                                  AND  a.cod_personal = p.cod_personal
+                                  AND  a.fec_authe    = t.fechamar
+                                  AND  a.tip_authe   IN ('1','2','5'))
+                    ) dias_pendientes,
+                    -- Días con al menos una autorización en el período
+                    (SELECT COUNT(DISTINCT a.fec_authe)
+                     FROM   SCA_AUTORIZACION a
+                     WHERE  a.cod_empresa  = p.cod_empresa
+                       AND  a.cod_personal = p.cod_personal
+                       AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                       AND  a.tip_authe   IN ('1','2','5')
+                    ) dias_autorizados,
+                    -- Minutos HED crudos (horaextra)
+                    NVL((SELECT SUM(ROUND((t.horaextra - v_base) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO t
+                         WHERE  t.cod_empresa  = p.cod_empresa
+                           AND  t.cod_personal = p.cod_personal
+                           AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
+                           AND  t.horaextra    > v_base), 0)  min_hed,
+                    -- Minutos HEA crudos (horaextantes)
+                    NVL((SELECT SUM(ROUND((t.horaextantes - v_base) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO t
+                         WHERE  t.cod_empresa   = p.cod_empresa
+                           AND  t.cod_personal  = p.cod_personal
+                           AND  t.fechamar      BETWEEN v_fec_ini AND v_fec_fin
+                           AND  t.horaextantes  > v_base), 0) min_hea,
+                    -- Minutos HEO crudos (horadobles)
+                    NVL((SELECT SUM(ROUND((t.horadobles - v_base) * 1440))
+                         FROM   SCA_ASISTENCIA_TAREO t
+                         WHERE  t.cod_empresa  = p.cod_empresa
+                           AND  t.cod_personal = p.cod_personal
+                           AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
+                           AND  t.horadobles   > v_base), 0)  min_heo,
+                    -- Minutos HED autorizados (tip='2')
+                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                         FROM   SCA_AUTORIZACION a
+                         WHERE  a.cod_empresa  = p.cod_empresa
+                           AND  a.cod_personal = p.cod_personal
+                           AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                           AND  a.tip_authe    = '2'), 0)  min_hed_aut,
+                    -- Minutos HEA autorizados (tip='1')
+                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                         FROM   SCA_AUTORIZACION a
+                         WHERE  a.cod_empresa  = p.cod_empresa
+                           AND  a.cod_personal = p.cod_personal
+                           AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                           AND  a.tip_authe    = '1'), 0)  min_hea_aut,
+                    -- Minutos HEO autorizados (tip='5')
+                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                         FROM   SCA_AUTORIZACION a
+                         WHERE  a.cod_empresa  = p.cod_empresa
+                           AND  a.cod_personal = p.cod_personal
+                           AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                           AND  a.tip_authe    = '5'), 0)  min_heo_aut
+                FROM PLA_PERSONAL p
+                LEFT JOIN MAE_C_COSTOS cc
+                       ON cc.cod_empresa      = p.cod_empresa
+                      AND cc.num_ver_c_costos = p.num_ver_c_costos
+                      AND cc.cod_c_costos     = p.cod_c_costos
+                JOIN  PLA_TIPO_PLANILLA tp
+                       ON tp.cod_empresa       = p.cod_empresa
+                      AND tp.cod_tipo_planilla = p.cod_tipo_planilla
+                      AND tp.ind_asistencia    = 'S'
+                WHERE p.cod_empresa = v_cod_empresa
+                  AND p.tip_estado = 'AC'  -- solo activos ('AC'; cesados = 'CE')
+                  -- Seguridad: empresa habilitada
+                  AND p.cod_empresa IN (
+                        SELECT cod_empresa
+                        FROM   MAE_USUARIO_EMP
+                        WHERE  cod_usuario    = v_cod_usuario
+                          AND  cod_grupo_menu = c_grupo
+                      )
+                  -- Seguridad: sucursal habilitada
+                  AND p.cod_sucursal IN (
+                        SELECT cod_sucursal
+                        FROM   MAE_SUCURSAL_USUARIO
+                        WHERE  cod_usuario    = v_cod_usuario
+                          AND  cod_empresa    = p.cod_empresa
+                          AND  cod_grupo_menu = c_grupo
+                      )
+                  -- Seguridad: tipo planilla habilitado
+                  AND p.cod_tipo_planilla IN (
+                        SELECT PPA.cod_tipo_planilla
+                        FROM   PLA_PERFIL_PLANILLA     PP
+                        JOIN   PLA_PERFIL_ACCESO_PLANI PPA
+                               ON PP.cod_empresa      = PPA.cod_empresa
+                              AND PP.cod_perfil_plani = PPA.cod_perfil_plani
+                        JOIN   PLA_USUARIO_PLANILLA    PUP
+                               ON PP.cod_empresa      = PUP.cod_empresa
+                              AND PP.cod_perfil_plani = PUP.cod_perfil_plani
+                        WHERE  PUP.cod_usuario    = v_cod_usuario
+                          AND  PUP.cod_grupo_menu = c_grupo
+                          AND  PP.cod_empresa     = v_cod_empresa
+                      )
+                  -- Seguridad: CC (Adm=todos / Usu=asignados)
+                  AND (
+                        EXISTS (
+                            SELECT 1
+                            FROM   MAE_USUARIO_EMP
+                            WHERE  cod_usuario    = v_cod_usuario
+                              AND  cod_empresa    = v_cod_empresa
+                              AND  cod_grupo_menu = c_grupo
+                              AND  tip_usuario    = 'Adm'
+                        )
+                        OR p.cod_c_costos IN (
+                            SELECT MC.cod_c_costos
+                            FROM   MAE_C_COSTOS_VERSION  MCV
+                            JOIN   MAE_C_COSTOS           MC
+                                   ON MCV.cod_empresa      = MC.cod_empresa
+                                  AND MCV.num_ver_c_costos = MC.num_ver_c_costos
+                            JOIN   MAE_C_COSTOS_USUARIO   MCU
+                                   ON MC.cod_empresa       = MCU.cod_empresa
+                                  AND MC.num_ver_c_costos  = MCU.num_ver_c_costos
+                                  AND MC.cod_c_costos      = MCU.cod_c_costos
+                            WHERE  MCU.cod_usuario    = v_cod_usuario
+                              AND  MC.cod_empresa     = v_cod_empresa
+                              AND  MCU.cod_grupo_menu = c_grupo
+                              AND  MCV.ind_vigente    = 'S'
+                        )
+                      )
+            ) sq
+            ORDER BY sq.cod_c_costos, sq.nombre_completo;
+    END sp_read_resumen_he;
 
 END PKG_AUTH_HE_SUPERVISOR;
 /

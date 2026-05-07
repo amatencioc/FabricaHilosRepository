@@ -21,10 +21,21 @@
 
 @section Styles {
 <style>
-    :root { --rh-primary: #1B4D3E; --rh-primary-light: #e8f5e9; }
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
 
     .rh-header {
-        background: linear-gradient(135deg, var(--rh-primary) 0%, #2d6a4f 100%);
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
         color: #fff;
         border-radius: .5rem .5rem 0 0;
         padding: 1.1rem 1.4rem;
@@ -34,8 +45,8 @@
 
     .search-bar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: .85rem 1.4rem; }
     .search-bar .form-control { border-radius: .4rem 0 0 .4rem; }
-    .search-bar .btn-search    { border-radius: 0 .4rem .4rem 0; background: var(--rh-primary); border: none; color: #fff; }
-    .search-bar .btn-search:hover { background: #2d6a4f; }
+    .search-bar .btn-search    { border-radius: 0 .4rem .4rem 0; background: var(--aq); border: none; color: #fff; }
+    .search-bar .btn-search:hover { background: var(--aq-dk); }
     .search-bar .btn-clear { background: transparent; border-color: #adb5bd; }
 
     .emp-table { margin: 0; }
@@ -46,18 +57,18 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: .5px;
-        border-bottom: 2px solid #dee2e6;
+        border-bottom: 2px solid var(--aq-mid);
         white-space: nowrap;
         padding: .65rem 1rem;
     }
     .emp-table tbody tr { transition: background .12s; }
-    .emp-table tbody tr:hover { background: var(--rh-primary-light); }
+    .emp-table tbody tr:hover { background: var(--aq-lt); }
     .emp-table tbody td { vertical-align: middle; padding: .6rem 1rem; font-size: .87rem; }
 
     .avatar {
         width: 36px; height: 36px;
         border-radius: 50%;
-        background: var(--rh-primary);
+        background: var(--aq);
         color: #fff;
         display: inline-flex; align-items: center; justify-content: center;
         font-weight: 700; font-size: .8rem;
@@ -66,16 +77,17 @@
     .emp-nombre { font-weight: 500; color: #212529; }
     .emp-codigo { font-size: .78rem; color: #6c757d; }
 
-    .badge-activo    { background: #d1fae5; color: #065f46; font-size: .72rem; }
-    .badge-inactivo  { background: #fee2e2; color: #991b1b; font-size: .72rem; }
-    .badge-otro      { background: #e0e7ff; color: #3730a3; font-size: .72rem; }
+    .badge-activo    { background: var(--aq-ok-lt); color: var(--aq-ok); font-size: .72rem; }
+    .badge-inactivo  { background: var(--aq-elt);   color: var(--aq-err); font-size: .72rem; }
+    .badge-otro      { background: var(--aq-ilt);   color: var(--aq-info); font-size: .72rem; }
 
     .btn-horarios {
         font-size: .78rem; padding: .3rem .7rem;
-        border-color: var(--rh-primary); color: var(--rh-primary);
+        border-color: var(--aq); color: var(--aq);
         border-radius: .35rem;
     }
-    .btn-horarios:hover { background: var(--rh-primary); color: #fff; }
+    .btn-horarios:hover { background: var(--aq); color: #fff; }
+    .form-control:focus { border-color: var(--aq); box-shadow: 0 0 0 .2rem rgba(192,98,43,.15); }
 
     .autocomplete-wrap { position: relative; }
     .autocomplete-list {
@@ -91,7 +103,7 @@
     }
     .autocomplete-list .ac-item:last-child { border-bottom: none; }
     .autocomplete-list .ac-item:hover, .autocomplete-list .ac-item.ac-active {
-        background: var(--rh-primary-light);
+        background: var(--aq-lt);
     }
     .autocomplete-list .ac-item .avatar {
         width: 28px; height: 28px; font-size: .65rem;
@@ -107,8 +119,8 @@
         display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
     }
     .pagination-info { font-size: .82rem; color: #6c757d; }
-    .pagination .page-link { color: var(--rh-primary); font-size: .82rem; padding: .3rem .6rem; }
-    .pagination .page-item.active .page-link { background: var(--rh-primary); border-color: var(--rh-primary); color: #fff; }
+    .pagination .page-link { color: var(--aq); font-size: .82rem; padding: .3rem .6rem; }
+    .pagination .page-item.active .page-link { background: var(--aq); border-color: var(--aq); color: #fff; }
     .pagination .page-item.disabled .page-link { color: #adb5bd; }
 
     .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }

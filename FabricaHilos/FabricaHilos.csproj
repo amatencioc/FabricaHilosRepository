@@ -31,6 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="Models\RecursosHumanos\AuthHorasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\CompensacionDiaDiaDtos.cs" />
     <Compile Include="Models\RecursosHumanos\HorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
@@ -86,11 +87,17 @@
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\EvolucionMensualMasaSalarial\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
-    <Folder Include="Views\RecursosHumanos\Aquarius\AuthHoras\" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaPorDia\Index.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Login.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Dashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Resumen.cshtml" />
   </ItemGroup>
 
 

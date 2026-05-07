@@ -1,0 +1,365 @@
+@{
+    ViewData["Title"] = "Consulta de Horas Autorizadas";
+
+    var hoy    = DateTime.Today;
+    var diff   = (int)hoy.DayOfWeek - 1;
+    if (diff < 0) diff = 6;
+    var lunes   = hoy.AddDays(-diff);
+    var domingo = lunes.AddDays(6);
+    var fDesde  = lunes.ToString("yyyy-MM-dd");
+    var fHasta  = domingo.ToString("yyyy-MM-dd");
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+
+    .badge-sin-he     { background: #e9ecef;          color: #6c757d; }
+    .badge-pendiente  { background: var(--aq-wlt);    color: var(--aq-warn); }
+    .badge-parcial    { background: var(--aq-ilt);    color: var(--aq-info); }
+    .badge-completo   { background: var(--aq-ok-lt);  color: var(--aq-ok);   }
+
+    .resumen-table th { white-space: nowrap; font-size: .78rem; }
+    .resumen-table td { font-size: .82rem; vertical-align: middle; }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
+
+    .bar-wrap { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+    .bar-bg   { flex: 1; height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; background: var(--aq-ok); }
+
+    .aq-modal-header { background: var(--aq);    color: #fff; }
+    .aq-modal-err    { background: var(--aq-err);color: #fff; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/AuthHoras/Dashboard">Aquarius</a></li>
+    <li class="breadcrumb-item active">Consulta de Horas</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-bar-chart-line me-2"></i>Consulta de Horas Autorizadas / Pendientes
+    </h4>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge fs-6" style="background:var(--aq)" id="lblNomUsuario">Cargando…</span>
+        <a href="/RecursosHumanos/Aquarius/AuthHoras/Dashboard" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+        <form method="post" action="/RecursosHumanos/Aquarius/AuthHoras/Logout" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+<hr class="mt-1 mb-3" />
+
+<!-- FILTROS -->
+<div class="row g-2 mb-3 align-items-end">
+    <div class="col-auto" id="divEmpresa" style="display:none">
+        <label class="form-label fw-semibold mb-1">Empresa</label>
+        <select id="selEmpresa" class="form-select form-select-sm" style="min-width:140px"></select>
+    </div>
+    <div class="col-auto" id="divSupervisor" style="display:none">
+        <label class="form-label fw-semibold mb-1">Supervisor</label>
+        <select id="selSupervisor" class="form-select form-select-sm" style="min-width:200px">
+            <option value="">— Todos —</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label fw-semibold mb-1">Período</label>
+        <div class="input-group input-group-sm">
+            <input type="date" id="dtDesde" class="form-control" value="@fDesde" />
+            <span class="input-group-text">—</span>
+            <input type="date" id="dtHasta" class="form-control" value="@fHasta" />
+        </div>
+    </div>
+    <div class="col-auto">
+        <button id="btnBuscar" class="btn btn-sm text-white" style="background:var(--aq);border-color:var(--aq);">
+            <i class="bi bi-search me-1"></i>Consultar
+        </button>
+    </div>
+    <div class="col-auto ms-auto">
+        <input type="search" id="inpFiltro" class="form-control form-control-sm"
+               placeholder="Filtrar por nombre o fotocheck…" style="min-width:220px" />
+    </div>
+</div>
+
+<!-- TARJETAS RESUMEN -->
+<div class="row g-3 mb-3" id="divKpis" style="display:none">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 text-center py-2 px-1" style="background:var(--aq-lt)">
+            <div class="fs-3 fw-bold" id="kpiTotal" style="color:var(--aq)">0</div>
+            <div class="small text-muted">Empleados con HE</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 text-center py-2 px-1" style="background:var(--aq-wlt)">
+            <div class="fs-3 fw-bold" id="kpiPendiente" style="color:var(--aq-warn)">0</div>
+            <div class="small text-muted">Con días pendientes</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 text-center py-2 px-1" style="background:var(--aq-ilt)">
+            <div class="fs-3 fw-bold" id="kpiParcial" style="color:var(--aq-info)">0</div>
+            <div class="small text-muted">Parcialmente autorizados</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 text-center py-2 px-1" style="background:var(--aq-ok-lt)">
+            <div class="fs-3 fw-bold" id="kpiCompleto" style="color:var(--aq-ok)">0</div>
+            <div class="small text-muted">Completamente autorizados</div>
+        </div>
+    </div>
+</div>
+
+<!-- TABLA -->
+<div class="card">
+    <div class="card-body p-0" style="overflow-x:auto">
+        <table class="table table-sm resumen-table mb-0" id="tblResumen">
+            <thead class="table-light sticky-top">
+                <tr>
+                    <th>Fotocheck</th>
+                    <th>Empleado</th>
+                    <th>Centro Costo</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Días HE</th>
+                    <th class="text-center" style="color:var(--aq-warn)">Pendientes</th>
+                    <th class="text-center" style="color:var(--aq-ok)">Autorizados</th>
+                    <th class="text-center" style="color:var(--aq-warn)">HEA</th>
+                    <th class="text-center" style="color:var(--aq-warn)">HEA Aut.</th>
+                    <th class="text-center" style="color:var(--aq)">HED</th>
+                    <th class="text-center" style="color:var(--aq)">HED Aut.</th>
+                    <th class="text-center" style="color:var(--aq-dk)">HEO</th>
+                    <th class="text-center" style="color:var(--aq-dk)">HEO Aut.</th>
+                    <th>% Autorizado</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyResumen">
+                <tr><td colspan="14" class="text-muted text-center p-4">Seleccione empresa, período y presione Consultar.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal resultado -->
+<div class="modal fade" id="modalMsg" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" id="modalMsgHeader">
+                <h5 class="modal-title" id="modalMsgTitulo">Aviso</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalMsgCuerpo"></div>
+            <div class="modal-footer">
+                <button class="btn text-white" style="background:var(--aq);border-color:var(--aq);" data-bs-dismiss="modal">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+let sesion = {};
+let _listaResumen = [];
+
+// ── Init ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarSesion();
+    document.getElementById('btnBuscar').addEventListener('click', buscar);
+    document.getElementById('inpFiltro').addEventListener('input', function () {
+        renderTabla(this.value.trim().toLowerCase());
+    });
+});
+
+async function cargarSesion() {
+    const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/SesionInfo', { cache: 'no-store' });
+    if (!r.ok) { window.location = '/RecursosHumanos/Aquarius/AuthHoras'; return; }
+    sesion = await r.json();
+    document.getElementById('lblNomUsuario').textContent = '👤 ' + (sesion.nomUsuario || sesion.codUsuario);
+
+    if (sesion.esAdmin === 'S') {
+        document.getElementById('divSupervisor').style.display = '';
+    }
+
+    if (sesion.cntEmpresas == 1 && sesion.codEmpresa) {
+        document.getElementById('divEmpresa').style.display = 'none';
+        if (sesion.esAdmin === 'S') await cargarSupervisores();
+    } else {
+        document.getElementById('divEmpresa').style.display = '';
+        cargarEmpresas();
+        document.getElementById('selEmpresa').addEventListener('change', async () => {
+            if (sesion.esAdmin === 'S') await cargarSupervisores();
+        });
+        if (sesion.esAdmin === 'S') await cargarSupervisores();
+    }
+}
+
+function cargarEmpresas() {
+    const empresas = [
+        { cod: '0001', des: 'La Colonial' },
+        { cod: '0002', des: 'Arbona' },
+        { cod: '0003', des: 'Solsa' },
+    ];
+    const sel = document.getElementById('selEmpresa');
+    sel.innerHTML = empresas.map(e => `<option value="${e.cod}">${e.des}</option>`).join('');
+
+    if (sesion.codEmpresaSistema) {
+        sel.value    = sesion.codEmpresaSistema;
+        sel.disabled = true;
+    }
+}
+
+async function cargarSupervisores() {
+    const empresa = getEmpresa();
+    if (!empresa) return;
+    const r = await fetch(`/RecursosHumanos/Aquarius/AuthHoras/Supervisores?empresa=${empresa}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const lista = await r.json();
+    const sel = document.getElementById('selSupervisor');
+    sel.innerHTML = '<option value="">— Todos —</option>' +
+        lista.map(s => `<option value="${s.codUsuario}">${s.nomUsuario}</option>`).join('');
+}
+
+// ── Consultar ────────────────────────────────────────────────────────────────
+async function buscar() {
+    const empresa = getEmpresa();
+    if (!empresa) { mostrarMsg(false, 'Seleccione una empresa.'); return; }
+
+    const desde = formatFecha(document.getElementById('dtDesde').value);
+    const hasta = formatFecha(document.getElementById('dtHasta').value);
+    if (!desde || !hasta) { mostrarMsg(false, 'Ingrese el período.'); return; }
+
+    const supervisor = document.getElementById('selSupervisor')?.value ?? '';
+
+    let url = `/RecursosHumanos/Aquarius/AuthHoras/ResumenHe?empresa=${empresa}&desde=${desde}&hasta=${hasta}`;
+    if (supervisor) url += `&supervisor=${supervisor}`;
+
+    const btn = document.getElementById('btnBuscar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Consultando…';
+
+    const r = await fetch(url, { cache: 'no-store' });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search me-1"></i>Consultar';
+
+    if (!r.ok) { mostrarMsg(false, 'Error al obtener datos.'); return; }
+    _listaResumen = await r.json();
+
+    actualizarKpis();
+    renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
+}
+
+function actualizarKpis() {
+    const conHe     = _listaResumen.filter(e => e.estado !== 'SIN_HE');
+    const pendiente = _listaResumen.filter(e => e.estado === 'PENDIENTE');
+    const parcial   = _listaResumen.filter(e => e.estado === 'PARCIAL');
+    const completo  = _listaResumen.filter(e => e.estado === 'COMPLETO');
+
+    document.getElementById('kpiTotal').textContent    = conHe.length;
+    document.getElementById('kpiPendiente').textContent = pendiente.length;
+    document.getElementById('kpiParcial').textContent  = parcial.length;
+    document.getElementById('kpiCompleto').textContent = completo.length;
+    document.getElementById('divKpis').style.display   = '';
+}
+
+function renderTabla(filtro = '') {
+    const tbody = document.getElementById('tbodyResumen');
+    let lista = _listaResumen.slice();
+
+    if (filtro) {
+        lista = lista.filter(e =>
+            (e.nombreCompleto || '').toLowerCase().includes(filtro) ||
+            (e.numFotocheck   || '').toLowerCase().includes(filtro)
+        );
+    }
+
+    if (!lista.length) {
+        tbody.innerHTML = `<tr><td colspan="14" class="text-muted text-center p-4">Sin resultados${filtro ? ' para "' + filtro + '"' : ''}.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = lista.map(e => {
+        const badgeEstado = estadoBadge(e.estado);
+        const minTotal    = e.minHed + e.minHea + e.minHeo;
+        const minAut      = e.minHedAut + e.minHeaAut + e.minHeoAut;
+        const pct         = minTotal > 0 ? Math.round(minAut / minTotal * 100) : 0;
+        const barFill     = `<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><span style="font-size:.75rem">${pct}%</span></div>`;
+
+        return `<tr>
+            <td><span style="color:var(--aq-dk);font-weight:600">${e.numFotocheck || '—'}</span></td>
+            <td>${e.nombreCompleto}</td>
+            <td><small class="text-muted">${e.desCCostos || e.codCCostos}</small></td>
+            <td class="text-center">${badgeEstado}</td>
+            <td class="text-center">${e.diasConHe}</td>
+            <td class="text-center">${e.diasPendientes > 0 ? `<span class="badge badge-pendiente">${e.diasPendientes}</span>` : '—'}</td>
+            <td class="text-center">${e.diasAutorizados > 0 ? `<span class="badge badge-completo">${e.diasAutorizados}</span>` : '—'}</td>
+            <td class="text-center">${fmtMin(e.minHea)}</td>
+            <td class="text-center">${fmtMin(e.minHeaAut)}</td>
+            <td class="text-center">${fmtMin(e.minHed)}</td>
+            <td class="text-center">${fmtMin(e.minHedAut)}</td>
+            <td class="text-center">${fmtMin(e.minHeo)}</td>
+            <td class="text-center">${fmtMin(e.minHeoAut)}</td>
+            <td>${barFill}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function estadoBadge(estado) {
+    switch (estado) {
+        case 'PENDIENTE': return '<span class="badge badge-pendiente">Pendiente</span>';
+        case 'PARCIAL':   return '<span class="badge badge-parcial">Parcial</span>';
+        case 'COMPLETO':  return '<span class="badge badge-completo">Completo</span>';
+        default:          return '<span class="badge badge-sin-he">Sin HE</span>';
+    }
+}
+
+function fmtMin(min) {
+    if (!min || min === 0) return '<span class="text-muted">—</span>';
+    const h = Math.floor(min / 60);
+    const m = String(min % 60).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+function getEmpresa() {
+    if (sesion.cntEmpresas == 1) return sesion.codEmpresa;
+    return document.getElementById('selEmpresa')?.value ?? '';
+}
+
+function formatFecha(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+function mostrarMsg(ok, msg) {
+    const h = document.getElementById('modalMsgHeader');
+    h.className = 'modal-header ' + (ok ? '' : 'aq-modal-err');
+    document.getElementById('modalMsgTitulo').textContent = ok ? 'Información' : 'Error';
+    document.getElementById('modalMsgCuerpo').textContent = msg;
+    new bootstrap.Modal(document.getElementById('modalMsg')).show();
+}
+</script>
+@Html.AntiForgeryToken()
+}

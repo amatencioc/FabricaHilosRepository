@@ -56,6 +56,18 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
+            if (menus.RhAutorizacionHoras)
+            {
+                moduloAquarius.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Autorización de Horas",
+                    Descripcion = "Portal de autorización de horas extras para supervisores.",
+                    Icono       = "bi-pencil-square",
+                    Controller  = "AuthHoras",
+                    Action      = "Index"
+                });
+            }
+
             if (moduloAquarius.SubModulos.Any())
                 modulos.Add(moduloAquarius);
 

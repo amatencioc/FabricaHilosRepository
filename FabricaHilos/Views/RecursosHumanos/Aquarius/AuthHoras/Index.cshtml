@@ -1,0 +1,562 @@
+@{
+    ViewData["Title"] = "Autorización de Horas";
+
+    // Semana actual: lunes → domingo
+    var hoy     = DateTime.Today;
+    var diff    = (int)hoy.DayOfWeek - 1;          // DayOfWeek: Mon=1…Sun=0
+    if (diff < 0) diff = 6;                        // domingo: retrocede 6 días
+    var lunes   = hoy.AddDays(-diff);
+    var domingo = lunes.AddDays(6);
+    var fDesde  = lunes.ToString("yyyy-MM-dd");
+    var fHasta  = domingo.ToString("yyyy-MM-dd");
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+
+    .emp-row { cursor: pointer; }
+    .emp-row:hover { background-color: var(--aq-lt); }
+    .emp-row.selected { background-color: var(--aq-mid); font-weight: 600; }
+
+    .he-badge { font-size: .72rem; }
+
+    .btn-auth    { min-width: 90px; }
+    .btn-desauth { min-width: 90px; }
+
+    .tareo-table th { white-space: nowrap; font-size: .8rem; }
+    .tareo-table td { font-size: .82rem; vertical-align: middle; }
+
+    .col-fecha  { min-width: 90px; }
+    .col-horas  { min-width: 65px; }
+    .col-accion { min-width: 110px; }
+
+    .badge-pendiente     { background-color: var(--aq-wlt);   color: var(--aq-warn); }
+    .badge-autorizado    { background-color: var(--aq-ok-lt); color: var(--aq-ok);   }
+    .badge-desautorizado { background-color: var(--aq-elt);   color: var(--aq-err);  }
+    .badge-ok            { background-color: var(--aq-lt);    color: var(--aq-dk);   }
+
+    .aq-modal-header { background: var(--aq);    color: #fff; }
+    .aq-modal-ok     { background: var(--aq-ok); color: #fff; }
+    .aq-modal-err    { background: var(--aq-err);color: #fff; }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item"><a href="/RecursosHumanos/Aquarius/AuthHoras/Dashboard">Aquarius</a></li>
+    <li class="breadcrumb-item active">Autorización de Horas</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-pencil-square me-2"></i>Autorización de Horas Extras
+    </h4>
+    <div id="divSupervisor" class="d-flex align-items-center gap-2">
+        <span class="badge fs-6" style="background:var(--aq)" id="lblNomUsuario">Cargando...</span>
+        <a href="/RecursosHumanos/Aquarius/AuthHoras/Dashboard" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Inicio
+        </a>
+        <form method="post" action="/RecursosHumanos/Aquarius/AuthHoras/Logout" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+<hr class="mt-1 mb-3" />
+
+<!-- FILTROS SUPERIORES -->
+<div class="row g-2 mb-3 align-items-end">
+    <div class="col-auto" id="divEmpresa" style="display:none">
+        <label class="form-label fw-semibold mb-1">Empresa</label>
+        <select id="selEmpresa" class="form-select form-select-sm" style="min-width:140px"></select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label fw-semibold mb-1">Período</label>
+        <div class="input-group input-group-sm">
+            <input type="date" id="dtDesde" class="form-control" value="@fDesde" />
+            <span class="input-group-text">—</span>
+            <input type="date" id="dtHasta" class="form-control" value="@fHasta" />
+        </div>
+    </div>
+    <div class="col-auto">
+        <button id="btnBuscarEmp" class="btn btn-sm text-white" style="background:var(--aq);border-color:var(--aq);">
+            <i class="bi bi-search me-1"></i>Buscar empleados
+        </button>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Panel izquierdo: lista empleados -->
+    <div class="col-md-4 col-lg-3">
+        <div class="card h-100">
+            <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-people me-1"></i>Empleados a cargo</span>
+                <div class="d-flex gap-1">
+                    <button type="button" id="btnSortNombre" class="btn btn-xs btn-sort active" title="Ordenar por nombre"
+                        style="font-size:.7rem;padding:.15rem .45rem;border-radius:.3rem;background:var(--aq);color:#fff;border:none;">
+                        A–Z
+                    </button>
+                    <button type="button" id="btnSortFoto" class="btn btn-xs btn-sort" title="Ordenar por fotocheck"
+                        style="font-size:.7rem;padding:.15rem .45rem;border-radius:.3rem;background:#e9ecef;color:#495057;border:1px solid #ced4da;">
+                        # Foto
+                    </button>
+                </div>
+            </div>
+            <!-- Búsqueda -->
+            <div class="px-2 pt-2 pb-1">
+                <input type="search" id="inpBuscarEmp" class="form-control form-control-sm"
+                       placeholder="Buscar nombre o fotocheck…" autocomplete="off" />
+            </div>
+            <div class="card-body p-0" style="max-height:480px; overflow-y:auto;">
+                <table class="table table-sm table-hover mb-0" id="tblEmpleados">
+                    <tbody id="tbodyEmpleados">
+                        <tr><td class="text-muted text-center p-3">Seleccione empresa y período.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel derecho: tareo + autorizaciones -->
+    <div class="col-md-8 col-lg-9">
+        <div class="card h-100">
+            <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-calendar3 me-1"></i>Tareo y Autorizaciones</span>
+                <span id="lblEmpleadoSel" class="text-muted small"></span>
+            </div>
+            <div class="card-body p-0" style="overflow-x:auto; max-height:520px; overflow-y:auto;">
+                <table class="table table-sm tareo-table mb-0" id="tblTareo">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th class="col-fecha">Fecha</th>
+                            <th>Entrada</th>
+                            <th>Salida</th>
+                            <th class="col-horas">Efect.</th>
+                            <th class="text-center" style="min-width:110px">Alerta</th>
+                            <th colspan="2" class="text-center" style="background:var(--aq-wlt);color:var(--aq-warn)">HEA<br/><small>Antes entr.</small></th>
+                            <th colspan="2" class="text-center" style="background:var(--aq-lt);color:var(--aq-dk)">HED<br/><small>Desp. sal.</small></th>
+                            <th colspan="2" class="text-center" style="background:var(--aq-mid);color:var(--aq-dk)">HEO<br/><small>Dobles</small></th>
+                        </tr>
+                        <tr class="table-secondary" style="font-size:.72rem">
+                            <th></th><th></th><th></th><th></th><th></th>
+                            <th class="col-horas" style="color:var(--aq-warn)">HEA</th>
+                                            <th class="col-accion" style="color:var(--aq-warn)">Autorización</th>
+                                            <th class="col-horas" style="color:var(--aq)">HED</th>
+                                            <th class="col-accion" style="color:var(--aq)">Autorización</th>
+                                            <th class="col-horas" style="color:var(--aq-dk)">HEO</th>
+                                            <th class="col-accion" style="color:var(--aq-dk)">Autorización</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTareo">
+                        <tr><td colspan="10" class="text-muted text-center p-3">Seleccione un empleado.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: confirmar autorización -->
+<div class="modal fade" id="modalAuth" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAuthTitulo">Autorizar Horas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Horas a autorizar (HH:MM)</label>
+                    <input type="time" id="inpHoras" class="form-control" step="60" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold">Observaciones <span class="text-muted">(opcional)</span></label>
+                    <input type="text" id="inpObs" class="form-control" maxlength="200" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarAuth" class="btn" style="background:var(--aq);color:#fff;border-color:var(--aq);">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: confirmar DESAUTORIZACIÓN -->
+<div class="modal fade" id="modalDesauth" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header aq-modal-err">
+                <h5 class="modal-title">Desautorizar Horas</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="lblDesauthMsg">¿Desea quitar la autorización existente?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarDesauth" class="btn" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);">Quitar autorización</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: resultado -->
+<div class="modal fade" id="modalResultado" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" id="modalResHeader">
+                <h5 class="modal-title" id="modalResTitulo">Resultado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalResMensaje"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn" style="background:var(--aq);color:#fff;border-color:var(--aq);" data-bs-dismiss="modal">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+// ─── Estado ────────────────────────────────────────────────────────────────
+let sesion = {};
+let empSeleccionado = null;
+let pendingAuth = {};
+let _listaEmpleados = [];
+let _sortEmpleados  = 'nombre';   // 'nombre' | 'foto'
+
+// ─── Helpers lista empleados ───────────────────────────────────────────────
+function renderListaEmpleados(filtro = '') {
+    const tbody = document.getElementById('tbodyEmpleados');
+
+    let lista = _listaEmpleados.slice();
+
+    // Filtrar
+    if (filtro) {
+        lista = lista.filter(e =>
+            (e.nombreCompleto || '').toLowerCase().includes(filtro) ||
+            (e.numFotocheck   || '').toLowerCase().includes(filtro)
+        );
+    }
+
+    // Ordenar
+    if (_sortEmpleados === 'foto') {
+        lista.sort((a, b) => (a.numFotocheck || '').localeCompare(b.numFotocheck || '', undefined, { numeric: true }));
+    } else {
+        lista.sort((a, b) => (a.nombreCompleto || '').localeCompare(b.nombreCompleto || '', 'es'));
+    }
+
+    if (!lista.length) {
+        tbody.innerHTML = '<tr><td class="text-muted text-center p-3">Sin resultados.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = lista.map(e => `
+        <tr class="emp-row" data-cod="${e.codPersonal}" data-nom="${e.nombreCompleto}" onclick="seleccionarEmpleado(this)">
+            <td class="px-2 py-1">
+                <div class="fw-semibold" style="font-size:.85rem;">
+                    <span style="color:var(--aq-dk);">${e.numFotocheck || '—'}</span>
+                    <span class="text-muted mx-1">–</span>${e.nombreCompleto}
+                </div>
+                <small class="text-muted">${e.desCCostos || e.codCCostos}</small>
+            </td>
+        </tr>`).join('');
+
+    // Re-marcar seleccionado si sigue en la lista
+    if (empSeleccionado) {
+        document.querySelectorAll('.emp-row').forEach(r => {
+            if (r.dataset.cod === empSeleccionado.cod) r.classList.add('selected');
+        });
+    }
+}
+
+function setSortBtn(activeBtn) {
+    document.querySelectorAll('.btn-sort').forEach(b => {
+        b.style.background   = '#e9ecef';
+        b.style.color        = '#495057';
+        b.style.borderColor  = '#ced4da';
+    });
+    activeBtn.style.background  = 'var(--aq)';
+    activeBtn.style.color       = '#fff';
+    activeBtn.style.borderColor = 'var(--aq)';
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarSesion();
+    document.getElementById('btnBuscarEmp').addEventListener('click', buscarEmpleados);
+
+    document.getElementById('inpBuscarEmp').addEventListener('input', function () {
+        renderListaEmpleados(this.value.trim().toLowerCase());
+    });
+    document.getElementById('btnSortNombre').addEventListener('click', function () {
+        _sortEmpleados = 'nombre';
+        setSortBtn(this);
+        renderListaEmpleados(document.getElementById('inpBuscarEmp').value.trim().toLowerCase());
+    });
+    document.getElementById('btnSortFoto').addEventListener('click', function () {
+        _sortEmpleados = 'foto';
+        setSortBtn(this);
+        renderListaEmpleados(document.getElementById('inpBuscarEmp').value.trim().toLowerCase());
+    });
+});
+
+async function cargarSesion() {
+    const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/SesionInfo', { cache: 'no-store' });
+    if (!r.ok) { window.location = '/RecursosHumanos/Aquarius/AuthHoras'; return; }
+    sesion = await r.json();
+    document.getElementById('lblNomUsuario').textContent = '👤 ' + (sesion.nomUsuario || sesion.codUsuario);
+
+    if (sesion.cntEmpresas == 1 && sesion.codEmpresa) {
+        document.getElementById('divEmpresa').style.display = 'none';
+    } else {
+        document.getElementById('divEmpresa').style.display = '';
+        cargarEmpresas();
+    }
+}
+
+function cargarEmpresas() {
+    const empresas = [
+        { cod: '0001', des: 'La Colonial' },
+        { cod: '0002', des: 'Arbona' },
+        { cod: '0003', des: 'Solsa' },
+    ];
+    const sel = document.getElementById('selEmpresa');
+    sel.innerHTML = empresas.map(e => `<option value="${e.cod}">${e.des}</option>`).join('');
+
+    if (sesion.codEmpresaSistema) {
+        sel.value    = sesion.codEmpresaSistema;
+        sel.disabled = true;
+    }
+}
+
+// ─── Buscar empleados ──────────────────────────────────────────────────────
+async function buscarEmpleados() {
+    const empresa = getEmpresa();
+    if (!empresa) { mostrarError('Seleccione una empresa.'); return; }
+
+    const r = await fetch(`/RecursosHumanos/Aquarius/AuthHoras/Empleados?empresa=${empresa}`, { cache: 'no-store' });
+    if (!r.ok) { mostrarError('Error al obtener empleados.'); return; }
+    const lista = await r.json();
+
+    if (!lista.length) {
+        document.getElementById('tbodyEmpleados').innerHTML =
+            '<tr><td class="text-muted text-center p-3">Sin empleados asignados.</td></tr>';
+        return;
+    }
+
+    // Guardar lista completa para search/sort
+    _listaEmpleados = lista;
+    _sortEmpleados  = 'nombre';
+    document.getElementById('inpBuscarEmp').value = '';
+    renderListaEmpleados();
+}
+
+// ─── Seleccionar empleado y cargar tareo ───────────────────────────────────
+async function seleccionarEmpleado(row) {
+    document.querySelectorAll('.emp-row').forEach(r => r.classList.remove('selected'));
+    row.classList.add('selected');
+    empSeleccionado = { cod: row.dataset.cod, nom: row.dataset.nom };
+    document.getElementById('lblEmpleadoSel').textContent = empSeleccionado.nom;
+    await cargarTareo();
+}
+
+async function cargarTareo() {
+    if (!empSeleccionado) return;
+    const empresa = getEmpresa();
+    const desde   = formatFecha(document.getElementById('dtDesde').value);
+    const hasta   = formatFecha(document.getElementById('dtHasta').value);
+
+    const r = await fetch(
+        `/RecursosHumanos/Aquarius/AuthHoras/Tareo?empresa=${empresa}&personal=${empSeleccionado.cod}&desde=${desde}&hasta=${hasta}`,
+        { cache: 'no-store' }
+    );
+    if (!r.ok) { mostrarError('Error al obtener tareo.'); return; }
+    const lista = await r.json();
+
+    renderTareo(lista, empresa);
+}
+
+// ─── Renderizar tabla tareo ────────────────────────────────────────────────
+function renderTareo(lista, empresa) {
+    const tbody = document.getElementById('tbodyTareo');
+    if (!lista.length) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-muted text-center p-3">Sin registros en el período.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = lista.map(t => {
+        const esDescanso = t.descanso === 'S' || t.feriado === 'S';
+        const rowCls = esDescanso ? 'table-light text-muted' : '';
+        const alertaMI = t.alerta01 === 'MI'
+            ? `<span class="badge bg-danger" title="Número impar de marcaciones — verificar entrada/salida"><i class="bi bi-exclamation-triangle-fill me-1"></i>Marca impar</span>`
+            : '<span class="text-muted">—</span>';
+
+        return `<tr class="${rowCls}">
+            <td class="col-fecha fw-semibold">${t.fechaMarStr}<br/><small class="text-muted">${t.diaSemana}</small></td>
+            <td>${t.entrada || '—'}</td>
+            <td>${t.salida  || '—'}</td>
+            <td>${t.horaEfectiva || '—'}</td>
+            <td class="text-center">${alertaMI}</td>
+            ${celdaHE(t, 'HEA', empresa)}
+            ${celdaHE(t, 'HED', empresa)}
+            ${celdaHE(t, 'HEO', empresa)}
+        </tr>`;
+    }).join('');
+}
+
+function celdaHE(t, tipo, empresa) {
+    let horasTareo, horasAuth, tipoAuth, tipoDesauth, authUsr, authObs;
+
+    if (tipo === 'HEA') {
+        horasTareo  = t.horaExtAntesOfi;
+        horasAuth   = t.authHeaHoras;
+        authUsr     = t.authHeaUsr;
+        authObs     = t.authHeaObs;
+        tipoAuth    = '1'; tipoDesauth = '3';
+    } else if (tipo === 'HED') {
+        horasTareo  = t.horaExtraOfi;
+        horasAuth   = t.authHedHoras;
+        authUsr     = t.authHedUsr;
+        authObs     = t.authHedObs;
+        tipoAuth    = '2'; tipoDesauth = '4';
+    } else {
+        horasTareo  = t.horaDoblesOf;
+        horasAuth   = t.authHeoHoras;
+        authUsr     = t.authHeoUsr;
+        authObs     = t.authHeoObs;
+        tipoAuth    = '5'; tipoDesauth = '6';
+    }
+
+    if (!horasTareo || horasTareo === '00:00') {
+        return '<td>—</td><td>—</td>';
+    }
+
+    const authData = JSON.stringify({
+        empresa, personal: empSeleccionado?.cod,
+        fecha: t.fechaMarStr, tipo: tipoAuth,
+        valor: horasTareo, tipoD: tipoDesauth,
+        horasTareo
+    }).replace(/"/g, '&quot;');
+
+    let badgeHoras = `<span class="badge badge-pendiente he-badge">${horasTareo}</span>`;
+    let acciones   = '';
+
+    if (horasAuth) {
+        const tooltip = authUsr ? ` title="Autorizado por: ${authUsr}${authObs ? ' — ' + authObs : ''}"` : '';
+        badgeHoras = `<span class="badge badge-autorizado he-badge"${tooltip}>${horasAuth}</span>`;
+        acciones   = `<button class="btn btn-sm btn-desauth" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);" onclick="abrirDesauth('${authData}')">
+                          <i class="bi bi-x-circle me-1"></i>Quitar
+                      </button>`;
+    } else {
+        acciones = `<button class="btn btn-sm btn-auth" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="abrirAuth('${authData}')">
+                        <i class="bi bi-check-circle me-1"></i>Autorizar
+                    </button>`;
+    }
+
+    return `<td>${badgeHoras}</td><td>${acciones}</td>`;
+}
+
+// ─── Modales Autorizar / Desautorizar ─────────────────────────────────────
+function abrirAuth(dataStr) {
+    pendingAuth = JSON.parse(dataStr.replace(/&quot;/g, '"'));
+    document.getElementById('inpHoras').value = pendingAuth.valor.replace(':','h').replace('h', ':');
+    // Limpiar campo de tiempo — asegurar formato HH:MM
+    document.getElementById('inpHoras').value = pendingAuth.valor;
+    document.getElementById('inpObs').value   = '';
+    document.getElementById('modalAuthTitulo').textContent =
+        `Autorizar ${pendingAuth.tipo === '1' ? 'HEA' : pendingAuth.tipo === '2' ? 'HED' : 'HEO'} — ${pendingAuth.fecha}`;
+    document.getElementById('btnConfirmarAuth').onclick = confirmarAuth;
+    new bootstrap.Modal(document.getElementById('modalAuth')).show();
+}
+
+function abrirDesauth(dataStr) {
+    pendingAuth = JSON.parse(dataStr.replace(/&quot;/g, '"'));
+    document.getElementById('lblDesauthMsg').textContent =
+        `¿Desea quitar la autorización de ${pendingAuth.tipo === '3' ? 'HEA' : pendingAuth.tipo === '4' ? 'HED' : 'HEO'} del ${pendingAuth.fecha}?`;
+    document.getElementById('btnConfirmarDesauth').onclick = confirmarDesauth;
+    new bootstrap.Modal(document.getElementById('modalDesauth')).show();
+}
+
+async function confirmarAuth() {
+    const horas = document.getElementById('inpHoras').value;
+    if (!horas) { mostrarError('Ingrese las horas a autorizar.'); return; }
+    bootstrap.Modal.getInstance(document.getElementById('modalAuth')).hide();
+    await grabar(pendingAuth.empresa, pendingAuth.personal, pendingAuth.fecha,
+                 pendingAuth.tipo, horas, document.getElementById('inpObs').value);
+}
+
+async function confirmarDesauth() {
+    bootstrap.Modal.getInstance(document.getElementById('modalDesauth')).hide();
+    await grabar(pendingAuth.empresa, pendingAuth.personal, pendingAuth.fecha,
+                 pendingAuth.tipoD, pendingAuth.horasTareo, '');
+}
+
+async function grabar(empresa, personal, fecha, tipo, valor, obs) {
+    const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/Grabar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getAntiForgeryToken() },
+        body: JSON.stringify({ codEmpresa: empresa, codPersonal: personal, fecha, tipo, valor, observaciones: obs })
+    });
+    const res = await r.json();
+    mostrarResultado(res.ok, res.ok ? 'Operación realizada correctamente.' : res.mensaje);
+    if (res.ok) await cargarTareo();
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function getEmpresa() {
+    if (sesion.cntEmpresas == 1) return sesion.codEmpresa;
+    return document.getElementById('selEmpresa').value;
+}
+
+function toInputDate(d) {
+    return d.toISOString().slice(0, 10);
+}
+
+function formatFecha(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+function getAntiForgeryToken() {
+    return document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+}
+
+function mostrarResultado(ok, msg) {
+    const h = document.getElementById('modalResHeader');
+    h.className = 'modal-header ' + (ok ? 'aq-modal-ok' : 'aq-modal-err');
+    document.getElementById('modalResTitulo').textContent = ok ? 'Éxito' : 'Error';
+    document.getElementById('modalResMensaje').textContent = msg;
+    new bootstrap.Modal(document.getElementById('modalResultado')).show();
+}
+
+function mostrarError(msg) {
+    mostrarResultado(false, msg);
+}
+</script>
+<!-- Anti-forgery token oculto para las llamadas AJAX -->
+@Html.AntiForgeryToken()
+}

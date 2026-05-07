@@ -18,10 +18,23 @@
 
 @section Styles {
 <style>
-    :root { --cp: #1B4D3E; }
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-warn:  #B8772C;
+        --aq-wlt:   #FEF5E3;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
 
     .comp-header {
-        background: linear-gradient(135deg, var(--cp) 0%, #2d6a4f 100%);
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
         color: #fff; border-radius: .5rem .5rem 0 0; padding: 1.1rem 1.4rem;
     }
     .comp-header h5 { margin: 0; font-weight: 600; }
@@ -30,7 +43,7 @@
     .step-badge {
         display: inline-flex; align-items: center; justify-content: center;
         width: 26px; height: 26px; border-radius: 50%;
-        background: var(--cp); color: #fff;
+        background: var(--aq); color: #fff;
         font-weight: 700; font-size: .8rem; flex-shrink: 0;
     }
 
@@ -47,21 +60,31 @@
         background: #f1f3f5; color: #495057;
         font-size: .72rem; font-weight: 600;
         text-transform: uppercase; letter-spacing: .4px;
-        border-bottom: 2px solid #dee2e6;
+        border-bottom: 2px solid var(--aq-mid);
         white-space: nowrap; padding: .55rem .8rem;
     }
     .table-comp tbody td { vertical-align: middle; padding: .45rem .8rem; font-size: .86rem; }
-    .td-sobrante { color: #b45309; font-weight: 600; }
+    .table-comp tbody tr:hover { background: var(--aq-lt); }
+    .td-sobrante { color: var(--aq-warn); font-weight: 600; }
 
-    .badge-ok        { background: #d1fae5; color: #065f46; }
-    .badge-sin       { background: #fef9c3; color: #92400e; }
-    .badge-err       { background: #fee2e2; color: #991b1b; }
-    .badge-aplicada  { background: #dbeafe; color: #1e40af; }
-    .badge-pendiente { background: #f3f4f6; color: #374151; }
+    .badge-ok        { background: var(--aq-ok-lt); color: var(--aq-ok);   }
+    .badge-sin       { background: var(--aq-wlt);   color: var(--aq-warn); }
+    .badge-err       { background: var(--aq-elt);   color: var(--aq-err);  }
+    .badge-aplicada  { background: var(--aq-lt);    color: var(--aq-dk);   }
+    .badge-pendiente { background: #f3f4f6;          color: #374151;        }
 
-    .badge-he     { background: #dbeafe; color: #1e40af; }
-    .badge-dobles { background: #ede9fe; color: #5b21b6; }
-    .badge-banco  { background: #d1fae5; color: #065f46; }
+    .badge-he     { background: var(--aq-wlt);   color: var(--aq-warn); }
+    .badge-dobles { background: var(--aq-lt);    color: var(--aq);      }
+    .badge-banco  { background: var(--aq-ok-lt); color: var(--aq-ok);   }
+
+    .aq-modal-header { background: var(--aq);    color: #fff; }
+    .aq-modal-ok     { background: var(--aq-ok); color: #fff; }
+    .aq-modal-err    { background: var(--aq-err);color: #fff; }
+
+    .form-control:focus, .form-select:focus {
+        border-color: var(--aq);
+        box-shadow: 0 0 0 .2rem rgba(192,98,43,.15);
+    }
 
     #areaEmpleados  { display: none; }
     #areaPreview    { display: none; }
@@ -96,7 +119,7 @@
                         <input type="date" id="rangoHasta" class="form-control form-control-sm" value="@_hasta" />
                     </div>
                     <div class="col-sm-6 col-md-2 d-flex align-items-end gap-2">
-                        <button id="btnBuscarEmpleados" class="btn btn-sm btn-primary flex-grow-1" onclick="buscarEmpleados(1, true)">
+                        <button id="btnBuscarEmpleados" class="btn btn-sm flex-grow-1" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="buscarEmpleados(1, true)">
                             <i class="bi bi-search me-1"></i>Buscar
                         </button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="limpiarTodo()" title="Limpiar">
@@ -187,7 +210,7 @@
                         <input type="date" id="fechaDestinoEmp" class="form-control form-control-sm" onchange="actualizarConteoEmp()" />
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button id="btnCalcularSeleccion" class="btn btn-sm btn-outline-primary w-100" onclick="calcularSeleccion()" disabled>
+                        <button id="btnCalcularSeleccion" class="btn btn-sm w-100" style="color:var(--aq);border-color:var(--aq);" onclick="calcularSeleccion()" disabled>
                             <i class="bi bi-calculator me-1"></i>Calcular Seleccionados
                         </button>
                     </div>
@@ -225,7 +248,7 @@
                     </table>
                 </div>
                 <div class="d-flex gap-2 align-items-center p-3 border-top">
-                    <button id="btnRegistrar" class="btn btn-sm btn-success" onclick="abrirModalRegistro()" disabled>
+                    <button id="btnRegistrar" class="btn btn-sm" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="abrirModalRegistro()" disabled>
                         <i class="bi bi-check2-circle me-1"></i>Registrar Compensación
                     </button>
                     <span id="lblSeleccion" class="small text-muted"></span>
@@ -256,10 +279,10 @@
                     </table>
                 </div>
                 <div class="d-flex gap-2 p-3 border-top align-items-center">
-                    <button id="btnCommit" class="btn btn-sm btn-success" onclick="hacerCommit()">
+                    <button id="btnCommit" class="btn btn-sm" style="background:var(--aq-ok);color:#fff;border-color:var(--aq-ok);" onclick="hacerCommit()">
                         <i class="bi bi-check-all me-1"></i>Confirmar (COMMIT)
                     </button>
-                    <button id="btnRollback" class="btn btn-sm btn-outline-danger" onclick="hacerRollback()">
+                    <button id="btnRollback" class="btn btn-sm btn-outline-secondary" style="color:var(--aq-err);border-color:var(--aq-err);" onclick="hacerRollback()">
                         <i class="bi bi-arrow-counterclockwise me-1"></i>Cancelar (ROLLBACK)
                     </button>
                     <span class="small text-muted ms-2">
@@ -279,8 +302,8 @@
 <div class="modal fade" id="modalRegistro" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header py-2" style="background:var(--cp)">
-                <h6 class="modal-title text-white"><i class="bi bi-pencil-square me-2"></i>Datos para el Registro</h6>
+            <div class="modal-header py-2 aq-modal-header">
+                <h6 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Datos para el Registro</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -306,14 +329,14 @@
                         <input type="text" id="modalHorasMax" class="form-control form-control-sm" placeholder="08:00" />
                     </div>
                 </div>
-                <div class="alert alert-warning mt-3 py-2 small mb-0">
+                <div class="rounded mt-3 py-2 px-3 small mb-0" style="background:var(--aq-wlt);color:var(--aq-warn);border:1px solid var(--aq-mid);">
                     <i class="bi bi-exclamation-triangle me-1"></i>
                     La transacción quedará abierta hasta que confirme o cancele.
                 </div>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-success" id="btnConfirmRegistro" onclick="ejecutarRegistro()">
+                <button type="button" class="btn btn-sm" id="btnConfirmRegistro" style="background:var(--aq-ok);color:#fff;border-color:var(--aq-ok);" onclick="ejecutarRegistro()">
                     <i class="bi bi-check2-circle me-1"></i>Aplicar
                 </button>
             </div>
@@ -332,7 +355,7 @@
             <div class="modal-body small" id="modalMsgBody"></div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" id="btnMsgCancel" style="display:none">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-primary" id="btnMsgOk">Aceptar</button>
+                <button type="button" class="btn btn-sm" id="btnMsgOk" style="background:var(--aq);color:#fff;border-color:var(--aq);">Aceptar</button>
             </div>
         </div>
     </div>
@@ -342,13 +365,13 @@
 <div class="modal fade" id="modalResumen" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header py-2" style="background:var(--cp)">
+            <div class="modal-header py-2 aq-modal-header">
                 <h6 class="modal-title text-white"><i class="bi bi-list-check me-2"></i>Resumen de Compensaciones Registradas</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalResumenBody"></div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-sm" style="background:var(--aq);color:#fff;border-color:var(--aq);" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
@@ -358,12 +381,12 @@
 <div class="modal fade" id="modalEstado" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-dark text-white py-2">
+            <div class="modal-header aq-modal-header py-2">
                 <h6 class="modal-title"><i class="bi bi-info-circle me-2"></i>Detalle de Compensación</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalEstadoBody">
-                <div class="text-center py-4"><div class="spinner-border text-secondary"></div></div>
+                <div class="text-center py-4"><div class="spinner-border" style="color:var(--aq-mid)"></div></div>
             </div>
         </div>
     </div>
@@ -373,12 +396,12 @@
 <div class="modal fade" id="modalDetalleHoras" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header py-2" style="background:var(--cp)">
-                <h6 class="modal-title text-white"><i class="bi bi-table me-2"></i>Detalle de Horas Disponibles</h6>
+            <div class="modal-header py-2 aq-modal-header">
+                <h6 class="modal-title"><i class="bi bi-table me-2"></i>Detalle de Horas Disponibles</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="modalDetalleHorasBody">
-                <div class="text-center py-4"><div class="spinner-border text-success"></div></div>
+                <div class="text-center py-4"><div class="spinner-border" style="color:var(--aq)"></div></div>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
@@ -451,7 +474,9 @@ function msgModal(title, body, { confirm = false } = {}) {
         const btnOk     = document.getElementById('btnMsgOk');
         btnCancel.style.display = confirm ? '' : 'none';
         btnOk.textContent = confirm ? 'Confirmar' : 'Aceptar';
-        btnOk.className   = `btn btn-sm ${confirm ? 'btn-primary' : 'btn-secondary'}`;
+        btnOk.className   = `btn btn-sm ${confirm ? '' : 'btn-outline-secondary'}`;
+        if (confirm) { btnOk.style.cssText = 'background:var(--aq);color:#fff;border-color:var(--aq);'; }
+        else { btnOk.style.cssText = ''; }
         const modal = new bootstrap.Modal(document.getElementById('modalMsg'));
         btnOk.onclick = () => { modal.hide(); resolve(true); };
         btnCancel.onclick = () => { modal.hide(); resolve(false); };
@@ -581,9 +606,9 @@ function renderEmpleados(data) {
             <td style="display:none;"><code>${r.codPersonal}</code></td>
             <td>${r.numFotocheck ?? ''}</td>
             <td class="text-truncate" style="max-width:220px;" title="${r.nombreCompleto ?? ''}">${r.nombreCompleto ?? ''}</td>
-            <td><span class="badge bg-secondary">${r.fechamarStr ?? ''}</span></td>
+            <td><span class="badge" style="background:var(--aq-lt);color:var(--aq-dk);">${r.fechamarStr ?? ''}</span></td>
             <td class="text-end">
-              ${r.minTrabajadas > 0 ? `<span class="badge rounded-pill bg-info text-dark">${r.horasTrabajadas}</span>` : '<span class="text-muted">—</span>'}
+              ${r.minTrabajadas > 0 ? `<span class="badge rounded-pill" style="background:var(--aq-ilt);color:var(--aq-info);">${r.horasTrabajadas}</span>` : '<span class="text-muted">—</span>'}
             </td>
             <td class="text-end">
               ${r.minHe > 0 ? `<span class="badge rounded-pill badge-he">${r.horasHe}</span>` : '<span class="text-muted">—</span>'}
@@ -596,7 +621,7 @@ function renderEmpleados(data) {
             </td>
             <td class="text-end fw-bold">
               ${r.minTotal > 0
-                ? `<span class="badge bg-success" style="cursor:pointer;" title="Ver detalle por día" onclick="verDetalleHoras('${r.codPersonal ?? ''}','${r.nombreCompleto ?? ''}')">${r.horasTotal ?? '00:00'} <i class="bi bi-zoom-in ms-1"></i></span>`
+                ? `<span class="badge" style="background:var(--aq-ok);color:#fff;cursor:pointer;" title="Ver detalle por día" onclick="verDetalleHoras('${r.codPersonal ?? ''}','${r.nombreCompleto ?? ''}')">${r.horasTotal ?? '00:00'} <i class="bi bi-zoom-in ms-1"></i></span>`
                 : `<span class="text-muted">—</span>`}
             </td>
           </tr>`);
@@ -740,7 +765,7 @@ function renderPreview(data) {
             <td class="text-truncate" style="max-width:220px;" title="${r.nombreCompleto ?? ''}">${r.nombreCompleto ?? ''}</td>
             <td class="text-end fw-semibold">${r.horasDisponibles ?? '00:00'}</td>
             <td class="text-end">${r.horasJornadaDestino ?? '00:00'}</td>
-            <td class="text-end text-success fw-bold">${r.horasACompensar ?? '00:00'}</td>
+            <td class="text-end fw-bold" style="color:var(--aq-ok);">${r.horasACompensar ?? '00:00'}</td>
             <td class="text-end ${sobrante ? 'td-sobrante' : ''}">
               ${sobrante ? r.horasSobrante : '<span class="text-muted">—</span>'}
             </td>
@@ -865,7 +890,7 @@ function renderResultados(data) {
             <td><code>${r.codPersonal}</code></td>
             <td class="text-truncate" style="max-width:220px;">${r.nombreCompleto ?? ''}</td>
             <td class="text-end fw-bold">${r.horasACompensar ?? '00:00'}</td>
-            <td>${r.idCompen ? `<code class="text-success">${r.idCompen}</code>` : '<span class="text-muted">—</span>'}</td>
+            <td>${r.idCompen ? `<code style="color:var(--aq-ok);">${r.idCompen}</code>` : '<span class="text-muted">—</span>'}</td>
             <td>${badgeEstado(r.estado)}</td>
             <td class="small text-muted">${r.motivo ?? ''}</td>
           </tr>`);
@@ -884,7 +909,7 @@ async function verDetalleHoras(codPersonal, nombreCompleto) {
         return;
     }
     const body = document.getElementById('modalDetalleHorasBody');
-    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-success"></div></div>';
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq)"></div></div>';
     const modal = new bootstrap.Modal(document.getElementById('modalDetalleHoras'));
     modal.show();
 
@@ -904,7 +929,7 @@ async function verDetalleHoras(codPersonal, nombreCompleto) {
         let html = `<p class="small fw-semibold mb-2">${nombreCompleto} &mdash; <span class="text-muted">${_lastFechaHorasIni} al ${_lastFechaHorasFin}</span></p>`;
         html += '<div class="table-responsive">';
         html += '<table class="table table-sm table-hover table-bordered small mb-0">';
-        html += '<thead style="background:var(--cp);color:#fff;"><tr>';
+        html += '<thead style="background:var(--aq);color:#fff;"><tr>';
         html += '<th>Fecha</th><th>Día</th>';
         html += '<th class="text-end">HH.Extra</th>';
         html += '<th class="text-end">HH.Dobles</th>';
@@ -913,11 +938,11 @@ async function verDetalleHoras(codPersonal, nombreCompleto) {
         html += '</tr></thead><tbody>';
 
         json.data.forEach(r => {
-            const ecBadge = r.alerta06 === 'EC' ? ' <span class="badge bg-warning text-dark" title="Extras/Banco consumidos">EC</span>' : '';
-            const dcBadge = r.alerta08 === 'DC' ? ' <span class="badge bg-warning text-dark" title="Dobles consumidas">DC</span>' : '';
+            const ecBadge = r.alerta06 === 'EC' ? ` <span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);" title="Extras/Banco consumidos">EC</span>` : '';
+            const dcBadge = r.alerta08 === 'DC' ? ` <span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);" title="Dobles consumidas">DC</span>` : '';
             html += '<tr>';
             html += `<td>${r.fechamarStr ?? ''}</td>`;
-            html += `<td><span class="badge bg-secondary">${r.diaSemana ?? ''}</span></td>`;
+            html += `<td><span class="badge" style="background:var(--aq-lt);color:var(--aq-dk);">${r.diaSemana ?? ''}</span></td>`;
             html += `<td class="text-end">${r.minHe    > 0 ? `<span class="badge rounded-pill badge-he">${r.horasHe}</span>${ecBadge}`    : '—'}</td>`;
             html += `<td class="text-end">${r.minDobles > 0 ? `<span class="badge rounded-pill badge-dobles">${r.horasDobles}</span>${dcBadge}` : '—'}</td>`;
             html += `<td class="text-end">${r.minBanco > 0 ? `<span class="badge rounded-pill badge-banco">${r.horasBanco}</span>`          : '—'}</td>`;
@@ -1002,18 +1027,18 @@ async function mostrarResumenPostCommit() {
             const mm = String(totalMin % 60).padStart(2, '0');
 
             html += `<div class="card mb-2">`;
-            html += `<div class="card-header py-1 px-2 d-flex justify-content-between align-items-center" style="background:var(--cp10)">`;
+            html += `<div class="card-header py-1 px-2 d-flex justify-content-between align-items-center" style="background:var(--aq-lt);">`;  
             html += `<span class="fw-semibold small"><code>${emp.codPersonal}</code> ${emp.nombreCompleto ?? ''}</span>`;
-            html += `<span class="badge bg-success">${hh}:${mm} compensadas</span>`;
+            html += `<span class="badge" style="background:var(--aq-ok);color:#fff;">${hh}:${mm} compensadas</span>`;
             html += `</div>`;
             html += `<div class="table-responsive"><table class="table table-sm table-hover mb-0 small">`;
             html += `<thead><tr><th>ID</th><th>Origen</th><th>Destino</th><th>Tipo Orig.</th><th>Tipo Comp.</th><th class="text-end">Tiempo</th><th>Aplicado</th></tr></thead><tbody>`;
             emp.filas.forEach(r => {
                 const aplicado = r.estadoAplicacion === 'APLICADA'
-                    ? '<span class="badge bg-success">✔ Aplicado al tareo</span>'
-                    : '<span class="badge bg-warning text-dark" title="Guardado en Oracle. Se aplicará al tareo en el siguiente proceso.">⏳ Guardado (pendiente tareo)</span>';
+                    ? `<span class="badge" style="background:var(--aq-ok);color:#fff;">✔ Aplicado al tareo</span>`
+                    : `<span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);" title="Guardado en Oracle. Se aplicará al tareo en el siguiente proceso.">⏳ Guardado (pendiente tareo)</span>`;
                 html += `<tr>`;
-                html += `<td><code class="text-success">${r.idCompen ?? '—'}</code></td>`;
+                html += `<td><code style="color:var(--aq-ok);">${r.idCompen ?? '—'}</code></td>`;
                 html += `<td>${r.fechaOrigen ?? ''}</td>`;
                 html += `<td>${r.fechaDestino ?? ''}</td>`;
                 html += `<td>${r.tipoOrigen ?? ''}</td>`;
@@ -1097,12 +1122,12 @@ function renderConsulta(data) {
 }
 
 async function verEstado(idCompen) {
-    document.getElementById('modalEstadoBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border text-secondary"></div></div>';
+    document.getElementById('modalEstadoBody').innerHTML = '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq)"></div></div>';
     new bootstrap.Modal(document.getElementById('modalEstado')).show();
     try {
         const res  = await fetch(`${URL_BASE}/VerEstado/${idCompen}`);
         const json = await res.json();
-        if (!json.ok) { document.getElementById('modalEstadoBody').innerHTML = `<div class="alert alert-danger">${json.error}</div>`; return; }
+        if (!json.ok) { document.getElementById('modalEstadoBody').innerHTML = `<div class="rounded p-3" style="background:var(--aq-elt);color:var(--aq-err);">${json.error}</div>`; return; }
         const d = json.data;
         const nombre = `${d.apePaterno ?? ''} ${d.apeMaterno ?? ''} ${d.nomTrabajador ?? ''}`.trim();
         document.getElementById('modalEstadoBody').innerHTML = `

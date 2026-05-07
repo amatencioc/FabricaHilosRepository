@@ -249,13 +249,13 @@
                         <ul class="list-unstyled ps-3">
                             <!-- Aquarius -->
                             <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "active" : "")"
-                                   data-bs-toggle="collapse" href="#submenuAquarius" role="button"
-                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "true" : "false")"
-                                   aria-controls="submenuAquarius">
-                                    <i class="bi bi-people-fill"></i> Aquarius
-                                </a>
-                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "AuthHoras" ? "active" : "")"
+                                                   data-bs-toggle="collapse" href="#submenuAquarius" role="button"
+                                                   aria-expanded="@(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "AuthHoras" ? "true" : "false")"
+                                                   aria-controls="submenuAquarius">
+                                                    <i class="bi bi-people-fill"></i> Aquarius
+                                                </a>
+                                                <ul class="collapse @(ctrl == "Marcaciones" || ctrl == "CompensacionDiaDia" || ctrl == "AuthHoras" ? "show" : "") list-unstyled ps-3" id="submenuAquarius">
                                     @if (menus.RhMarcaciones)
                                     {
                                     <li>
@@ -269,6 +269,14 @@
                                     <li>
                                         <a href="/RecursosHumanos/Aquarius/CompensacionDiaDia" class="sidebar-link sidebar-sublink @(ctrl == "CompensacionDiaDia" ? "active" : "")">
                                             <i class="bi bi-calendar2-check"></i> Compensación Día x Día
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.RhAutorizacionHoras)
+                                    {
+                                    <li>
+                                        <a href="/RecursosHumanos/Aquarius/AuthHoras" class="sidebar-link sidebar-sublink @(ctrl == "AuthHoras" ? "active" : "")">
+                                            <i class="bi bi-pencil-square"></i> Autorización de Horas
                                         </a>
                                     </li>
                                     }
