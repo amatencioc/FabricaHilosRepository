@@ -329,7 +329,7 @@ async function cargarSesion() {
     sesion = await r.json();
     document.getElementById('lblNomUsuario').textContent = '👤 ' + (sesion.nomUsuario || sesion.codUsuario);
 
-    if (sesion.cntEmpresas == 1 && sesion.codEmpresa) {
+    if (parseInt(sesion.cntEmpresas) === 1 && sesion.codEmpresa) {
         document.getElementById('divEmpresa').style.display = 'none';
     } else {
         document.getElementById('divEmpresa').style.display = '';
@@ -428,23 +428,26 @@ function renderTareo(lista, empresa) {
 }
 
 function celdaHE(t, tipo, empresa) {
-    let horasTareo, horasAuth, tipoAuth, tipoDesauth, authUsr, authObs;
+    let horasTareo, horasAuth, hayPorAut, tipoAuth, tipoDesauth, authUsr, authObs;
 
     if (tipo === 'HEA') {
         horasTareo  = t.horaExtAntesOfi;
         horasAuth   = t.authHeaHoras;
+        hayPorAut   = t.hayHeaPorAut;
         authUsr     = t.authHeaUsr;
         authObs     = t.authHeaObs;
         tipoAuth    = '1'; tipoDesauth = '3';
     } else if (tipo === 'HED') {
         horasTareo  = t.horaExtraOfi;
         horasAuth   = t.authHedHoras;
+        hayPorAut   = t.hayHedPorAut;
         authUsr     = t.authHedUsr;
         authObs     = t.authHedObs;
         tipoAuth    = '2'; tipoDesauth = '4';
     } else {
         horasTareo  = t.horaDoblesOf;
         horasAuth   = t.authHeoHoras;
+        hayPorAut   = t.hayHeoPorAut;
         authUsr     = t.authHeoUsr;
         authObs     = t.authHeoObs;
         tipoAuth    = '5'; tipoDesauth = '6';
@@ -465,39 +468,45 @@ function celdaHE(t, tipo, empresa) {
     let acciones   = '';
 
     if (horasAuth) {
-        const tooltip = authUsr ? ` title="Autorizado por: ${authUsr}${authObs ? ' — ' + authObs : ''}"` : '';
+        // Fix XSS: escapar datos de Oracle antes de incluirlos en atributos HTML
+        const usr = escapeHtml(authUsr);
+        const obs = escapeHtml(authObs);
+        const tooltip = usr ? ` title="Autorizado por: ${usr}${obs ? ' — ' + obs : ''}"` : '';
         badgeHoras = `<span class="badge badge-autorizado he-badge"${tooltip}>${horasAuth}</span>`;
         acciones   = `<button class="btn btn-sm btn-desauth" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);" onclick="abrirDesauth('${authData}')">
                           <i class="bi bi-x-circle me-1"></i>Quitar
                       </button>`;
-    } else {
+    } else if (hayPorAut === 'S') {
+        // Solo mostrar botón Autorizar si el SP indicó que hay horas por autorizar
         acciones = `<button class="btn btn-sm btn-auth" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="abrirAuth('${authData}')">
                         <i class="bi bi-check-circle me-1"></i>Autorizar
                     </button>`;
     }
 
-    return `<td>${badgeHoras}</td><td>${acciones}</td>`;
+    return `<td>${badgeHoras}</td><td>${acciones || '<span class="text-muted">—</span>'}</td>`;
 }
 
 // ─── Modales Autorizar / Desautorizar ─────────────────────────────────────
 function abrirAuth(dataStr) {
     pendingAuth = JSON.parse(dataStr.replace(/&quot;/g, '"'));
-    document.getElementById('inpHoras').value = pendingAuth.valor.replace(':','h').replace('h', ':');
-    // Limpiar campo de tiempo — asegurar formato HH:MM
     document.getElementById('inpHoras').value = pendingAuth.valor;
     document.getElementById('inpObs').value   = '';
+    const tipoLabel = pendingAuth.tipo === '1' ? 'HEA' : pendingAuth.tipo === '2' ? 'HED' : 'HEO';
     document.getElementById('modalAuthTitulo').textContent =
-        `Autorizar ${pendingAuth.tipo === '1' ? 'HEA' : pendingAuth.tipo === '2' ? 'HED' : 'HEO'} — ${pendingAuth.fecha}`;
+        `Autorizar ${tipoLabel} — ${pendingAuth.fecha}`;
     document.getElementById('btnConfirmarAuth').onclick = confirmarAuth;
-    new bootstrap.Modal(document.getElementById('modalAuth')).show();
+    const el = document.getElementById('modalAuth');
+    (bootstrap.Modal.getInstance(el) ?? new bootstrap.Modal(el)).show();
 }
 
 function abrirDesauth(dataStr) {
     pendingAuth = JSON.parse(dataStr.replace(/&quot;/g, '"'));
+    const tipoLabel = pendingAuth.tipoD === '3' ? 'HEA' : pendingAuth.tipoD === '4' ? 'HED' : 'HEO';
     document.getElementById('lblDesauthMsg').textContent =
-        `¿Desea quitar la autorización de ${pendingAuth.tipo === '3' ? 'HEA' : pendingAuth.tipo === '4' ? 'HED' : 'HEO'} del ${pendingAuth.fecha}?`;
+        `¿Desea quitar la autorización de ${tipoLabel} del ${pendingAuth.fecha}?`;
     document.getElementById('btnConfirmarDesauth').onclick = confirmarDesauth;
-    new bootstrap.Modal(document.getElementById('modalDesauth')).show();
+    const el = document.getElementById('modalDesauth');
+    (bootstrap.Modal.getInstance(el) ?? new bootstrap.Modal(el)).show();
 }
 
 async function confirmarAuth() {
@@ -521,24 +530,25 @@ async function grabar(empresa, personal, fecha, tipo, valor, obs) {
         body: JSON.stringify({ codEmpresa: empresa, codPersonal: personal, fecha, tipo, valor, observaciones: obs })
     });
     const res = await r.json();
+    if (res.ok) await cargarTareo();   // primero actualizar tabla
     mostrarResultado(res.ok, res.ok ? 'Operación realizada correctamente.' : res.mensaje);
-    if (res.ok) await cargarTareo();
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function getEmpresa() {
-    if (sesion.cntEmpresas == 1) return sesion.codEmpresa;
+    if (parseInt(sesion.cntEmpresas) === 1) return sesion.codEmpresa;
     return document.getElementById('selEmpresa').value;
-}
-
-function toInputDate(d) {
-    return d.toISOString().slice(0, 10);
 }
 
 function formatFecha(iso) {
     if (!iso) return '';
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function getAntiForgeryToken() {
@@ -550,7 +560,8 @@ function mostrarResultado(ok, msg) {
     h.className = 'modal-header ' + (ok ? 'aq-modal-ok' : 'aq-modal-err');
     document.getElementById('modalResTitulo').textContent = ok ? 'Éxito' : 'Error';
     document.getElementById('modalResMensaje').textContent = msg;
-    new bootstrap.Modal(document.getElementById('modalResultado')).show();
+    const el = document.getElementById('modalResultado');
+    (bootstrap.Modal.getInstance(el) ?? new bootstrap.Modal(el)).show();
 }
 
 function mostrarError(msg) {

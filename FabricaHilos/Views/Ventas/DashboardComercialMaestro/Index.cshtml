@@ -179,6 +179,7 @@
                             <th style="width:36px">#</th>
                             <th>RUC</th>
                             <th>Razón Social</th>
+                            <th>Giro</th>
                             <th class="text-end">Kilos</th>
                             <th class="text-end">Importe</th>
                         </tr>
@@ -913,7 +914,7 @@
             var rows = await resp.json();
 
             if (!rows || rows.length === 0) {
-                body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
+                body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos para el período seleccionado.</td></tr>';
             } else {
                 const fmtKg = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2 });
                     rows.forEach(function(row, i) {
@@ -921,6 +922,7 @@
                             + '<td>' + (i + 1) + '</td>'
                             + '<td>' + (row.ruc || '') + '</td>'
                             + '<td>' + (row.razonSocial || '') + '</td>'
+                            + '<td>' + (row.giro || '') + '</td>'
                             + '<td class="text-end">' + fmtKg.format(row.cantidadKg ?? 0) + '</td>'
                             + '<td class="text-end fw-bold">' + monLabel + ' ' + fmt(row.importe) + '</td>'
                             + '</tr>';
@@ -928,7 +930,7 @@
             }
         } catch (e) {
             console.error(e);
-            body.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error al cargar los datos.</td></tr>';
         } finally {
             spin.style.display = 'none';
         }

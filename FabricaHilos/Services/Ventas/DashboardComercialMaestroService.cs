@@ -104,18 +104,53 @@ namespace FabricaHilos.Services.Ventas
             return filas;
         }
 
+        // ── Cargar descripción de giros desde TABLAS_AUXILIARES TIPO=27 ──────────
+        private async Task<Dictionary<string, string>> ObtenerGirosAsync()
+        {
+            var dict    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var connStr = GetOracleConnectionString();
+            if (string.IsNullOrEmpty(connStr)) return dict;
+
+            try
+            {
+                using var conn = new OracleConnection(connStr);
+                await conn.OpenAsync();
+                using var cmd = new OracleCommand(
+                    $"SELECT CODIGO, NVL(ABREVIADA, DESCRIPCION) LABEL FROM {S}TABLAS_AUXILIARES WHERE TIPO = 27",
+                    conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var cod = reader["CODIGO"]?.ToString();
+                    var lbl = reader["LABEL"]?.ToString();
+                    if (!string.IsNullOrEmpty(cod) && !string.IsNullOrEmpty(lbl))
+                        dict[cod] = lbl;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[DCM] No se pudo cargar catálogo de giros");
+            }
+
+            return dict;
+        }
+
         // ── Proyectar al DTO de cliente maestro ────────────────────────────────
         private static DcmClienteMaestroDto ToClienteDto(
             string asesor, string? codCliente, string? ruc, string? nombre, string? giro,
-            decimal monto, decimal totUnid)
+            decimal monto, decimal totUnid, Dictionary<string, string>? giros = null)
         {
+            string giroDesc = string.IsNullOrEmpty(giro)
+                ? "SIN GIRO"
+                : (giros != null && giros.TryGetValue(giro, out var desc) ? desc : giro);
+
             return new DcmClienteMaestroDto
             {
                 Asesor      = asesor,
                 CodCliente  = codCliente,
                 Ruc         = ruc,
                 RazonSocial = nombre,
-                Giro        = string.IsNullOrEmpty(giro) ? "SIN GIRO" : giro,
+                Giro        = giroDesc,
                 CantidadKg  = totUnid,
                 Importe     = monto,
                 Total       = monto,
@@ -156,10 +191,13 @@ namespace FabricaHilos.Services.Ventas
                     Monto      = GetDec(r, "MONTO"),
                 });
 
-            await Task.WhenAll(taskCab, taskDet);
+            var taskGiros = ObtenerGirosAsync();
+
+            await Task.WhenAll(taskCab, taskDet, taskGiros);
 
             var filasCab = taskCab.Result;
             var filasDet = taskDet.Result;
+            var giros    = taskGiros.Result;
 
             // ── 1. Cartera completa de clientes por Asesor (para la grilla y el export) ──
             // Se construye desde filasDet para conservar Ruc, RazonSocial, CantidadKg e Importe
@@ -184,6 +222,9 @@ namespace FabricaHilos.Services.Ventas
                     Asesor      = f.Asesor ?? "Sin Asesor",
                     Ruc         = f.Ruc,
                     RazonSocial = f.Nombre,
+                    Giro        = string.IsNullOrEmpty(f.Giro)
+                                    ? "SIN GIRO"
+                                    : (giros.TryGetValue(f.Giro, out var gDesc) ? gDesc : f.Giro),
                     CantidadKg  = f.TotUnid,
                     Importe     = f.Monto,
                     Total       = f.Monto,
@@ -281,7 +322,7 @@ namespace FabricaHilos.Services.Ventas
         {
             var mon = string.IsNullOrEmpty(moneda) ? "D" : moneda.ToUpperInvariant();
 
-            var filas = await EjecutarPaqueteAsync(
+            var taskFilas = EjecutarPaqueteAsync(
                 fechaInicio, fechaFin, mon, "D",
                 r => new FilaDetalleRaw
                 {
@@ -293,13 +334,19 @@ namespace FabricaHilos.Services.Ventas
                     TotUnid    = GetDec(r, "TOTUNID"),
                     Monto      = GetDec(r, "MONTO"),
                 });
+            var taskGiros = ObtenerGirosAsync();
+
+            await Task.WhenAll(taskFilas, taskGiros);
+
+            var filas = taskFilas.Result;
+            var giros = taskGiros.Result;
 
             return filas
                 .Where(f => string.Equals(f.Asesor, asesor, StringComparison.OrdinalIgnoreCase))
                 .GroupBy(f => new { f.CodCliente, f.Ruc, f.Nombre, f.Giro })
                 .Select(g => ToClienteDto(asesor, g.Key.CodCliente, g.Key.Ruc,
                                           g.Key.Nombre, g.Key.Giro,
-                                          g.Sum(f => f.Monto), g.Sum(f => f.TotUnid)))
+                                          g.Sum(f => f.Monto), g.Sum(f => f.TotUnid), giros))
                 .Where(x => x.Total > 0)
                 .OrderByDescending(x => x.Total)
                 .ToList();

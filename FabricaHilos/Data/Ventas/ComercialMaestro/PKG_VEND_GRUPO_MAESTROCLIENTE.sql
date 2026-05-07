@@ -285,7 +285,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
              A.NOMBRE,
              A.RUC,
              A.FECHA         PERIODO,
-             A.GIRO,
+             A.DESC_GIRO     GIRO,
              TU.TOTUNID,
              (A.MONTO - NVL(B.MONTO, 0)) MONTO
         FROM (SELECT T.INDICADOR2                        GRUPO,
@@ -297,12 +297,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
                      C.RUC,
                      TO_CHAR(V.FECHA, 'YYYY/MM')         FECHA,
                      C.GIRO,
+                     NVL(T2.DESCRIPCION, C.GIRO)         DESC_GIRO,
                      SUM(DECODE(P_MON,
                                 'S', V.SOLES_SINANT,
                                      V.DOLARES_SINANT))  MONTO
                 FROM V_DOCUVEN V
                    , CLIENTES C
                    , TABLAS_AUXILIARES T
+                   , TABLAS_AUXILIARES T2
                    , (SELECT GRUPO, MIN(COD_CLIENTE) MIN_CLIENTE
                         FROM CLIENTE_RELACION
                        GROUP BY GRUPO) GRP
@@ -310,6 +312,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
                  AND C.COD_CLIENTE = V.COD_CLIENTE
                  AND T.TIPO(+)     = 29
                  AND T.CODIGO(+)   = C.VENDEDOR
+                 AND T2.TIPO(+)    = 27
+                 AND T2.CODIGO(+)  = C.GIRO
                  AND GRP.GRUPO(+)  = C.GRUPO_REL
                GROUP BY T.INDICADOR2,
                         C.VENDEDOR,
@@ -319,7 +323,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_VEND_GRUPO_MAESTROCLIENTE AS
                         C.NOMBRE,
                         C.RUC,
                         TO_CHAR(V.FECHA, 'YYYY/MM'),
-                        C.GIRO) A,
+                        C.GIRO,
+                        NVL(T2.DESCRIPCION, C.GIRO)) A,
              (SELECT T.INDICADOR2               GRUPO,
                      C.VENDEDOR                 COD_VENDE,
                      DECODE(C.GRUPO_REL, NULL, D.COD_CLIENTE,

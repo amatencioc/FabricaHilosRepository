@@ -132,8 +132,19 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             var usuario = HttpContext.Session.GetString(SessUsuario);
             if (string.IsNullOrEmpty(usuario)) return Unauthorized();
 
-            // Admin puede consultar en nombre de otro supervisor
-            var codConsulta = !string.IsNullOrEmpty(supervisor) ? supervisor : usuario;
+            // Solo admin puede consultar en nombre de otro supervisor
+            string codConsulta;
+            if (!string.IsNullOrEmpty(supervisor))
+            {
+                var esAdmin = HttpContext.Session.GetString(SessEsAdmin);
+                if (esAdmin != "S") return Forbid();
+                codConsulta = supervisor;
+            }
+            else
+            {
+                codConsulta = usuario;
+            }
+
             var lista = await _service.ObtenerResumenHeAsync(codConsulta, empresa, desde, hasta);
             return Ok(lista);
         }
@@ -168,11 +179,25 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
         // ── API: grabar autorización ───────────────────────────────────────
         [HttpPost("Grabar")]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Grabar([FromBody] AuthHorasGrabarRequest req)
         {
             var usuario = HttpContext.Session.GetString(SessUsuario);
             if (string.IsNullOrEmpty(usuario))
                 return Unauthorized();
+
+            // Validar tipo permitido (1=AuthHEA, 2=AuthHED, 3=DesAuthHEA, 4=DesAuthHED, 5=AuthHEO, 6=DesAuthHEO)
+            var tiposValidos = new[] { "1", "2", "3", "4", "5", "6" };
+            if (!tiposValidos.Contains(req.Tipo))
+                return BadRequest(new { ok = false, mensaje = "Tipo de operación no válido." });
+
+            // Validar formato fecha dd/MM/yyyy
+            if (!System.Text.RegularExpressions.Regex.IsMatch(req.Fecha, @"^\d{2}/\d{2}/\d{4}$"))
+                return BadRequest(new { ok = false, mensaje = "Formato de fecha inválido." });
+
+            // Validar formato valor HH:MM
+            if (!System.Text.RegularExpressions.Regex.IsMatch(req.Valor, @"^\d{2}:\d{2}$"))
+                return BadRequest(new { ok = false, mensaje = "Formato de horas inválido." });
 
             var result = await _service.GrabarAutorizacionAsync(usuario, req);
             return Ok(result);

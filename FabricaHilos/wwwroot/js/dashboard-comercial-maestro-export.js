@@ -31,6 +31,7 @@ function _dcmHeaderRow(monLabel, conAsesor) {
     html += '<th>#</th>';
     if (conAsesor) html += '<th>Asesor</th>';
     html += '<th>RUC</th><th>Raz\u00f3n Social</th>';
+    html += '<th>Giro</th>';
     html += '<th>Kilos</th>';
     html += '<th>Importe (' + monLabel + ')</th>';
     html += '</tr>';
@@ -43,6 +44,7 @@ function _dcmFila(row, idx, conAsesor) {
     if (conAsesor) html += '<td>' + (row.asesor || '') + '</td>';
     html += '<td>' + (row.ruc         || '') + '</td>';
     html += '<td>' + (row.razonSocial || '') + '</td>';
+    html += '<td>' + (row.giro        || '') + '</td>';
     html += '<td>' + (row.cantidadKg  || 0)  + '</td>';
     html += '<td>' + (row.importe     || 0)  + '</td>';
     html += '</tr>';
@@ -62,7 +64,7 @@ window.exportarClientesAsesorExcel = function () {
 
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
     html += '<head><meta charset="UTF-8"></head><body><table border="1">';
-    html += '<tr><td colspan="5" style="background:#1B4D3E;color:#fff;font-weight:bold;font-size:13pt;text-align:center;padding:6px;">Clientes del Asesor: ' + asesor + '</td></tr>';
+    html += '<tr><td colspan="6" style="background:#1B4D3E;color:#fff;font-weight:bold;font-size:13pt;text-align:center;padding:6px;">Clientes del Asesor: ' + asesor + '</td></tr>';
     html += _dcmHeaderRow(monLabel, false);
     rows.forEach(function (r, i) { html += _dcmFila(r, i, false); });
     html += '</table></body></html>';
