@@ -207,14 +207,20 @@ namespace FabricaHilos.Services.Ventas
                 .OrderBy(x => x.Asesor)
                 .ToList();
 
-            // ── 4. Ventas por asesor (ranking + participación) desde detalle ─────
+            // ── 4. Ventas por asesor (ranking + participación) ───────────────────
+            // Importe desde detalle; KG desde cabecera (P_TIPO='C') para
+            // coincidir con el Indicador Comercial Maestro (mismo paquete, mismo tipo).
+            var kgPorAsesor = filasCab
+                .GroupBy(f => f.Asesor ?? "Sin Asesor")
+                .ToDictionary(g => g.Key, g => g.Sum(f => f.TotUnid));
+
             dto.VentasPorAsesor = consolidado
                 .GroupBy(f => f.Asesor ?? "Sin Asesor")
                 .Select(g => new DcmVentaAsesorDto
                 {
                     Asesor     = g.Key,
                     Importe    = g.Sum(f => f.Monto),
-                    CantidadKg = g.Sum(f => f.TotUnid),
+                    CantidadKg = kgPorAsesor.TryGetValue(g.Key, out var kg) ? kg : 0m,
                 })
                 .OrderBy(x => x.Asesor)
                 .ToList();

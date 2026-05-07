@@ -431,13 +431,23 @@
 
         var monLabel = document.getElementById('moneda').value === 'S' ? 'S/' : 'USD';
 
-        // Agregar por asesor desde clientesTodosData
-        var map = {};
+        // Agregar por asesor: importe desde clientesTodosData, KG desde ventasPorAsesorData
+        // (KG de ventasPorAsesorData viene de P_TIPO='C', igual que el Indicador Comercial Maestro)
+        var mapImp = {};
         clientesTodosData.forEach(function(d) {
             var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
-            if (!map[key]) map[key] = { importe: 0, kg: 0 };
-            map[key].importe += (d.importe      || 0);
-            map[key].kg      += (d.cantidadKg || 0);
+            if (!mapImp[key]) mapImp[key] = 0;
+            mapImp[key] += (d.importe || 0);
+        });
+        var mapKg = {};
+        ventasPorAsesorData.forEach(function(d) {
+            var key = (d.asesor && d.asesor !== 'null') ? d.asesor : 'Sin Asesor';
+            mapKg[key] = (mapKg[key] || 0) + (d.cantidadKg || 0);
+        });
+        var allAsesores = new Set([...Object.keys(mapImp), ...Object.keys(mapKg)]);
+        var map = {};
+        allAsesores.forEach(function(key) {
+            map[key] = { importe: mapImp[key] || 0, kg: mapKg[key] || 0 };
         });
         if (Object.keys(map).length === 0) return;
 

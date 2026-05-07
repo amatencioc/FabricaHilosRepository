@@ -1,0 +1,759 @@
+-- ============================================================
+-- PKG_AUTH_HE_SUPERVISOR
+-- Portal de autorización de horas extras para supervisores
+--
+-- FLUJO:
+--   1. sp_login            → valida credenciales, devuelve datos del supervisor
+--   2. sp_read_empleados   → lista empleados a cargo con CC y horario vigente
+--   3. sp_read_tareo_he    → tareo diario del empleado + HE + autorizaciones vigentes
+--   4. sp_grabar_autorizacion → graba/revoca autorización por día
+--
+-- TABLAS LECTURA:
+--   MAE_USUARIO, MAE_USUARIO_EMP, MAE_SUCURSAL_USUARIO
+--   MAE_C_COSTOS, MAE_C_COSTOS_VERSION, MAE_C_COSTOS_USUARIO
+--   PLA_PERSONAL, PLA_TIPO_PLANILLA
+--   PLA_PERFIL_PLANILLA, PLA_PERFIL_ACCESO_PLANI, PLA_USUARIO_PLANILLA
+--   SCA_HORARIO_PERSONAL, SCA_HORARIO_CAB
+--   SCA_ASISTENCIA_TAREO, SCA_AUTORIZACION
+--
+-- TABLAS ESCRITURA:
+--   SCA_AUTORIZACION (INSERT/DELETE via sp_grabar_autorizacion)
+--
+-- Oracle 11g / Toad 7.5 — usa TO_DATE, ROWNUM; sin DATE '...' ni FETCH FIRST
+-- ============================================================
+
+-- ============================================================
+-- SPEC
+-- ============================================================
+CREATE OR REPLACE PACKAGE PKG_AUTH_HE_SUPERVISOR AS
+
+    -- ------------------------------------------------------
+    -- 1. LOGIN
+    --    v_cod_usuario    : login del usuario
+    --    v_password_hash  : contraseña ya hasheada por el cliente (.NET)
+    --
+    --    Retorna (1 fila o 0 si credenciales inválidas):
+    --      resultado        : 'OK' | 'CREDENCIAL_INVALIDA' | 'USUARIO_BAJA'
+    --      mensaje          : descripción del error (vacío si OK)
+    --      cod_usuario, nom_usuario, cod_personal
+    --      ind_admin        : 'S'/'N'
+    --      cnt_empresas     : cuántas empresas tiene habilitadas en módulo 1002
+    --      cod_empresa_unica: empresa si cnt_empresas=1, NULL si varias
+    --      es_adm_alguna    : 'S' si es Adm en al menos una empresa del módulo
+    -- ------------------------------------------------------
+    PROCEDURE sp_login(
+        v_cod_usuario   IN  VARCHAR2,
+        v_password_plain IN  VARCHAR2,   -- clave en texto plano (la decodificación se hace aquí)
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+    -- ------------------------------------------------------
+    -- 2. EMPLEADOS A CARGO
+    --    Devuelve los empleados visibles para el usuario
+    --    en la empresa indicada (seguridad: empresa, sucursal,
+    --    tipo planilla, centro de costo).
+    --    Solo empleados activos con horario asignado.
+    --
+    --    Retorna:
+    --      cod_personal, nombre_completo, cod_c_costos, des_c_costos
+    --      cod_tipo_planilla, des_tipo_planilla, cod_sucursal
+    --      horid, hordes, horcla, tip_estado
+    -- ------------------------------------------------------
+    PROCEDURE sp_read_empleados(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+    -- ------------------------------------------------------
+    -- 3. TAREO DIARIO CON HE Y AUTORIZACIONES
+    --    Retorna un registro por día procesado del empleado
+    --    en el rango indicado, con todas las columnas de HE
+    --    y las autorizaciones vigentes para cada día.
+    --    Valida que el usuario tenga acceso al empleado.
+    --
+    --    Campos de horas y pendientes:
+    --      horaextantes, horaextantesofi, hayhea_poraut   (HEA)
+    --      horaextra, horaextraofi, horaextra_ajus,
+    --        horaexofi1/2/3, hayhed_poraut                (HED)
+    --      horadobles, horadoblesof, hayheo_poraut        (HEO/Dobles)
+    --      horabancoh                                     (Banco)
+    --      tothoranocturna_of                             (Nocturnas)
+    --
+    --    Autorizaciones vigentes (tipos '1','2','5'):
+    --      auth_hea_horas / auth_hea_obs / auth_hea_usr
+    --      auth_hed_horas / auth_hed_obs / auth_hed_usr
+    --      auth_heo_horas / auth_heo_obs / auth_heo_usr
+    --
+    --    Desautorizaciones vigentes (tipos '3','4','6'):
+    --      desauth_hea_horas / desauth_hed_horas / desauth_heo_horas
+    -- ------------------------------------------------------
+    PROCEDURE sp_read_tareo_he(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_cod_personal  IN  VARCHAR2,
+        v_fecha_inicio  IN  VARCHAR2,   -- 'dd/MM/yyyy'
+        v_fecha_final   IN  VARCHAR2,   -- 'dd/MM/yyyy'
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+    -- ------------------------------------------------------
+    -- 4. GRABAR AUTORIZACIÓN / DESAUTORIZACIÓN
+    --    Tipos de autorización:
+    --      '1' = Autorizar HEA (horas antes de entrada)
+    --      '2' = Autorizar HED (horas después de salida)
+    --      '5' = Autorizar HEO (horas dobles / descanso trabajado)
+    --      '3' = Desautorizar HEA  → si existe auth '1': la elimina
+    --      '4' = Desautorizar HED  → si existe auth '2': la elimina
+    --      '6' = Desautorizar HEO  → si existe auth '5': la elimina
+    --
+    --    v_valor: 'HH:MI'  ej: '02:30'
+    --      - Para auth  (1/2/5): horas a autorizar
+    --      - Para desauth (3/4/6): horas actuales del tareo
+    --        (necesario para la validación del PASO 14 del proceso)
+    --
+    --    cv_1: resultado 'OK'/'ERROR', mensaje
+    -- ------------------------------------------------------
+    PROCEDURE sp_grabar_autorizacion(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_cod_personal  IN  VARCHAR2,
+        v_fecha         IN  VARCHAR2,   -- 'dd/MM/yyyy'
+        v_tipo          IN  VARCHAR2,   -- '1'..'6'
+        v_valor         IN  VARCHAR2,   -- 'HH:MI'
+        v_observaciones IN  VARCHAR2 DEFAULT NULL,
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+END PKG_AUTH_HE_SUPERVISOR;
+/
+
+
+-- ============================================================
+-- BODY
+-- ============================================================
+CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
+
+    -- Módulo Control de Asistencia (constante interna)
+    c_grupo CONSTANT VARCHAR2(4) := '1002';
+
+    -- =========================================================
+    -- FUNCIÓN PRIVADA: decodifica des_password → texto plano
+    --
+    -- ALGORITMO (Delphi legacy):
+    --   Estructura: [salt:3] + [bloque×2 (con sep opcional)] + [2*salt+30:3]
+    --   Cada carácter: decoded_char = CHR(encoded_val - salt - 15)
+    --   encoded_val = ASCII(char) + salt + 15
+    --
+    -- Verificación de integridad: suffix = 2*salt + 30
+    -- =========================================================
+    FUNCTION fn_decode_pwd(v_encoded IN VARCHAR2) RETURN VARCHAR2 AS
+        v_salt     NUMBER;
+        v_suffix   NUMBER;
+        v_n        NUMBER;   -- cantidad de chars del password
+        v_central  VARCHAR2(300);
+        v_central_len NUMBER;
+        v_result   VARCHAR2(100) := '';
+        v_val      NUMBER;
+        i          NUMBER;
+    BEGIN
+        IF v_encoded IS NULL OR LENGTH(v_encoded) < 9 OR MOD(LENGTH(v_encoded),3) <> 0 THEN
+            RETURN NULL;
+        END IF;
+
+        v_salt   := TO_NUMBER(SUBSTR(v_encoded, 1, 3));
+        v_suffix := TO_NUMBER(SUBSTR(v_encoded, LENGTH(v_encoded)-2, 3));
+
+        -- Verificar integridad: suffix = 2*salt + 30
+        IF v_suffix <> 2 * v_salt + 30 THEN RETURN NULL; END IF;
+
+        -- Bloque central = todo menos prefix(3) y suffix(3)
+        v_central     := SUBSTR(v_encoded, 4, LENGTH(v_encoded)-6);
+        v_central_len := LENGTH(v_central);  -- en caracteres (grupos de 3)
+
+        -- ¿Tiene separador central? → central_len/3 grupos es impar
+        -- Con separador: grupos_totales = 2*N + 1 → N = (grupos-1)/2
+        -- Sin separador: grupos_totales = 2*N   → N = grupos/2
+        IF MOD(v_central_len/3, 2) = 1 THEN
+            v_n := (v_central_len/3 - 1) / 2;   -- con separador
+        ELSE
+            v_n := (v_central_len/3) / 2;        -- sin separador
+        END IF;
+
+        -- Decodificar solo el primer bloque (N chars)
+        FOR i IN 0..v_n-1 LOOP
+            v_val    := TO_NUMBER(SUBSTR(v_central, 1 + i*3, 3));
+            v_result := v_result || CHR(v_val - v_salt - 15);
+        END LOOP;
+
+        RETURN v_result;
+    EXCEPTION
+        WHEN OTHERS THEN RETURN NULL;
+    END fn_decode_pwd;
+
+    -- =========================================================
+    -- FUNCIÓN PRIVADA: verifica si el usuario tiene acceso
+    -- al empleado en la empresa (usa el modelo de seguridad
+    -- estándar de 4 filtros: empresa, sucursal, tipo planilla,
+    -- centro de costos). Retorna 1 si tiene acceso, 0 si no.
+    -- =========================================================
+    FUNCTION fn_tiene_acceso(
+        v_cod_usuario  IN VARCHAR2,
+        v_cod_empresa  IN VARCHAR2,
+        v_cod_personal IN VARCHAR2
+    ) RETURN NUMBER AS
+        v_cnt NUMBER := 0;
+    BEGIN
+        SELECT COUNT(*) INTO v_cnt
+        FROM PLA_PERSONAL p
+        WHERE p.cod_empresa  = v_cod_empresa
+          AND p.cod_personal = v_cod_personal
+          -- Filtro 1: empresa habilitada para el usuario
+          AND p.cod_empresa IN (
+                SELECT cod_empresa
+                FROM   MAE_USUARIO_EMP
+                WHERE  cod_usuario   = v_cod_usuario
+                  AND  cod_grupo_menu = c_grupo
+              )
+          -- Filtro 2: sucursal habilitada para el usuario
+          AND p.cod_sucursal IN (
+                SELECT cod_sucursal
+                FROM   MAE_SUCURSAL_USUARIO
+                WHERE  cod_usuario    = v_cod_usuario
+                  AND  cod_empresa    = p.cod_empresa
+                  AND  cod_grupo_menu = c_grupo
+              )
+          -- Filtro 3: tipo planilla habilitado para el usuario
+          AND p.cod_tipo_planilla IN (
+                SELECT PPA.cod_tipo_planilla
+                FROM   PLA_PERFIL_PLANILLA    PP
+                JOIN   PLA_PERFIL_ACCESO_PLANI PPA
+                       ON PP.cod_empresa   = PPA.cod_empresa
+                      AND PP.cod_perfil_plani = PPA.cod_perfil_plani
+                JOIN   PLA_USUARIO_PLANILLA   PUP
+                       ON PP.cod_empresa   = PUP.cod_empresa
+                      AND PP.cod_perfil_plani = PUP.cod_perfil_plani
+                JOIN   PLA_TIPO_PLANILLA      PT
+                       ON PPA.cod_empresa      = PT.cod_empresa
+                      AND PPA.cod_tipo_planilla = PT.cod_tipo_planilla
+                WHERE  PUP.cod_usuario    = v_cod_usuario
+                  AND  PUP.cod_grupo_menu = c_grupo
+                  AND  PP.cod_empresa     = v_cod_empresa
+                  AND  PT.ind_asistencia  = 'S'
+              )
+          -- Filtro 4: centro de costo
+          -- Administradores ('Adm') ven todos los CCs de su empresa
+          -- Usuarios ('Usu') solo ven los CCs asignados
+          AND (
+                EXISTS (
+                    SELECT 1
+                    FROM   MAE_USUARIO_EMP
+                    WHERE  cod_usuario    = v_cod_usuario
+                      AND  cod_empresa    = v_cod_empresa
+                      AND  cod_grupo_menu = c_grupo
+                      AND  tip_usuario    = 'Adm'
+                )
+                OR p.cod_c_costos IN (
+                    SELECT MC.cod_c_costos
+                    FROM   MAE_C_COSTOS_VERSION  MCV
+                    JOIN   MAE_C_COSTOS           MC
+                           ON MCV.cod_empresa        = MC.cod_empresa
+                          AND MCV.num_ver_c_costos   = MC.num_ver_c_costos
+                    JOIN   MAE_C_COSTOS_USUARIO   MCU
+                           ON MC.cod_empresa        = MCU.cod_empresa
+                          AND MC.num_ver_c_costos   = MCU.num_ver_c_costos
+                          AND MC.cod_c_costos       = MCU.cod_c_costos
+                    WHERE  MCU.cod_usuario    = v_cod_usuario
+                      AND  MC.cod_empresa     = v_cod_empresa
+                      AND  MCU.cod_grupo_menu = c_grupo
+                      AND  MCV.ind_vigente    = 'S'
+                )
+              );
+        RETURN v_cnt;
+    EXCEPTION
+        WHEN OTHERS THEN RETURN 0;
+    END fn_tiene_acceso;
+
+
+    -- =========================================================
+    -- 1. LOGIN  (acepta clave en texto plano — decodifica el hash almacenado)
+    -- =========================================================
+    PROCEDURE sp_login(
+        v_cod_usuario    IN  VARCHAR2,
+        v_password_plain IN  VARCHAR2,
+        cv_1             OUT SYS_REFCURSOR
+    ) AS
+        v_stored  VARCHAR2(300);
+        v_decoded VARCHAR2(100);
+        v_baja    VARCHAR2(1);
+    BEGIN
+        -- Obtener password almacenado y estado
+        BEGIN
+            SELECT des_password, NVL(ind_baja,'N')
+            INTO   v_stored, v_baja
+            FROM   MAE_USUARIO
+            WHERE  cod_usuario = v_cod_usuario;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                OPEN cv_1 FOR SELECT 'ERROR' resultado,'CREDENCIAL_INVALIDA' mensaje FROM DUAL;
+                RETURN;
+        END;
+
+        -- Verificar si el usuario está dado de baja
+        IF v_baja = 'S' THEN
+            OPEN cv_1 FOR SELECT 'ERROR' resultado,'USUARIO_BAJA' mensaje FROM DUAL;
+            RETURN;
+        END IF;
+
+        -- Decodificar hash almacenado y comparar con texto plano
+        v_decoded := fn_decode_pwd(v_stored);
+        IF v_decoded IS NULL OR v_decoded <> v_password_plain THEN
+            OPEN cv_1 FOR SELECT 'ERROR' resultado,'CREDENCIAL_INVALIDA' mensaje FROM DUAL;
+            RETURN;
+        END IF;
+
+        -- Credenciales OK → devolver datos del usuario
+        OPEN cv_1 FOR
+            SELECT
+                u.cod_usuario,
+                u.nom_usuario,
+                u.cod_personal,
+                NVL(u.ind_admin,'N') ind_admin,
+                (SELECT COUNT(DISTINCT cod_empresa) FROM MAE_USUARIO_EMP
+                 WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo)          cnt_empresas,
+                (SELECT CASE WHEN COUNT(DISTINCT cod_empresa)=1 THEN MAX(cod_empresa) ELSE NULL END
+                 FROM MAE_USUARIO_EMP WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo) cod_empresa_unica,
+                (SELECT CASE WHEN SUM(CASE WHEN tip_usuario='Adm' THEN 1 ELSE 0 END)>0 THEN 'S' ELSE 'N' END
+                 FROM MAE_USUARIO_EMP WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo) es_adm_alguna,
+                'OK' resultado,
+                ''   mensaje
+            FROM MAE_USUARIO u
+            WHERE u.cod_usuario = v_cod_usuario;
+    END sp_login;
+
+
+    -- =========================================================
+    -- 2. EMPLEADOS A CARGO
+    -- =========================================================
+    PROCEDURE sp_read_empleados(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+    BEGIN
+        OPEN cv_1 FOR
+            SELECT
+                p.cod_personal,
+                p.ape_paterno || ' ' || p.ape_materno || ', ' || p.nom_trabajador  nombre_completo,
+                p.cod_empresa,
+                p.cod_sucursal,
+                p.cod_c_costos,
+                NVL(cc.des_c_costos, p.cod_c_costos)                               des_c_costos,
+                p.cod_tipo_planilla,
+                NVL(tp.des_tipo_planilla, p.cod_tipo_planilla)                     des_tipo_planilla,
+                p.tip_estado,
+                -- Horario vigente a hoy
+                hor.horid,
+                hor.hordes,
+                hor.horcla
+            FROM PLA_PERSONAL p
+            -- Descripción del centro de costo
+            LEFT JOIN MAE_C_COSTOS cc
+                   ON cc.cod_empresa       = p.cod_empresa
+                  AND cc.num_ver_c_costos  = p.num_ver_c_costos
+                  AND cc.cod_c_costos      = p.cod_c_costos
+            -- Descripción del tipo de planilla
+            JOIN PLA_TIPO_PLANILLA tp
+                 ON tp.cod_empresa       = p.cod_empresa
+                AND tp.cod_tipo_planilla = p.cod_tipo_planilla
+                AND tp.ind_asistencia    = 'S'   -- solo planillas de asistencia
+            -- Horario vigente (último fec_vigencia <= hoy)
+            LEFT JOIN (
+                SELECT hp.cod_empresa,
+                       hp.cod_personal,
+                       hc.horid,
+                       hc.hordes,
+                       hc.horcla
+                FROM   SCA_HORARIO_PERSONAL hp
+                JOIN   SCA_HORARIO_CAB hc ON hc.horid = hp.horid
+                WHERE  hp.fec_vigencia = (
+                           SELECT MAX(hp2.fec_vigencia)
+                           FROM   SCA_HORARIO_PERSONAL hp2
+                           WHERE  hp2.cod_empresa  = hp.cod_empresa
+                             AND  hp2.cod_personal = hp.cod_personal
+                             AND  hp2.fec_vigencia <= TRUNC(SYSDATE)
+                       )
+            ) hor ON hor.cod_empresa  = p.cod_empresa
+                 AND hor.cod_personal = p.cod_personal
+            -- Seguridad: empresa habilitada
+            WHERE p.cod_empresa = v_cod_empresa
+              AND p.tip_estado <> 'C'   -- excluir cesados
+              AND p.cod_empresa IN (
+                    SELECT cod_empresa
+                    FROM   MAE_USUARIO_EMP
+                    WHERE  cod_usuario    = v_cod_usuario
+                      AND  cod_grupo_menu = c_grupo
+                  )
+              -- Seguridad: sucursal habilitada
+              AND p.cod_sucursal IN (
+                    SELECT cod_sucursal
+                    FROM   MAE_SUCURSAL_USUARIO
+                    WHERE  cod_usuario    = v_cod_usuario
+                      AND  cod_empresa   = p.cod_empresa
+                      AND  cod_grupo_menu = c_grupo
+                  )
+              -- Seguridad: tipo planilla habilitado
+              AND p.cod_tipo_planilla IN (
+                    SELECT PPA.cod_tipo_planilla
+                    FROM   PLA_PERFIL_PLANILLA     PP
+                    JOIN   PLA_PERFIL_ACCESO_PLANI PPA
+                           ON PP.cod_empresa      = PPA.cod_empresa
+                          AND PP.cod_perfil_plani = PPA.cod_perfil_plani
+                    JOIN   PLA_USUARIO_PLANILLA    PUP
+                           ON PP.cod_empresa      = PUP.cod_empresa
+                          AND PP.cod_perfil_plani = PUP.cod_perfil_plani
+                    WHERE  PUP.cod_usuario    = v_cod_usuario
+                      AND  PUP.cod_grupo_menu = c_grupo
+                      AND  PP.cod_empresa     = v_cod_empresa
+                  )
+              -- Seguridad: centro de costo (Adm=todos / Usu=asignados)
+              AND (
+                    EXISTS (
+                        SELECT 1
+                        FROM   MAE_USUARIO_EMP
+                        WHERE  cod_usuario    = v_cod_usuario
+                          AND  cod_empresa    = v_cod_empresa
+                          AND  cod_grupo_menu = c_grupo
+                          AND  tip_usuario    = 'Adm'
+                    )
+                    OR p.cod_c_costos IN (
+                        SELECT MC.cod_c_costos
+                        FROM   MAE_C_COSTOS_VERSION  MCV
+                        JOIN   MAE_C_COSTOS           MC
+                               ON MCV.cod_empresa       = MC.cod_empresa
+                              AND MCV.num_ver_c_costos  = MC.num_ver_c_costos
+                        JOIN   MAE_C_COSTOS_USUARIO   MCU
+                               ON MC.cod_empresa       = MCU.cod_empresa
+                              AND MC.num_ver_c_costos  = MCU.num_ver_c_costos
+                              AND MC.cod_c_costos      = MCU.cod_c_costos
+                        WHERE  MCU.cod_usuario    = v_cod_usuario
+                          AND  MC.cod_empresa     = v_cod_empresa
+                          AND  MCU.cod_grupo_menu = c_grupo
+                          AND  MCV.ind_vigente    = 'S'
+                    )
+                  )
+            ORDER BY p.cod_c_costos,
+                     p.ape_paterno, p.ape_materno, p.nom_trabajador;
+    END sp_read_empleados;
+
+
+    -- =========================================================
+    -- 3. TAREO DIARIO CON HE Y AUTORIZACIONES
+    -- =========================================================
+    PROCEDURE sp_read_tareo_he(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_cod_personal  IN  VARCHAR2,
+        v_fecha_inicio  IN  VARCHAR2,
+        v_fecha_final   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+    BEGIN
+        -- Sin acceso → cursor vacío (sin levantar error)
+        IF fn_tiene_acceso(v_cod_usuario, v_cod_empresa, v_cod_personal) = 0 THEN
+            OPEN cv_1 FOR SELECT * FROM SCA_ASISTENCIA_TAREO WHERE 1=0;
+            RETURN;
+        END IF;
+
+        OPEN cv_1 FOR
+            SELECT
+                -- Identificación del día
+                t.fechamar,
+                TO_CHAR(t.fechamar, 'DY')                                          dia_semana,
+                t.descanso,
+                t.feriado,
+                -- Horario teórico
+                t.entrada_fijada,
+                t.salida_fijada,
+                t.tothoras,
+                t.horiniref,
+                t.horfinref,
+                t.totref,
+                t.horid,
+                t.hortur,
+                -- Marcaciones reales
+                t.entrada,
+                t.salida,
+                t.inirefri,
+                t.finrefri,
+                t.nummarcaciones,
+                -- Horas calculadas (base 01/01/1900, formato HH24:MI)
+                t.horaefectiva,
+                t.horatardanza,
+                t.tothoramarcas,
+                t.horarefrigerio,
+                t.tothoranocturna_of,
+                -- Horas Extras Antes de entrada (HEA)
+                t.horaantesentrada,
+                t.horaextantes,
+                t.horaextantesofi,
+                NVL(t.hayhea_poraut, 'N')                                           hayhea_poraut,
+                -- Horas Extras Después de salida (HED)
+                t.horaextra,
+                t.horaextraofi,
+                t.horaextra_ajus,
+                t.horaexofi1,
+                t.horaexofi2,
+                t.horaexofi3,
+                NVL(t.hayhed_poraut, 'N')                                           hayhed_poraut,
+                t.haypagohe,
+                -- Horas Dobles / Descanso trabajado (HEO)
+                t.horadobles,
+                t.horadoblesof,
+                NVL(t.hayheo_poraut, 'N')                                           hayheo_poraut,
+                -- Banco de horas
+                t.horabancoh,
+                -- Faltas / Permisos / Subsidios
+                t.horas_falta,
+                t.horas_no_trabajadas,
+                t.horapermiso,
+                t.per_vaca,
+                t.per_desc_med,
+                t.per_subsidio,
+                t.per_goce,
+                t.per_sgoce,
+                t.per_lic_sind,
+                t.per_suspension,
+                -- Alertas relevantes
+                t.alerta01,     -- MI=marca impar
+                t.alerta04,     -- TN/TE=tardanza; TC=compensada
+                t.alerta06,     -- EN/EE=extras; EC=compensadas
+                t.alerta07,     -- SN/SE=salida antes; SC=compensada
+                t.alerta08,     -- DC=dobles compensadas
+                t.alerta09,     -- PE=permiso; PC=compensado
+                -- Auditoría depuración
+                t.codaux4,
+                -- -----------------------------------------------
+                -- AUTORIZACIÓN '1' (HEA autorizada) vigente
+                -- -----------------------------------------------
+                a1.can_authe_str                                                    auth_hea_horas,
+                a1.obs_authe                                                        auth_hea_obs,
+                a1.cod_usuario                                                      auth_hea_usr,
+                -- DESAUTORIZACIÓN '3' (HEA desautorizada) vigente
+                a3.can_authe_str                                                    desauth_hea_horas,
+                -- -----------------------------------------------
+                -- AUTORIZACIÓN '2' (HED autorizada) vigente
+                -- -----------------------------------------------
+                a2.can_authe_str                                                    auth_hed_horas,
+                a2.obs_authe                                                        auth_hed_obs,
+                a2.cod_usuario                                                      auth_hed_usr,
+                -- DESAUTORIZACIÓN '4' (HED desautorizada) vigente
+                a4.can_authe_str                                                    desauth_hed_horas,
+                -- -----------------------------------------------
+                -- AUTORIZACIÓN '5' (HEO/Dobles autorizada) vigente
+                -- -----------------------------------------------
+                a5.can_authe_str                                                    auth_heo_horas,
+                a5.obs_authe                                                        auth_heo_obs,
+                a5.cod_usuario                                                      auth_heo_usr,
+                -- DESAUTORIZACIÓN '6' (HEO desautorizada) vigente
+                a6.can_authe_str                                                    desauth_heo_horas
+
+            FROM SCA_ASISTENCIA_TAREO t
+            -- Autorizaciones vigentes para cada día (LEFT JOIN por tipo)
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str,
+                              obs_authe, cod_usuario
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '1') a1
+                   ON a1.cod_empresa  = t.cod_empresa
+                  AND a1.cod_personal = t.cod_personal
+                  AND a1.fec_authe    = t.fechamar
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '3') a3
+                   ON a3.cod_empresa  = t.cod_empresa
+                  AND a3.cod_personal = t.cod_personal
+                  AND a3.fec_authe    = t.fechamar
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str,
+                              obs_authe, cod_usuario
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '2') a2
+                   ON a2.cod_empresa  = t.cod_empresa
+                  AND a2.cod_personal = t.cod_personal
+                  AND a2.fec_authe    = t.fechamar
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '4') a4
+                   ON a4.cod_empresa  = t.cod_empresa
+                  AND a4.cod_personal = t.cod_personal
+                  AND a4.fec_authe    = t.fechamar
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str,
+                              obs_authe, cod_usuario
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '5') a5
+                   ON a5.cod_empresa  = t.cod_empresa
+                  AND a5.cod_personal = t.cod_personal
+                  AND a5.fec_authe    = t.fechamar
+            LEFT JOIN (SELECT cod_empresa, cod_personal, fec_authe,
+                              TO_CHAR(can_authe,'HH24:MI') can_authe_str
+                       FROM   SCA_AUTORIZACION
+                       WHERE  tip_authe = '6') a6
+                   ON a6.cod_empresa  = t.cod_empresa
+                  AND a6.cod_personal = t.cod_personal
+                  AND a6.fec_authe    = t.fechamar
+            WHERE t.cod_empresa  = v_cod_empresa
+              AND t.cod_personal = v_cod_personal
+              AND t.fechamar BETWEEN TO_DATE(v_fecha_inicio, 'dd/MM/yyyy')
+                                 AND TO_DATE(v_fecha_final,  'dd/MM/yyyy')
+            ORDER BY t.fechamar;
+    END sp_read_tareo_he;
+
+
+    -- =========================================================
+    -- 4. GRABAR AUTORIZACIÓN / DESAUTORIZACIÓN
+    -- =========================================================
+    PROCEDURE sp_grabar_autorizacion(
+        v_cod_usuario   IN  VARCHAR2,
+        v_cod_empresa   IN  VARCHAR2,
+        v_cod_personal  IN  VARCHAR2,
+        v_fecha         IN  VARCHAR2,
+        v_tipo          IN  VARCHAR2,
+        v_valor         IN  VARCHAR2,
+        v_observaciones IN  VARCHAR2 DEFAULT NULL,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+        v_fec_authe   DATE;
+        v_can_authe   DATE;
+        v_tipo_opuesto VARCHAR2(1);
+        v_existe       NUMBER := 0;        v_err_msg      VARCHAR2(4000);    BEGIN
+        -- --------------------------------------------------
+        -- Validar tipo
+        -- --------------------------------------------------
+        IF v_tipo NOT IN ('1','2','3','4','5','6') THEN
+            OPEN cv_1 FOR
+                SELECT 'ERROR' resultado,
+                       'Tipo de autorización inválido: ' || v_tipo || '. Use 1-6.' mensaje
+                FROM DUAL;
+            RETURN;
+        END IF;
+
+        -- --------------------------------------------------
+        -- Validar acceso al empleado
+        -- --------------------------------------------------
+        IF fn_tiene_acceso(v_cod_usuario, v_cod_empresa, v_cod_personal) = 0 THEN
+            OPEN cv_1 FOR
+                SELECT 'ERROR' resultado,
+                       'Sin acceso al empleado ' || v_cod_personal mensaje
+                FROM DUAL;
+            RETURN;
+        END IF;
+
+        -- --------------------------------------------------
+        -- Convertir parámetros
+        -- --------------------------------------------------
+        BEGIN
+            v_fec_authe := TO_DATE(v_fecha, 'dd/MM/yyyy');
+        EXCEPTION
+            WHEN OTHERS THEN
+                OPEN cv_1 FOR
+                    SELECT 'ERROR' resultado, 'Fecha inválida: ' || v_fecha mensaje
+                    FROM DUAL;
+                RETURN;
+        END;
+
+        BEGIN
+            -- v_valor formato 'HH:MI' → base 01/01/1900 HH:MI
+            v_can_authe := TO_DATE('01/01/1900 ' || v_valor, 'dd/MM/yyyy HH24:MI');
+        EXCEPTION
+            WHEN OTHERS THEN
+                OPEN cv_1 FOR
+                    SELECT 'ERROR' resultado, 'Valor de horas inválido: ' || v_valor || '. Use HH:MI' mensaje
+                    FROM DUAL;
+                RETURN;
+        END;
+
+        -- --------------------------------------------------
+        -- Lógica de inserción / eliminación por tipo
+        --
+        -- Pares mutuamente excluyentes:
+        --   '1' (auth HEA) ↔ '3' (desauth HEA)
+        --   '2' (auth HED) ↔ '4' (desauth HED)
+        --   '5' (auth HEO) ↔ '6' (desauth HEO)
+        -- --------------------------------------------------
+
+        -- Determinar el tipo opuesto
+        v_tipo_opuesto := CASE v_tipo
+                              WHEN '1' THEN '3'
+                              WHEN '3' THEN '1'
+                              WHEN '2' THEN '4'
+                              WHEN '4' THEN '2'
+                              WHEN '5' THEN '6'
+                              WHEN '6' THEN '5'
+                          END;
+
+        -- Eliminar tipo opuesto si existe (no deben coexistir)
+        DELETE SCA_AUTORIZACION
+        WHERE  cod_empresa  = v_cod_empresa
+          AND  cod_personal = v_cod_personal
+          AND  fec_authe    = v_fec_authe
+          AND  tip_authe    = v_tipo_opuesto;
+
+        -- Para auth (1/2/5): eliminar también el mismo tipo previo (reemplaza)
+        IF v_tipo IN ('1','2','5') THEN
+            DELETE SCA_AUTORIZACION
+            WHERE  cod_empresa  = v_cod_empresa
+              AND  cod_personal = v_cod_personal
+              AND  fec_authe    = v_fec_authe
+              AND  tip_authe    = v_tipo;
+        END IF;
+
+        -- Para desauth (3/4/6): si el tipo opuesto (auth) ya fue eliminado
+        -- arriba no hay nada más que hacer.
+        -- Solo INSERT si no existe ya el tipo (en caso de que el auth no existiera).
+        IF v_tipo IN ('3','4','6') THEN
+            SELECT COUNT(*) INTO v_existe
+            FROM   SCA_AUTORIZACION
+            WHERE  cod_empresa  = v_cod_empresa
+              AND  cod_personal = v_cod_personal
+              AND  fec_authe    = v_fec_authe
+              AND  tip_authe    = v_tipo;
+        END IF;
+
+        -- INSERT del nuevo registro
+        -- Para auth: siempre inserta
+        -- Para desauth: solo inserta si el auth ya NO existía (fue eliminado arriba)
+        --               y no había ya una desauth previa
+        IF v_tipo IN ('1','2','5') OR (v_tipo IN ('3','4','6') AND v_existe = 0) THEN
+            INSERT INTO SCA_AUTORIZACION
+                (id_authe, cod_empresa, cod_personal, fec_authe,
+                 ori_authe, tip_authe, can_authe, obs_authe, cod_usuario)
+            VALUES
+                (id_authe_seq.NEXTVAL, v_cod_empresa, v_cod_personal, v_fec_authe,
+                 2, v_tipo, v_can_authe, v_observaciones, v_cod_usuario);
+        END IF;
+
+        OPEN cv_1 FOR
+            SELECT 'OK'  resultado,
+                   CASE v_tipo
+                       WHEN '1' THEN 'HEA autorizada: ' || v_valor
+                       WHEN '2' THEN 'HED autorizada: ' || v_valor
+                       WHEN '5' THEN 'HEO/Dobles autorizada: ' || v_valor
+                       WHEN '3' THEN 'HEA desautorizada'
+                       WHEN '4' THEN 'HED desautorizada'
+                       WHEN '6' THEN 'HEO/Dobles desautorizada'
+                   END  mensaje
+            FROM DUAL;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            ROLLBACK;
+            v_err_msg := SQLERRM;
+            OPEN cv_1 FOR SELECT 'ERROR' resultado, v_err_msg mensaje FROM DUAL;
+    END sp_grabar_autorizacion;
+
+END PKG_AUTH_HE_SUPERVISOR;
+/

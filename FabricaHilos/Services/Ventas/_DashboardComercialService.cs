@@ -3,7 +3,7 @@ using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
 {
-    public class DashboardComercialService : OracleServiceBase, IDashboardComercialService
+    public class DashboardComercialService : OracleServiceBase, _IDashboardComercialService
     {
         private readonly ILogger<DashboardComercialService> _logger;
 

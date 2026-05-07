@@ -7,9 +7,9 @@ namespace FabricaHilos.Controllers.Ventas
     [Authorize]
     public class DashboardComercialController : OracleBaseController
     {
-        private readonly IDashboardComercialService _service;
+        private readonly _IDashboardComercialService _service;
 
-        public DashboardComercialController(IDashboardComercialService service)
+        public DashboardComercialController(_IDashboardComercialService service)
         {
             _service = service;
         }

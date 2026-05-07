@@ -2,7 +2,7 @@ using FabricaHilos.Models.Ventas;
 
 namespace FabricaHilos.Services.Ventas
 {
-    public interface IDashboardComercialService
+    public interface _IDashboardComercialService
     {
         /// <summary>
         /// Ejecuta el QueryPrincipal y devuelve todos los datos agregados del dashboard en un solo objeto.
