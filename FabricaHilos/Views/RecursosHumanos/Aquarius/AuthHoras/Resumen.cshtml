@@ -301,9 +301,7 @@ function renderTabla(filtro = '') {
 
     tbody.innerHTML = lista.map(e => {
         const badgeEstado = estadoBadge(e.estado);
-        const minTotal    = e.minHed + e.minHea + e.minHeo;
-        const minAut      = e.minHedAut + e.minHeaAut + e.minHeoAut;
-        const pct         = minTotal > 0 ? Math.round(minAut / minTotal * 100) : 0;
+        const pct         = e.diasConHe > 0 ? Math.min(100, Math.round(e.diasAutorizados / e.diasConHe * 100)) : 0;
         const barFill     = `<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><span style="font-size:.75rem">${pct}%</span></div>`;
 
         return `<tr>

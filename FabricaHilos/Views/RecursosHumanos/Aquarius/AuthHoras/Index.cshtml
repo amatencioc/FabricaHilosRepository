@@ -476,8 +476,8 @@ function celdaHE(t, tipo, empresa) {
         acciones   = `<button class="btn btn-sm btn-desauth" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);" onclick="abrirDesauth('${authData}')">
                           <i class="bi bi-x-circle me-1"></i>Quitar
                       </button>`;
-    } else if (hayPorAut === 'S') {
-        // Solo mostrar botón Autorizar si el SP indicó que hay horas por autorizar
+    } else {
+        // Mostrar botón Autorizar si hay horas (independientemente del flag hayPorAut)
         acciones = `<button class="btn btn-sm btn-auth" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="abrirAuth('${authData}')">
                         <i class="bi bi-check-circle me-1"></i>Autorizar
                     </button>`;
