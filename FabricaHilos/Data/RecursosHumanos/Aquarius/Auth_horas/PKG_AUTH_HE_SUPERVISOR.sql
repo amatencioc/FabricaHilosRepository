@@ -692,6 +692,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
         v_can_authe    DATE;
         v_tipo_opuesto VARCHAR2(1);
         v_existe       NUMBER        := 0;
+        v_auth_borrado NUMBER        := 0;  -- filas eliminadas del tipo opuesto (auth)
         v_err_msg      VARCHAR2(4000);
         v_cur_aux      SYS_REFCURSOR;  -- cursor auxiliar para sp_SCA_Upd_Tar_InsAut
     BEGIN
@@ -767,6 +768,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
           AND  fec_authe    = v_fec_authe
           AND  tip_authe    = v_tipo_opuesto;
 
+        -- Registrar si se eliminó un auth (opuesto).
+        -- Para desauth (3/4/6): si v_auth_borrado > 0 = se canceló una auth existente.
+        -- En ese caso NO se inserta desauth: el delete ya es suficiente y evita que
+        -- PASO 14 re-aplique la desauth cada noche (anulando el estado pendiente).
+        v_auth_borrado := SQL%ROWCOUNT;
+
         -- Para auth (1/2/5): eliminar también el mismo tipo previo (reemplaza)
         IF v_tipo IN ('1','2','5') THEN
             DELETE SCA_AUTORIZACION
@@ -776,10 +783,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
               AND  tip_authe    = v_tipo;
         END IF;
 
-        -- Para desauth (3/4/6): si el tipo opuesto (auth) ya fue eliminado
-        -- arriba no hay nada más que hacer.
-        -- Solo INSERT si no existe ya el tipo (en caso de que el auth no existiera).
-        IF v_tipo IN ('3','4','6') THEN
+        -- Para desauth (3/4/6): solo INSERT si el auth NO existía (v_auth_borrado = 0).
+        -- Motivo: si existía el auth (v_auth_borrado > 0), cancelarlo borrándolo es
+        -- la acción correcta (igual que sp_SCA_Insert_Autorizacion original).
+        -- Insertar adicionalmente un desauth haría que PASO 14 re-aplique la
+        -- desauth nightly (horaextraofi/horadoblesof = NULL), deshaciendo el
+        -- estado visual de "pendiente" que se restaura más abajo.
+        IF v_tipo IN ('3','4','6') AND v_auth_borrado = 0 THEN
             SELECT COUNT(*) INTO v_existe
             FROM   SCA_AUTORIZACION
             WHERE  cod_empresa  = v_cod_empresa
@@ -789,10 +799,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
         END IF;
 
         -- INSERT del nuevo registro
-        -- Para auth: siempre inserta
-        -- Para desauth: solo inserta si el auth ya NO existía (fue eliminado arriba)
-        --               y no había ya una desauth previa
-        IF v_tipo IN ('1','2','5') OR (v_tipo IN ('3','4','6') AND v_existe = 0) THEN
+        -- Para auth (1/2/5): siempre inserta
+        -- Para desauth (3/4/6): solo inserta cuando NO hubo auth que cancelar
+        --   (v_auth_borrado = 0) y no había ya una desauth previa (v_existe = 0)
+        IF v_tipo IN ('1','2','5') OR
+           (v_tipo IN ('3','4','6') AND v_auth_borrado = 0 AND v_existe = 0) THEN
             INSERT INTO SCA_AUTORIZACION
                 (id_authe, cod_empresa, cod_personal, fec_authe,
                  ori_authe, tip_authe, can_authe, obs_authe, cod_usuario)
@@ -818,16 +829,28 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
             v_valor,           -- NVARCHAR2 aceptado desde VARCHAR2 (implicit cast)
             v_cur_aux
         );
+        -- Liberar el cursor interno devuelto por sp_SCA_Upd_Tar_InsAut
+        IF v_cur_aux%ISOPEN THEN CLOSE v_cur_aux; END IF;
 
         -- --------------------------------------------------
-        -- Tipo '3' (desauth HEA): sp_SCA_Upd_Tar_InsAut deja
-        -- horaextantesofi = NULL, lo que hace que la UI muestre
-        -- la hora como '—' en lugar de volver al estado pendiente.
-        -- La hora real sigue en horaextantes (calculada por el proceso).
-        -- Se restaura horaextantesofi = horaextantes para que la UI
-        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
+        -- Restaurar campos _ofi SOLO cuando se canceló una auth existente
+        -- (v_auth_borrado > 0 = se borró el registro auth del tipo opuesto).
+        --
+        -- Al cancelar una auth, sp_SCA_Upd_Tar_InsAut (tipo '3'/'4'/'6')
+        -- pone el campo _ofi = NULL y limpia horaexofi1/2/3 (correcto para
+        -- planilla). Pero la UI usa _ofi para mostrar la hora; con NULL
+        -- aparece '—' en vez de la hora real con botón "Autorizar".
+        --
+        -- Al restaurar _ofi = valor bruto:
+        --   · La UI vuelve a mostrar la hora en estado pendiente ✓
+        --   · horaexofi1/2/3 siguen en NULL → planilla no la recibe ✓
+        --   · Sin registro de desauth en SCA_AUTORIZACION, PASO 14 no
+        --     vuelve a anular _ofi en el proceso nocturno ✓
+        --
+        -- Si NO había auth previa (v_auth_borrado = 0) = desauth explícita:
+        -- no se restaura → _ofi queda NULL = UI muestra estado desautorizado ✓
         -- --------------------------------------------------
-        IF v_tipo = '3' THEN
+        IF v_tipo = '3' AND v_auth_borrado > 0 THEN
             UPDATE SCA_ASISTENCIA_TAREO
             SET    horaextantesofi = horaextantes
             WHERE  cod_empresa  = v_cod_empresa
@@ -836,15 +859,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
               AND  horaextantes IS NOT NULL;
         END IF;
 
-        -- --------------------------------------------------
-        -- Tipo '4' (desauth HED): sp_SCA_Upd_Tar_InsAut deja
-        -- horaextraofi = NULL, lo que hace que la UI muestre
-        -- la hora como '—' en lugar de volver al estado pendiente.
-        -- La hora real sigue en horaextra (base 01/01/1900).
-        -- Se restaura horaextraofi = horaextra para que la UI
-        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
-        -- --------------------------------------------------
-        IF v_tipo = '4' THEN
+        IF v_tipo = '4' AND v_auth_borrado > 0 THEN
             UPDATE SCA_ASISTENCIA_TAREO
             SET    horaextraofi = horaextra
             WHERE  cod_empresa  = v_cod_empresa
@@ -853,15 +868,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
               AND  horaextra IS NOT NULL;
         END IF;
 
-        -- --------------------------------------------------
-        -- Tipo '6' (desauth HEO): sp_SCA_Upd_Tar_InsAut deja
-        -- horadoblesof = NULL, lo que hace que la UI muestre
-        -- la hora como '—' en lugar de volver al estado pendiente.
-        -- La hora real sigue en horadobles (base 01/01/1900).
-        -- Se restaura horadoblesof = horadobles para que la UI
-        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
-        -- --------------------------------------------------
-        IF v_tipo = '6' THEN
+        IF v_tipo = '6' AND v_auth_borrado > 0 THEN
             UPDATE SCA_ASISTENCIA_TAREO
             SET    horadoblesof = horadobles
             WHERE  cod_empresa  = v_cod_empresa
