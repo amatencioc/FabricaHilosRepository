@@ -17,7 +17,8 @@
 --   SCA_ASISTENCIA_TAREO, SCA_AUTORIZACION
 --
 -- TABLAS ESCRITURA:
---   SCA_AUTORIZACION (INSERT/DELETE via sp_grabar_autorizacion)
+--   SCA_AUTORIZACION    (INSERT/DELETE via sp_grabar_autorizacion)
+--   SCA_ASISTENCIA_TAREO (UPDATE via sp_SCA_Upd_Tar_InsAut — campos _ofi y horaexofi1/2/3)
 --
 -- Oracle 11g / Toad 7.5 — usa TO_DATE, ROWNUM; sin DATE '...' ni FETCH FIRST
 -- ============================================================
@@ -112,6 +113,16 @@ CREATE OR REPLACE PACKAGE PKG_AUTH_HE_SUPERVISOR AS
     --      - Para desauth (3/4/6): horas actuales del tareo
     --        (necesario para la validación del PASO 14 del proceso)
     --
+    --    Efecto en tareo (inmediato, vía sp_SCA_Upd_Tar_InsAut):
+    --      auth  1/2  → horaextantesofi/horaextraofi = v_valor;
+    --                    recalcula horaextra_ajus, horaexofi1/2/3 (tippagohe='1')
+    --                    o horabancoh (tippagohe='2')
+    --      auth  5    → horadoblesof = v_valor
+    --      desauth 3/4 → horaextantesofi/horaextraofi = NULL;
+    --                    horaextra_ajus/horaexofi1/2/3/alerta06 = NULL
+    --      desauth 6  → horadoblesof = NULL
+    --    Sin este paso el Interface no llevaría las HE a planilla.
+    --
     --    cv_1: resultado 'OK'/'ERROR', mensaje
     -- ------------------------------------------------------
     PROCEDURE sp_grabar_autorizacion(
@@ -154,8 +165,8 @@ CREATE OR REPLACE PACKAGE PKG_AUTH_HE_SUPERVISOR AS
     --      cod_personal, nombre_completo, num_fotocheck
     --      cod_c_costos, des_c_costos
     --      dias_con_he, dias_pendientes, dias_autorizados
-    --      min_hed / min_hea / min_heo   (minutos HE crudos)
-    --      min_hed_aut / min_hea_aut / min_heo_aut (autorizados)
+    --      min_hed / min_hea / min_heo   (minutos PENDIENTES de autorizar)
+    --      min_hed_aut / min_hea_aut / min_heo_aut (ya autorizados)
     --      estado: 'SIN_HE' | 'PENDIENTE' | 'PARCIAL' | 'COMPLETO'
     -- ------------------------------------------------------
     PROCEDURE sp_read_resumen_he(
@@ -677,10 +688,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
         v_observaciones IN  VARCHAR2 DEFAULT NULL,
         cv_1            OUT SYS_REFCURSOR
     ) AS
-        v_fec_authe   DATE;
-        v_can_authe   DATE;
+        v_fec_authe    DATE;
+        v_can_authe    DATE;
         v_tipo_opuesto VARCHAR2(1);
-        v_existe       NUMBER := 0;        v_err_msg      VARCHAR2(4000);    BEGIN
+        v_existe       NUMBER        := 0;
+        v_err_msg      VARCHAR2(4000);
+        v_cur_aux      SYS_REFCURSOR;  -- cursor auxiliar para sp_SCA_Upd_Tar_InsAut
+    BEGIN
         -- --------------------------------------------------
         -- Validar tipo
         -- --------------------------------------------------
@@ -785,6 +799,75 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
             VALUES
                 (id_authe_seq.NEXTVAL, v_cod_empresa, v_cod_personal, v_fec_authe,
                  2, v_tipo, v_can_authe, v_observaciones, v_cod_usuario);
+        END IF;
+
+        -- --------------------------------------------------
+        -- Actualizar tareo de forma inmediata.
+        -- sp_SCA_Upd_Tar_InsAut escribe los campos _ofi
+        -- (horaextantesofi / horaextraofi / horadoblesof)
+        -- y recalcula horaextra_ajus + horaexofi1/2/3 según
+        -- tippagohe, dejando el tareo listo para que el
+        -- Interface lleve las HE a planilla sin esperar el
+        -- proceso nocturno.
+        -- --------------------------------------------------
+        sp_SCA_Upd_Tar_InsAut(
+            v_cod_empresa,
+            v_cod_personal,
+            v_fecha,           -- NVARCHAR2 aceptado desde VARCHAR2 (implicit cast)
+            v_tipo,            -- CHAR      aceptado desde VARCHAR2 (implicit cast)
+            v_valor,           -- NVARCHAR2 aceptado desde VARCHAR2 (implicit cast)
+            v_cur_aux
+        );
+
+        -- --------------------------------------------------
+        -- Tipo '3' (desauth HEA): sp_SCA_Upd_Tar_InsAut deja
+        -- horaextantesofi = NULL, lo que hace que la UI muestre
+        -- la hora como '—' en lugar de volver al estado pendiente.
+        -- La hora real sigue en horaextantes (calculada por el proceso).
+        -- Se restaura horaextantesofi = horaextantes para que la UI
+        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
+        -- --------------------------------------------------
+        IF v_tipo = '3' THEN
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    horaextantesofi = horaextantes
+            WHERE  cod_empresa  = v_cod_empresa
+              AND  cod_personal = v_cod_personal
+              AND  fechamar     = v_fec_authe
+              AND  horaextantes IS NOT NULL;
+        END IF;
+
+        -- --------------------------------------------------
+        -- Tipo '4' (desauth HED): sp_SCA_Upd_Tar_InsAut deja
+        -- horaextraofi = NULL, lo que hace que la UI muestre
+        -- la hora como '—' en lugar de volver al estado pendiente.
+        -- La hora real sigue en horaextra (base 01/01/1900).
+        -- Se restaura horaextraofi = horaextra para que la UI
+        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
+        -- --------------------------------------------------
+        IF v_tipo = '4' THEN
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    horaextraofi = horaextra
+            WHERE  cod_empresa  = v_cod_empresa
+              AND  cod_personal = v_cod_personal
+              AND  fechamar     = v_fec_authe
+              AND  horaextra IS NOT NULL;
+        END IF;
+
+        -- --------------------------------------------------
+        -- Tipo '6' (desauth HEO): sp_SCA_Upd_Tar_InsAut deja
+        -- horadoblesof = NULL, lo que hace que la UI muestre
+        -- la hora como '—' en lugar de volver al estado pendiente.
+        -- La hora real sigue en horadobles (base 01/01/1900).
+        -- Se restaura horadoblesof = horadobles para que la UI
+        -- vuelva a mostrar la hora con botón "Autorizar" (pendiente).
+        -- --------------------------------------------------
+        IF v_tipo = '6' THEN
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    horadoblesof = horadobles
+            WHERE  cod_empresa  = v_cod_empresa
+              AND  cod_personal = v_cod_personal
+              AND  fechamar     = v_fec_authe
+              AND  horadobles IS NOT NULL;
         END IF;
 
         OPEN cv_1 FOR
@@ -909,15 +992,23 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                                               WHERE  f2.cod_empresa  = p.cod_empresa
                                                 AND  f2.cod_personal = p.cod_personal)
                     ) num_fotocheck,
-                    -- Días con HE de cualquier tipo en el período
+                    -- Días con HE de cualquier tipo en el período.
+                    -- Lógica: el PROCESO es el árbitro de qué cuenta como HE real:
+                    --   HED/HEO: hayhed_poraut/hayheo_poraut IN ('S','N')
+                    --             ('S'=pendiente, 'N'=ya autorizado)
+                    --   HEA:     horaextantesofi IS NOT NULL con tiempo > 0
+                    --             (el proceso la setea cuando supera el umbral)
                     (SELECT COUNT(*)
                      FROM   SCA_ASISTENCIA_TAREO t
                      WHERE  t.cod_empresa  = p.cod_empresa
                        AND  t.cod_personal = p.cod_personal
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                       AND  (   t.horaextra     > v_base
-                             OR t.horaextantes  > v_base
-                             OR t.horadobles    > v_base)
+                       AND  (
+                                t.hayhed_poraut IN ('S','N')
+                             OR (   t.horaextantesofi IS NOT NULL
+                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
+                             OR t.hayheo_poraut IN ('S','N')
+                            )
                     ) dias_con_he,
                     -- Días con HE sin ninguna autorización (pendientes)
                     (SELECT COUNT(*)
@@ -925,9 +1016,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                      WHERE  t.cod_empresa  = p.cod_empresa
                        AND  t.cod_personal = p.cod_personal
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                       AND  (   t.horaextra    > v_base
-                             OR t.horaextantes > v_base
-                             OR t.horadobles   > v_base)
+                       AND  (
+                                t.hayhed_poraut IN ('S','N')
+                             OR (   t.horaextantesofi IS NOT NULL
+                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
+                             OR t.hayheo_poraut IN ('S','N')
+                            )
                        AND  NOT EXISTS (
                                 SELECT 1
                                 FROM   SCA_AUTORIZACION a
@@ -944,27 +1038,44 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
                        AND  a.tip_authe   IN ('1','2','5')
                     ) dias_autorizados,
-                    -- Minutos HED crudos (horaextra)
+                    -- Minutos HED pendientes de autorizar.
+                    -- hayhed_poraut='S': el proceso lo marcó como pendiente
+                    -- (solo cuando HED >= min_a_part_hextra → evita sumar valores
+                    -- sub-umbral que la UI no muestra ni permite autorizar)
                     NVL((SELECT SUM(ROUND((t.horaextra - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
                            AND  t.cod_personal = p.cod_personal
                            AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                           AND  t.horaextra    > v_base), 0)  min_hed,
-                    -- Minutos HEA crudos (horaextantes)
-                    NVL((SELECT SUM(ROUND((t.horaextantes - v_base) * 1440))
+                           AND  t.hayhed_poraut = 'S'
+                         ), 0)  min_hed,
+                    -- Minutos HEA pendientes de autorizar.
+                    -- Usa horaextantesofi (seteado por el proceso cuando supera
+                    -- el umbral) con TRUNC para extraer solo la parte horaria
+                    -- (base de fecha variable: no se puede restar v_base directo)
+                    NVL((SELECT SUM(ROUND((t.horaextantesofi - TRUNC(t.horaextantesofi)) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa   = p.cod_empresa
                            AND  t.cod_personal  = p.cod_personal
                            AND  t.fechamar      BETWEEN v_fec_ini AND v_fec_fin
-                           AND  t.horaextantes  > v_base), 0) min_hea,
-                    -- Minutos HEO crudos (horadobles)
+                           AND  t.horaextantesofi IS NOT NULL
+                           AND  (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0
+                           AND  NOT EXISTS (
+                                    SELECT 1 FROM SCA_AUTORIZACION a
+                                    WHERE  a.cod_empresa  = p.cod_empresa
+                                      AND  a.cod_personal = p.cod_personal
+                                      AND  a.fec_authe    = t.fechamar
+                                      AND  a.tip_authe    = '1')
+                         ), 0) min_hea,
+                    -- Minutos HEO pendientes de autorizar.
+                    -- hayheo_poraut='S': el proceso lo marcó como pendiente
                     NVL((SELECT SUM(ROUND((t.horadobles - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
                            AND  t.cod_personal = p.cod_personal
                            AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                           AND  t.horadobles   > v_base), 0)  min_heo,
+                           AND  t.hayheo_poraut = 'S'
+                         ), 0)  min_heo,
                     -- Minutos HED autorizados (tip='2')
                     NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
                          FROM   SCA_AUTORIZACION a
