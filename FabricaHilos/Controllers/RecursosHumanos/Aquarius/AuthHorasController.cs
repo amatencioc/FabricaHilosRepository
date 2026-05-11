@@ -41,7 +41,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Login([FromForm] AuthHorasLoginRequest req)
         {
-            var result = await _service.LoginAsync(req.CodUsuario, req.PasswordPlain);
+            var result = await _service.LoginAsync(req.CodUsuario);
 
             if (!result.Ok)
             {
@@ -198,6 +198,21 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             // Validar formato valor HH:MM
             if (!System.Text.RegularExpressions.Regex.IsMatch(req.Valor, @"^\d{2}:\d{2}$"))
                 return BadRequest(new { ok = false, mensaje = "Formato de horas inválido." });
+
+            // Prefijo de trazabilidad: identifica qué usuario del sistema principal autorizó
+            var oracleUser   = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+            var connKey      = HttpContext.Session.GetString("EmpresaConexion") ?? string.Empty;
+            var empresaLabel = connKey switch
+            {
+                "ArbonaConnection"     => "ARBONA",
+                "SolsaConnection"      => "SOLSA",
+                "LaColonialConnection" => "COLONIAL",
+                _                     => "COLONIAL"
+            };
+            var prefijo = $"[{empresaLabel}-{oracleUser}]";
+            req.Observaciones = string.IsNullOrWhiteSpace(req.Observaciones)
+                ? prefijo
+                : $"{prefijo} {req.Observaciones}";
 
             var result = await _service.GrabarAutorizacionAsync(usuario, req);
             return Ok(result);

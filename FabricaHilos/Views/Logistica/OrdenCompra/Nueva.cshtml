@@ -1,0 +1,931 @@
+@{
+    ViewData["Title"] = "Nueva Orden de Compra";
+    var requisiciones = ViewBag.Requisiciones as List<FabricaHilos.Models.Logistica.RequisicionPendienteDto>
+                        ?? new List<FabricaHilos.Models.Logistica.RequisicionPendienteDto>();
+    var proveedores   = ViewBag.Proveedores   as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var condPag       = ViewBag.CondPag       as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var opcEntrega    = ViewBag.OpcEntrega    as List<FabricaHilos.Models.Logistica.OpcEntregaDto>
+                        ?? new List<FabricaHilos.Models.Logistica.OpcEntregaDto>();
+    var centrosCosto  = ViewBag.CentrosCosto  as Dictionary<string, string> ?? new Dictionary<string, string>();
+    string? navToken  = ViewBag.NavToken      as string;
+    string  hoy       = DateTime.Today.ToString("yyyy-MM-dd");
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Logistica" asp-action="Index">Logística</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index" asp-route-t="@navToken">Órdenes de Compra</a></li>
+    <li class="breadcrumb-item active">Nueva Orden</li>
+}
+
+@Html.AntiForgeryToken()
+
+<style>
+    .oc-panel-header {
+        background: linear-gradient(90deg,#1a3c5e 0%,#26547c 100%);
+        color:#fff; font-size:.78rem; font-weight:600; letter-spacing:.04em;
+        padding:.35rem .75rem; border-radius:4px 4px 0 0;
+    }
+    .oc-panel { border:1px solid #c8d6e5; border-radius:4px; margin-bottom:.75rem; }
+    .oc-panel .oc-panel-body { padding:.5rem .75rem; background:#fff; }
+    .req-row { cursor:pointer; transition:background .15s; }
+    .req-row:hover td { background:#eef4fb !important; }
+    .req-row.selected td { background:#dbeeff !important; }
+    .req-row td { vertical-align:middle; font-size:.8rem; padding:.3rem .5rem; }
+    .badge-req { background:#1a3c5e; color:#fff; font-size:.72rem; font-weight:700; border-radius:3px; padding:2px 7px; display:inline-block; }
+    .badge-urg  { background:#dc3545; color:#fff; font-size:.68rem; border-radius:3px; padding:1px 6px; display:inline-block; }
+    .badge-corr { background:#6c757d; color:#fff; font-size:.68rem; border-radius:3px; padding:1px 6px; display:inline-block; }
+    .items-subrow > td { background:#f0f5ff !important; padding:.3rem .5rem .4rem 2.2rem !important; }
+    .items-inner-table { font-size:.76rem; margin-bottom:0; }
+    .items-inner-table thead th { background:#dee2e6; padding:.25rem .4rem; white-space:nowrap; }
+    .items-inner-table tbody td { padding:.2rem .4rem; vertical-align:middle; }
+    .form-field-label { font-size:.73rem; font-weight:600; color:#495057; margin-bottom:.15rem; display:block; }
+    .form-control-xs, .form-select-xs { font-size:.78rem !important; padding:.22rem .45rem !important; height:auto; border-radius:3px; }
+    .inp-readonly-style { background:#f0f4f8; font-size:.78rem; padding:.22rem .45rem; border:1px solid #ced4da; border-radius:3px; height:auto; color:#555; width:100%; }
+    .oc-items-table { font-size:.77rem; }
+    .oc-items-table thead th { background:#1a3c5e; color:#fff; padding:.3rem .4rem; white-space:nowrap; }
+    .oc-items-table tbody td { padding:.22rem .35rem; vertical-align:middle; }
+    .oc-items-table tbody tr:nth-child(even) td { background:#f4f8ff; }
+    .totals-bar { background:#1a3c5e; color:#fff; border-radius:0 0 4px 4px; padding:.45rem .85rem; font-size:.8rem; }
+    .totals-bar .lbl { font-size:.65rem; color:#adc8e8; text-transform:uppercase; display:block; white-space:nowrap; }
+    .totals-bar .val { font-weight:700; font-size:.92rem; }
+    .totals-bar .val-total { font-size:1.1rem; color:#ffd43b; }
+    .step-badge { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:#4a7fad; color:#fff; font-size:.7rem; font-weight:700; margin-right:5px; }
+    .sel-count-bar { background:#eef4fb; border-top:1px solid #c8d6e5; padding:.4rem .75rem; border-radius:0 0 3px 3px; }
+    .btn-genera { background:linear-gradient(135deg,#0d6efd,#1a3c5e); color:#fff !important; font-weight:600; font-size:.8rem; border:none; padding:.38rem 1.2rem; border-radius:4px; }
+    .btn-genera:hover { background:linear-gradient(135deg,#0b5ed7,#15305e); }
+    .btn-genera:disabled { opacity:.65; }
+</style>
+
+<!-- ── Alerta OC pendientes de confirmación (red caída) ──────────────── -->
+<div id="alertaPendientes" class="alert alert-warning border border-warning d-none mb-3" role="alert">
+    <div class="d-flex align-items-center mb-2">
+        <i class="bi bi-exclamation-triangle-fill me-2 text-warning fs-5"></i>
+        <strong>⚠ Órdenes registradas sin confirmar</strong>
+        <span class="ms-2 text-muted small">
+            Estas O/C fueron enviadas a Oracle pero la respuesta no llegó al navegador (posible corte de red).
+            Verifique en el listado y haga clic en <strong>OK</strong> para descartar la alerta.
+        </span>
+    </div>
+    <table class="table table-sm table-bordered mb-0 small">
+        <thead class="table-warning">
+            <tr>
+                <th>N° Pedido</th><th>Detalle</th><th>Fecha registro</th><th></th>
+            </tr>
+        </thead>
+        <tbody id="tbodyPendientes"></tbody>
+    </table>
+</div>
+
+<!-- ── Encabezado ─────────────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="section-title mb-0">
+        <i class="bi bi-plus-circle-fill me-2 text-primary"></i>Nueva Orden de Compra / Servicio
+    </h5>
+    <a asp-action="Index" asp-route-t="@navToken" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PASO 1 — REQUERIMIENTOS
+     ══════════════════════════════════════════════════════ -->
+<div id="cardPaso1">
+    <div class="oc-panel">
+        <div class="oc-panel-header">
+            <span class="step-badge">1</span>
+            Seleccionar Requerimientos e Ítems
+        </div>
+        <div class="oc-panel-body p-0">
+            @if (!requisiciones.Any())
+            {
+                <div class="alert alert-info m-2 py-2 small mb-2">
+                    <i class="bi bi-info-circle me-1"></i>No hay requerimientos pendientes con saldo disponible.
+                </div>
+            }
+            else
+            {
+                <div class="px-2 pt-2 pb-1">
+                    <div class="input-group input-group-sm" style="max-width:320px;">
+                        <span class="input-group-text bg-white border-end-0" style="border-color:#c8d6e5;">
+                            <i class="bi bi-search text-muted" style="font-size:.75rem;"></i>
+                        </span>
+                        <input type="text" id="inputBuscarReq" class="form-control form-control-xs border-start-0"
+                               placeholder="Buscar por N° de requerimiento…"
+                               style="border-color:#c8d6e5; font-size:.78rem;"
+                               oninput="filtrarRequisiciones(this.value)" autocomplete="off" />
+                        <button class="btn btn-outline-secondary btn-sm px-2" type="button"
+                                onclick="document.getElementById('inputBuscarReq').value=''; filtrarRequisiciones('');"
+                                title="Limpiar">
+                            <i class="bi bi-x" style="font-size:.8rem;"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered mb-0" style="border-color:#c8d6e5;">
+                        <thead>
+                            <tr style="background:#dce8f5; font-size:.72rem; color:#1a3c5e;">
+                                <th style="width:24px;"></th>
+                                <th>Requisición</th>
+                                <th>C. Costo</th>
+                                <th>Proveedor Sug.</th>
+                                <th>Fecha</th>
+                                <th>F. Entrega</th>
+                                <th>Observación</th>
+                                <th class="text-center" style="width:75px;">Ítems pend.</th>
+                                <th class="text-center" style="width:80px;">Prioridad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyReqs">
+                            @foreach (var req in requisiciones)
+                            {
+                                var reqId  = $"req_{req.TipDoc}_{req.Serie}_{req.NumReq}";
+                                var ccDesc = !string.IsNullOrWhiteSpace(req.CentroCosto) && centrosCosto.TryGetValue(req.CentroCosto!, out var ccd) ? ccd : req.CentroCosto ?? "-";
+                                <tr class="req-row" id="row_@reqId"
+                                    data-reqid="@reqId" data-tipdoc="@req.TipDoc" data-serie="@req.Serie" data-numreq="@req.NumReq"
+                                    onclick="toggleReqRow('@reqId','@req.TipDoc','@req.Serie','@req.NumReq')">
+                                    <td class="text-center px-1">
+                                        <i class="bi bi-chevron-right" id="ico_@reqId" style="font-size:.7rem; color:#888;"></i>
+                                    </td>
+                                    <td><span class="badge-req">REQ @req.NumReq</span></td>
+                                    <td>@ccDesc</td>
+                                    <td class="text-muted">@(req.Proveedores ?? "-")</td>
+                                    <td>@req.Fecha?.ToString("dd/MM/yyyy")</td>
+                                    <td>@req.FEntrega?.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@req.Observacion">@(req.Observacion ?? "-")</td>
+                                    <td class="text-center"><span class="badge bg-warning text-dark">@req.ItemsPendientes</span></td>
+                                    <td class="text-center">
+                                        @if (req.Prioridad == "01")
+                                        {
+                                            <span class="badge-urg">⚡ URGENTE</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-corr">Corriente</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr id="subrow_@reqId" style="display:none;" class="items-subrow">
+                                    <td colspan="9">
+                                        <div id="body_@reqId" class="text-center text-muted py-2 small">
+                                            <span class="spinner-border spinner-border-sm me-1"></span>Cargando ítems…
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="sel-count-bar d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <span class="small text-muted">
+                        <i class="bi bi-check2-square me-1 text-primary"></i>
+                        Ítems seleccionados: <strong id="lblTotalSel" class="text-primary">0</strong>
+                    </span>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnPaso2" disabled>
+                        <i class="bi bi-arrow-right-circle me-1"></i>Continuar — Completar datos de la Orden
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     PASO 2 — DATOS DE LA ORDEN
+     ══════════════════════════════════════════════════════ -->
+<div id="cardPaso2" class="d-none">
+
+    <!-- Panel cabecera -->
+    <div class="oc-panel">
+        <div class="oc-panel-header">
+            <span class="step-badge">2</span>
+            Datos de la Orden de Compra / Servicio
+        </div>
+        <div class="oc-panel-body">
+
+            <!-- Fila 1: tipo / c.costo / fecha / f.entrega -->
+            <div class="row g-2 mb-2 align-items-end">
+                <div class="col-12 col-md-2">
+                    <label class="form-field-label">Tipo Doc. <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm form-select-xs" id="selTipoDocto">
+                        <option value="82">O.COMPRA</option>
+                        <option value="83">O.SERVICIO</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-field-label">C. Costo</label>
+                    <div class="position-relative">
+                        <input type="text" class="form-control form-control-sm form-control-xs" id="buscarCCosto"
+                               placeholder="Buscar centro de costo…" autocomplete="off" />
+                        <input type="hidden" id="selCCosto" />
+                        <ul id="listaCCosto" class="list-group position-absolute w-100 d-none"
+                            style="z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;border:1px solid #c8d6e5;"></ul>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-field-label">Fecha <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control form-control-sm form-control-xs" id="inpFecha" value="@hoy" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-field-label">F. Entrega <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control form-control-sm form-control-xs" id="inpFEntrega" value="@hoy" />
+                </div>
+            </div>
+
+            <!-- Fila 2: proveedor / IGV / moneda / c.pago -->
+            <div class="row g-2 mb-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-field-label">Proveedor <span class="text-danger">*</span></label>
+                    <div class="position-relative">
+                        <input type="text" class="form-control form-control-sm form-control-xs" id="buscarProveedor"
+                               placeholder="Buscar por nombre, código o RUC…" autocomplete="off" />
+                        <input type="hidden" id="selProveedor" />
+                        <ul id="listaProveedor" class="list-group position-absolute w-100 d-none"
+                            style="z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;border:1px solid #c8d6e5;"></ul>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-field-label">IGV %</label>
+                    <select class="form-select form-select-sm form-select-xs" id="selIgv">
+                        @{ var igvList = ViewBag.IgvList as List<FabricaHilos.Models.Logistica.IgvDto> ?? new List<FabricaHilos.Models.Logistica.IgvDto> { new() { Codigo="18", Descripcion="IGV 18%", Valor=0.18m } }; }
+                        @foreach (var igvOpt in igvList)
+                        {
+                            var pct = (igvOpt.Valor * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                            var valStr = igvOpt.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            if (igvOpt.Valor == 0.18m)
+                            {
+                                <option value="@valStr" selected="selected">@igvOpt.Descripcion (@pct%)</option>
+                            }
+                            else
+                            {
+                                <option value="@valStr">@igvOpt.Descripcion (@pct%)</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-field-label">Moneda <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm form-select-xs" id="selMoneda">
+                        <option value="S">S/ Soles</option>
+                        <option value="D">$ Dólares</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-field-label">C. Pago <span class="text-danger">*</span></label>
+                    <div class="position-relative">
+                        <input type="text" class="form-control form-control-sm form-control-xs" id="buscarCondPag"
+                               placeholder="Buscar condición de pago…" autocomplete="off" />
+                        <input type="hidden" id="selCondPag" />
+                        <ul id="listaCondPag" class="list-group position-absolute w-100 d-none"
+                            style="z-index:1050;max-height:220px;overflow-y:auto;top:100%;left:0;border:1px solid #c8d6e5;"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila 3: detalle / opc entrega / dirección -->
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-field-label">Detalle</label>
+                    <input type="text" class="form-control form-control-sm form-control-xs" id="inpDetalle"
+                           maxlength="500" placeholder="Observación general de la orden…" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-field-label">Lugar Entrega <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm form-select-xs" id="selOpcEntrega">
+                        @foreach (var opc in opcEntrega)
+                        {
+                            <option value="@opc.OpcLEntrega" data-lref="@(opc.LEntregaRef ?? "")">
+                                @opc.Descripcion
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-5">
+                    <label class="form-field-label">Dirección de Entrega</label>
+                    <input type="text" class="form-control form-control-sm form-control-xs" id="inpLEntrega"
+                           maxlength="200" placeholder="(Dirección actual de la empresa)" />
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Panel ítems -->
+    <div class="oc-panel">
+        <div class="oc-panel-header d-flex justify-content-between align-items-center">
+            <span>
+                <i class="bi bi-list-ul me-1"></i>Ítems de la Orden
+                <span class="badge bg-light text-dark ms-2 fw-normal" id="badgeItemsOc" style="font-size:.68rem;">0 ítems</span>
+            </span>
+            <span class="text-white-50 small" id="lblReqsRelacionados"></span>
+        </div>
+        <div class="oc-panel-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered oc-items-table mb-0" style="border-color:#c8d6e5;">
+                    <thead>
+                        <tr>
+                            <th style="width:80px;">REQs</th>
+                            <th style="width:90px;">Artículo</th>
+                            <th style="width:85px;">Cód. Prov.</th>
+                            <th>Descripción</th>
+                            <th style="width:50px;" class="text-center">Und</th>
+                            <th style="width:95px;" class="text-end">Precio</th>
+                            <th style="width:65px;" class="text-end">Desc 1%</th>
+                            <th style="width:65px;" class="text-end">Desc 2%</th>
+                            <th style="width:88px;" class="text-end">Cantidad</th>
+                            <th style="width:100px;">Destino</th>
+                            <th style="width:95px;" class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyItemsOc">
+                        <tr id="trSinItems">
+                            <td colspan="11" class="text-center text-muted py-3 small">
+                                <i class="bi bi-inbox me-1"></i>Sin ítems — vuelva al Paso 1 para seleccionar.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Barra de totales estilo antiguo -->
+            <div class="totals-bar d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="small">
+                    <span style="color:#adc8e8; font-size:.65rem; text-transform:uppercase;">Nros Reqs relacionados:</span><br>
+                    <span class="fw-semibold" id="spanReqsIds">—</span>
+                </div>
+                <div class="d-flex gap-3 flex-wrap">
+                    <div class="text-center">
+                        <span class="lbl">Importe</span>
+                        <span class="val" id="tdValVenta">0.00</span>
+                    </div>
+                    <div class="text-center">
+                        <span class="lbl">Descuento</span>
+                        <span class="val" style="color:#adc8e8;">0.00</span>
+                    </div>
+                    <div class="text-center">
+                        <span class="lbl">Valor Venta</span>
+                        <span class="val" id="tdValorVenta2">0.00</span>
+                    </div>
+                    <div class="text-center">
+                        <span class="lbl">I.G.V.</span>
+                        <span class="val" id="tdIgvTotal">0.00</span>
+                    </div>
+                    <div class="text-center border-start border-secondary ps-3">
+                        <span class="lbl">TOTAL</span>
+                        <span class="val val-total" id="tdTotal">0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botones -->
+    <div class="d-flex justify-content-between mb-3">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnVolver1">
+            <i class="bi bi-arrow-left-circle me-1"></i>Volver al Paso 1
+        </button>
+        <button type="button" class="btn btn-genera" id="btnRegistrar">
+            <i class="bi bi-check2-circle me-1"></i>GENERA — Registrar Orden
+        </button>
+    </div>
+
+</div><!-- /cardPaso2 -->
+
+
+<!-- Modal éxito -->
+<div class="modal fade" id="modalExito" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:linear-gradient(90deg,#1a3c5e,#26547c);color:#fff;">
+                <h6 class="modal-title"><i class="bi bi-check-circle me-1"></i>Orden registrada</h6>
+            </div>
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-cart-check text-success" style="font-size:3rem;"></i>
+                <p class="mt-3 mb-1 text-muted small">La Orden fue registrada con el número:</p>
+                <p class="fw-bold fs-4 text-primary" id="lblNumPedCreado"></p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <a href="#" class="btn btn-primary btn-sm" id="btnVerDetalle">
+                    <i class="bi bi-eye me-1"></i>Ver Detalle
+                </a>
+                <a asp-action="Index" asp-route-t="@navToken" class="btn btn-outline-secondary btn-sm">
+                    Volver al listado
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal error -->
+<div class="modal fade" id="modalError" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white py-2">
+                <h6 class="modal-title"><i class="bi bi-exclamation-circle me-1"></i>Error</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body small" id="modalErrorMsg"></div>
+            <div class="modal-footer py-1">
+                <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    var itemsSeleccionados = {};
+    var itemsCache         = {};
+
+    // ── Filtrar reqs por número ───────────────────────────────────────────────
+    window.filtrarRequisiciones = function(texto) {
+        var q = texto.trim().toLowerCase();
+        var rows = document.querySelectorAll('#tbodyReqs tr.req-row');
+        rows.forEach(function(row) {
+            var numReq = (row.dataset.numreq || '').toLowerCase();
+            var visible = !q || numReq.includes(q);
+            row.style.display = visible ? '' : 'none';
+            // También ocultar el subrow cuando la fila se oculta
+            var reqId  = row.dataset.reqid;
+            var subrow = document.getElementById('subrow_' + reqId);
+            if (subrow && !visible) subrow.style.display = 'none';
+        });
+    };
+
+    // ── Toggle fila req ───────────────────────────────────────────────────────
+    window.toggleReqRow = function(reqId, tipDoc, serie, numReq) {
+        var sub = document.getElementById('subrow_' + reqId);
+        var ico = document.getElementById('ico_' + reqId);
+        var row = document.getElementById('row_' + reqId);
+        var open = sub.style.display !== 'none';
+        if (open) {
+            sub.style.display = 'none';
+            ico.className = 'bi bi-chevron-right';
+            ico.style.color = '#888';
+            row.classList.remove('selected');
+        } else {
+            sub.style.display = '';
+            ico.className = 'bi bi-chevron-down';
+            ico.style.color = '#0d6efd';
+            row.classList.add('selected');
+            cargarItemsReq(tipDoc, serie, numReq, reqId);
+        }
+    };
+
+    // ── Cargar ítems AJAX ────────────────────────────────────────────────────
+    function cargarItemsReq(tipDoc, serie, numReq, reqId) {
+        var ck = tipDoc + '|' + serie + '|' + numReq;
+        if (itemsCache[ck]) { renderItems(reqId, itemsCache[ck]); return; }
+        fetch('/Logistica/OrdenCompra/ItemsReq?tipDoc=' + encodeURIComponent(tipDoc) +
+              '&serie=' + encodeURIComponent(serie) + '&numReq=' + encodeURIComponent(numReq))
+            .then(function(r) { return r.json(); })
+            .then(function(d) { itemsCache[ck] = d; renderItems(reqId, d); })
+            .catch(function() {
+                document.getElementById('body_' + reqId).innerHTML =
+                    '<div class="text-danger small py-2"><i class="bi bi-exclamation-circle me-1"></i>Error al cargar ítems.</div>';
+            });
+    }
+
+    function renderItems(reqId, items) {
+        var body = document.getElementById('body_' + reqId);
+        if (!items || !items.length) {
+            body.innerHTML = '<div class="text-muted small py-2 ps-2">No hay ítems pendientes.</div>';
+            return;
+        }
+        var h = '<div class="table-responsive"><table class="table table-sm items-inner-table mb-0 border" style="border-color:#c8d6e5 !important;">' +
+            '<thead><tr>' +
+            '<th style="width:26px;"><input type="checkbox" class="form-check-input chk-req-all" data-reqid="' + reqId + '"></th>' +
+            '<th>Ord</th><th>Artículo</th><th>Descripción</th>' +
+            '<th class="text-center">Und</th><th class="text-end">Cantidad</th>' +
+            '<th class="text-end" style="color:#155724;">Saldo</th>' +
+            '<th class="text-end">Precio Ref.</th><th>Destino</th>' +
+            '</tr></thead><tbody>';
+        items.forEach(function(it) {
+            var key = it.tipDoc+'|'+it.serie+'|'+it.numReq+'|'+it.orden+'|'+it.codArt;
+            var chk = itemsSeleccionados[key] ? 'checked' : '';
+            var desc = it.descArticulo || it.detalle || it.codArt || '';
+            h += '<tr>' +
+                '<td><input type="checkbox" class="form-check-input chk-item-req" ' + chk +
+                ' data-reqid="' + reqId + '" data-key="' + key + '"' +
+                ' data-tipdoc="'    + (it.tipDoc||'')          + '"' +
+                ' data-serie="'     + (it.serie||0)            + '"' +
+                ' data-numreq="'    + (it.numReq||0)           + '"' +
+                ' data-orden="'     + (it.orden||0)            + '"' +
+                ' data-codart="'    + esc(it.codArt||'')       + '"' +
+                ' data-detalle="'   + esc(it.detalle||'')      + '"' +
+                ' data-desc="'      + esc(desc)                + '"' +
+                ' data-unidad="'    + esc(it.unidad||'')       + '"' +
+                ' data-saldo="'     + (it.saldo||0)            + '"' +
+                ' data-precio="'    + (it.precio||0)           + '"' +
+                ' data-tpdestino="' + (it.tpDestino||'')       + '"' +
+                ' data-destino="'   + esc(it.destino||'')      + '"' +
+                ' data-destinodesc="'+ esc(it.destinoDesc||'') + '"' +
+                ' data-codsolicita="'+ esc(it.codSolicita||'') + '"' +
+                '></td>' +
+                '<td class="text-center">' + it.orden + '</td>' +
+                '<td class="fw-semibold" style="color:#1a3c5e;">' + esc(it.codArt||'-') + '</td>' +
+                '<td>' + esc(desc) + '</td>' +
+                '<td class="text-center">' + esc(it.unidad||'-') + '</td>' +
+                '<td class="text-end">' + pf(it.cantidad,2) + '</td>' +
+                '<td class="text-end fw-semibold" style="color:#155724;">' + pf(it.saldo,2) + '</td>' +
+                '<td class="text-end">' + pf(it.precio,4) + '</td>' +
+                '<td class="text-muted small">' + esc((it.destinoDesc || it.destino) ||'-') + '</td>' +
+                '</tr>';
+        });
+        h += '</tbody></table></div>';
+        body.innerHTML = h;
+
+        body.querySelectorAll('.chk-item-req').forEach(function(c) {
+            c.addEventListener('change', function() {
+                if (c.checked) itemsSeleccionados[c.dataset.key] = buildItem(c);
+                else delete itemsSeleccionados[c.dataset.key];
+                actualizarConteo();
+                syncAll(reqId);
+            });
+        });
+        var ca = body.querySelector('.chk-req-all');
+        if (ca) {
+            ca.addEventListener('change', function() {
+                body.querySelectorAll('.chk-item-req').forEach(function(c) {
+                    c.checked = ca.checked;
+                    if (c.checked) itemsSeleccionados[c.dataset.key] = buildItem(c);
+                    else delete itemsSeleccionados[c.dataset.key];
+                });
+                actualizarConteo();
+            });
+        }
+        syncAll(reqId);
+    }
+
+    function syncAll(reqId) {
+        var body = document.getElementById('body_' + reqId);
+        if (!body) return;
+        var all = body.querySelectorAll('.chk-item-req');
+        var chk = body.querySelectorAll('.chk-item-req:checked');
+        var ca  = body.querySelector('.chk-req-all');
+        if (!ca) return;
+        ca.indeterminate = chk.length > 0 && chk.length < all.length;
+        ca.checked       = all.length > 0 && chk.length === all.length;
+    }
+
+    function buildItem(c) {
+        var saldo    = parseFloat(c.dataset.saldo) || 0;
+        var existing = itemsSeleccionados[c.dataset.key];
+        return {
+            tipDoc: c.dataset.tipdoc, serie: +c.dataset.serie, numReq: +c.dataset.numreq,
+            orden: +c.dataset.orden, codArt: c.dataset.codart,
+            detalle: c.dataset.detalle, desc: c.dataset.desc || c.dataset.detalle || c.dataset.codart,
+            unidad: c.dataset.unidad,
+            codOrig:  existing ? existing.codOrig  : '',
+            cantidad: existing ? existing.cantidad  : saldo,
+            cantOrig: saldo,
+            precio:   existing ? existing.precio    : (parseFloat(c.dataset.precio) || 0),
+            porDesc1: existing ? existing.porDesc1  : 0,
+            porDesc2: existing ? existing.porDesc2  : 0,
+            tpDestino: c.dataset.tpdestino, destino: c.dataset.destino,
+            destinoDesc: c.dataset.destinodesc, cCodigo: c.dataset.codsolicita
+        };
+    }
+
+    function actualizarConteo() {
+        var n = Object.keys(itemsSeleccionados).length;
+        document.getElementById('lblTotalSel').textContent = n;
+        document.getElementById('btnPaso2').disabled = n === 0;
+    }
+
+    // ── Paso 2 ───────────────────────────────────────────────────────────────
+    document.getElementById('btnPaso2').addEventListener('click', function() {
+        document.getElementById('cardPaso1').classList.add('d-none');
+        document.getElementById('cardPaso2').classList.remove('d-none');
+        renderTablaOc();
+        window.scrollTo(0, 0);
+    });
+
+    document.getElementById('btnVolver1').addEventListener('click', function() {
+        document.getElementById('cardPaso2').classList.add('d-none');
+        document.getElementById('cardPaso1').classList.remove('d-none');
+        window.scrollTo(0, 0);
+    });
+
+    function renderTablaOc() {
+        var tbody = document.getElementById('tbodyItemsOc');
+        tbody.innerHTML = '';
+        var keys = Object.keys(itemsSeleccionados);
+
+        if (!keys.length) {
+            tbody.innerHTML = document.getElementById('trSinItems').outerHTML;
+            document.getElementById('badgeItemsOc').textContent = '0 ítems';
+            return;
+        }
+
+        // REQs relacionados
+        var rset = {};
+        keys.forEach(function(k) { rset[itemsSeleccionados[k].numReq] = 1; });
+        var rlist = Object.keys(rset).sort(function(a,b){return b-a;}).join(', ');
+        document.getElementById('spanReqsIds').textContent = rlist;
+        document.getElementById('lblReqsRelacionados').textContent = 'REQs: ' + rlist;
+
+        // ── Fusionar por codArt (Opción B) ───────────────────────────────────
+        var mergedMap   = {};
+        var mergedOrder = [];
+        keys.forEach(function(k) {
+            var it = itemsSeleccionados[k];
+            var ca = it.codArt;
+            if (!mergedMap[ca]) {
+                mergedMap[ca] = {
+                    codArt: ca, desc: it.desc, detalle: it.detalle,
+                    unidad: it.unidad, precio: it.precio,
+                    porDesc1: it.porDesc1, porDesc2: it.porDesc2,
+                    tpDestino: it.tpDestino, destino: it.destino, destinoDesc: it.destinoDesc,
+                    cantidad: 0, origTotal: 0, reqNums: [], reqItems: [], codOrig: it.codOrig || ''
+                };
+                mergedOrder.push(ca);
+            }
+            var m = mergedMap[ca];
+            m.cantidad  += it.cantOrig;
+            m.origTotal += it.cantOrig;
+            if (m.reqNums.indexOf(it.numReq) === -1) m.reqNums.push(it.numReq);
+            m.reqItems.push({ numReq: it.numReq, orden: it.orden });
+        });
+
+        mergedOrder.forEach(function(ca) {
+            var it = mergedMap[ca];
+            var reqBadges = it.reqItems.slice()
+                .sort(function(a,b){ return b.numReq - a.numReq || a.orden - b.orden; })
+                .map(function(r) {
+                    return '<span class="badge-req" style="font-size:.65rem;margin-right:2px;white-space:nowrap;">' + r.numReq + ' - ' + r.orden + '</span>';
+                }).join('<br>');
+            var tr = document.createElement('tr');
+            tr.dataset.codart    = ca;
+            tr.dataset.origtotal = it.origTotal;
+            tr.innerHTML =
+                '<td>' + reqBadges + '</td>' +
+                '<td class="fw-semibold" style="color:#1a3c5e;">' + esc(ca) + '</td>' +
+                '<td><input type="text" class="form-control form-control-sm form-control-xs inp-codorig" style="width:80px;" placeholder="Cód.Prov." data-codart="' + esc(ca) + '" value="' + esc(it.codOrig||'') + '"></td>' +
+                '<td class="small">' + esc(it.desc || it.detalle || ca) + '</td>' +
+                '<td class="text-center text-muted">' + esc(it.unidad||'-') + '</td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-precio text-end" style="width:90px;" value="' + it.precio + '" min="0" step="0.0001" data-codart="' + esc(ca) + '"></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc1 text-end" style="width:60px;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '"></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc2 text-end" style="width:60px;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '"></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-cantidad text-end" style="width:78px;" value="' + it.cantidad + '" min="0.01" step="0.01" data-codart="' + esc(ca) + '"></td>' +
+                '<td class="small text-muted">' + esc((it.destinoDesc || it.destino)||'-') + '</td>' +
+                '<td class="text-end fw-semibold imp-vvta" style="color:#1a3c5e;">0.00</td>';
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.inp-cantidad,.inp-precio,.inp-desc1,.inp-desc2').forEach(function(inp) {
+            inp.addEventListener('input', function() { syncMergedItem(inp.dataset.codart); recalc(); });
+        });
+        tbody.querySelectorAll('.inp-codorig').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                var ca = inp.dataset.codart;
+                Object.keys(itemsSeleccionados).forEach(function(k) {
+                    if (itemsSeleccionados[k].codArt === ca) itemsSeleccionados[k].codOrig = inp.value;
+                });
+            });
+        });
+
+        mergedOrder.forEach(function(ca) { syncMergedItem(ca); });
+        recalc();
+        document.getElementById('badgeItemsOc').textContent = mergedOrder.length + ' ítem' + (mergedOrder.length === 1 ? '' : 's');
+    }
+
+    // Sincroniza precio/desc/cantidad de la fila fusionada → todos los items fuente del mismo codArt
+    function syncMergedItem(ca) {
+        var row = document.querySelector('#tbodyItemsOc [data-codart="' + ca + '"]');
+        if (!row) return;
+        var cant = pf(row.querySelector('.inp-cantidad').value, 0);
+        var prec = pf(row.querySelector('.inp-precio').value, 0);
+        var d1   = pf(row.querySelector('.inp-desc1').value, 0);
+        var d2   = pf(row.querySelector('.inp-desc2').value, 0);
+        var imp  = Math.round(cant * prec * (1-d1/100) * (1-d2/100) * 100) / 100;
+        row.querySelector('.imp-vvta').textContent = imp.toFixed(2);
+
+        var origTotal = parseFloat(row.dataset.origtotal) || 0;
+        Object.keys(itemsSeleccionados).forEach(function(k) {
+            var it = itemsSeleccionados[k];
+            if (it.codArt !== ca) return;
+            it.precio   = prec;
+            it.porDesc1 = d1;
+            it.porDesc2 = d2;
+            // Distribuir cantidad proporcionalmente al saldo original de cada item
+            it.cantidad = origTotal > 0
+                ? Math.round(cant * (it.cantOrig / origTotal) * 100000) / 100000
+                : cant;
+        });
+    }
+
+    function recalc() {
+        var igv = parseFloat(document.getElementById('selIgv').value) || 0;
+        var vv  = 0;
+        document.querySelectorAll('#tbodyItemsOc .imp-vvta').forEach(function(td) { vv += parseFloat(td.textContent)||0; });
+        var igvAmt = Math.round(vv * igv * 100) / 100;
+        var total  = Math.round((vv + igvAmt) * 100) / 100;
+        var fmt = function(n) { return n.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+        document.getElementById('tdValVenta').textContent    = fmt(vv);
+        document.getElementById('tdValorVenta2').textContent = fmt(vv);
+        document.getElementById('tdIgvTotal').textContent    = fmt(igvAmt);
+        document.getElementById('tdTotal').textContent       = fmt(total);
+    }
+
+    document.getElementById('selIgv').addEventListener('change', recalc);
+
+    // ── Registrar ─────────────────────────────────────────────────────────────
+    document.getElementById('btnRegistrar').addEventListener('click', function() {
+        var tipoDocto   = document.getElementById('selTipoDocto').value;
+        var fecha       = document.getElementById('inpFecha').value;
+        var fEntrega    = document.getElementById('inpFEntrega').value;
+        var codProveed  = document.getElementById('selProveedor').value;
+        var condPag     = document.getElementById('selCondPag').value;
+        var moneda      = document.getElementById('selMoneda').value;
+        var impsto      = parseFloat(document.getElementById('selIgv').value) || 0;
+        var detalle     = document.getElementById('inpDetalle').value;
+        var opcLEntrega = document.getElementById('selOpcEntrega').value;
+        var lEntregaInp = document.getElementById('inpLEntrega');
+        var lEntrega    = (!lEntregaInp.disabled && lEntregaInp.value) ? lEntregaInp.value : null;
+
+        if (!tipoDocto)  { err('Seleccione el Tipo de Documento.'); return; }
+        if (!fecha)      { err('Ingrese la Fecha.'); return; }
+        if (!fEntrega)   { err('Ingrese la Fecha de Entrega.'); return; }
+        if (!codProveed) { err('Seleccione un Proveedor.'); return; }
+        if (!condPag)    { err('Seleccione una Condición de Pago.'); return; }
+        if (!moneda)     { err('Seleccione la Moneda.'); return; }
+        if (!opcLEntrega){ err('Seleccione el Lugar de Entrega.'); return; }
+        if (!Object.keys(itemsSeleccionados).length) { err('No hay ítems seleccionados.'); return; }
+
+        // Validar que todos los ítems tengan precio > 0
+        var sinPrecio = [];
+        document.querySelectorAll('#tbodyItemsOc .inp-precio').forEach(function(inp) {
+            if (!(parseFloat(inp.value) > 0)) sinPrecio.push(inp.dataset.codart);
+        });
+        if (sinPrecio.length) {
+            err('Debe ingresar un precio mayor a 0 para: ' + sinPrecio.join(', '));
+            return;
+        }
+
+        var itemsArr = Object.keys(itemsSeleccionados).map(function(k) {
+            var it = itemsSeleccionados[k];
+            return { tipDoc:it.tipDoc, serie:it.serie, numReq:it.numReq, orden:it.orden,
+                     codArt:it.codArt, detalle:it.detalle, unidad:it.unidad, codOrig:it.codOrig||'',
+                     cantidad:it.cantidad, precio:it.precio, porDesc1:it.porDesc1, porDesc2:it.porDesc2,
+                     tpDestino:it.tpDestino||'', destino:it.destino||'', cCodigo:it.cCodigo||'' };
+        });
+
+        var payload = { tipoDocto, fecha, fEntrega, codProveed, condPag, moneda,
+                        impsto, cCosto: document.getElementById('selCCosto').value || null,
+                        detalle, opcLEntrega, lEntrega, cCodigo:null, items:itemsArr };
+
+        var btn = document.getElementById('btnRegistrar');
+        btn.disabled  = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Registrando…';
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        fetch('/Logistica/OrdenCompra/Registrar', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','RequestVerificationToken':token},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.disabled  = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>GENERA — Registrar Orden';
+            if (d.ok) {
+                document.getElementById('lblNumPedCreado').textContent = 'N° ' + d.numPed;
+                if (d.detailUrl) document.getElementById('btnVerDetalle').href = d.detailUrl;
+                new bootstrap.Modal(document.getElementById('modalExito')).show();
+                // Notificar al backend que la respuesta llegó correctamente al cliente
+                if (d.logId) {
+                    fetch('/Logistica/OrdenCompra/AcusarRecepcion', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                        body: JSON.stringify(d.logId)
+                    }).catch(function() { /* silencioso: el log queda como no notificado */ });
+                }
+            } else { err(d.error || 'Error desconocido.'); }
+        })
+        .catch(function() {
+            btn.disabled  = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>GENERA — Registrar Orden';
+            err('Error de comunicación con el servidor.');
+        });
+    });
+
+    document.getElementById('btnVerDetalle').href = '#';
+
+    // ── Verificar OC registradas pero no confirmadas (red caída) ─────────────
+    fetch('/Logistica/OrdenCompra/PendientesNotificacion')
+        .then(function(r) { return r.json(); })
+        .then(function(lista) {
+            if (!lista || !lista.length) return;
+            var tkn = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+            var filas = lista.map(function(p) {
+                return '<tr>' +
+                    '<td class="pe-3"><strong>O/C ' + p.numPed + '</strong></td>' +
+                    '<td class="pe-3">' + (p.detalle || '—') + '</td>' +
+                    '<td class="text-muted small">' + new Date(p.fechaLog).toLocaleString() + '</td>' +
+                    '<td><button class="btn btn-sm btn-outline-secondary" ' +
+                    'onclick="acusarPend(' + p.id + ',this)">OK</button></td>' +
+                '</tr>';
+            }).join('');
+            var div = document.getElementById('alertaPendientes');
+            document.getElementById('tbodyPendientes').innerHTML = filas;
+            div.classList.remove('d-none');
+        }).catch(function() { /* silencioso */ });
+
+    window.acusarPend = function(logId, btn) {
+        var tkn = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        fetch('/Logistica/OrdenCompra/AcusarRecepcion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': tkn },
+            body: JSON.stringify(logId)
+        }).then(function() {
+            var fila = btn.closest('tr');
+            if (fila) fila.remove();
+            var tbody = document.getElementById('tbodyPendientes');
+            if (!tbody.querySelector('tr')) document.getElementById('alertaPendientes').classList.add('d-none');
+        }).catch(function() {});
+    };
+
+    // ── Selector buscable ────────────────────────────────────────────────────
+    function selector(inputId, hiddenId, listaId, datos) {
+        var inp = document.getElementById(inputId);
+        var hid = document.getElementById(hiddenId);
+        var lst = document.getElementById(listaId);
+        function build(q) {
+            lst.innerHTML = '';
+            var fil = q ? datos.filter(function(d){ return d.txt.toLowerCase().includes(q.toLowerCase()); }) : datos;
+            if (!fil.length) { lst.innerHTML='<li class="list-group-item disabled small text-muted py-1 px-2">Sin resultados</li>'; return; }
+            fil.forEach(function(d) {
+                var li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action py-1 px-2 small';
+                li.style.cursor = 'pointer';
+                li.textContent = d.txt;
+                li.addEventListener('mousedown', function(e) {
+                    e.preventDefault(); inp.value = d.txt; hid.value = d.val; lst.classList.add('d-none');
+                });
+                lst.appendChild(li);
+            });
+        }
+        inp.addEventListener('focus',  function() { build(''); lst.classList.remove('d-none'); });
+        inp.addEventListener('input',  function() { hid.value=''; build(this.value.trim()); lst.classList.remove('d-none'); });
+        inp.addEventListener('blur',   function() { setTimeout(function(){ lst.classList.add('d-none'); }, 150); });
+    }
+
+    var datosProveedores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        proveedores.Select(kv => new { val = kv.Key, txt = kv.Value + " (" + kv.Key + ")" })
+    ));
+    var datosCondPag = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        condPag.Select(kv => new { val = kv.Key, txt = kv.Value })
+    ));
+
+    selector('buscarProveedor','selProveedor','listaProveedor', datosProveedores);
+    selector('buscarCondPag',  'selCondPag',  'listaCondPag',   datosCondPag);
+
+    // ── Selector C.Costo: carga única al inicio, luego búsqueda local ────────
+    fetch('/Logistica/OrdenCompra/BuscarDestinos?tipo=U')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var datosCCosto = d.map(function(x){ return { val: x.val, txt: x.txt + ' (' + x.val + ')' }; });
+            selector('buscarCCosto', 'selCCosto', 'listaCCosto', datosCCosto);
+        })
+        .catch(function(){
+            console.error('Error al cargar centros de costo');
+        });
+
+    // ── Lugar de entrega ──────────────────────────────────────────────────────
+    function updateEntrega() {
+        var sel  = document.getElementById('selOpcEntrega');
+        var inp  = document.getElementById('inpLEntrega');
+        var lref = sel.options[sel.selectedIndex]?.dataset.lref || '';
+        if (sel.value === '2') {
+            inp.disabled = false; inp.required = true; inp.value = '';
+            inp.placeholder = 'Ingrese la dirección de entrega…';
+            inp.classList.remove('inp-readonly-style');
+            inp.classList.add('form-control','form-control-sm','form-control-xs');
+        } else {
+            inp.disabled = true; inp.required = false; inp.value = lref;
+            inp.placeholder = lref || '(Dirección actual de la empresa)';
+            inp.classList.add('inp-readonly-style');
+            inp.classList.remove('form-control-sm','form-control-xs');
+        }
+    }
+    document.getElementById('selOpcEntrega').addEventListener('change', updateEntrega);
+    updateEntrega();
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+    function err(msg) {
+        document.getElementById('modalErrorMsg').textContent = msg;
+        new bootstrap.Modal(document.getElementById('modalError')).show();
+    }
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function pf(v, d) { return parseFloat(v) || 0; }
+
+})();
+</script>
+}

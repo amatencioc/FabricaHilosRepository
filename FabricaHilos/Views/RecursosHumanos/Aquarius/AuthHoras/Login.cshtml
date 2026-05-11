@@ -27,7 +27,7 @@
             <div class="card-body p-4">
                 <p class="text-muted small mb-3">
                     <i class="bi bi-info-circle me-1"></i>
-                    Ingrese sus credenciales de <strong>Aquarius</strong> para acceder al módulo de autorización de horas extras como supervisor.
+                    Ingrese su usuario de <strong>Aquarius</strong> para acceder al módulo de autorización de horas extras.
                 </p>
 
                 @if (!string.IsNullOrEmpty(loginError))
@@ -39,20 +39,12 @@
 
                 <form method="post" action="/RecursosHumanos/Aquarius/AuthHoras/Login">
                     @Html.AntiForgeryToken()
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label fw-semibold small">Usuario Aquarius</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-person"></i></span>
                             <input name="CodUsuario" type="text" class="form-control"
                                    placeholder="Código de usuario" autocomplete="username" required autofocus />
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold small">Contraseña Aquarius</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-key"></i></span>
-                            <input name="PasswordPlain" type="password" class="form-control"
-                                   placeholder="Contraseña" autocomplete="current-password" required />
                         </div>
                     </div>
                     <div class="d-grid">

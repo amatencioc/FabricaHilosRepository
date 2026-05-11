@@ -987,6 +987,63 @@ namespace FabricaHilos.Migrations
                 {
                     b.Navigation("Pedidos");
                 });
+
+            modelBuilder.Entity("FabricaHilos.Models.Logistica.LogRegistroOc", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("CantItems")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CodProveed")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Detalle")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("FEntrega")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaLog")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Impsto")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Moneda")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("Notificado")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("NumPed")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Serie")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TipoDocto")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Usuario")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Usuario", "Notificado")
+                        .HasDatabaseName("IX_LogRegistrosOc_Usuario_Notificado");
+
+                    b.ToTable("LogRegistrosOc");
+                });
 #pragma warning restore 612, 618
         }
     }

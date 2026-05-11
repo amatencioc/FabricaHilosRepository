@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using FabricaHilos.Models;
 using FabricaHilos.Models.Facturacion;
+using FabricaHilos.Models.Logistica;
 using FabricaHilos.Models.Produccion;
 using FabricaHilos.Models.Ventas;
 
@@ -19,6 +20,7 @@ namespace FabricaHilos.Data
         public DbSet<Cliente> Clientes { get; set; }
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<FhLcDocumento> LcDocumentos { get; set; }
+        public DbSet<LogRegistroOc> LogRegistrosOc { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -58,6 +60,13 @@ namespace FabricaHilos.Data
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
-                    }
-                }
-            }
+            // Configuración de LogRegistroOc
+            builder.Entity<LogRegistroOc>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Impsto).HasColumnType("decimal(18,4)");
+                entity.HasIndex(e => new { e.Usuario, e.Notificado });
+            });
+        }
+    }
+}

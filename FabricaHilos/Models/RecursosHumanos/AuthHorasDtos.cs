@@ -4,8 +4,7 @@ namespace FabricaHilos.Models.RecursosHumanos;
 
 public class AuthHorasLoginRequest
 {
-    public string CodUsuario    { get; set; } = string.Empty;
-    public string PasswordPlain { get; set; } = string.Empty;
+    public string CodUsuario { get; set; } = string.Empty;
 }
 
 public class AuthHorasLoginResult

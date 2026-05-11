@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using FabricaHilos.Services.Logistica;
 using FabricaHilos.Models.Logistica;
 using FabricaHilos.Services;
+using FabricaHilos.Data;
 
 namespace FabricaHilos.Controllers.Logistica;
 
@@ -16,6 +17,7 @@ public class OrdenCompraController : OracleBaseController
     private readonly ILogger<OrdenCompraController> _logger;
     private readonly IEmpresaTemaService _empresaTema;
     private readonly INavTokenService _navToken;
+    private readonly ApplicationDbContext _db;
 
     private static readonly HashSet<string> _extPermitidas =
         new(StringComparer.OrdinalIgnoreCase)
@@ -31,7 +33,8 @@ public class OrdenCompraController : OracleBaseController
         IConfiguration config,
         ILogger<OrdenCompraController> logger,
         IEmpresaTemaService empresaTema,
-        INavTokenService navToken)
+        INavTokenService navToken,
+        ApplicationDbContext db)
     {
         _service     = service;
         _env         = env;
@@ -39,6 +42,7 @@ public class OrdenCompraController : OracleBaseController
         _logger      = logger;
         _empresaTema = empresaTema;
         _navToken    = navToken;
+        _db          = db;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -376,4 +380,250 @@ public class OrdenCompraController : OracleBaseController
         ".rar"  => "application/x-rar-compressed",
         _       => "application/octet-stream"
     };
+
+    // ── NUEVA ORDEN DE COMPRA ──────────────────────────────────────────────────
+
+    [HttpGet("Nueva")]
+    public async Task<IActionResult> Nueva(string? t = null)
+    {
+        var requisiciones = (await _service.ObtenerRequisicionesPendientesAsync())
+                            .OrderByDescending(r => r.NumReq)
+                            .ToList();
+        var proveedores   = await _service.ObtenerTodosProveedoresAsync();
+        var condPag       = await _service.ObtenerTodasCondPagAsync();
+        var opcEntrega    = await _service.ObtenerOpcEntregaAsync();
+        var igvList       = await _service.ObtenerIgvAsync();
+        var centrosCosto  = await _service.ObtenerDescripcionesCentroCostosAsync(
+            requisiciones.Select(r => r.CentroCosto).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct());
+
+        ViewBag.NavToken    = t;
+        ViewBag.Requisiciones = requisiciones;
+        ViewBag.Proveedores   = proveedores;
+        ViewBag.CondPag       = condPag;
+        ViewBag.OpcEntrega    = opcEntrega;   // List<OpcEntregaDto>
+        ViewBag.IgvList       = igvList;      // List<IgvDto>
+        ViewBag.CentrosCosto  = centrosCosto;
+        ViewBag.Usuario       = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+
+        return View("~/Views/Logistica/OrdenCompra/Nueva.cshtml");
+    }
+
+    // ── AJAX: ítems de un requerimiento ───────────────────────────────────────
+
+    [HttpGet("ItemsReq")]
+    public async Task<IActionResult> ItemsReq(string tipDoc, int serie, long numReq)
+    {
+        var items = await _service.ObtenerItemsReqPendientesAsync(tipDoc, serie, numReq);
+
+        // Resolver descripciones de destino agrupando por tipo para minimizar llamadas
+        var codigosU = items.Where(i => i.TpDestino == "U" && !string.IsNullOrWhiteSpace(i.Destino))
+                            .Select(i => i.Destino!).Distinct().ToList();
+        var codigosA = items.Where(i => i.TpDestino == "A" && !string.IsNullOrWhiteSpace(i.Destino))
+                            .Select(i => i.Destino!).Distinct().ToList();
+
+        var descMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (codigosU.Count > 0)
+        {
+            foreach (var cod in codigosU)
+            {
+                var res = await _service.ObtenerDestinosAsync("U", cod);
+                var match = res.FirstOrDefault(d => string.Equals(d.Codigo, cod, StringComparison.OrdinalIgnoreCase));
+                if (match != null) descMap[cod] = match.Descripcion;
+            }
+        }
+        if (codigosA.Count > 0)
+        {
+            foreach (var cod in codigosA)
+            {
+                var res = await _service.ObtenerDestinosAsync("A", cod);
+                var match = res.FirstOrDefault(d => string.Equals(d.Codigo, cod, StringComparison.OrdinalIgnoreCase));
+                if (match != null) descMap[cod] = match.Descripcion;
+            }
+        }
+
+        foreach (var it in items)
+            if (!string.IsNullOrWhiteSpace(it.Destino) && descMap.TryGetValue(it.Destino!, out var desc))
+                it.DestinoDesc = desc;
+
+        return Json(items);
+    }
+
+    [HttpGet("BuscarDestinos")]
+    public async Task<IActionResult> BuscarDestinos(string? tipo = null, string? buscar = null)
+    {
+        var destinos = await _service.ObtenerDestinosAsync(tipo, buscar);
+        return Json(destinos.Select(d => new { val = d.Codigo, txt = d.Descripcion, tp = d.TpDestino }));
+    }
+
+    // ── REGISTRAR ORDEN ────────────────────────────────────────────────────────
+
+    [HttpPost("Registrar")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Registrar([FromBody] RegistrarOcRequest? request)
+    {
+        // ── Guardia: payload nulo o malformado (corte de red, cierre de navegador) ──
+        if (request is null)
+            return Json(new { ok = false, error = "No se recibieron datos. Intente nuevamente." });
+
+        // ── Validación de cabecera ────────────────────────────────────────────────
+        var errs = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(request.TipoDocto))
+            errs.Add("Tipo de documento es requerido.");
+        if (request.Fecha == default)
+            errs.Add("Fecha es requerida.");
+        if (request.FEntrega == default)
+            errs.Add("Fecha de entrega es requerida.");
+        if (string.IsNullOrWhiteSpace(request.CodProveed))
+            errs.Add("Proveedor es requerido.");
+        if (string.IsNullOrWhiteSpace(request.CondPag))
+            errs.Add("Condición de pago es requerida.");
+        if (string.IsNullOrWhiteSpace(request.Moneda))
+            errs.Add("Moneda es requerida.");
+        if (string.IsNullOrWhiteSpace(request.OpcLEntrega))
+            errs.Add("Lugar de entrega es requerido.");
+
+        // ── Validación de ítems ───────────────────────────────────────────────────
+        if (request.Items is null || request.Items.Count == 0)
+            errs.Add("Debe incluir al menos un ítem.");
+        else
+        {
+            for (int i = 0; i < request.Items.Count; i++)
+            {
+                var it  = request.Items[i];
+                var idx = $"Ítem {i + 1} ({it.CodArt ?? "?"})";
+
+                if (string.IsNullOrWhiteSpace(it.TipDoc))
+                    errs.Add($"{idx}: TipDoc es requerido.");
+                if (string.IsNullOrWhiteSpace(it.CodArt))
+                    errs.Add($"{idx}: Código de artículo es requerido.");
+                if (it.NumReq <= 0)
+                    errs.Add($"{idx}: Número de requerimiento inválido.");
+                if (it.Orden <= 0)
+                    errs.Add($"{idx}: Orden inválida.");
+                if (it.Cantidad <= 0)
+                    errs.Add($"{idx}: Cantidad debe ser mayor a 0.");
+                if (it.Precio <= 0)
+                    errs.Add($"{idx}: Precio debe ser mayor a 0.");
+                if (it.PorDesc1 < 0 || it.PorDesc1 >= 100)
+                    errs.Add($"{idx}: Descuento 1 fuera de rango (0-99.99).");
+                if (it.PorDesc2 < 0 || it.PorDesc2 >= 100)
+                    errs.Add($"{idx}: Descuento 2 fuera de rango (0-99.99).");
+            }
+        }
+
+        if (errs.Count > 0)
+        {
+            _logger.LogWarning("Registrar OC rechazado — {Count} error(es): {Errors}",
+                errs.Count, string.Join(" | ", errs));
+            return Json(new { ok = false, error = string.Join("\n", errs) });
+        }
+
+        // ── Llamada al servicio ───────────────────────────────────────────────────
+        var usuario = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+
+        try
+        {
+            var (numPed, error) = await _service.RegistrarOcAsync(request, usuario);
+
+            if (!string.IsNullOrEmpty(error))
+                return Json(new { ok = false, error });
+
+            // ── Persistir en SQL Server ANTES de responder al cliente ─────────────
+            // Si la red cae después del COMMIT de Oracle, el registro queda aquí
+            // y el usuario puede recuperarlo la próxima vez que abra "Nueva Orden".
+            var logEntry = new LogRegistroOc
+            {
+                Usuario    = usuario,
+                TipoDocto  = request.TipoDocto!,
+                NumPed     = numPed,
+                Serie      = 1,
+                CodProveed = request.CodProveed!,
+                Moneda     = request.Moneda!,
+                Impsto     = request.Impsto,
+                Fecha      = request.Fecha,
+                FEntrega   = request.FEntrega,
+                CantItems  = request.Items.Count,
+                Detalle    = request.Detalle,
+                FechaLog   = DateTime.UtcNow,
+                Notificado = false
+            };
+            _db.LogRegistrosOc.Add(logEntry);
+            await _db.SaveChangesAsync();
+
+            // Generar token de detalle para navegar directamente a la OC creada
+            var dtToken = _navToken.Protect(new Dictionary<string, string?> {
+                ["tipoDocto"] = request.TipoDocto,
+                ["serie"]     = "1",
+                ["numPed"]    = numPed.ToString()
+            });
+            var detailUrl = Url.Action(nameof(Detalle), "OrdenCompra",
+                new { dt = dtToken, t = HttpContext.Request.Query["t"].ToString() });
+
+            return Json(new { ok = true, numPed, detailUrl, logId = logEntry.Id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al registrar OC. Usuario={Usuario}", usuario);
+            return Json(new { ok = false, error = "Error interno al registrar la orden. Contacte al administrador." });
+        }
+    }
+
+    // ── ACUSAR RECEPCIÓN ──────────────────────────────────────────────────────
+    // El front llama a este endpoint una vez que recibió y mostró el resultado.
+    // Marca el log como notificado para que no vuelva a aparecer como pendiente.
+
+    [HttpPost("AcusarRecepcion")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AcusarRecepcion([FromBody] long logId)
+    {
+        var usuario = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+        var log = await _db.LogRegistrosOc.FindAsync(logId);
+        if (log != null && log.Usuario == usuario)
+        {
+            log.Notificado = true;
+            await _db.SaveChangesAsync();
+        }
+        return Json(new { ok = true });
+    }
+
+    // ── ÓRDENES PENDIENTES DE NOTIFICAR ───────────────────────────────────────
+    // Devuelve OC registradas en Oracle pero cuya respuesta no llegó al cliente.
+    // Se consulta al entrar a "Nueva Orden" para alertar al usuario.
+
+    [HttpGet("PendientesNotificacion")]
+    public async Task<IActionResult> PendientesNotificacion()
+    {
+        var usuario = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+        var pendientes = _db.LogRegistrosOc
+            .Where(l => l.Usuario == usuario && !l.Notificado
+                     && l.FechaLog >= DateTime.UtcNow.AddHours(-8)) // solo del turno actual
+            .OrderByDescending(l => l.FechaLog)
+            .Select(l => new {
+                l.Id, l.NumPed, l.TipoDocto, l.Serie,
+                l.CodProveed, l.Moneda, l.CantItems,
+                l.Fecha, l.Detalle, l.FechaLog
+            })
+            .ToList();
+
+        return Json(pendientes);
+    }
+
+    // ── ANULAR ORDEN ───────────────────────────────────────────────────────────
+
+    [HttpPost("Anular")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Anular([FromBody] AnularOcRequest request)
+    {
+        var usuario = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+        var error   = await _service.AnularOcAsync(
+            request.TipoDocto ?? string.Empty, request.NumPed, usuario);
+
+        if (!string.IsNullOrEmpty(error))
+            return Json(new { ok = false, error });
+
+        TempData["Success"] = $"O/C N° {request.NumPed} anulada correctamente.";
+        return Json(new { ok = true });
+    }
 }

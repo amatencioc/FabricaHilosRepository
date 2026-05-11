@@ -49,6 +49,18 @@ CREATE OR REPLACE PACKAGE PKG_AUTH_HE_SUPERVISOR AS
     );
 
     -- ------------------------------------------------------
+    -- 1b. LOGIN SIN CONTRASEÑA (uso interno intranet)
+    --    Igual que sp_login pero sin validar password.
+    --    Útil cuando el usuario ya fue autenticado por la intranet.
+    --
+    --    Retorna los mismos campos que sp_login.
+    -- ------------------------------------------------------
+    PROCEDURE sp_login_intranet(
+        v_cod_usuario   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    );
+
+    -- ------------------------------------------------------
     -- 2. EMPLEADOS A CARGO
     --    Devuelve los empleados visibles para el usuario
     --    en la empresa indicada (seguridad: empresa, sucursal,
@@ -382,6 +394,53 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
             FROM MAE_USUARIO u
             WHERE u.cod_usuario = v_cod_usuario;
     END sp_login;
+
+
+    -- =========================================================
+    -- 1b. LOGIN SIN CONTRASEÑA (intranet)
+    -- =========================================================
+    PROCEDURE sp_login_intranet(
+        v_cod_usuario   IN  VARCHAR2,
+        cv_1            OUT SYS_REFCURSOR
+    ) AS
+        v_baja  VARCHAR2(1);
+    BEGIN
+        -- Verificar existencia del usuario
+        BEGIN
+            SELECT NVL(ind_baja,'N')
+            INTO   v_baja
+            FROM   MAE_USUARIO
+            WHERE  cod_usuario = v_cod_usuario;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                OPEN cv_1 FOR SELECT 'ERROR' resultado,'CREDENCIAL_INVALIDA' mensaje FROM DUAL;
+                RETURN;
+        END;
+
+        -- Verificar si el usuario está dado de baja
+        IF v_baja = 'S' THEN
+            OPEN cv_1 FOR SELECT 'ERROR' resultado,'USUARIO_BAJA' mensaje FROM DUAL;
+            RETURN;
+        END IF;
+
+        -- Usuario OK → devolver datos (sin validar contraseña)
+        OPEN cv_1 FOR
+            SELECT
+                u.cod_usuario,
+                u.nom_usuario,
+                u.cod_personal,
+                NVL(u.ind_admin,'N') ind_admin,
+                (SELECT COUNT(DISTINCT cod_empresa) FROM MAE_USUARIO_EMP
+                 WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo)          cnt_empresas,
+                (SELECT CASE WHEN COUNT(DISTINCT cod_empresa)=1 THEN MAX(cod_empresa) ELSE NULL END
+                 FROM MAE_USUARIO_EMP WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo) cod_empresa_unica,
+                (SELECT CASE WHEN SUM(CASE WHEN tip_usuario='Adm' THEN 1 ELSE 0 END)>0 THEN 'S' ELSE 'N' END
+                 FROM MAE_USUARIO_EMP WHERE cod_usuario=u.cod_usuario AND cod_grupo_menu=c_grupo) es_adm_alguna,
+                'OK' resultado,
+                ''   mensaje
+            FROM MAE_USUARIO u
+            WHERE u.cod_usuario = v_cod_usuario;
+    END sp_login_intranet;
 
 
     -- =========================================================

@@ -29,6 +29,17 @@ public interface IOrdenCompraService
     Task AprobarGrupoAsync(long idGrupo);
     Task DesaprobarGrupoAsync(long idGrupo);
     Task LimpiarIdGrupoAsync(long idGrupo);
+
+    // ── Registro Nueva OC ──────────────────────────────────────────────────────
+    Task<List<RequisicionPendienteDto>> ObtenerRequisicionesPendientesAsync();
+    Task<List<ItemReqPendienteDto>> ObtenerItemsReqPendientesAsync(string tipDoc, int serie, long numReq);
+    Task<Dictionary<string, string>> ObtenerTodosProveedoresAsync(string? buscar = null);
+    Task<Dictionary<string, string>> ObtenerTodasCondPagAsync();
+    Task<List<OpcEntregaDto>> ObtenerOpcEntregaAsync();
+    Task<List<DestinoDto>> ObtenerDestinosAsync(string? tipo = null, string? buscar = null);
+    Task<List<IgvDto>> ObtenerIgvAsync();
+    Task<(long NumPed, string? Error)> RegistrarOcAsync(RegistrarOcRequest req, string usuario);
+    Task<string?> AnularOcAsync(string tipoDocto, long numPed, string usuario);
 }
 
 public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
@@ -627,5 +638,468 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             }
         }
         catch (Exception ex) { _logger.LogError(ex, "Error al limpiar ID_GRUPO {IdGrupo}", idGrupo); throw; }
+    }
+
+    // ── ObtenerDestinos (P_OBTENER_DESTINOS) ────────────────────────────────────
+
+    public async Task<List<DestinoDto>> ObtenerDestinosAsync(string? tipo = null, string? buscar = null)
+    {
+        var result = new List<DestinoDto>();
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_DESTINOS";
+            cmd.BindByName  = true;
+            cmd.Parameters.Add(new OracleParameter("P_TIPO",   OracleDbType.Varchar2)
+                { Value = string.IsNullOrWhiteSpace(tipo)   ? (object)DBNull.Value : tipo.Trim().ToUpper() });
+            cmd.Parameters.Add(new OracleParameter("P_BUSCAR", OracleDbType.Varchar2)
+                { Value = string.IsNullOrWhiteSpace(buscar) ? (object)DBNull.Value : buscar.Trim() });
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+                { Direction = ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new DestinoDto
+                {
+                    TpDestino   = GetStr(reader, "TP_DESTINO") ?? "",
+                    Codigo      = GetStr(reader, "CODIGO")      ?? "",
+                    Descripcion = GetStr(reader, "DESCRIPCION") ?? "",
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener destinos tipo={Tipo} buscar={Buscar}", tipo, buscar);
+        }
+        return result.OrderBy(d => d.Codigo).ToList();
+    }
+
+    // ── ObtenerIgvAsync ────────────────────────────────────────────────────────
+
+    public async Task<List<IgvDto>> ObtenerIgvAsync()
+    {
+        var result = new List<IgvDto>();
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_IGV";
+            cmd.BindByName  = true;
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+                { Direction = ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new IgvDto
+                {
+                    Codigo      = GetStr(reader, "CODIGO")      ?? "",
+                    Descripcion = GetStr(reader, "DESCRIPCION") ?? "",
+                    Valor       = reader.IsDBNull(reader.GetOrdinal("VALOR"))
+                                    ? 0m
+                                    : Convert.ToDecimal(reader["VALOR"])
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener lista de IGV: {Msg}", ex.Message);
+            // Retornar fallback con IGV 18% para que el combo no quede vacío
+            return new List<IgvDto>
+            {
+                new IgvDto { Codigo = "18", Descripcion = "IGV 18%", Valor = 0.18m }
+            };
+        }
+        return result;
+    }
+
+    // ── ObtenerRequisicionesPendientes ─────────────────────────────────────────
+
+    public async Task<List<RequisicionPendienteDto>> ObtenerRequisicionesPendientesAsync()
+    {
+        var result = new List<RequisicionPendienteDto>();
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_REQUISICIONES";
+            cmd.Parameters.Add(new Oracle.ManagedDataAccess.Client.OracleParameter("P_CURSOR", Oracle.ManagedDataAccess.Client.OracleDbType.RefCursor)
+                { Direction = System.Data.ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new RequisicionPendienteDto
+                {
+                    TipDoc          = GetStr(reader, "TIPDOC"),
+                    Serie           = GetInt(reader, "SERIE"),
+                    NumReq          = GetLong(reader, "NUMREQ"),
+                    CentroCosto     = GetStr(reader, "CENTRO_COSTO"),
+                    Proveedores     = GetStr(reader, "PROVEEDORES"),
+                    Fecha           = GetDt(reader, "FECHA"),
+                    FEntrega        = GetDt(reader, "F_ENTREGA"),
+                    Responsable     = GetStr(reader, "RESPONSABLE"),
+                    Prioridad       = GetStr(reader, "PRIORIDAD"),
+                    Observacion     = GetStr(reader, "OBSERVACION"),
+                    Estado          = GetStr(reader, "ESTADO"),
+                    Destino         = GetStr(reader, "DESTINO"),
+                    IndServ         = GetStr(reader, "IND_SERV"),
+                    Autoriza        = GetStr(reader, "AUTORIZA"),
+                    TotalItems      = GetInt(reader, "TOTAL_ITEMS"),
+                    ItemsPendientes = GetInt(reader, "ITEMS_PENDIENTES"),
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener requisiciones pendientes para OC");
+        }
+        return result;
+    }
+
+    // ── ObtenerItemsReqPendientes ──────────────────────────────────────────────
+
+    public async Task<List<ItemReqPendienteDto>> ObtenerItemsReqPendientesAsync(string tipDoc, int serie, long numReq)
+    {
+        var result = new List<ItemReqPendienteDto>();
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_ITEMS_REQ";
+            cmd.BindByName  = true;
+            cmd.Parameters.Add(new OracleParameter("P_TIPDOC", OracleDbType.Varchar2)  { Value = tipDoc });
+            cmd.Parameters.Add(new OracleParameter("P_SERIE",  OracleDbType.Varchar2)  { Value = serie.ToString() });
+            cmd.Parameters.Add(new OracleParameter("P_NUMREQ", OracleDbType.Decimal)   { Value = numReq });
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor) { Direction = System.Data.ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new ItemReqPendienteDto
+                {
+                    TipDoc        = GetStr(reader, "TIPDOC"),
+                    Serie         = GetInt(reader, "SERIE"),
+                    NumReq        = GetLong(reader, "NUMREQ"),
+                    Orden         = GetInt(reader, "ORDEN"),
+                    CodArt        = GetStr(reader, "COD_ART"),
+                    Detalle       = GetStr(reader, "DETALLE"),
+                    Unidad        = GetStr(reader, "UNIDAD"),
+                    Cantidad      = GetDec(reader, "CANTIDAD"),
+                    Saldo         = GetDec(reader, "SALDO"),
+                    Moneda        = GetStr(reader, "MONEDA"),
+                    Precio        = GetDec(reader, "PRECIO"),
+                    TpDestino     = GetStr(reader, "TP_DESTINO"),
+                    Destino       = GetStr(reader, "DESTINO"),
+                    CodSolicita   = GetStr(reader, "COD_SOLICITA"),
+                    Marca         = GetStr(reader, "MARCA"),
+                    Observaciones = GetStr(reader, "OBSERVACIONES"),
+                    DescArticulo  = GetStr(reader, "DESC_ARTICULO"),
+                    NumOcPrevio   = GetLong(reader, "NUM_OC_PREVIO"),
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener ítems de requisición pendiente {TipDoc}-{Serie}-{NumReq}", tipDoc, serie, numReq);
+        }
+        return result;
+    }
+
+    // ── ObtenerTodosProveedores ────────────────────────────────────────────────
+
+    public async Task<Dictionary<string, string>> ObtenerTodosProveedoresAsync(string? buscar = null)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_PROVEEDORES";
+            cmd.BindByName  = true;
+            cmd.Parameters.Add(new OracleParameter("P_BUSCAR", OracleDbType.Varchar2)
+                { Value = string.IsNullOrWhiteSpace(buscar) ? (object)DBNull.Value : buscar });
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+                { Direction = ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException("OracleDataReader expected");
+            while (await reader.ReadAsync())
+            {
+                var cod    = GetStr(reader, "COD_PROVEED") ?? "";
+                var nombre = GetStr(reader, "NOMBRE")      ?? "";
+                if (!string.IsNullOrEmpty(cod))
+                    result[cod] = nombre;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener lista de proveedores");
+        }
+        return result;
+    }
+
+    // ── ObtenerTodasCondPag ────────────────────────────────────────────────────
+
+    public async Task<Dictionary<string, string>> ObtenerTodasCondPagAsync()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_CONDPAG";
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+                { Direction = ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException("OracleDataReader expected");
+            while (await reader.ReadAsync())
+            {
+                var cod  = GetStr(reader, "COND_PAG")    ?? "";
+                var desc = GetStr(reader, "DESCRIPCION") ?? "";
+                if (!string.IsNullOrEmpty(cod))
+                    result[cod] = desc;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener condiciones de pago");
+        }
+        return result;
+    }
+
+    // ── ObtenerOpcEntrega ──────────────────────────────────────────────────────
+
+    public async Task<List<OpcEntregaDto>> ObtenerOpcEntregaAsync()
+    {
+        var result = new List<OpcEntregaDto>();
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_OBTENER_OPC_ENTREGA";
+            cmd.Parameters.Add(new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+                { Direction = ParameterDirection.Output });
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException("OracleDataReader expected");
+            while (await reader.ReadAsync())
+            {
+                var cod  = GetStr(reader, "OPC_LENTR")   ?? "";
+                var desc = GetStr(reader, "DESCRIPCION") ?? "";
+                var lref = GetStr(reader, "L_ENTREGA_REF");
+                if (!string.IsNullOrEmpty(cod))
+                    result.Add(new OpcEntregaDto { OpcLEntrega = cod, Descripcion = desc, LEntregaRef = lref });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener opciones de lugar de entrega");
+        }
+        return result;
+    }
+
+    // ── RegistrarOcAsync ───────────────────────────────────────────────────────
+
+    public async Task<(long NumPed, string? Error)> RegistrarOcAsync(RegistrarOcRequest req, string usuario)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
+            cmd.CommandText = $"{S}PKG_REG_ORDEN_COMPRA.P_REGISTRAR_OC";
+            cmd.BindByName  = true;
+
+            cmd.Parameters.Add(new OracleParameter("P_TIPO_DOCTO",  OracleDbType.Varchar2) { Value = req.TipoDocto });
+            cmd.Parameters.Add(new OracleParameter("P_FECHA",       OracleDbType.Date)     { Value = req.Fecha.Date });
+            cmd.Parameters.Add(new OracleParameter("P_F_ENTREGA",   OracleDbType.Date)     { Value = req.FEntrega.Date });
+            cmd.Parameters.Add(new OracleParameter("P_COD_PROVEED", OracleDbType.Varchar2) { Value = req.CodProveed });
+            cmd.Parameters.Add(new OracleParameter("P_COND_PAG",    OracleDbType.Varchar2) { Value = req.CondPag });
+            cmd.Parameters.Add(new OracleParameter("P_MONEDA",      OracleDbType.Varchar2) { Value = req.Moneda });
+            cmd.Parameters.Add(new OracleParameter("P_IMPSTO",      OracleDbType.Decimal)  { Value = req.Impsto });
+            cmd.Parameters.Add(new OracleParameter("P_C_COSTO",     OracleDbType.Varchar2) { Value = (object?)req.CCosto ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("P_DETALLE",     OracleDbType.Varchar2) { Value = (object?)req.Detalle ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("P_L_ENTREGA",   OracleDbType.Varchar2) { Value = (object?)req.LEntrega ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("P_C_CODIGO",    OracleDbType.Varchar2) { Value = (object?)req.CCodigo ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("P_USUARIO",     OracleDbType.Varchar2) { Value = usuario });
+
+            // P_ITEMS: Oracle array — usamos el paquete con colección de registros.
+            // Como ODP.NET no admite T_ITEMS (tipo de registro anidado de PL/SQL) como parámetro
+            // directo, construimos un bloque anónimo PL/SQL que llama al paquete.
+            // Se rearma el comando como bloque anónimo.
+            cmd.CommandType = System.Data.CommandType.Text;
+
+            // Construir el bloque PL/SQL dinámico
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("DECLARE");
+            sb.AppendLine($"  v_items {S}PKG_REG_ORDEN_COMPRA.T_ITEMS;");
+            sb.AppendLine("  v_numped NUMBER;");
+            sb.AppendLine("  v_error  VARCHAR2(500);");
+            sb.AppendLine("BEGIN");
+            for (int i = 0; i < req.Items.Count; i++)
+            {
+                sb.AppendLine($"  v_items({i + 1}).TIPDOC     := :tipdoc{i};");
+                sb.AppendLine($"  v_items({i + 1}).SERIE      := :serie{i};");
+                sb.AppendLine($"  v_items({i + 1}).NUMREQ     := :numreq{i};");
+                sb.AppendLine($"  v_items({i + 1}).ORDEN      := :orden{i};");
+                sb.AppendLine($"  v_items({i + 1}).COD_ART    := :codart{i};");
+                sb.AppendLine($"  v_items({i + 1}).DETALLE    := :detalle{i};");
+                sb.AppendLine($"  v_items({i + 1}).UNIDAD     := :unidad{i};");
+                sb.AppendLine($"  v_items({i + 1}).COD_ORIG   := :codorig{i};");
+                sb.AppendLine($"  v_items({i + 1}).CANTIDAD   := :cantidad{i};");
+                sb.AppendLine($"  v_items({i + 1}).PRECIO     := :precio{i};");
+                sb.AppendLine($"  v_items({i + 1}).POR_DESC1  := :pordesc1{i};");
+                sb.AppendLine($"  v_items({i + 1}).POR_DESC2  := :pordesc2{i};");
+                sb.AppendLine($"  v_items({i + 1}).TP_DESTINO := :tpdestino{i};");
+                sb.AppendLine($"  v_items({i + 1}).DESTINO    := :destino{i};");
+                sb.AppendLine($"  v_items({i + 1}).C_CODIGO   := :ccodigo{i};");
+            }
+            sb.AppendLine($"  {S}PKG_REG_ORDEN_COMPRA.P_REGISTRAR_OC(");
+            sb.AppendLine("    P_TIPO_DOCTO  => :p_tipo_docto,");
+            sb.AppendLine("    P_FECHA       => :p_fecha,");
+            sb.AppendLine("    P_F_ENTREGA   => :p_f_entrega,");
+            sb.AppendLine("    P_COD_PROVEED => :p_cod_proveed,");
+            sb.AppendLine("    P_COND_PAG    => :p_cond_pag,");
+            sb.AppendLine("    P_MONEDA      => :p_moneda,");
+            sb.AppendLine("    P_IMPSTO      => :p_impsto,");
+            sb.AppendLine("    P_C_COSTO     => :p_c_costo,");
+            sb.AppendLine("    P_DETALLE     => :p_detalle,");
+            sb.AppendLine("    P_OPC_LENTR   => :p_opc_lentr,");
+            sb.AppendLine("    P_L_ENTREGA   => :p_l_entrega,");
+            sb.AppendLine("    P_C_CODIGO    => :p_c_codigo,");
+            sb.AppendLine("    P_USUARIO     => :p_usuario,");
+            sb.AppendLine("    P_ITEMS       => v_items,");
+            sb.AppendLine("    P_NUM_PED     => v_numped,");
+            sb.AppendLine("    P_MSGERROR    => v_error");
+            sb.AppendLine("  );");
+            sb.AppendLine("  :p_num_ped  := v_numped;");
+            sb.AppendLine("  :p_msgerror := v_error;");
+            sb.AppendLine("END;");
+
+            cmd.CommandText = sb.ToString();
+            cmd.Parameters.Clear();
+            cmd.BindByName = true;
+
+            // Parámetros de cabecera
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto",  OracleDbType.Varchar2) { Value = req.TipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_fecha",       OracleDbType.Date)     { Value = req.Fecha.Date });
+            cmd.Parameters.Add(new OracleParameter("p_f_entrega",   OracleDbType.Date)     { Value = req.FEntrega.Date });
+            cmd.Parameters.Add(new OracleParameter("p_cod_proveed", OracleDbType.Varchar2) { Value = req.CodProveed });
+            cmd.Parameters.Add(new OracleParameter("p_cond_pag",    OracleDbType.Varchar2) { Value = req.CondPag });
+            cmd.Parameters.Add(new OracleParameter("p_moneda",      OracleDbType.Varchar2) { Value = req.Moneda });
+            cmd.Parameters.Add(new OracleParameter("p_impsto",      OracleDbType.Decimal)  { Value = req.Impsto });
+            cmd.Parameters.Add(new OracleParameter("p_c_costo",     OracleDbType.Varchar2) { Value = (object?)req.CCosto  ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_detalle",     OracleDbType.Varchar2) { Value = (object?)req.Detalle ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_opc_lentr",   OracleDbType.Varchar2) { Value = (object?)req.OpcLEntrega ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_l_entrega",   OracleDbType.Varchar2) { Value = (object?)req.LEntrega ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_c_codigo",    OracleDbType.Varchar2) { Value = (object?)req.CCodigo ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_usuario",     OracleDbType.Varchar2) { Value = usuario });
+
+            // Parámetros de ítems
+            for (int i = 0; i < req.Items.Count; i++)
+            {
+                var it = req.Items[i];
+                cmd.Parameters.Add(new OracleParameter($"tipdoc{i}",    OracleDbType.Varchar2) { Value = it.TipDoc });
+                cmd.Parameters.Add(new OracleParameter($"serie{i}",     OracleDbType.Int32)    { Value = it.Serie });
+                cmd.Parameters.Add(new OracleParameter($"numreq{i}",    OracleDbType.Decimal)  { Value = it.NumReq });
+                cmd.Parameters.Add(new OracleParameter($"orden{i}",     OracleDbType.Int32)    { Value = it.Orden });
+                cmd.Parameters.Add(new OracleParameter($"codart{i}",    OracleDbType.Varchar2) { Value = it.CodArt });
+                cmd.Parameters.Add(new OracleParameter($"detalle{i}",   OracleDbType.Varchar2) { Value = (object?)it.Detalle ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter($"unidad{i}",    OracleDbType.Varchar2) { Value = (object?)it.Unidad ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter($"codorig{i}",   OracleDbType.Varchar2) { Value = (object?)it.CodOrig ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter($"cantidad{i}",  OracleDbType.Decimal)  { Value = it.Cantidad });
+                cmd.Parameters.Add(new OracleParameter($"precio{i}",    OracleDbType.Decimal)  { Value = it.Precio });
+                cmd.Parameters.Add(new OracleParameter($"pordesc1{i}",  OracleDbType.Decimal)  { Value = it.PorDesc1 });
+                cmd.Parameters.Add(new OracleParameter($"pordesc2{i}",  OracleDbType.Decimal)  { Value = it.PorDesc2 });
+                cmd.Parameters.Add(new OracleParameter($"tpdestino{i}", OracleDbType.Varchar2) { Value = (object?)it.TpDestino ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter($"destino{i}",   OracleDbType.Varchar2) { Value = (object?)it.Destino ?? DBNull.Value });
+                cmd.Parameters.Add(new OracleParameter($"ccodigo{i}",   OracleDbType.Varchar2) { Value = (object?)it.CCodigo ?? DBNull.Value });
+            }
+
+            // Parámetros de salida
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",  OracleDbType.Decimal)   { Direction = System.Data.ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_msgerror", OracleDbType.Varchar2, 500, "") { Direction = System.Data.ParameterDirection.Output });
+
+            await cmd.ExecuteNonQueryAsync();
+
+            var rawNum  = cmd.Parameters["p_num_ped"].Value;
+            var rawErr  = cmd.Parameters["p_msgerror"].Value;
+            string? err = rawErr == DBNull.Value || rawErr is Oracle.ManagedDataAccess.Types.OracleDecimal od && od.IsNull ? null : rawErr?.ToString();
+            if (string.IsNullOrWhiteSpace(err)) err = null;
+
+            long numPed = 0;
+            if (rawNum != null && rawNum != DBNull.Value)
+            {
+                if (rawNum is Oracle.ManagedDataAccess.Types.OracleDecimal odc)
+                    numPed = odc.IsNull ? 0 : Convert.ToInt64(odc.Value);
+                else
+                    numPed = Convert.ToInt64(rawNum);
+            }
+
+            return (numPed, err);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al registrar OC");
+            return (0, $"Error interno: {ex.Message}");
+        }
+    }
+
+    // ── AnularOcAsync ──────────────────────────────────────────────────────────
+
+    public async Task<string?> AnularOcAsync(string tipoDocto, long numPed, string usuario)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.Text;
+            cmd.BindByName  = true;
+            cmd.CommandText = $@"DECLARE
+  v_error VARCHAR2(500);
+BEGIN
+  {S}PKG_REG_ORDEN_COMPRA.P_ANULAR_OC(
+    P_TIPO_DOCTO => :p_tipo_docto,
+    P_SERIE      => :p_serie,
+    P_NUM_PED    => :p_num_ped,
+    P_USUARIO    => :p_usuario,
+    P_MSGERROR   => v_error
+  );
+  :p_msgerror := v_error;
+END;";
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+            cmd.Parameters.Add(new OracleParameter("p_usuario",    OracleDbType.Varchar2) { Value = usuario });
+            cmd.Parameters.Add(new OracleParameter("p_msgerror",   OracleDbType.Varchar2, 500, "") { Direction = System.Data.ParameterDirection.Output });
+
+            await cmd.ExecuteNonQueryAsync();
+
+            var rawErr = cmd.Parameters["p_msgerror"].Value;
+            string? err = rawErr == DBNull.Value ? null : rawErr?.ToString();
+            return string.IsNullOrWhiteSpace(err) ? null : err;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al anular OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            return $"Error interno: {ex.Message}";
+        }
     }
 }

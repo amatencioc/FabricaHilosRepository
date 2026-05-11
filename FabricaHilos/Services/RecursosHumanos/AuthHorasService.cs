@@ -7,7 +7,7 @@ namespace FabricaHilos.Services.RecursosHumanos;
 
 public interface IAuthHorasService
 {
-    Task<AuthHorasLoginResult>       LoginAsync(string codUsuario, string passwordPlain);
+    Task<AuthHorasLoginResult>       LoginAsync(string codUsuario);
     Task<List<AuthHorasEmpleadoDto>> ObtenerEmpleadosAsync(string codUsuario, string codEmpresa);
     Task<List<AuthHorasTareoDto>>    ObtenerTareoAsync(string codUsuario, string codEmpresa, string codPersonal, string fechaInicio, string fechaFin);
     Task<AuthHorasGrabarResult>          GrabarAutorizacionAsync(string codUsuario, AuthHorasGrabarRequest req);
@@ -31,7 +31,7 @@ public class AuthHorasService : IAuthHorasService
     // =========================================================
     // 1. LOGIN
     // =========================================================
-    public async Task<AuthHorasLoginResult> LoginAsync(string codUsuario, string passwordPlain)
+    public async Task<AuthHorasLoginResult> LoginAsync(string codUsuario)
     {
         var result = new AuthHorasLoginResult();
         try
@@ -39,10 +39,9 @@ public class AuthHorasService : IAuthHorasService
             await using var conn = new OracleConnection(_connStr);
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"{Paquete}.sp_login";
+            cmd.CommandText = $"{Paquete}.sp_login_intranet";
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.Add("v_cod_usuario",    OracleDbType.Varchar2).Value = codUsuario;
-            cmd.Parameters.Add("v_password_plain", OracleDbType.Varchar2).Value = passwordPlain;
+            cmd.Parameters.Add("v_cod_usuario", OracleDbType.Varchar2).Value = codUsuario;
             var pCur = cmd.Parameters.Add("cv_1", OracleDbType.RefCursor);
             pCur.Direction = ParameterDirection.Output;
 

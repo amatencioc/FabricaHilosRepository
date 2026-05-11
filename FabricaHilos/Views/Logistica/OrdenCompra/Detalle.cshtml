@@ -51,12 +51,24 @@
         <i class="bi bi-cart-check me-2"></i>
         Orden de Compra @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
     </h4>
-    <a asp-action="Index"
-       asp-route-t="@navToken"
-       asp-route-page="@retPage"
-       class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Volver
-    </a>
+    <div class="d-flex gap-2">
+        @if (oc.Estado == "0")
+        {
+            <button type="button" class="btn btn-sm btn-outline-danger"
+                    id="btnAnularOc"
+                    data-tipo="@oc.TipoDocto"
+                    data-serie="@oc.Serie"
+                    data-numpd="@oc.NumPed">
+                <i class="bi bi-x-circle me-1"></i>Anular O/C
+            </button>
+        }
+        <a asp-action="Index"
+           asp-route-t="@navToken"
+           asp-route-page="@retPage"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
 </div>
 
 <!-- Cabecera -->
@@ -661,6 +673,32 @@
         }
         form.submit();
     });
+
+    // ── Anular O/C ───────────────────────────────────────────────────────────
+    var btnAnular = document.getElementById('btnAnularOc');
+    if (btnAnular) {
+        btnAnular.addEventListener('click', function () {
+            modalTitulo.textContent = 'Anular Orden de Compra';
+            modalMensaje.innerHTML  = '¿Está seguro de anular la O/C <strong>' + btnAnular.dataset.numpd + '</strong>? Esta acción restaurará los saldos de los requerimientos.';
+            modalOk.className = 'btn btn-danger';
+            _formPendiente = null;
+            modalConfirmar.show();
+            modalOk.onclick = function () {
+                modalConfirmar.hide();
+                fetch('@Url.Action("Anular", "OrdenCompra")', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
+                    body: JSON.stringify({ tipoDocto: btnAnular.dataset.tipo, serie: parseInt(btnAnular.dataset.serie), numPed: parseInt(btnAnular.dataset.numpd) })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location = '@Url.Action("Index", "OrdenCompra", new { t = (string?)ViewBag.NavToken })'; }
+                    else { alert('Error: ' + d.error); }
+                })
+                .catch(function () { alert('Error de comunicación con el servidor.'); });
+            };
+        });
+    }
 })();
 </script>
 }
