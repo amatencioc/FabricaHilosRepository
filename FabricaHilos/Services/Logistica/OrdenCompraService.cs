@@ -40,6 +40,19 @@ public interface IOrdenCompraService
     Task<List<IgvDto>> ObtenerIgvAsync();
     Task<(long NumPed, string? Error)> RegistrarOcAsync(RegistrarOcRequest req, string usuario);
     Task<string?> AnularOcAsync(string tipoDocto, long numPed, string usuario);
+
+    /// <summary>
+    /// Devuelve los ID_GRUPO que están en ITEMREQ vinculados a los ítems de esta O/C
+    /// a través de DESP_ITEMREQ, para mostrar los archivos del requerimiento original.
+    /// </summary>
+    Task<List<long>> ObtenerGruposDeRequisicionesVinculadasAsync(long numPed);
+
+    /// <summary>
+    /// Propaga los ID_GRUPO de ITEMREQ a los ITEMORD correspondientes cuando la O/C
+    /// se creó después de que se subieron documentos al requerimiento.
+    /// Devuelve true si se actualizó al menos un ítem.
+    /// </summary>
+    Task<bool> PropagateGruposReqToItemOrdAsync(long numPed);
 }
 
 public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
@@ -505,6 +518,103 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             _logger.LogError(ex, "Error al actualizar ID_GRUPO de ítems de O/C");
             throw;
         }
+    }
+
+    public async Task<List<long>> ObtenerGruposDeRequisicionesVinculadasAsync(long numPed)
+    {
+        // Busca ID_GRUPO de los ITEMREQ que están enlazados con esta O/C via DESP_ITEMREQ
+        // Solo trae grupos que aún no están en ITEMORD (para no duplicar los ya propagados)
+        var sql = $@"SELECT DISTINCT IR.ID_GRUPO
+                     FROM {S}ITEMREQ IR
+                     JOIN {S}DESP_ITEMREQ D ON D.NUMREQ = IR.NUMREQ AND D.ORDEN = IR.ORDEN
+                     WHERE D.NRO_DOC_REF = TO_CHAR(:numPed)
+                     AND IR.ID_GRUPO IS NOT NULL
+                     AND NOT EXISTS (
+                         SELECT 1 FROM {S}ITEMORD O
+                         WHERE O.NUM_PED = :numPed AND O.ID_GRUPO = IR.ID_GRUPO
+                     )";
+        var result = new List<long>();
+        try
+        {
+            await using var con = new OracleConnection(GetOracleConnectionString());
+            await con.OpenAsync();
+            await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+            cmd.Parameters.Add("numPed", OracleDbType.Decimal).Value = numPed;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                result.Add(Convert.ToInt64(reader[0]));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener grupos de requerimientos vinculados a O/C {NumPed}", numPed);
+        }
+        return result;
+    }
+
+    public async Task<bool> PropagateGruposReqToItemOrdAsync(long numPed)
+    {
+        // Obtener los pares (COD_ART, ORDEN, ID_GRUPO, F_APROBADO) de ITEMREQ vinculados
+        // a esta O/C que aún no tienen ID_GRUPO en ITEMORD
+        var sqlSelect = $@"SELECT I.COD_ART, I.ORDEN, IR.ID_GRUPO, IR.F_APROBADO
+                           FROM {S}ITEMORD I
+                           JOIN {S}DESP_ITEMREQ D ON D.NRO_DOC_REF = TO_CHAR(:numPed)
+                               AND D.COD_ART = I.COD_ART AND D.ORDEN = I.ORDEN
+                           JOIN {S}ITEMREQ IR ON IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN
+                           WHERE I.NUM_PED = :numPed
+                             AND I.ID_GRUPO IS NULL
+                             AND IR.ID_GRUPO IS NOT NULL";
+
+        var rows = new List<(string CodArt, int Orden, long IdGrupo, DateTime? FAprobado)>();
+
+        await using var con = new OracleConnection(GetOracleConnectionString());
+        await con.OpenAsync();
+
+        await using (var cmdSel = new OracleCommand(sqlSelect, con) { BindByName = true })
+        {
+            cmdSel.Parameters.Add("numPed", OracleDbType.Decimal).Value = numPed;
+            await using var reader = await cmdSel.ExecuteReaderAsync() as OracleDataReader;
+            while (reader != null && await reader.ReadAsync())
+            {
+                rows.Add((
+                    GetStr(reader, "COD_ART") ?? "",
+                    GetInt(reader, "ORDEN"),
+                    Convert.ToInt64(reader["ID_GRUPO"]),
+                    reader["F_APROBADO"] == DBNull.Value ? null : Convert.ToDateTime(reader["F_APROBADO"])
+                ));
+            }
+        }
+
+        if (rows.Count == 0) return false;
+
+        using var trx = con.BeginTransaction();
+        try
+        {
+            foreach (var row in rows)
+            {
+                var sqlUpd = $@"UPDATE {S}ITEMORD
+                                SET ID_GRUPO = :idGrupo,
+                                    F_GRUPO  = :fGrupo
+                                WHERE NUM_PED = :numPed
+                                  AND COD_ART = :codArt
+                                  AND ORDEN   = :orden";
+                await using var cmdUpd = new OracleCommand(sqlUpd, con) { BindByName = true, Transaction = trx };
+                cmdUpd.Parameters.Add("idGrupo", OracleDbType.Decimal).Value  = row.IdGrupo;
+                cmdUpd.Parameters.Add("fGrupo",  OracleDbType.Date).Value     = row.FAprobado.HasValue ? (object)row.FAprobado.Value : DBNull.Value;
+                cmdUpd.Parameters.Add("numPed",  OracleDbType.Decimal).Value  = numPed;
+                cmdUpd.Parameters.Add("codArt",  OracleDbType.Varchar2).Value = row.CodArt;
+                cmdUpd.Parameters.Add("orden",   OracleDbType.Int32).Value    = row.Orden;
+                await cmdUpd.ExecuteNonQueryAsync();
+            }
+            trx.Commit();
+        }
+        catch
+        {
+            trx.Rollback();
+            throw;
+        }
+
+        _logger.LogInformation("PropagateGruposReqToItemOrd: {Count} ítem(s) de ITEMORD actualizados para O/C {NumPed}", rows.Count, numPed);
+        return true;
     }
 
     public async Task<long> ObtenerSiguienteIdGrupoAsync()

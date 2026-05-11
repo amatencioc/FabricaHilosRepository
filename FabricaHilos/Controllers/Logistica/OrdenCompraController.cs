@@ -167,7 +167,24 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.ReturnPage = page;
 
         EnsureNetworkShare(ObtenerCarpetaRaiz());
-        ViewBag.ArchivosExistentes = ObtenerArchivosExistentes(items);
+
+        // Si hay grupos en requerimientos vinculados que aún no están en ITEMORD, propagarlos
+        bool propagado = await _service.PropagateGruposReqToItemOrdAsync(numPed);
+        if (propagado)
+            items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
+
+        var archivosOc = ObtenerArchivosExistentes(items);
+
+        // Requerimientos que aún tengan grupos no presentes en ITEMORD (caso muy raro tras la propagación)
+        var gruposReq   = await _service.ObtenerGruposDeRequisicionesVinculadasAsync(numPed);
+        var archivosReq = ObtenerArchivosExistentes(
+            gruposReq.Select(g => new ItemOrdDto { IdGrupo = g }));
+
+        foreach (var a in archivosReq)
+            a.EsDeRequerimiento = true;
+
+        ViewBag.ArchivosExistentes = archivosOc.Concat(archivosReq)
+            .OrderByDescending(a => a.IdGrupo).ThenByDescending(a => a.FechaCarga).ToList();
 
         return View("~/Views/Logistica/OrdenCompra/Detalle.cshtml", (orden, items));
     }

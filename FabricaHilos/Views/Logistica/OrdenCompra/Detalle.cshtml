@@ -371,10 +371,17 @@
                         @foreach (var grupo in gruposArchivos)
                         {
                             var color = grupoColorMap.TryGetValue(grupo.Key, out var _gc) ? _gc : "secondary";
-                            bool grupoAprobado = grupo.Any(a => a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
+                            bool grupoAprobado     = grupo.Any(a => a.NombreArchivo.StartsWith("APROBADO_", StringComparison.OrdinalIgnoreCase));
+                            bool grupoDeReq        = grupo.Any(a => a.EsDeRequerimiento);
                             <tr class="table-secondary">
                                 <td colspan="4" class="py-1 px-2">
                                     <span class="badge bg-@color me-2" style="font-size:.8rem;">Grupo @grupo.Key</span>
+                                    @if (grupoDeReq)
+                                    {
+                                        <span class="badge bg-info text-dark me-2" title="Documentos provenientes del requerimiento original">
+                                            <i class="bi bi-file-earmark-arrow-up me-1"></i>Requerimiento
+                                        </span>
+                                    }
                                     <small class="text-muted">@grupo.Count() archivo(s)</small>
                                 </td>
                             </tr>

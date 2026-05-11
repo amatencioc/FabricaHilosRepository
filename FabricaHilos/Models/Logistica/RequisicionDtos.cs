@@ -133,12 +133,13 @@ public class RequisicionUploadModel
 
 public class ArchivoRequisicionDto
 {
-    public string   NombreArchivo { get; set; } = string.Empty;
-    public string   RutaRelativa  { get; set; } = string.Empty;
-    public long     TamanioBytes  { get; set; }
-    public DateTime FechaCarga    { get; set; }
-    public long     IdGrupo       { get; set; }
-    public string   CarpetaGrupo  { get; set; } = string.Empty;
+    public string   NombreArchivo    { get; set; } = string.Empty;
+    public string   RutaRelativa     { get; set; } = string.Empty;
+    public long     TamanioBytes     { get; set; }
+    public DateTime FechaCarga       { get; set; }
+    public long     IdGrupo          { get; set; }
+    public string   CarpetaGrupo     { get; set; } = string.Empty;
+    public bool     EsDeRequerimiento { get; set; }
 }
 
 /// <summary>
