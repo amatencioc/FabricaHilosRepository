@@ -242,6 +242,7 @@
     MF = Marca faltante insertada en SCA_HISTORIAL desde tareo
     RN = Nocturno sin entrada anticipada: refrigerio limpiado (marca duplicada)
     HF = H.efectiva faltante: asignada desde tothoras del horario
+    HN = H.nocturna faltante: recalculada (Aquarius no la calculo)
     
     TABLAS:
     =======
@@ -480,6 +481,25 @@
                       con el nuevo valor del tareo (06:45). Resultado: la marca de ingreso
                       desaparecia de la UI. Mismo patron que PASO 1B-HIS pero para descanso.
                       Detectado: emp 002421 (ZAPATA BERECHE MIGUEL ANGEL) 26/04/2026.
+    11/05/2026 - FIX: PASO 0-RESTORE: Agregar ORDEN a los 4 INSERTs en SCA_HISTORIAL
+                      BUG: Las marcas restauradas (entrada/inirefri/finrefri/salida) se
+                      insertaban sin el campo ORDEN (quedaba NULL). El Windows .NET ordena
+                      el grid por ORDEN ASC NULLS FIRST, por lo que una salida restaurada
+                      (ej: 07:07) aparecia ANTES que la entrada real (ej: 18:46 ORDEN=1).
+                      Fix: calcular ORDEN = MAX(orden)+1 del mismo fotocheck/fec_equiv
+                      al momento de cada INSERT. Los inserts son en orden entrada->inirefri
+                      ->finrefri->salida, por lo que cada uno obtiene el valor correcto.
+                      Detectado: emp 003995 (ALCALA ARANGO, JORGE LUIS) 08/05/2026.
+    11/05/2026 - NEW: PASO 5-NOC: Safety net tothoranocturna=NULL con entrada/salida OK
+                      BUG: SP_SCA_PROCESO_TRABAJADOR deja tothoranocturna=NULL en empleados
+                      TURNO NOCTURNO (ej: HORARIO 19-03) cuando la salida fue restaurada por
+                      PASO 0-RESTORE (codaux4 queda NULL antes de PASO 5, que lo omite).
+                      PASO 5-HEFE asigna horaefectiva (codaux4='HF') pero PASO 5A requiere
+                      tothoranocturna IS NOT NULL -> H.Noct=00:00 en reporte final.
+                      Fix: nuevo PASO entre PASO 5-HEFE y PASO 5A que recalcula
+                      tothoranocturna (interseccion jornada real con ventana nocturna).
+                      tothoranocturna_of se pone NULL para que PASO 5A la redondee.
+                      Codigo: HN. Detectado: emp 003995 (ALCALA ARANGO, JORGE LUIS) 08/05/2026.
     04/05/2026 - NEW: PASO 5-HEFE: Safety net horaefectiva = 00:00 con entrada/salida OK
                       BUG: SP_SCA_PROCESO_TRABAJADOR deja horaefectiva=NULL/00:00 en ciertos
                       empleados TERCER TURNO con entrada levemente anticipada (<2h) y sin
@@ -748,6 +768,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         c_RT  CONSTANT NVARCHAR2(5)  := N'RT';  -- Refrigerio Truncado: salida antes de finrefri, limpiado
         c_PH  CONSTANT NVARCHAR2(5)  := N'PH';  -- Phantom: descanso con marcas fantasma limpiadas
         c_HF  CONSTANT NVARCHAR2(5)  := N'HF';  -- Horas efectivas Faltantes: asignadas desde tothoras
+        c_HN  CONSTANT NVARCHAR2(5)  := N'HN';  -- Hora Nocturna faltante: recalculada
         c_SEP CONSTANT NVARCHAR2(5)  := N'|';
         
         -- Descripciones de depuracion (CODAUX5) - max 30 chars
@@ -781,6 +802,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         d_NC      CONSTANT NVARCHAR2(30) := N'Noct: salida dup limpiada';
         d_PH      CONSTANT NVARCHAR2(30) := N'Descanso: fantasma limpiado';
         d_HF      CONSTANT NVARCHAR2(30) := N'H.efectiva faltante asignada';
+        d_HN      CONSTANT NVARCHAR2(30) := N'H.nocturna faltante calculada';
         d_SS      CONSTANT NVARCHAR2(30) := N'Salida imposible -> teorico';
         d_SSR     CONSTANT NVARCHAR2(30) := N'Salida real oculta restaurada';
         d_RI      CONSTANT NVARCHAR2(30) := N'Refri anterior a entrada';
@@ -1220,12 +1242,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             -- Verificar cada campo del tareo contra SCA_HISTORIAL
             -- ENTRADA
             IF rec_rest.entrada IS NOT NULL THEN
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_rest.num_fotocheck,
                        TO_CHAR(rec_rest.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(rec_rest.entrada, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_rest.fechamar,
-                       'DEPURACION: Marca restaurada entrada 0-REST', 'A'
+                       'DEPURACION: Marca restaurada entrada 0-REST', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_rest.num_fotocheck
+                        AND h2.fec_equiv = rec_rest.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -1243,12 +1269,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             -- INIREFRI: solo restaurar si NO es near-dup con FINREFRI
             -- (caso 12:44/12:45 -> 0-DUP elimino correctamente, no restaurar)
             IF rec_rest.inirefri IS NOT NULL AND rec_rest.refri_neardup = 'N' THEN
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_rest.num_fotocheck,
                        TO_CHAR(rec_rest.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(rec_rest.inirefri, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_rest.fechamar,
-                       'DEPURACION: Marca restaurada inirefri 0-REST', 'A'
+                       'DEPURACION: Marca restaurada inirefri 0-REST', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_rest.num_fotocheck
+                        AND h2.fec_equiv = rec_rest.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -1265,12 +1295,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             
             -- FINREFRI: solo restaurar si NO es near-dup con INIREFRI
             IF rec_rest.finrefri IS NOT NULL AND rec_rest.refri_neardup = 'N' THEN
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_rest.num_fotocheck,
                        TO_CHAR(rec_rest.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(rec_rest.finrefri, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_rest.fechamar,
-                       'DEPURACION: Marca restaurada finrefri 0-REST', 'A'
+                       'DEPURACION: Marca restaurada finrefri 0-REST', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_rest.num_fotocheck
+                        AND h2.fec_equiv = rec_rest.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -1287,12 +1321,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             
             -- SALIDA
             IF rec_rest.salida IS NOT NULL THEN
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_rest.num_fotocheck,
                        TO_CHAR(rec_rest.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(rec_rest.salida, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_rest.fechamar,
-                       'DEPURACION: Marca restaurada salida 0-REST', 'A'
+                       'DEPURACION: Marca restaurada salida 0-REST', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_rest.num_fotocheck
+                        AND h2.fec_equiv = rec_rest.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -4452,6 +4490,63 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         IF v_count_hefe > 0 THEN
             DBMS_OUTPUT.PUT_LINE('PASO 5-HEFE: horaefectiva faltante asignada -> ' || v_count_hefe || ' registros');
+        END IF;
+        
+        -- =====================================================================
+        -- PASO 5-NOC: Safety net tothoranocturna = NULL con entrada/salida OK
+        -- BUG (11/05/2026): SP_SCA_PROCESO_TRABAJADOR deja tothoranocturna=NULL
+        -- en ciertos empleados de turno nocturno (ej: HORARIO 19-03) cuando la
+        -- marca de salida fue restaurada por PASO 0-RESTORE (motivo 0-REST) y
+        -- codaux4 quedó NULL antes del PASO 5, impidiendo que éste la procese.
+        -- PASO 5-HEFE ya asigno horaefectiva (codaux4='HF') pero tothoranocturna
+        -- sigue siendo NULL -> PASO 5A no la procesa -> H.Noct=00:00 en reporte.
+        -- FIX: Recalcular tothoranocturna usando la misma formula que PASO 5
+        --      (interseccion de jornada real con ventana nocturna horinihornoc/horfinhornoc).
+        --      Solo aplica si horinihornoc != horfinhornoc (ventana real existe).
+        --
+        -- TABLAS ESCRITURA: SCA_ASISTENCIA_TAREO
+        -- TABLAS CONSULTA:  (ninguna adicional)
+        -- =====================================================================
+        UPDATE SCA_ASISTENCIA_TAREO t
+        SET    t.tothoranocturna =
+                   NVL(
+                       CASE
+                           WHEN t.entrada <= t.horinihornoc THEN
+                               CASE
+                                   WHEN t.salida > t.horinihornoc AND t.salida < t.horfinhornoc
+                                   THEN TO_DATE('01/01/1900','dd/MM/yyyy') + (t.salida - t.horinihornoc)
+                                   WHEN t.salida >= t.horfinhornoc
+                                   THEN TO_DATE('01/01/1900','dd/MM/yyyy') + (t.horfinhornoc - t.horinihornoc)
+                               END
+                           WHEN t.entrada > t.horinihornoc AND t.entrada < t.horfinhornoc THEN
+                               CASE
+                                   WHEN t.salida <= t.horfinhornoc
+                                   THEN TO_DATE('01/01/1900','dd/MM/yyyy') + (t.salida - t.entrada)
+                                   WHEN t.salida > t.horfinhornoc
+                                   THEN TO_DATE('01/01/1900','dd/MM/yyyy') + (t.horfinhornoc - t.entrada)
+                               END
+                       END,
+                       TO_DATE('01/01/1900','dd/MM/yyyy')
+                   ),
+               t.tothoranocturna_of = NULL,  -- PASO 5A la calculara a continuacion
+               t.codaux4 = CASE WHEN t.codaux4 IS NULL THEN c_HN ELSE t.codaux4 || c_SEP || c_HN END,
+               t.codaux5 = SUBSTR(CASE WHEN t.codaux5 IS NULL THEN d_HN ELSE t.codaux5 || c_SEP || d_HN END, 1, 50)
+        WHERE  t.fechamar          = v_fecha_proceso
+        AND    t.cod_empresa       LIKE v_empresa_filtro
+        AND    t.cod_personal      LIKE v_personal_filtro
+        AND    (p_solo_obreros = 'N' OR t.ind_obrero = 'S')
+        AND    t.entrada           IS NOT NULL
+        AND    t.salida            IS NOT NULL
+        AND    (t.tothoranocturna IS NULL
+                OR t.tothoranocturna = TO_DATE('01/01/1900','dd/MM/yyyy'))
+        AND    t.horinihornoc      IS NOT NULL
+        AND    t.horfinhornoc      IS NOT NULL
+        AND    t.horinihornoc      <> t.horfinhornoc  -- ventana nocturna real
+        AND    NVL(t.descanso, 'N')    <> 'S'
+        AND    NVL(t.ind_cerrado, 'N') <> 'S';
+        
+        IF SQL%ROWCOUNT > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('PASO 5-NOC: tothoranocturna faltante recalculada -> ' || SQL%ROWCOUNT || ' registros');
         END IF;
         
         -- =====================================================================
