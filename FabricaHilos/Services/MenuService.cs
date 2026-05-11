@@ -77,6 +77,7 @@ public class MenuService : IMenuService
             // Submenus: Recursos Humanos
             RhMarcaciones         = global.RhMarcaciones         && Tiene("RecursosHumanos"),
             RhCompensacionDiaDia  = global.RhCompensacionDiaDia  && Tiene("RecursosHumanos"),
+            RhCompensacionDdc     = global.RhCompensacionDdc     && Tiene("RecursosHumanos"),
             RhAutorizacionHoras   = global.RhAutorizacionHoras   && Tiene("RecursosHumanos"),
 
             RhIndicadores                         = global.RhIndicadores                         && Tiene("RecursosHumanos"),

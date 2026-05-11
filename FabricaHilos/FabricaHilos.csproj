@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <Compile Include="Models\RecursosHumanos\AuthHorasDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\CompensacionDdcDtos.cs" />
     <Compile Include="Models\RecursosHumanos\CompensacionDiaDiaDtos.cs" />
     <Compile Include="Models\RecursosHumanos\HorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
@@ -84,6 +85,7 @@
   <ItemGroup>
     <Content Include="Data\CreditoCobranza\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Data\Sistemas\Indicadores\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\EvolucionMensualMasaSalarial\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
@@ -98,6 +100,10 @@
     <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Login.cshtml" />
     <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Dashboard.cshtml" />
     <Content Include="Views\RecursosHumanos\Aquarius\AuthHoras\Resumen.cshtml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaLibrePorCompensar\Index.cshtml" />
   </ItemGroup>
 
 

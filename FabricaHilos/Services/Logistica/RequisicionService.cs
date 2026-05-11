@@ -59,6 +59,11 @@ public interface IRequisicionService
     /// para exportar a Excel.
     /// </summary>
     Task<List<(RequisicionDto Cabecera, List<ItemReqDto> Items)>> ObtenerPendientesConItemsAsync();
+
+    /// <summary>
+    /// Actualiza el PRECIO y la MONEDA de un ítem del requerimiento.
+    /// </summary>
+    Task ActualizarPrecioItemAsync(string tipDoc, int serie, long numReq, int orden, decimal precio, string moneda, string usuario);
 }
 
 public class RequisicionService : OracleServiceBase, IRequisicionService
@@ -491,23 +496,51 @@ public async Task ActualizarIdGrupoItemsAsync(
     if (lista.Count == 0) return;
 
     var paramNames = lista.Select((_, i) => $":ord{i}").ToList();
-    var sql = $"UPDATE {S}ITEMREQ SET ID_GRUPO = :idGrupo" +
-              $" WHERE TIPDOC = :tipDoc AND SERIE = :serie AND NUMREQ = :numReq" +
-              $" AND ORDEN IN ({string.Join(",", paramNames)})";
+    var sqlItemreq = $"UPDATE {S}ITEMREQ SET ID_GRUPO = :idGrupo" +
+                    $" WHERE TIPDOC = :tipDoc AND SERIE = :serie AND NUMREQ = :numReq" +
+                    $" AND ORDEN IN ({string.Join(",", paramNames)})";
+
+    // Propagar ID_GRUPO a ITEMORD via DESP_ITEMREQ
+    var condOrdenes = string.Join(",", paramNames);
+    var sqlItemord = $@"UPDATE {S}ITEMORD IO SET ID_GRUPO = :idGrupo
+        WHERE EXISTS (
+            SELECT 1 FROM {S}DESP_ITEMREQ D
+            WHERE D.NUMREQ = :numReq
+            AND D.ORDEN IN ({condOrdenes})
+            AND TO_CHAR(IO.NUM_PED) = D.NRO_DOC_REF
+            AND IO.COD_ART = D.COD_ART
+        )";
 
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
-        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal)  { Value = idGrupo });
-        cmd.Parameters.Add(new OracleParameter(":tipDoc",  OracleDbType.Varchar2) { Value = tipDoc  });
-        cmd.Parameters.Add(new OracleParameter(":serie",   OracleDbType.Int32)    { Value = serie   });
-        cmd.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal)  { Value = numReq  });
-        for (int i = 0; i < lista.Count; i++)
-            cmd.Parameters.Add(new OracleParameter($":ord{i}", OracleDbType.Int32) { Value = lista[i] });
+        using var trx = con.BeginTransaction();
+        try
+        {
+            await using var cmd1 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
+            cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal)  { Value = idGrupo });
+            cmd1.Parameters.Add(new OracleParameter(":tipDoc",  OracleDbType.Varchar2) { Value = tipDoc  });
+            cmd1.Parameters.Add(new OracleParameter(":serie",   OracleDbType.Int32)    { Value = serie   });
+            cmd1.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal)  { Value = numReq  });
+            for (int i = 0; i < lista.Count; i++)
+                cmd1.Parameters.Add(new OracleParameter($":ord{i}", OracleDbType.Int32) { Value = lista[i] });
+            await cmd1.ExecuteNonQueryAsync();
 
-        await cmd.ExecuteNonQueryAsync();
+            await using var cmd2 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
+            cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            cmd2.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal) { Value = numReq  });
+            for (int i = 0; i < lista.Count; i++)
+                cmd2.Parameters.Add(new OracleParameter($":ord{i}", OracleDbType.Int32) { Value = lista[i] });
+            await cmd2.ExecuteNonQueryAsync();
+
+            trx.Commit();
+        }
+        catch
+        {
+            trx.Rollback();
+            throw;
+        }
     }
     catch (Exception ex)
     {
@@ -543,14 +576,40 @@ public async Task<long> ObtenerSiguienteIdGrupoAsync()
 
 public async Task AprobarGrupoAsync(long idGrupo)
 {
-    var sql = $"UPDATE {S}ITEMREQ SET F_APROBADO = SYSDATE WHERE ID_GRUPO = :idGrupo";
+    var sqlItemreq = $"UPDATE {S}ITEMREQ SET F_APROBADO = SYSDATE WHERE ID_GRUPO = :idGrupo";
+    var sqlItemord = $@"UPDATE {S}ITEMORD IO SET F_GRUPO = SYSDATE
+        WHERE EXISTS (
+            SELECT 1 FROM {S}DESP_ITEMREQ D
+            WHERE TO_CHAR(IO.NUM_PED) = D.NRO_DOC_REF
+            AND IO.COD_ART = D.COD_ART
+            AND EXISTS (
+                SELECT 1 FROM {S}ITEMREQ IR
+                WHERE IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN
+                AND IR.ID_GRUPO = :idGrupo
+            )
+        )";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
-        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
-        await cmd.ExecuteNonQueryAsync();
+        using var trx = con.BeginTransaction();
+        try
+        {
+            await using var cmd1 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
+            cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd1.ExecuteNonQueryAsync();
+
+            await using var cmd2 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
+            cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd2.ExecuteNonQueryAsync();
+
+            trx.Commit();
+        }
+        catch
+        {
+            trx.Rollback();
+            throw;
+        }
     }
     catch (Exception ex)
     {
@@ -561,14 +620,40 @@ public async Task AprobarGrupoAsync(long idGrupo)
 
 public async Task DesaprobarGrupoAsync(long idGrupo)
 {
-    var sql = $"UPDATE {S}ITEMREQ SET F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    var sqlItemreq = $"UPDATE {S}ITEMREQ SET F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    var sqlItemord = $@"UPDATE {S}ITEMORD IO SET F_GRUPO = NULL
+        WHERE EXISTS (
+            SELECT 1 FROM {S}DESP_ITEMREQ D
+            WHERE TO_CHAR(IO.NUM_PED) = D.NRO_DOC_REF
+            AND IO.COD_ART = D.COD_ART
+            AND EXISTS (
+                SELECT 1 FROM {S}ITEMREQ IR
+                WHERE IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN
+                AND IR.ID_GRUPO = :idGrupo
+            )
+        )";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
-        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
-        await cmd.ExecuteNonQueryAsync();
+        using var trx = con.BeginTransaction();
+        try
+        {
+            await using var cmd1 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
+            cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd1.ExecuteNonQueryAsync();
+
+            await using var cmd2 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
+            cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd2.ExecuteNonQueryAsync();
+
+            trx.Commit();
+        }
+        catch
+        {
+            trx.Rollback();
+            throw;
+        }
     }
     catch (Exception ex)
     {
@@ -579,14 +664,41 @@ public async Task DesaprobarGrupoAsync(long idGrupo)
 
 public async Task LimpiarIdGrupoAsync(long idGrupo)
 {
-    var sql = $"UPDATE {S}ITEMREQ SET ID_GRUPO = NULL, F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
+    // Primero ITEMORD (mientras ITEMREQ.ID_GRUPO aún existe para el subquery)
+    var sqlItemord = $@"UPDATE {S}ITEMORD IO SET ID_GRUPO = NULL, F_GRUPO = NULL
+        WHERE EXISTS (
+            SELECT 1 FROM {S}DESP_ITEMREQ D
+            WHERE TO_CHAR(IO.NUM_PED) = D.NRO_DOC_REF
+            AND IO.COD_ART = D.COD_ART
+            AND EXISTS (
+                SELECT 1 FROM {S}ITEMREQ IR
+                WHERE IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN
+                AND IR.ID_GRUPO = :idGrupo
+            )
+        )";
+    var sqlItemreq = $"UPDATE {S}ITEMREQ SET ID_GRUPO = NULL, F_APROBADO = NULL WHERE ID_GRUPO = :idGrupo";
     try
     {
         await using var con = new OracleConnection(GetOracleConnectionString());
         await con.OpenAsync();
-        await using var cmd = new OracleCommand(sql, con) { BindByName = true };
-        cmd.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
-        await cmd.ExecuteNonQueryAsync();
+        using var trx = con.BeginTransaction();
+        try
+        {
+            await using var cmd1 = new OracleCommand(sqlItemord, con) { BindByName = true, Transaction = trx };
+            cmd1.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd1.ExecuteNonQueryAsync();
+
+            await using var cmd2 = new OracleCommand(sqlItemreq, con) { BindByName = true, Transaction = trx };
+            cmd2.Parameters.Add(new OracleParameter(":idGrupo", OracleDbType.Decimal) { Value = idGrupo });
+            await cmd2.ExecuteNonQueryAsync();
+
+            trx.Commit();
+        }
+        catch
+        {
+            trx.Rollback();
+            throw;
+        }
     }
     catch (Exception ex)
     {
@@ -1186,5 +1298,32 @@ public async Task<List<(RequisicionDto Cabecera, List<ItemReqDto> Items)>> Obten
 
     return resultado;
 }
+
+public async Task ActualizarPrecioItemAsync(string tipDoc, int serie, long numReq, int orden, decimal precio, string moneda, string usuario)
+{
+    var sql = $@"
+        UPDATE {S}ITEMREQ
+        SET    PRECIO     = :precio,
+               MONEDA     = :moneda,
+               A_MDUSER   = :usuario,
+               A_MDFECHA  = SYSDATE
+        WHERE  TIPDOC = :tipDoc
+          AND  SERIE  = :serie
+          AND  NUMREQ = :numReq
+          AND  ORDEN  = :orden";
+
+    await using var con = new OracleConnection(GetOracleConnectionString());
+    await con.OpenAsync();
+    await using var cmd = new OracleCommand(sql, con) { BindByName = true };
+    cmd.Parameters.Add(new OracleParameter(":precio",  OracleDbType.Decimal,  precio,  ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":moneda",  OracleDbType.Varchar2, moneda,  ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":usuario", OracleDbType.Varchar2, usuario, ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":tipDoc",  OracleDbType.Varchar2, tipDoc,  ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":serie",   OracleDbType.Int32,    serie,   ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal,  numReq,  ParameterDirection.Input));
+    cmd.Parameters.Add(new OracleParameter(":orden",   OracleDbType.Int32,    orden,   ParameterDirection.Input));
+    await cmd.ExecuteNonQueryAsync();
 }
+}
+
 

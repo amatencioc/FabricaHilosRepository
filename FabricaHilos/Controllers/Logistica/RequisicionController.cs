@@ -203,6 +203,21 @@ public class RequisicionController : OracleBaseController
         return View("~/Views/Logistica/Requerimiento/Detalle.cshtml", vm);
     }
 
+    // ── EDITAR PRECIO / MONEDA DE UN ÍTEM ─────────────────────────────────────
+
+    [HttpPost("EditarPrecioItem")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditarPrecioItem(
+        string tipDoc, int serie, long numReq, int orden,
+        decimal precio, string moneda,
+        string? t = null, int page = 1)
+    {
+        var usuario = User.Identity?.Name ?? "SYS";
+        await _service.ActualizarPrecioItemAsync(tipDoc, serie, numReq, orden, precio, moneda, usuario);
+        TempData["Success"] = "Precio y moneda actualizados correctamente.";
+        return RedirectToAction(nameof(Detalle), new { tipDoc, serie, numReq, t, page });
+    }
+
     // ── UPLOAD DE ARCHIVOS ─────────────────────────────────────────────────────
 
     [HttpPost("SubirArchivos")]
@@ -281,8 +296,8 @@ public class RequisicionController : OracleBaseController
 
     // ── VER ARCHIVO INLINE (visor)
 
-    [HttpGet("Ver/{idGrupo:long}/{nombreArchivo}")]
-    public IActionResult Ver(long idGrupo, string nombreArchivo)
+    [HttpGet("Ver")]
+    public IActionResult Ver([FromQuery] long idGrupo, [FromQuery] string nombreArchivo)
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);
@@ -356,8 +371,8 @@ public class RequisicionController : OracleBaseController
 
     // ── DESCARGAR ARCHIVO
 
-    [HttpGet("Descargar/{idGrupo:long}/{nombreArchivo}")]
-    public IActionResult Descargar(long idGrupo, string nombreArchivo)
+    [HttpGet("Descargar")]
+    public IActionResult Descargar([FromQuery] long idGrupo, [FromQuery] string nombreArchivo)
     {
         nombreArchivo = Path.GetFileName(nombreArchivo);
         var ruta = Path.Combine(ObtenerCarpetaPorGrupo(idGrupo), nombreArchivo);

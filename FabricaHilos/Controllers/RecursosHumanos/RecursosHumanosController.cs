@@ -56,6 +56,18 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
+            if (menus.RhCompensacionDdc)
+            {
+                moduloAquarius.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Día Libre por Compensar (DDC)",
+                    Descripcion = "Compensa días DDC de empleados con horario rotativo usando sus HE simples del rango.",
+                    Icono       = "bi-calendar2-x",
+                    Controller  = "CompensacionDdc",
+                    Action      = "Index"
+                });
+            }
+
             if (menus.RhAutorizacionHoras)
             {
                 moduloAquarius.SubModulos.Add(new SgcSubModuloDto

@@ -230,7 +230,6 @@
                         <th class="text-end">Cantidad</th>
                         <th class="text-end">Saldo</th>
                         <th class="text-end">Stk. Mín.</th>
-                        <th class="text-end">Stk. Hist.</th>
                         <th class="text-end">Precio</th>
                         <th class="text-center">Moneda</th>
                         <th>Marca</th>
@@ -258,8 +257,20 @@
                             <td class="text-end">@item.Cantidad.ToString("N2")</td>
                             <td class="text-end">@item.Saldo.ToString("N2")</td>
                             <td class="text-end text-muted">@(item.StkMin.HasValue ? item.StkMin.Value.ToString("N2") : "-")</td>
-                            <td class="text-end text-muted">@(item.StkHist.HasValue ? item.StkHist.Value.ToString("N2") : "-")</td>
-                            <td class="text-end">@(item.Precio > 0 ? item.Precio.ToString("N2") : "-")</td>
+                            <td class="text-end">
+                                <a href="#" class="text-decoration-none btn-editar-precio"
+                                   data-tipDoc="@item.TipDoc"
+                                   data-serie="@item.Serie"
+                                   data-numreq="@item.NumReq"
+                                   data-orden="@item.Orden"
+                                   data-precio="@item.Precio.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                   data-moneda="@(item.Moneda ?? "S")"
+                                   data-tieneoc="@(!string.IsNullOrWhiteSpace(item.NroDocRef) ? "1" : "0")"
+                                   title="Editar precio">
+                                    @(item.Precio > 0 ? item.Precio.ToString("N2") : "-")
+                                    <i class="bi bi-pencil-fill ms-1 text-muted" style="font-size:.65rem;"></i>
+                                </a>
+                            </td>
                             <td class="text-center">
                                 @(item.Moneda == "D" ? "USD" : item.Moneda == "S" ? "PEN" : (item.Moneda ?? "-"))
                             </td>
@@ -311,7 +322,7 @@
                     @if (!Model.Items.Any())
                     {
                         <tr>
-                            <td colspan="17" class="text-center text-muted py-3">
+                            <td colspan="16" class="text-center text-muted py-3">
                                 <i class="bi bi-inbox d-block mb-1"></i> Sin ítems registrados.
                             </td>
                         </tr>
@@ -324,7 +335,7 @@
                             <td colspan="5" class="text-end small">Totales:</td>
                                 <td class="text-end">@Model.Items.Sum(i => i.Cantidad).ToString("N2")</td>
                                 <td class="text-end">@Model.Items.Sum(i => i.Saldo).ToString("N2")</td>
-                                <td colspan="9"></td>
+                                <td colspan="8"></td>
                         </tr>
                     </tfoot>
                 }
@@ -391,7 +402,7 @@
 
             // Tipos visualizables en el visor
             var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".docx", ".doc" };
 
             // La aprobación es POR GRUPO: si un grupo ya tiene un archivo aprobado,
             // se oculta el botón Aprobar solo en ese grupo.
@@ -439,10 +450,11 @@
                                         @if (esVisualizble)
                                         {
                                             <a href="#" class="link-primary text-decoration-none btn-ver-archivo @(esAprobado ? "fw-semibold" : "")"
-                                               data-url="@urlVer"
-                                               data-nombre="@archivo.NombreArchivo"
-                                               data-tipo="@(extArch.TrimStart('.').ToLower())"
-                                               title="Haz clic para ver @archivo.NombreArchivo">
+                                                               data-url="@urlVer"
+                                                               data-urldesc="@urlDesc"
+                                                               data-nombre="@archivo.NombreArchivo"
+                                                               data-tipo="@(extArch.TrimStart('.').ToLower())"
+                                                               title="Haz clic para ver @archivo.NombreArchivo">
                                                 @archivo.NombreArchivo
                                             </a>
                                         }
@@ -521,6 +533,8 @@
 </div>
 
 @section Scripts {
+<script src="~/lib/jszip/jszip.min.js"></script>
+<script src="~/lib/docx-preview/docx-preview.min.js"></script>
 
 <!-- ── Modal de confirmación genérico ───────────────────────────────────── -->
 <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-labelledby="modalConfirmarLabel" aria-hidden="true">
@@ -557,9 +571,10 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
             </div>
-            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:hidden;height:100%;">
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:auto;height:100%;">
                 <iframe  id="visorIframe" src=""  style="width:100%;height:100%;border:0;display:none;"></iframe>
                 <img     id="visorImg"    src=""  class="img-fluid" style="max-height:100%;object-fit:contain;display:none;" alt="Vista previa" />
+                <div id="visorDocx" style="width:100%;height:100%;overflow:auto;padding:1rem;display:none;"></div>
                 <div id="visorSpinner" class="text-center text-muted py-5">
                     <div class="spinner-border text-primary mb-2"></div><br/>Cargando…
                 </div>
@@ -604,9 +619,11 @@
     var modalDescarga  = document.getElementById('modalBtnDescargar');
     var visorIframe    = document.getElementById('visorIframe');
     var visorImg       = document.getElementById('visorImg');
+    var visorDocx      = document.getElementById('visorDocx');
     var visorSpinner   = document.getElementById('visorSpinner');
 
     var extImagen = ['jpg','jpeg','png','gif','bmp'];
+    var extDocx   = ['docx','doc'];
 
     document.querySelectorAll('.btn-ver-archivo').forEach(function (a) {
         a.addEventListener('click', function (e) {
@@ -614,7 +631,7 @@
             var url    = this.dataset.url;
             var nombre = this.dataset.nombre;
             var tipo   = this.dataset.tipo;   // extensión sin punto, en minúsculas
-            var urlDesc= url.replace('/Ver/', '/Descargar/');
+            var urlDesc= this.dataset.urldesc;
 
             modalNombre.textContent  = nombre;
             modalDescarga.href       = urlDesc;
@@ -622,6 +639,8 @@
             // Ocultar todo, mostrar spinner
             visorIframe.style.display = 'none';
             visorImg.style.display    = 'none';
+            visorDocx.style.display   = 'none';
+            visorDocx.innerHTML       = '';
             visorSpinner.style.display= 'block';
             visorIframe.src = '';
             visorImg.src    = '';
@@ -640,6 +659,28 @@
                     visorSpinner.innerHTML = '<span class="text-danger">No se pudo cargar la imagen.</span>';
                 };
                 img.src = url;
+            } else if (extDocx.indexOf(tipo) !== -1) {
+                fetch(url, { noLoading: true })
+                    .then(function (r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.arrayBuffer();
+                    })
+                    .then(function (buf) {
+                        visorSpinner.style.display = 'none';
+                        visorDocx.style.display    = 'block';
+                        return docx.renderAsync(buf, visorDocx, null, {
+                            className: 'docx-preview',
+                            inWrapper: true,
+                            ignoreWidth: true,
+                            ignoreHeight: true
+                        });
+                    })
+                    .catch(function (err) {
+                        console.error('Error al renderizar DOCX:', err);
+                        visorDocx.style.display    = 'none';
+                        visorSpinner.style.display = 'block';
+                        visorSpinner.innerHTML     = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>No se pudo renderizar el documento Word.</span>';
+                    });
             } else {
                 // PDF (u otro visualizable)
                 visorSpinner.style.display = 'none';
@@ -651,8 +692,10 @@
 
     // Limpiar al cerrar el modal
     document.getElementById('modalVisorArchivo').addEventListener('hidden.bs.modal', function () {
-        visorIframe.src = '';
-        visorImg.src    = '';
+        visorIframe.src         = '';
+        visorImg.src            = '';
+        visorDocx.innerHTML     = '';
+        visorDocx.style.display = 'none';
     });
 
     // ── Upload: selección de ítems y carga ───────────────────────────────────
@@ -726,6 +769,86 @@
 
         form.submit();
     });
+
+    // ── Editar Precio / Moneda ───────────────────────────────────────────────
+    document.querySelectorAll('.btn-editar-precio').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (a.dataset.tieneoc === '1') {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditarPrecioOcBlock')).show();
+                return;
+            }
+            document.getElementById('editTipDoc').value = a.dataset.tipdoc;
+            document.getElementById('editSerie').value  = a.dataset.serie;
+            document.getElementById('editNumReq').value = a.dataset.numreq;
+            document.getElementById('editOrden').value  = a.dataset.orden;
+            document.getElementById('editPrecio').value = a.dataset.precio.replace(/,/g, '');
+            document.getElementById('editMoneda').value = a.dataset.moneda;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditarPrecio')).show();
+        });
+    });
 })();
 </script>
+
+<!-- Modal bloqueo edición: ítem con O/C asignada -->
+<div class="modal fade" id="modalEditarPrecioOcBlock" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-warning bg-opacity-25">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Edición no permitida</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Este ítem ya tiene una <strong>Orden de Compra asignada</strong>.<br>
+                No es posible modificar el precio o la moneda mientras esté vinculado a una O/C.</p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal editar precio / moneda -->
+<div class="modal fade" id="modalEditarPrecio" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-pencil-square me-1"></i>Editar Precio y Moneda</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-controller="Requisicion" asp-action="EditarPrecioItem"
+                  method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="editTipDoc" name="tipDoc" />
+                <input type="hidden" id="editSerie"  name="serie"  />
+                <input type="hidden" id="editNumReq" name="numReq" />
+                <input type="hidden" id="editOrden"  name="orden"  />
+                <input type="hidden" name="t"    value="@navToken" />
+                <input type="hidden" name="page" value="@retPage"  />
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Precio</label>
+                        <input type="number" id="editPrecio" name="precio"
+                               class="form-control form-control-sm"
+                               step="0.01" min="0" required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Moneda</label>
+                        <select id="editMoneda" name="moneda" class="form-select form-select-sm">
+                            <option value="S">PEN – Soles</option>
+                            <option value="D">USD – Dólares</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 }

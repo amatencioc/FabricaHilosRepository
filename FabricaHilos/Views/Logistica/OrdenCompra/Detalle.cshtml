@@ -343,7 +343,7 @@
         {
             var gruposArchivos = archivos.GroupBy(a => a.IdGrupo).OrderBy(g => g.Key).ToList();
             var extVisualizables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp" };
+                { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".docx", ".doc" };
 
             <div class="table-responsive">
                 <table class="table table-sm table-hover table-corporate mb-0">
@@ -396,6 +396,7 @@
                                         else
                                         {
                                             <a href="@urlDesc" class="link-primary text-decoration-none @(esAprobado ? "fw-semibold" : "")"
+                                               data-no-loading
                                                title="Descargar @archivo.NombreArchivo">
                                                 @archivo.NombreArchivo
                                             </a>
@@ -462,6 +463,7 @@
 </div>
 
 @section Scripts {
+<script src="~/lib/docx-preview/docx-preview.min.js"></script>
 
 <!-- Modal de confirmación genérico -->
 <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true">
@@ -495,9 +497,10 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
             </div>
-            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:hidden;height:100%;">
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:auto;height:100%;">
                 <iframe id="visorIframe" src="" style="width:100%;height:100%;border:0;display:none;"></iframe>
                 <img    id="visorImg"    src="" class="img-fluid" style="max-height:100%;object-fit:contain;display:none;" alt="Vista previa" />
+                <div id="visorDocx" style="width:100%;height:100%;overflow:auto;padding:1rem;display:none;"></div>
                 <div id="visorSpinner" class="text-center text-muted py-5">
                     <div class="spinner-border text-primary mb-2"></div><br/>Cargando…
                 </div>
@@ -537,8 +540,10 @@
     var modalDescarga = document.getElementById('modalBtnDescargar');
     var visorIframe   = document.getElementById('visorIframe');
     var visorImg      = document.getElementById('visorImg');
+    var visorDocx     = document.getElementById('visorDocx');
     var visorSpinner  = document.getElementById('visorSpinner');
     var extImagen     = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+    var extDocx       = ['docx', 'doc'];
 
     document.querySelectorAll('.btn-ver-archivo').forEach(function (a) {
         a.addEventListener('click', function (e) {
@@ -552,6 +557,8 @@
             modalDescarga.href         = desc;
             visorIframe.style.display  = 'none';
             visorImg.style.display     = 'none';
+            visorDocx.style.display    = 'none';
+            visorDocx.innerHTML        = '';
             visorSpinner.style.display = 'block';
             visorSpinner.innerHTML     = '<div class="spinner-border text-primary mb-2"></div><br/>Cargando…';
             visorIframe.src = '';
@@ -564,6 +571,22 @@
                 img.onload  = function () { visorSpinner.style.display = 'none'; visorImg.src = url; visorImg.style.display = 'block'; };
                 img.onerror = function () { visorSpinner.innerHTML = '<span class="text-danger">No se pudo cargar la imagen.</span>'; };
                 img.src = url;
+            } else if (extDocx.indexOf(tipo) !== -1) {
+                fetch(url, { noLoading: true })
+                    .then(function (r) { return r.arrayBuffer(); })
+                    .then(function (buf) {
+                        visorSpinner.style.display = 'none';
+                        visorDocx.style.display    = 'block';
+                        return docx.renderAsync(buf, visorDocx, null, {
+                            className: 'docx-preview',
+                            inWrapper: true,
+                            ignoreWidth: true,
+                            ignoreHeight: true
+                        });
+                    })
+                    .catch(function () {
+                        visorSpinner.innerHTML = '<span class="text-danger">No se pudo renderizar el documento Word.</span>';
+                    });
             } else {
                 visorSpinner.style.display = 'none';
                 visorIframe.src            = url;
@@ -573,8 +596,10 @@
     });
 
     document.getElementById('modalVisorArchivo').addEventListener('hidden.bs.modal', function () {
-        visorIframe.src = '';
-        visorImg.src    = '';
+        visorIframe.src      = '';
+        visorImg.src         = '';
+        visorDocx.innerHTML  = '';
+        visorDocx.style.display = 'none';
     });
 
     // ── Upload: selección de ítems ───────────────────────────────────────────
@@ -586,7 +611,7 @@
     var inputFiles = document.getElementById('inputArchivos');
 
     function getSeleccionados() {
-        return Array.from(document.querySelectorAll('.chk-item:checked')).map(function (c) { return c.value; });
+        return Array.from(document.querySelectorAll('.chk-item')).map(function (c) { return c.value; });
     }
 
     function actualizarBoton() {
@@ -614,9 +639,14 @@
 
     inputFiles.addEventListener('change', actualizarBoton);
 
+    // Seleccionar todos los ítems automáticamente al cargar la página y bloquear su edición
+    document.querySelectorAll('.chk-item').forEach(function (c) { c.checked = true; c.disabled = true; });
+    if (chkTodos) { chkTodos.checked = true; chkTodos.disabled = true; }
+    actualizarBoton();
+
     btnCargar.addEventListener('click', function () {
         container.innerHTML = '';
-        var seleccionados = Array.from(document.querySelectorAll('.chk-item:checked'));
+        var seleccionados = Array.from(document.querySelectorAll('.chk-item'));
         seleccionados.forEach(function (chk) {
             var inp = document.createElement('input');
             inp.type = 'hidden'; inp.name = 'SeleccionItems'; inp.value = chk.value;

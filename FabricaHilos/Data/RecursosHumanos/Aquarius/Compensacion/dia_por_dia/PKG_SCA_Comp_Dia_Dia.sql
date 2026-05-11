@@ -505,7 +505,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         -- Redondeo hora-entera (regla negocio: <45 baja, >=45 sube)
         SP_SCA_REDONDEAR_TAREO_HE(p_emp, p_per, p_fec);
 
-        -- Post-redondeo: si el SP bajo HE a exactamente c_BASE_DATE (ej. 00:25 ? 00:00),
+        -- Post-redondeo: si el SP bajo HE a exactamente c_BASE_DATE (ej. 00:25 → 00:00),
         -- el CASE anterior no lo detecto porque corrio antes del redondeo.
         -- Dejar c_BASE_DATE como marca (00:00) y solo actualizar alerta EC.
         IF p_tipo_ori = 'E' THEN
@@ -764,20 +764,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                            FROM   SCA_ASISTENCIA_TAREO s
                            WHERE  s.cod_empresa  = p.cod_empresa
                            AND    s.cod_personal = p.cod_personal
-                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                           AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                     + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                            FROM   SCA_ASISTENCIA_TAREO s
                            WHERE  s.cod_empresa  = p.cod_empresa
                            AND    s.cod_personal = p.cod_personal
-                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                           AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                     + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
                            FROM   SCA_ASISTENCIA_TAREO s
                            WHERE  s.cod_empresa  = p.cod_empresa
                            AND    s.cod_personal = p.cod_personal
-                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                           AND    MOD(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440), 30) = 0), 0)
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                                                                           AS min_disp,
                     -- jornada destino
                     NVL((SELECT ROUND((NVL(td.tothoras, c_BASE) - c_BASE) * 1440)
@@ -844,10 +841,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         c_BASE        CONSTANT DATE := TO_DATE('01/01/1900','dd/MM/yyyy');
         v_fec_ini     DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
         v_fec_fin     DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
-        -- Rango independiente para sumar HE/Dobles/Banco.
-        -- Por defecto usa el mismo rango de busqueda de empleados.
-        v_fec_hor_ini DATE := NVL(TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy'), TO_DATE(p_fecha_inicio, 'dd/MM/yyyy'));
-        v_fec_hor_fin DATE := NVL(TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy'), TO_DATE(p_fecha_fin,    'dd/MM/yyyy'));
+        -- Rango INDEPENDIENTE para sumar HE/Dobles/Banco.
+        -- Por defecto: semana Lun-Dom que contiene p_fecha_inicio
+        -- (igual que CALCULAR_HORAS_EVENTO y REGISTRAR_EVENTO_MASIVO).
+        -- Es independiente del rango de busqueda de empleados (v_fec_ini/fin).
+        v_fec_hor_ini DATE := NVL(TO_DATE(p_fecha_horas_inicio, 'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_inicio, 'dd/MM/yyyy'), 'IW'));
+        v_fec_hor_fin DATE := NVL(TO_DATE(p_fecha_horas_fin,    'dd/MM/yyyy'),
+                                  TRUNC(TO_DATE(p_fecha_inicio, 'dd/MM/yyyy'), 'IW') + 6);
         v_nombre      VARCHAR2(200) := CASE WHEN p_nombre IS NOT NULL
                                             THEN '%' || UPPER(p_nombre) || '%'
                                             ELSE NULL END;
@@ -855,7 +856,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         OPEN cv_resultado FOR
             SELECT
                 t.cod_personal,
-                f.num_fotocheck,
+                (SELECT f.num_fotocheck
+                 FROM   SCA_FOTOCHECK f
+                 WHERE  f.cod_empresa  = t.cod_empresa
+                 AND    f.cod_personal = t.cod_personal
+                 AND    f.id_fotocheck = (SELECT MAX(f2.id_fotocheck)
+                                         FROM   SCA_FOTOCHECK f2
+                                         WHERE  f2.cod_empresa  = t.cod_empresa
+                                         AND    f2.cod_personal = t.cod_personal)) AS num_fotocheck,
                 p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
                 t.fechamar,
                 -- Horas trabajadas efectivas del dia origen (horaefectiva = H.Efe.)
@@ -971,29 +979,15 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             JOIN  PLA_PERSONAL p
                   ON  p.cod_empresa  = t.cod_empresa
                   AND p.cod_personal = t.cod_personal
-            LEFT JOIN SCA_FOTOCHECK f
-                  ON  f.cod_empresa  = t.cod_empresa
-                  AND f.cod_personal = t.cod_personal
-                  AND f.act_fotocheck = 1
             WHERE t.cod_empresa = p_cod_empresa
             AND   t.fechamar BETWEEN v_fec_ini AND v_fec_fin
             AND   (
-                    -- Al menos una fuente con horas en el rango de horas
-                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
-                         FROM   SCA_ASISTENCIA_TAREO s
-                         WHERE  s.cod_empresa  = t.cod_empresa
-                         AND    s.cod_personal = t.cod_personal
-                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
-                    OR NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
-                         FROM   SCA_ASISTENCIA_TAREO s
-                         WHERE  s.cod_empresa  = t.cod_empresa
-                         AND    s.cod_personal = t.cod_personal
-                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
-                    OR NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE) - c_BASE) * 1440))
-                         FROM   SCA_ASISTENCIA_TAREO s
-                         WHERE  s.cod_empresa  = t.cod_empresa
-                         AND    s.cod_personal = t.cod_personal
-                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) > 0
+                    -- El dia especifico (t.fechamar) tiene al menos una fuente de horas.
+                    -- Independiente del rango de horas: ese rango solo afecta los totales
+                    -- de las columnas, pero no debe condicionar si el dia aparece o no.
+                    ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440) > 0
+                    OR ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440) > 0
+                    OR ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440) > 0
                   )
             AND   (v_nombre IS NULL
                    OR UPPER(p.ape_paterno || ' ' || p.ape_materno
@@ -1128,20 +1122,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                           FROM   SCA_ASISTENCIA_TAREO s
                           WHERE  s.cod_empresa  = p.cod_empresa
                           AND    s.cod_personal = p.cod_personal
-                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                          AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                  + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440))
                           FROM   SCA_ASISTENCIA_TAREO s
                           WHERE  s.cod_empresa  = p.cod_empresa
                           AND    s.cod_personal = p.cod_personal
-                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                          AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                  + NVL((SELECT SUM(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440))
                           FROM   SCA_ASISTENCIA_TAREO s
                           WHERE  s.cod_empresa  = p.cod_empresa
                           AND    s.cod_personal = p.cod_personal
-                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                          AND    MOD(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0), 0)
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
                                                                               AS min_disp,
                    NVL(ROUND((NVL(td.tothoras, c_BASE_DATE) - c_BASE_DATE) * 1440), 0) AS min_jorn
             FROM   PLA_PERSONAL p
@@ -1224,7 +1215,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                             AND    s.cod_personal = e.cod_personal
                             AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
                             AND    s.horadoblesof > c_BASE_DATE
-                            AND    MOD(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
                             ORDER  BY s.fechamar
                         ) LOOP
                             EXIT WHEN v_restante <= 0;
@@ -1259,7 +1249,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                             AND    s.cod_personal = e.cod_personal
                             AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
                             AND    s.horabancoh > c_BASE_DATE
-                            AND    MOD(ROUND((NVL(s.horabancoh, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
                             ORDER  BY s.fechamar
                         ) LOOP
                             EXIT WHEN v_restante <= 0;
@@ -1293,7 +1282,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                             AND    s.cod_personal = e.cod_personal
                             AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
                             AND    s.horaextra_ajus > c_BASE_DATE
-                            AND    MOD(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440), 30) = 0
                             ORDER  BY s.fechamar
                         ) LOOP
                             EXIT WHEN v_restante <= 0;

@@ -130,6 +130,7 @@ builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
 builder.Services.AddScoped<ICompensacionDiaDiaService, CompensacionDiaDiaService>();
+builder.Services.AddScoped<ICompensacionDdcService, CompensacionDdcService>();
 builder.Services.AddScoped<IAuthHorasService, AuthHorasService>();
 builder.Services.AddScoped<IHorasExtrasService, HorasExtrasService>();
 builder.Services.AddScoped<IConcentracionSobretiempoAreaService, ConcentracionSobretiempoAreaService>();

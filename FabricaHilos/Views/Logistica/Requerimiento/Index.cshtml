@@ -83,7 +83,7 @@
     <input type="hidden" name="page" value="@currentPage" />
     <div class="mb-2 d-flex gap-2">
         <button type="button" id="btnAnularSeleccionados"
-                class="btn btn-sm btn-danger" @(estado == "9" || estado == "6" ? "disabled" : "")>
+                class="btn btn-sm btn-danger" disabled="@(estado == "9" || estado == "6" ? "disabled" : null)">
             <i class="bi bi-slash-circle me-1"></i>Anular seleccionados
         </button>
     </div>
@@ -94,7 +94,7 @@
                 <thead>
                     <tr>
                         <th class="text-center" style="width:40px;">
-                            <input type="checkbox" id="chkAll" title="Seleccionar todos" @(estado == "9" || estado == "6" ? "disabled" : "") />
+                            <input type="checkbox" id="chkAll" title="Seleccionar todos" disabled="@(estado == "9" || estado == "6" ? "disabled" : null)" />
                         </th>
                         <th class="text-center">TipDoc</th>
                         <th class="text-center">N° Req.</th>
@@ -120,7 +120,7 @@
                                 {
                                     <input type="checkbox" name="seleccion" class="chk-req"
                                            value="@req.TipDoc|@req.Serie|@req.NumReq"
-                                           @(estado == "9" || estado == "6" ? "disabled" : "") />
+                                           disabled="@(estado == "9" || estado == "6" ? "disabled" : null)" />
                                 }
                                 else
                                 {

@@ -1,0 +1,412 @@
+using FabricaHilos.Models.RecursosHumanos;
+using Oracle.ManagedDataAccess.Client;
+using System.Collections.Concurrent;
+using System.Data;
+
+namespace FabricaHilos.Services.RecursosHumanos;
+
+public interface ICompensacionDdcService
+{
+    Task<List<DdcRangoFilaDto>> ListarDdcRangoAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string? nombre = null);
+
+    Task<List<DdcCalculoFilaDto>> CalcularDdcAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string listaPersonal);
+
+    Task<List<DdcRegistroFilaDto>> RegistrarDdcMasivoAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string listaPersonal);
+
+    Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento);
+
+    Task<List<DdcRangoConsultaDto>> ConsultarRangoDdcAsync(
+        string? codEmpresa,
+        string? codPersonal,
+        string fechaInicio,
+        string fechaFin);
+
+    Task CommitAsync();
+    Task RollbackAsync();
+}
+
+public class CompensacionDdcService : ICompensacionDdcService
+{
+    private const string Paquete = "AQUARIUS.PKG_SCA_COMP_DDC";
+
+    private readonly string _baseConnectionString;
+    private readonly ILogger<CompensacionDdcService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    internal record ActiveTxEntry(OracleConnection Conn, OracleTransaction Txn, DateTime CreatedAt, string CodEmpresa);
+    internal static readonly ConcurrentDictionary<string, ActiveTxEntry> _activeTx = new();
+
+    public CompensacionDdcService(
+        IConfiguration configuration,
+        ILogger<CompensacionDdcService> logger,
+        IHttpContextAccessor httpContextAccessor)
+    {
+        _baseConnectionString = configuration.GetConnectionString("AquariusConnection")
+            ?? throw new InvalidOperationException("Aquarius connection string not found.");
+        _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    private string GetOracleConnectionString() => _baseConnectionString;
+
+    private string GetSessionId()
+    {
+        var ctx = _httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("HttpContext no disponible.");
+        ctx.Session.LoadAsync().GetAwaiter().GetResult();
+        return ctx.Session.Id;
+    }
+
+    private static string? GetStr(OracleDataReader r, string col)
+    {
+        try { return r[col] == DBNull.Value ? null : r[col]?.ToString(); }
+        catch { return null; }
+    }
+
+    private static int GetInt(OracleDataReader r, string col)
+    {
+        try { return r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]); }
+        catch { return 0; }
+    }
+
+    private static long? GetNullLong(OracleDataReader r, string col)
+    {
+        try { return r[col] == DBNull.Value ? null : Convert.ToInt64(r[col]); }
+        catch { return null; }
+    }
+
+    private static bool IsOra04068(OracleException ex) =>
+        ex.Number == 4068 || ex.Number == 4061 || ex.Number == 4065 || ex.Number == 6508;
+
+    private async Task<T> WithOracleRetryAsync<T>(Func<Task<T>> operation, string contexto)
+    {
+        try
+        {
+            return await operation();
+        }
+        catch (OracleException ex) when (IsOra04068(ex))
+        {
+            _logger.LogWarning("ORA-04068 en {Contexto}, reintentando...", contexto);
+            return await operation();
+        }
+    }
+
+    // ── LISTAR_DDC_RANGO ─────────────────────────────────────────────────────
+
+    public async Task<List<DdcRangoFilaDto>> ListarDdcRangoAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string? nombre = null)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcRangoFilaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.LISTAR_DDC_RANGO";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",   OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",  OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",     OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_nombre",        OracleDbType.Varchar2) { Value = (object?)nombre ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",    OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcRangoFilaDto
+                {
+                    CodPersonal    = GetStr(r, "cod_personal"),
+                    NombreCompleto = GetStr(r, "nombre_completo"),
+                    NumFotocheck   = GetStr(r, "num_fotocheck"),
+                    FechamarStr    = GetStr(r, "fechamar_str"),
+                    DiaSemana      = GetStr(r, "dia_semana"),
+                    TipoDia        = GetStr(r, "tipo_dia"),
+                    MinHe          = GetInt(r, "min_he"),
+                    HorasHe        = GetStr(r, "horas_he"),
+                    MinFalta       = GetInt(r, "min_falta"),
+                    HorasFalta     = GetStr(r, "horas_falta"),
+                    Alerta02       = GetStr(r, "alerta02"),
+                    Alerta06       = GetStr(r, "alerta06"),
+                    Descanso       = GetStr(r, "descanso"),
+                    YaCompensado   = GetStr(r, "ya_compensado"),
+                });
+            }
+            return result;
+        }, "LISTAR_DDC_RANGO");
+    }
+
+    // ── CALCULAR_DDC ─────────────────────────────────────────────────────────
+
+    public async Task<List<DdcCalculoFilaDto>> CalcularDdcAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string listaPersonal)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcCalculoFilaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.CALCULAR_DDC";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",   OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",      OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal", OracleDbType.Varchar2) { Value = listaPersonal });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",     OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcCalculoFilaDto
+                {
+                    CodPersonal           = GetStr(r, "cod_personal"),
+                    NombreCompleto        = GetStr(r, "nombre_completo"),
+                    FechaDdcStr           = GetStr(r, "fecha_ddc_str"),
+                    DiaSemana             = GetStr(r, "dia_semana"),
+                    MinFalta              = GetInt(r, "min_falta"),
+                    HorasFalta            = GetStr(r, "horas_falta"),
+                    MinHeAsignadasSim     = GetInt(r, "min_he_asignadas_sim"),
+                    HorasHeAsignadasSim   = GetStr(r, "horas_he_asignadas_sim"),
+                    MinFaltaRestanteSim   = GetInt(r, "min_falta_restante_sim"),
+                    HorasFaltaRestanteSim = GetStr(r, "horas_falta_restante_sim"),
+                    TotalHeRangoSim       = GetInt(r, "total_he_rango_sim"),
+                    HorasTotalHeRangoSim  = GetStr(r, "horas_total_he_rango_sim"),
+                    Estado                = GetStr(r, "estado"),
+                });
+            }
+            return result;
+        }, "CALCULAR_DDC");
+    }
+
+    // ── REGISTRAR_DDC_MASIVO ─────────────────────────────────────────────────
+    // Mantiene la conexión abierta con transacción hasta Commit / Rollback.
+
+    public async Task<List<DdcRegistroFilaDto>> RegistrarDdcMasivoAsync(
+        string codEmpresa,
+        string fechaInicio,
+        string fechaFin,
+        string listaPersonal)
+    {
+        var sessionId = GetSessionId();
+        await DisposeTransactionAsync(sessionId);
+
+        var txConn = new OracleConnection(GetOracleConnectionString());
+        await txConn.OpenAsync();
+        var txn = txConn.BeginTransaction();
+        _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow, codEmpresa);
+
+        try
+        {
+            var result = new List<DdcRegistroFilaDto>();
+            var entry = _activeTx[sessionId];
+
+            await using var cmd = entry.Conn.CreateCommand();
+            cmd.Transaction = entry.Txn;
+            cmd.CommandTimeout = 120;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.REGISTRAR_DDC_MASIVO";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",   OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",      OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal", OracleDbType.Varchar2) { Value = listaPersonal });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",     OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcRegistroFilaDto
+                {
+                    IdEvento           = GetNullLong(r, "id_evento"),
+                    CodPersonal        = GetStr(r, "cod_personal"),
+                    NombreCompleto     = GetStr(r, "nombre_completo"),
+                    FechaDdcStr        = GetStr(r, "fecha_ddc_str"),
+                    DiaSemana          = GetStr(r, "dia_semana"),
+                    MinFaltaTotal      = GetInt(r, "min_falta_total"),
+                    HorasFaltaTotal    = GetStr(r, "horas_falta_total"),
+                    MinHeAsignadas     = GetInt(r, "min_he_asignadas"),
+                    HorasHeAsignadas   = GetStr(r, "horas_he_asignadas"),
+                    MinFaltaRestante   = GetInt(r, "min_falta_restante"),
+                    HorasFaltaRestante = GetStr(r, "horas_falta_restante"),
+                    Estado             = GetStr(r, "estado"),
+                    Motivo             = GetStr(r, "motivo"),
+                });
+            }
+            return result;
+        }
+        catch
+        {
+            await DisposeTransactionAsync(sessionId);
+            throw;
+        }
+    }
+
+    // ── COMMIT ────────────────────────────────────────────────────────────────
+
+    public async Task CommitAsync()
+    {
+        var sessionId = GetSessionId();
+        if (!_activeTx.TryGetValue(sessionId, out var entry))
+            throw new InvalidOperationException("No hay transacción activa para esta sesión. Es posible que el servidor se haya reiniciado.");
+        try
+        {
+            await entry.Txn.CommitAsync();
+            _logger.LogInformation("COMMIT DDC exitoso para sesión {SessionId}", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en COMMIT DDC para sesión {SessionId}", sessionId);
+            throw;
+        }
+        finally
+        {
+            await DisposeTransactionAsync(sessionId);
+        }
+    }
+
+    // ── ROLLBACK ──────────────────────────────────────────────────────────────
+
+    public async Task RollbackAsync()
+    {
+        var sessionId = GetSessionId();
+        if (!_activeTx.TryGetValue(sessionId, out _))
+            return;
+        try
+        {
+            if (_activeTx.TryGetValue(sessionId, out var entry))
+                await entry.Txn.RollbackAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error en ROLLBACK DDC para sesión {SessionId}", sessionId);
+        }
+        finally
+        {
+            await DisposeTransactionAsync(sessionId);
+        }
+    }
+
+    internal static async Task DisposeTransactionAsync(string sessionId)
+    {
+        if (_activeTx.TryRemove(sessionId, out var entry))
+        {
+            try { await entry.Txn.DisposeAsync(); } catch { /* ignorar */ }
+            try { await entry.Conn.DisposeAsync(); } catch { /* ignorar */ }
+        }
+    }
+
+    // ── CONSULTAR_EVENTO_DDC ─────────────────────────────────────────────────
+
+    public async Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcEventoFilaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.CONSULTAR_EVENTO_DDC";
+
+            cmd.Parameters.Add(new OracleParameter("p_id_evento",  OracleDbType.Decimal)   { Value = idEvento });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcEventoFilaDto
+                {
+                    IdCompen         = GetNullLong(r, "id_compen"),
+                    CodEmpresa       = GetStr(r, "cod_empresa"),
+                    CodPersonal      = GetStr(r, "cod_personal"),
+                    NombreCompleto   = GetStr(r, "nombre_completo"),
+                    FechaOrigenStr   = GetStr(r, "fechaorigen_str"),
+                    FechaDestinoStr  = GetStr(r, "fechadestino_str"),
+                    TipoOrigen       = GetStr(r, "tipoorigen"),
+                    TipoCompensacion = GetStr(r, "tipocompensacion"),
+                    TiempoMin        = GetInt(r, "tiempo_min"),
+                    TiempoHhMi       = GetStr(r, "tiempo_hhmi"),
+                    EstadoAplicacion = GetStr(r, "estado_aplicacion"),
+                    OriAlerta06      = GetStr(r, "ori_alerta06"),
+                    DestAlerta02     = GetStr(r, "dest_alerta02"),
+                });
+            }
+            return result;
+        }, "CONSULTAR_EVENTO_DDC");
+    }
+
+    // ── CONSULTAR_RANGO_DDC ───────────────────────────────────────────────────
+
+    public async Task<List<DdcRangoConsultaDto>> ConsultarRangoDdcAsync(
+        string? codEmpresa,
+        string? codPersonal,
+        string fechaInicio,
+        string fechaFin)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcRangoConsultaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.CONSULTAR_RANGO_DDC";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = (object?)codEmpresa  ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_cod_personal", OracleDbType.Varchar2) { Value = (object?)codPersonal ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio", OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",    OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",   OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcRangoConsultaDto
+                {
+                    IdCompen         = GetNullLong(r, "id_compen"),
+                    CodEmpresa       = GetStr(r, "cod_empresa"),
+                    CodPersonal      = GetStr(r, "cod_personal"),
+                    FechaOrigenStr   = GetStr(r, "fechaorigen_str"),
+                    FechaDestinoStr  = GetStr(r, "fechadestino_str"),
+                    TipoOrigen       = GetStr(r, "tipoorigen"),
+                    TipoCompensacion = GetStr(r, "tipocompensacion"),
+                    TiempoMin        = GetInt(r, "tiempo_min"),
+                    TiempoHhMi       = GetStr(r, "tiempo_hhmi"),
+                    Aux1             = GetStr(r, "aux1"),
+                    OriAlerta06      = GetStr(r, "ori_alerta06"),
+                    DestAlerta02     = GetStr(r, "dest_alerta02"),
+                });
+            }
+            return result;
+        }, "CONSULTAR_RANGO_DDC");
+    }
+}
