@@ -63,6 +63,12 @@ namespace FabricaHilos.Controllers.Account
                 return View();
             }
 
+            // Normalizar: eliminar espacios del usuario y contraseña que el browser/autocompletar
+            // puede añadir silenciosamente, y convertir el usuario a mayúsculas (Oracle CS_USER
+            // almacena siempre en mayúsculas: PERSARB2, no persarb2).
+            usuario  = usuario.Trim().ToUpperInvariant();
+            password = password.Trim();
+
             try
             {
                 // 1. Validar contra Oracle Database (async con timeout interno)
@@ -202,23 +208,10 @@ namespace FabricaHilos.Controllers.Account
                     return RedirectToLanding();
                 }
 
-                // 2. Validar contra Identity local
-                // Identity local: siempre persistente para consistencia con el flujo Oracle
-                var resultado = await _signInManager.PasswordSignInAsync(usuario, password, isPersistent: true, lockoutOnFailure: true);
-                if (resultado.Succeeded)
-                {
-                    if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
-                        return Redirect(returnUrl);
-                    return RedirectToLanding();
-                }
-
-                if (resultado.IsLockedOut)
-                {
-                    _logger.LogWarning("Cuenta bloqueada tras múltiples intentos fallidos: {Usuario}", usuario);
-                    ModelState.AddModelError(string.Empty, "Cuenta bloqueada temporalmente por múltiples intentos fallidos. Intente nuevamente en 10 minutos.");
-                    return View();
-                }
-
+                // Oracle es la única fuente de autenticación válida.
+                // No se permite fallback a Identity local para evitar accesos con
+                // contraseñas desactualizadas almacenadas en SQLite.
+                _logger.LogWarning("Usuario '{Usuario}' no autenticado: no existe en Oracle o contraseña incorrecta.", usuario);
                 ModelState.AddModelError(string.Empty, "Usuario o contraseña incorrectos.");
                 return View();
             }
