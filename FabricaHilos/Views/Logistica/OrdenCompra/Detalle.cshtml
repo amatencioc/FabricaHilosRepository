@@ -3,7 +3,7 @@
 @{
     var oc       = Model.Orden;
     var items    = Model.Items;
-    ViewData["Title"] = $"O/C {oc.TipoDocto}-{oc.Serie:D3}-{oc.NumPed}";
+    ViewData["Title"] = $"{(oc.TipoDocto == "83" ? "O/S" : "O/C")} {oc.TipoDocto}-{oc.Serie:D3}-{oc.NumPed}";
 
     var proveedores  = ViewBag.Proveedores           as Dictionary<string, string> ?? new Dictionary<string, string>();
     var centrosCosto  = ViewBag.CentrosCosto          as Dictionary<string, string> ?? new Dictionary<string, string>();
@@ -21,6 +21,9 @@
     };
 
     var monedaSimbolo = (oc.Moneda ?? "").ToUpper() == "D" ? "$" : "S/";
+
+    var tipoLabel = oc.TipoDocto == "83" ? "Orden de Servicio" : "Orden de Compra";
+    var tipoCorto = oc.TipoDocto == "83" ? "O/S" : "O/C";
 
     string? navToken  = ViewBag.NavToken  as string;
     string? dt        = ViewBag.Dt        as string;
@@ -43,13 +46,13 @@
            asp-route-t="@navToken"
            asp-route-page="@retPage">Órdenes de Compra</a>
     </li>
-    <li class="breadcrumb-item active">@oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed</li>
+    <li class="breadcrumb-item active">@tipoCorto @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed</li>
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="section-title mb-0">
         <i class="bi bi-cart-check me-2"></i>
-        Orden de Compra @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
+        @tipoLabel @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
     </h4>
     <div class="d-flex gap-2">
         @if (oc.Estado == "0")
@@ -59,9 +62,23 @@
                     data-tipo="@oc.TipoDocto"
                     data-serie="@oc.Serie"
                     data-numpd="@oc.NumPed">
-                <i class="bi bi-x-circle me-1"></i>Anular O/C
+                <i class="bi bi-x-circle me-1"></i>Anular @tipoCorto
             </button>
         }
+        <a asp-action="Imprimir"
+           asp-route-dt="@dt"
+           asp-route-t="@navToken"
+           target="_blank"
+           class="btn btn-sm btn-success">
+            <i class="bi bi-printer me-1"></i>Imprimir Proveedor
+        </a>
+        <a asp-action="ImprimirContabilidad"
+           asp-route-dt="@dt"
+           asp-route-t="@navToken"
+           target="_blank"
+           class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Imprimir Contabilidad
+        </a>
         <a asp-action="Index"
            asp-route-t="@navToken"
            asp-route-page="@retPage"
@@ -685,8 +702,8 @@
     var btnAnular = document.getElementById('btnAnularOc');
     if (btnAnular) {
         btnAnular.addEventListener('click', function () {
-            modalTitulo.textContent = 'Anular Orden de Compra';
-            modalMensaje.innerHTML  = '¿Está seguro de anular la O/C <strong>' + btnAnular.dataset.numpd + '</strong>? Esta acción restaurará los saldos de los requerimientos.';
+            modalTitulo.textContent = 'Anular @tipoLabel';
+            modalMensaje.innerHTML  = '¿Está seguro de anular la @tipoCorto <strong>' + btnAnular.dataset.numpd + '</strong>? Esta acción restaurará los saldos de los requerimientos.';
             modalOk.className = 'btn btn-danger';
             _formPendiente = null;
             modalConfirmar.show();

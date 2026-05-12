@@ -60,10 +60,15 @@ public class ItemOrdDto
 
     // ── Precio / importes ──────────────────────────────────────────────────
     public decimal   Precio        { get; set; }
+    public decimal   PorDesc1      { get; set; }
+    public decimal   PorDesc2      { get; set; }
     public decimal   ImpVvta       { get; set; }
 
     // ── Estado ─────────────────────────────────────────────────────────────
     public string?   Estado        { get; set; }
+
+    // ── Centro de Costo (del requerimiento origen) ─────────────────────────
+    public string?   CCosto        { get; set; }
 
     // ── Grupo / aprobación ─────────────────────────────────────────────────
     public long?     IdGrupo       { get; set; }
@@ -157,6 +162,22 @@ public class AnularOcRequest
     public long      NumPed     { get; set; }
 }
 
+public class PreviewBorradorRequest : RegistrarOcRequest
+{
+    // Mismo payload que RegistrarOcRequest pero sin validación de negocio;
+    // incluye datos resueltos de UI para los lookups de nombre.
+    public string? ProveedorNombre  { get; set; }
+    public string? CondPagNombre    { get; set; }
+    public string? CCostoNombre     { get; set; }
+    public List<PreviewItemBorradorDto> ItemsConDesc { get; set; } = new();
+}
+
+public class PreviewItemBorradorDto : ItemSeleccionadoOcDto
+{
+    public string?   Desc         { get; set; }   // descripción visible del artículo
+    public string?   DestinoDesc  { get; set; }   // descripción visible del destino
+}
+
 public class OpcEntregaDto
 {
     public string  OpcLEntrega  { get; set; } = "";
@@ -164,11 +185,37 @@ public class OpcEntregaDto
     public string? LEntregaRef  { get; set; }   // dirección real de la empresa (solo opción '1')
 }
 
+public class ProveedorDetalleDto
+{
+    public string Codigo    { get; set; } = "";
+    public string Nombre    { get; set; } = "";
+    public string Ruc       { get; set; } = "";
+    public string Direccion { get; set; } = "";
+    public string Telefono  { get; set; } = "";
+}
+
 public class DestinoDto
 {
     public string TpDestino  { get; set; } = "";   // 'U'=Centro de Costo  'A'=Activo Fijo
     public string Codigo     { get; set; } = "";
     public string Descripcion { get; set; } = "";
+}
+
+public class FirmaOcDto
+{
+    public string    Codigo         { get; set; } = "";
+    public string    NombreCompleto { get; set; } = "";
+    public string    Cargo          { get; set; } = "";
+    public string    RolEtiqueta    { get; set; } = "";
+    public byte[]?   Firma          { get; set; }
+
+    // ── Campos extra devueltos por P_OBTENER_FIRMAS_OC ─────────────────
+    /// <summary>FECHA_DOC: fecha de la O/C (cursor GENERADO).</summary>
+    public DateTime? FechaDoc       { get; set; }
+    /// <summary>APROB_GERENCIA: código de aprobación gerencia (cursor APROBADO).</summary>
+    public string?   AprobGerencia  { get; set; }
+    /// <summary>F_APROB_GER: fecha de aprobación gerencia (cursor APROBADO).</summary>
+    public DateTime? FAprobGer      { get; set; }
 }
 
 public class IgvDto
@@ -190,4 +237,59 @@ public class OrdenCompraUploadModel
     public string? ReturnFechaFin    { get; set; }
     public string? ReturnEstado      { get; set; }
     public int     ReturnPage        { get; set; } = 1;
+}
+
+/// <summary>
+/// Ítem ya fusionado por CodArt + Unidad + Precio.
+/// Usado por Imprimir.cshtml (proveedor). Cualquier cambio en la lógica
+/// de fusión debe hacerse aquí y se refleja automáticamente en todos los consumidores.
+/// </summary>
+public class MergedItemOrdDto
+{
+    public string  CodArt      { get; init; } = "";
+    public string  Unidad      { get; init; } = "";
+    public decimal Precio      { get; init; }
+    public decimal Cantidad    { get; init; }
+    public decimal ImpVvta     { get; init; }
+    public decimal PorDesc1    { get; init; }
+    public decimal PorDesc2    { get; init; }
+    public string? Descripcion { get; init; }
+    public string? CodOrig     { get; init; }
+
+    /// <summary>Pares (NumReq, Orden) de los ítems origen del grupo, ordenados desc por NumReq.</summary>
+    public List<(long NumReq, int Orden)> ReqItems { get; init; } = [];
+
+    // ── Método de fusión — fuente única de verdad ─────────────────────────
+    /// <summary>
+    /// Fusiona una lista de <see cref="ItemOrdDto"/> agrupando por
+    /// CodArt + Unidad + Precio. Cantidades e importes se suman.
+    /// Los ítems sin req (NumReq nulo o 0) también se incluyen pero sin badge REQ.
+    /// </summary>
+    public static List<MergedItemOrdDto> FusionarItems(IEnumerable<ItemOrdDto> items) =>
+        items
+            .GroupBy(i => new
+            {
+                CodArt = (i.CodArt ?? "").Trim(),
+                Unidad = (i.Unidad ?? "").Trim(),
+                Precio = i.Precio
+            })
+            .Select(g => new MergedItemOrdDto
+            {
+                CodArt      = g.Key.CodArt,
+                Unidad      = g.Key.Unidad,
+                Precio      = g.Key.Precio,
+                Cantidad    = g.Sum(i => i.Cantidad),
+                ImpVvta     = g.Sum(i => i.ImpVvta),
+                PorDesc1    = g.First().PorDesc1,
+                PorDesc2    = g.First().PorDesc2,
+                Descripcion = g.First().Descripcion,
+                CodOrig     = g.First().CodOrig,
+                ReqItems    = g
+                    .Where(i => i.NumReq.HasValue && i.NumReq.Value > 0)
+                    .Select(i => (i.NumReq!.Value, i.Orden))
+                    .OrderByDescending(x => x.Value).ThenBy(x => x.Orden)
+                    .ToList()
+            })
+            .OrderBy(x => x.CodArt)
+            .ToList();
 }

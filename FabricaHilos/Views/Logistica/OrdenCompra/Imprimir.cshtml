@@ -1,0 +1,827 @@
+@model (FabricaHilos.Models.Logistica.OrdenCompraDto Orden, List<FabricaHilos.Models.Logistica.ItemOrdDto> Items)
+@{
+    Layout = null;
+
+    var oc    = Model.Orden;
+    var items = Model.Items;
+
+    var proveedores        = ViewBag.Proveedores              as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var centrosCosto       = ViewBag.CentrosCosto             as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var descsCondPag       = ViewBag.DescripcionesCondPag      as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var descsArt           = ViewBag.DescripcionesArticulos    as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var nombresUsuarios    = ViewBag.NombresUsuarios           as Dictionary<string, string> ?? new Dictionary<string, string>();
+
+    _ = proveedores.TryGetValue(oc.CodProveed ?? "", out var nomProv);
+    _ = centrosCosto.TryGetValue(oc.CCosto ?? "", out var nomCcosto);
+    _ = descsCondPag.TryGetValue(oc.CondPag ?? "", out var descCondPag);
+
+    var monedaSimbolo = (oc.Moneda ?? "").ToUpper() == "D" ? "USD $" : "PEN S/";
+    var monedaSimb    = (oc.Moneda ?? "").ToUpper() == "D" ? "$" : "S/";
+    var tipoLabel     = oc.TipoDocto == "83" ? "ORDEN DE SERVICIO" : "ORDEN DE COMPRA";
+    var tipoCorto     = oc.TipoDocto == "83" ? "O/S" : "O/C";
+    var numDoc        = $"{oc.Serie:D3}-{oc.NumPed:D8}";
+
+    var empresaNombre    = ViewBag.EmpresaNombre    as string ?? "FÁBRICA DE HILOS S.A.";
+    var empresaRuc       = ViewBag.EmpresaRuc        as string ?? "";
+    var empresaDireccion = ViewBag.EmpresaDireccion  as string ?? "";
+    var empresaTelefono  = ViewBag.EmpresaTelefono   as string ?? "";
+    var logoPath         = ViewBag.EmpresaLogoPath   as string ?? "";
+    var logoAlt          = ViewBag.EmpresaLogoAlt    as string ?? "Logo";
+
+    // REQs relacionados: números únicos extraidos de los ítems
+    var reqsRelacionados = items
+        .Where(i => i.NumReq.HasValue && i.NumReq.Value > 0)
+        .Select(i => i.NumReq!.Value.ToString())
+        .Distinct()
+        .OrderByDescending(n => n)
+        .ToList();
+    var reqsTexto = reqsRelacionados.Any() ? string.Join(", ", reqsRelacionados) : "—";
+
+    var provDetalle = ViewBag.ProveedorDetalle as FabricaHilos.Models.Logistica.ProveedorDetalleDto;
+
+    Func<string?, string> fmtUsu = cod => {
+        if (string.IsNullOrEmpty(cod)) return "—";
+        return nombresUsuarios.TryGetValue(cod, out var n) && n != cod ? $"{n} ({cod})" : cod;
+    };
+
+    var estadoTexto = oc.Estado switch {
+        "0" => "EMITIDA",
+        "1" => "ATENDIDA PARCIAL",
+        "2" => "ATENDIDA TOTAL",
+        "9" => "ANULADA",
+        _   => oc.Estado ?? "—"
+    };
+    var estadoColor = oc.Estado switch {
+        "0" => "#1a5276",
+        "9" => "#c0392b",
+        "2" => "#1e8449",
+        _   => "#784212"
+    };
+
+    // Calcular totales desde ítems
+    decimal valVenta   = items.Sum(i => i.ImpVvta);
+    decimal impIgv     = oc.ImpIgv > 0 ? oc.ImpIgv : Math.Round(valVenta * (oc.PrecioVta > 0 ? oc.PrecioVta : 0.18m), 2);
+    decimal total      = oc.PrecioVta > 0 ? oc.PrecioVta : valVenta + impIgv;
+    // usar los campos del DTO cuando estén disponibles
+    if (oc.ValVenta > 0) valVenta = oc.ValVenta;
+    if (oc.PrecioVta > 0) total   = oc.PrecioVta;
+    if (oc.ImpIgv > 0)    impIgv  = oc.ImpIgv;
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@tipoCorto @numDoc — @empresaNombre</title>
+    <style>
+        /* ── Reset & base ────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9pt;
+            color: #1a1a2e;
+            background: #f0f4f8;
+        }
+
+        /* ── Contenedor A4 ───────────────────────────────────────────────── */
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 10mm auto;
+            background: #fff;
+            box-shadow: 0 4px 28px rgba(0,0,0,.18);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        /* ── Franja superior de color ────────────────────────────────────── */
+        .top-stripe {
+            height: 7px;
+            background: linear-gradient(90deg, #0F2E25 0%, #1B4D3E 55%, #C8A951 100%);
+        }
+
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .doc-header {
+            display: flex;
+            align-items: stretch;
+            border-bottom: 2px solid #1B4D3E;
+        }
+        .header-left {
+            flex: 1;
+            padding: 10mm 8mm 6mm 10mm;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-logo img {
+            max-height: 120px;
+            max-width: 260px;
+            object-fit: contain;
+        }
+        .header-logo-placeholder {
+            width: 260px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e8f0ec;
+            border: 1px solid #a8c4b8;
+            border-radius: 3px;
+            font-size: 8pt;
+            color: #1B4D3E;
+            font-weight: 600;
+        }
+        .header-company h1 {
+            font-size: 13pt;
+            font-weight: 700;
+            color: #1B4D3E;
+            letter-spacing: -.3px;
+            line-height: 1.1;
+        }
+        .header-company p {
+            font-size: 8pt;
+            color: #555;
+            margin-top: 2px;
+            line-height: 1.5;
+        }
+        .header-right {
+            width: 62mm;
+            background: #1B4D3E;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8mm 6mm;
+            gap: 4px;
+        }
+        .header-right .doc-type {
+            font-size: 9pt;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            opacity: .85;
+        }
+        .header-right .doc-num {
+            font-size: 18pt;
+            font-weight: 800;
+            letter-spacing: .5px;
+            line-height: 1.1;
+        }
+        .header-right .doc-estado {
+            margin-top: 4px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        /* ── Sección de datos ────────────────────────────────────────────── */
+        .section-grid {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid #d0dce8;
+        }
+        .section-col {
+            flex: 1;
+            padding: 5mm 7mm 4mm;
+            border-right: 1px solid #d0dce8;
+        }
+        .section-col:last-child { border-right: none; }
+        .section-title {
+            font-size: 7pt;
+            font-weight: 700;
+            color: #1B4D3E;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            border-bottom: 1px solid #a8c4b8;
+            padding-bottom: 2px;
+            margin-bottom: 4px;
+        }
+        .field-row {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 2px;
+        }
+        .field-lbl {
+            font-size: 7pt;
+            color: #6c7a89;
+            font-weight: 600;
+            white-space: nowrap;
+            min-width: 60px;
+            margin-right: 4px;
+        }
+        .field-val {
+            font-size: 8.5pt;
+            color: #1a1a2e;
+            font-weight: 500;
+            word-break: break-word;
+        }
+        .field-val.highlight {
+            color: #1B4D3E;
+            font-weight: 700;
+        }
+
+        /* ── Proveedor ───────────────────────────────────────────────────── */
+        .prov-section {
+            padding: 4mm 7mm;
+            border-bottom: 1px solid #d0dce8;
+            display: flex;
+            gap: 0;
+        }
+        .prov-block {
+            flex: 1;
+        }
+        .prov-block .section-title { margin-bottom: 3px; }
+        .prov-name {
+            font-size: 11pt;
+            font-weight: 700;
+            color: #1B4D3E;
+            margin-bottom: 2px;
+        }
+        .prov-code {
+            font-size: 7.5pt;
+            color: #888;
+        }
+        .prov-divider {
+            width: 1px;
+            background: #d0dce8;
+            margin: 0 10mm;
+        }
+        .cond-block { flex: 0 0 68mm; }
+
+        /* ── Tabla de ítems ──────────────────────────────────────────────── */
+        .items-section {
+            padding: 0 7mm 0;
+        }
+        .items-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3mm 0 2mm;
+            border-bottom: 2px solid #1B4D3E;
+        }
+        .items-header h2 {
+            font-size: 8pt;
+            font-weight: 700;
+            color: #1B4D3E;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+        .items-header .badge-items {
+            background: #e8f0ec;
+            color: #1B4D3E;
+            border: 1px solid #a8c4b8;
+            font-size: 7pt;
+            font-weight: 700;
+            padding: 1px 8px;
+            border-radius: 20px;
+        }
+        .oc-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .oc-table thead tr {
+            background: #1B4D3E;
+            color: #fff;
+        }
+        .oc-table thead th {
+            padding: 3px 5px;
+            font-size: 7pt;
+            font-weight: 600;
+            letter-spacing: .03em;
+            white-space: nowrap;
+            text-align: left;
+        }
+        .oc-table thead th.r { text-align: right; }
+        .oc-table thead th.c { text-align: center; }
+        .oc-table tbody tr {
+            border-bottom: 1px solid #e8edf2;
+        }
+        .oc-table tbody tr:nth-child(even) td {
+            background: #f0f5f2;
+        }
+        .oc-table tbody td {
+            padding: 3px 5px;
+            font-size: 8pt;
+            vertical-align: middle;
+        }
+        .oc-table tbody td.r { text-align: right; }
+        .oc-table tbody td.c { text-align: center; }
+        .oc-table tbody td.art-code {
+            font-weight: 700;
+            color: #1B4D3E;
+            font-size: 7.5pt;
+        }
+        .oc-table tbody td.desc {
+            color: #222;
+            line-height: 1.3;
+        }
+        .oc-table tbody td.num {
+            color: #999;
+            font-size: 7.5pt;
+            text-align: center;
+        }
+        .oc-table tfoot td {
+            border-top: 2px solid #1B4D3E;
+            font-weight: 700;
+            padding: 3px 5px;
+            font-size: 8pt;
+            background: #eef3f1;
+        }
+
+        /* ── Totales ─────────────────────────────────────────────────────── */
+        .totals-section {
+            padding: 4mm 7mm 3mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid #d0dce8;
+        }
+        .observacion-block {
+            flex: 1;
+            padding-right: 15mm;
+        }
+        .observacion-block .section-title { margin-bottom: 3px; }
+        .observacion-block p {
+            font-size: 8pt;
+            color: #444;
+            line-height: 1.4;
+        }
+        .totals-table {
+            flex: 0 0 auto;
+            min-width: 55mm;
+        }
+        .totals-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 2px 4px;
+            font-size: 8pt;
+        }
+        .totals-table .t-lbl {
+            color: #6c7a89;
+            font-size: 7.5pt;
+            text-align: right;
+            padding-right: 8px;
+        }
+        .totals-table .t-val {
+            text-align: right;
+            font-weight: 600;
+            color: #1a1a2e;
+            white-space: nowrap;
+        }
+        .totals-table tr.grand-total td {
+            background: #1B4D3E;
+            color: #fff;
+            font-weight: 700;
+            font-size: 10pt;
+            border-radius: 0;
+        }
+        .totals-table tr.grand-total .t-lbl {
+            color: #a8c4b8;
+        }
+
+        /* ── Firmas ──────────────────────────────────────────────────────── */
+        .firma-section {
+            display: flex;
+            padding: 6mm 7mm 5mm;
+            gap: 5mm;
+            border-bottom: 1px solid #d0dce8;
+        }
+        .firma-box {
+            flex: 1;
+            text-align: center;
+            padding: 0 4mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .firma-img {
+            height: 16mm;
+            max-width: 100%;
+            object-fit: contain;
+            margin-bottom: 1mm;
+        }
+        .firma-img-placeholder {
+            height: 16mm;
+        }
+        .firma-line {
+            border-top: 1.5px solid #1B4D3E;
+            width: 100%;
+            margin-bottom: 3px;
+        }
+        .firma-label {
+            font-size: 7pt;
+            font-weight: 600;
+            color: #1B4D3E;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .firma-sublabel {
+            font-size: 7pt;
+            color: #888;
+        }
+        .firma-nombre {
+            font-size: 7pt;
+            color: #333;
+            font-weight: 500;
+        }
+
+        /* ── Footer ─────────────────────────────────────────────────────── */
+        .doc-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3mm 7mm;
+            background: #eef3f1;
+            border-top: 1px solid #a8c4b8;
+        }
+        .doc-footer .footer-left {
+            font-size: 7pt;
+            color: #888;
+        }
+        .doc-footer .footer-right {
+            font-size: 7pt;
+            color: #888;
+            text-align: right;
+        }
+        .bottom-stripe {
+            height: 5px;
+            background: linear-gradient(90deg, #C8A951 0%, #2D7A5F 55%, #0F2E25 100%);
+        }
+
+        /* ── Botón imprimir (screen only) ────────────────────────────────── */
+        .print-bar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 8px;
+            background: #fff;
+        }
+        .btn-print {
+            background: #1B4D3E;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 22px;
+            font-size: 9pt;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-print:hover { background: #0F2E25; }
+        .btn-close-win {
+            background: #6c757d;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 16px;
+            font-size: 9pt;
+            cursor: pointer;
+        }
+        .btn-close-win:hover { background: #5a6268; }
+
+        /* ── Print media ─────────────────────────────────────────────────── */
+        @@media print {
+            html, body { background: #fff !important; margin: 0; padding: 0; }
+            .print-bar { display: none !important; }
+            .page {
+                width: 100%;
+                min-height: 0;
+                margin: 0;
+                box-shadow: none;
+                border-radius: 0;
+            }
+            @@page {
+                size: A4 portrait;
+                margin: 8mm 10mm 10mm;
+            }
+            .oc-table tbody tr { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Barra de botones (pantalla) -->
+<div class="print-bar">
+    <button class="btn-print" onclick="window.print()">
+        🖨 Imprimir / Guardar PDF
+    </button>
+    <button class="btn-close-win" onclick="window.close()">✕ Cerrar</button>
+</div>
+
+<!-- ══ Documento A4 ═══════════════════════════════════════════════════════════ -->
+<div class="page">
+
+    <div class="top-stripe"></div>
+
+    <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+    <div class="doc-header">
+        <div class="header-left">
+            <div class="header-logo">
+                @if (!string.IsNullOrWhiteSpace(logoPath))
+                {
+                    <img src="/@logoPath" alt="@logoAlt" />
+                }
+                else
+                {
+                    <div class="header-logo-placeholder">@logoAlt</div>
+                }
+            </div>
+            <div class="header-company">
+                <h1>@empresaNombre</h1>
+                <p>
+                    @if (!string.IsNullOrWhiteSpace(empresaRuc))
+                    {
+                        <span>RUC: <strong>@empresaRuc</strong></span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(empresaDireccion))
+                    {
+                        <br /><span>@empresaDireccion</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(empresaTelefono))
+                    {
+                        <br /><span>Teléfono: @empresaTelefono</span>
+                    }
+                </p>
+            </div>
+        </div>
+        <div class="header-right">
+            <span class="doc-type">@tipoLabel</span>
+            <span class="doc-num">@numDoc</span>
+            <span class="doc-estado" style="background-color:@estadoColor;">@estadoTexto</span>
+        </div>
+    </div>
+
+    <!-- ── DATOS GENERALES ─────────────────────────────────────────────────── -->
+    <div class="section-grid">
+        <div class="section-col">
+            <div class="section-title">Datos del Documento</div>
+            <div class="field-row">
+                <span class="field-lbl">Tipo:</span>
+                <span class="field-val highlight">@tipoLabel</span>
+            </div>
+            <div class="field-row">
+                <span class="field-lbl">Número:</span>
+                <span class="field-val highlight">@numDoc</span>
+            </div>
+            <div class="field-row">
+                <span class="field-lbl">Fecha:</span>
+                <span class="field-val">@oc.Fecha?.ToString("dd/MM/yyyy")</span>
+            </div>
+            <div class="field-row">
+                <span class="field-lbl">F. Entrega:</span>
+                <span class="field-val">@oc.FEntrega?.ToString("dd/MM/yyyy")</span>
+            </div>
+        </div>
+        <div class="section-col">
+            <div class="section-title">Condiciones Comerciales</div>
+            <div class="field-row">
+                <span class="field-lbl">Moneda:</span>
+                <span class="field-val highlight">@monedaSimbolo</span>
+            </div>
+            <div class="field-row">
+                <span class="field-lbl">C. Pago:</span>
+                <span class="field-val">@(descCondPag ?? oc.CondPag ?? "—")</span>
+            </div>
+            <div class="field-row">
+                <span class="field-lbl">F. Venc:</span>
+                <span class="field-val"></span>
+            </div>
+        </div>
+        <div class="section-col">
+            <div class="section-title">Requerimientos</div>
+            <div class="field-row">
+                <span class="field-val" style="font-size:8pt; color:#2c3e50;">@reqsTexto</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── PROVEEDOR ──────────────────────────────────────────────────────────── -->
+    <div class="prov-section">
+        <div class="prov-block">
+            <div class="section-title">Proveedor</div>
+            <div class="prov-name">@(provDetalle?.Nombre ?? nomProv ?? oc.CodProveed ?? "—")</div>
+            @if (!string.IsNullOrWhiteSpace(oc.CodProveed))
+            {
+                <div class="prov-code">Código: @oc.CodProveed</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(provDetalle?.Ruc))
+            {
+                <div class="prov-code">RUC: @provDetalle!.Ruc</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(provDetalle?.Direccion))
+            {
+                <div class="prov-code" style="max-width:320px;white-space:normal;">@provDetalle!.Direccion</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(provDetalle?.Telefono))
+            {
+                <div class="prov-code">Tel: @provDetalle!.Telefono</div>
+            }
+        </div>
+        <div class="prov-divider"></div>
+        <div class="cond-block">
+            <div class="section-title">Observaciones</div>
+            @if (!string.IsNullOrWhiteSpace(oc.Detalle))
+            {
+                <div style="font-size:.76rem; color:#2c3e50; white-space:pre-wrap; line-height:1.4;">@oc.Detalle</div>
+            }
+            else
+            {
+                <div style="font-size:.75rem; color:#aaa; font-style:italic;">—</div>
+            }
+        </div>
+    </div>
+
+    <!-- ── TABLA DE ÍTEMS ──────────────────────────────────────────────────── -->
+    <div class="items-section">
+        <div class="items-header">
+            <h2>Descripción de Bienes / Servicios</h2>
+            @{
+                    // ── Fusión centralizada: lógica en MergedItemOrdDto.FusionarItems ──
+                    var merged = FabricaHilos.Models.Logistica.MergedItemOrdDto.FusionarItems(items);
+                }
+            <span class="badge-items">@merged.Count ítem@(merged.Count == 1 ? "" : "s")</span>
+        </div>
+        <table class="oc-table">
+            <thead>
+                <tr>
+                    <th class="c" style="width:22px;">#</th>
+                    <th style="width:72px;">Artículo</th>
+                    <th>Descripción</th>
+                    <th class="c" style="width:30px;">Und</th>
+                    <th class="r" style="width:58px;">Cantidad</th>
+                    <th class="r" style="width:66px;">P. Unit.</th>
+                    <th class="r" style="width:70px;">Descuentos</th>
+                    <th class="r" style="width:70px;">Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int rowNum = 0; }
+                @foreach (var it in merged)
+                {
+                    rowNum++;
+                    var desc = descsArt.TryGetValue(it.CodArt, out var da) && !string.IsNullOrWhiteSpace(da)
+                                ? da : it.Descripcion ?? it.CodArt ?? "—";
+                    var tieneDesc = it.PorDesc1 > 0 || it.PorDesc2 > 0;
+                    var descTxt = tieneDesc
+                        ? (it.PorDesc1 > 0 && it.PorDesc2 > 0
+                            ? $"{it.PorDesc1:N2}% + {it.PorDesc2:N2}%"
+                            : it.PorDesc1 > 0 ? $"{it.PorDesc1:N2}%" : $"{it.PorDesc2:N2}%")
+                        : "—";
+                    <tr>
+                        <td class="num">@rowNum</td>
+                        <td class="art-code">@(it.CodArt != "" ? it.CodArt : "—")</td>
+                        <td class="desc">@desc</td>
+                        <td class="c" style="color:#555;">@(it.Unidad != "" ? it.Unidad : "—")</td>
+                        <td class="r">@it.Cantidad.ToString("N2")</td>
+                        <td class="r">@monedaSimb @it.Precio.ToString("N2")</td>
+                        <td class="r" style="color:@(tieneDesc ? "#b71c1c" : "#888"); font-size:7.5pt;">@descTxt</td>
+                        <td class="r" style="font-weight:700;">@monedaSimb @it.ImpVvta.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="8" class="r" style="color:#6c7a89;font-weight:600;">Subtotal</td>
+                    <td class="r">@monedaSimb @valVenta.ToString("N2")</td>
+                </tr>
+            </tfoot>
+        </table>
+        <!-- ── Totales inline bajo la tabla ── -->
+        <div style="display:flex; justify-content:flex-end; padding:.4rem 0 .5rem;">
+            <div class="totals-table">
+            <table>
+                <tr>
+                    <td class="t-lbl">Valor Venta:</td>
+                    <td class="t-val">@monedaSimb @valVenta.ToString("N2")</td>
+                </tr>
+                @if (oc.ImpDescto > 0)
+                {
+                    <tr>
+                        <td class="t-lbl">Descuento:</td>
+                        <td class="t-val">(@monedaSimb @oc.ImpDescto.ToString("N2"))</td>
+                    </tr>
+                    <tr>
+                        <td class="t-lbl">Valor Neto:</td>
+                        <td class="t-val">@monedaSimb @oc.ImpNeto.ToString("N2")</td>
+                    </tr>
+                }
+                <tr>
+                    <td class="t-lbl">I.G.V.:</td>
+                    <td class="t-val">@monedaSimb @impIgv.ToString("N2")</td>
+                </tr>
+                <tr class="grand-total">
+                    <td class="t-lbl">TOTAL:</td>
+                    <td class="t-val">@monedaSimb @total.ToString("N2")</td>
+                </tr>
+            </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── FIRMAS ────────────────────────────────────────────────────────── -->
+    @{
+        var firmaGen = ViewBag.FirmaGenerado as FabricaHilos.Models.Logistica.FirmaOcDto;
+        var firmaApr = ViewBag.FirmaAprobado as FabricaHilos.Models.Logistica.FirmaOcDto;
+
+        string? firmaGenSrc = firmaGen?.Firma != null && firmaGen.Firma.Length > 0
+            ? FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firmaGen.Firma) is string mimeGen
+                ? $"data:{mimeGen};base64,{Convert.ToBase64String(firmaGen.Firma)}"
+                : null
+            : null;
+        string? firmaAprSrc = firmaApr?.Firma != null && firmaApr.Firma.Length > 0
+            ? FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firmaApr.Firma) is string mimeApr
+                ? $"data:{mimeApr};base64,{Convert.ToBase64String(firmaApr.Firma)}"
+                : null
+            : null;
+    }
+    <div class="firma-section">
+        <div class="firma-box">
+            @if (firmaGenSrc != null)
+            {
+                <img class="firma-img" src="@firmaGenSrc" alt="Firma" />
+            }
+            else
+            {
+                <div class="firma-img-placeholder"></div>
+            }
+            <div class="firma-line"></div>
+            @if (!string.IsNullOrWhiteSpace(firmaGen?.NombreCompleto))
+            {
+                <div class="firma-nombre">@firmaGen!.NombreCompleto</div>
+            }
+            <div class="firma-label">@(firmaGen?.RolEtiqueta ?? "Generado por")</div>
+            <div class="firma-sublabel">@(firmaGen?.Cargo ?? "Logística")</div>
+        </div>
+        <div class="firma-box">
+            @if (firmaAprSrc != null)
+            {
+                <img class="firma-img" src="@firmaAprSrc" alt="Firma" />
+            }
+            else
+            {
+                <div class="firma-img-placeholder"></div>
+            }
+            <div class="firma-line"></div>
+            @if (!string.IsNullOrWhiteSpace(firmaApr?.NombreCompleto))
+            {
+                <div class="firma-nombre">@firmaApr!.NombreCompleto</div>
+            }
+            <div class="firma-label">@(firmaApr?.RolEtiqueta ?? "Aprobado por")</div>
+            <div class="firma-sublabel">@(firmaApr?.Cargo ?? "Gerencia")</div>
+        </div>
+    </div>
+
+    <!-- ── INSTRUCCIONES AL PROVEEDOR ───────────────────────────────────── -->
+    <div style="border:1px solid #b0bec5; border-radius:4px; padding:.5rem .75rem; margin-bottom:.6rem; font-size:.72rem; line-height:1.5; background:#fafafa; page-break-inside:avoid;">
+        <ol style="margin:0; padding-left:1.2rem;">
+            <li>Colocar en la factura N° de @tipoLabel.ToLower() o de Servicio</li>
+            <li>Si es servicio colocar en observaciones: <em>Operación sujeta al Spot</em></li>
+            <li>Las facturas y guías electrónicas deben de enviar los formatos PDF y XML, al correo:
+                <strong>documentos.electronicos&#64;colonial.com.pe</strong>
+            </li>
+            <li>Que su factura cumpla con las últimas disposiciones de Sunat:<br>
+                &nbsp;&nbsp;Condición de pago: <strong>Contado</strong> (se paga el mismo día de la emisión — recibida en correo indicado antes de las 10.30 a.m.)<br>
+                &nbsp;&nbsp;Condición de pago: <strong>Crédito</strong> / forma de pago: cuota-vencimiento-neto a pagar
+            </li>
+            <li>Si no envían el formato XML no será cancelada la factura</li>
+            <li>Las fechas de vencimiento de Lts. o facturas se indicarán en la @tipoLabel.ToLower()</li>
+            <li>Cuando es Servicio se debe adjuntar: Acta de Conformidad e Informe Técnico</li>
+        </ol>
+        <div style="margin-top:.35rem; font-weight:700; text-align:center; color:#b71c1c; font-size:.73rem;">
+            SI LAS FACTURAS NO TIENEN LO INDICADO LÍNEAS ARRIBA — NO SERÁN ACEPTADAS
+        </div>
+    </div>
+
+    <!-- ── FOOTER ────────────────────────────────────────────────────────── -->
+    <div class="doc-footer">
+        <div class="footer-left">
+            @empresaNombre
+            @if (!string.IsNullOrWhiteSpace(empresaRuc)) { <text> · RUC: @empresaRuc</text> }
+            <br>
+            Documento generado el @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+        </div>
+        <div class="footer-right">
+            <span style="color:#2e86c1;font-weight:700;">Este documento NO tiene validez como comprobante de pago</span>
+        </div>
+    </div>
+
+    <div class="bottom-stripe"></div>
+
+</div><!-- /page -->
+
+<script>
+    // Auto-imprimir si se navega con ?print=1
+    if (new URLSearchParams(window.location.search).get('print') === '1') {
+        window.addEventListener('load', function() { window.print(); });
+    }
+</script>
+</body>
+</html>

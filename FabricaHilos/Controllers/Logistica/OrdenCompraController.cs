@@ -422,6 +422,10 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.CentrosCosto  = centrosCosto;
         ViewBag.Usuario       = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
 
+        var empresa = _empresaTema.GetTemaActual();
+        ViewBag.EmpresaNombre = empresa.NombreCompleto;
+        ViewBag.EmpresaRuc    = _empresaTema.GetRucActual();
+
         return View("~/Views/Logistica/OrdenCompra/Nueva.cshtml");
     }
 
@@ -627,6 +631,145 @@ public class OrdenCompraController : OracleBaseController
         return Json(pendientes);
     }
 
+    // ── IMPRIMIR ORDEN ─────────────────────────────────────────────────────────
+
+    [HttpGet("Imprimir")]
+    public async Task<IActionResult> Imprimir(string? dt = null, string? t = null)
+    {
+        if (string.IsNullOrEmpty(dt) || !_navToken.TryUnprotect(dt, out var dtNav))
+            return NotFound();
+
+        var tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+        if (!int.TryParse(dtNav.GetValueOrDefault("serie"), out var serie)) serie = 0;
+        if (!long.TryParse(dtNav.GetValueOrDefault("numPed"), out var numPed)) numPed = 0;
+
+        var orden = await _service.ObtenerOrdenAsync(tipoDocto, serie, numPed);
+        if (orden is null) return NotFound();
+
+        var items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
+
+        var codigos = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.Proveedores = await _service.ObtenerNombresProveedoresAsync(codigos);
+
+        var codigosCc = new[] { orden.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
+
+        var codigosCondPag = new[] { orden.CondPag }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DescripcionesCondPag = await _service.ObtenerDescripcionesCondPagAsync(codigosCondPag);
+
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
+
+        var usuariosAuditoria = new[] { orden.AAduser, orden.AMduser }
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        var tareasNombres = usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u));
+        var nombresResultado = await Task.WhenAll(tareasNombres);
+        var nombresUsuarios = usuariosAuditoria.Zip(nombresResultado, (u, n) => (u, n))
+            .ToDictionary(x => x.u, x => x.n, StringComparer.OrdinalIgnoreCase);
+        ViewBag.NombresUsuarios = nombresUsuarios;
+
+        var empresa = _empresaTema.GetTemaActual();
+        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
+        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion = empresa.Direccion;
+        ViewBag.EmpresaTelefono  = empresa.Telefono;
+
+        var provDetalle = await _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
+        ViewBag.ProveedorDetalle = provDetalle;
+
+        ViewBag.NavToken        = t;
+        ViewBag.Dt              = dt;
+
+        var (firmaGenerado, firmaAprobado) = await _service.ObtenerFirmasOcAsync(tipoDocto, serie, numPed);
+        ViewBag.FirmaGenerado = firmaGenerado;
+        ViewBag.FirmaAprobado = firmaAprobado;
+
+        return View("~/Views/Logistica/OrdenCompra/Imprimir.cshtml", (orden, items));
+    }
+
+    // ── FIRMA IMAGEN ───────────────────────────────────────────────────────────
+
+    [HttpGet("FirmaImg")]
+    public async Task<IActionResult> FirmaImg(string dt, string rol)
+    {
+        if (string.IsNullOrEmpty(dt) || !_navToken.TryUnprotect(dt, out var dtNav))
+            return NotFound();
+
+        var tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+        if (!int.TryParse(dtNav.GetValueOrDefault("serie"),  out var serie))  serie  = 0;
+        if (!long.TryParse(dtNav.GetValueOrDefault("numPed"), out var numPed)) numPed = 0;
+
+        var (firmaGenerado, firmaAprobado) = await _service.ObtenerFirmasOcAsync(tipoDocto, serie, numPed);
+        var firma = rol == "aprobado" ? firmaAprobado : firmaGenerado;
+
+        if (firma?.Firma == null || firma.Firma.Length == 0)
+            return NotFound();
+
+        var mime = FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firma.Firma);
+        return File(firma.Firma, mime);
+    }
+
+    // ── IMPRIMIR CONTABILIDAD ──────────────────────────────────────────────────
+
+    [HttpGet("ImprimirContabilidad")]
+    public async Task<IActionResult> ImprimirContabilidad(string? dt = null, string? t = null)
+    {
+        if (string.IsNullOrEmpty(dt) || !_navToken.TryUnprotect(dt, out var dtNav))
+            return NotFound();
+
+        var tipoDocto = dtNav.GetValueOrDefault("tipoDocto") ?? string.Empty;
+        if (!int.TryParse(dtNav.GetValueOrDefault("serie"), out var serie)) serie = 0;
+        if (!long.TryParse(dtNav.GetValueOrDefault("numPed"), out var numPed)) numPed = 0;
+
+        var orden = await _service.ObtenerOrdenAsync(tipoDocto, serie, numPed);
+        if (orden is null) return NotFound();
+
+        var items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
+
+        var codigos = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.Proveedores = await _service.ObtenerNombresProveedoresAsync(codigos);
+
+        // Todos los centros de costo que aparecen en cabecera e ítems
+        var codigosCc = items.Select(i => i.CCosto)
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!)
+            .Concat(new[] { orden.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!))
+            .Distinct();
+        ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
+
+        var codigosCondPag = new[] { orden.CondPag }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DescripcionesCondPag = await _service.ObtenerDescripcionesCondPagAsync(codigosCondPag);
+
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
+
+        var usuariosAuditoria = new[] { orden.AAduser, orden.AMduser }
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        var tareasNombres = usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u));
+        var nombresResultado = await Task.WhenAll(tareasNombres);
+        ViewBag.NombresUsuarios = usuariosAuditoria.Zip(nombresResultado, (u, n) => (u, n))
+            .ToDictionary(x => x.u, x => x.n, StringComparer.OrdinalIgnoreCase);
+
+        var empresa = _empresaTema.GetTemaActual();
+        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
+        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion = empresa.Direccion;
+        ViewBag.EmpresaTelefono  = empresa.Telefono;
+
+        ViewBag.ProveedorDetalle = await _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
+        ViewBag.NavToken = t;
+        ViewBag.Dt       = dt;
+
+        var (firmaGenerado, firmaAprobado) = await _service.ObtenerFirmasOcAsync(tipoDocto, serie, numPed);
+        ViewBag.FirmaGenerado = firmaGenerado;
+        ViewBag.FirmaAprobado = firmaAprobado;
+
+        return View("~/Views/Logistica/OrdenCompra/ImprimirContabilidad.cshtml", (orden, items));
+    }
+
     // ── ANULAR ORDEN ───────────────────────────────────────────────────────────
 
     [HttpPost("Anular")]
@@ -642,5 +785,102 @@ public class OrdenCompraController : OracleBaseController
 
         TempData["Success"] = $"O/C N° {request.NumPed} anulada correctamente.";
         return Json(new { ok = true });
+    }
+
+    // ── PREVIEW BORRADOR (Paso 2 → Imprimir.cshtml sin guardar) ──────────────
+
+    [HttpPost("PreviewBorrador")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PreviewBorrador([FromBody] PreviewBorradorRequest? req)
+    {
+        if (req is null) return BadRequest();
+
+        // Construir OrdenCompraDto desde los datos del formulario
+        var oc = new OrdenCompraDto
+        {
+            TipoDocto  = req.TipoDocto,
+            Serie      = 0,
+            NumPed     = 0,
+            Estado     = "0",                  // EMITIDA (borrador)
+            Fecha      = req.Fecha == default ? DateTime.Today : req.Fecha,
+            FEntrega   = req.FEntrega == default ? DateTime.Today : req.FEntrega,
+            CodProveed = req.CodProveed,
+            CondPag    = req.CondPag,
+            Moneda     = req.Moneda,
+            Detalle    = req.Detalle,
+            CCosto     = req.CCosto,
+            PrecioVta  = 0
+        };
+
+        // Construir ítems
+        int orden = 0;
+        var items = req.ItemsConDesc.Select(it => {
+            orden++;
+            var precio = it.Precio;
+            var cant   = it.Cantidad;
+            var d1     = it.PorDesc1 / 100m;
+            var d2     = it.PorDesc2 / 100m;
+            var imp    = Math.Round(cant * precio * (1 - d1) * (1 - d2), 2);
+            return new ItemOrdDto
+            {
+                TipoDocto   = req.TipoDocto,
+                Serie       = 0,
+                NumPed      = 0,
+                Orden       = orden,
+                CodArt      = it.CodArt,
+                CodOrig     = it.CodOrig,
+                Unidad      = it.Unidad,
+                Descripcion = it.Desc ?? it.Detalle ?? it.CodArt,
+                Cantidad    = cant,
+                Precio      = precio,
+                PorDesc1    = it.PorDesc1,
+                PorDesc2    = it.PorDesc2,
+                ImpVvta     = imp,
+                Estado      = "0",
+                NumReq      = it.NumReq > 0 ? it.NumReq : null,
+                OrdenReq    = it.Orden > 0 ? it.Orden : null,
+            };
+        }).ToList();
+
+        // Calcular totales
+        var impsto    = req.Impsto;
+        var valVenta  = items.Sum(i => i.ImpVvta);
+        var igvAmt    = Math.Round(valVenta * impsto, 2);
+        oc.ValVenta   = valVenta;
+        oc.ImpIgv     = igvAmt;
+        oc.PrecioVta  = valVenta + igvAmt;
+
+        // ViewBag: mismos lookups que usa Imprimir.cshtml
+        ViewBag.Proveedores = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            { [req.CodProveed ?? ""] = req.ProveedorNombre ?? req.CodProveed ?? "" };
+        ViewBag.CentrosCosto = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            { [req.CCosto ?? ""] = req.CCostoNombre ?? req.CCosto ?? "" };
+        ViewBag.DescripcionesCondPag = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            { [req.CondPag ?? ""] = req.CondPagNombre ?? req.CondPag ?? "" };
+        ViewBag.DescripcionesArticulos = req.ItemsConDesc
+            .Where(i => !string.IsNullOrEmpty(i.CodArt))
+            .GroupBy(i => i.CodArt!)
+            .ToDictionary(g => g.Key, g => g.First().Desc ?? g.Key, StringComparer.OrdinalIgnoreCase);
+        ViewBag.NombresUsuarios = new Dictionary<string, string>();
+
+        var empresa = _empresaTema.GetTemaActual();
+        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
+        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion = empresa.Direccion;
+        ViewBag.EmpresaTelefono  = empresa.Telefono;
+
+        var provDetallePrev = await _service.ObtenerDetalleProveedorAsync(req.CodProveed ?? "");
+        // Para preview, si no hay datos de Oracle usamos el nombre que ya viene en el payload
+        if (provDetallePrev == null && !string.IsNullOrWhiteSpace(req.ProveedorNombre))
+            provDetallePrev = new ProveedorDetalleDto { Codigo = req.CodProveed ?? "", Nombre = req.ProveedorNombre };
+        ViewBag.ProveedorDetalle = provDetallePrev;
+
+        // Para borrador no hay numPed aún; firmas se muestran en blanco
+        ViewBag.FirmaGenerado = (FirmaOcDto?)null;
+        ViewBag.FirmaAprobado = (FirmaOcDto?)null;
+
+        return View("~/Views/Logistica/OrdenCompra/Imprimir.cshtml", (oc, items));
     }
 }

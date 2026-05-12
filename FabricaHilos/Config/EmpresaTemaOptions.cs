@@ -45,4 +45,10 @@ public class EmpresaConfig
 
     /// <summary>RUC de la empresa (ej: "20100096260").</summary>
     public string Ruc { get; set; } = string.Empty;
+
+    /// <summary>Dirección fiscal de la empresa.</summary>
+    public string Direccion { get; set; } = string.Empty;
+
+    /// <summary>Teléfono de la empresa.</summary>
+    public string Telefono { get; set; } = string.Empty;
 }

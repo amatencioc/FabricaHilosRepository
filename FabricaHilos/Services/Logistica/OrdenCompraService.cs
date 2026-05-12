@@ -1,6 +1,9 @@
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using FabricaHilos.Models.Logistica;
 using System.Data;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 
 namespace FabricaHilos.Services.Logistica;
 
@@ -15,6 +18,8 @@ public interface IOrdenCompraService
     Task<List<ItemOrdDto>> ObtenerItemsAsync(string tipoDocto, int serie, long numPed);
 
     Task<Dictionary<string, string>> ObtenerNombresProveedoresAsync(IEnumerable<string> codigos);
+
+    Task<ProveedorDetalleDto?> ObtenerDetalleProveedorAsync(string codProveedor);
 
     Task<Dictionary<string, string>> ObtenerDescripcionesCentroCostosAsync(IEnumerable<string> codigos);
 
@@ -53,6 +58,8 @@ public interface IOrdenCompraService
     /// Devuelve true si se actualizó al menos un ítem.
     /// </summary>
     Task<bool> PropagateGruposReqToItemOrdAsync(long numPed);
+
+    Task<(FirmaOcDto? Generado, FirmaOcDto? Aprobado)> ObtenerFirmasOcAsync(string tipoDocto, int serie, long numPed);
 }
 
 public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
@@ -107,7 +114,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
 
         string sql = $@"
             SELECT PAGED.TOTAL_COUNT,
-                   PAGED.TIPO_DOCTO, PAGED.SERIE, PAGED.NUM_PED, PAGED.FECHA,
+                   PAGED.TIPO_DOCTO, PAGED.SERIE, PAGED.NUM_PED, PAGED.ESTADO, PAGED.FECHA,
                    PAGED.COD_PROVEED, PAGED.COND_PAG, PAGED.MONEDA, PAGED.COD_VENDE,
                    PAGED.PLAZO_ENTREGA, PAGED.DETALLE, PAGED.C_COSTO, PAGED.F_ENTREGA,
                    PAGED.VAL_VENTA, PAGED.IMP_DESCTO, PAGED.IMP_NETO, PAGED.IMP_IGV,
@@ -117,7 +124,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             FROM (
                 SELECT ROW_NUMBER() OVER (ORDER BY O.FECHA DESC, O.NUM_PED DESC) AS RN,
                        COUNT(*) OVER() AS TOTAL_COUNT,
-                       O.TIPO_DOCTO, O.SERIE, O.NUM_PED, O.FECHA,
+                       O.TIPO_DOCTO, O.SERIE, O.NUM_PED, O.ESTADO, O.FECHA,
                        O.COD_PROVEED, O.COND_PAG, O.MONEDA, O.COD_VENDE,
                        O.PLAZO_ENTREGA, O.DETALLE, O.C_COSTO, O.F_ENTREGA,
                        O.VAL_VENTA, O.IMP_DESCTO, O.IMP_NETO, O.IMP_IGV,
@@ -174,7 +181,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
 
     public async Task<OrdenCompraDto?> ObtenerOrdenAsync(string tipoDocto, int serie, long numPed)
     {
-        string sql  = $@"SELECT TIPO_DOCTO, SERIE, NUM_PED, FECHA, COD_PROVEED,
+        string sql  = $@"SELECT TIPO_DOCTO, SERIE, NUM_PED, ESTADO, FECHA, COD_PROVEED,
                                COND_PAG, MONEDA, COD_VENDE, PLAZO_ENTREGA, DETALLE, C_COSTO, F_ENTREGA,
                                VAL_VENTA, IMP_DESCTO, IMP_NETO, IMP_IGV, PRECIO_VTA, TOTAL_FACTURADO,
                                APROB_GERENCIA, F_APROB_GER,
@@ -207,15 +214,17 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         var items   = new List<ItemOrdDto>();
         string sql  = $@"SELECT I.TIPO_DOCTO, I.SERIE, I.NUM_PED, I.ORDEN,
                                I.COD_ART, I.COD_ORIG, I.UNIDAD, I.DESCRIPCION,
-                               I.CANTIDAD, I.SALDO, I.PRECIO, I.IMP_VVTA, I.ESTADO,
+                               I.CANTIDAD, I.SALDO, I.PRECIO, I.POR_DESC1, I.POR_DESC2, I.IMP_VVTA, I.ESTADO,
                                I.ID_GRUPO, I.F_GRUPO,
-                               D.NUMREQ, D.ORDEN_REQ
+                               D.NUMREQ, D.ORDEN_REQ,
+                               R.CENTRO_COSTO
                         FROM {S}ITEMORD I
                         LEFT JOIN (SELECT COD_ART, ORDEN AS ORDEN_REQ, MAX(NUMREQ) AS NUMREQ
                                    FROM {S}DESP_ITEMREQ
                                    WHERE NRO_DOC_REF = TO_CHAR(:numPed)
                                    GROUP BY COD_ART, ORDEN) D
                                ON D.COD_ART = I.COD_ART AND D.ORDEN_REQ = I.ORDEN
+                        LEFT JOIN {S}REQUISICION R ON R.NUMREQ = D.NUMREQ
                         WHERE I.TIPO_DOCTO = :tipoDocto AND I.SERIE = :serie AND I.NUM_PED = :numPed
                         ORDER BY D.NUMREQ NULLS LAST, D.ORDEN_REQ NULLS LAST, I.ORDEN";
         try
@@ -243,12 +252,15 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                     Cantidad    = GetDec(r, "CANTIDAD"),
                     Saldo       = GetDec(r, "SALDO"),
                     Precio      = GetDec(r, "PRECIO"),
+                    PorDesc1    = GetDec(r, "POR_DESC1"),
+                    PorDesc2    = GetDec(r, "POR_DESC2"),
                     ImpVvta     = GetDec(r, "IMP_VVTA"),
                     Estado      = GetStr(r, "ESTADO"),
                     IdGrupo     = r["ID_GRUPO"] == DBNull.Value ? null : Convert.ToInt64(r["ID_GRUPO"]),
                     FAprobado   = r["F_GRUPO"]  == DBNull.Value ? null : Convert.ToDateTime(r["F_GRUPO"]),
                     NumReq      = r["NUMREQ"]    == DBNull.Value ? null : Convert.ToInt64(r["NUMREQ"]),
                     OrdenReq    = r["ORDEN_REQ"] == DBNull.Value ? null : Convert.ToInt32(r["ORDEN_REQ"]),
+                    CCosto      = GetStr(r, "CENTRO_COSTO"),
                 });
             }
         }
@@ -292,6 +304,36 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         return result;
     }
 
+    public async Task<ProveedorDetalleDto?> ObtenerDetalleProveedorAsync(string codProveedor)
+    {
+        if (string.IsNullOrWhiteSpace(codProveedor)) return null;
+        string sql = $"SELECT COD_PROVEED, NOMBRE, RUC, DIRECCION, TELEFONO FROM {S}PROVEED WHERE COD_PROVEED = :cod AND ROWNUM = 1";
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+            cmd.Parameters.Add("cod", OracleDbType.Varchar2).Value = codProveedor;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                return new ProveedorDetalleDto
+                {
+                    Codigo    = GetStr(reader, "COD_PROVEED") ?? "",
+                    Nombre    = GetStr(reader, "NOMBRE")      ?? "",
+                    Ruc       = GetStr(reader, "RUC")         ?? "",
+                    Direccion = GetStr(reader, "DIRECCION")   ?? "",
+                    Telefono  = GetStr(reader, "TELEFONO")    ?? ""
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener detalle del proveedor {Cod}", codProveedor);
+        }
+        return null;
+    }
+
     // ── Mapeo ──────────────────────────────────────────────────────────────────
 
     private static OrdenCompraDto MapOrden(OracleDataReader r) => new()
@@ -299,6 +341,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         TipoDocto      = GetStr(r, "TIPO_DOCTO"),
         Serie          = GetInt(r, "SERIE"),
         NumPed         = GetLong(r, "NUM_PED"),
+        Estado         = GetStr(r, "ESTADO"),
         Fecha          = GetDt(r, "FECHA"),
         CodProveed     = GetStr(r, "COD_PROVEED"),
         CondPag        = GetStr(r, "COND_PAG"),
@@ -1210,6 +1253,203 @@ END;";
         {
             _logger.LogError(ex, "Error al anular OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
+        }
+    }
+
+    // ── FIRMAS OC ─────────────────────────────────────────────────────────────
+
+    public async Task<(FirmaOcDto? Generado, FirmaOcDto? Aprobado)> ObtenerFirmasOcAsync(
+        string tipoDocto, int serie, long numPed)
+    {
+        var connStr = GetOracleConnectionString();
+        if (string.IsNullOrEmpty(connStr)) return (null, null);
+
+        FirmaOcDto? generado = null;
+        FirmaOcDto? aprobado = null;
+
+        try
+        {
+            await using var conn = new OracleConnection(connStr);
+            await conn.OpenAsync();
+
+            // ── Paso 1: obtener A_ADUSER (generó) y APROB_GERENCIA (aprobó) de la O/C ──
+            string? codGenerado  = null;
+            string? codAprobado  = null;
+            DateTime? fechaDoc   = null;
+            string?   aprobGer   = null;
+            DateTime? fAprobGer  = null;
+
+            var sqlOc = $@"SELECT C_CODIGO, FECHA, APROB_GERENCIA, F_APROB_GER
+                           FROM {S}ORDEN_DE_COMPRA
+                           WHERE TIPO_DOCTO = :tipoDocto AND SERIE = :serie AND NUM_PED = :numPed
+                           AND ROWNUM = 1";
+            await using (var cmdOc = new OracleCommand(sqlOc, conn) { BindByName = true })
+            {
+                cmdOc.Parameters.Add("tipoDocto", OracleDbType.Varchar2).Value = tipoDocto;
+                cmdOc.Parameters.Add("serie",     OracleDbType.Decimal).Value  = serie;
+                cmdOc.Parameters.Add("numPed",    OracleDbType.Decimal).Value  = numPed;
+                await using var r = (OracleDataReader)await cmdOc.ExecuteReaderAsync();
+                if (await r.ReadAsync())
+                {
+                    codGenerado = GetStr(r, "C_CODIGO");
+                    codAprobado = "034001"; // C_GERENTE — aprobador fijo definido en PKG_REG_ORDEN_COMPRA
+                    fechaDoc    = GetDt(r, "FECHA");
+                    aprobGer    = GetStr(r, "APROB_GERENCIA");
+                    fAprobGer   = GetDt(r, "F_APROB_GER");
+                }
+            }
+
+            // ── Paso 2: resolver nombre, cargo de cada usuario ──
+            async Task<FirmaOcDto?> BuildFirma(string? cod, string rolEtiqueta)
+            {
+                if (string.IsNullOrWhiteSpace(cod)) return null;
+
+                var sqlP = $@"SELECT ps.C_CODIGO,
+                                     ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                                     || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                                     NVL(tc.DESCRIPCION, '') AS CARGO
+                              FROM {S}RH_PERSONAS ps
+                              JOIN {S}RH_PERSONAL pr ON pr.C_CODIGO = ps.C_CODIGO
+                              LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO
+                              WHERE ps.C_CODIGO = :cod AND ROWNUM = 1";
+                await using var cmdP = new OracleCommand(sqlP, conn) { BindByName = true };
+                cmdP.Parameters.Add("cod", OracleDbType.Varchar2).Value = cod;
+                await using var rp = (OracleDataReader)await cmdP.ExecuteReaderAsync();
+                if (!await rp.ReadAsync()) return null;
+
+                return new FirmaOcDto
+                {
+                    Codigo         = GetStr(rp, "C_CODIGO")        ?? cod,
+                    NombreCompleto = GetStr(rp, "NOMBRE_COMPLETO") ?? "",
+                    Cargo          = GetStr(rp, "CARGO")           ?? "",
+                    RolEtiqueta    = rolEtiqueta,
+                    Firma          = null,
+                    FechaDoc       = fechaDoc,
+                    AprobGerencia  = aprobGer,
+                    FAprobGer      = fAprobGer
+                };
+            }
+
+            generado = await BuildFirma(codGenerado, "GENERADO POR");
+            aprobado = await BuildFirma(codAprobado, "APROBADO POR");
+
+            // ── Paso 3: leer LONG RAW de firma desde RH_FIRMAS ──
+            async Task CargarFirma(FirmaOcDto? dto)
+            {
+                if (dto == null || string.IsNullOrEmpty(dto.Codigo)) return;
+                try
+                {
+                    await using var cmdF = new OracleCommand(
+                        $"SELECT FIRMA FROM {S}RH_FIRMAS WHERE C_CODIGO = :cod", conn)
+                    {
+                        InitialLONGFetchSize = -1
+                    };
+                    cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = dto.Codigo;
+                    await using var rdr = (OracleDataReader)await cmdF.ExecuteReaderAsync();
+                    if (await rdr.ReadAsync() && !rdr.IsDBNull(0))
+                    {
+                        byte[]? bytes = null;
+                        var val = rdr.GetValue(0);
+                        var typeName = val?.GetType().FullName ?? "null";
+
+                        if (val is byte[] b && b.Length > 0)
+                            bytes = b;
+                        else if (val is OracleBinary ob && !ob.IsNull)
+                            bytes = ob.Value;
+
+                        _logger.LogInformation(
+                            "RH_FIRMAS [{Codigo}]: tipo={Type} longitud={Len} primeros={Hex}",
+                            dto.Codigo, typeName,
+                            bytes?.Length ?? 0,
+                            bytes != null ? BitConverter.ToString(bytes, 0, Math.Min(16, bytes.Length)) : "—");
+
+                        if (bytes != null && bytes.Length > 0)
+                        {
+                            var mime = DetectImageMimeType(bytes);
+                            if (mime == "image/tiff")
+                            {
+                                // TIFF no es soportado por navegadores → convertir a PNG
+                                bytes = ConvertirTiffAPng(bytes);
+                                mime  = "image/png";
+                                _logger.LogInformation("Firma [{Codigo}]: TIFF convertido a PNG ({Len} bytes)", dto.Codigo, bytes.Length);
+                            }
+                            if (mime != null)
+                            {
+                                dto.Firma = bytes;
+                            }
+                            else
+                            {
+                                _logger.LogWarning(
+                                    "Firma de {Codigo}: formato no soportado por navegador. Primeros 16 bytes: {Bytes}",
+                                    dto.Codigo, BitConverter.ToString(bytes, 0, Math.Min(16, bytes.Length)));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("RH_FIRMAS [{Codigo}]: sin registro o columna nula", dto.Codigo);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "No se pudo leer firma de RH_FIRMAS para {Codigo}", dto.Codigo);
+                }
+            }
+
+            await CargarFirma(generado);
+            await CargarFirma(aprobado);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudieron obtener firmas OC {TipoDocto}-{Serie}-{NumPed}",
+                tipoDocto, serie, numPed);
+        }
+
+        return (generado, aprobado);
+    }
+
+    /// <summary>Devuelve el ordinal de la columna si existe en el reader, -1 si no.</summary>
+    private static int TryGetOrdinal(OracleDataReader reader, string columnName)
+    {
+        try { return reader.GetOrdinal(columnName); }
+        catch (IndexOutOfRangeException) { return -1; }
+    }
+
+    /// <summary>
+    /// Detecta el MIME type de una imagen por sus magic bytes.
+    /// Soporta PNG, JPEG, BMP, GIF y TIFF.
+    /// Devuelve null si el formato no es soportado por navegadores (ej: WMF, EMF).
+    /// </summary>
+    public static string? DetectImageMimeType(byte[] data)
+    {
+        if (data == null || data.Length < 4) return null;
+        if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) return "image/png";
+        if (data[0] == 0xFF && data[1] == 0xD8)                                         return "image/jpeg";
+        if (data[0] == 0x42 && data[1] == 0x4D)                                         return "image/bmp";
+        if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)                     return "image/gif";
+        if ((data[0] == 0x49 && data[1] == 0x49) || (data[0] == 0x4D && data[1] == 0x4D)) return "image/tiff";
+        // WMF: D7 CD C6 9A  /  EMF: 01 00 00 00 — no soportados por navegadores
+        return null;
+    }
+
+    /// <summary>
+    /// Convierte bytes de imagen TIFF a PNG usando ImageSharp, para que el navegador pueda mostrarla.
+    /// Devuelve los bytes PNG, o el array original si la conversión falla.
+    /// </summary>
+    private byte[] ConvertirTiffAPng(byte[] tiffBytes)
+    {
+        try
+        {
+            using var input  = new System.IO.MemoryStream(tiffBytes);
+            using var image  = Image.Load(input);
+            using var output = new System.IO.MemoryStream();
+            image.Save(output, new PngEncoder());
+            return output.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo convertir TIFF a PNG (longitud={Len})", tiffBytes.Length);
+            return tiffBytes;
         }
     }
 }

@@ -24,6 +24,16 @@
    ============================================================ */
 
 -- ==============================================================
+--  Tabla temporal global para convertir LONG RAW → BLOB
+--  (TO_LOB solo es válido en INSERT ... SELECT, no en SELECT INTO)
+--  Se crea una vez; los datos se borran al terminar la transacción.
+-- ==============================================================
+CREATE GLOBAL TEMPORARY TABLE PKG_FIRMA_TMP (
+    FIRMA BLOB
+) ON COMMIT DELETE ROWS;
+/
+
+-- ==============================================================
 --  ESPECIFICACIÓN
 -- ==============================================================
 CREATE OR REPLACE PACKAGE PKG_REG_ORDEN_COMPRA AS
@@ -155,6 +165,44 @@ CREATE OR REPLACE PACKAGE PKG_REG_ORDEN_COMPRA AS
         P_MSGERROR   OUT VARCHAR2
     );
 
+    /*  Convierte la firma de un empleado de LONG RAW a BLOB.
+        Necesario para ODP.NET Core que no soporta LONG RAW directamente.
+        Accesible desde SQL (debe estar en el SPEC para ser visible
+        en sentencias OPEN cursor FOR del body).                       */
+    FUNCTION F_FIRMA_BLOB (P_CODIGO IN VARCHAR2) RETURN BLOB;
+
+    /*  Retorna las 2 firmas del PDF de la Orden de Compra.
+
+        Formato del PDF (2 cajas, izquierda a derecha):
+        ────────────────────────────────────────────────────
+        Caja 1 – GENERADO POR  (subítulo: Logística)
+            Fuente : ORDEN_DE_COMPRA.C_CODIGO
+
+        Caja 2 – APROBADO POR  (subítulo: Gerencia General)
+            Fuente : código fijo '034001'  (Gerente General)
+        ────────────────────────────────────────────────────
+        Cada cursor retorna:
+            C_CODIGO        VARCHAR2(8)
+            NOMBRE_COMPLETO VARCHAR2(130)  -- APELL_PAT APELL_MAT, NOMBRES
+            CARGO           VARCHAR2(50)   -- descripción del puesto (T_CARGO)
+            ROL_ETIQUETA    VARCHAR2(30)   -- etiqueta de la caja en el PDF
+            FIRMA           BLOB           -- imagen desde RH_FIRMAS vía F_FIRMA_BLOB() (NULL si no registrada)
+
+        P_CURSOR_GENERADO también retorna:
+            FECHA_DOC       DATE           -- ORDEN_DE_COMPRA.FECHA
+
+        P_CURSOR_APROBADO también retorna:
+            APROB_GERENCIA  VARCHAR2(1)    -- 'S' = aprobada; NULL/vacío = pendiente
+            F_APROB_GER     DATE           -- fecha de aprobación gerencial
+    */
+    PROCEDURE P_OBTENER_FIRMAS_OC (
+        P_TIPO_DOCTO      IN  ORDEN_DE_COMPRA.TIPO_DOCTO%TYPE,
+        P_SERIE           IN  ORDEN_DE_COMPRA.SERIE%TYPE,
+        P_NUM_PED         IN  ORDEN_DE_COMPRA.NUM_PED%TYPE,
+        P_CURSOR_GENERADO OUT T_CURSOR,   -- caja 1: GENERADO POR  (Logística)
+        P_CURSOR_APROBADO OUT T_CURSOR    -- caja 2: APROBADO POR  (Gerencia General)
+    );
+
 END PKG_REG_ORDEN_COMPRA;
 /
 
@@ -169,7 +217,43 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
         Se usa en P_OBTENER_IGV (para mostrarlo en el combo) y en
         P_REGISTRAR_OC (para validar que el valor recibido sea válido).
         Cambiar aquí actualiza automáticamente ambos puntos. */
-    C_IGV_ESPECIAL CONSTANT NUMBER := -0.10;
+    C_IGV_ESPECIAL CONSTANT NUMBER    := -0.10;
+    C_GERENTE      CONSTANT VARCHAR2(8) := '034001';  -- Gerente General (aprobador fijo de O/C)
+
+    -- ── F_FIRMA_BLOB (privada) ──────────────────────────────
+    /*  Convierte LONG RAW de RH_FIRMAS a BLOB temporal para que
+        ODP.NET Core pueda leerlo como byte[].  El límite de 32 KB
+        es suficiente para imágenes de firma digitales típicas.
+        Si la firma está ausente retorna NULL sin error.            */
+    FUNCTION F_FIRMA_BLOB (P_CODIGO IN VARCHAR2) RETURN BLOB IS
+        V_BLOB BLOB;
+        V_CNT  NUMBER;
+    BEGIN
+        -- Verificar que el registro existe con firma no nula
+        SELECT COUNT(*) INTO V_CNT
+        FROM   RH_FIRMAS
+        WHERE  C_CODIGO = P_CODIGO
+          AND  FIRMA IS NOT NULL;
+
+        IF V_CNT = 0 THEN
+            RETURN NULL;
+        END IF;
+
+        -- TO_LOB() solo es válido dentro de INSERT...SELECT (Oracle 10g)
+        -- Usamos tabla temporal global para la conversión LONG RAW → BLOB
+        DELETE FROM PKG_FIRMA_TMP;
+        INSERT INTO PKG_FIRMA_TMP (FIRMA)
+            SELECT TO_LOB(FIRMA)
+            FROM   RH_FIRMAS
+            WHERE  C_CODIGO = P_CODIGO;
+
+        SELECT FIRMA INTO V_BLOB FROM PKG_FIRMA_TMP WHERE ROWNUM = 1;
+        DELETE FROM PKG_FIRMA_TMP;
+
+        RETURN V_BLOB;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN RETURN NULL;
+    END F_FIRMA_BLOB;
 
     -- ── P_OBTENER_REQUISICIONES ─────────────────────────────────
     PROCEDURE P_OBTENER_REQUISICIONES (
@@ -965,6 +1049,63 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
             ROLLBACK;
             P_MSGERROR := 'Error al anular O/C: ' || SQLERRM;
     END P_ANULAR_OC;
+
+    -- ── P_OBTENER_FIRMAS_OC ──────────────────────────────────────
+    /*  Devuelve 3 cursores con los firmantes y su imagen de firma para
+        el PDF de la O/C.  Se usan 3 cursores separados porque Oracle no
+        permite UNION ni DISTINCT sobre columnas LONG RAW (RH_FIRMAS.FIRMA).
+        La técnica es: subquery con DISTINCT sobre el código de personal
+        (sin LONG RAW) y luego JOIN externo a RH_FIRMAS en la capa exterior.  */
+    PROCEDURE P_OBTENER_FIRMAS_OC (
+        P_TIPO_DOCTO      IN  ORDEN_DE_COMPRA.TIPO_DOCTO%TYPE,
+        P_SERIE           IN  ORDEN_DE_COMPRA.SERIE%TYPE,
+        P_NUM_PED         IN  ORDEN_DE_COMPRA.NUM_PED%TYPE,
+        P_CURSOR_GENERADO OUT T_CURSOR,
+        P_CURSOR_APROBADO OUT T_CURSOR
+    ) IS
+    BEGIN
+
+        -- ── Caja 1: GENERADO POR — Logística ───────────────────────
+        --  Fuente: ORDEN_DE_COMPRA.C_CODIGO (quien creó la O/C)
+        --  Extra : FECHA de la O/C para imprimirla en el PDF
+        --  NOTA  : FIRMA se lee por separado desde C# (LONG RAW)
+        OPEN P_CURSOR_GENERADO FOR
+            SELECT oc.C_CODIGO,
+                   ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                   || ', ' || ps.NOMBRES            AS NOMBRE_COMPLETO,
+                   NVL(tc.DESCRIPCION, '')           AS CARGO,
+                   'GENERADO POR'                    AS ROL_ETIQUETA,
+                   oc.FECHA                          AS FECHA_DOC
+            FROM   ORDEN_DE_COMPRA  oc
+            JOIN   RH_PERSONAS      ps ON ps.C_CODIGO = oc.C_CODIGO
+            JOIN   RH_PERSONAL      pr ON pr.C_CODIGO = oc.C_CODIGO
+            LEFT JOIN T_CARGO       tc ON tc.C_CARGO  = pr.C_CARGO
+            WHERE  oc.TIPO_DOCTO = P_TIPO_DOCTO
+              AND  oc.SERIE      = P_SERIE
+              AND  oc.NUM_PED    = P_NUM_PED;
+
+        -- ── Caja 2: APROBADO POR — Gerencia General ───────────────
+        --  Aprobador fijo: C_GERENTE (Gerente General).
+        --  APROB_GERENCIA='S' y F_APROB_GER vienen de la O/C.
+        --  NOTA  : FIRMA se lee por separado desde C# (LONG RAW)
+        OPEN P_CURSOR_APROBADO FOR
+            SELECT ps.C_CODIGO,
+                   ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                   || ', ' || ps.NOMBRES            AS NOMBRE_COMPLETO,
+                   NVL(tc.DESCRIPCION, '')           AS CARGO,
+                   'APROBADO POR'                    AS ROL_ETIQUETA,
+                   oc.APROB_GERENCIA,
+                   oc.F_APROB_GER
+            FROM   RH_PERSONAS      ps
+            JOIN   RH_PERSONAL      pr ON pr.C_CODIGO = ps.C_CODIGO
+            LEFT JOIN T_CARGO       tc ON tc.C_CARGO  = pr.C_CARGO
+            LEFT JOIN ORDEN_DE_COMPRA oc
+                                     ON oc.TIPO_DOCTO = P_TIPO_DOCTO
+                                    AND oc.SERIE      = P_SERIE
+                                    AND oc.NUM_PED    = P_NUM_PED
+            WHERE  ps.C_CODIGO = C_GERENTE;
+
+    END P_OBTENER_FIRMAS_OC;
 
 END PKG_REG_ORDEN_COMPRA;
 /

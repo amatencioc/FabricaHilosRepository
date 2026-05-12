@@ -7,8 +7,10 @@
     var opcEntrega    = ViewBag.OpcEntrega    as List<FabricaHilos.Models.Logistica.OpcEntregaDto>
                         ?? new List<FabricaHilos.Models.Logistica.OpcEntregaDto>();
     var centrosCosto  = ViewBag.CentrosCosto  as Dictionary<string, string> ?? new Dictionary<string, string>();
-    string? navToken  = ViewBag.NavToken      as string;
-    string  hoy       = DateTime.Today.ToString("yyyy-MM-dd");
+    string? navToken       = ViewBag.NavToken      as string;
+    string  hoy           = DateTime.Today.ToString("yyyy-MM-dd");
+    string  empresaNombre = ViewBag.EmpresaNombre as string ?? "";
+    string  empresaRuc    = ViewBag.EmpresaRuc    as string ?? "";
 }
 
 @section Breadcrumb {
@@ -384,9 +386,15 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" id="btnVolver1">
             <i class="bi bi-arrow-left-circle me-1"></i>Volver al Paso 1
         </button>
-        <button type="button" class="btn btn-genera" id="btnRegistrar">
-            <i class="bi bi-check2-circle me-1"></i>GENERA — Registrar Orden
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-info btn-sm" id="btnPreview"
+                    title="Vista previa del documento antes de registrar">
+                <i class="bi bi-eye me-1"></i>Vista Previa
+            </button>
+            <button type="button" class="btn btn-genera" id="btnRegistrar">
+                <i class="bi bi-check2-circle me-1"></i>GENERA — Registrar Orden
+            </button>
+        </div>
     </div>
 
 </div><!-- /cardPaso2 -->
@@ -629,78 +637,53 @@
         document.getElementById('spanReqsIds').textContent = rlist;
         document.getElementById('lblReqsRelacionados').textContent = 'REQs: ' + rlist;
 
-        // ── Fusionar por codArt (Opción B) ───────────────────────────────────
-        var mergedMap    = {};
-        var mergedOrder  = [];
-        var avisoPrecios = []; // items con precio distinto al primero del mismo codArt
+        // ── Fusionar por codArt + unidad + precio ────────────────────────────
+        // Mismo cod_art + misma unidad + mismo precio → una sola fila (suma de cantidades).
+        // Cualquier diferencia en unidad O precio → filas separadas (desagregado).
+        var mergedMap   = {};
+        var mergedOrder = [];
 
         keys.forEach(function(k) {
-            var it = itemsSeleccionados[k];
-            var ca = it.codArt;
-            if (!mergedMap[ca]) {
-                mergedMap[ca] = {
-                    codArt: ca, desc: it.desc, detalle: it.detalle,
+            var it   = itemsSeleccionados[k];
+            var mKey = it.codArt + '||' + (it.unidad || '') + '||' + (it.precio || 0);
+            if (!mergedMap[mKey]) {
+                mergedMap[mKey] = {
+                    mKey: mKey, codArt: it.codArt, desc: it.desc, detalle: it.detalle,
                     unidad: it.unidad, precio: it.precio,
-                    precioConflicto: false,
                     porDesc1: it.porDesc1, porDesc2: it.porDesc2,
                     tpDestino: it.tpDestino, destino: it.destino, destinoDesc: it.destinoDesc,
                     cantidad: 0, origTotal: 0, reqNums: [], reqItems: [], codOrig: it.codOrig || ''
                 };
-                mergedOrder.push(ca);
+                mergedOrder.push(mKey);
             }
-            var m = mergedMap[ca];
-            // Detectar precio diferente entre ítems del mismo codArt
-            if (!m.precioConflicto && m.precio !== it.precio) {
-                m.precioConflicto = true;
-                m.precio = 0; // forzar a 0 para que el usuario lo corrija
-            }
+            var m = mergedMap[mKey];
             m.cantidad  += it.cantOrig;
             m.origTotal += it.cantOrig;
             if (m.reqNums.indexOf(it.numReq) === -1) m.reqNums.push(it.numReq);
-            m.reqItems.push({ numReq: it.numReq, orden: it.orden, precio: it.precio });
+            m.reqItems.push({ numReq: it.numReq, orden: it.orden });
         });
 
-        // Construir lista de avisos para mostrar al usuario
-        mergedOrder.forEach(function(ca) {
-            var m = mergedMap[ca];
-            if (!m.precioConflicto) return;
-            var detalle = m.reqItems.map(function(r) {
-                return 'REQ ' + r.numReq + ' - Ítem ' + r.orden + ': precio <strong>' + r.precio.toFixed(4) + '</strong>';
-            }).join('<br>&nbsp;&nbsp;&nbsp;');
-            avisoPrecios.push('<b>COD_ART ' + esc(ca) + '</b><br>&nbsp;&nbsp;&nbsp;' + detalle);
-        });
-
-        if (avisoPrecios.length) {
-            var msg = '<div class="mb-2 fw-semibold text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>' +
-                'Los siguientes artículos tienen precios distintos entre requerimientos.<br>' +
-                'Se dejó el precio en <strong>0</strong> — corríjalo en el requerimiento antes de generar la O/C:</div>' +
-                '<ul class="small mb-0" style="line-height:1.7;padding-left:1.2rem;">' + avisoPrecios.map(function(a){ return '<li class="mb-1">' + a + '</li>'; }).join('') + '</ul>';
-            errHtml(msg);
-        }
-
-        mergedOrder.forEach(function(ca) {
-            var it = mergedMap[ca];
+        mergedOrder.forEach(function(mKey) {
+            var it = mergedMap[mKey];
             var reqBadges = it.reqItems.slice()
                 .sort(function(a,b){ return b.numReq - a.numReq || a.orden - b.orden; })
                 .map(function(r) {
-                    var extra = it.precioConflicto
-                        ? ' <span style="color:#dc3545;font-size:.6rem;" title="Precio distinto">(' + r.precio.toFixed(4) + ')</span>'
-                        : '';
-                    return '<span class="badge-req" style="font-size:.65rem;margin-right:2px;white-space:nowrap;">' + r.numReq + ' - ' + r.orden + '</span>' + extra;
+                    return '<span class="badge-req" style="font-size:.65rem;margin-right:2px;white-space:nowrap;">' + r.numReq + ' - ' + r.orden + '</span>';
                 }).join('<br>');
             var tr = document.createElement('tr');
-            tr.dataset.codart    = ca;
+            tr.dataset.mkey     = mKey;
+            tr.dataset.codart   = it.codArt;
             tr.dataset.origtotal = it.origTotal;
             tr.innerHTML =
                 '<td>' + reqBadges + '</td>' +
-                '<td class="fw-semibold" style="color:#1a3c5e;">' + esc(ca) + '</td>' +
-                '<td><input type="text" class="form-control form-control-sm form-control-xs inp-codorig" style="width:80px;" placeholder="Cód.Prov." data-codart="' + esc(ca) + '" value="' + esc(it.codOrig||'') + '"></td>' +
-                '<td class="small">' + esc(it.desc || it.detalle || ca) + '</td>' +
+                '<td class="fw-semibold" style="color:#1a3c5e;">' + esc(it.codArt) + '</td>' +
+                '<td><input type="text" class="form-control form-control-sm form-control-xs inp-codorig" style="width:80px;" placeholder="Cód.Prov." data-mkey="' + esc(mKey) + '" data-codart="' + esc(it.codArt) + '" value="' + esc(it.codOrig||'') + '"></td>' +
+                '<td class="small">' + esc(it.desc || it.detalle || it.codArt) + '</td>' +
                 '<td class="text-center text-muted">' + esc(it.unidad||'-') + '</td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-precio text-end" style="width:90px;background:#f0f4f8;' + (it.precioConflicto ? 'border-color:#dc3545;background:#fff5f5;' : '') + '" value="' + it.precio + '" min="0" step="0.0001" data-codart="' + esc(ca) + '" readonly' + (it.precioConflicto ? ' title="EL REQUERIMIENTO - ITEM Y COD_ART TIENE UN MONTO DIFERENTE AL RESTO, MODIFICARLO EN REQUERIMIENTO."' : '') + '></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc1 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc2 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-cantidad text-end" style="width:78px;background:#f0f4f8;" value="' + it.cantidad + '" min="0.01" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-precio text-end" style="width:90px;background:#f0f4f8;" value="' + it.precio + '" min="0" step="0.0001" data-mkey="' + esc(mKey) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc1 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-mkey="' + esc(mKey) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc2 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-mkey="' + esc(mKey) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-cantidad text-end" style="width:78px;background:#f0f4f8;" value="' + it.cantidad + '" min="0.01" step="0.01" data-mkey="' + esc(mKey) + '" readonly></td>' +
                 '<td class="small text-muted">' + esc((it.destinoDesc || it.destino)||'-') + '</td>' +
                 '<td class="text-end fw-semibold imp-vvta" style="color:#1a3c5e;">0.00</td>';
             tbody.appendChild(tr);
@@ -708,21 +691,22 @@
 
         tbody.querySelectorAll('.inp-codorig').forEach(function(inp) {
             inp.addEventListener('input', function() {
-                var ca = inp.dataset.codart;
+                var mk = inp.dataset.mkey;
                 Object.keys(itemsSeleccionados).forEach(function(k) {
-                    if (itemsSeleccionados[k].codArt === ca) itemsSeleccionados[k].codOrig = inp.value;
+                    var it2 = itemsSeleccionados[k];
+                    if ((it2.codArt + '||' + (it2.unidad||'') + '||' + (it2.precio||0)) === mk) it2.codOrig = inp.value;
                 });
             });
         });
 
-        mergedOrder.forEach(function(ca) { syncMergedItem(ca); });
+        mergedOrder.forEach(function(mKey) { syncMergedItem(mKey); });
         recalc();
         document.getElementById('badgeItemsOc').textContent = mergedOrder.length + ' ítem' + (mergedOrder.length === 1 ? '' : 's');
     }
 
-    // Sincroniza precio/desc/cantidad de la fila fusionada → todos los items fuente del mismo codArt
-    function syncMergedItem(ca) {
-        var row = document.querySelector('#tbodyItemsOc [data-codart="' + ca + '"]');
+    // Sincroniza precio/desc/cantidad de la fila fusionada → todos los items fuente del mismo grupo
+    function syncMergedItem(mKey) {
+        var row = document.querySelector('#tbodyItemsOc [data-mkey="' + mKey + '"]');
         if (!row) return;
         var cant = pf(row.querySelector('.inp-cantidad').value, 0);
         var prec = pf(row.querySelector('.inp-precio').value, 0);
@@ -734,11 +718,10 @@
         var origTotal = parseFloat(row.dataset.origtotal) || 0;
         Object.keys(itemsSeleccionados).forEach(function(k) {
             var it = itemsSeleccionados[k];
-            if (it.codArt !== ca) return;
+            if ((it.codArt + '||' + (it.unidad||'') + '||' + (it.precio||0)) !== mKey) return;
             it.precio   = prec;
             it.porDesc1 = d1;
             it.porDesc2 = d2;
-            // Distribuir cantidad proporcionalmente al saldo original de cada item
             it.cantidad = origTotal > 0
                 ? Math.round(cant * (it.cantOrig / origTotal) * 100000) / 100000
                 : cant;
@@ -786,7 +769,7 @@
         // Validar que todos los ítems tengan precio > 0
         var sinPrecio = [];
         document.querySelectorAll('#tbodyItemsOc .inp-precio').forEach(function(inp) {
-            if (!(parseFloat(inp.value) > 0)) sinPrecio.push(inp.dataset.codart);
+            if (!(parseFloat(inp.value) > 0)) sinPrecio.push(inp.closest('tr').dataset.codart);
         });
         if (sinPrecio.length) {
             err('Debe ingresar un precio mayor a 0 para: ' + sinPrecio.join(', '));
@@ -956,6 +939,61 @@
     }
     function pf(v, d) { return parseFloat(v) || 0; }
 
+    // ── Vista Previa: POST → PreviewBorrador → Imprimir.cshtml ──────────────
+    document.getElementById('btnPreview').addEventListener('click', function () {
+        var keys = Object.keys(itemsSeleccionados);
+        if (!keys.length) { err('Sin ítems seleccionados para previsualizar.'); return; }
+
+        var itemsConDesc = keys.map(function (k) {
+            var it = itemsSeleccionados[k];
+            return {
+                tipDoc: it.tipDoc, serie: it.serie, numReq: it.numReq, orden: it.orden,
+                codArt: it.codArt, detalle: it.detalle, unidad: it.unidad,
+                codOrig: it.codOrig || '', cantidad: it.cantidad, precio: it.precio,
+                porDesc1: it.porDesc1, porDesc2: it.porDesc2,
+                tpDestino: it.tpDestino || '', destino: it.destino || '', cCodigo: it.cCodigo || '',
+                desc: it.desc || it.detalle || it.codArt,
+                destinoDesc: it.destinoDesc || ''
+            };
+        });
+
+        var payload = {
+            tipoDocto:      document.getElementById('selTipoDocto').value,
+            fecha:          document.getElementById('inpFecha').value,
+            fEntrega:       document.getElementById('inpFEntrega').value,
+            codProveed:     document.getElementById('selProveedor').value,
+            condPag:        document.getElementById('selCondPag').value,
+            moneda:         document.getElementById('selMoneda').value,
+            impsto:         parseFloat(document.getElementById('selIgv').value) || 0,
+            cCosto:         document.getElementById('selCCosto').value || null,
+            detalle:        document.getElementById('inpDetalle').value,
+            opcLEntrega:    document.getElementById('selOpcEntrega').value,
+            lEntrega:       null, cCodigo: null, items: [],
+            proveedorNombre: document.getElementById('buscarProveedor').value || '',
+            condPagNombre:  document.getElementById('buscarCondPag').value || '',
+            cCostoNombre:   document.getElementById('buscarCCosto').value || '',
+            itemsConDesc:   itemsConDesc
+        };
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        fetch('/Logistica/OrdenCompra/PreviewBorrador', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
+        .then(function (html) {
+            var win = window.open('', '_blank');
+            if (win) { win.document.open(); win.document.write(html); win.document.close(); }
+            else err('El navegador bloqueó la ventana emergente. Permítala para este sitio.');
+        })
+        .catch(function (e) { err('Error al generar vista previa: ' + e.message); });
+    });
+
 })();
 </script>
 }
+
