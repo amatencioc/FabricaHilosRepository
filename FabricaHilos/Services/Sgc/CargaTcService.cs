@@ -600,36 +600,33 @@ namespace FabricaHilos.Services.Sgc
 
                 var sql = $@"
                     SELECT DISTINCT 
-                        CASE 
-                            WHEN P.NUM_PED IS NOT NULL AND I.NRO IS NOT NULL 
-                            THEN TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO)
-                            ELSE NULL 
-                        END AS PEDIDO
+                        TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) AS PEDIDO
                     FROM {S}REQ_CERT_D rcd
                     INNER JOIN {S}DOCUVENT F
                         ON F.TIPODOC = rcd.TIPODOC
                         AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
                         AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
-                    LEFT JOIN {S}KARDEX_G G
+                        AND F.ESTADO <> '9'
+                        AND F.TIP_DOC_REF IN ('21','23','PL')
+                    INNER JOIN {S}KARDEX_G G
                         ON G.TIP_REF = F.TIPODOC
                         AND TRIM(G.SER_REF) = TRIM(F.SERIE)
                         AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
-                    LEFT JOIN {S}PEDIDO P
+                        AND G.ESTADO <> '9'
+                    INNER JOIN {S}PEDIDO P
                         ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
                         AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
                         AND G.TIP_DOC_REF = P.TIPO_DOCTO
                         AND P.ESTADO <> '9'
-                    LEFT JOIN {S}ITEMDOCU ID
+                    INNER JOIN {S}ITEMDOCU ID
                         ON ID.TIPODOC = F.TIPODOC
                         AND TRIM(ID.SERIE) = TRIM(F.SERIE)
                         AND TRIM(ID.NUMERO) = TRIM(F.NUMERO)
-                    LEFT JOIN {S}ITEMPED I
+                    INNER JOIN {S}ITEMPED I
                         ON I.NUM_PED = P.NUM_PED
                         AND I.SERIE = P.SERIE
                         AND I.COD_ART = ID.COD_ART
                     WHERE rcd.NUM_REQ = :NumReq
-                        AND P.NUM_PED IS NOT NULL
-                        AND I.NRO IS NOT NULL
                     ORDER BY P.NUM_PED, I.NRO";
 
                 using var cmd = new OracleCommand(sql, conn);

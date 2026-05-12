@@ -630,8 +630,10 @@
         document.getElementById('lblReqsRelacionados').textContent = 'REQs: ' + rlist;
 
         // ── Fusionar por codArt (Opción B) ───────────────────────────────────
-        var mergedMap   = {};
-        var mergedOrder = [];
+        var mergedMap    = {};
+        var mergedOrder  = [];
+        var avisoPrecios = []; // items con precio distinto al primero del mismo codArt
+
         keys.forEach(function(k) {
             var it = itemsSeleccionados[k];
             var ca = it.codArt;
@@ -639,6 +641,7 @@
                 mergedMap[ca] = {
                     codArt: ca, desc: it.desc, detalle: it.detalle,
                     unidad: it.unidad, precio: it.precio,
+                    precioConflicto: false,
                     porDesc1: it.porDesc1, porDesc2: it.porDesc2,
                     tpDestino: it.tpDestino, destino: it.destino, destinoDesc: it.destinoDesc,
                     cantidad: 0, origTotal: 0, reqNums: [], reqItems: [], codOrig: it.codOrig || ''
@@ -646,18 +649,44 @@
                 mergedOrder.push(ca);
             }
             var m = mergedMap[ca];
+            // Detectar precio diferente entre ítems del mismo codArt
+            if (!m.precioConflicto && m.precio !== it.precio) {
+                m.precioConflicto = true;
+                m.precio = 0; // forzar a 0 para que el usuario lo corrija
+            }
             m.cantidad  += it.cantOrig;
             m.origTotal += it.cantOrig;
             if (m.reqNums.indexOf(it.numReq) === -1) m.reqNums.push(it.numReq);
-            m.reqItems.push({ numReq: it.numReq, orden: it.orden });
+            m.reqItems.push({ numReq: it.numReq, orden: it.orden, precio: it.precio });
         });
+
+        // Construir lista de avisos para mostrar al usuario
+        mergedOrder.forEach(function(ca) {
+            var m = mergedMap[ca];
+            if (!m.precioConflicto) return;
+            var detalle = m.reqItems.map(function(r) {
+                return 'REQ ' + r.numReq + ' - Ítem ' + r.orden + ': precio <strong>' + r.precio.toFixed(4) + '</strong>';
+            }).join('<br>&nbsp;&nbsp;&nbsp;');
+            avisoPrecios.push('<b>COD_ART ' + esc(ca) + '</b><br>&nbsp;&nbsp;&nbsp;' + detalle);
+        });
+
+        if (avisoPrecios.length) {
+            var msg = '<div class="mb-2 fw-semibold text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+                'Los siguientes artículos tienen precios distintos entre requerimientos.<br>' +
+                'Se dejó el precio en <strong>0</strong> — corríjalo en el requerimiento antes de generar la O/C:</div>' +
+                '<ul class="small mb-0" style="line-height:1.7;padding-left:1.2rem;">' + avisoPrecios.map(function(a){ return '<li class="mb-1">' + a + '</li>'; }).join('') + '</ul>';
+            errHtml(msg);
+        }
 
         mergedOrder.forEach(function(ca) {
             var it = mergedMap[ca];
             var reqBadges = it.reqItems.slice()
                 .sort(function(a,b){ return b.numReq - a.numReq || a.orden - b.orden; })
                 .map(function(r) {
-                    return '<span class="badge-req" style="font-size:.65rem;margin-right:2px;white-space:nowrap;">' + r.numReq + ' - ' + r.orden + '</span>';
+                    var extra = it.precioConflicto
+                        ? ' <span style="color:#dc3545;font-size:.6rem;" title="Precio distinto">(' + r.precio.toFixed(4) + ')</span>'
+                        : '';
+                    return '<span class="badge-req" style="font-size:.65rem;margin-right:2px;white-space:nowrap;">' + r.numReq + ' - ' + r.orden + '</span>' + extra;
                 }).join('<br>');
             var tr = document.createElement('tr');
             tr.dataset.codart    = ca;
@@ -668,18 +697,15 @@
                 '<td><input type="text" class="form-control form-control-sm form-control-xs inp-codorig" style="width:80px;" placeholder="Cód.Prov." data-codart="' + esc(ca) + '" value="' + esc(it.codOrig||'') + '"></td>' +
                 '<td class="small">' + esc(it.desc || it.detalle || ca) + '</td>' +
                 '<td class="text-center text-muted">' + esc(it.unidad||'-') + '</td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-precio text-end" style="width:90px;" value="' + it.precio + '" min="0" step="0.0001" data-codart="' + esc(ca) + '"></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc1 text-end" style="width:60px;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '"></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc2 text-end" style="width:60px;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '"></td>' +
-                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-cantidad text-end" style="width:78px;" value="' + it.cantidad + '" min="0.01" step="0.01" data-codart="' + esc(ca) + '"></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-precio text-end" style="width:90px;background:#f0f4f8;' + (it.precioConflicto ? 'border-color:#dc3545;background:#fff5f5;' : '') + '" value="' + it.precio + '" min="0" step="0.0001" data-codart="' + esc(ca) + '" readonly' + (it.precioConflicto ? ' title="EL REQUERIMIENTO - ITEM Y COD_ART TIENE UN MONTO DIFERENTE AL RESTO, MODIFICARLO EN REQUERIMIENTO."' : '') + '></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc1 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-desc2 text-end" style="width:60px;background:#f0f4f8;" value="0" min="0" max="100" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
+                '<td class="text-end"><input type="number" class="form-control form-control-sm form-control-xs inp-cantidad text-end" style="width:78px;background:#f0f4f8;" value="' + it.cantidad + '" min="0.01" step="0.01" data-codart="' + esc(ca) + '" readonly></td>' +
                 '<td class="small text-muted">' + esc((it.destinoDesc || it.destino)||'-') + '</td>' +
                 '<td class="text-end fw-semibold imp-vvta" style="color:#1a3c5e;">0.00</td>';
             tbody.appendChild(tr);
         });
 
-        tbody.querySelectorAll('.inp-cantidad,.inp-precio,.inp-desc1,.inp-desc2').forEach(function(inp) {
-            inp.addEventListener('input', function() { syncMergedItem(inp.dataset.codart); recalc(); });
-        });
         tbody.querySelectorAll('.inp-codorig').forEach(function(inp) {
             inp.addEventListener('input', function() {
                 var ca = inp.dataset.codart;
@@ -879,7 +905,7 @@
         proveedores.Select(kv => new { val = kv.Key, txt = kv.Value + " (" + kv.Key + ")" })
     ));
     var datosCondPag = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        condPag.Select(kv => new { val = kv.Key, txt = kv.Value })
+        condPag.Select(kv => new { val = kv.Key, txt = kv.Value + " (" + kv.Key + ")" })
     ));
 
     selector('buscarProveedor','selProveedor','listaProveedor', datosProveedores);
@@ -919,6 +945,10 @@
     // ── helpers ───────────────────────────────────────────────────────────────
     function err(msg) {
         document.getElementById('modalErrorMsg').textContent = msg;
+        new bootstrap.Modal(document.getElementById('modalError')).show();
+    }
+    function errHtml(html) {
+        document.getElementById('modalErrorMsg').innerHTML = html;
         new bootstrap.Modal(document.getElementById('modalError')).show();
     }
     function esc(s) {
