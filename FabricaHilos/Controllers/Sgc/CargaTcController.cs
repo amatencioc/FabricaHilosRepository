@@ -467,5 +467,57 @@ namespace FabricaHilos.Controllers.Sgc
                 return Json(new { success = false, message = $"Error al enviar a Facturación: {ex.Message}" });
             }
         }
+
+        // ── SIMULACIÓN (sin enviar correo) ────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> SimularEnvioFacturacion(int numReq)
+        {
+            try
+            {
+                var requerimiento = await _cargaTcService.ObtenerRequerimientoAsync(numReq);
+                if (requerimiento is null)
+                    return Json(new { ok = false, error = "No se encontró el requerimiento." });
+
+                var (nroLista, importe)           = await _cargaTcService.ObtenerDatosListaPreciosAsync(requerimiento.CodArt ?? "");
+                var (nombreVendedor, emailVendedor) = await _cargaTcService.ObtenerDatosVendedorAsync(requerimiento.CodVende ?? "");
+                var detalles                       = await _cargaTcService.ObtenerDetalleRequerimientoAsync(numReq);
+                var partidas                       = await _cargaTcService.ObtenerPartidasPorRequerimientoAsync(numReq);
+                var ordenesCompra                  = await _cargaTcService.ObtenerOrdenesCompraPorRequerimientoAsync(numReq);
+
+                string partidasTexto     = partidas.Any()     ? string.Join("\n", partidas.Select(p => p.PartidaItem))        : "No disponible";
+                string ordenesCompraTexto = ordenesCompra.Any() ? string.Join("\n", ordenesCompra.Select(oc => oc.OrdenCompra)) : "No disponible";
+
+                string monedaTexto = nroLista == "2" ? "DOLARES" : (nroLista ?? "N/A");
+
+                return Json(new
+                {
+                    ok = true,
+                    numReq,
+                    numCer            = requerimiento.NumCer,
+                    tipoCertificado   = requerimiento.CodArt?.Replace("CERT", ""),
+                    fechaRequerimiento= requerimiento.Fecha?.ToString("dd/MM/yyyy"),
+                    ruc               = requerimiento.Ruc ?? requerimiento.CodCliente,
+                    razonSocial       = requerimiento.RazonSocial,
+                    codVendedor       = requerimiento.CodVende,
+                    nombreVendedor,
+                    emailVendedor,
+                    moneda            = monedaTexto,
+                    importe           = importe?.ToString("N2") ?? "0.00",
+                    totalFacturas     = detalles.Count,
+                    partidas          = partidas.Select(p => p.PartidaItem).ToList(),
+                    partidasTexto,
+                    ordenesCompra     = ordenesCompra.Select(oc => oc.OrdenCompra).ToList(),
+                    ordenesCompraTexto,
+                    destinatario      = _configuration["CorreosFacturacion:Destinatario"] ?? "iramirez@colonial.com.pe",
+                    copia             = _configuration["CorreosFacturacion:Copia"],
+                    copiaOculta       = _configuration["CorreosFacturacion:CopiaOculta"]
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en simulación de envío para NUM_REQ {NumReq}", numReq);
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
     }
 }
