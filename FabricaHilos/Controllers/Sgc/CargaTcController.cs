@@ -394,11 +394,11 @@ namespace FabricaHilos.Controllers.Sgc
 
                 // Formatear partidas y OC para el correo
                 string partidasTexto = partidas.Any() 
-                    ? string.Join("\n", partidas.Select(p => p.PartidaItem)) 
+                    ? string.Join(", ", partidas.Select(p => p.PartidaItem)) 
                     : "No disponible";
 
                 string ordenesCompraTexto = ordenesCompra.Any() 
-                    ? string.Join("\n", ordenesCompra.Select(oc => oc.OrdenCompra)) 
+                    ? string.Join(", ", ordenesCompra.Select(oc => oc.OrdenCompra)) 
                     : "No disponible";
 
                 var tipoCertificado = requerimiento.CodArt.Replace("CERT", "");

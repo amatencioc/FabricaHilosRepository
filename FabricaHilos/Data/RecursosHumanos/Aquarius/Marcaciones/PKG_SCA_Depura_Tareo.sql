@@ -481,6 +481,15 @@
                       con el nuevo valor del tareo (06:45). Resultado: la marca de ingreso
                       desaparecia de la UI. Mismo patron que PASO 1B-HIS pero para descanso.
                       Detectado: emp 002421 (ZAPATA BERECHE MIGUEL ANGEL) 26/04/2026.
+    13/05/2026 - FIX: ORDEN: Agregar ORDEN a los 22 INSERTs restantes en SCA_HISTORIAL
+                      BUG: Solo PASO 0-RESTORE tenia ORDEN. Los otros 22 INSERTs del paquete
+                      (PASO 0-SWAP, 0B3b, 0C, 0D, 1, 1B-HIS, 1C-NOC, 1C, 2, 2B, 3A, 3B,
+                      3D-SSR, 3D-SS, 4B x3, 8-PRE x4) seguian insertando sin ORDEN=NULL.
+                      El .NET ordena el grid por ORDEN ASC NULLS FIRST -> las marcas
+                      DEPURACION aparecian antes que la entrada real con ORDEN=1.
+                      Fix: calcular ORDEN = MAX(orden)+1 del mismo fotocheck/fec_equiv
+                      en cada INSERT, igual al patron de PASO 0-RESTORE (11/05/2026).
+                      Detectado: emp 037672 (VALLE VALQUI, ALEXANDER) 05/05/2026.
     11/05/2026 - FIX: PASO 0-RESTORE: Agregar ORDEN a los 4 INSERTs en SCA_HISTORIAL
                       BUG: Las marcas restauradas (entrada/inirefri/finrefri/salida) se
                       insertaban sin el campo ORDEN (quedaba NULL). El Windows .NET ordena
@@ -2014,12 +2023,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             AND NVL(h.ind_anulado, 'N') <> 'S';
             
             -- Insertar marca de salida teorica en SCA_HISTORIAL
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', rec_swap.num_fotocheck,
                    TO_CHAR(rec_swap.fechamar, 'DD/MM/YYYY'),
                    TO_CHAR(v_salida_teorica, 'HH24:MI:SS'),
                    '3', SYSDATE, rec_swap.fechamar,
-                   'DEPURACION: Salida teorica nocturna (SWAP)', 'A'
+                   'DEPURACION: Salida teorica nocturna (SWAP)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = rec_swap.num_fotocheck
+                    AND h2.fec_equiv = rec_swap.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM DUAL
             WHERE NOT EXISTS (
                 SELECT 1 FROM SCA_HISTORIAL h
@@ -2322,12 +2335,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_nocturno := v_count_nocturno + SQL%ROWCOUNT;
         
         -- INSERT a SCA_HISTORIAL para salida teorica nocturna (PASO 0B3b)
-        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
         SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                TO_CHAR(t.salida, 'HH24:MI:SS'),
                '3', SYSDATE, t.fechamar,
-               'DEPURACION: Salida noct teorica 0B3b', 'A'
+               'DEPURACION: Salida noct teorica 0B3b', 'A',
+               (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                WHERE h2.idtarjeta = t.num_fotocheck
+                AND h2.fec_equiv = t.fechamar
+                AND NVL(h2.ind_anulado,'N') <> 'S')
         FROM SCA_ASISTENCIA_TAREO t
         WHERE t.fechamar = v_fecha_proceso
         AND t.cod_empresa LIKE v_empresa_filtro
@@ -2507,12 +2524,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de SALIDA teorica en SCA_HISTORIAL (Case 0C)
         IF SQL%ROWCOUNT > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.salida, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Salida noct teorica', 'A'
+                   'DEPURACION: Salida noct teorica', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2562,12 +2583,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de ENTRADA nocturna en SCA_HISTORIAL (Case 0D)
         IF SQL%ROWCOUNT > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.entrada, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Entrada nocturna (0D)', 'A'
+                   'DEPURACION: Entrada nocturna (0D)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2615,12 +2640,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de ENTRADA en SCA_HISTORIAL
         IF v_count_entrada > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.entrada, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Entrada completada', 'A'
+                   'DEPURACION: Entrada completada', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2753,7 +2782,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             END IF;
 
             -- Paso 2: Insertar nueva marca Manual con la hora ajustada
-            INSERT INTO SCA_HISTORIAL (idcod, idlectora, idtarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idcod, idlectora, idtarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL,
                    '000',
                    t.num_fotocheck,
@@ -2763,7 +2792,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                    SYSDATE,
                    t.fechamar,
                    'DEPURACION: Entrada ajustada -15min (anticipada <1h)',
-                   NULL
+                   NULL,
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2819,12 +2852,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de ENTRADA nocturna en SCA_HISTORIAL (Case 1C-NOC)
         IF SQL%ROWCOUNT > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.entrada, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Entrada nocturna', 'A'
+                   'DEPURACION: Entrada nocturna', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2867,12 +2904,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de SALIDA corregida en SCA_HISTORIAL (Case 1C)
         IF SQL%ROWCOUNT > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.salida, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Salida corregida', 'A'
+                   'DEPURACION: Salida corregida', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -2920,12 +2961,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de SALIDA en SCA_HISTORIAL (Case 2)
         IF v_count_salida > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                    TO_CHAR(t.salida, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: Salida completada', 'A'
+                   'DEPURACION: Salida completada', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -3323,12 +3368,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marcas de INIREFRI teorico en SCA_HISTORIAL (R1)
         IF SQL%ROWCOUNT > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no inirefri (tiene fecha 01/01/1900)
                    TO_CHAR(t.inirefri, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: IniRefri teorico (R1)', 'A'
+                   'DEPURACION: IniRefri teorico (R1)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -3345,12 +3394,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             v_count_historial := v_count_historial + SQL%ROWCOUNT;
             
             -- Insertar marcas de FINREFRI teorico en SCA_HISTORIAL (R1)
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no finrefri (tiene fecha 01/01/1900)
                    TO_CHAR(t.finrefri, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: FinRefri teorico (R1)', 'A'
+                   'DEPURACION: FinRefri teorico (R1)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -3417,12 +3470,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de INIREFRI calculado en SCA_HISTORIAL (R2)
         IF v_count_inirefri > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no inirefri
                    TO_CHAR(t.inirefri, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: IniRefri calculado (R2)', 'A'
+                   'DEPURACION: IniRefri calculado (R2)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -3494,12 +3551,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         
         -- Insertar marca de FINREFRI calculado en SCA_HISTORIAL (R3)
         IF v_count_finrefri > 0 THEN
-            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+            INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
             SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                    TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no finrefri
                    TO_CHAR(t.finrefri, 'HH24:MI:SS'),
                    '3', SYSDATE, t.fechamar,
-                   'DEPURACION: FinRefri calculado (R3)', 'A'
+                   'DEPURACION: FinRefri calculado (R3)', 'A',
+                   (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                    WHERE h2.idtarjeta = t.num_fotocheck
+                    AND h2.fec_equiv = t.fechamar
+                    AND NVL(h2.ind_anulado,'N') <> 'S')
             FROM SCA_ASISTENCIA_TAREO t
             WHERE t.fechamar = v_fecha_proceso
             AND t.cod_empresa LIKE v_empresa_filtro
@@ -3749,12 +3810,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 -- FASE A: Marca oculta encontrada -> es la salida real (SSR)
                 -- Insertar nueva marca VISIBLE en SCA_HISTORIAL con motivo DEPURACION
                 -- (la original oculta NO se toca; si ROLLBACK, se elimina esta nueva)
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_ss.num_fotocheck,
                        TO_CHAR(rec_ss.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(v_marca_inter, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_ss.fechamar,
-                       'DEPURACION: Salida real restaurada (SSR)', 'A'
+                       'DEPURACION: Salida real restaurada (SSR)', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_ss.num_fotocheck
+                        AND h2.fec_equiv = rec_ss.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -3785,12 +3850,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 WHERE ROWID = rec_ss.rid;
                 
                 -- Insertar marca de SALIDA teorica en SCA_HISTORIAL
-                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                 SELECT id_cod_seq.NEXTVAL, '005', rec_ss.num_fotocheck,
                        TO_CHAR(rec_ss.fechamar, 'DD/MM/YYYY'),
                        TO_CHAR(rec_ss.salida_fijada, 'HH24:MI:SS'),
                        '3', SYSDATE, rec_ss.fechamar,
-                       'DEPURACION: Salida corregida (SS)', 'A'
+                       'DEPURACION: Salida corregida (SS)', 'A',
+                       (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                        WHERE h2.idtarjeta = rec_ss.num_fotocheck
+                        AND h2.fec_equiv = rec_ss.fechamar
+                        AND NVL(h2.ind_anulado,'N') <> 'S')
                 FROM DUAL
                 WHERE NOT EXISTS (
                     SELECT 1 FROM SCA_HISTORIAL h
@@ -4024,12 +4093,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_anomala := SQL%ROWCOUNT;
         
         -- Insertar marcas de SALIDA en SCA_HISTORIAL (PASO 4B)
-        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
         SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar
                TO_CHAR(t.salida, 'HH24:MI:SS'),
                '3', SYSDATE, t.fechamar,
-               'DEPURACION: Salida anomala 4B', 'A'
+               'DEPURACION: Salida anomala 4B', 'A',
+               (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                WHERE h2.idtarjeta = t.num_fotocheck
+                AND h2.fec_equiv = t.fechamar
+                AND NVL(h2.ind_anulado,'N') <> 'S')
         FROM SCA_ASISTENCIA_TAREO t
         WHERE t.fechamar = v_fecha_proceso
         AND t.cod_empresa LIKE v_empresa_filtro
@@ -4046,12 +4119,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_historial := v_count_historial + SQL%ROWCOUNT;
         
         -- Insertar marcas de INI REFRIGERIO en SCA_HISTORIAL (PASO 4B)
-        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
         SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no inirefri
                TO_CHAR(t.inirefri, 'HH24:MI:SS'),
                '3', SYSDATE, t.fechamar,
-               'DEPURACION: IniRefri anomala 4B', 'A'
+               'DEPURACION: IniRefri anomala 4B', 'A',
+               (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                WHERE h2.idtarjeta = t.num_fotocheck
+                AND h2.fec_equiv = t.fechamar
+                AND NVL(h2.ind_anulado,'N') <> 'S')
         FROM SCA_ASISTENCIA_TAREO t
         WHERE t.fechamar = v_fecha_proceso
         AND t.cod_empresa LIKE v_empresa_filtro
@@ -4068,12 +4145,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         v_count_historial := v_count_historial + SQL%ROWCOUNT;
         
         -- Insertar marcas de FIN REFRIGERIO en SCA_HISTORIAL (PASO 4B)
-        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
         SELECT id_cod_seq.NEXTVAL, '005', t.num_fotocheck,
                TO_CHAR(t.fechamar, 'DD/MM/YYYY'),  -- FIX: usar fechamar, no finrefri
                TO_CHAR(t.finrefri, 'HH24:MI:SS'),
                '3', SYSDATE, t.fechamar,
-               'DEPURACION: FinRefri anomala 4B', 'A'
+               'DEPURACION: FinRefri anomala 4B', 'A',
+               (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                WHERE h2.idtarjeta = t.num_fotocheck
+                AND h2.fec_equiv = t.fechamar
+                AND NVL(h2.ind_anulado,'N') <> 'S')
         FROM SCA_ASISTENCIA_TAREO t
         WHERE t.fechamar = v_fecha_proceso
         AND t.cod_empresa LIKE v_empresa_filtro
@@ -5308,12 +5389,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 
                 -- Verificar ENTRADA
                 IF rec_mf.entrada IS NOT NULL THEN
-                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                     SELECT id_cod_seq.NEXTVAL, '005', rec_mf.num_fotocheck,
                            TO_CHAR(rec_mf.fechamar, 'DD/MM/YYYY'),
                            TO_CHAR(rec_mf.entrada, 'HH24:MI:SS'),
                            '3', SYSDATE, rec_mf.fechamar,
-                           'DEPURACION: Marca faltante entrada 8-PRE', 'A'
+                           'DEPURACION: Marca faltante entrada 8-PRE', 'A',
+                           (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                            WHERE h2.idtarjeta = rec_mf.num_fotocheck
+                            AND h2.fec_equiv = rec_mf.fechamar
+                            AND NVL(h2.ind_anulado,'N') <> 'S')
                     FROM DUAL
                     WHERE NOT EXISTS (
                         SELECT 1 FROM SCA_HISTORIAL h
@@ -5331,12 +5416,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 
                 -- Verificar INIREFRI
                 IF rec_mf.inirefri IS NOT NULL THEN
-                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                     SELECT id_cod_seq.NEXTVAL, '005', rec_mf.num_fotocheck,
                            TO_CHAR(rec_mf.fechamar, 'DD/MM/YYYY'),
                            TO_CHAR(rec_mf.inirefri, 'HH24:MI:SS'),
                            '3', SYSDATE, rec_mf.fechamar,
-                           'DEPURACION: Marca faltante inirefri 8-PRE', 'A'
+                           'DEPURACION: Marca faltante inirefri 8-PRE', 'A',
+                           (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                            WHERE h2.idtarjeta = rec_mf.num_fotocheck
+                            AND h2.fec_equiv = rec_mf.fechamar
+                            AND NVL(h2.ind_anulado,'N') <> 'S')
                     FROM DUAL
                     WHERE NOT EXISTS (
                         SELECT 1 FROM SCA_HISTORIAL h
@@ -5354,12 +5443,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                 
                 -- Verificar FINREFRI
                 IF rec_mf.finrefri IS NOT NULL THEN
-                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                    INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                     SELECT id_cod_seq.NEXTVAL, '005', rec_mf.num_fotocheck,
                            TO_CHAR(rec_mf.fechamar, 'DD/MM/YYYY'),
                            TO_CHAR(rec_mf.finrefri, 'HH24:MI:SS'),
                            '3', SYSDATE, rec_mf.fechamar,
-                           'DEPURACION: Marca faltante finrefri 8-PRE', 'A'
+                           'DEPURACION: Marca faltante finrefri 8-PRE', 'A',
+                           (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                            WHERE h2.idtarjeta = rec_mf.num_fotocheck
+                            AND h2.fec_equiv = rec_mf.fechamar
+                            AND NVL(h2.ind_anulado,'N') <> 'S')
                     FROM DUAL
                     WHERE NOT EXISTS (
                         SELECT 1 FROM SCA_HISTORIAL h
@@ -5427,12 +5520,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                         DBMS_OUTPUT.PUT_LINE('PASO 8-PRE BUG-B: Movida marca real SALIDA ' || TO_CHAR(rec_mf.salida, 'HH24:MI:SS') || ' desde dia adyacente para fotocheck ' || rec_mf.num_fotocheck);
                     ELSE
                         -- Si no se pudo mover, insertar DEPURACION (comportamiento original)
-                        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est)
+                        INSERT INTO SCA_HISTORIAL (idCod, idLectora, idTarjeta, fecha, hora, tiporeg, fecreg, fec_equiv, motivo, ind_aman_hor_est, orden)
                         SELECT id_cod_seq.NEXTVAL, '005', rec_mf.num_fotocheck,
                                TO_CHAR(rec_mf.fechamar, 'DD/MM/YYYY'),
                                TO_CHAR(rec_mf.salida, 'HH24:MI:SS'),
                                '3', SYSDATE, rec_mf.fechamar,
-                               'DEPURACION: Marca faltante salida 8-PRE', 'A'
+                               'DEPURACION: Marca faltante salida 8-PRE', 'A',
+                               (SELECT NVL(MAX(h2.orden),0)+1 FROM SCA_HISTORIAL h2
+                                WHERE h2.idtarjeta = rec_mf.num_fotocheck
+                                AND h2.fec_equiv = rec_mf.fechamar
+                                AND NVL(h2.ind_anulado,'N') <> 'S')
                         FROM DUAL
                         WHERE NOT EXISTS (
                             SELECT 1 FROM SCA_HISTORIAL h

@@ -536,43 +536,49 @@ namespace FabricaHilos.Services.Sgc
 
                 try
                 {
-                    int nuevoNumero;
-
-                    var sqlMax = $@"
-                        SELECT NVL(MAX(NUMERO), 0) + 1 AS NUEVO_NUMERO
-                        FROM {S}V_FACTAUT
-                        WHERE TIPO = 'FA' AND SERIE = 1";
-
-                    using (var cmdMax = new OracleCommand(sqlMax, conn))
-                    {
-                        cmdMax.Transaction = transaction;
-                        var result = await cmdMax.ExecuteScalarAsync();
-                        nuevoNumero = Convert.ToInt32(result);
-                    }
-
                     string tipoCertificado = codArt.Length > 4 ? codArt.Substring(4) : codArt;
                     string concepto = $"REQ. EMISION. FACT. {tipoCertificado}";
+                    if (concepto.Length > 25) concepto = concepto.Substring(0, 25);
+                    string usuarioTrunc = (usuario ?? "SYSTEM").Length > 15
+                        ? (usuario ?? "SYSTEM").Substring(0, 15)
+                        : (usuario ?? "SYSTEM");
 
+                    // INSERT + cálculo del NUMERO en un solo statement atómico con RETURNING INTO.
+                    // Esto elimina la condición de carrera del MAX+1 en dos pasos separados.
                     var sqlInsert = $@"
                         INSERT INTO {S}V_FACTAUT 
-                        (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
+                            (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, SER_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES 
-                        ('FA', 1, :Numero, :Concepto, 'GC', :NumReq, 0, :Usuario, SYSDATE)";
+                            ('FA', 1,
+                             (SELECT NVL(MAX(NUMERO), 0) + 1 FROM {S}V_FACTAUT WHERE TIPO = 'FA' AND SERIE = 1),
+                             :Concepto, 'GC', 1, :NumReq, '0', :Usuario, SYSDATE)
+                        RETURNING NUMERO INTO :NroGenerado";
+
+                    int nuevoNumero;
 
                     using (var cmdInsert = new OracleCommand(sqlInsert, conn))
                     {
                         cmdInsert.Transaction = transaction;
-                        cmdInsert.Parameters.Add(new OracleParameter("Numero", nuevoNumero));
-                        cmdInsert.Parameters.Add(new OracleParameter("Concepto", concepto));
-                        cmdInsert.Parameters.Add(new OracleParameter("NumReq", numReq));
-                        cmdInsert.Parameters.Add(new OracleParameter("Usuario", usuario));
+                        cmdInsert.Parameters.Add(new OracleParameter("Concepto", OracleDbType.Varchar2, concepto,       ParameterDirection.Input));
+                        cmdInsert.Parameters.Add(new OracleParameter("NumReq",   OracleDbType.Int32,    numReq,         ParameterDirection.Input));
+                        cmdInsert.Parameters.Add(new OracleParameter("Usuario",  OracleDbType.Varchar2, usuarioTrunc,   ParameterDirection.Input));
+
+                        var pNro = new OracleParameter("NroGenerado", OracleDbType.Int32)
+                        {
+                            Direction = ParameterDirection.Output
+                        };
+                        cmdInsert.Parameters.Add(pNro);
 
                         await cmdInsert.ExecuteNonQueryAsync();
+
+                        nuevoNumero = Convert.ToInt32(pNro.Value.ToString());
                     }
 
                     transaction.Commit();
 
-                    _logger.LogInformation("Registro V_FACTAUT creado exitosamente: TIPO=FA, SERIE=1, NUMERO={Numero}, NRO_REF={NumReq}, TIP_DIREF=GC, ESTADO=0", nuevoNumero, numReq);
+                    _logger.LogInformation(
+                        "Registro V_FACTAUT creado: TIPO=FA, SERIE=1, NUMERO={Numero}, TIP_DIREF=GC, NRO_DIREF={NumReq}, ESTADO='0'",
+                        nuevoNumero, numReq);
 
                     return nuevoNumero;
                 }
@@ -599,35 +605,39 @@ namespace FabricaHilos.Services.Sgc
                 await conn.OpenAsync();
 
                 var sql = $@"
-                    SELECT DISTINCT 
-                        TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) AS PEDIDO
-                    FROM {S}REQ_CERT_D rcd
-                    INNER JOIN {S}DOCUVENT F
-                        ON F.TIPODOC = rcd.TIPODOC
-                        AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
-                        AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
-                        AND F.ESTADO <> '9'
-                        AND F.TIP_DOC_REF IN ('21','23','PL')
-                    INNER JOIN {S}KARDEX_G G
-                        ON G.TIP_REF = F.TIPODOC
-                        AND TRIM(G.SER_REF) = TRIM(F.SERIE)
-                        AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
-                        AND G.ESTADO <> '9'
-                    INNER JOIN {S}PEDIDO P
-                        ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
-                        AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
-                        AND G.TIP_DOC_REF = P.TIPO_DOCTO
-                        AND P.ESTADO <> '9'
-                    INNER JOIN {S}ITEMDOCU ID
-                        ON ID.TIPODOC = F.TIPODOC
-                        AND TRIM(ID.SERIE) = TRIM(F.SERIE)
-                        AND TRIM(ID.NUMERO) = TRIM(F.NUMERO)
-                    INNER JOIN {S}ITEMPED I
-                        ON I.NUM_PED = P.NUM_PED
-                        AND I.SERIE = P.SERIE
-                        AND I.COD_ART = ID.COD_ART
-                    WHERE rcd.NUM_REQ = :NumReq
-                    ORDER BY P.NUM_PED, I.NRO";
+                    SELECT PEDIDO
+                    FROM (
+                        SELECT DISTINCT
+                            TO_CHAR(P.NUM_PED) || '-' || TO_CHAR(I.NRO) AS PEDIDO,
+                            P.NUM_PED,
+                            I.NRO
+                        FROM {S}REQ_CERT_D rcd
+                        INNER JOIN {S}DOCUVENT F
+                            ON F.TIPODOC = rcd.TIPODOC
+                            AND TRIM(F.SERIE) = TRIM(rcd.SERIE)
+                            AND TRIM(F.NUMERO) = TRIM(rcd.NUMERO)
+                            AND F.ESTADO <> '9'
+                        INNER JOIN {S}KARDEX_G G
+                            ON G.TIP_REF = F.TIPODOC
+                            AND TRIM(G.SER_REF) = TRIM(F.SERIE)
+                            AND TRIM(G.NRO_REF) = TRIM(F.NUMERO)
+                            AND G.ESTADO <> '9'
+                        INNER JOIN {S}PEDIDO P
+                            ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
+                            AND TRIM(G.SER_DOC_REF) = TO_CHAR(P.SERIE)
+                            AND G.TIP_DOC_REF = P.TIPO_DOCTO
+                            AND P.ESTADO <> '9'
+                        INNER JOIN {S}ITEMDOCU ID
+                            ON ID.TIPODOC = F.TIPODOC
+                            AND TRIM(ID.SERIE) = TRIM(F.SERIE)
+                            AND TRIM(ID.NUMERO) = TRIM(F.NUMERO)
+                        INNER JOIN {S}ITEMPED I
+                            ON I.NUM_PED = P.NUM_PED
+                            AND I.SERIE = P.SERIE
+                            AND I.COD_ART = ID.COD_ART
+                        WHERE rcd.NUM_REQ = :NumReq
+                    )
+                    ORDER BY NUM_PED, NRO";
 
                 using var cmd = new OracleCommand(sql, conn);
                 cmd.Parameters.Add(new OracleParameter("NumReq", numReq));

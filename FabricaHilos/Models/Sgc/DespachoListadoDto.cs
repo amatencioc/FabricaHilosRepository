@@ -13,6 +13,7 @@ namespace FabricaHilos.Models.Sgc
         public decimal? CantFacturada { get; set; }
         public decimal? Precio { get; set; }
         public int? Guia { get; set; }
+        public int? GuiaDest { get; set; }
         public string? Obs { get; set; }
 
         // Datos adicionales para descarga de PDF
@@ -21,6 +22,11 @@ namespace FabricaHilos.Models.Sgc
         public string? GuiaCodAlm { get; set; }
         public string? GuiaTpTransac { get; set; }
         public int? GuiaSerie { get; set; }
+
+        // Datos adicionales para descarga de PDF de Guía Destino
+        public string? GuiaDestCodAlm { get; set; }
+        public string? GuiaDestTpTransac { get; set; }
+        public int? GuiaDestSerie { get; set; }
 
         // Código de cliente para envío a TC
         public string? CodCliente { get; set; }
@@ -32,5 +38,11 @@ namespace FabricaHilos.Models.Sgc
 
         // Código de vendedor
         public string? CodVende { get; set; }
+
+        // Lote de hilo de producción
+        public string? LoteHilo { get; set; }
+
+        // Porcentaje de merma de tintorería
+        public decimal? Merma { get; set; }
     }
 }

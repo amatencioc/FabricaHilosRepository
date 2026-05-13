@@ -208,7 +208,7 @@
     async function descargarPdf(event, anchor) {
         event.preventDefault();
         try {
-            const resp = await fetch(anchor.href, { credentials: 'include' });
+            const resp = await fetch(anchor.href, { credentials: 'include', noLoading: true });
             const ct = resp.headers.get('Content-Type') ?? '';
             if (ct.includes('application/json')) {
                 const data = await resp.json();

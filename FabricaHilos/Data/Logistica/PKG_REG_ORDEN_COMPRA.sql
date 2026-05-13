@@ -486,6 +486,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
         V_SERIE       NUMBER := 1;          -- serie siempre = 1
         V_DOCORDE     PARAMLG.DOCORDE%TYPE; -- '82'
         V_DOCSERV     PARAMLG.DOCSERV%TYPE; -- '83'
+        RESOURCE_BUSY EXCEPTION;
+        PRAGMA EXCEPTION_INIT(RESOURCE_BUSY, -54);  -- ORA-00054 (FOR UPDATE WAIT timeout)
 
     BEGIN
         P_MSGERROR := NULL;
@@ -511,17 +513,30 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
             RETURN;
         END IF;
 
-        -- Proveedor
-        SELECT COUNT(*) INTO V_CNT FROM PROVEED WHERE COD_PROVEED = P_COD_PROVEED;
-        IF V_CNT = 0 THEN
-            P_MSGERROR := 'Proveedor ' || P_COD_PROVEED || ' no existe.';
+        IF P_FECHA > P_F_ENTREGA THEN
+            P_MSGERROR := 'La fecha de entrega no puede ser anterior a la fecha del documento.';
             RETURN;
         END IF;
 
-        -- Condición de pago
-        SELECT COUNT(*) INTO V_CNT FROM CONDPAG WHERE COND_PAG = P_COND_PAG;
+        -- Proveedor activo
+        SELECT COUNT(*) INTO V_CNT FROM PROVEED
+        WHERE  COD_PROVEED = P_COD_PROVEED AND ESTADO = '0';
         IF V_CNT = 0 THEN
-            P_MSGERROR := 'Condición de pago ' || P_COND_PAG || ' no existe.';
+            P_MSGERROR := 'Proveedor ' || P_COD_PROVEED || ' no existe o está inactivo.';
+            RETURN;
+        END IF;
+
+        -- Condición de pago activa
+        SELECT COUNT(*) INTO V_CNT FROM CONDPAG
+        WHERE  COND_PAG = P_COND_PAG AND FLAG_EST = 'S';
+        IF V_CNT = 0 THEN
+            P_MSGERROR := 'Condición de pago ' || P_COND_PAG || ' no existe o está inactiva.';
+            RETURN;
+        END IF;
+
+        -- Lugar de entrega
+        IF P_OPC_LENTR NOT IN ('1', '2') THEN
+            P_MSGERROR := 'OPC_LENTR inválido. Use ''1'' (Dirección actual) o ''2'' (Otro local).';
             RETURN;
         END IF;
 
@@ -596,7 +611,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
                 RETURN;
             END IF;
 
-            -- Saldo disponible del ítem
+            -- Saldo disponible del ítem (FOR UPDATE: bloquea la fila para evitar race condition)
             BEGIN
                 SELECT SALDO
                 INTO   V_SALDO_ACT
@@ -605,7 +620,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
                   AND  SERIE   = P_ITEMS(I).SERIE
                   AND  NUMREQ  = P_ITEMS(I).NUMREQ
                   AND  ORDEN   = P_ITEMS(I).ORDEN
-                  AND  COD_ART = P_ITEMS(I).COD_ART;
+                  AND  COD_ART = P_ITEMS(I).COD_ART
+                FOR UPDATE WAIT 5;
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN
                     P_MSGERROR := 'Ítem ' || P_ITEMS(I).COD_ART
@@ -630,9 +646,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
             el mismo número. El UPDATE al final del paso 10 incrementa
             el contador para la siguiente O/C.                          */
         IF P_TIPO_DOCTO = V_DOCORDE THEN
-            SELECT NUMORDE INTO V_NUM_PED FROM PARAMLG FOR UPDATE;
+            SELECT NUMORDE INTO V_NUM_PED FROM PARAMLG FOR UPDATE WAIT 5;
         ELSE
-            SELECT NUMSERV INTO V_NUM_PED FROM PARAMLG FOR UPDATE;
+            SELECT NUMSERV INTO V_NUM_PED FROM PARAMLG FOR UPDATE WAIT 5;
         END IF;
 
         -- ── 4. Construir mapa de ítems unificados (merge por COD_ART) ──
@@ -645,10 +661,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
         FOR I IN 1 .. P_ITEMS.COUNT LOOP
             V_KEY := P_ITEMS(I).COD_ART;
 
-            -- Precio neto unitario con descuentos
+            -- Precio neto unitario con descuentos (NVL: NULL equivale a 0% descuento)
             V_PRECIO_NETO := P_ITEMS(I).PRECIO
-                             * (1 - P_ITEMS(I).POR_DESC1 / 100)
-                             * (1 - P_ITEMS(I).POR_DESC2 / 100);
+                             * (1 - NVL(P_ITEMS(I).POR_DESC1, 0) / 100)
+                             * (1 - NVL(P_ITEMS(I).POR_DESC2, 0) / 100);
 
             IF V_MERGE.EXISTS(V_KEY) THEN
                 -- Ya existe: acumular cantidad y recalcular IMP_VVTA
@@ -657,8 +673,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
                 V_MERGE(V_KEY).IMP_VVTA :=
                     ROUND(V_MERGE(V_KEY).CANTIDAD
                           * V_MERGE(V_KEY).PRECIO
-                          * (1 - V_MERGE(V_KEY).POR_DESC1 / 100)
-                          * (1 - V_MERGE(V_KEY).POR_DESC2 / 100), 2);
+                          * (1 - NVL(V_MERGE(V_KEY).POR_DESC1, 0) / 100)
+                          * (1 - NVL(V_MERGE(V_KEY).POR_DESC2, 0) / 100), 2);
 
                 V_MERGE(V_KEY).IGV_ITEM :=
                     ROUND(V_MERGE(V_KEY).IMP_VVTA * P_IMPSTO, 2);
@@ -675,8 +691,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
                 V_MERGE(V_KEY).DESCRIPCION  := P_ITEMS(I).DETALLE;
                 V_MERGE(V_KEY).CANTIDAD     := P_ITEMS(I).CANTIDAD;
                 V_MERGE(V_KEY).PRECIO       := P_ITEMS(I).PRECIO;
-                V_MERGE(V_KEY).POR_DESC1    := P_ITEMS(I).POR_DESC1;
-                V_MERGE(V_KEY).POR_DESC2    := P_ITEMS(I).POR_DESC2;
+                V_MERGE(V_KEY).POR_DESC1    := NVL(P_ITEMS(I).POR_DESC1, 0);
+                V_MERGE(V_KEY).POR_DESC2    := NVL(P_ITEMS(I).POR_DESC2, 0);
                 V_MERGE(V_KEY).IMP_VVTA     := V_IMP_VVTA;
                 V_MERGE(V_KEY).IGV_ITEM     := V_IGV_ITEM;
                 V_MERGE(V_KEY).TIPO_DESTINO := P_ITEMS(I).TP_DESTINO;
@@ -776,17 +792,20 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
             V_KEY := V_MERGE.NEXT(V_KEY);
         END LOOP;
 
-        -- ── 8. Para cada ítem original: DESP_ITEMREQ + actualizar SALDO ──
+        -- ── 8. Para cada ítem original: DESP_ITEMREQ ──────────────────
         /*  DESP_ITEMREQ registra la trazabilidad req-ítem → OC-ítem.
             FK_DESP_OCOMPRA valida que exista (TIPO_DOCTO, SERIE, NUM_PED,
             ORDEN_REF, COD_ART) en ITEMORD (ya insertado en paso 7).
-            Se descuenta la CANTIDAD despachada del SALDO del ITEMREQ. */
+            El descuento de SALDO en ITEMREQ es manejado automáticamente
+            por el trigger TIA_DESP_ITEMREQ (AFTER INSERT). No se debe
+            actualizar ITEMREQ.SALDO manualmente — hacerlo sería un
+            doble descuento. */
 
         FOR I IN 1 .. P_ITEMS.COUNT LOOP
             -- ORDEN_REF: orden del COD_ART en ITEMORD (del mapa de merge)
             V_ORD_REF := V_MERGE(P_ITEMS(I).COD_ART).ORD_ITEM;
 
-            -- Registrar despacho
+            -- Registrar despacho (el trigger TIA_DESP_ITEMREQ descuenta ITEMREQ.SALDO)
             INSERT INTO DESP_ITEMREQ (
                 TIPDOC, SERIE, NUMREQ, ORDEN, COD_ART,
                 TIP_DOC_REF, SER_DOC_REF, NRO_DOC_REF,
@@ -800,17 +819,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
                 '0',                  -- estado despacho: pendiente de recepción
                 V_ORD_REF
             );
-
-            -- Descontar saldo del ítem de requisición
-            UPDATE ITEMREQ
-            SET    SALDO     = SALDO - P_ITEMS(I).CANTIDAD,
-                   A_MDUSER  = P_USUARIO,
-                   A_MDFECHA = SYSDATE
-            WHERE  TIPDOC  = P_ITEMS(I).TIPDOC
-              AND  SERIE   = P_ITEMS(I).SERIE
-              AND  NUMREQ  = P_ITEMS(I).NUMREQ
-              AND  ORDEN   = P_ITEMS(I).ORDEN
-              AND  COD_ART = P_ITEMS(I).COD_ART;
 
         END LOOP;
 
@@ -866,8 +874,13 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
     EXCEPTION
         WHEN DUP_VAL_ON_INDEX THEN
             ROLLBACK;
-            -- Reintentar con el siguiente número (raro, sólo en alta concurrencia)
+            -- Raro: otro usuario obtuvo el mismo número justo antes (alta concurrencia)
             P_MSGERROR := 'El número de O/C generado ya existe. Intente nuevamente.';
+            P_NUM_PED  := NULL;
+        WHEN RESOURCE_BUSY THEN
+            ROLLBACK;
+            -- FOR UPDATE WAIT 5 expiró: otro usuario está procesando el mismo recurso
+            P_MSGERROR := 'Recurso ocupado por otro usuario. Espere unos segundos e intente nuevamente.';
             P_NUM_PED  := NULL;
         WHEN OTHERS THEN
             ROLLBACK;
@@ -982,43 +995,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_REG_ORDEN_COMPRA AS
             RETURN;
         END IF;
 
-        -- Restaurar SALDO en ITEMREQ y reactivar reqs cerrados
-        FOR REC IN (
-            SELECT D.TIPDOC, D.SERIE, D.NUMREQ, D.ORDEN, D.COD_ART, D.CANTIDAD
-            FROM   DESP_ITEMREQ D
-            WHERE  D.TIP_DOC_REF = P_TIPO_DOCTO
-              AND  D.SER_DOC_REF = P_SERIE
-              AND  D.NRO_DOC_REF = P_NUM_PED
-        ) LOOP
-            -- Devolver saldo al ítem de requisición
-            UPDATE ITEMREQ
-            SET    SALDO     = SALDO + REC.CANTIDAD,
-                   A_MDUSER  = P_USUARIO,
-                   A_MDFECHA = SYSDATE
-            WHERE  TIPDOC  = REC.TIPDOC
-              AND  SERIE   = REC.SERIE
-              AND  NUMREQ  = REC.NUMREQ
-              AND  ORDEN   = REC.ORDEN
-              AND  COD_ART = REC.COD_ART;
-
-            -- Si la requisición estaba cerrada por esta O/C, reactivarla
-            -- (vuelve a '1' si tenía autorización, o a '2' si ya fue recibida)
-            UPDATE REQUISICION
-            SET    ESTADO             = CASE
-                                            WHEN AUTORIZA IS NOT NULL
-                                              AND TRIM(AUTORIZA) != '' THEN '1'
-                                            ELSE '2'
-                                        END,
-                   FCH_ENTREGA_LOGIST = NULL,
-                   A_MDUSER           = P_USUARIO,
-                   A_MDFECHA          = SYSDATE
-            WHERE  TIPDOC = REC.TIPDOC
-              AND  SERIE  = REC.SERIE
-              AND  NUMREQ = REC.NUMREQ
-              AND  ESTADO = '6';     -- solo si estaba cerrado
-        END LOOP;
-
         -- Eliminar registros de despacho
+        /*  El trigger TDA_DESP_ITEMREQ (AFTER DELETE) restaura automáticamente
+            ITEMREQ.SALDO y re-activa la REQUISICION (ESTADO='2') por cada fila
+            eliminada.  No se deben actualizar ITEMREQ ni REQUISICION antes del
+            DELETE — hacerlo causaría doble restauración de saldo. */
         DELETE FROM DESP_ITEMREQ
         WHERE  TIP_DOC_REF = P_TIPO_DOCTO
           AND  SER_DOC_REF = P_SERIE

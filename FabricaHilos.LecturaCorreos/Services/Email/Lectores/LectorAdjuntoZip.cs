@@ -25,7 +25,7 @@ public class LectorAdjuntoZip : ILectorAdjuntoZip
         var resultado = new List<AdjuntoCorreo>();
 
         using var ms = new MemoryStream();
-        await parte.Content.DecodeToAsync(ms, ct);
+        await (parte.Content ?? throw new InvalidOperationException($"El adjunto ZIP '{parte.FileName}' no tiene contenido.")).DecodeToAsync(ms, ct);
         ms.Position = 0;
 
         using var zip = new ZipArchive(ms, ZipArchiveMode.Read);

@@ -565,7 +565,7 @@ public class OrdenCompraController : OracleBaseController
                 Impsto     = request.Impsto,
                 Fecha      = request.Fecha,
                 FEntrega   = request.FEntrega,
-                CantItems  = request.Items.Count,
+                CantItems  = request.Items?.Count ?? 0,
                 Detalle    = request.Detalle,
                 FechaLog   = DateTime.UtcNow,
                 Notificado = false
@@ -581,8 +581,10 @@ public class OrdenCompraController : OracleBaseController
             });
             var detailUrl = Url.Action(nameof(Detalle), "OrdenCompra",
                 new { dt = dtToken, t = HttpContext.Request.Query["t"].ToString() });
+            var printUrl = Url.Action(nameof(Imprimir), "OrdenCompra",
+                new { dt = dtToken, t = HttpContext.Request.Query["t"].ToString() });
 
-            return Json(new { ok = true, numPed, detailUrl, logId = logEntry.Id });
+            return Json(new { ok = true, numPed, detailUrl, printUrl, logId = logEntry.Id });
         }
         catch (Exception ex)
         {
@@ -707,7 +709,8 @@ public class OrdenCompraController : OracleBaseController
         if (firma?.Firma == null || firma.Firma.Length == 0)
             return NotFound();
 
-        var mime = FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firma.Firma);
+        var mime = FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firma.Firma)
+                   ?? "application/octet-stream";
         return File(firma.Firma, mime);
     }
 

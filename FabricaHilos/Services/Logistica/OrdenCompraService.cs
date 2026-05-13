@@ -219,14 +219,14 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                                D.NUMREQ, D.ORDEN_REQ,
                                R.CENTRO_COSTO
                         FROM {S}ITEMORD I
-                        LEFT JOIN (SELECT COD_ART, ORDEN AS ORDEN_REQ, MAX(NUMREQ) AS NUMREQ
+                        LEFT JOIN (SELECT COD_ART, MIN(NUMREQ) AS NUMREQ, MIN(ORDEN) AS ORDEN_REQ
                                    FROM {S}DESP_ITEMREQ
                                    WHERE NRO_DOC_REF = TO_CHAR(:numPed)
-                                   GROUP BY COD_ART, ORDEN) D
-                               ON D.COD_ART = I.COD_ART AND D.ORDEN_REQ = I.ORDEN
+                                   GROUP BY COD_ART) D
+                                ON D.COD_ART = I.COD_ART
                         LEFT JOIN {S}REQUISICION R ON R.NUMREQ = D.NUMREQ
                         WHERE I.TIPO_DOCTO = :tipoDocto AND I.SERIE = :serie AND I.NUM_PED = :numPed
-                        ORDER BY D.NUMREQ NULLS LAST, D.ORDEN_REQ NULLS LAST, I.ORDEN";
+                        ORDER BY D.NUMREQ ASC NULLS LAST, D.ORDEN_REQ ASC NULLS LAST, I.ORDEN ASC";
         try
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -1193,7 +1193,14 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
 
             var rawNum  = cmd.Parameters["p_num_ped"].Value;
             var rawErr  = cmd.Parameters["p_msgerror"].Value;
-            string? err = rawErr == DBNull.Value || rawErr is Oracle.ManagedDataAccess.Types.OracleDecimal od && od.IsNull ? null : rawErr?.ToString();
+            string? err = null;
+            if (rawErr != null && rawErr != DBNull.Value)
+            {
+                if (rawErr is Oracle.ManagedDataAccess.Types.OracleString os)
+                    err = os.IsNull ? null : os.Value;
+                else
+                    err = rawErr.ToString();
+            }
             if (string.IsNullOrWhiteSpace(err)) err = null;
 
             long numPed = 0;
@@ -1350,44 +1357,25 @@ END;";
                     {
                         byte[]? bytes = null;
                         var val = rdr.GetValue(0);
-                        var typeName = val?.GetType().FullName ?? "null";
 
                         if (val is byte[] b && b.Length > 0)
                             bytes = b;
                         else if (val is OracleBinary ob && !ob.IsNull)
                             bytes = ob.Value;
 
-                        _logger.LogInformation(
-                            "RH_FIRMAS [{Codigo}]: tipo={Type} longitud={Len} primeros={Hex}",
-                            dto.Codigo, typeName,
-                            bytes?.Length ?? 0,
-                            bytes != null ? BitConverter.ToString(bytes, 0, Math.Min(16, bytes.Length)) : "—");
-
                         if (bytes != null && bytes.Length > 0)
                         {
                             var mime = DetectImageMimeType(bytes);
                             if (mime == "image/tiff")
                             {
-                                // TIFF no es soportado por navegadores → convertir a PNG
                                 bytes = ConvertirTiffAPng(bytes);
                                 mime  = "image/png";
-                                _logger.LogInformation("Firma [{Codigo}]: TIFF convertido a PNG ({Len} bytes)", dto.Codigo, bytes.Length);
                             }
                             if (mime != null)
-                            {
                                 dto.Firma = bytes;
-                            }
                             else
-                            {
-                                _logger.LogWarning(
-                                    "Firma de {Codigo}: formato no soportado por navegador. Primeros 16 bytes: {Bytes}",
-                                    dto.Codigo, BitConverter.ToString(bytes, 0, Math.Min(16, bytes.Length)));
-                            }
+                                _logger.LogWarning("Firma de {Codigo}: formato de imagen no soportado.", dto.Codigo);
                         }
-                    }
-                    else
-                    {
-                        _logger.LogInformation("RH_FIRMAS [{Codigo}]: sin registro o columna nula", dto.Codigo);
                     }
                 }
                 catch (Exception ex)

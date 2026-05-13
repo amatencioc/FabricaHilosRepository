@@ -243,21 +243,24 @@
             <table class="table table-corporate table-hover mb-0">
                 <thead>
                     <tr>
-                        <th class="text-center" style="width: 40px;">
+                        <th class="text-center" style="width: 36px;">
                             <input type="checkbox" id="checkboxSelectAll" class="form-check-input" onchange="toggleSelectAll(this)" />
                         </th>
-                        <th class="text-center">#</th>
-                        <th>RAZON SOCIAL</th>
-                        <th>OC</th>
-                        <th class="text-center">PEDIDO</th>
-                        <th class="text-center">FACTURA</th>
-                        <th class="text-center">FECHA.DOC</th>
-                        <th>ARTICULO</th>
-                        <th class="text-end">CANTIDAD</th>
-                        <th class="text-end">CANT. FACT.</th>
-                        <th class="text-end">PRECIO</th>
-                        <th class="text-center" style="width: 120px;">GUIA</th>
-                        <th>OBS</th>
+                        <th class="text-center" style="width: 40px;">#</th>
+                        <th style="min-width: 160px;">RAZON SOCIAL</th>
+                        <th style="min-width: 90px;">OC</th>
+                        <th class="text-center" style="width: 90px;">PEDIDO</th>
+                        <th class="text-center" style="width: 100px;">FACTURA</th>
+                        <th class="text-center" style="width: 95px;">FECHA.DOC</th>
+                        <th style="min-width: 180px;">ARTICULO</th>
+                        <th class="text-end" style="width: 85px;">CANTIDAD</th>
+                        <th class="text-end" style="width: 90px;">CANT. FACT.</th>
+                        <th class="text-end" style="width: 75px;">PRECIO</th>
+                        <th class="text-end" style="width: 90px;">GUIA</th>
+                        <th class="text-end" style="width: 100px;">GUIA DEST</th>
+                        <th style="width: 90px;">LOTE HILO</th>
+                        <th class="text-end" style="width: 75px;">MERMA%</th>
+                        <th style="min-width: 120px;">OBS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -296,8 +299,8 @@
                             </td>
                             <td class="text-center">@item.Correlativo</td>
                             <td>@(item.RazonSocial ?? "-")</td>
-                            <td>@(item.Oc ?? "-")</td>
-                            <td class="text-center">@(item.Pedido ?? "-")</td>
+                            <td class="text-nowrap">@(item.Oc ?? "-")</td>
+                            <td class="text-center text-nowrap">@(item.Pedido ?? "-")</td>
                             <td class="text-start" style="background-color: #e3f2fd;">
                                 @if (!string.IsNullOrEmpty(item.Factura) && !string.IsNullOrEmpty(item.FacturaTipo) && !string.IsNullOrEmpty(item.FacturaSerie))
                                 {
@@ -320,7 +323,7 @@
                             <td class="text-end">@(item.Cantidad.HasValue ? item.Cantidad.Value.ToString("N2") : "-")</td>
                             <td class="text-end">@(item.CantFacturada.HasValue ? item.CantFacturada.Value.ToString("N2") : "-")</td>
                             <td class="text-end">@(item.Precio.HasValue ? item.Precio.Value.ToString("N2") : "-")</td>
-                            <td class="text-start" style="width: 120px;">
+                            <td class="text-end text-nowrap">
                                 @if (item.Guia.HasValue && !string.IsNullOrEmpty(item.GuiaCodAlm) && !string.IsNullOrEmpty(item.GuiaTpTransac) && item.GuiaSerie.HasValue)
                                 {
                                     <a asp-controller="Sgc"
@@ -338,7 +341,27 @@
                                 }
                                 @(item.Guia.HasValue ? item.Guia.Value.ToString() : string.Empty)
                             </td>
-                            <td>@(item.Obs ?? "-")</td>
+                            <td class="text-end text-nowrap">
+                                @if (item.GuiaDest.HasValue && !string.IsNullOrEmpty(item.GuiaDestCodAlm) && !string.IsNullOrEmpty(item.GuiaDestTpTransac) && item.GuiaDestSerie.HasValue)
+                                {
+                                    <a asp-controller="Sgc"
+                                       asp-action="DescargarGuiaPdf"
+                                       asp-route-codAlm="@item.GuiaDestCodAlm"
+                                       asp-route-tpTransac="@item.GuiaDestTpTransac"
+                                       asp-route-serie="@item.GuiaDestSerie"
+                                       asp-route-numero="@item.GuiaDest"
+                                       onclick="descargarPdf(event, this)"
+                                       data-no-loading
+                                       class="text-danger me-2"
+                                       title="Descargar PDF de Guía Destino">
+                                        <i class="bi bi-file-earmark-pdf-fill" style="font-size: 1.1rem;"></i>
+                                    </a>
+                                }
+                                @(item.GuiaDest.HasValue ? item.GuiaDest.Value.ToString() : string.Empty)
+                            </td>
+                            <td class="text-center text-nowrap">@(item.LoteHilo ?? "-")</td>
+                            <td class="text-end">@(item.Merma.HasValue ? item.Merma.Value.ToString("N2") + "%" : "-")</td>
+                            <td class="text-start">@(item.Obs ?? "-")</td>
                         </tr>
                     }
                     @if (Model.Any())
@@ -349,13 +372,13 @@
                             <td class="text-end">@sumCantidad.ToString("N2")</td>
                             <td class="text-end">@sumCantFacturada.ToString("N2")</td>
                             <td class="text-end">@sumPrecio.ToString("N2")</td>
-                            <td colspan="2"></td>
+                            <td colspan="5"></td>
                         </tr>
                     }
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="13" class="text-center text-muted py-4">
+                            <td colspan="16" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox me-2"></i>No se encontraron registros.
                             </td>
                         </tr>

@@ -12,7 +12,7 @@ public class LectorAdjuntoPdf : ILectorAdjuntoPdf
         MimePart parte, string asunto, string remitente, DateTime fecha, CancellationToken ct)
     {
         using var ms = new MemoryStream();
-        await parte.Content.DecodeToAsync(ms, ct);
+        await (parte.Content ?? throw new InvalidOperationException($"El adjunto '{parte.FileName}' no tiene contenido.")).DecodeToAsync(ms, ct);
 
         if (ms.Length > MaxPdfBytes)
             throw new InvalidOperationException(

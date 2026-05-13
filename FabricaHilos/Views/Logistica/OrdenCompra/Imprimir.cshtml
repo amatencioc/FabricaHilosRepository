@@ -667,7 +667,7 @@
                 @foreach (var it in merged)
                 {
                     rowNum++;
-                    var desc = descsArt.TryGetValue(it.CodArt, out var da) && !string.IsNullOrWhiteSpace(da)
+                    var desc = descsArt.TryGetValue(it.CodArt ?? string.Empty, out var da) && !string.IsNullOrWhiteSpace(da)
                                 ? da : it.Descripcion ?? it.CodArt ?? "—";
                     var tieneDesc = it.PorDesc1 > 0 || it.PorDesc2 > 0;
                     var descTxt = tieneDesc

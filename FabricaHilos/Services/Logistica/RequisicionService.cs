@@ -113,17 +113,18 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
 
         bool esFiltroEspecial = hasEstado && (estado == "6" || estado == "9");
 
-        // Para cerrado/anulado: respetar búsqueda y fechas igual que otros estados
         bool aplicarBuscar = hasBuscar;
         bool aplicarFechas = !hasBuscar;
+        // Cuando hay búsqueda de texto libre no se aplican filtros de estado ni de fechas
+        bool aplicarEstado = !hasBuscar && hasEstado;
 
         string fechaIniFilter = (aplicarFechas && hasFechaIni) ? " AND TRUNC(FECHA) >= TRUNC(:fechaIni)" : string.Empty;
         string fechaFinFilter = (aplicarFechas && hasFechaFin) ? " AND TRUNC(FECHA) <= TRUNC(:fechaFin)" : string.Empty;
-        string estadoFilter   = hasEstado ? " AND ESTADO = :estado" : string.Empty;
+        string estadoFilter   = aplicarEstado ? " AND ESTADO = :estado" : string.Empty;
 
-        // Por defecto (sin filtro de estado) excluir cerrado(6) y anulado(9)
-        // Cuando se elige explícitamente 6 o 9 no se aplica este filtro base
-        string baseEstadoFilter = esFiltroEspecial ? string.Empty : " AND ESTADO NOT IN ('6','9')";
+        // Por defecto (sin búsqueda libre ni filtro de estado) excluir cerrado(6) y anulado(9)
+        // Si hay búsqueda de texto libre se muestran todos los estados
+        string baseEstadoFilter = (hasBuscar || esFiltroEspecial) ? string.Empty : " AND ESTADO NOT IN ('6','9')";
 
         string whereClause = $"WHERE 1=1{baseEstadoFilter}{buscarFilter}{fechaIniFilter}{fechaFinFilter}{estadoFilter}";
 
@@ -170,7 +171,7 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
                 cmd.Parameters.Add(new OracleParameter(":fechaIni",  OracleDbType.Date,     fechaInicio!.Value.Date, ParameterDirection.Input));
             if (aplicarFechas && hasFechaFin)
                 cmd.Parameters.Add(new OracleParameter(":fechaFin",  OracleDbType.Date,     fechaFin!.Value.Date,    ParameterDirection.Input));
-            if (hasEstado)
+            if (aplicarEstado)
                 cmd.Parameters.Add(new OracleParameter(":estado",    OracleDbType.Varchar2, estado,                  ParameterDirection.Input));
 
             cmd.Parameters.Add(new OracleParameter(":startRow", OracleDbType.Int32, startRow, ParameterDirection.Input));

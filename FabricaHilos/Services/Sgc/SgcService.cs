@@ -1219,10 +1219,13 @@ namespace FabricaHilos.Services.Sgc
                 SELECT RN, TOTAL_COUNT,
                        ""RAZON SOCIAL"", ""OC"", ""PEDIDO"", ""FACTURA"",
                        ""FECHA.DOC"", ""ARTICULO"", ""CANT_PEDIDO"", ""CANT_FACTURADA"", ""PRECIO"",
-                       ""GUIA"", ""OBS"",
-                       ""FACTURA_TIPO"", ""FACTURA_SERIE"", ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE"",
+                       ""GUIA"", ""GUIA_DEST"", ""OBS"",
+                       ""FACTURA_TIPO"", ""FACTURA_SERIE"",
+                       ""GUIA_COD_ALM"", ""GUIA_TP_TRANSAC"", ""GUIA_SERIE"",
+                       ""GUIA_DEST_COD_ALM"", ""GUIA_DEST_TP_TRANSAC"", ""GUIA_DEST_SERIE"",
                        ""COD_CLIENTE"", ""COD_VENDE"",
-                       ""ENVIADO_A_TC"", ""NUM_REQ_TC"", ""NUM_CER""
+                       ""ENVIADO_A_TC"", ""NUM_REQ_TC"", ""NUM_CER"",
+                       ""LOTE_HILO"", ""MERMA%""
                 FROM (
                     SELECT ROW_NUMBER() OVER (ORDER BY Q.""FECHA.DOC"" DESC NULLS LAST) AS RN,
                            COUNT(*) OVER() AS TOTAL_COUNT,
@@ -1236,17 +1239,23 @@ namespace FabricaHilos.Services.Sgc
                            Q.""CANT_FACTURADA"",
                            Q.""PRECIO"",
                            Q.""GUIA"",
+                           Q.""GUIA_DEST"",
                            Q.""OBS"",
                            Q.""FACTURA_TIPO"",
                            Q.""FACTURA_SERIE"",
                            Q.""GUIA_COD_ALM"",
                            Q.""GUIA_TP_TRANSAC"",
                            Q.""GUIA_SERIE"",
+                           Q.""GUIA_DEST_COD_ALM"",
+                           Q.""GUIA_DEST_TP_TRANSAC"",
+                           Q.""GUIA_DEST_SERIE"",
                            Q.""COD_CLIENTE"",
                            Q.""COD_VENDE"",
                            Q.""ENVIADO_A_TC"",
                            Q.""NUM_REQ_TC"",
-                           Q.""NUM_CER""
+                           Q.""NUM_CER"",
+                           Q.""LOTE_HILO"",
+                           Q.""MERMA%""
                     FROM (
                         SELECT
                             F.NOMBRE                                                AS ""RAZON SOCIAL"",
@@ -1259,17 +1268,23 @@ namespace FabricaHilos.Services.Sgc
                             MAX(ID.CANTIDAD)                                        AS ""CANT_FACTURADA"",
                             MAX(I.PRECIO)                                           AS ""PRECIO"",
                             MAX(G.NUMERO)                                           AS ""GUIA"",
+                            MAX(GN.NUMERO)                                          AS ""GUIA_DEST"",
                             MAX(I.DETALLE)                                          AS ""OBS"",
                             F.TIPODOC                                               AS ""FACTURA_TIPO"",
                             TRIM(F.SERIE)                                           AS ""FACTURA_SERIE"",
                             MAX(G.COD_ALM)                                          AS ""GUIA_COD_ALM"",
                             MAX(G.TP_TRANSAC)                                       AS ""GUIA_TP_TRANSAC"",
                             MAX(G.SERIE)                                            AS ""GUIA_SERIE"",
+                            MAX(GN.COD_ALM)                                         AS ""GUIA_DEST_COD_ALM"",
+                            MAX(GN.TP_TRANSAC)                                      AS ""GUIA_DEST_TP_TRANSAC"",
+                            MAX(GN.SERIE)                                           AS ""GUIA_DEST_SERIE"",
                             F.COD_CLIENTE                                           AS ""COD_CLIENTE"",
                             F.COD_VENDE                                             AS ""COD_VENDE"",
                             CASE WHEN MAX(RD.NUM_REQ) IS NOT NULL THEN 1 ELSE 0 END AS ""ENVIADO_A_TC"",
                             MAX(RD.NUM_REQ)                                         AS ""NUM_REQ_TC"",
-                            MAX(RC.NUM_CER)                                         AS ""NUM_CER""
+                            MAX(RC.NUM_CER)                                         AS ""NUM_CER"",
+                            COALESCE(MAX(VP.LOTE_HILO), MAX(VI.LOTE_HILO))        AS ""LOTE_HILO"",
+                            COALESCE(MAX(HR.PORC_MERMA), MAX(HRP.PORC_MERMA), MAX(HRL.PORC_MERMA)) AS ""MERMA%""
                         FROM {S}PEDIDO P
                         LEFT  JOIN {S}KARDEX_G G
                                 ON TRIM(G.NRO_DOC_REF) = TO_CHAR(P.NUM_PED)
@@ -1299,6 +1314,62 @@ namespace FabricaHilos.Services.Sgc
                                 ON I.NUM_PED = P.NUM_PED
                                AND I.SERIE   = P.SERIE
                                AND I.COD_ART = ID.COD_ART
+                        LEFT  JOIN (
+                            SELECT NUM_PED, NRO, MIN(LOTE) AS LOTE_HILO
+                            FROM {S}V_ITEMPEDET
+                            GROUP BY NUM_PED, NRO
+                        ) VI ON VI.NUM_PED = P.NUM_PED
+                             AND VI.NRO    = I.NRO
+                        LEFT  JOIN (
+                            SELECT NRO_PEDIDO, SER_PARTIDA, MIN(LOTE_PRODUC) AS LOTE_HILO
+                            FROM {S}PARTIDA
+                            WHERE ESTADO <> '9'
+                              AND LOTE_PRODUC IS NOT NULL
+                              AND LOTE_PRODUC <> ' '
+                            GROUP BY NRO_PEDIDO, SER_PARTIDA
+                        ) VP ON VP.NRO_PEDIDO  = P.NUM_PED
+                             AND VP.SER_PARTIDA = I.NRO
+                        LEFT  JOIN (
+                            SELECT NUM_PED, ITEM_PED, MAX(PORC_MERMA) AS PORC_MERMA
+                            FROM {S}H_RECETA_G
+                            GROUP BY NUM_PED, ITEM_PED
+                        ) HR ON HR.NUM_PED  = P.NUM_PED
+                             AND HR.ITEM_PED = I.NRO
+                        LEFT  JOIN (
+                            SELECT hp.NUM_PED, hp.ITEM_PED, MAX(hg.PORC_MERMA) AS PORC_MERMA
+                            FROM {S}H_RECETA_P hp
+                            JOIN {S}H_RECETA_G hg ON hg.NUMERO = hp.NUMERO
+                            GROUP BY hp.NUM_PED, hp.ITEM_PED
+                        ) HRP ON HRP.NUM_PED  = P.NUM_PED
+                              AND HRP.ITEM_PED = I.NRO
+                        LEFT  JOIN (
+                            SELECT pt.NRO_PEDIDO, pt.SER_PARTIDA, MAX(hg.PORC_MERMA) AS PORC_MERMA
+                            FROM {S}PARTIDA pt
+                            INNER JOIN {S}ITEMPED  ip2 ON ip2.NUM_PED = pt.NRO_PEDIDO
+                                                       AND ip2.NRO    = pt.SER_PARTIDA
+                            INNER JOIN {S}ARTICUL  a2  ON a2.COD_ART  = ip2.COD_ART
+                                                       AND a2.TP_ART  = 'T'
+                            INNER JOIN {S}H_RECETA_G hg ON hg.LOTE   = pt.LOTE_PRODUC
+                                                        AND hg.FIBRA  = pt.TIPO_FIBRA
+                                                        AND hg.TITULO = a2.TITULO
+                            WHERE pt.ESTADO <> '9'
+                              AND pt.LOTE_PRODUC IS NOT NULL
+                            GROUP BY pt.NRO_PEDIDO, pt.SER_PARTIDA
+                        ) HRL ON HRL.NRO_PEDIDO  = P.NUM_PED
+                              AND HRL.SER_PARTIDA = I.NRO
+                        LEFT  JOIN (
+                            SELECT GN.TIP_REF, TRIM(GN.SER_REF) AS SER_REF, TRIM(GN.NRO_REF) AS NRO_REF,
+                                   MIN(GN.NUMERO) AS NUMERO,
+                                   MAX(GN.COD_ALM) AS COD_ALM,
+                                   MAX(GN.TP_TRANSAC) AS TP_TRANSAC,
+                                   MAX(GN.SERIE) AS SERIE
+                            FROM {S}KARDEX_G GN
+                            WHERE GN.IND_FACT = 'N'
+                              AND GN.ESTADO   <> '9'
+                            GROUP BY GN.TIP_REF, TRIM(GN.SER_REF), TRIM(GN.NRO_REF)
+                        ) GN ON GN.TIP_REF = F.TIPODOC
+                             AND GN.SER_REF  = TRIM(F.SERIE)
+                             AND GN.NRO_REF  = TRIM(F.NUMERO)
                         LEFT  JOIN {S}REQ_CERT_D RD
                                 ON RD.TIPODOC = F.TIPODOC
                                AND TRIM(RD.SERIE) = TRIM(F.SERIE)
@@ -1374,17 +1445,23 @@ namespace FabricaHilos.Services.Sgc
                         CantFacturada = GetDec(reader, "CANT_FACTURADA"),
                         Precio        = GetDec(reader, "PRECIO"),
                         Guia          = GetNullInt(reader, "GUIA"),
+                        GuiaDest      = GetNullInt(reader, "GUIA_DEST"),
                         Obs           = GetStr(reader, "OBS"),
                         FacturaTipo   = GetStr(reader, "FACTURA_TIPO"),
                         FacturaSerie  = GetStr(reader, "FACTURA_SERIE"),
                         GuiaCodAlm    = GetStr(reader, "GUIA_COD_ALM"),
                         GuiaTpTransac = GetStr(reader, "GUIA_TP_TRANSAC"),
-                        GuiaSerie     = GetNullInt(reader, "GUIA_SERIE"),
-                        CodCliente    = GetStr(reader, "COD_CLIENTE"),
+                        GuiaSerie         = GetNullInt(reader, "GUIA_SERIE"),
+                        GuiaDestCodAlm    = GetStr(reader, "GUIA_DEST_COD_ALM"),
+                        GuiaDestTpTransac = GetStr(reader, "GUIA_DEST_TP_TRANSAC"),
+                        GuiaDestSerie     = GetNullInt(reader, "GUIA_DEST_SERIE"),
+                        CodCliente        = GetStr(reader, "COD_CLIENTE"),
                         CodVende      = GetStr(reader, "COD_VENDE"),
                         EnviadoATC    = GetInt(reader, "ENVIADO_A_TC") == 1,
                         NumReqTC      = GetNullInt(reader, "NUM_REQ_TC"),
-                        NumCer        = GetStr(reader, "NUM_CER")
+                        NumCer        = GetStr(reader, "NUM_CER"),
+                        LoteHilo      = GetStr(reader, "LOTE_HILO"),
+                        Merma         = GetDec(reader, "MERMA%")
                     });
                 }
             }
