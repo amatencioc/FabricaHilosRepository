@@ -563,7 +563,8 @@ namespace FabricaHilos.Controllers.Sgc
             var rutaProv      = _configuration["RutaProv"] ?? string.Empty;
             var rucEmpresa    = _empresaTema.GetRucActual();
             var nroFormato    = (factura.Numero ?? string.Empty).Trim().PadLeft(8, '0');
-            var nombreArchivo = $"{rucEmpresa}-01-{factura.Serie!.Trim()}-{nroFormato}.pdf";
+            var tipoDocPdf    = (factura.Tipodoc ?? string.Empty).Trim().PadLeft(2, '0');
+            var nombreArchivo = $"{rucEmpresa}-{tipoDocPdf}-{factura.Serie!.Trim()}-{nroFormato}.pdf";
 
             var rutaPdf = !string.IsNullOrEmpty(rutaProv)
                 ? Path.Combine(rutaProv, fecha.ToString("yyyyMMdd"), nombreArchivo)

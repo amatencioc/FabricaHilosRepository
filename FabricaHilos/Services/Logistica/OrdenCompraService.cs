@@ -1299,10 +1299,13 @@ END;";
                 if (await r.ReadAsync())
                 {
                     codGenerado = GetStr(r, "C_CODIGO");
-                    codAprobado = "034001"; // C_GERENTE — aprobador fijo definido en PKG_REG_ORDEN_COMPRA
-                    fechaDoc    = GetDt(r, "FECHA");
                     aprobGer    = GetStr(r, "APROB_GERENCIA");
                     fAprobGer   = GetDt(r, "F_APROB_GER");
+                    fechaDoc    = GetDt(r, "FECHA");
+                    // Solo cargar firma de gerencia si APROB_GERENCIA = 'S'
+                    codAprobado = string.Equals(aprobGer, "S", StringComparison.OrdinalIgnoreCase)
+                        ? "034001" // C_GERENTE — aprobador fijo definido en PKG_REG_ORDEN_COMPRA
+                        : null;
                 }
             }
 

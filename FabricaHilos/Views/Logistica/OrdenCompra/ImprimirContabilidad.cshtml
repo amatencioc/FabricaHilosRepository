@@ -19,7 +19,7 @@
     var monedaSimb    = (oc.Moneda ?? "").ToUpper() == "D" ? "$" : "S/";
     var tipoLabel     = oc.TipoDocto == "83" ? "ORDEN DE SERVICIO" : "ORDEN DE COMPRA";
     var tipoCorto     = oc.TipoDocto == "83" ? "O/S" : "O/C";
-    var numDoc        = $"{oc.Serie:D3}-{oc.NumPed:D8}";
+    var numDoc        = $"{oc.NumPed:D8}";
 
     var empresaNombre    = ViewBag.EmpresaNombre    as string ?? "FÁBRICA DE HILOS S.A.";
     var empresaRuc       = ViewBag.EmpresaRuc       as string ?? "";
