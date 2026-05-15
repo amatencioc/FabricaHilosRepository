@@ -119,7 +119,10 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
         - p_fecha_he_fin      'dd/MM/yyyy' fin del rango para buscar dias con HE.
                               NULL = usa p_fecha_fin (mismo rango que DDC).
 
-        CURSOR resultado (una fila por empleado+dia con HE o candidato DDC):
+        - p_solo_ddc        'S' (default) = solo devuelve filas DDC y BLOQ_LOGIX (vista inicial).
+                              'N'           = devuelve todos los tipos (HE, DDC, BLOQ_LOGIX, DESCANSO).
+
+        CURSOR resultado (una fila por empleado+dia):
           cod_personal, nombre_completo,
           fechamar, fechamar_str, dia_semana,
           tipo_dia     ('HE'=dia con HE | 'DDC'=candidato DDC | 'DESCANSO' | 'BLOQ_LOGIX'=DDC bloqueado por evento en LOGIX)
@@ -127,6 +130,7 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
           min_falta, horas_falta        (0 si no es candidato DDC)
           alerta02, alerta06, descanso,
           ya_compensado  ('S'/'N': si ya existe comp DDC para ese dia)
+          desc_alerta06  descripcion textual de alerta06 (NULL si no aplica)
     ***************************************************************************/
     PROCEDURE LISTAR_DDC_RANGO(
         p_cod_empresa      IN VARCHAR2,
@@ -135,6 +139,38 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
         p_nombre           IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        p_solo_ddc         IN VARCHAR2 DEFAULT 'S',
+        cv_resultado       OUT SYS_REFCURSOR
+    );
+
+    /***************************************************************************
+        LISTAR_HE_PERSONAL
+        Solo lectura. Devuelve los dias con HE disponibles de un empleado
+        especifico en el rango de fechas HE indicado.
+        Llamar al hacer click en un empleado en la vista DDC para expandir
+        los dias HE que pueden financiar la compensacion.
+
+        PARAMETROS:
+        - p_cod_empresa       Empresa
+        - p_cod_personal      Empleado especifico
+        - p_fecha_he_inicio   'dd/MM/yyyy' inicio del rango HE
+        - p_fecha_he_fin      'dd/MM/yyyy' fin del rango HE
+
+        CURSOR resultado (mismas columnas que LISTAR_DDC_RANGO, tipo_dia='HE'):
+          cod_personal, nombre_completo,
+          fechamar, fechamar_str, dia_semana,
+          tipo_dia     siempre 'HE'
+          min_he, horas_he
+          min_falta (siempre 0), horas_falta (NULL)
+          alerta02, alerta06, descanso, nummarcaciones,
+          ya_compensado (siempre 'N'), logix_* (siempre NULL)
+          desc_alerta06 descripcion textual de alerta06
+    ***************************************************************************/
+    PROCEDURE LISTAR_HE_PERSONAL(
+        p_cod_empresa      IN VARCHAR2,
+        p_cod_personal     IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2,
+        p_fecha_he_fin     IN VARCHAR2,
         cv_resultado       OUT SYS_REFCURSOR
     );
 
@@ -145,10 +181,12 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
         si hay advertencia de redondeo y si la compensacion seria parcial.
 
         PARAMETROS:
-        - p_cod_empresa     Empresa
-        - p_fecha_inicio    'dd/MM/yyyy'
-        - p_fecha_fin       'dd/MM/yyyy'
-        - p_lista_personal  'cod1,cod2,...' OBLIGATORIO
+        - p_cod_empresa       Empresa
+        - p_fecha_inicio      'dd/MM/yyyy' inicio rango DDC
+        - p_fecha_fin         'dd/MM/yyyy' fin rango DDC
+        - p_lista_personal    'cod1,cod2,...' OBLIGATORIO
+        - p_fecha_he_inicio   'dd/MM/yyyy' inicio rango HE (NULL = igual al rango DDC)
+        - p_fecha_he_fin      'dd/MM/yyyy' fin rango HE    (NULL = igual al rango DDC)
 
         CURSOR resultado (una fila por DDC por empleado):
           cod_personal, nombre_completo,
@@ -160,11 +198,13 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
           estado   ('OK'|'PARCIAL'|'SIN_HE'|'ADVERTENCIA_REDONDEO')
     ***************************************************************************/
     PROCEDURE CALCULAR_DDC(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_lista_personal IN VARCHAR2,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_lista_personal   IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -181,10 +221,12 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
           5. Guarda en GGT (una fila por DDC con resumen)
 
         PARAMETROS:
-        - p_cod_empresa     Empresa
-        - p_fecha_inicio    'dd/MM/yyyy'
-        - p_fecha_fin       'dd/MM/yyyy'
-        - p_lista_personal  'cod1,cod2,...' OBLIGATORIO
+        - p_cod_empresa       Empresa
+        - p_fecha_inicio      'dd/MM/yyyy' inicio rango DDC
+        - p_fecha_fin         'dd/MM/yyyy' fin rango DDC
+        - p_lista_personal    'cod1,cod2,...' OBLIGATORIO
+        - p_fecha_he_inicio   'dd/MM/yyyy' inicio rango HE (NULL = igual al rango DDC)
+        - p_fecha_he_fin      'dd/MM/yyyy' fin rango HE    (NULL = igual al rango DDC)
 
         CURSOR resultado (una fila por DDC procesado):
           id_evento, cod_personal, nombre_completo,
@@ -195,11 +237,13 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
           estado, motivo
     ***************************************************************************/
     PROCEDURE REGISTRAR_DDC_MASIVO(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_lista_personal IN VARCHAR2,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_lista_personal   IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -252,6 +296,17 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
     ***************************************************************************/
     PROCEDURE CONSULTAR_EVENTO_DDC(
         p_id_evento  IN NUMBER,
+        cv_resultado OUT SYS_REFCURSOR
+    );
+
+    /***************************************************************************
+        CONSULTAR_COMP_DDC
+        Devuelve la fila de SCA_COMPENSACION correspondiente a un id_compen
+        especifico. Se usa desde el historial cuando el usuario hace clic en
+        el detalle de una fila individual (no del evento completo).
+    ***************************************************************************/
+    PROCEDURE CONSULTAR_COMP_DDC(
+        p_id_compen  IN NUMBER,
         cv_resultado OUT SYS_REFCURSOR
     );
 
@@ -666,6 +721,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
         p_nombre           IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        p_solo_ddc         IN VARCHAR2 DEFAULT 'S',
         cv_resultado       OUT SYS_REFCURSOR
     ) AS
         v_fec_ini    DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
@@ -758,6 +814,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                 AND    t.fechamar BETWEEN v_fec_he_ini AND v_fec_he_fin
                 AND    t.horaextra_ajus > c_BASE_DATE
                 AND    NVL(t.descanso,'N') = 'N'
+                AND    p_solo_ddc = 'N'   -- solo se incluye si el caller pide todos los tipos
                 AND    EXISTS (
                            SELECT 1 FROM tareo_cands tc
                            WHERE  tc.cod_empresa  = t.cod_empresa
@@ -817,6 +874,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                 WHERE  t.cod_empresa = p_cod_empresa
                 AND    t.fechamar BETWEEN v_fec_ini AND v_fec_fin
                 AND    NVL(t.descanso,'N') = 'S'
+                AND    p_solo_ddc = 'N'   -- solo se incluye si el caller pide todos los tipos
             )
             SELECT
                 d.cod_personal,
@@ -852,7 +910,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                 d.logix_cmotivo,
                 d.logix_dinicio,
                 d.logix_dfinal,
-                d.logix_desc_motivo
+                d.logix_desc_motivo,
+                -- Descripcion textual de alerta06 (util para filas HE con p_solo_ddc='N')
+                CASE d.alerta06
+                    WHEN 'EN' THEN 'Normal (HE dentro de razonabilidad)'
+                    WHEN 'EE' THEN 'Excede razonabilidad'
+                    WHEN 'EC' THEN 'HE compensadas/consumidas'
+                    ELSE NULL
+                END AS desc_alerta06
             FROM dias d
             JOIN PLA_PERSONAL p
                  ON  p.cod_empresa  = d.cod_empresa
@@ -870,14 +935,22 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
     -- CALCULAR_DDC  (solo lectura, simula distribucion)
     -- =========================================================================
     PROCEDURE CALCULAR_DDC(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_lista_personal IN VARCHAR2,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_lista_personal   IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     ) AS
-        v_fec_ini   DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
-        v_fec_fin   DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        v_fec_ini    DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
+        v_fec_fin    DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        -- Rango independiente para buscar dias con HE disponibles.
+        -- NULL = usa el mismo rango que los candidatos DDC.
+        v_fec_he_ini DATE := NVL(TO_DATE(p_fecha_he_inicio, 'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_inicio,    'dd/MM/yyyy'));
+        v_fec_he_fin DATE := NVL(TO_DATE(p_fecha_he_fin,    'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_fin,       'dd/MM/yyyy'));
         v_dias_he   t_lista;
         v_dias_ddc  t_lista;
         v_i_cur     PLS_INTEGER;
@@ -911,8 +984,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
             ORDER  BY p.cod_personal
         ) LOOP
             -- Cargar dias HE y DDC en memoria
-            prv_cargar_he (p_cod_empresa, e.cod_personal, v_fec_ini, v_fec_fin, v_dias_he);
-            prv_cargar_ddc(p_cod_empresa, e.cod_personal, v_fec_ini, v_fec_fin, v_dias_ddc);
+            prv_cargar_he (p_cod_empresa, e.cod_personal, v_fec_he_ini, v_fec_he_fin, v_dias_he);
+            prv_cargar_ddc(p_cod_empresa, e.cod_personal, v_fec_ini,    v_fec_fin,    v_dias_ddc);
 
             -- Total HE disponibles en el rango
             v_total_he := 0;
@@ -1019,14 +1092,22 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
     -- REGISTRAR_DDC_MASIVO
     -- =========================================================================
     PROCEDURE REGISTRAR_DDC_MASIVO(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_lista_personal IN VARCHAR2,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_lista_personal   IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     ) AS
-        v_fec_ini   DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
-        v_fec_fin   DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        v_fec_ini    DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
+        v_fec_fin    DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        -- Rango independiente para buscar dias con HE disponibles.
+        -- NULL = usa el mismo rango que los candidatos DDC.
+        v_fec_he_ini DATE := NVL(TO_DATE(p_fecha_he_inicio, 'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_inicio,    'dd/MM/yyyy'));
+        v_fec_he_fin DATE := NVL(TO_DATE(p_fecha_he_fin,    'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_fin,       'dd/MM/yyyy'));
         v_dias_he   t_lista;
         v_dias_ddc  t_lista;
         v_id_evento NUMBER;
@@ -1061,8 +1142,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
         ) LOOP
             BEGIN
                 -- Cargar listas en memoria para este empleado
-                prv_cargar_he (p_cod_empresa, e.cod_personal, v_fec_ini, v_fec_fin, v_dias_he);
-                prv_cargar_ddc(p_cod_empresa, e.cod_personal, v_fec_ini, v_fec_fin, v_dias_ddc);
+                prv_cargar_he (p_cod_empresa, e.cod_personal, v_fec_he_ini, v_fec_he_fin, v_dias_he);
+                prv_cargar_ddc(p_cod_empresa, e.cod_personal, v_fec_ini,    v_fec_fin,    v_dias_ddc);
 
                 -- Total HE disponibles
                 v_total_he := 0;
@@ -1086,8 +1167,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                     BEGIN
                         IF v_total_he = 0 THEN
                             v_estado := 'SIN_HE';
-                            v_motivo := 'Sin horaextra_ajus en rango '
-                                        ||p_fecha_inicio||' a '||p_fecha_fin;
+                            v_motivo := 'Sin horaextra_ajus en rango HE '
+                                        ||NVL(p_fecha_he_inicio, p_fecha_inicio)
+                                        ||' a '||NVL(p_fecha_he_fin, p_fecha_fin);
                         ELSE
                             -- Consumir HE disponibles para este DDC
                             WHILE v_falt_rest > 0 AND v_i_cur <= v_dias_he.COUNT LOOP
@@ -1361,7 +1443,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
             AND    c.aux1 LIKE 'D%'
             AND    c.cod_empresa  LIKE v_emp
             AND    c.cod_personal LIKE v_per
-            AND    c.fechaorigen BETWEEN v_fec_ini AND v_fec_fin
+            AND    c.fechadestino BETWEEN v_fec_ini AND v_fec_fin
             ORDER  BY c.fechadestino DESC, c.cod_personal, c.fechaorigen;
     END CONSULTAR_RANGO_DDC;
 
@@ -1408,6 +1490,121 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
             AND    c.aux1             = 'D'||TO_CHAR(p_id_evento)
             ORDER  BY c.cod_personal, c.fechadestino, c.fechaorigen;
     END CONSULTAR_EVENTO_DDC;
+
+    -- =========================================================================
+    -- CONSULTAR_COMP_DDC
+    -- =========================================================================
+    PROCEDURE CONSULTAR_COMP_DDC(
+        p_id_compen  IN NUMBER,
+        cv_resultado OUT SYS_REFCURSOR
+    ) AS
+    BEGIN
+        OPEN cv_resultado FOR
+            SELECT
+                c.id_compen,
+                c.cod_empresa,
+                c.cod_personal,
+                p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo,
+                TO_CHAR(c.fechaorigen,'DD/MM/YYYY')  AS fechaorigen_str,
+                TO_CHAR(c.fechadestino,'DD/MM/YYYY') AS fechadestino_str,
+                c.tipocompensacion,
+                c.tiempo AS tiempo_min,
+                SUBSTR('00'||TO_CHAR(TRUNC(c.tiempo/60)),-2,2)
+                  ||':'||SUBSTR('00'||TO_CHAR(MOD(c.tiempo,60)),-2,2) AS tiempo_hhmi,
+                -- ID del evento al que pertenece (util para mostrar en UI)
+                TO_NUMBER(SUBSTR(c.aux1, 2)) AS id_evento,
+                -- Estado actual tareo
+                tori.alerta06  AS ori_alerta06,
+                TO_CHAR(NVL(tori.horaextra_ajus, c_BASE_DATE),'HH24:MI') AS ori_he_actual,
+                tdes.alerta02  AS dest_alerta02,
+                TO_CHAR(NVL(tdes.horas_falta, c_BASE_DATE),'HH24:MI')    AS dest_falta_actual,
+                TO_CHAR(NVL(tdes.horaefectiva, c_BASE_DATE),'HH24:MI')   AS dest_hefec_actual
+            FROM   SCA_COMPENSACION c
+            JOIN   PLA_PERSONAL p
+                   ON  p.cod_empresa  = c.cod_empresa
+                   AND p.cod_personal = c.cod_personal
+            LEFT JOIN SCA_ASISTENCIA_TAREO tori
+                   ON  tori.cod_empresa  = c.cod_empresa
+                   AND tori.cod_personal = c.cod_personal
+                   AND tori.fechamar     = c.fechaorigen
+            LEFT JOIN SCA_ASISTENCIA_TAREO tdes
+                   ON  tdes.cod_empresa  = c.cod_empresa
+                   AND tdes.cod_personal = c.cod_personal
+                   AND tdes.fechamar     = c.fechadestino
+            WHERE  c.id_compen        = p_id_compen
+            AND    c.tipoorigen       = 'E'
+            AND    c.tipocompensacion = 'F'
+            AND    c.aux1 LIKE 'D%';
+    END CONSULTAR_COMP_DDC;
+
+    -- =========================================================================
+    -- LISTAR_HE_PERSONAL
+    -- Devuelve solo los dias con HE de un empleado especifico en el rango.
+    -- Llamar al hacer click en un empleado en la vista DDC (p_solo_ddc='S').
+    -- Mismas columnas que LISTAR_DDC_RANGO para compatibilidad con el grid .NET.
+    -- =========================================================================
+    PROCEDURE LISTAR_HE_PERSONAL(
+        p_cod_empresa      IN VARCHAR2,
+        p_cod_personal     IN VARCHAR2,
+        p_fecha_he_inicio  IN VARCHAR2,
+        p_fecha_he_fin     IN VARCHAR2,
+        cv_resultado       OUT SYS_REFCURSOR
+    ) AS
+        v_fec_he_ini DATE := TO_DATE(p_fecha_he_inicio, 'dd/MM/yyyy');
+        v_fec_he_fin DATE := TO_DATE(p_fecha_he_fin,    'dd/MM/yyyy');
+    BEGIN
+        OPEN cv_resultado FOR
+            SELECT
+                t.cod_personal,
+                ft.num_fotocheck,
+                p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo,
+                t.fechamar,
+                TO_CHAR(t.fechamar,'DD/MM/YYYY')                          AS fechamar_str,
+                TO_CHAR(t.fechamar,'DY','NLS_DATE_LANGUAGE=SPANISH')      AS dia_semana,
+                'HE'                                                      AS tipo_dia,
+                ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440) AS min_he,
+                CASE WHEN ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440) > 0
+                     THEN TO_CHAR(TRUNC(ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440)/60),'FM00')
+                          ||':'||
+                          TO_CHAR(MOD(ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440),60),'FM00')
+                     ELSE NULL END                                        AS horas_he,
+                0                                                         AS min_falta,
+                NULL                                                      AS horas_falta,
+                t.alerta02,
+                t.alerta06,
+                NVL(t.descanso,'N')                                       AS descanso,
+                t.nummarcaciones,
+                'N'                                                       AS ya_compensado,
+                NULL                                                      AS logix_cmotivo,
+                NULL                                                      AS logix_dinicio,
+                NULL                                                      AS logix_dfinal,
+                NULL                                                      AS logix_desc_motivo,
+                CASE t.alerta06
+                    WHEN 'EN' THEN 'Normal (HE dentro de razonabilidad)'
+                    WHEN 'EE' THEN 'Excede razonabilidad'
+                    WHEN 'EC' THEN 'HE compensadas/consumidas'
+                    ELSE NULL
+                END                                                       AS desc_alerta06
+            FROM   SCA_ASISTENCIA_TAREO t
+            JOIN   PLA_PERSONAL p
+                   ON  p.cod_empresa  = t.cod_empresa
+                   AND p.cod_personal = t.cod_personal
+            LEFT JOIN (
+                SELECT cod_empresa, cod_personal,
+                       MAX(num_fotocheck)
+                           KEEP (DENSE_RANK LAST ORDER BY id_fotocheck) AS num_fotocheck
+                FROM   SCA_FOTOCHECK
+                WHERE  cod_empresa  = p_cod_empresa
+                AND    cod_personal = p_cod_personal
+                GROUP  BY cod_empresa, cod_personal
+            ) ft ON ft.cod_empresa = t.cod_empresa AND ft.cod_personal = t.cod_personal
+            WHERE  t.cod_empresa  = p_cod_empresa
+            AND    t.cod_personal = p_cod_personal
+            AND    t.fechamar     BETWEEN v_fec_he_ini AND v_fec_he_fin
+            AND    t.horaextra_ajus > c_BASE_DATE
+            AND    NVL(t.descanso,'N') = 'N'
+            ORDER  BY t.fechamar;
+    END LISTAR_HE_PERSONAL;
 
 END PKG_SCA_COMP_DDC;
 /

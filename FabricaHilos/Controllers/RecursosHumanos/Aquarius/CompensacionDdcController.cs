@@ -47,7 +47,8 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     fechaFin,
                     string.IsNullOrWhiteSpace(nombre) ? null : nombre,
                     string.IsNullOrWhiteSpace(fechaHeInicio) ? null : fechaHeInicio,
-                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin);
+                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin,
+                    soloDdc: true);
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -58,13 +59,40 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             }
         }
 
+        // ── LISTAR HE DE UN EMPLEADO (GET, devuelve JSON) ─────────────────────
+
+        [HttpGet("ListarHe")]
+        public async Task<IActionResult> ListarHe(
+            string codPersonal,
+            string fechaHeInicio,
+            string fechaHeFin)
+        {
+            try
+            {
+                var resultado = await _service.ListarHePersonalAsync(
+                    CodEmpresaAquarius,
+                    codPersonal,
+                    fechaHeInicio,
+                    fechaHeFin);
+
+                return Json(new { ok = true, data = resultado });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ListarHe cod={Cod}", codPersonal);
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
         // ── CALCULAR DDC PREVIEW (POST, devuelve JSON) ────────────────────────
 
         [HttpPost("Calcular")]
         public async Task<IActionResult> Calcular(
             string fechaInicio,
             string fechaFin,
-            string listaPersonal)
+            string listaPersonal,
+            string? fechaHeInicio = null,
+            string? fechaHeFin = null)
         {
             try
             {
@@ -72,7 +100,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     CodEmpresaAquarius,
                     fechaInicio,
                     fechaFin,
-                    listaPersonal);
+                    listaPersonal,
+                    string.IsNullOrWhiteSpace(fechaHeInicio) ? null : fechaHeInicio,
+                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin);
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -94,7 +124,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> RegistrarMasivo(
             string fechaInicio,
             string fechaFin,
-            string listaPersonal)
+            string listaPersonal,
+            string? fechaHeInicio = null,
+            string? fechaHeFin = null)
         {
             try
             {
@@ -102,7 +134,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     CodEmpresaAquarius,
                     fechaInicio,
                     fechaFin,
-                    listaPersonal);
+                    listaPersonal,
+                    string.IsNullOrWhiteSpace(fechaHeInicio) ? null : fechaHeInicio,
+                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin);
 
                 return Json(new { ok = true, data = resultado });
             }
@@ -170,6 +204,23 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en ConsultarEvento DDC id={Id}", idEvento);
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // ── CONSULTAR COMP (GET, devuelve JSON) ───────────────────────────────
+
+        [HttpGet("ConsultarComp")]
+        public async Task<IActionResult> ConsultarComp(long idCompen)
+        {
+            try
+            {
+                var resultado = await _service.ConsultarCompDdcAsync(idCompen);
+                return Json(new { ok = true, data = resultado });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ConsultarComp DDC id={Id}", idCompen);
                 return Json(new { ok = false, error = ex.Message });
             }
         }

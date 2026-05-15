@@ -144,16 +144,17 @@
                         <label class="form-label small text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Rango HE <small class="fw-normal">(opcional, por defecto igual al rango)</small></label>
                     </div>
                     <div class="col-sm-6 col-md-2">
-                        <input type="date" id="rangoHeDesde" class="form-control form-control-sm" value="@_desde" />
+                        <input type="date" id="rangoHeDesde" class="form-control form-control-sm" value="@_mesInicio" />
                     </div>
                     <div class="col-sm-6 col-md-2">
-                        <input type="date" id="rangoHeHasta" class="form-control form-control-sm" value="@_hasta" />
+                        <input type="date" id="rangoHeHasta" class="form-control form-control-sm" value="@_mesFin" />
                     </div>
                 </div>
                 <div class="rounded mt-3 py-2 px-3 small" style="background:var(--aq-ilt);color:var(--aq-info);border:1px solid #d8d0ef;">
                     <i class="bi bi-info-circle me-1"></i>
-                    Se muestran los días con <strong>HE disponibles</strong> y los <strong>días DDC</strong> (falta total sin ausencia formal) para cada empleado en el rango.
-                    Seleccione los empleados que desea compensar y haga clic en <em>Calcular Seleccionados</em>.
+                    Se muestran los <strong>días DDC candidatos</strong> (falta total sin ausencia formal) de cada empleado en el rango.
+                    Haga clic en <em><i class="bi bi-clock-history"></i> Ver HE</em> en la fila del empleado para consultar sus horas extra disponibles.
+                    Luego seleccione los empleados y haga clic en <em>Calcular Seleccionados</em>.
                 </div>
             </div>
         </div>
@@ -161,7 +162,7 @@
         <!-- ── PASO 2: Días del rango con checkboxes ── -->
         <div id="areaRango" class="section-card">
             <div class="section-card-header">
-                <span class="step-badge">2</span> Días del rango — HE disponibles y DDC candidatos
+                <span class="step-badge">2</span> Días DDC candidatos
                 <span id="lblRangoInfo" class="ms-auto text-muted fw-normal small"></span>
             </div>
             <div class="p-0">
@@ -178,10 +179,10 @@
                                 <th>Fecha</th>
                                 <th>Día</th>
                                 <th>Tipo</th>
-                                <th class="text-end">HH. Extra Disp.</th>
                                 <th class="text-end">HH. Falta (DDC)</th>
                                 <th class="text-center">Marc.</th>
                                 <th>Ya Comp.</th>
+                                <th class="text-center">HE disponibles</th>
                             </tr>
                         </thead>
                         <tbody id="bodyRango"></tbody>
@@ -346,6 +347,34 @@
     </div>
 </div>
 
+<!-- ── Modal HE disponibles por empleado ──────────────────────────────── -->
+<div class="modal" id="modalHe" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header aq-modal-header py-2">
+                <h6 class="modal-title" id="modalHeTitulo"><i class="bi bi-clock-history me-2"></i>HE disponibles</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <!-- Barra de rango rebuscable dentro del modal -->
+            <div class="px-3 pt-2 pb-1 border-bottom bg-light d-flex align-items-center gap-2 flex-wrap">
+                <span class="small text-muted">Rango HE:</span>
+                <input type="date" id="heModalDesde" class="form-control form-control-sm" style="width:140px;" />
+                <span class="small text-muted">—</span>
+                <input type="date" id="heModalHasta" class="form-control form-control-sm" style="width:140px;" />
+                <button id="btnHeModalBuscar" class="btn btn-sm" style="background:var(--aq);color:#fff;border-color:var(--aq);">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+            <div class="modal-body p-2" id="modalHeBody">
+                <div class="text-center py-4"><div class="spinner-border" style="color:var(--aq-mid)"></div></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Modal genérico (alertas / confirmaciones) ──────────────────────── -->
 <div class="modal fade" id="modalMsg" tabindex="-1">
     <div class="modal-dialog">
@@ -405,7 +434,8 @@ let rangoData     = [];   // todos los datos cargados del servidor
 let rangoDataFilt = [];   // después de sort/filter
 let previewData   = [];
 let txAbierta     = false;
-let seleccionCods = new Set();
+let seleccionCods = new Set();  // codPersonal únicos (para el backend)
+let seleccionDias = new Set();  // "codPersonal|fecha" individuales (para filtrar preview)
 let _lastIdEvento = null;
 
 // paginación cliente
@@ -550,6 +580,7 @@ async function buscarRango() {
     if (!desde || !hasta) { await msgModal('Aviso', '<p>Ingrese el rango de fechas.</p>'); return; }
 
     seleccionCods = new Set();
+    seleccionDias = new Set();
     setBusy('btnBuscarRango', true, 'Buscando...');
 
     try {
@@ -564,16 +595,72 @@ async function buscarRango() {
         const json = await res.json();
         if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
         rangoData = json.data ?? [];
+        // Resetear bloqueo de ciclos anteriores
+        rangoData.forEach(r => { delete r._sinHeBloq; });
         _sortBy = 'nombre'; _sortDir = 'asc';
         actualizarIconosSort();
         aplicarSortYPaginar();
         document.getElementById('areaRango').style.display = 'block';
         document.getElementById('areaPreview').style.display = 'none';
         document.getElementById('areaResultados').style.display = 'none';
+        // Verificar en background qué empleados NO tienen HE y pre-deshabilitar
+        const codsUnicos = [...new Set(rangoData.map(r => r.codPersonal).filter(Boolean))];
+        verificarHeEnBackground(codsUnicos);
     } catch (e) {
         await msgModal('Error de red', `<p>${e.message}</p>`);
     } finally {
         setBusy('btnBuscarRango', false, '<i class="bi bi-search me-1"></i>Buscar');
+    }
+}
+
+// Verifica en paralelo qué empleados tienen HE disponibles.
+// Los que no tienen ninguna HE quedan bloqueados (no seleccionables) en el paso 2.
+async function verificarHeEnBackground(codsUnicos) {
+    const heDesde = document.getElementById('rangoHeDesde').value;
+    const heHasta = document.getElementById('rangoHeHasta').value;
+    if (!heDesde || !heHasta || !codsUnicos.length) return;
+
+    // Solo verificar empleados cuyas filas son DDC y no están ya compensadas
+    const codsDdc = codsUnicos.filter(cod =>
+        rangoData.some(r => r.codPersonal === cod && r.tipoDia === 'DDC' && r.yaCompensado !== 'S')
+    );
+    if (!codsDdc.length) return;
+
+    // Consultar HE de todos en paralelo
+    const resultados = await Promise.allSettled(
+        codsDdc.map(cod => {
+            const params = new URLSearchParams({
+                codPersonal:   cod,
+                fechaHeInicio: isoADdMmYyyy(heDesde),
+                fechaHeFin:    isoADdMmYyyy(heHasta),
+            });
+            return fetch(`${URL_BASE}/ListarHe?${params}`)
+                .then(r => r.json())
+                .then(json => ({ cod, tieneHe: json.ok && (json.data ?? []).length > 0 }));
+        })
+    );
+
+    let huboBloqueo = false;
+    resultados.forEach(result => {
+        if (result.status !== 'fulfilled') return;
+        const { cod, tieneHe } = result.value;
+        if (!tieneHe) {
+            rangoData.forEach(r => { if (r.codPersonal === cod) r._sinHeBloq = true; });
+            seleccionCods.delete(cod);
+            seleccionDias.forEach(k => { if (k.startsWith(cod + '|')) seleccionDias.delete(k); });
+            huboBloqueo = true;
+        }
+    });
+
+    if (huboBloqueo) {
+        rangoDataFilt = [...rangoData].sort((a, b) => {
+            let va = '', vb = '';
+            if (_sortBy === 'fotocheck') { va = a.numFotocheck ?? ''; vb = b.numFotocheck ?? ''; }
+            else                         { va = a.nombreCompleto ?? ''; vb = b.nombreCompleto ?? ''; }
+            return _sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+        renderPagina();
+        actualizarConteoRango();
     }
 }
 
@@ -590,15 +677,14 @@ function renderRangoFilas(data) {
     tbody.innerHTML = '';
 
     if (!rangoDataFilt.length) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">
-            Sin días DDC ni HE disponibles en el rango indicado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted py-3">
+            Sin días DDC en el rango indicado.</td></tr>`;
         actualizarConteoRango();
         return;
     }
 
     data.forEach(r => {
         const esDdc  = r.tipoDia === 'DDC';
-        const esHe   = r.tipoDia === 'HE';
         const esBloq = r.tipoDia === 'BLOQ_LOGIX';
         const yaComp = r.yaCompensado === 'S';
 
@@ -611,28 +697,29 @@ function renderRangoFilas(data) {
             : '';
         const tipoBadge = esDdc
             ? `<span class="badge rounded-pill badge-ddc">DDC</span>`
-            : esHe
-                ? `<span class="badge rounded-pill badge-he">HE</span>`
-                : esBloq
-                    ? `<span class="badge rounded-pill badge-bloq" title="${bloqTip}">&#x1F512; BLOQ</span>`
-                    : `<span class="badge rounded-pill" style="background:#f1f3f5;color:#6c757d;">${r.tipoDia ?? ''}</span>`;
+            : esBloq
+                ? `<span class="badge rounded-pill badge-bloq" title="${bloqTip}">&#x1F512; BLOQ</span>`
+                : `<span class="badge rounded-pill" style="background:#f1f3f5;color:#6c757d;">${r.tipoDia ?? ''}</span>`;
 
-        const heCell    = r.minHe    > 0 ? `<span class="badge rounded-pill badge-he">${r.horasHe}</span>` : '<span class="text-muted">—</span>';
         const faltaCell = r.minFalta > 0 ? `<span class="badge rounded-pill badge-ddc">${r.horasFalta}</span>` : '<span class="text-muted">—</span>';
         const yaCell    = yaComp ? `<span class="badge rounded-pill badge-ok">✓ Sí</span>` : '<span class="text-muted">—</span>';
         const marcCell  = (r.numMarcaciones ?? 0) > 0
             ? `<span class="badge" style="background:#f1f3f5;color:#495057;">${r.numMarcaciones}</span>`
             : '<span class="text-muted">—</span>';
 
-        const puedeMarcar = esDdc && !yaComp;
-        const isChecked   = seleccionCods.has(r.codPersonal ?? '');
+        const puedeMarcar = esDdc && !yaComp && !r._sinHeBloq;
+        const diaKey      = (r.codPersonal ?? '') + '|' + (r.fechamarStr ?? '');
+        const isChecked   = seleccionDias.has(diaKey) && puedeMarcar;
+        const chkTitle    = r._sinHeBloq ? 'Sin HE disponibles en el rango seleccionado' : '';
         tbody.insertAdjacentHTML('beforeend', `
           <tr class="${!puedeMarcar ? 'text-muted' : ''}">
             <td>
               <input type="checkbox" class="form-check-input chk-rango"
                      data-cod="${r.codPersonal ?? ''}"
+                     data-fecha="${r.fechamarStr ?? ''}"
                      ${!puedeMarcar ? 'disabled' : ''}
-                     ${isChecked && puedeMarcar ? 'checked' : ''}
+                     ${isChecked ? 'checked' : ''}
+                     title="${chkTitle}"
                      onchange="onCheckRango(this)" />
             </td>
             <td>${r.numFotocheck ?? ''}</td>
@@ -640,10 +727,17 @@ function renderRangoFilas(data) {
             <td><span class="badge" style="background:var(--aq-lt);color:var(--aq-dk);">${r.fechamarStr ?? ''}</span></td>
             <td><span class="badge" style="background:#f1f3f5;color:#495057;">${r.diaSemana ?? ''}</span></td>
             <td>${tipoBadge}</td>
-            <td class="text-end">${heCell}</td>
             <td class="text-end">${faltaCell}</td>
             <td class="text-center">${marcCell}</td>
             <td>${yaCell}</td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                      style="font-size:.75rem;"
+                      title="Ver HE disponibles de este empleado"
+                      onclick="verHePersonal('${r.codPersonal ?? ''}','${r.nombreCompleto ?? ''}')">
+                <i class="bi bi-clock-history me-1"></i>Ver HE
+              </button>
+            </td>
           </tr>`);
     });
 
@@ -651,8 +745,11 @@ function renderRangoFilas(data) {
 }
 
 function onCheckRango(chk) {
-    if (chk.checked) seleccionCods.add(chk.dataset.cod);
-    else             seleccionCods.delete(chk.dataset.cod);
+    const key = chk.dataset.cod + '|' + chk.dataset.fecha;
+    if (chk.checked) seleccionDias.add(key);
+    else             seleccionDias.delete(key);
+    // Reconstruir seleccionCods desde seleccionDias
+    seleccionCods = new Set([...seleccionDias].map(k => k.split('|')[0]));
     actualizarConteoRango();
     sincronizarChkTodosRango();
 }
@@ -661,9 +758,11 @@ function toggleTodosRango(chk) {
     // Solo afecta la página visible
     document.querySelectorAll('.chk-rango:not(:disabled)').forEach(c => {
         c.checked = chk.checked;
-        if (chk.checked) seleccionCods.add(c.dataset.cod);
-        else             seleccionCods.delete(c.dataset.cod);
+        const key = c.dataset.cod + '|' + c.dataset.fecha;
+        if (chk.checked) seleccionDias.add(key);
+        else             seleccionDias.delete(key);
     });
+    seleccionCods = new Set([...seleccionDias].map(k => k.split('|')[0]));
     actualizarConteoRango();
 }
 
@@ -676,21 +775,102 @@ function sincronizarChkTodosRango() {
 }
 
 function actualizarConteoRango() {
-    const total    = document.querySelectorAll('.chk-rango').length;
-    const marcados = seleccionCods.size;
+    const marcados = seleccionDias.size;
     document.getElementById('lblRangoInfo').textContent = `${rangoDataFilt.length} fila(s)`;
     document.getElementById('lblSeleccionRango').textContent =
-        marcados > 0 ? `${marcados} empleado(s) seleccionado(s)` : 'Seleccione al menos un empleado con DDC';
+        marcados > 0 ? `${marcados} día(s) DDC seleccionado(s)` : 'Seleccione al menos un día DDC';
     document.getElementById('btnCalcularSeleccion').disabled = marcados === 0;
     sincronizarChkTodosRango();
+}
+
+// ── Ver HE de un empleado (click en botón Ver HE) ────────────────────────
+
+async function verHePersonal(codPersonal, nombreCompleto) {
+    const heDesde = document.getElementById('rangoHeDesde').value || document.getElementById('rangoDesde').value;
+    const heHasta = document.getElementById('rangoHeHasta').value || document.getElementById('rangoHasta').value;
+
+    if (!heDesde || !heHasta) {
+        await msgModal('Aviso', '<p>Ingrese el rango de fechas (Paso 1) antes de consultar las HE.</p>');
+        return;
+    }
+
+    document.getElementById('modalHeTitulo').textContent = `HE disponibles — ${nombreCompleto}`;
+    document.getElementById('heModalDesde').value = heDesde;
+    document.getElementById('heModalHasta').value = heHasta;
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalHe')).show();
+
+    await _cargarHeModal(codPersonal, heDesde, heHasta);
+
+    document.getElementById('btnHeModalBuscar').onclick = async () => {
+        const d = document.getElementById('heModalDesde').value;
+        const h = document.getElementById('heModalHasta').value;
+        if (!d || !h) return;
+        await _cargarHeModal(codPersonal, d, h);
+    };
+}
+
+async function _cargarHeModal(codPersonal, heDesde, heHasta) {
+    const body = document.getElementById('modalHeBody');
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq-mid)"></div></div>';
+
+    try {
+        const params = new URLSearchParams({
+            codPersonal,
+            fechaHeInicio: isoADdMmYyyy(heDesde),
+            fechaHeFin:    isoADdMmYyyy(heHasta),
+        });
+        const res  = await fetch(`${URL_BASE}/ListarHe?${params}`);
+        const json = await res.json();
+        if (!json.ok) {
+            body.innerHTML = `<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle me-1"></i>${json.error}</div>`;
+            return;
+        }
+        const rows = json.data ?? [];
+        if (!rows.length) {
+            body.innerHTML = `
+              <div class="alert alert-warning small mb-0">
+                <i class="bi bi-info-circle me-1"></i>
+                Sin días con HE disponibles en el rango
+                <strong>${isoADdMmYyyy(heDesde)} – ${isoADdMmYyyy(heHasta)}</strong>.<br>
+                Amplíe el rango de fechas HE y vuelva a buscar.
+              </div>`;
+            return;
+        }
+        let totalMin = 0;
+        let html = `<table class="table table-comp table-sm mb-0"><thead><tr>
+            <th>Fecha</th><th>Día</th><th class="text-end">HH. Extra Disp.</th>
+            <th>Alerta</th><th>Descripción</th><th class="text-center">Marc.</th></tr></thead><tbody>`;
+        rows.forEach(r => {
+            totalMin += (r.minHe ?? 0);
+            html += `<tr>
+              <td><span class="badge" style="background:var(--aq-lt);color:var(--aq-dk);">${r.fechamarStr ?? ''}</span></td>
+              <td><span class="badge" style="background:#f1f3f5;color:#495057;">${r.diaSemana ?? ''}</span></td>
+              <td class="text-end"><span class="badge rounded-pill badge-he">${r.horasHe ?? '00:00'}</span></td>
+              <td><code>${r.alerta06 ?? ''}</code></td>
+              <td class="small text-muted">${r.descAlerta06 ?? ''}</td>
+              <td class="text-center">${(r.numMarcaciones ?? 0) > 0 ? r.numMarcaciones : '—'}</td>
+            </tr>`;
+        });
+        const hhTot = Math.floor(totalMin/60).toString().padStart(2,'0') + ':' + (totalMin%60).toString().padStart(2,'0');
+        html += `</tbody><tfoot><tr class="fw-bold" style="background:#f8f9fa;">
+          <td colspan="2">Total HE disponibles</td>
+          <td class="text-end"><span class="badge rounded-pill badge-he">${hhTot}</span></td>
+          <td colspan="3"></td></tr></tfoot></table>`;
+        body.innerHTML = html;
+    } catch (e) {
+        body.innerHTML = `<div class="alert alert-danger small">${e.message}</div>`;
+    }
 }
 
 // ── PASO 2: Calcular preview ──────────────────────────────────────────────
 
 async function calcularSeleccion() {
     if (!seleccionCods.size) return;
-    const desde = document.getElementById('rangoDesde').value;
-    const hasta = document.getElementById('rangoHasta').value;
+    const desde   = document.getElementById('rangoDesde').value;
+    const hasta   = document.getElementById('rangoHasta').value;
+    const heDesde = document.getElementById('rangoHeDesde').value;
+    const heHasta = document.getElementById('rangoHeHasta').value;
 
     setBusy('btnCalcularSeleccion', true, 'Calculando...');
 
@@ -698,18 +878,63 @@ async function calcularSeleccion() {
         const params = new URLSearchParams({
             fechaInicio:   isoADdMmYyyy(desde),
             fechaFin:      isoADdMmYyyy(hasta),
-            listaPersonal: [...seleccionCods].join(',')
+            listaPersonal: [...seleccionCods].join(','),
+            ...(heDesde && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
+            ...(heHasta && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
         });
         const res  = await fetch(`${URL_BASE}/Calcular`, { method: 'POST', body: params });
         const json = await res.json();
         if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
-        previewData = json.data ?? [];
+        // Filtrar solo las filas/días seleccionados en el Paso 2
+        const todosData = json.data ?? [];
+        previewData = todosData.filter(r => seleccionDias.has((r.codPersonal ?? '') + '|' + (r.fechaDdcStr ?? '')));
         renderPreview(previewData);
+        bloquearEmpleadosSinHe(previewData);
     } catch (e) {
         await msgModal('Error de red', `<p>${e.message}</p>`);
     } finally {
         setBusy('btnCalcularSeleccion', false, '<i class="bi bi-calculator me-1"></i>Calcular Seleccionados');
     }
+}
+
+// Bloquea en el grid DDC (PASO 2) a los empleados cuyo cálculo muestra
+// únicamente días SIN_HE: deshabilita su checkbox y los quita de la selección.
+function bloquearEmpleadosSinHe(preview) {
+    if (!preview?.length) return;
+
+    // Agrupar por empleado: determinar si TODOS sus DDC son SIN_HE
+    const porPersonal = {};
+    preview.forEach(r => {
+        if (!porPersonal[r.codPersonal]) porPersonal[r.codPersonal] = { total: 0, sinHe: 0 };
+        porPersonal[r.codPersonal].total++;
+        if (r.estado === 'SIN_HE') porPersonal[r.codPersonal].sinHe++;
+    });
+
+    const sinHeTodos = new Set(
+        Object.entries(porPersonal)
+              .filter(([, v]) => v.sinHe === v.total)
+              .map(([k]) => k)
+    );
+
+    if (!sinHeTodos.size) return;
+
+    // Deshabilitar checkboxes visibles en la página actual
+    document.querySelectorAll('.chk-rango').forEach(chk => {
+        if (sinHeTodos.has(chk.dataset.cod)) {
+            chk.checked  = false;
+            chk.disabled = true;
+            chk.title    = 'Sin HE disponibles en el rango seleccionado';
+            seleccionCods.delete(chk.dataset.cod);
+            seleccionDias.forEach(k => { if (k.startsWith(chk.dataset.cod + '|')) seleccionDias.delete(k); });
+        }
+    });
+
+    // También actualizar rangoData para que al paginar se mantengan bloqueados
+    rangoData.forEach(r => {
+        if (sinHeTodos.has(r.codPersonal)) r._sinHeBloq = true;
+    });
+
+    actualizarConteoRango();
 }
 
 function renderPreview(data) {
@@ -799,10 +1024,14 @@ async function ejecutarRegistro() {
     setBusy('btnRegistrar', true, 'Registrando...');
 
     try {
+        const heDesde = document.getElementById('rangoHeDesde').value;
+        const heHasta = document.getElementById('rangoHeHasta').value;
         const params = new URLSearchParams({
             fechaInicio:   isoADdMmYyyy(desde),
             fechaFin:      isoADdMmYyyy(hasta),
-            listaPersonal: codsUnicos.join(',')
+            listaPersonal: codsUnicos.join(','),
+            ...(heDesde && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
+            ...(heHasta && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
         });
         const res  = await fetch(`${URL_BASE}/RegistrarMasivo`, { method: 'POST', body: params });
         const json = await res.json();
@@ -990,9 +1219,8 @@ function renderConsulta(data) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
     } else {
         data.forEach(r => {
-                const idEvento = r.evento ? r.evento.replace(/^D/i, '') : null;
-                const btnVer = idEvento
-                    ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstadoDdc(${idEvento})" title="Ver detalle evento ${idEvento}"><i class="bi bi-eye"></i></button>`
+                const btnVer = r.idCompen
+                    ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstadoDdc(${r.idCompen})" title="Ver detalle compensación ${r.idCompen}"><i class="bi bi-eye"></i></button>`
                     : '';
             tbody.insertAdjacentHTML('beforeend', `
               <tr>
@@ -1015,55 +1243,90 @@ async function verEstadoDdc(idCompen) {
         '<div class="text-center py-4"><div class="spinner-border" style="color:var(--aq-mid)"></div></div>';
     new bootstrap.Modal(document.getElementById('modalEstado')).show();
     try {
-        const res  = await fetch(`${URL_BASE}/ConsultarEvento?idEvento=${idCompen}`);
+        const res  = await fetch(`${URL_BASE}/ConsultarComp?idCompen=${idCompen}`);
         const json = await res.json();
-        if (!json.ok || !json.data?.length) {
+        if (!json.ok) {
             document.getElementById('modalEstadoBody').innerHTML =
-                `<div class="rounded p-3" style="background:var(--aq-elt);color:var(--aq-err);">Sin datos para este registro.</div>`;
+                `<div class="rounded p-3" style="background:var(--aq-elt);color:var(--aq-err);"><strong>Error del servidor:</strong><br>${json.error ?? 'Sin detalle'}</div>`;
             return;
         }
-        const filas = json.data;
-        const r0    = filas[0];
-        const nombre = r0.nombreCompleto ?? '';
-        let html = `<div class="row g-3 small">
-          <div class="col-12">
-            <table class="table table-sm table-borderless mb-2">
-              <tr><th class="text-muted fw-normal" style="width:130px;">Personal:</th>
-                  <td><code>${r0.codPersonal ?? ''}</code> — ${nombre}</td>
-                  <th class="text-muted fw-normal ps-3">ID Evento:</th>
-                  <td><code>${r0.idEvento ?? idCompen}</code></td></tr>
-            </table>
-          </div>
-          <div class="col-12">
-            <div class="table-responsive">
-              <table class="table table-sm table-hover table-bordered mb-0">
-                <thead style="background:var(--aq);color:#fff;">
-                  <tr><th>ID Comp.</th><th>Origen (HE)</th><th>Destino (DDC)</th>
-                      <th>Tipo</th><th class="text-end">Tiempo</th>
-                      <th>Est. Origen</th><th>Est. Destino</th></tr>
-                </thead><tbody>`;
-        filas.forEach(f => {
-            const oriEst = f.oriAlerta06 === 'EC'
-                ? `<span class="badge" style="background:var(--aq-ok);color:#fff;">EC ✔</span>`
-                : f.oriAlerta06
-                    ? `<span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${f.oriAlerta06}</span>`
-                    : '—';
-            const desEst = f.destAlerta02 === 'FC'
-                ? `<span class="badge" style="background:var(--aq-ok);color:#fff;">FC ✔</span>`
-                : f.destAlerta02 === 'FT'
-                    ? `<span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">FT ∼ Parcial</span>`
-                    : '—';
-            html += `<tr>
-              <td><code style="color:var(--aq-ok);">${f.idCompen ?? '—'}</code></td>
-              <td>${f.fechaOrigenStr ?? ''}</td>
-              <td>${f.fechaDestinoStr ?? ''}</td>
-              <td>${f.tipoCompensacion ?? ''}</td>
-              <td class="text-end fw-bold">${f.tiempoHhMi ?? '—'}</td>
-              <td>${oriEst}</td>
-              <td>${desEst}</td>
-            </tr>`;
-        });
-        html += `</tbody></table></div></div></div>`;
+        if (!json.data?.length) {
+            document.getElementById('modalEstadoBody').innerHTML =
+                `<div class="rounded p-3" style="background:var(--aq-elt);color:var(--aq-err);">Sin datos para ID Comp. <strong>${idCompen}</strong>.</div>`;
+            return;
+        }
+        const r = json.data[0];
+        const oriEst = r.oriAlerta06 === 'EC'
+            ? `<span class="badge" style="background:var(--aq-ok);color:#fff;">EC ✔ HE agotadas</span>`
+            : r.oriAlerta06
+                ? `<span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${r.oriAlerta06} — ${r.oriHeActual ?? ''}</span>`
+                : '<span class="text-muted">—</span>';
+        const desEst = r.destAlerta02 === 'FC'
+            ? `<span class="badge" style="background:var(--aq-ok);color:#fff;">FC ✔ Compensado</span>`
+            : r.destAlerta02 === 'FT'
+                ? `<span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">FT ∼ Parcial — Falta: ${r.destFaltaActual ?? ''}</span>`
+                : '<span class="text-muted">—</span>';
+        const html = `
+<div class="row g-3 small">
+  <div class="col-12">
+    <table class="table table-sm table-borderless mb-2">
+      <tbody>
+        <tr>
+          <th class="text-muted fw-normal" style="width:120px;">Personal:</th>
+          <td><code>${r.codPersonal ?? ''}</code> — ${r.nombreCompleto ?? ''}</td>
+          <th class="text-muted fw-normal ps-3" style="width:110px;">ID Comp.:</th>
+          <td><code style="color:var(--aq-ok);">${r.idCompen ?? idCompen}</code></td>
+        </tr>
+        <tr>
+          <th class="text-muted fw-normal">ID Evento:</th>
+          <td><code>${r.idEvento ?? '—'}</code></td>
+          <th class="text-muted fw-normal ps-3">Tipo Comp.:</th>
+          <td>${r.tipoCompensacion ?? '—'}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header py-1 px-2 small fw-semibold" style="background:var(--aq-wlt);color:var(--aq-warn);">Origen — Día HE</div>
+      <div class="card-body py-2 px-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Fecha:</span>
+          <span class="fw-semibold">${r.fechaOrigenStr ?? '—'}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Tiempo compensado:</span>
+          <span class="fw-bold" style="color:var(--aq-ok);">${r.tiempoHhMi ?? '—'}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">HE actual:</span>
+          <span>${r.oriHeActual ?? '—'}</span>
+        </div>
+        <div class="mt-2">${oriEst}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header py-1 px-2 small fw-semibold" style="background:var(--aq-elt);color:var(--aq-err);">Destino — Día DDC</div>
+      <div class="card-body py-2 px-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Fecha:</span>
+          <span class="fw-semibold">${r.fechaDestinoStr ?? '—'}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Falta restante:</span>
+          <span>${r.destFaltaActual ?? '—'}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Hora efectiva:</span>
+          <span>${r.destHefecActual ?? '—'}</span>
+        </div>
+        <div class="mt-2">${desEst}</div>
+      </div>
+    </div>
+  </div>
+</div>`;
         document.getElementById('modalEstadoBody').innerHTML = html;
     } catch (e) {
         document.getElementById('modalEstadoBody').innerHTML =
@@ -1092,6 +1355,7 @@ function _limpiar() {
     rangoDataFilt = [];
     previewData   = [];
     seleccionCods = new Set();
+    seleccionDias = new Set();
     _lastIdEvento = null;
     _pagActual    = 1;
     document.getElementById('areaRango').style.display      = 'none';

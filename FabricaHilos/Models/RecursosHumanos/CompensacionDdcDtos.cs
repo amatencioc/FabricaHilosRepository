@@ -24,6 +24,8 @@ public class DdcRangoFilaDto
     public string? LogixDinicio     { get; set; }  // Fecha inicio evento LOGIX (dd/MM/yyyy)
     public string? LogixDfinal      { get; set; }  // Fecha fin evento LOGIX   (dd/MM/yyyy)
     public string? LogixDescMotivo  { get; set; }  // Descripción del motivo LOGIX
+    // Disponible en LISTAR_DDC_RANGO y LISTAR_HE_PERSONAL (no nulo solo para filas tipo 'HE')
+    public string? DescAlerta06     { get; set; }  // Descripción legible de alerta06
 }
 
 // ── Resultado de CALCULAR_DDC (preview por DDC) ───────────────────────────────
@@ -106,4 +108,25 @@ public class DdcEventoFilaDto
     public string? DestAlerta02      { get; set; }   // FC=compensado, FT=pendiente
     public string? DestFaltaActual   { get; set; }   // horas_falta actual en tareo destino
     public string? DestHefecActual   { get; set; }   // horaefectiva actual en tareo destino
+}
+
+// ── Resultado de CONSULTAR_COMP_DDC (fila individual por id_compen) ───────────
+
+public class DdcCompFilaDto
+{
+    public long?   IdCompen          { get; set; }
+    public string? CodEmpresa        { get; set; }
+    public string? CodPersonal       { get; set; }
+    public string? NombreCompleto    { get; set; }
+    public string? FechaOrigenStr    { get; set; }
+    public string? FechaDestinoStr   { get; set; }
+    public string? TipoCompensacion  { get; set; }
+    public int     TiempoMin         { get; set; }
+    public string? TiempoHhMi        { get; set; }
+    public long?   IdEvento          { get; set; }   // extraído de aux1 (SUBSTR(aux1,2))
+    public string? OriAlerta06       { get; set; }
+    public string? OriHeActual       { get; set; }
+    public string? DestAlerta02      { get; set; }
+    public string? DestFaltaActual   { get; set; }
+    public string? DestHefecActual   { get; set; }
 }

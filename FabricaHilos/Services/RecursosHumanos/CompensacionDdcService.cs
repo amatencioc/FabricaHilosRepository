@@ -13,21 +13,34 @@ public interface ICompensacionDdcService
         string fechaFin,
         string? nombre = null,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null);
+        string? fechaHeFin = null,
+        bool soloDdc = true);
+
+    Task<List<DdcRangoFilaDto>> ListarHePersonalAsync(
+        string codEmpresa,
+        string codPersonal,
+        string fechaHeInicio,
+        string fechaHeFin);
 
     Task<List<DdcCalculoFilaDto>> CalcularDdcAsync(
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string listaPersonal);
+        string listaPersonal,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null);
 
     Task<List<DdcRegistroFilaDto>> RegistrarDdcMasivoAsync(
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string listaPersonal);
+        string listaPersonal,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null);
 
     Task<List<DdcEventoFilaDto>> ConsultarEventoDdcAsync(long idEvento);
+
+    Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen);
 
     Task<List<DdcRangoConsultaDto>> ConsultarRangoDdcAsync(
         string? codEmpresa,
@@ -67,7 +80,6 @@ public class CompensacionDdcService : ICompensacionDdcService
     {
         var ctx = _httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException("HttpContext no disponible.");
-        ctx.Session.LoadAsync().GetAwaiter().GetResult();
         return ctx.Session.Id;
     }
 
@@ -113,7 +125,8 @@ public class CompensacionDdcService : ICompensacionDdcService
         string fechaFin,
         string? nombre = null,
         string? fechaHeInicio = null,
-        string? fechaHeFin = null)
+        string? fechaHeFin = null,
+        bool soloDdc = true)
     {
         return await WithOracleRetryAsync(async () =>
         {
@@ -132,6 +145,7 @@ public class CompensacionDdcService : ICompensacionDdcService
             cmd.Parameters.Add(new OracleParameter("p_nombre",          OracleDbType.Varchar2) { Value = (object?)nombre       ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHeInicio ?? DBNull.Value });
             cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHeFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_solo_ddc",        OracleDbType.Varchar2) { Value = soloDdc ? "S" : "N" });
             cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -154,15 +168,69 @@ public class CompensacionDdcService : ICompensacionDdcService
                     Alerta06       = GetStr(r, "alerta06"),
                     Descanso       = GetStr(r, "descanso"),
                     NumMarcaciones = GetInt(r, "nummarcaciones"),
-                    YaCompensado   = GetStr(r, "ya_compensado"),
-                    LogixCmotivo   = GetStr(r, "logix_cmotivo"),
-                    LogixDinicio   = GetStr(r, "logix_dinicio"),
-                    LogixDfinal    = GetStr(r, "logix_dfinal"),
+                    YaCompensado    = GetStr(r, "ya_compensado"),
+                    LogixCmotivo    = GetStr(r, "logix_cmotivo"),
+                    LogixDinicio    = GetStr(r, "logix_dinicio"),
+                    LogixDfinal     = GetStr(r, "logix_dfinal"),
                     LogixDescMotivo = GetStr(r, "logix_desc_motivo"),
+                    DescAlerta06    = GetStr(r, "desc_alerta06"),
                 });
             }
             return result;
         }, "LISTAR_DDC_RANGO");
+    }
+
+    // ── LISTAR_HE_PERSONAL ────────────────────────────────────────────────────
+
+    public async Task<List<DdcRangoFilaDto>> ListarHePersonalAsync(
+        string codEmpresa,
+        string codPersonal,
+        string fechaHeInicio,
+        string fechaHeFin)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcRangoFilaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType    = CommandType.StoredProcedure;
+            cmd.CommandTimeout = 120;
+            cmd.CommandText    = $"{Paquete}.LISTAR_HE_PERSONAL";
+
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_cod_personal",    OracleDbType.Varchar2) { Value = codPersonal });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = fechaHeInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = fechaHeFin });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcRangoFilaDto
+                {
+                    CodPersonal     = GetStr(r, "cod_personal"),
+                    NombreCompleto  = GetStr(r, "nombre_completo"),
+                    NumFotocheck    = GetStr(r, "num_fotocheck"),
+                    FechamarStr     = GetStr(r, "fechamar_str"),
+                    DiaSemana       = GetStr(r, "dia_semana"),
+                    TipoDia         = GetStr(r, "tipo_dia"),
+                    MinHe           = GetInt(r, "min_he"),
+                    HorasHe         = GetStr(r, "horas_he"),
+                    MinFalta        = 0,
+                    HorasFalta      = null,
+                    Alerta02        = GetStr(r, "alerta02"),
+                    Alerta06        = GetStr(r, "alerta06"),
+                    Descanso        = GetStr(r, "descanso"),
+                    NumMarcaciones  = GetInt(r, "nummarcaciones"),
+                    YaCompensado    = GetStr(r, "ya_compensado"),
+                    DescAlerta06    = GetStr(r, "desc_alerta06"),
+                });
+            }
+            return result;
+        }, "LISTAR_HE_PERSONAL");
     }
 
     // ── CALCULAR_DDC ─────────────────────────────────────────────────────────
@@ -171,7 +239,9 @@ public class CompensacionDdcService : ICompensacionDdcService
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string listaPersonal)
+        string listaPersonal,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
@@ -180,14 +250,17 @@ public class CompensacionDdcService : ICompensacionDdcService
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.CALCULAR_DDC";
+            cmd.CommandType    = CommandType.StoredProcedure;
+            cmd.CommandTimeout = 120;
+            cmd.CommandText    = $"{Paquete}.CALCULAR_DDC";
 
-            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",   OracleDbType.Varchar2) { Value = fechaInicio });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",      OracleDbType.Varchar2) { Value = fechaFin });
-            cmd.Parameters.Add(new OracleParameter("p_lista_personal", OracleDbType.Varchar2) { Value = listaPersonal });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",     OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",       OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal",  OracleDbType.Varchar2) { Value = listaPersonal });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHeInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHeFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -221,15 +294,25 @@ public class CompensacionDdcService : ICompensacionDdcService
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string listaPersonal)
+        string listaPersonal,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null)
     {
         var sessionId = GetSessionId();
         await DisposeTransactionAsync(sessionId);
 
         var txConn = new OracleConnection(GetOracleConnectionString());
-        await txConn.OpenAsync();
-        var txn = txConn.BeginTransaction();
-        _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow, codEmpresa);
+        try
+        {
+            await txConn.OpenAsync();
+            var txn = txConn.BeginTransaction();
+            _activeTx[sessionId] = new ActiveTxEntry(txConn, txn, DateTime.UtcNow, codEmpresa);
+        }
+        catch
+        {
+            await txConn.DisposeAsync();
+            throw;
+        }
 
         try
         {
@@ -242,11 +325,13 @@ public class CompensacionDdcService : ICompensacionDdcService
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.CommandText = $"{Paquete}.REGISTRAR_DDC_MASIVO";
 
-            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",    OracleDbType.Varchar2) { Value = codEmpresa });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",   OracleDbType.Varchar2) { Value = fechaInicio });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",      OracleDbType.Varchar2) { Value = fechaFin });
-            cmd.Parameters.Add(new OracleParameter("p_lista_personal", OracleDbType.Varchar2) { Value = listaPersonal });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",     OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",       OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal",  OracleDbType.Varchar2) { Value = listaPersonal });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHeInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHeFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -375,7 +460,51 @@ public class CompensacionDdcService : ICompensacionDdcService
         }, "CONSULTAR_EVENTO_DDC");
     }
 
-    // ── CONSULTAR_RANGO_DDC ───────────────────────────────────────────────────
+    // ── CONSULTAR_COMP_DDC ─────────────────────────────────────────────────────
+
+    public async Task<List<DdcCompFilaDto>> ConsultarCompDdcAsync(long idCompen)
+    {
+        return await WithOracleRetryAsync(async () =>
+        {
+            var result = new List<DdcCompFilaDto>();
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.CommandText = $"{Paquete}.CONSULTAR_COMP_DDC";
+
+            cmd.Parameters.Add(new OracleParameter("p_id_compen",  OracleDbType.Decimal)  { Value = idCompen });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado", OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new DdcCompFilaDto
+                {
+                    IdCompen        = GetNullLong(r, "id_compen"),
+                    CodEmpresa      = GetStr(r, "cod_empresa"),
+                    CodPersonal     = GetStr(r, "cod_personal"),
+                    NombreCompleto  = GetStr(r, "nombre_completo"),
+                    FechaOrigenStr  = GetStr(r, "fechaorigen_str"),
+                    FechaDestinoStr = GetStr(r, "fechadestino_str"),
+                    TipoCompensacion= GetStr(r, "tipocompensacion"),
+                    TiempoMin       = GetInt(r, "tiempo_min"),
+                    TiempoHhMi      = GetStr(r, "tiempo_hhmi"),
+                    IdEvento        = GetNullLong(r, "id_evento"),
+                    OriAlerta06     = GetStr(r, "ori_alerta06"),
+                    OriHeActual     = GetStr(r, "ori_he_actual"),
+                    DestAlerta02    = GetStr(r, "dest_alerta02"),
+                    DestFaltaActual = GetStr(r, "dest_falta_actual"),
+                    DestHefecActual = GetStr(r, "dest_hefec_actual"),
+                });
+            }
+            return result;
+        }, "CONSULTAR_COMP_DDC");
+    }
+
+    // ── CONSULTAR_RANGO_DDC
 
     public async Task<List<DdcRangoConsultaDto>> ConsultarRangoDdcAsync(
         string? codEmpresa,

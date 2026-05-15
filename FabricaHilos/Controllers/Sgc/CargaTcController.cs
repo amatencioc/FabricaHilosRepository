@@ -366,6 +366,13 @@ namespace FabricaHilos.Controllers.Sgc
                     return Json(new { success = false, message = "El requerimiento no tiene código de vendedor." });
                 }
 
+                // Guardia de idempotencia a nivel de controlador: si el REQ ya fue enviado
+                // (ESTADO=2) rechazar inmediatamente sin llegar a Oracle, protege contra doble clic.
+                if (requerimiento.Estado == 2)
+                {
+                    return Json(new { success = false, message = $"El requerimiento {numReq} ya fue enviado a Facturación anteriormente." });
+                }
+
                 _logger.LogInformation("Iniciando proceso de envío a Facturación - REQ {NumReq}, Certificado {NumCer}", 
                     numReq, requerimiento.NumCer);
 

@@ -543,48 +543,99 @@ namespace FabricaHilos.Services.Sgc
                         ? (usuario ?? "SYSTEM").Substring(0, 15)
                         : (usuario ?? "SYSTEM");
 
-                    // INSERT + cálculo del NUMERO en un solo statement atómico con RETURNING INTO.
-                    // Esto elimina la condición de carrera del MAX+1 en dos pasos separados.
+                    // PASO 1: Obtener y bloquear el correlativo desde NRODOC dentro de la transacción.
+                    //         FOR UPDATE NOWAIT garantiza serialización entre sesiones concurrentes:
+                    //         la primera sesión bloquea la fila; las demás reciben ORA-00054 inmediatamente.
+                    var sqlNroDoc = $"SELECT NUMERO FROM {S}NRODOC WHERE TIPODOC = 'FA' AND SERIE = '1' FOR UPDATE NOWAIT";
+                    int numero;
+
+                    using (var cmdNroDoc = new OracleCommand(sqlNroDoc, conn))
+                    {
+                        cmdNroDoc.Transaction = transaction;
+                        var result = await cmdNroDoc.ExecuteScalarAsync();
+                        if (result == null || result == DBNull.Value)
+                            throw new InvalidOperationException(
+                                "No se encontró el correlativo en NRODOC para TIPODOC='FA', SERIE='1'.");
+                        numero = Convert.ToInt32(result);
+                    }
+
+                    _logger.LogInformation("NRODOC correlativo obtenido y bloqueado: TIPODOC=FA, SERIE=1, NUMERO={Numero}", numero);
+
+                    // PASO 2: Idempotencia — verificar que no exista ya un registro activo en V_FACTAUT
+                    //         para este mismo REQ (protege contra doble clic y doble envío concurrente).
+                    //         Se consulta dentro de la misma transacción para ver el estado más reciente.
+                    var sqlVerificar = $@"
+                        SELECT COUNT(1) FROM {S}V_FACTAUT
+                        WHERE TIP_DIREF = 'GC'
+                          AND NRO_DIREF = :NumReq
+                          AND ESTADO   <> '9'";
+
+                    using (var cmdVerificar = new OracleCommand(sqlVerificar, conn))
+                    {
+                        cmdVerificar.Transaction = transaction;
+                        cmdVerificar.Parameters.Add(new OracleParameter("NumReq", OracleDbType.Int32, numReq, ParameterDirection.Input));
+                        var existente = Convert.ToInt32(await cmdVerificar.ExecuteScalarAsync());
+                        if (existente > 0)
+                        {
+                            // Ya fue registrado por otra sesión concurrente — liberar lock y retornar el número existente
+                            await transaction.RollbackAsync();
+                            _logger.LogWarning(
+                                "V_FACTAUT ya contiene un registro activo para NRO_DIREF={NumReq}. Operación cancelada para evitar duplicado.",
+                                numReq);
+                            throw new InvalidOperationException(
+                                $"El requerimiento {numReq} ya fue enviado a Facturación. Actualice la página para ver el estado actualizado.");
+                        }
+                    }
+
+                    // PASO 3: Insertar en V_FACTAUT usando el número obtenido de NRODOC
                     var sqlInsert = $@"
                         INSERT INTO {S}V_FACTAUT 
                             (TIPO, SERIE, NUMERO, CONCEPTO, TIP_DIREF, SER_DIREF, NRO_DIREF, ESTADO, A_ADUSER, A_ADFECHA)
                         VALUES 
-                            ('FA', 1,
-                             (SELECT NVL(MAX(NUMERO), 0) + 1 FROM {S}V_FACTAUT WHERE TIPO = 'FA' AND SERIE = 1),
-                             :Concepto, 'GC', 1, :NumReq, '0', :Usuario, SYSDATE)
-                        RETURNING NUMERO INTO :NroGenerado";
-
-                    int nuevoNumero;
+                            ('FA', 1, :Numero, :Concepto, 'GC', 1, :NumReq, '0', :Usuario, SYSDATE)";
 
                     using (var cmdInsert = new OracleCommand(sqlInsert, conn))
                     {
                         cmdInsert.Transaction = transaction;
-                        cmdInsert.Parameters.Add(new OracleParameter("Concepto", OracleDbType.Varchar2, concepto,       ParameterDirection.Input));
-                        cmdInsert.Parameters.Add(new OracleParameter("NumReq",   OracleDbType.Int32,    numReq,         ParameterDirection.Input));
-                        cmdInsert.Parameters.Add(new OracleParameter("Usuario",  OracleDbType.Varchar2, usuarioTrunc,   ParameterDirection.Input));
-
-                        var pNro = new OracleParameter("NroGenerado", OracleDbType.Int32)
-                        {
-                            Direction = ParameterDirection.Output
-                        };
-                        cmdInsert.Parameters.Add(pNro);
-
+                        cmdInsert.Parameters.Add(new OracleParameter("Numero",   OracleDbType.Int32,    numero,       ParameterDirection.Input));
+                        cmdInsert.Parameters.Add(new OracleParameter("Concepto", OracleDbType.Varchar2, concepto,     ParameterDirection.Input));
+                        cmdInsert.Parameters.Add(new OracleParameter("NumReq",   OracleDbType.Int32,    numReq,       ParameterDirection.Input));
+                        cmdInsert.Parameters.Add(new OracleParameter("Usuario",  OracleDbType.Varchar2, usuarioTrunc, ParameterDirection.Input));
                         await cmdInsert.ExecuteNonQueryAsync();
-
-                        nuevoNumero = Convert.ToInt32(pNro.Value.ToString());
                     }
 
-                    transaction.Commit();
+                    // PASO 4: Incrementar el correlativo en NRODOC (+1)
+                    var sqlUpdateNroDoc = $"UPDATE {S}NRODOC SET NUMERO = NUMERO + 1 WHERE TIPODOC = 'FA' AND SERIE = '1'";
+
+                    using (var cmdUpdate = new OracleCommand(sqlUpdateNroDoc, conn))
+                    {
+                        cmdUpdate.Transaction = transaction;
+                        var filas = await cmdUpdate.ExecuteNonQueryAsync();
+                        if (filas == 0)
+                            throw new InvalidOperationException(
+                                "No se pudo actualizar el correlativo en NRODOC para TIPODOC='FA', SERIE='1'.");
+                    }
+
+                    await transaction.CommitAsync();
 
                     _logger.LogInformation(
-                        "Registro V_FACTAUT creado: TIPO=FA, SERIE=1, NUMERO={Numero}, TIP_DIREF=GC, NRO_DIREF={NumReq}, ESTADO='0'",
-                        nuevoNumero, numReq);
+                        "Registro V_FACTAUT creado: TIPO=FA, SERIE=1, NUMERO={Numero}, TIP_DIREF=GC, NRO_DIREF={NumReq}, ESTADO='0'. NRODOC actualizado a {Siguiente}.",
+                        numero, numReq, numero + 1);
 
-                    return nuevoNumero;
+                    return numero;
+                }
+                catch (OracleException oraEx) when (oraEx.Number == 54)
+                {
+                    // ORA-00054: resource busy — NRODOC bloqueada por otra sesión concurrente
+                    _logger.LogWarning("NRODOC BLOQUEADA (ORA-00054) al intentar registrar V_FACTAUT para REQ {NumReq}", numReq);
+                    try { await transaction.RollbackAsync(); } catch { /* ignorar error de rollback */ }
+                    throw new InvalidOperationException(
+                        "Otro usuario está procesando una operación en este momento. " +
+                        "Intente nuevamente en unos segundos.", oraEx);
                 }
                 catch
                 {
-                    transaction.Rollback();
+                    try { await transaction.RollbackAsync(); } catch { /* ignorar error de rollback */ }
                     throw;
                 }
             }
