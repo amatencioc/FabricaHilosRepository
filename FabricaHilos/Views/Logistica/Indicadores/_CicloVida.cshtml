@@ -1,0 +1,256 @@
+@model FabricaHilos.Models.Logistica.IndLogisticaCicloVidaViewModel
+@using System.Globalization
+@using System.Text.Json
+
+@{
+    var culture = CultureInfo.GetCultureInfo("es-PE");
+    string FmtFecha(DateTime? d) => d?.ToString("dd/MM/yyyy") ?? "-";
+    string FmtNum(decimal v, int d = 1) => v.ToString("N" + d, culture);
+
+    // ── Estadísticas generales ────────────────────────────────────────────────
+    int total = Model.Items.Count;
+    decimal avgCiclo  = total > 0 ? Model.Items.Average(x => (decimal)x.TCicloTotal) : 0;
+    decimal avgT1     = total > 0 ? Model.Items.Average(x => (decimal)x.T1RegAut)    : 0;
+    decimal avgT2     = total > 0 ? Model.Items.Average(x => (decimal)x.T2AutRec)    : 0;
+    decimal avgT3     = total > 0 ? Model.Items.Average(x => (decimal)x.T3RecOc)     : 0;
+
+    // OCs únicas — varias reqs pueden compartir la misma OC
+    int totalOcs = Model.Items.Select(x => x.NroOc).Distinct().Count();
+
+    // Histograma del ciclo total (tramos del SQL)
+    var histData = new[] {
+        new { label = "0 d",       count = Model.Items.Count(x => x.TCicloTotal == 0) },
+        new { label = "1 d",       count = Model.Items.Count(x => x.TCicloTotal == 1) },
+        new { label = "2-3 d",     count = Model.Items.Count(x => x.TCicloTotal >= 2  && x.TCicloTotal <= 3) },
+        new { label = "4-5 d",     count = Model.Items.Count(x => x.TCicloTotal >= 4  && x.TCicloTotal <= 5) },
+        new { label = "6-7 d",     count = Model.Items.Count(x => x.TCicloTotal >= 6  && x.TCicloTotal <= 7) },
+        new { label = "8-14 d",    count = Model.Items.Count(x => x.TCicloTotal >= 8  && x.TCicloTotal <= 14) },
+        new { label = "> 14 d",    count = Model.Items.Count(x => x.TCicloTotal > 14) }
+    };
+
+    // JSON para gantt y histograma
+    // Gantt: cada req → {numreq, oc, t1, t2, t3, total, fchReg, fchAut, fchRec, fchOc}
+    var ganttJson = JsonSerializer.Serialize(Model.Items.Take(50).Select(x => new {
+        numreq = x.NumReq,
+        tipo   = x.Tipo,
+        oc     = x.NroOc ?? "-",
+        fReg   = x.FchRegistro?.ToString("yyyy-MM-dd"),
+        fAut   = x.FchAutoriza?.ToString("yyyy-MM-dd"),
+        fRec   = x.FchReciboLog?.ToString("yyyy-MM-dd"),
+        fOc    = x.FchOc?.ToString("yyyy-MM-dd"),
+        t1 = x.T1RegAut < 0 ? 0 : x.T1RegAut,
+        t2 = x.T2AutRec < 0 ? 0 : x.T2AutRec,
+        t3 = x.T3RecOc  < 0 ? 0 : x.T3RecOc,
+        total = x.TCicloTotal < 0 ? 0 : x.TCicloTotal
+    }));
+
+    var histJson = JsonSerializer.Serialize(histData);
+}
+
+<!-- ── KPI Cards del ciclo ────────────────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1565C0; font-size:.95rem;">
+        ⏱️ Ciclo de Vida de Requisiciones Atendidas
+    </h5>
+    <p class="text-muted mb-0" style="font-size:.8rem;">
+        Período: @FmtFecha(Model.FechaDesde) — @FmtFecha(Model.FechaHasta)
+    </p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">📋</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Reqs Atendidas</div>
+            <div class="fw-bold fs-4" style="color:#1B4D3E;">@total</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">🛒</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">OCs generadas</div>
+            <div class="fw-bold fs-4" style="color:#1565C0;">@totalOcs</div>
+            <div style="font-size:.68rem; color:#9ca3af;">1 OC puede agrupar varias reqs</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">📊</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Promedio</div>
+            <div class="fw-bold fs-4" style="color:#e65100;">@FmtNum(avgCiclo) d</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">⚡</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">% SLA ≤ 5 días</div>
+            @{
+                decimal pctSla = total > 0
+                    ? Math.Round(Model.Items.Count(x => x.TCicloTotal <= 5) * 100m / total, 1)
+                    : 0;
+                string slaColor = pctSla >= 70 ? "#1B4D3E" : pctSla >= 50 ? "#e65100" : "#c62828";
+            }
+            <div class="fw-bold fs-4" style="color:@slaColor;">@FmtNum(pctSla)%</div>
+            <div style="font-size:.68rem; color:#9ca3af;">SLA sugerido: ≥ 70 %</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Desglose de tramos (promedios) ────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T1 Reg → Aut.</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#1565C0;">@FmtNum(avgT1) d</div>
+            <div class="progress mt-1 mx-3" style="height:5px;">
+                <div class="progress-bar bg-primary" style="width:@Math.Min((double)avgT1/10*100,100)%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T2 Aut. → Log.</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#e65100;">@FmtNum(avgT2) d</div>
+            <div class="progress mt-1 mx-3" style="height:5px;">
+                <div class="progress-bar bg-warning" style="width:@Math.Min((double)avgT2/10*100,100)%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T3 Log. → OC</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#1B4D3E;">@FmtNum(avgT3) d</div>
+            <div class="progress mt-1 mx-3" style="height:5px;">
+                <div class="progress-bar bg-success" style="width:@Math.Min((double)avgT3/10*100,100)%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Total (avg)</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#4A148C;">@FmtNum(avgCiclo) d</div>
+            <div class="progress mt-1 mx-3" style="height:5px;">
+                <div class="progress-bar bg-purple" style="width:@Math.Min((double)avgCiclo/20*100,100)%; background:#4A148C;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Histograma del ciclo total + Gantt ────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-md-5">
+        <div class="card chart-card">
+            <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Histograma — Ciclo Total (distribución)</div>
+            <div class="card-body" style="height:320px;"><canvas id="chartHistCiclo"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card chart-card">
+            <div class="card-header small"><i class="bi bi-calendar3 me-1"></i>Gantt del Ciclo — últimas 50 requisiciones &nbsp;<small class="fw-normal text-muted">🔵 T1 &nbsp; 🟠 T2 &nbsp; 🟢 T3</small></div>
+            <div class="card-body" style="height:320px;"><canvas id="chartGantt"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla detalle del ciclo ───────────────────────────────────────── -->
+<div class="section-title">📋 Detalle por Requisición Atendida</div>
+<div class="card border-0 shadow-sm mb-3">
+    <div style="max-height:420px; overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0" style="font-size:.77rem;">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th>Nro. Req.</th>
+                    <th>Tipo</th>
+                    <th>NRO OC</th>
+                    <th>Fch. Registro</th>
+                    <th>Fch. Autoriza</th>
+                    <th>Fch. Recibo Log.</th>
+                    <th>Fch. OC</th>
+                    <th class="text-center">T1 (d)</th>
+                    <th class="text-center">T2 (d)</th>
+                    <th class="text-center">T3 (d)</th>
+                    <th class="text-center">Total (d)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var x in Model.Items)
+                {
+                    string cicloClass = x.TCicloTotal == 0   ? "sem-verde"
+                                      : x.TCicloTotal <= 5   ? ""
+                                      : x.TCicloTotal <= 14  ? "sem-amarillo"
+                                      : "sem-rojo";
+                    <tr class="@cicloClass">
+                        <td class="fw-semibold">@x.NumReq</td>
+                        <td><span class="badge @(x.Tipo=="SERVICIO" ? "bg-info text-dark" : "bg-secondary")">@x.Tipo</span></td>
+                        <td>@(x.NroOc ?? "-")</td>
+                        <td>@FmtFecha(x.FchRegistro)</td>
+                        <td>@FmtFecha(x.FchAutoriza)</td>
+                        <td>@FmtFecha(x.FchReciboLog)</td>
+                        <td>@FmtFecha(x.FchOc)</td>
+                        <td class="text-center">@x.T1RegAut</td>
+                        <td class="text-center">@x.T2AutRec</td>
+                        <td class="text-center">@x.T3RecOc</td>
+                        <td class="text-center fw-bold">@x.TCicloTotal</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<input type="hidden" id="cvHistJson"  value='@Html.Raw(histJson)'  />
+<input type="hidden" id="cvGanttJson" value='@Html.Raw(ganttJson)' />
+
+<script>
+window.initCicloVidaCharts = function () {
+    const hist  = JSON.parse(document.getElementById('cvHistJson').value  || '[]');
+    const gantt = JSON.parse(document.getElementById('cvGanttJson').value || '[]');
+
+    // ── Histograma ───────────────────────────────────────────────────────
+    const ctxH = document.getElementById('chartHistCiclo');
+    if (ctxH) {
+        new Chart(ctxH, {
+                type:'bar',
+                data:{ labels: hist.map(h=>h.label),
+                       datasets:[{ label:'Reqs', data: hist.map(h=>h.count),
+                                   backgroundColor:'#1565C0cc', borderColor:'#1565C0', borderWidth:1 }]},
+                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }},
+                          scales:{ y:{ beginAtZero:true, min:0, title:{ display:true, text:'Requisiciones' }}}}
+            });
+    }
+
+    // ── Gantt (stacked bar horizontal) ──────────────────────────────────
+    const ctxG = document.getElementById('chartGantt');
+    if (ctxG && gantt.length) {
+        // Filtrar outliers: quitar registros cuyo ciclo total supera el percentil 95
+        const sorted = [...gantt].sort((a,b) => (a.total||0)-(b.total||0));
+        const p95    = sorted[Math.floor(sorted.length * 0.95)].total || 60;
+        const ganttOk = gantt.filter(g => (g.total||0) <= p95 && (g.total||0) >= 0);
+        const maxX    = Math.max(p95, 1);
+
+        new Chart(ctxG, {
+            type:'bar',
+            data:{
+                labels: ganttOk.map(g => '#'+g.numreq),
+                datasets:[
+                    { label:'T1 Reg→Aut', data: ganttOk.map(g => Math.min(g.t1??0, maxX)), backgroundColor:'#1565C0cc' },
+                    { label:'T2 Aut→Log', data: ganttOk.map(g => Math.min(g.t2??0, maxX)), backgroundColor:'#ff980099' },
+                    { label:'T3 Log→OC',  data: ganttOk.map(g => Math.min(g.t3??0, maxX)), backgroundColor:'#1B4D3Ecc' }
+                ]
+            },
+            options:{
+                indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ position:'bottom' },
+                          tooltip:{ callbacks:{ footer: items => {
+                              const idx = items[0].dataIndex;
+                              const g   = ganttOk[idx];
+                              return [`OC: ${g.oc}`, `Total: ${g.total ?? 0} d`, `Reg: ${g.fReg ?? '-'}`, `OC: ${g.fOc ?? '-'}`];
+                          }}}},
+                scales:{ x:{ stacked:true, beginAtZero:true, min:0, suggestedMax: maxX,
+                             title:{ display:true, text:'Días' }},
+                         y:{ stacked:true }}
+            }
+        });
+    }
+};
+</script>

@@ -37,8 +37,12 @@
     .kpi-card .kpi-label { font-size:.68rem; color:#6b7280; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:.2rem; }
     .kpi-card .kpi-value { font-size:2rem; font-weight:800; color:#111827; line-height:1.1; }
     .kpi-card .kpi-sub   { font-size:.7rem; color:#9ca3af; margin-top:.2rem; }
-    .section-title { font-size:.92rem; font-weight:700; color:#374151; text-transform:uppercase;
-                     letter-spacing:.06em; margin:1.6rem 0 .8rem; border-left:4px solid #8B5E3C; padding-left:.6rem; }
+    .section-title { font-size:1rem; font-weight:700; color:#1B4D3E; text-transform:uppercase;
+                     letter-spacing:.04em; margin:1.4rem 0 .5rem; border-left:4px solid #1B4D3E; padding-left:.5rem; }
+    .chart-card { border:none; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.08); height:100%; }
+    .chart-card .card-header { background:transparent; color:#1B4D3E; font-weight:600;
+                                border-bottom:1px solid #e0e0e0; border-radius:12px 12px 0 0!important; }
+    .chart-card .card-body { background:#fafaf8; border-radius:0 0 12px 12px; }
     .tab-content-panel { min-height: 260px; }
     /* Semáforo pendientes */
     .sem-verde   { background:#d4edda !important; }
@@ -142,19 +146,64 @@
         };
     }
 
+    // ── Mapa: paneId → nombre de función init pendiente ──────────────────
+    const _pendingInit = {};
+
     function loadPartial(url, containerId, initFn) {
         const el = document.getElementById(containerId);
         el.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-secondary"></div><p class="mt-2 text-muted">Cargando...</p></div>';
         fetch(url)
             .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(t)))
             .then(html => {
-                el.innerHTML = html;
-                if (typeof window[initFn] === 'function') window[initFn]();
+                // 1. Separar <script> del HTML
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                const scripts = [...temp.querySelectorAll('script')];
+                scripts.forEach(s => s.parentNode.removeChild(s));
+
+                // 2. Insertar el HTML (canvas ya en el DOM)
+                el.innerHTML = temp.innerHTML;
+
+                // 3. Re-ejecutar los scripts en orden
+                scripts.forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    if (oldScript.src) {
+                        newScript.src = oldScript.src;
+                    } else {
+                        newScript.textContent = oldScript.textContent;
+                    }
+                    document.body.appendChild(newScript);
+                });
+
+                // 4. Si el tab está oculto, diferir el init para cuando se active;
+                //    si ya está visible, ejecutarlo con doble rAF para garantizar layout
+                requestAnimationFrame(() => {
+                    const pane = el.closest('.tab-pane');
+                    if (pane && !pane.classList.contains('active')) {
+                        _pendingInit[pane.id] = initFn;
+                    } else {
+                        requestAnimationFrame(() => {
+                            if (typeof window[initFn] === 'function') window[initFn]();
+                        });
+                    }
+                });
             })
             .catch(err => {
                 el.innerHTML = `<div class="alert alert-danger m-2">Error al cargar los datos.<br><small>${err}</small></div>`;
             });
     }
+
+    // ── Ejecutar init diferido cuando el tab se hace visible ─────────────
+    document.getElementById('indTabs').addEventListener('shown.bs.tab', function (e) {
+        const targetId = (e.target.getAttribute('data-bs-target') || '').replace('#', '');
+        if (!targetId) return;
+        const fn = _pendingInit[targetId];
+        if (fn && typeof window[fn] === 'function') {
+            delete _pendingInit[targetId];
+            // doble rAF para que Bootstrap termine el layout del tab antes de dibujar
+            requestAnimationFrame(() => requestAnimationFrame(() => window[fn]()));
+        }
+    });
 
     document.getElementById('btnConsultar').addEventListener('click', function () {
         const p = getParams();
@@ -185,129 +234,3 @@
 </script>
 }
 
-
-@section Breadcrumb {
-    <li class="breadcrumb-item"><a asp-controller="Logistica" asp-action="Index">Logística</a></li>
-    <li class="breadcrumb-item active">Indicadores</li>
-}
-
-@section Styles {
-<style>
-    .filter-bar {
-        background: #fff;
-        border-radius: 12px;
-        box-shadow: 0 2px 12px rgba(0,0,0,.08);
-        padding: .9rem 1.4rem;
-        margin-bottom: 1.5rem;
-    }
-    .kpi-card {
-        border: none;
-        border-radius: 14px;
-        text-align: center;
-        padding: 1.4rem 1rem 1.1rem;
-        position: relative;
-        overflow: hidden;
-        transition: transform .18s, box-shadow .18s;
-    }
-    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.13) !important; }
-    .kpi-card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 4px;
-        border-radius: 14px 14px 0 0;
-    }
-    .kpi-card.accent-green  { box-shadow: 0 3px 14px rgba(27,77,62,.14); }
-    .kpi-card.accent-green::before  { background: linear-gradient(90deg,#1B4D3E,#2e8b6a); }
-    .kpi-card.accent-blue   { box-shadow: 0 3px 14px rgba(21,101,192,.14); }
-    .kpi-card.accent-blue::before   { background: linear-gradient(90deg,#1565C0,#42a5f5); }
-    .kpi-card.accent-orange { box-shadow: 0 3px 14px rgba(230,81,0,.14); }
-    .kpi-card.accent-orange::before { background: linear-gradient(90deg,#e65100,#ffa726); }
-    .kpi-card.accent-purple { box-shadow: 0 3px 14px rgba(74,20,140,.14); }
-    .kpi-card.accent-purple::before { background: linear-gradient(90deg,#4A148C,#9c4dcc); }
-    .kpi-card .kpi-icon   { font-size: 2.1rem; line-height: 1; margin-bottom: .4rem; }
-    .kpi-card .kpi-label  { font-size: .68rem; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: .2rem; }
-    .kpi-card .kpi-value  { font-size: 2rem; font-weight: 800; color: #111827; line-height: 1.1; }
-    .kpi-card .kpi-sub    { font-size: .7rem; color: #9ca3af; margin-top: .2rem; }
-    .section-title { font-size: .92rem; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: .06em; margin: 1.8rem 0 .8rem; border-left: 4px solid #8B5E3C; padding-left: .6rem; }
-    #kpi-container { min-height: 220px; }
-</style>
-}
-
-<div class="d-flex align-items-center gap-2 mb-4">
-    <i class="bi bi-bar-chart-line-fill fs-4" style="color: #8B5E3C;"></i>
-    <h4 class="mb-0 fw-bold">Indicadores de Logística</h4>
-</div>
-
-<!-- ── Barra de filtros ────────────────────────────────────────────────── -->
-<div class="filter-bar">
-    <div class="row g-2 align-items-end">
-        <div class="col-sm-4 col-md-3">
-            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Desde</label>
-            <input type="date" id="fechaDesde" class="form-control form-control-sm" value="@fechaDesde" />
-        </div>
-        <div class="col-sm-4 col-md-3">
-            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Hasta</label>
-            <input type="date" id="fechaHasta" class="form-control form-control-sm" value="@fechaHasta" />
-        </div>
-        <div class="col-sm-4 col-md-auto d-flex gap-2">
-            <button id="btnConsultar" class="btn btn-sm btn-primary">
-                <i class="bi bi-search"></i> Consultar
-            </button>
-            <button id="btnExportar" class="btn btn-sm btn-success">
-                <i class="bi bi-file-earmark-excel"></i> Exportar Excel
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- ── Contenedor del dashboard ───────────────────────────────────────── -->
-<div id="kpi-container">
-    <div class="text-center py-5 text-muted">
-        <i class="bi bi-bar-chart-line fs-1 d-block mb-2" style="color:#8B5E3C;"></i>
-        Seleccione un rango de fechas y presione <strong>Consultar</strong>.
-    </div>
-</div>
-
-@section Scripts {
-<script>
-    function getParams() {
-        return {
-            fechaDesde: document.getElementById('fechaDesde').value,
-            fechaHasta: document.getElementById('fechaHasta').value
-        };
-    }
-
-    document.getElementById('btnConsultar').addEventListener('click', function () {
-        const p = getParams();
-        if (!p.fechaDesde || !p.fechaHasta) {
-            alert('Seleccione el rango de fechas.');
-            return;
-        }
-        const container = document.getElementById('kpi-container');
-        container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-secondary"></div><p class="mt-2 text-muted">Cargando...</p></div>';
-        fetch(`/Logistica/Indicadores/Dashboard?fechaDesde=${p.fechaDesde}&fechaHasta=${p.fechaHasta}`)
-            .then(r => r.ok ? r.text() : r.text().then(t => Promise.reject(t)))
-            .then(html => {
-                container.innerHTML = html;
-                // Inicializar gráficos inyectados por el partial
-                if (typeof window.initIndLogisticaCharts === 'function') window.initIndLogisticaCharts();
-            })
-            .catch(err => {
-                container.innerHTML = `<div class="alert alert-danger">Error al cargar los datos.<br><small>${err}</small></div>`;
-            });
-    });
-
-    document.getElementById('btnExportar').addEventListener('click', function () {
-        const p = getParams();
-        if (!p.fechaDesde || !p.fechaHasta) {
-            alert('Seleccione el rango de fechas.');
-            return;
-        }
-        window.location = `/Logistica/Indicadores/ExportarExcel?fechaDesde=${p.fechaDesde}&fechaHasta=${p.fechaHasta}`;
-    });
-
-    // Carga automática al abrir
-    document.getElementById('btnConsultar').click();
-</script>
-}

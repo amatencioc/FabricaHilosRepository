@@ -1,0 +1,231 @@
+@model FabricaHilos.Models.Logistica.IndLogisticaTendenciaMensualViewModel
+@using System.Globalization
+@using System.Text.Json
+
+@{
+    var culture = CultureInfo.GetCultureInfo("es-PE");
+    string FmtNum(decimal v, int d = 1) => v.ToString("N" + d, culture);
+
+    var items = Model.Items;
+    int total = items.Sum(x => x.CantReqs);
+
+    // SLA: PCT_HASTA_5DIAS ≥ 70% es bueno según comentario del SQL
+    var ultimoPct = items.LastOrDefault()?.PctHasta5Dias ?? 0;
+    string slaColor = ultimoPct >= 70 ? "#1B4D3E" : ultimoPct >= 50 ? "#e65100" : "#c62828";
+
+    var tendenciaJson = JsonSerializer.Serialize(items.Select(x => new {
+        mes    = x.Mes,
+        reqs   = x.CantReqs,
+        t1     = x.CantReqs > 0 ? (decimal?)x.T1Avg    : null,
+        t2     = x.CantReqs > 0 ? (decimal?)x.T2Avg    : null,
+        t3     = x.CantReqs > 0 ? (decimal?)x.T3Avg    : null,
+        ciclo  = x.CantReqs > 0 ? (decimal?)x.CicloAvg : null,
+        pctDia = x.CantReqs > 0 ? (decimal?)x.PctMismoDia   : null,
+        pct5d  = x.CantReqs > 0 ? (decimal?)x.PctHasta5Dias : null
+    }));
+}
+
+<!-- ── Header ────────────────────────────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1B4D3E; font-size:.95rem;">
+        📈 Tendencia Mensual del Ciclo Logístico
+    </h5>
+    <p class="text-muted mb-0" style="font-size:.8rem;">
+        Últimos @Model.MesesAtras meses — @total requisiciones atendidas en total
+    </p>
+</div>
+
+<!-- ── KPI Cards resumen ─────────────────────────────────────────────── -->
+@if (items.Any())
+{
+    decimal avgCicloGlobal = items.Average(x => x.CicloAvg);
+    decimal avgT1 = items.Average(x => x.T1Avg);
+    decimal avgT2 = items.Average(x => x.T2Avg);
+    decimal avgT3 = items.Average(x => x.T3Avg);
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center py-3">
+                <div class="fs-4 mb-1">📅</div>
+                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Meses con datos</div>
+                <div class="fw-bold fs-4" style="color:#1B4D3E;">@items.Count</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center py-3">
+                <div class="fs-4 mb-1">🔄</div>
+                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Ciclo Promedio Global</div>
+                <div class="fw-bold fs-4" style="color:#e65100;">@FmtNum(avgCicloGlobal) d</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center py-3">
+                <div class="fs-4 mb-1">🎯</div>
+                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Último % SLA ≤5d</div>
+                <div class="fw-bold fs-4" style="color:@slaColor;">@FmtNum(ultimoPct)%</div>
+                <div style="font-size:.68rem;color:#9ca3af;">Objetivo: ≥ 70 %</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm text-center py-3">
+                <div class="fs-4 mb-1">⚡</div>
+                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Cuello de Botella</div>
+                @{
+                    string cuello = avgT1 >= avgT2 && avgT1 >= avgT3 ? "T1 Reg→Aut"
+                                  : avgT2 >= avgT3                   ? "T2 Aut→Log"
+                                                                     : "T3 Log→OC";
+                }
+                <div class="fw-bold fs-5" style="color:#4A148C;">@cuello</div>
+                <div style="font-size:.68rem;color:#9ca3af;">tramo con mayor avg</div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Gráfico principal: Stacked Bar apilado (T1+T2+T3) + línea SLA ── -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card chart-card">
+            <div class="card-header small">
+                <i class="bi bi-bar-chart-stacked me-1"></i>Stacked Bar de Tramos (días avg) + % Cumplimiento SLA ≤5d
+                &nbsp;<small class="fw-normal text-muted">🔵 T1 &nbsp; 🟠 T2 &nbsp; 🟢 T3</small>
+            </div>
+            <div class="card-body" style="height:360px;"><canvas id="chartTendencia"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Gráfico combo: Volumen + Ciclo ────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card chart-card">
+            <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Volumen de Reqs Atendidas por Mes</div>
+            <div class="card-body" style="height:260px;"><canvas id="chartVolumen"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card chart-card">
+            <div class="card-header small"><i class="bi bi-graph-up me-1"></i>% Mismo Día vs % ≤5 Días (SLA)</div>
+            <div class="card-body" style="height:260px;"><canvas id="chartSla"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla de datos ────────────────────────────────────────────────── -->
+<div class="section-title">📋 Datos Mensuales</div>
+<div class="card border-0 shadow-sm mb-3">
+    <div style="max-height:400px; overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
+            <thead class="table-dark sticky-top">
+                <tr>
+                    <th>Mes</th>
+                    <th class="text-end">Reqs</th>
+                    <th class="text-end">T1 (d)</th>
+                    <th class="text-end">T2 (d)</th>
+                    <th class="text-end">T3 (d)</th>
+                    <th class="text-end">Ciclo (d)</th>
+                    <th class="text-end">% Mismo Día</th>
+                    <th class="text-end">% ≤5 d (SLA)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var x in items)
+                {
+                    string slaRowColor = x.PctHasta5Dias >= 70 ? "sem-verde"
+                                        : x.PctHasta5Dias >= 50 ? "sem-amarillo"
+                                        : x.CantReqs > 0        ? "sem-rojo"
+                                        : "";
+                    <tr class="@slaRowColor">
+                        <td class="fw-semibold">@x.Mes</td>
+                        <td class="text-end">@x.CantReqs</td>
+                        <td class="text-end">@FmtNum(x.T1Avg)</td>
+                        <td class="text-end">@FmtNum(x.T2Avg)</td>
+                        <td class="text-end">@FmtNum(x.T3Avg)</td>
+                        <td class="text-end fw-semibold">@FmtNum(x.CicloAvg)</td>
+                        <td class="text-end">@FmtNum(x.PctMismoDia)%</td>
+                        <td class="text-end fw-bold">@FmtNum(x.PctHasta5Dias)%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<input type="hidden" id="tendenciaJson" value='@Html.Raw(tendenciaJson)' />
+
+<script>
+window.initTendenciaCharts = function () {
+    const data = JSON.parse(document.getElementById('tendenciaJson').value || '[]');
+    if (!data.length) return;
+
+    const labels = data.map(d => d.mes);
+
+    // ── 1. Stacked Bar + Línea SLA ───────────────────────────────────────
+    const ctxT = document.getElementById('chartTendencia');
+    if (ctxT) {
+        new Chart(ctxT, {
+            data:{
+                labels,
+                datasets:[
+                    { type:'bar',  label:'T1 Reg→Aut', data:data.map(d => d.reqs > 0 ? d.t1 : null), backgroundColor:'#1565C0cc', stack:'tramos', order:2 },
+                    { type:'bar',  label:'T2 Aut→Log', data:data.map(d => d.reqs > 0 ? d.t2 : null), backgroundColor:'#ff9800cc', stack:'tramos', order:2 },
+                    { type:'bar',  label:'T3 Log→OC',  data:data.map(d => d.reqs > 0 ? d.t3 : null), backgroundColor:'#1B4D3Ecc', stack:'tramos', order:2 },
+                    { type:'line', label:'% SLA ≤5d', data:data.map(d => d.reqs > 0 ? d.pct5d : null),
+                      borderColor:'#c62828', backgroundColor:'transparent', fill:false,
+                      tension:.3, yAxisID:'ySla', pointRadius:4, spanGaps:false, order:1 }
+                ]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ position:'bottom' },
+                          tooltip:{ mode:'index', intersect:false }},
+                scales:{
+                    x:{ stacked:true },
+                    y:{ stacked:true, beginAtZero:true, min:0,
+                        title:{ display:true, text:'Días (promedio)' }},
+                    ySla:{ type:'linear', position:'right', min:0, max:100,
+                           title:{ display:true, text:'% SLA' },
+                           grid:{ drawOnChartArea:false },
+                           ticks:{ callback: v => v+'%' }}
+                }
+            }
+        });
+    }
+
+    // ── 2. Volumen de Reqs ───────────────────────────────────────────────
+    const ctxV = document.getElementById('chartVolumen');
+    if (ctxV) {
+        new Chart(ctxV, {
+            type:'bar',
+            data:{ labels, datasets:[{
+                label:'Reqs atendidas', data:data.map(d=>d.reqs),
+                backgroundColor:'#1565C0cc', borderColor:'#1565C0', borderWidth:1
+            }]},
+            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }},
+                      scales:{ y:{ beginAtZero:true, min:0 }}}
+        });
+    }
+
+    // ── 3. % Mismo Día vs % ≤5d ─────────────────────────────────────────
+    const ctxS = document.getElementById('chartSla');
+    if (ctxS) {
+        new Chart(ctxS, {
+            type:'line',
+            data:{ labels, datasets:[
+                { label:'% Mismo día', data:data.map(d => d.reqs > 0 ? d.pctDia : null),
+                  borderColor:'#1B4D3E', backgroundColor:'#1B4D3E22', fill:false,
+                  tension:.3, pointRadius:4, spanGaps:false },
+                { label:'% ≤5 días (SLA)', data:data.map(d => d.reqs > 0 ? d.pct5d : null),
+                  borderColor:'#c62828', backgroundColor:'#c6282822', fill:false,
+                  tension:.3, pointRadius:4, spanGaps:false }
+            ]},
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ position:'bottom' },
+                          tooltip:{ mode:'index', intersect:false }},
+                scales:{ y:{ min:0, max:100, ticks:{ callback: v => v+'%' }}}
+            }
+        });
+    }
+};
+</script>

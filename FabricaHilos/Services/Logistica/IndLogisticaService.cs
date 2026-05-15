@@ -37,8 +37,6 @@ public class IndLogisticaService : IIndLogisticaService
             ?? throw new InvalidOperationException($"Connection string '{connKey}' not found.");
     }
 
-    // ── Helpers de lectura de columnas ────────────────────────────────────────
-
     private static DateTime? ReadDate(System.Data.Common.DbDataReader r, string col)
         => r[col] is DBNull ? null : Convert.ToDateTime(r[col]);
 
@@ -48,9 +46,7 @@ public class IndLogisticaService : IIndLogisticaService
     private static int ReadInt(System.Data.Common.DbDataReader r, string col)
         => r[col] is DBNull ? 0 : Convert.ToInt32(r[col]);
 
-    // ── P_DETALLE ──────────────────────────────────────────────────────────────
-    // Devuelve una fila por ítem/despacho. Fuente del Excel exportable.
-
+    // P_DETALLE
     public async Task<List<IndLogisticaDetalleDto>> ObtenerDetalleAsync(DateTime fechaDesde, DateTime fechaHasta)
     {
         var result = new List<IndLogisticaDetalleDto>();
@@ -97,9 +93,7 @@ public class IndLogisticaService : IIndLogisticaService
         return result;
     }
 
-    // ── P_DASHBOARD ────────────────────────────────────────────────────────────
-    // 4 cursores en una sola llamada: resumen, tiempos, top CC, pendientes.
-
+    // P_DASHBOARD
     public async Task<IndLogisticaDashboardViewModel> ObtenerDashboardAsync(DateTime fechaDesde, DateTime fechaHasta)
     {
         var vm = new IndLogisticaDashboardViewModel { FechaDesde = fechaDesde, FechaHasta = fechaHasta };
@@ -120,8 +114,6 @@ public class IndLogisticaService : IIndLogisticaService
 
         await cmd.ExecuteNonQueryAsync();
 
-        // ── Cursor 1: Resumen por TIPO y ESTADO ────────────────────────────
-        // PCT_ATENDIDO viene como window function → mismo valor por TIPO.
         await using (var r = ((OracleRefCursor)pResumen.Value).GetDataReader())
         {
             while (await r.ReadAsync())
@@ -138,7 +130,6 @@ public class IndLogisticaService : IIndLogisticaService
             }
         }
 
-        // ── Cursor 2: Tiempos promedio del ciclo (1 fila) ──────────────────
         await using (var r = ((OracleRefCursor)pTiempos.Value).GetDataReader())
         {
             if (await r.ReadAsync())
@@ -154,8 +145,6 @@ public class IndLogisticaService : IIndLogisticaService
             }
         }
 
-        // ── Cursor 3: Top 10 destinos por monto ────────────────────────────
-        // Incluye CANT_REQS y TP_DESTINO para colorear CC vs Activo Fijo.
         await using (var r = ((OracleRefCursor)pTopCcosto.Value).GetDataReader())
         {
             while (await r.ReadAsync())
@@ -172,9 +161,6 @@ public class IndLogisticaService : IIndLogisticaService
             }
         }
 
-        // ── Cursor 4: Ítems con saldo pendiente ────────────────────────────
-        // DIAS_EN_ESPERA siempre es número (nunca NULL según lógica SQL).
-        // Semáforo: verde <3d, amarillo 3-7d, rojo >7d.
         await using (var r = ((OracleRefCursor)pPend.Value).GetDataReader())
         {
             while (await r.ReadAsync())
@@ -198,10 +184,7 @@ public class IndLogisticaService : IIndLogisticaService
         return vm;
     }
 
-    // ── P_CICLO_VIDA ───────────────────────────────────────────────────────────
-    // Una fila por req ATENDIDA con los 4 hitos y los días de cada tramo.
-    // Datos para Gantt, histograma y scatter monto vs ciclo.
-
+    // P_CICLO_VIDA
     public async Task<IndLogisticaCicloVidaViewModel> ObtenerCicloVidaAsync(DateTime fechaDesde, DateTime fechaHasta)
     {
         var vm = new IndLogisticaCicloVidaViewModel { FechaDesde = fechaDesde, FechaHasta = fechaHasta };
@@ -238,9 +221,7 @@ public class IndLogisticaService : IIndLogisticaService
         return vm;
     }
 
-    // ── P_TENDENCIA_MENSUAL ────────────────────────────────────────────────────
-    // Una fila por mes con promedios de tramos y % SLA (ciclo ≤ 5 días).
-
+    // P_TENDENCIA_MENSUAL
     public async Task<IndLogisticaTendenciaMensualViewModel> ObtenerTendenciaMensualAsync(int mesesAtras = 12)
     {
         var vm = new IndLogisticaTendenciaMensualViewModel { MesesAtras = mesesAtras };
@@ -270,178 +251,6 @@ public class IndLogisticaService : IIndLogisticaService
                 PctHasta5Dias = ReadDec(reader, "PCT_HASTA_5DIAS"),
             });
         }
-        return vm;
-    }
-}
-
-public class IndLogisticaService : IIndLogisticaService
-{
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<IndLogisticaService> _logger;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public IndLogisticaService(
-        IConfiguration configuration,
-        ILogger<IndLogisticaService> logger,
-        IHttpContextAccessor httpContextAccessor)
-    {
-        _configuration       = configuration;
-        _logger              = logger;
-        _httpContextAccessor = httpContextAccessor;
-    }
-
-    private string GetConnectionString()
-    {
-        var session = _httpContextAccessor.HttpContext?.Session;
-        var connKey = session?.GetString("EmpresaConexion") ?? "LaColonialConnection";
-        return _configuration.GetConnectionString(connKey)
-            ?? throw new InvalidOperationException($"Connection string '{connKey}' not found.");
-    }
-
-    // ── P_DETALLE ──────────────────────────────────────────────────────────────
-
-    public async Task<List<IndLogisticaDetalleDto>> ObtenerDetalleAsync(DateTime fechaDesde, DateTime fechaHasta)
-    {
-        var result = new List<IndLogisticaDetalleDto>();
-        await using var conn = new OracleConnection(GetConnectionString());
-        await conn.OpenAsync();
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PKG_IND_LOGISTICA.P_DETALLE";
-        cmd.CommandType = CommandType.StoredProcedure;
-
-        cmd.Parameters.Add("P_FECHA_DESDE", OracleDbType.Date).Value = fechaDesde;
-        cmd.Parameters.Add("P_FECHA_HASTA", OracleDbType.Date).Value = fechaHasta;
-        var curParam = cmd.Parameters.Add("P_CURSOR", OracleDbType.RefCursor);
-        curParam.Direction = ParameterDirection.Output;
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            result.Add(new IndLogisticaDetalleDto
-            {
-                Tipo         = reader["TIPO"]         as string,
-                NumReq       = Convert.ToInt64(reader["NUMREQ"]),
-                Fecha        = reader["FECHA"]        is DBNull ? null : Convert.ToDateTime(reader["FECHA"]),
-                FAutoriza    = reader["F_AUTORIZA"]   is DBNull ? null : Convert.ToDateTime(reader["F_AUTORIZA"]),
-                FRecibe      = reader["F_RECIBE"]     is DBNull ? null : Convert.ToDateTime(reader["F_RECIBE"]),
-                OrdenCompra  = reader["ORDEN_COMPRA"] as string,
-                FchOrden     = reader["FCH_ORDEN"]    is DBNull ? null : Convert.ToDateTime(reader["FCH_ORDEN"]),
-                Destino      = reader["DESTINO"]      as string,
-                DescDestino  = reader["DESC_DESTINO"] as string,
-                Solicita     = reader["SOLICITA"]     as string,
-                Observacion  = reader["OBSERVACION"]  as string,
-                CodArt       = reader["COD_ART"]      as string,
-                DescArticulo = reader["DESC_ARTICULO"] as string,
-                Unidad       = reader["UNIDAD"]       as string,
-                Cantidad     = reader["CANTIDAD"]     is DBNull ? 0 : Convert.ToDecimal(reader["CANTIDAD"]),
-                CantDesp     = reader["CANT_DESP"]    is DBNull ? 0 : Convert.ToDecimal(reader["CANT_DESP"]),
-                Saldo        = reader["SALDO"]        is DBNull ? 0 : Convert.ToDecimal(reader["SALDO"]),
-                PUnit        = reader["PUNIT"]        is DBNull ? 0 : Convert.ToDecimal(reader["PUNIT"]),
-                SubTotal     = reader["SUB_TOTAL"]    is DBNull ? 0 : Convert.ToDecimal(reader["SUB_TOTAL"]),
-                Igv          = reader["IGV"]          is DBNull ? 0 : Convert.ToDecimal(reader["IGV"]),
-                Total        = reader["TOTAL"]        is DBNull ? 0 : Convert.ToDecimal(reader["TOTAL"]),
-                Estado       = reader["ESTADO"]       as string,
-            });
-        }
-        return result;
-    }
-
-    // ── P_DASHBOARD ────────────────────────────────────────────────────────────
-
-    public async Task<IndLogisticaDashboardViewModel> ObtenerDashboardAsync(DateTime fechaDesde, DateTime fechaHasta)
-    {
-        var vm = new IndLogisticaDashboardViewModel
-        {
-            FechaDesde = fechaDesde,
-            FechaHasta = fechaHasta,
-        };
-
-        await using var conn = new OracleConnection(GetConnectionString());
-        await conn.OpenAsync();
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PKG_IND_LOGISTICA.P_DASHBOARD";
-        cmd.CommandType = CommandType.StoredProcedure;
-
-        cmd.Parameters.Add("P_FECHA_DESDE",    OracleDbType.Date).Value    = fechaDesde;
-        cmd.Parameters.Add("P_FECHA_HASTA",    OracleDbType.Date).Value    = fechaHasta;
-
-        var pResumen   = cmd.Parameters.Add("P_CUR_RESUMEN",    OracleDbType.RefCursor); pResumen.Direction   = ParameterDirection.Output;
-        var pTiempos   = cmd.Parameters.Add("P_CUR_TIEMPOS",    OracleDbType.RefCursor); pTiempos.Direction   = ParameterDirection.Output;
-        var pTopCcosto = cmd.Parameters.Add("P_CUR_TOP_CCOSTO", OracleDbType.RefCursor); pTopCcosto.Direction = ParameterDirection.Output;
-        var pPend      = cmd.Parameters.Add("P_CUR_PENDIENTES", OracleDbType.RefCursor); pPend.Direction      = ParameterDirection.Output;
-
-        await cmd.ExecuteNonQueryAsync();
-
-        // ── Cursor 1: Resumen ───────────────────────────────────────────────
-        await using (var r = ((OracleRefCursor)pResumen.Value).GetDataReader())
-        {
-            while (await r.ReadAsync())
-            {
-                vm.Resumen.Add(new IndLogisticaResumenDto
-                {
-                    Tipo        = r["TIPO"]         as string,
-                    Estado      = r["ESTADO"]       as string,
-                    CantReqs    = r["CANT_REQS"]    is DBNull ? 0 : Convert.ToInt32(r["CANT_REQS"]),
-                    CantItems   = r["CANT_ITEMS"]   is DBNull ? 0 : Convert.ToInt32(r["CANT_ITEMS"]),
-                    MontoTotal  = r["MONTO_TOTAL"]  is DBNull ? 0 : Convert.ToDecimal(r["MONTO_TOTAL"]),
-                    PctAtendido = r["PCT_ATENDIDO"] is DBNull ? 0 : Convert.ToDecimal(r["PCT_ATENDIDO"]),
-                });
-            }
-        }
-
-        // ── Cursor 2: Tiempos ───────────────────────────────────────────────
-        await using (var r = ((OracleRefCursor)pTiempos.Value).GetDataReader())
-        {
-            if (await r.ReadAsync())
-            {
-                vm.Tiempos = new IndLogisticaTiemposDto
-                {
-                    TotalReqs           = r["TOTAL_REQS"]           is DBNull ? 0 : Convert.ToInt32(r["TOTAL_REQS"]),
-                    DiasRegAutorizacion = r["DIAS_REG_AUTORIZACION"] is DBNull ? 0 : Convert.ToDecimal(r["DIAS_REG_AUTORIZACION"]),
-                    DiasAutRecibo       = r["DIAS_AUT_RECIBO"]       is DBNull ? 0 : Convert.ToDecimal(r["DIAS_AUT_RECIBO"]),
-                    DiasReciboOc        = r["DIAS_RECIBO_OC"]        is DBNull ? 0 : Convert.ToDecimal(r["DIAS_RECIBO_OC"]),
-                    DiasCicloTotal      = r["DIAS_CICLO_TOTAL"]      is DBNull ? 0 : Convert.ToDecimal(r["DIAS_CICLO_TOTAL"]),
-                };
-            }
-        }
-
-        // ── Cursor 3: Top Centros de Costo ──────────────────────────────────
-        await using (var r = ((OracleRefCursor)pTopCcosto.Value).GetDataReader())
-        {
-            while (await r.ReadAsync())
-            {
-                vm.TopCcosto.Add(new IndLogisticaTopCcostoDto
-                {
-                    Destino     = r["DESTINO"]      as string,
-                    DescDestino = r["DESC_DESTINO"] as string,
-                    CantItems   = r["CANT_ITEMS"]   is DBNull ? 0 : Convert.ToInt32(r["CANT_ITEMS"]),
-                    MontoTotal  = r["MONTO_TOTAL"]  is DBNull ? 0 : Convert.ToDecimal(r["MONTO_TOTAL"]),
-                });
-            }
-        }
-
-        // ── Cursor 4: Pendientes ────────────────────────────────────────────
-        await using (var r = ((OracleRefCursor)pPend.Value).GetDataReader())
-        {
-            while (await r.ReadAsync())
-            {
-                vm.Pendientes.Add(new IndLogisticaPendienteDto
-                {
-                    NumReq         = Convert.ToInt64(r["NUMREQ"]),
-                    Fecha          = r["FECHA"]           is DBNull ? null : Convert.ToDateTime(r["FECHA"]),
-                    Tipo           = r["TIPO"]            as string,
-                    Solicita       = r["SOLICITA"]        as string,
-                    CodArt         = r["COD_ART"]         as string,
-                    DescArticulo   = r["DESC_ARTICULO"]   as string,
-                    Saldo          = r["SALDO"]           is DBNull ? 0 : Convert.ToDecimal(r["SALDO"]),
-                    MontoPendiente = r["MONTO_PENDIENTE"] is DBNull ? 0 : Convert.ToDecimal(r["MONTO_PENDIENTE"]),
-                    DiasEnEspera   = r["DIAS_EN_ESPERA"]  is DBNull ? null : Convert.ToInt32(r["DIAS_EN_ESPERA"]),
-                });
-            }
-        }
-
         return vm;
     }
 }
