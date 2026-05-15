@@ -17,7 +17,7 @@
  *   - Compensacion parcial: permitida (reduce horas_falta sin anularla)
  *   - Multiples INSERT en SCA_COMPENSACION por empleado (uno por par origen-destino)
  *
- * IDENTIFICACION DDC (por exclusion en SCA_ASISTENCIA_TAREO):
+ * IDENTIFICACION DDC (por exclusion en SCA_ASISTENCIA_TAREO + SIG.RH_EVENTOS):
  *   alerta02 = 'FT'  AND horas_falta IS NOT NULL
  *   AND descanso = 'N'
  *   AND NVL(per_dia_comp,'N') = 'N'
@@ -25,6 +25,10 @@
  *   AND per_suspension IS NULL AND per_lic_sind IS NULL AND per_lic_pat IS NULL
  *   AND per_lic_fac IS NULL AND per_goce_fis IS NULL AND per_goce IS NULL
  *   AND per_sgoce IS NULL
+ *   -- Ademas: NO debe existir evento C_TIPO='07' (FALTA NO JUSTIFICADA) en LOGIX
+ *   -- para ese empleado y fecha. C_TIPO='07' no se sincroniza a AQUARIUS via el
+ *   -- trigger TIA_RH_EVENTOS_AQUARIUS, por eso se consulta SIG.RH_EVENTOS directamente.
+ *   -- Join: SCA_FOTOCHECK.num_fotocheck = SIG.RH_EVENTOS.c_codigo
  *
  * DISTRIBUCION HE -> DDC:
  *   - Pool de HE: todos los dias con horaextra_ajus > 0 en el rango
@@ -106,26 +110,32 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
         son realmente DDC antes de aplicar compensacion.
 
         PARAMETROS:
-        - p_cod_empresa     Empresa
-        - p_fecha_inicio    'dd/MM/yyyy' inicio del rango (ej. lunes)
-        - p_fecha_fin       'dd/MM/yyyy' fin del rango (ej. sabado/domingo)
-        - p_nombre          NULL = sin filtro; texto parcial sobre nombre
+        - p_cod_empresa       Empresa
+        - p_fecha_inicio      'dd/MM/yyyy' inicio del rango DDC (ej. lunes)
+        - p_fecha_fin         'dd/MM/yyyy' fin del rango DDC (ej. sabado/domingo)
+        - p_nombre            NULL = sin filtro; texto parcial sobre nombre
+        - p_fecha_he_inicio   'dd/MM/yyyy' inicio del rango para buscar dias con HE.
+                              NULL = usa p_fecha_inicio (mismo rango que DDC).
+        - p_fecha_he_fin      'dd/MM/yyyy' fin del rango para buscar dias con HE.
+                              NULL = usa p_fecha_fin (mismo rango que DDC).
 
         CURSOR resultado (una fila por empleado+dia con HE o candidato DDC):
           cod_personal, nombre_completo,
           fechamar, fechamar_str, dia_semana,
-          tipo_dia     ('HE'=dia con HE | 'DDC'=candidato DDC | 'DESCANSO')
+          tipo_dia     ('HE'=dia con HE | 'DDC'=candidato DDC | 'DESCANSO' | 'BLOQ_LOGIX'=DDC bloqueado por evento en LOGIX)
           min_he, horas_he              (0 si no es dia HE)
           min_falta, horas_falta        (0 si no es candidato DDC)
           alerta02, alerta06, descanso,
           ya_compensado  ('S'/'N': si ya existe comp DDC para ese dia)
     ***************************************************************************/
     PROCEDURE LISTAR_DDC_RANGO(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_nombre         IN VARCHAR2 DEFAULT NULL,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_nombre           IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     );
 
     /***************************************************************************
@@ -391,7 +401,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
               TO_CHAR(TRUNC(MOD((horaextra_ajus - NVL(h35f, c_BASE_DATE))*24*60, 60))),
               'dd/MM/yyyy HH24:MI')
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec
-        AND   horaextra_ajus > h35f;
+        AND   horaextra_ajus > hni;
 
         -- 4. Marca alerta06='EC' si llega a 0
         UPDATE SCA_ASISTENCIA_TAREO
@@ -463,7 +473,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
               TO_CHAR(TRUNC(MOD((horaextra_ajus - NVL(h35f, c_BASE_DATE))*24*60, 60))),
               'dd/MM/yyyy HH24:MI')
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec
-        AND   horaextra_ajus > h35f;
+        AND   horaextra_ajus > hni;
 
         -- Quita alerta EC si ya no es 0
         UPDATE SCA_ASISTENCIA_TAREO
@@ -488,23 +498,24 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
     BEGIN
         IF p_min <= 0 THEN RETURN; END IF;
 
-        -- Reduce horas_falta en p_min
+        -- Reduce horas_falta en p_min; acredita horaefectiva y tothoramarcas
         UPDATE SCA_ASISTENCIA_TAREO
         SET
-            horas_falta  = CASE
-                               WHEN (NVL(horas_falta, c_BASE_DATE) - p_min/1440) <= c_BASE_DATE
-                               THEN NULL
-                               ELSE horas_falta - p_min/1440
-                           END,
-            alerta02     = CASE
-                               WHEN (NVL(horas_falta, c_BASE_DATE) - p_min/1440) <= c_BASE_DATE
-                               THEN 'FC'
-                               ELSE alerta02   -- mantiene 'FT' si parcial
-                           END,
-            horaefectiva = NVL(horaefectiva, c_BASE_DATE) + p_min/1440
+            horas_falta   = CASE
+                                WHEN (NVL(horas_falta, c_BASE_DATE) - p_min/1440) <= c_BASE_DATE
+                                THEN NULL
+                                ELSE horas_falta - p_min/1440
+                            END,
+            alerta02      = CASE
+                                WHEN (NVL(horas_falta, c_BASE_DATE) - p_min/1440) <= c_BASE_DATE
+                                THEN 'FC'
+                                ELSE alerta02   -- mantiene 'FT' si parcial
+                            END,
+            horaefectiva  = NVL(horaefectiva,  c_BASE_DATE) + p_min/1440,
+            tothoramarcas = NVL(tothoramarcas, c_BASE_DATE) + p_min/1440
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
-        -- Normalizar horaefectiva si quedo en base_date (no deberia, pero por seguridad)
+        -- Normalizar si horaefectiva quedo en base_date (no deberia, pero por seguridad)
         UPDATE SCA_ASISTENCIA_TAREO
         SET horaefectiva = CASE WHEN horaefectiva = c_BASE_DATE THEN NULL ELSE horaefectiva END
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
@@ -523,19 +534,21 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
 
         UPDATE SCA_ASISTENCIA_TAREO
         SET
-            horas_falta  = NVL(horas_falta, c_BASE_DATE) + p_min/1440,
-            alerta02     = CASE
-                               -- Si vuelve a tothoras completo -> FT; si parcial -> FP? usar FT
-                               WHEN (NVL(horas_falta, c_BASE_DATE) + p_min/1440) >= NVL(tothoras, c_BASE_DATE)
-                               THEN 'FT'
-                               ELSE alerta02
-                           END,
-            horaefectiva = horaefectiva - p_min/1440
+            horas_falta   = NVL(horas_falta, c_BASE_DATE) + p_min/1440,
+            alerta02      = CASE
+                                -- Si vuelve a tothoras completo -> FT; si parcial mantiene estado
+                                WHEN (NVL(horas_falta, c_BASE_DATE) + p_min/1440) >= NVL(tothoras, c_BASE_DATE)
+                                THEN 'FT'
+                                ELSE alerta02
+                            END,
+            horaefectiva  = horaefectiva  - p_min/1440,
+            tothoramarcas = tothoramarcas - p_min/1440
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
-        -- Si horaefectiva bajo a base_date o menos -> NULL
+        -- Normalizar si bajaron a base_date o menos
         UPDATE SCA_ASISTENCIA_TAREO
-        SET horaefectiva = CASE WHEN horaefectiva <= c_BASE_DATE THEN NULL ELSE horaefectiva END
+        SET horaefectiva  = CASE WHEN horaefectiva  <= c_BASE_DATE THEN NULL ELSE horaefectiva  END,
+            tothoramarcas = CASE WHEN tothoramarcas <= c_BASE_DATE THEN NULL ELSE tothoramarcas END
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
     END prv_revertir_destino_ddc;
 
@@ -573,7 +586,26 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
             AND    t.per_goce_fis IS NULL
             AND    t.per_goce IS NULL
             AND    t.per_sgoce IS NULL
-            -- Excluir dias que ya tienen comp DDC aplicada (total = falta original)
+            -- Excluir si existe FALTA NO JUSTIFICADA (C_TIPO='07') en LOGIX para ese dia.
+            -- C_TIPO='07' no se sincroniza a AQUARIUS, se consulta SIG.RH_EVENTOS directamente.
+            -- NOTA: Se usa el ultimo fotocheck del empleado (MAX id_fotocheck), sin filtrar act_fotocheck.
+            AND    NOT EXISTS (
+                       SELECT 1
+                       FROM   SIG.RH_EVENTOS re
+                       WHERE  re.c_tipo = '07'
+                       AND    TO_NUMBER(re.c_codigo) = (
+                                  SELECT TO_NUMBER(
+                                             MAX(sf2.num_fotocheck)
+                                             KEEP (DENSE_RANK LAST ORDER BY sf2.id_fotocheck)
+                                         )
+                                  FROM   SCA_FOTOCHECK sf2
+                                  WHERE  sf2.cod_empresa  = t.cod_empresa
+                                  AND    sf2.cod_personal = t.cod_personal
+                              )
+                       AND    re.d_inicio                  <= t.fechamar
+                       AND    NVL(re.d_final, re.d_inicio) >= t.fechamar
+                   )
+            -- Excluir dias que ya tienen comp DDC aplicada
             AND    NOT EXISTS (
                        SELECT 1 FROM SCA_COMPENSACION c2
                        WHERE  c2.cod_empresa      = t.cod_empresa
@@ -628,43 +660,74 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
     -- LISTAR_DDC_RANGO
     -- =========================================================================
     PROCEDURE LISTAR_DDC_RANGO(
-        p_cod_empresa    IN VARCHAR2,
-        p_fecha_inicio   IN VARCHAR2,
-        p_fecha_fin      IN VARCHAR2,
-        p_nombre         IN VARCHAR2 DEFAULT NULL,
-        cv_resultado     OUT SYS_REFCURSOR
+        p_cod_empresa      IN VARCHAR2,
+        p_fecha_inicio     IN VARCHAR2,
+        p_fecha_fin        IN VARCHAR2,
+        p_nombre           IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
+        p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
+        cv_resultado       OUT SYS_REFCURSOR
     ) AS
-        v_fec_ini DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
-        v_fec_fin DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
-        v_nombre  VARCHAR2(200) := CASE WHEN p_nombre IS NOT NULL
-                                        THEN '%'||UPPER(TRIM(p_nombre))||'%'
-                                        ELSE NULL END;
+        v_fec_ini    DATE := TO_DATE(p_fecha_inicio, 'dd/MM/yyyy');
+        v_fec_fin    DATE := TO_DATE(p_fecha_fin,    'dd/MM/yyyy');
+        -- Rango independiente para buscar dias con HE disponibles.
+        -- NULL = usa el mismo rango que los candidatos DDC.
+        v_fec_he_ini DATE := NVL(TO_DATE(p_fecha_he_inicio, 'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_inicio,    'dd/MM/yyyy'));
+        v_fec_he_fin DATE := NVL(TO_DATE(p_fecha_he_fin,    'dd/MM/yyyy'),
+                                 TO_DATE(p_fecha_fin,       'dd/MM/yyyy'));
+        v_nombre     VARCHAR2(200) := CASE WHEN p_nombre IS NOT NULL
+                                          THEN '%'||UPPER(TRIM(p_nombre))||'%'
+                                          ELSE NULL END;
     BEGIN
         OPEN cv_resultado FOR
-            WITH dias AS (
-                -- Dias con HE
+            WITH
+            -- ① Ultimo fotocheck por empleado (una sola lectura de SCA_FOTOCHECK)
+            ft AS (
+                SELECT cod_empresa, cod_personal,
+                       MAX(num_fotocheck)
+                           KEEP (DENSE_RANK LAST ORDER BY id_fotocheck) AS num_fotocheck
+                FROM   SCA_FOTOCHECK
+                WHERE  cod_empresa = p_cod_empresa
+                GROUP  BY cod_empresa, cod_personal
+            ),
+            -- ② Eventos LOGIX c_tipo='07' del rango (una sola lectura cross-schema)
+            lx AS (
+                SELECT TO_NUMBER(re.c_codigo)              AS fch_num,
+                       re.d_inicio,
+                       NVL(re.d_final, re.d_inicio)        AS d_final,
+                       re.c_motivo,
+                       rt.descripcion                      AS desc_motivo
+                FROM   SIG.RH_EVENTOS re
+                LEFT JOIN SIG.RH_RTPS rt
+                       ON  rt.tabla  = '100'
+                       AND rt.codigo = re.c_motivo
+                WHERE  re.c_tipo = '07'
+                AND    re.d_inicio                <= v_fec_fin
+                AND    NVL(re.d_final,re.d_inicio) >= v_fec_ini
+            ),
+            -- ③ Candidatos FT: un solo scan de SCA_ASISTENCIA_TAREO con LEFT JOIN
+            --    a ft y lx; clasifica cada fila como 'DDC' o 'BLOQ_LOGIX'.
+            tareo_cands AS (
                 SELECT t.cod_empresa, t.cod_personal, t.fechamar,
-                       'HE' AS tipo_dia,
-                       ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440) AS min_he,
-                       0 AS min_falta,
-                       t.alerta02, t.alerta06,
-                       NVL(t.descanso,'N') AS descanso,
-                       t.nummarcaciones
-                FROM   SCA_ASISTENCIA_TAREO t
-                WHERE  t.cod_empresa = p_cod_empresa
-                AND    t.fechamar BETWEEN v_fec_ini AND v_fec_fin
-                AND    t.horaextra_ajus > c_BASE_DATE
-                AND    NVL(t.descanso,'N') = 'N'
-                UNION ALL
-                -- Dias candidatos DDC
-                SELECT t.cod_empresa, t.cod_personal, t.fechamar,
-                       'DDC' AS tipo_dia,
-                       0 AS min_he,
+                       CASE WHEN lx.fch_num IS NOT NULL
+                            THEN 'BLOQ_LOGIX' ELSE 'DDC' END          AS tipo_dia,
                        ROUND((NVL(t.horas_falta, c_BASE_DATE) - c_BASE_DATE)*1440) AS min_falta,
                        t.alerta02, t.alerta06,
-                       NVL(t.descanso,'N') AS descanso,
-                       t.nummarcaciones
+                       NVL(t.descanso,'N')                             AS descanso,
+                       t.nummarcaciones,
+                       lx.c_motivo                                     AS logix_cmotivo,
+                       lx.desc_motivo                                  AS logix_desc_motivo,
+                       TO_CHAR(lx.d_inicio, 'DD/MM/YYYY')              AS logix_dinicio,
+                       TO_CHAR(lx.d_final,  'DD/MM/YYYY')              AS logix_dfinal
                 FROM   SCA_ASISTENCIA_TAREO t
+                LEFT JOIN ft
+                       ON  ft.cod_empresa  = t.cod_empresa
+                       AND ft.cod_personal = t.cod_personal
+                LEFT JOIN lx
+                       ON  lx.fch_num  = TO_NUMBER(ft.num_fotocheck)
+                       AND lx.d_inicio <= t.fechamar
+                       AND lx.d_final  >= t.fechamar
                 WHERE  t.cod_empresa = p_cod_empresa
                 AND    t.fechamar BETWEEN v_fec_ini AND v_fec_fin
                 AND    t.alerta02 = 'FT'
@@ -676,6 +739,68 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                 AND    t.per_lic_sind IS NULL AND t.per_lic_pat IS NULL
                 AND    t.per_lic_fac IS NULL  AND t.per_goce_fis IS NULL
                 AND    t.per_goce IS NULL AND t.per_sgoce IS NULL
+            ),
+            dias AS (
+                -- Dias con HE disponibles
+                SELECT t.cod_empresa, t.cod_personal, t.fechamar,
+                       'HE' AS tipo_dia,
+                       ROUND((NVL(t.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE)*1440) AS min_he,
+                       0 AS min_falta,
+                       t.alerta02, t.alerta06,
+                       NVL(t.descanso,'N') AS descanso,
+                       t.nummarcaciones,
+                       NULL AS logix_cmotivo,
+                       NULL AS logix_desc_motivo,
+                       NULL AS logix_dinicio,
+                       NULL AS logix_dfinal
+                FROM   SCA_ASISTENCIA_TAREO t
+                WHERE  t.cod_empresa = p_cod_empresa
+                AND    t.fechamar BETWEEN v_fec_he_ini AND v_fec_he_fin
+                AND    t.horaextra_ajus > c_BASE_DATE
+                AND    NVL(t.descanso,'N') = 'N'
+                AND    EXISTS (
+                           SELECT 1 FROM tareo_cands tc
+                           WHERE  tc.cod_empresa  = t.cod_empresa
+                           AND    tc.cod_personal = t.cod_personal
+                       )
+                UNION ALL
+                -- Dias DDC: no bloqueados por LOGIX, no compensados aun
+                SELECT c.cod_empresa, c.cod_personal, c.fechamar,
+                       'DDC' AS tipo_dia,
+                       0 AS min_he,
+                       c.min_falta,
+                       c.alerta02, c.alerta06,
+                       c.descanso,
+                       c.nummarcaciones,
+                       NULL AS logix_cmotivo,
+                       NULL AS logix_desc_motivo,
+                       NULL AS logix_dinicio,
+                       NULL AS logix_dfinal
+                FROM   tareo_cands c
+                WHERE  c.tipo_dia = 'DDC'
+                AND    NOT EXISTS (
+                           SELECT 1 FROM SCA_COMPENSACION c2
+                           WHERE  c2.cod_empresa      = c.cod_empresa
+                           AND    c2.cod_personal     = c.cod_personal
+                           AND    c2.fechadestino     = c.fechamar
+                           AND    c2.tipocompensacion = 'F'
+                           AND    c2.aux1 LIKE 'D%'
+                       )
+                UNION ALL
+                -- Dias bloqueados por LOGIX (solo informativo para la UI)
+                SELECT c.cod_empresa, c.cod_personal, c.fechamar,
+                       'BLOQ_LOGIX' AS tipo_dia,
+                       0 AS min_he,
+                       c.min_falta,
+                       c.alerta02, c.alerta06,
+                       c.descanso,
+                       c.nummarcaciones,
+                       c.logix_cmotivo,
+                       c.logix_desc_motivo,
+                       c.logix_dinicio,
+                       c.logix_dfinal
+                FROM   tareo_cands c
+                WHERE  c.tipo_dia = 'BLOQ_LOGIX'
                 UNION ALL
                 -- Descansos obligatorios del rango (info)
                 SELECT t.cod_empresa, t.cod_personal, t.fechamar,
@@ -683,7 +808,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                        0 AS min_he, 0 AS min_falta,
                        t.alerta02, t.alerta06,
                        'S' AS descanso,
-                       t.nummarcaciones
+                       t.nummarcaciones,
+                       NULL AS logix_cmotivo,
+                       NULL AS logix_desc_motivo,
+                       NULL AS logix_dinicio,
+                       NULL AS logix_dfinal
                 FROM   SCA_ASISTENCIA_TAREO t
                 WHERE  t.cod_empresa = p_cod_empresa
                 AND    t.fechamar BETWEEN v_fec_ini AND v_fec_fin
@@ -691,6 +820,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
             )
             SELECT
                 d.cod_personal,
+                ft.num_fotocheck,
                 p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo,
                 d.fechamar,
                 TO_CHAR(d.fechamar,'DD/MM/YYYY') AS fechamar_str,
@@ -717,11 +847,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                          AND    c2.fechadestino     = d.fechamar
                          AND    c2.tipocompensacion = 'F'
                          AND    c2.aux1 LIKE 'D%'
-                     ) THEN 'S' ELSE 'N' END AS ya_compensado
+                     ) THEN 'S' ELSE 'N' END AS ya_compensado,
+                -- Evento LOGIX bloqueante (solo para tipo_dia='BLOQ_LOGIX', NULL en el resto)
+                d.logix_cmotivo,
+                d.logix_dinicio,
+                d.logix_dfinal,
+                d.logix_desc_motivo
             FROM dias d
             JOIN PLA_PERSONAL p
                  ON  p.cod_empresa  = d.cod_empresa
                  AND p.cod_personal = d.cod_personal
+            LEFT JOIN ft
+                 ON  ft.cod_empresa  = d.cod_empresa
+                 AND ft.cod_personal = d.cod_personal
             WHERE (v_nombre IS NULL
                    OR UPPER(p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador)
                       LIKE v_nombre)
@@ -837,7 +975,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                 v_hft        := fn_min_a_hhmi(v_dias_ddc(j).min_valor);
                 v_hha        := fn_min_a_hhmi(v_he_asig);
                 v_hfr        := fn_min_a_hhmi(v_falt_rest);
-                v_motivo_ins := 'Total HE rango='||fn_min_a_hhmi(v_total_he);
+                v_motivo_ins := TO_CHAR(v_total_he);  -- minutos numericos; el cursor los formatea
                 v_fdc_str    := TO_CHAR(v_dias_ddc(j).fechamar,'DD/MM/YYYY');
                 v_dia_s      := TO_CHAR(v_dias_ddc(j).fechamar,'DY','NLS_DATE_LANGUAGE=SPANISH');
 
@@ -865,7 +1003,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                    r.min_falta_total,       r.horas_falta_total,
                    r.min_he_asignadas,      r.horas_he_asignadas,
                    r.min_falta_restante,    r.horas_falta_restante,
-                   r.motivo AS total_he_rango,
+                   TO_NUMBER(r.motivo)   AS total_he_rango_sim,
+                   LPAD(TRUNC(TO_NUMBER(NVL(r.motivo,'0'))/60),2,'0')||':'
+                   ||LPAD(MOD(TO_NUMBER(NVL(r.motivo,'0')),60),2,'0')
+                                        AS horas_total_he_rango_sim,
                    r.estado
             FROM   SCA_TMP_DDC_RES r
             WHERE  r.id_evento = v_id_sim
@@ -990,9 +1131,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
                                         'D'||TO_CHAR(v_id_evento)
                                     ) RETURNING id_compen INTO v_id_comp;
 
-                                    -- Actualizar contadores en memoria
+                                    -- Re-sincronizar memoria desde BD (SP_SCA_REDONDEAR_TAREO_HE
+                                    -- pudo bajar la HE mas de v_tomar por redondeo)
                                     v_dias_he(v_i_cur).min_valor :=
-                                        v_dias_he(v_i_cur).min_valor - v_tomar;
+                                        fn_he_actual(p_cod_empresa, e.cod_personal,
+                                                     v_dias_he(v_i_cur).fechamar);
                                     v_falt_rest := v_falt_rest - v_tomar;
                                     v_he_asig   := v_he_asig + v_tomar;
                                 END IF;

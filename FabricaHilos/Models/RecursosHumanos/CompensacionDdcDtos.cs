@@ -18,6 +18,12 @@ public class DdcRangoFilaDto
     public string? Descanso         { get; set; }
     public string? YaCompensado     { get; set; }
     public string? NumFotocheck     { get; set; }
+    public int     NumMarcaciones   { get; set; }
+    // Solo para tipo_dia = 'BLOQ_LOGIX'
+    public string? LogixCmotivo     { get; set; }  // Código de motivo LOGIX (C_TIPO='07')
+    public string? LogixDinicio     { get; set; }  // Fecha inicio evento LOGIX (dd/MM/yyyy)
+    public string? LogixDfinal      { get; set; }  // Fecha fin evento LOGIX   (dd/MM/yyyy)
+    public string? LogixDescMotivo  { get; set; }  // Descripción del motivo LOGIX
 }
 
 // ── Resultado de CALCULAR_DDC (preview por DDC) ───────────────────────────────
@@ -62,35 +68,42 @@ public class DdcRegistroFilaDto
 
 public class DdcRangoConsultaDto
 {
-    public long?   IdCompen         { get; set; }
-    public string? CodEmpresa       { get; set; }
-    public string? CodPersonal      { get; set; }
-    public string? FechaOrigenStr   { get; set; }
-    public string? FechaDestinoStr  { get; set; }
-    public string? TipoOrigen       { get; set; }
-    public string? TipoCompensacion { get; set; }
-    public int     TiempoMin        { get; set; }
-    public string? TiempoHhMi       { get; set; }
-    public string? Aux1             { get; set; }
-    public string? OriAlerta06      { get; set; }
-    public string? DestAlerta02     { get; set; }
+    public long?   IdCompen          { get; set; }
+    public string? CodEmpresa        { get; set; }
+    public string? CodPersonal       { get; set; }
+    public string? NombreCompleto    { get; set; }
+    public string? FechaOrigenStr    { get; set; }
+    public string? FechaDestinoStr   { get; set; }
+    public string? TipoOrigen        { get; set; }
+    public string? TipoCompensacion  { get; set; }
+    public int     TiempoMin         { get; set; }
+    public string? TiempoHhMi        { get; set; }
+    public string? Evento            { get; set; }   // aux1 LIKE 'D%'
+    public string? OriAlerta06       { get; set; }   // EC=HE consumidas, EE=HE existentes
+    public string? OriHeActual       { get; set; }   // HH:MI actual en tareo origen
+    public string? DestAlerta02      { get; set; }   // FC=compensado, FT=pendiente
+    public string? DestFaltaActual   { get; set; }   // horas_falta actual en tareo destino
+    public string? DestHefecActual   { get; set; }   // horaefectiva actual en tareo destino
+    /// <summary>Derivado de dest_alerta02: FC → APLICADA, otro → PENDIENTE.</summary>
+    public string? EstadoAplicacion  { get; set; }
 }
 
 // ── Resultado de CONSULTAR_EVENTO_DDC ────────────────────────────────────────
 
 public class DdcEventoFilaDto
 {
-    public long?   IdCompen         { get; set; }
-    public string? CodEmpresa       { get; set; }
-    public string? CodPersonal      { get; set; }
-    public string? NombreCompleto   { get; set; }
-    public string? FechaOrigenStr   { get; set; }
-    public string? FechaDestinoStr  { get; set; }
-    public string? TipoOrigen       { get; set; }
-    public string? TipoCompensacion { get; set; }
-    public int     TiempoMin        { get; set; }
-    public string? TiempoHhMi       { get; set; }
-    public string? EstadoAplicacion { get; set; }
-    public string? OriAlerta06      { get; set; }
-    public string? DestAlerta02     { get; set; }
+    public long?   IdCompen          { get; set; }
+    public string? CodEmpresa        { get; set; }
+    public string? CodPersonal       { get; set; }
+    public string? NombreCompleto    { get; set; }
+    public string? FechaOrigenStr    { get; set; }
+    public string? FechaDestinoStr   { get; set; }
+    public string? TipoCompensacion  { get; set; }
+    public int     TiempoMin         { get; set; }
+    public string? TiempoHhMi        { get; set; }
+    public string? OriAlerta06       { get; set; }   // EC=HE consumidas, EE=HE existentes
+    public string? OriHeActual       { get; set; }   // HH:MI actual en tareo origen
+    public string? DestAlerta02      { get; set; }   // FC=compensado, FT=pendiente
+    public string? DestFaltaActual   { get; set; }   // horas_falta actual en tareo destino
+    public string? DestHefecActual   { get; set; }   // horaefectiva actual en tareo destino
 }

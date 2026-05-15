@@ -877,7 +877,8 @@ namespace FabricaHilos.Services.Produccion
                 SELECT COUNT(*) FROM {S}H_RPRODUC
                 WHERE TRIM(TP_MAQ) = TRIM(:tpMaq)
                   AND TRIM(COD_MAQ) = TRIM(:codMaq)
-                  AND ESTADO = '1'";
+                  AND ESTADO = '1'
+                  AND FECHA_INI >= TRUNC(SYSDATE) - 1";
 
             try
             {

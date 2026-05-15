@@ -42,22 +42,7 @@ public abstract class OracleServiceBase
     {
         var session  = _httpContextAccessor.HttpContext?.Session;
         var connKey  = session?.GetString("EmpresaConexion") ?? "LaColonialConnection";
-        var baseConn = _configuration.GetConnectionString(connKey) ?? _fallbackConnectionString;
-
-        var oraUser = session?.GetString("OracleUser");
-        var oraPass = session?.GetString("OraclePass");
-
-        if (!string.IsNullOrEmpty(oraUser) && !string.IsNullOrEmpty(oraPass))
-        {
-            var csb = new OracleConnectionStringBuilder(baseConn)
-            {
-                UserID   = oraUser,
-                Password = oraPass
-            };
-            return csb.ToString();
-        }
-
-        return baseConn;
+        return _configuration.GetConnectionString(connKey) ?? _fallbackConnectionString;
     }
 
     // ── Prefijo de esquema Oracle ──────────────────────────────────────────────

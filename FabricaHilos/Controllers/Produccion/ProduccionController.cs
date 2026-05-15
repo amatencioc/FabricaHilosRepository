@@ -6,7 +6,7 @@ using FabricaHilos.Services;
 namespace FabricaHilos.Controllers.Produccion
 {
     [Authorize]
-    public class ProduccionController : Controller
+    public class ProduccionController : OracleBaseController
     {
         private readonly IMenuService _menuService;
 

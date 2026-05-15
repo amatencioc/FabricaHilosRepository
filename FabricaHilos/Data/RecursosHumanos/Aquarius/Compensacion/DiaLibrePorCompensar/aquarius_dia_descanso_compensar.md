@@ -34,9 +34,72 @@ per_lic_fac IS NULL           -- sin licencia fallecimiento
 per_goce_fis IS NULL          -- sin goce físico
 per_goce IS NULL              -- sin permiso con goce
 per_sgoce IS NULL             -- sin permiso sin goce
+-- PLUS: verificar que NO existe evento LOGIX bloqueante (ver sección LOGIX abajo)
 ```
 > **NOTA**: El sistema no distingue automáticamente DDC de falta normal. El operador
 > selecciona manualmente desde el listado qué días son realmente DDC.
+
+---
+
+## BUG CORREGIDO — INTEGRACIÓN LOGIX (14/05/2026)
+
+### Síntoma
+Un empleado con `alerta02='FT'` y sin ningún `per_xxx` en AQUARIUS aparecía como candidato
+DDC compensable, pero en LOGIX (SIG.RH_EVENTOS) tenía registrado un evento `C_TIPO='07'`
+(FALTA NO JUSTIFICADA). Al compensar ese día se generaba una compensación incorrecta.
+
+### Caso concreto
+- **QUISPE PICOY, NESTOR** (fotocheck 034675, cod_personal 004706, empresa 0003)
+- 09/05/2026: alerta02='FT', h_falta=08:00, sin per_xxx → pasaba todos los filtros AQUARIUS
+- `SIG.RH_EVENTOS`: C_TIPO='07', C_MOTIVO='13' (VIAJE), D_INICIO=D_FINAL=09/05/2026
+- Resultado incorrecto: paquete lo trataba como DDC y lo compensaba
+- **Contraste**: MUÑOZ POLACK WALTER (034076, cod 000430) sí debía compensarse — sin eventos LOGIX
+
+### Root cause
+El trigger `SIG.TIA_RH_EVENTOS_AQUARIUS` (AFTER INSERT ON SIG.RH_EVENTOS) solo sincroniza
+los tipos: `'01'` SUSP, `'05'` PSGO, `'20'` DMED, `'21'` SUBI, `'22'` SUBI, `'23'` VACA,
+`'25'` LSIN, `'26'` PGOC, `'28'` LPAT → escribe en SCA_ASISTENCIA_TAREO via SP_SCA_INSERT_PERPERSON_SIG.
+
+El tipo `'07'` (FALTA NO JUSTIFICADA) **NO está en el trigger** → los per_xxx quedan NULL en AQUARIUS
+→ PKG_SCA_COMP_DDC no puede detectar la ausencia formal.
+
+### Join clave AQUARIUS ↔ SIG
+```sql
+-- SIG.RH_EVENTOS.C_CODIGO = SCA_FOTOCHECK.NUM_FOTOCHECK
+-- NUM_FOTOCHECK es el código de tarjeta (ej: '034675')
+-- C_CODIGO en SIG = mismo código; los 2 primeros dígitos indican empresa ('01','02','03')
+SELECT re.c_codigo, re.c_tipo, re.d_inicio, re.d_final
+FROM SIG.RH_EVENTOS re
+JOIN SCA_FOTOCHECK sf ON sf.num_fotocheck = re.c_codigo
+                      AND sf.cod_empresa = :emp
+                      AND sf.cod_personal = :per
+                      AND NVL(sf.act_fotocheck,1) = 1
+WHERE re.c_tipo = '07'
+  AND re.d_inicio <= :fecha
+  AND NVL(re.d_final, re.d_inicio) >= :fecha
+```
+
+### Fix aplicado (PKG_SCA_Comp_DDC.sql)
+**1. `prv_cargar_ddc`** — cursor DDC candidatos: agrega NOT EXISTS contra SIG.RH_EVENTOS C_TIPO='07'
+**2. `LISTAR_DDC_RANGO`** — rama DDC del UNION ALL: igual NOT EXISTS; agrega nueva rama
+`BLOQ_LOGIX` para que la UI muestre los días bloqueados e informe al operador.
+
+### Tipos de eventos SIG.RH_EVENTOS
+| C_TIPO | Significado | Sincronizado a AQUARIUS | Bloquea DDC |
+|--------|-------------|------------------------|-------------|
+| '01'   | Suspensión  | SÍ (per_suspension)    | ya por AQUARIUS |
+| '05'   | Permiso c/goce | SÍ (per_goce)       | ya por AQUARIUS |
+| '07'   | **FALTA NO JUSTIFICADA** | **NO** | **SÍ — fix aplicado** |
+| '20'   | Descanso médico | SÍ (per_desc_med) | ya por AQUARIUS |
+| '21'   | Subsidio incap. | SÍ (per_subsidio) | ya por AQUARIUS |
+| '22'   | Subsidio       | SÍ (per_subsidio)  | ya por AQUARIUS |
+| '23'   | Vacaciones    | SÍ (per_vaca)       | ya por AQUARIUS |
+| '25'   | Lic. sin goce | SÍ (per_lic_sind)  | ya por AQUARIUS |
+| '26'   | Permiso c/goce (otro) | SÍ             | ya por AQUARIUS |
+| '28'   | Lic. paternidad | SÍ (per_lic_pat) | ya por AQUARIUS |
+| '52'   | Permiso (parada planta, personal) | NO | Evaluar caso a caso |
+| '53'   | Amonestación  | NO                  | NO (acción disciplinaria, no ausencia) |
+| '56','57' | Accidente de trabajo (diagnóstico médico) | NO | Evaluar caso a caso |
 
 ## PARÁMETROS DE COMPENSACIÓN
 | Campo            | Valor          |

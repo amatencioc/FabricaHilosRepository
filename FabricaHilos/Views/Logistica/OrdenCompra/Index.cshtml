@@ -10,6 +10,8 @@
     string? navToken    = ViewBag.NavToken    as string;
     bool    hayFiltros  = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado)
                        || !string.IsNullOrEmpty(fechaInicio) || !string.IsNullOrEmpty(fechaFin);
+    bool    noNuevaOC     = ViewBag.NoNuevaOC    is bool b && b;
+    string? estadoForzado = ViewBag.EstadoForzado as string;
     int currentPage = ViewBag.Page       != null ? Convert.ToInt32(ViewBag.Page)       : 1;
     int totalPages  = ViewBag.TotalPages  != null ? Convert.ToInt32(ViewBag.TotalPages)  : 1;
     int totalCount  = ViewBag.TotalCount  != null ? Convert.ToInt32(ViewBag.TotalCount)  : 0;
@@ -29,10 +31,13 @@
     <h4 class="section-title mb-0"><i class="bi bi-cart-check me-2"></i>Órdenes de Compra</h4>
     <div class="d-flex align-items-center gap-2">
         <span class="text-muted small">@totalCount registro(s) encontrado(s)</span>
-        <a asp-action="Nueva" asp-route-t="@navToken"
-           class="btn btn-sm btn-success">
-            <i class="bi bi-plus-circle me-1"></i>Nueva Orden de Compra
-        </a>
+        @if (!noNuevaOC)
+        {
+            <a asp-action="Nueva" asp-route-t="@navToken"
+               class="btn btn-sm btn-success">
+                <i class="bi bi-plus-circle me-1"></i>Nueva Orden de Compra
+            </a>
+        }
     </div>
 </div>
 
@@ -40,6 +45,10 @@
 <div class="card mb-3">
     <div class="card-body py-2">
         <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap align-items-center">
+            @if (!string.IsNullOrEmpty(estadoForzado))
+            {
+                <input type="hidden" name="estado" value="@estadoForzado" />
+            }
             <input type="text" name="buscar" value="@buscar"
                    class="form-control form-control-sm"
                    placeholder="Buscar por proveedor o N° pedido..."
@@ -70,8 +79,8 @@
 <!-- Tabla -->
 <div class="card shadow-sm">
     <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-corporate table-hover mb-0">
+        <div class="table-responsive" style="overflow-y: clip;">
+            <table class="table table-corporate table-hover mb-0" style="min-width:1200px;">
                 <thead>
                     <tr>
                         <th class="text-center">Tipo</th>
@@ -85,6 +94,7 @@
                         <th class="text-end">Val. Venta</th>
                         <th class="text-end">IGV</th>
                         <th class="text-end">Total</th>
+                        <th class="text-center">Estado</th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -125,20 +135,76 @@
                             <td class="text-end text-nowrap">@sim&nbsp;@oc.ImpIgv.ToString("N2")</td>
                             <td class="text-end text-nowrap fw-semibold">@sim&nbsp;@oc.PrecioVta.ToString("N2")</td>
                             <td class="text-center">
-                                <a asp-action="Detalle"
-                                   asp-route-dt="@dtToken"
-                                   asp-route-t="@navToken"
-                                   asp-route-page="@currentPage"
-                                   class="btn btn-sm btn-outline-primary" title="Ver detalle">
-                                    <i class="bi bi-eye"></i>
-                                </a>
+                                @{
+                                    var (badgeClass, estadoLabel) = (oc.Estado ?? "", oc.AprobGerencia) switch {
+                                        ("2", "S") => ("bg-success", "Aprobado Gerencia"),
+                                        ("0", _)   => ("bg-secondary", "Emitida"),
+                                        ("2", _)   => ("bg-warning text-dark", "En Aprobación"),
+                                        ("5", _)   => ("bg-info text-dark", "Parc. Cerrada"),
+                                        ("6", _)   => ("bg-success", "Cerrada"),
+                                        ("9", _)   => ("bg-danger", "Anulada"),
+                                        _          => ("bg-light text-dark", oc.Estado ?? "-")
+                                    };
+                                }
+                                <span class="badge @badgeClass">@estadoLabel</span>
+                            </td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <a asp-action="Detalle"
+                                       asp-route-dt="@dtToken"
+                                       asp-route-t="@navToken"
+                                       asp-route-page="@currentPage"
+                                       class="btn btn-sm btn-outline-primary" title="Ver detalle">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <div class="btn-group">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success dropdown-toggle"
+                                                data-bs-toggle="dropdown"
+                                                aria-expanded="false"
+                                                title="Imprimir">
+                                            <i class="bi bi-printer"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li>
+                                                <a class="dropdown-item"
+                                                   asp-action="Imprimir"
+                                                   asp-route-dt="@dtToken"
+                                                   asp-route-t="@navToken"
+                                                   target="_blank">
+                                                    <i class="bi bi-person me-2"></i>Para Proveedor
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item"
+                                                   asp-action="ImprimirContabilidad"
+                                                   asp-route-dt="@dtToken"
+                                                   asp-route-t="@navToken"
+                                                   target="_blank">
+                                                    <i class="bi bi-file-earmark-spreadsheet me-2"></i>Para Contabilidad
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    @if (oc.Estado != "6" && oc.Estado != "9")
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-dark btn-cerrar-oc"
+                                                data-tipo="@oc.TipoDocto"
+                                                data-serie="@oc.Serie"
+                                                data-numpd="@oc.NumPed"
+                                                title="Cerrar O/C">
+                                            <i class="bi bi-lock"></i>
+                                        </button>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">No se encontraron órdenes de compra.</td>
+                            <td colspan="13" class="text-center text-muted py-4">No se encontraron órdenes de compra.</td>
                         </tr>
                     }
                 </tbody>
@@ -175,3 +241,73 @@
         </div>
     }
 </div>
+
+@section Scripts {
+<!-- Modal confirmación cerrar O/C -->
+<div class="modal fade" id="modalCerrarOc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title">Cerrar Orden de Compra</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalCerrarMensaje"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-dark" id="modalCerrarOk">Cerrar O/C</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // Inicializar dropdowns con strategy fixed para que salgan del overflow de la tabla
+    document.querySelectorAll('.dropdown-toggle').forEach(function (btn) {
+        new bootstrap.Dropdown(btn, {
+            popperConfig: function (defaultConfig) {
+                defaultConfig.strategy = 'fixed';
+                return defaultConfig;
+            }
+        });
+    });
+
+    var modalCerrar  = new bootstrap.Modal(document.getElementById('modalCerrarOc'));
+    var modalMensaje = document.getElementById('modalCerrarMensaje');
+    var modalOk      = document.getElementById('modalCerrarOk');
+    var _btnActual   = null;
+
+    document.querySelectorAll('.btn-cerrar-oc').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            _btnActual = btn;
+            modalMensaje.innerHTML = '¿Está seguro de cerrar la O/C <strong>N° ' + btn.dataset.numpd + '</strong>? El estado cambiará a <strong>Cerrada</strong>.';
+            modalCerrar.show();
+        });
+    });
+
+    modalOk.addEventListener('click', function () {
+        if (!_btnActual) return;
+        modalCerrar.hide();
+        fetch('@Url.Action("CerrarOc", "OrdenCompra")', {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+            },
+            body: JSON.stringify({
+                tipoDocto: _btnActual.dataset.tipo,
+                serie:     parseInt(_btnActual.dataset.serie),
+                numPed:    parseInt(_btnActual.dataset.numpd)
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.ok) { window.location.reload(); }
+            else { alert('Error: ' + d.error); }
+        })
+        .catch(function () { alert('Error de comunicación con el servidor.'); });
+    });
+})();
+</script>
+@Html.AntiForgeryToken()
+}

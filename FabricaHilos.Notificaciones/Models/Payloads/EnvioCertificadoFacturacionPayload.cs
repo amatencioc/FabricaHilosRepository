@@ -29,6 +29,9 @@ public class EnvioCertificadoFacturacionPayload : INotificacionPayload
     public string? Partidas                     { get; set; }
     public string? OrdenesCompra                { get; set; }
 
+    public byte[]? ArchivoCertificadoPdf        { get; set; }
+    public string? NombreArchivoCertificadoPdf  { get; set; }
+
     public Dictionary<string, string> ObtenerReemplazos() => new()
     {
         { "NumRequerimiento",   NumRequerimiento   },

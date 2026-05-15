@@ -11,7 +11,9 @@ public interface ICompensacionDdcService
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string? nombre = null);
+        string? nombre = null,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null);
 
     Task<List<DdcCalculoFilaDto>> CalcularDdcAsync(
         string codEmpresa,
@@ -109,7 +111,9 @@ public class CompensacionDdcService : ICompensacionDdcService
         string codEmpresa,
         string fechaInicio,
         string fechaFin,
-        string? nombre = null)
+        string? nombre = null,
+        string? fechaHeInicio = null,
+        string? fechaHeFin = null)
     {
         return await WithOracleRetryAsync(async () =>
         {
@@ -118,14 +122,17 @@ public class CompensacionDdcService : ICompensacionDdcService
             await conn.OpenAsync();
 
             await using var cmd = conn.CreateCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.CommandText = $"{Paquete}.LISTAR_DDC_RANGO";
+            cmd.CommandType    = CommandType.StoredProcedure;
+            cmd.CommandTimeout = 120;
+            cmd.CommandText    = $"{Paquete}.LISTAR_DDC_RANGO";
 
-            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",   OracleDbType.Varchar2) { Value = codEmpresa });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",  OracleDbType.Varchar2) { Value = fechaInicio });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",     OracleDbType.Varchar2) { Value = fechaFin });
-            cmd.Parameters.Add(new OracleParameter("p_nombre",        OracleDbType.Varchar2) { Value = (object?)nombre ?? DBNull.Value });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",    OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",       OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_nombre",          OracleDbType.Varchar2) { Value = (object?)nombre       ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHeInicio ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHeFin    ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -146,7 +153,12 @@ public class CompensacionDdcService : ICompensacionDdcService
                     Alerta02       = GetStr(r, "alerta02"),
                     Alerta06       = GetStr(r, "alerta06"),
                     Descanso       = GetStr(r, "descanso"),
+                    NumMarcaciones = GetInt(r, "nummarcaciones"),
                     YaCompensado   = GetStr(r, "ya_compensado"),
+                    LogixCmotivo   = GetStr(r, "logix_cmotivo"),
+                    LogixDinicio   = GetStr(r, "logix_dinicio"),
+                    LogixDfinal    = GetStr(r, "logix_dfinal"),
+                    LogixDescMotivo = GetStr(r, "logix_desc_motivo"),
                 });
             }
             return result;
@@ -187,12 +199,12 @@ public class CompensacionDdcService : ICompensacionDdcService
                     NombreCompleto        = GetStr(r, "nombre_completo"),
                     FechaDdcStr           = GetStr(r, "fecha_ddc_str"),
                     DiaSemana             = GetStr(r, "dia_semana"),
-                    MinFalta              = GetInt(r, "min_falta"),
-                    HorasFalta            = GetStr(r, "horas_falta"),
-                    MinHeAsignadasSim     = GetInt(r, "min_he_asignadas_sim"),
-                    HorasHeAsignadasSim   = GetStr(r, "horas_he_asignadas_sim"),
-                    MinFaltaRestanteSim   = GetInt(r, "min_falta_restante_sim"),
-                    HorasFaltaRestanteSim = GetStr(r, "horas_falta_restante_sim"),
+                    MinFalta              = GetInt(r, "min_falta_total"),
+                    HorasFalta            = GetStr(r, "horas_falta_total"),
+                    MinHeAsignadasSim     = GetInt(r, "min_he_asignadas"),
+                    HorasHeAsignadasSim   = GetStr(r, "horas_he_asignadas"),
+                    MinFaltaRestanteSim   = GetInt(r, "min_falta_restante"),
+                    HorasFaltaRestanteSim = GetStr(r, "horas_falta_restante"),
                     TotalHeRangoSim       = GetInt(r, "total_he_rango_sim"),
                     HorasTotalHeRangoSim  = GetStr(r, "horas_total_he_rango_sim"),
                     Estado                = GetStr(r, "estado"),
@@ -349,13 +361,14 @@ public class CompensacionDdcService : ICompensacionDdcService
                     NombreCompleto   = GetStr(r, "nombre_completo"),
                     FechaOrigenStr   = GetStr(r, "fechaorigen_str"),
                     FechaDestinoStr  = GetStr(r, "fechadestino_str"),
-                    TipoOrigen       = GetStr(r, "tipoorigen"),
                     TipoCompensacion = GetStr(r, "tipocompensacion"),
                     TiempoMin        = GetInt(r, "tiempo_min"),
                     TiempoHhMi       = GetStr(r, "tiempo_hhmi"),
-                    EstadoAplicacion = GetStr(r, "estado_aplicacion"),
                     OriAlerta06      = GetStr(r, "ori_alerta06"),
+                    OriHeActual      = GetStr(r, "ori_he_actual"),
                     DestAlerta02     = GetStr(r, "dest_alerta02"),
+                    DestFaltaActual  = GetStr(r, "dest_falta_actual"),
+                    DestHefecActual  = GetStr(r, "dest_hefec_actual"),
                 });
             }
             return result;
@@ -390,20 +403,26 @@ public class CompensacionDdcService : ICompensacionDdcService
             while (await reader.ReadAsync())
             {
                 var r = (OracleDataReader)reader;
+                var destAlerta02 = GetStr(r, "dest_alerta02");
                 result.Add(new DdcRangoConsultaDto
                 {
                     IdCompen         = GetNullLong(r, "id_compen"),
                     CodEmpresa       = GetStr(r, "cod_empresa"),
                     CodPersonal      = GetStr(r, "cod_personal"),
+                    NombreCompleto   = GetStr(r, "nombre_completo"),
                     FechaOrigenStr   = GetStr(r, "fechaorigen_str"),
                     FechaDestinoStr  = GetStr(r, "fechadestino_str"),
                     TipoOrigen       = GetStr(r, "tipoorigen"),
                     TipoCompensacion = GetStr(r, "tipocompensacion"),
                     TiempoMin        = GetInt(r, "tiempo_min"),
                     TiempoHhMi       = GetStr(r, "tiempo_hhmi"),
-                    Aux1             = GetStr(r, "aux1"),
+                    Evento           = GetStr(r, "evento"),
                     OriAlerta06      = GetStr(r, "ori_alerta06"),
-                    DestAlerta02     = GetStr(r, "dest_alerta02"),
+                    OriHeActual      = GetStr(r, "ori_he_actual"),
+                    DestAlerta02     = destAlerta02,
+                    DestFaltaActual  = GetStr(r, "dest_falta_actual"),
+                    DestHefecActual  = GetStr(r, "dest_hefec_actual"),
+                    EstadoAplicacion = destAlerta02 == "FC" ? "APLICADA" : "PENDIENTE",
                 });
             }
             return result;

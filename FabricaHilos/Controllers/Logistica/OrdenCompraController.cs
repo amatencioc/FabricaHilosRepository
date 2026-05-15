@@ -18,6 +18,7 @@ public class OrdenCompraController : OracleBaseController
     private readonly IEmpresaTemaService _empresaTema;
     private readonly INavTokenService _navToken;
     private readonly ApplicationDbContext _db;
+    private readonly IMenuService _menuService;
 
     private static readonly HashSet<string> _extPermitidas =
         new(StringComparer.OrdinalIgnoreCase)
@@ -34,15 +35,17 @@ public class OrdenCompraController : OracleBaseController
         ILogger<OrdenCompraController> logger,
         IEmpresaTemaService empresaTema,
         INavTokenService navToken,
-        ApplicationDbContext db)
+        ApplicationDbContext db,
+        IMenuService menuService)
     {
-        _service     = service;
-        _env         = env;
-        _config      = config;
-        _logger      = logger;
-        _empresaTema = empresaTema;
-        _navToken    = navToken;
-        _db          = db;
+        _service      = service;
+        _env          = env;
+        _config       = config;
+        _logger       = logger;
+        _empresaTema  = empresaTema;
+        _navToken     = navToken;
+        _db           = db;
+        _menuService  = menuService;
     }
 
     // ── LISTADO ────────────────────────────────────────────────────────────────
@@ -57,6 +60,18 @@ public class OrdenCompraController : OracleBaseController
         string? estado = null,
         int page = 1)
     {
+        // ── Restricciones dinámicas según AccesoWeb ────────────────────────────
+        var accesoOc = _menuService.ObtenerAccesoModulo("LogisticaOrdenCompra");
+
+        // Si el token indica estado fijo (ej: estado=2), se impone sin posibilidad de cambiarlo
+        var estadoForzado = accesoOc.ObtenerParametro("estado");
+        if (!string.IsNullOrEmpty(estadoForzado))
+            estado = estadoForzado;
+
+        // Exponer modificadores a la vista
+        ViewBag.NoNuevaOC    = accesoOc.TieneModificador("noNuevaOC");
+        ViewBag.EstadoForzado = estadoForzado;
+
         // Si hay filtros nuevos sin token, crear token y redirigir
         if (string.IsNullOrEmpty(t) && (buscar != null || fechaInicio.HasValue || fechaFin.HasValue || estado != null))
         {
@@ -135,51 +150,66 @@ public class OrdenCompraController : OracleBaseController
         if (!int.TryParse(dtNav.GetValueOrDefault("serie"), out var serie)) serie = 0;
         if (!long.TryParse(dtNav.GetValueOrDefault("numPed"), out var numPed)) numPed = 0;
 
-        var orden = await _service.ObtenerOrdenAsync(tipoDocto, serie, numPed);
+        // ── Fase 1: obtener cabecera e ítems en paralelo ──────────────────────
+        var tOrden = _service.ObtenerOrdenAsync(tipoDocto, serie, numPed);
+        var tItems = _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
+        await Task.WhenAll(tOrden, tItems);
+
+        var orden = tOrden.Result;
+        var items = tItems.Result;
+
         if (orden is null)
             return NotFound();
 
-        var items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
-
-        var codigos = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
-        ViewBag.Proveedores  = await _service.ObtenerNombresProveedoresAsync(codigos);
-
-        var codigosCc = new[] { orden.CCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
-        ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
-
-        var codigosCondPag = new[] { orden.CondPag }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
-        ViewBag.DescripcionesCondPag = await _service.ObtenerDescripcionesCondPagAsync(codigosCondPag);
-
-        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
-        ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
-
-        // Nombres de usuarios de auditoría
+        // ── Fase 2: todos los lookups en paralelo ─────────────────────────────
+        var codigos        = new[] { orden.CodProveed }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        var codigosCc      = new[] { orden.CCosto     }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        var codigosCondPag = new[] { orden.CondPag    }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        var codigosArt     = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
         var usuariosAuditoria = new[] { orden.AAduser, orden.AMduser }
-            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
-        var tareasNombres = usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u!));
-        var nombresResultado = await Task.WhenAll(tareasNombres);
-        var nombresUsuarios = usuariosAuditoria.Zip(nombresResultado, (u, n) => (u!, n))
-            .ToDictionary(x => x.Item1, x => x.n, StringComparer.OrdinalIgnoreCase);
-        ViewBag.NombresUsuarios = nombresUsuarios;
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct().ToList();
 
-        ViewBag.NavToken  = t;
-        ViewBag.Dt        = dt;
+        var tProveedores    = _service.ObtenerNombresProveedoresAsync(codigos);
+        var tCentrosCosto   = _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
+        var tCondPag        = _service.ObtenerDescripcionesCondPagAsync(codigosCondPag);
+        var tArticulos      = _service.ObtenerDescripcionesArticulosAsync(codigosArt);
+        var tNombres        = Task.WhenAll(usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u)));
+        var tProvDetalle    = _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
+        var tPropagate      = _service.PropagateGruposReqToItemOrdAsync(numPed);
+        var tGruposReq      = _service.ObtenerGruposDeRequisicionesVinculadasAsync(numPed);
+
+        await Task.WhenAll(tProveedores, tCentrosCosto, tCondPag, tArticulos, tNombres, tProvDetalle, tPropagate, tGruposReq);
+
+        // Si la propagación añadió grupos nuevos, recargar ítems
+        if (tPropagate.Result)
+            items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
+
+        var nombresUsuarios = usuariosAuditoria
+            .Zip(tNombres.Result, (u, n) => (u, n))
+            .ToDictionary(x => x.u, x => x.n, StringComparer.OrdinalIgnoreCase);
+
+        ViewBag.Proveedores            = tProveedores.Result;
+        ViewBag.CentrosCosto           = tCentrosCosto.Result;
+        ViewBag.DescripcionesCondPag   = tCondPag.Result;
+        ViewBag.DescripcionesArticulos = tArticulos.Result;
+        ViewBag.NombresUsuarios        = nombresUsuarios;
+        ViewBag.ProveedorDetalle       = tProvDetalle.Result;
+
+        ViewBag.NavToken   = t;
+        ViewBag.Dt         = dt;
         ViewBag.ReturnPage = page;
+
+        var accesoOcDetalle  = _menuService.ObtenerAccesoModulo("LogisticaOrdenCompra");
+        var accesoLogistica  = _menuService.ObtenerAccesoModulo("Logistica");
+        ViewBag.NoAprobarOC  = accesoOcDetalle.TieneModificador("noAprobarOC")
+                            || accesoLogistica.TieneModificador("noAprobarOC");
 
         EnsureNetworkShare(ObtenerCarpetaRaiz());
 
-        // Si hay grupos en requerimientos vinculados que aún no están en ITEMORD, propagarlos
-        bool propagado = await _service.PropagateGruposReqToItemOrdAsync(numPed);
-        if (propagado)
-            items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
-
         var archivosOc = ObtenerArchivosExistentes(items);
 
-        // Requerimientos que aún tengan grupos no presentes en ITEMORD (caso muy raro tras la propagación)
-        var gruposReq   = await _service.ObtenerGruposDeRequisicionesVinculadasAsync(numPed);
         var archivosReq = ObtenerArchivosExistentes(
-            gruposReq.Select(g => new ItemOrdDto { IdGrupo = g }));
-
+            tGruposReq.Result.Select(g => new ItemOrdDto { IdGrupo = g }));
         foreach (var a in archivosReq)
             a.EsDeRequerimiento = true;
 
@@ -771,6 +801,55 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.FirmaAprobado = firmaAprobado;
 
         return View("~/Views/Logistica/OrdenCompra/ImprimirContabilidad.cshtml", (orden, items));
+    }
+
+    // ── ENVIAR A GERENCIA ──────────────────────────────────────────────────────
+
+    [HttpPost("EnviarGerencia")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EnviarGerencia([FromBody] AnularOcRequest request)
+    {
+        var error = await _service.EnviarGerenciaAsync(
+            request.TipoDocto ?? string.Empty, request.NumPed);
+
+        if (!string.IsNullOrEmpty(error))
+            return Json(new { ok = false, error });
+
+        TempData["Success"] = $"O/C N° {request.NumPed} enviada a aprobación de Gerencia.";
+        return Json(new { ok = true });
+    }
+
+    // ── APROBAR ORDEN DE COMPRA ────────────────────────────────────────────────
+
+    [HttpPost("AprobarOc")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AprobarOc([FromBody] AnularOcRequest request)
+    {
+        var codAprob = HttpContext.Session.GetString("OracleUserCodigo") ?? string.Empty;
+        var error = await _service.AprobarOcAsync(
+            request.TipoDocto ?? string.Empty, request.NumPed, codAprob);
+
+        if (!string.IsNullOrEmpty(error))
+            return Json(new { ok = false, error });
+
+        TempData["Success"] = $"O/C N° {request.NumPed} aprobada correctamente.";
+        return Json(new { ok = true });
+    }
+
+    // ── CERRAR ORDEN DE COMPRA ─────────────────────────────────────────────────
+
+    [HttpPost("CerrarOc")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CerrarOc([FromBody] AnularOcRequest request)
+    {
+        var error = await _service.CerrarOcAsync(
+            request.TipoDocto ?? string.Empty, request.NumPed);
+
+        if (!string.IsNullOrEmpty(error))
+            return Json(new { ok = false, error });
+
+        TempData["Success"] = $"O/C N° {request.NumPed} cerrada correctamente.";
+        return Json(new { ok = true });
     }
 
     // ── ANULAR ORDEN ───────────────────────────────────────────────────────────

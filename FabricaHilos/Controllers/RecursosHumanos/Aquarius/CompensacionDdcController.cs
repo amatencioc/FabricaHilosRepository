@@ -35,7 +35,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         public async Task<IActionResult> ListarDdcRango(
             string fechaInicio,
             string fechaFin,
-            string? nombre = null)
+            string? nombre = null,
+            string? fechaHeInicio = null,
+            string? fechaHeFin = null)
         {
             try
             {
@@ -43,7 +45,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     CodEmpresaAquarius,
                     fechaInicio,
                     fechaFin,
-                    string.IsNullOrWhiteSpace(nombre) ? null : nombre);
+                    string.IsNullOrWhiteSpace(nombre) ? null : nombre,
+                    string.IsNullOrWhiteSpace(fechaHeInicio) ? null : fechaHeInicio,
+                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin);
 
                 return Json(new { ok = true, data = resultado });
             }

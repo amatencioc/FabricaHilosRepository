@@ -45,6 +45,9 @@ public interface IOrdenCompraService
     Task<List<IgvDto>> ObtenerIgvAsync();
     Task<(long NumPed, string? Error)> RegistrarOcAsync(RegistrarOcRequest req, string usuario);
     Task<string?> AnularOcAsync(string tipoDocto, long numPed, string usuario);
+    Task<string?> CerrarOcAsync(string tipoDocto, long numPed);
+    Task<string?> EnviarGerenciaAsync(string tipoDocto, long numPed);
+    Task<string?> AprobarOcAsync(string tipoDocto, long numPed, string codAprob);
 
     /// <summary>
     /// Devuelve los ID_GRUPO que están en ITEMREQ vinculados a los ítems de esta O/C
@@ -1263,6 +1266,110 @@ END;";
         }
     }
 
+    // ── CerrarOcAsync ──────────────────────────────────────────────────────────
+
+    public async Task<string?> CerrarOcAsync(string tipoDocto, long numPed)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.Text;
+            cmd.BindByName  = true;
+            cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
+                                    SET ESTADO = '6'
+                                  WHERE TIPO_DOCTO = :p_tipo_docto
+                                    AND SERIE      = :p_serie
+                                    AND NUM_PED    = :p_num_ped
+                                    AND ESTADO    <> '9'";
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+
+            int rows = await cmd.ExecuteNonQueryAsync();
+            if (rows == 0)
+                return "No se encontró la orden o ya está anulada.";
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cerrar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            return $"Error interno: {ex.Message}";
+        }
+    }
+
+    // ── EnviarGerenciaAsync ────────────────────────────────────────────────────
+
+    public async Task<string?> EnviarGerenciaAsync(string tipoDocto, long numPed)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.Text;
+            cmd.BindByName  = true;
+            cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
+                                    SET ESTADO = '2'
+                                  WHERE TIPO_DOCTO = :p_tipo_docto
+                                    AND SERIE      = :p_serie
+                                    AND NUM_PED    = :p_num_ped
+                                    AND ESTADO     = '0'";
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+
+            int rows = await cmd.ExecuteNonQueryAsync();
+            if (rows == 0)
+                return "No se actualizó la orden. Verifique que esté en estado Emitida (0).";
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar OC {TipoDocto}-1-{NumPed} a gerencia", tipoDocto, numPed);
+            return $"Error interno: {ex.Message}";
+        }
+    }
+
+    // ── AprobarOcAsync ─────────────────────────────────────────────────────────
+
+    public async Task<string?> AprobarOcAsync(string tipoDocto, long numPed, string codAprob)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.Text;
+            cmd.BindByName  = true;
+            cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
+                                    SET APROB_GERENCIA = 'S',
+                                        F_APROB_GER    = SYSDATE,
+                                        COD_APROB      = :p_cod_aprob
+                                  WHERE TIPO_DOCTO = :p_tipo_docto
+                                    AND SERIE      = :p_serie
+                                    AND NUM_PED    = :p_num_ped";
+            cmd.Parameters.Add(new OracleParameter("p_cod_aprob",  OracleDbType.Varchar2) { Value = codAprob });
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+
+            int rows = await cmd.ExecuteNonQueryAsync();
+            if (rows == 0)
+                return "No se encontró la orden de compra.";
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al aprobar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            return $"Error interno: {ex.Message}";
+        }
+    }
+
     // ── FIRMAS OC ─────────────────────────────────────────────────────────────
 
     public async Task<(FirmaOcDto? Generado, FirmaOcDto? Aprobado)> ObtenerFirmasOcAsync(
@@ -1286,7 +1393,7 @@ END;";
             string?   aprobGer   = null;
             DateTime? fAprobGer  = null;
 
-            var sqlOc = $@"SELECT C_CODIGO, FECHA, APROB_GERENCIA, F_APROB_GER
+            var sqlOc = $@"SELECT C_CODIGO, FECHA, APROB_GERENCIA, F_APROB_GER, COD_APROB
                            FROM {S}ORDEN_DE_COMPRA
                            WHERE TIPO_DOCTO = :tipoDocto AND SERIE = :serie AND NUM_PED = :numPed
                            AND ROWNUM = 1";
@@ -1302,9 +1409,9 @@ END;";
                     aprobGer    = GetStr(r, "APROB_GERENCIA");
                     fAprobGer   = GetDt(r, "F_APROB_GER");
                     fechaDoc    = GetDt(r, "FECHA");
-                    // Solo cargar firma de gerencia si APROB_GERENCIA = 'S'
+                    // Solo cargar firma de gerencia si APROB_GERENCIA = 'S', usando COD_APROB
                     codAprobado = string.Equals(aprobGer, "S", StringComparison.OrdinalIgnoreCase)
-                        ? "034001" // C_GERENTE — aprobador fijo definido en PKG_REG_ORDEN_COMPRA
+                        ? GetStr(r, "COD_APROB")
                         : null;
                 }
             }

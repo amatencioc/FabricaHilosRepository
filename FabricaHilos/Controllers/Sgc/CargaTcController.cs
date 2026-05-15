@@ -408,6 +408,39 @@ namespace FabricaHilos.Controllers.Sgc
                 var copiaFacturacion = _configuration["CorreosFacturacion:Copia"];
                 var copiaOcultaFacturacion = _configuration["CorreosFacturacion:CopiaOculta"];
 
+                // Intentar cargar el PDF del certificado para adjuntarlo al correo
+                byte[]? pdfBytes = null;
+                string? nombrePdf = null;
+                try
+                {
+                    string? rucCert = requerimiento.Ruc;
+                    if (string.IsNullOrEmpty(rucCert) && !string.IsNullOrEmpty(requerimiento.CodCliente))
+                    {
+                        var clienteCert = await _cargaTcService.ObtenerClientePorCodigoAsync(requerimiento.CodCliente);
+                        rucCert = clienteCert?.Ruc;
+                    }
+
+                    if (!string.IsNullOrEmpty(rucCert))
+                    {
+                        var rutaPdf = await _cargaTcService.GenerarRutaPdfCertificado(rucCert, requerimiento.NumCer);
+                        EnsureNetworkShare(rutaPdf);
+                        if (System.IO.File.Exists(rutaPdf))
+                        {
+                            pdfBytes  = await System.IO.File.ReadAllBytesAsync(rutaPdf);
+                            nombrePdf = Path.GetFileName(rutaPdf);
+                            _logger.LogInformation("PDF del certificado cargado para adjuntar: {Archivo}", nombrePdf);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("No se encontró el PDF del certificado en: {Ruta}", rutaPdf);
+                        }
+                    }
+                }
+                catch (Exception exPdf)
+                {
+                    _logger.LogWarning(exPdf, "No se pudo cargar el PDF del certificado para adjuntar al correo (REQ {NumReq})", numReq);
+                }
+
                 var payload = new EnvioCertificadoFacturacionPayload
                 {
                     CorreoDestinatario = destinatarioFacturacion,
@@ -426,20 +459,20 @@ namespace FabricaHilos.Controllers.Sgc
                     Importe = importe?.ToString("N2") ?? "0.00",
                     TotalFacturas = totalFacturas.ToString(),
                     Partidas = partidasTexto,
-                    OrdenesCompra = ordenesCompraTexto
+                    OrdenesCompra = ordenesCompraTexto,
+                    ArchivoCertificadoPdf = pdfBytes,
+                    NombreArchivoCertificadoPdf = nombrePdf
                 };
 
-                try
+                var correoEnviado = await _emailService.EnviarAsync(payload);
+                if (!correoEnviado)
                 {
-                    await _emailService.EnviarAsync(payload);
-                    _logger.LogInformation("Correo enviado exitosamente a {Email} para REQ {NumReq}", 
-                        destinatarioFacturacion, numReq);
+                    _logger.LogError("Fallo al enviar correo a {Email} para REQ {NumReq}", destinatarioFacturacion, numReq);
+                    return Json(new { success = false, message = "Error al enviar el correo de notificación a Facturación." });
                 }
-                catch (Exception exEmail)
-                {
-                    _logger.LogError(exEmail, "Error al enviar correo para REQ {NumReq}", numReq);
-                    return Json(new { success = false, message = $"Error al enviar correo de notificación: {exEmail.Message}" });
-                }
+
+                _logger.LogInformation("Correo enviado exitosamente a {Email} para REQ {NumReq}",
+                    destinatarioFacturacion, numReq);
 
                 // PASO 3: Actualizar ESTADO en REQ_CERT después de envío exitoso del correo
                 var estadoActualizado = await _cargaTcService.ActualizarEstadoReqCertAsync(numReq, 2, usuario);

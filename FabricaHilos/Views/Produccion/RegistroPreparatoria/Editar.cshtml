@@ -127,7 +127,7 @@
                             <label class="form-label fw-semibold">Operario <span class="text-danger">*</span></label>
                             <div class="input-group">
                                 <input type="text" id="operarioInput" class="form-control" placeholder="ÚLtimos 4 dígitos del código"
-                                       value="@(ViewBag.NombreOperario != null && !string.IsNullOrEmpty((string)ViewBag.NombreOperario) ? ViewBag.NombreOperario + " (" + Model.EmpleadoId + ")" : Model.EmpleadoId)" autocomplete="off" />
+                                       value="@(ViewBag.NombreOperario != null && !string.IsNullOrEmpty((string)ViewBag.NombreOperario) ? ViewBag.NombreOperario + " (" + Model.EmpleadoId + ")" : Model.EmpleadoId)" autocomplete="off" inputmode="numeric" />
                                 <button type="button" id="btnBuscarOperario" class="btn btn-outline-secondary" title="Buscar operario">
                                     <i class="bi bi-search"></i>
                                 </button>
@@ -871,11 +871,16 @@
             operarioInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') { e.preventDefault(); buscarOperario(); }
             });
+            let operarioDebounceTimer = null;
             operarioInput.addEventListener('input', function() {
                 document.getElementById('operarioStatus').textContent = '';
                 const listaEl = document.getElementById('operarioDropdownList');
                 if (listaEl) listaEl.remove();
                 document.getElementById('empleadoIdHidden').value = '';
+                clearTimeout(operarioDebounceTimer);
+                if (this.value.trim().length >= 2) {
+                    operarioDebounceTimer = setTimeout(buscarOperario, 400);
+                }
             });
         });
     </script>

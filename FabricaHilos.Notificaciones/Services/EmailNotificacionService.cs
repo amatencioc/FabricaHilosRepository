@@ -38,18 +38,27 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
             mensaje.From.Add(new MailboxAddress(_settings.NombreEnvio, _settings.UsuarioEnvio));
             mensaje.To.Add(new MailboxAddress(payload.NombreDestinatario, payload.CorreoDestinatario));
 
-            // Agregar CC y BCC si están disponibles (solo para EnvioCertificadoFacturacionPayload)
+            mensaje.Subject = ObtenerAsunto(payload);
+
+            var builder = new BodyBuilder { HtmlBody = htmlBody };
+
+            // CC, BCC y adjunto PDF (solo para EnvioCertificadoFacturacionPayload)
             if (payload is FabricaHilos.Notificaciones.Models.Payloads.EnvioCertificadoFacturacionPayload certPayload)
             {
                 if (!string.IsNullOrEmpty(certPayload.CorreoCopia))
                     mensaje.Cc.Add(new MailboxAddress("Copia", certPayload.CorreoCopia));
                 if (!string.IsNullOrEmpty(certPayload.CorreoCopiaOculta))
                     mensaje.Bcc.Add(new MailboxAddress("Copia Oculta", certPayload.CorreoCopiaOculta));
+
+                if (certPayload.ArchivoCertificadoPdf is { Length: > 0 } pdfBytes)
+                {
+                    var nombreArchivo = string.IsNullOrWhiteSpace(certPayload.NombreArchivoCertificadoPdf)
+                        ? "certificado.pdf"
+                        : certPayload.NombreArchivoCertificadoPdf;
+                    builder.Attachments.Add(nombreArchivo, pdfBytes, new MimeKit.ContentType("application", "pdf"));
+                }
             }
 
-            mensaje.Subject = ObtenerAsunto(payload);
-
-            var builder = new BodyBuilder { HtmlBody = htmlBody };
             mensaje.Body = builder.ToMessageBody();
 
             // 3. Enviar con MailKit

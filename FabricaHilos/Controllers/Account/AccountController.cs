@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models;
 using FabricaHilos.Logica;
 using FabricaHilos.Services;
@@ -85,42 +84,14 @@ namespace FabricaHilos.Controllers.Account
                         _        => "LaColonialConnection"
                     };
 
-                    // Validar que las credenciales funcionen como login Oracle real
-                    // contra la conexión base de su empresa.
-                    bool oracleCredencialesValidas = false;
-                    var baseConnStr = _configuration.GetConnectionString(connKeyEmpresa) ?? string.Empty;
-                    var csb = new OracleConnectionStringBuilder(baseConnStr)
-                    {
-                        UserID = usuario,
-                        Password = password
-                    };
-                    using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5)))
-                    {
-                        try
-                        {
-                            using var testConn = new OracleConnection(csb.ToString());
-                            await testConn.OpenAsync(cts.Token);
-                            oracleCredencialesValidas = true;
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            _logger.LogWarning(
-                                "Timeout al verificar credenciales Oracle directas para {Usuario}. Se usará la conexión base.",
-                                usuario);
-                        }
-                        catch (OracleException oex) when (oex.Number == 1017 || oex.Number == 1004)
-                        {
-                            _logger.LogWarning(
-                                "Usuario {Usuario} existe en CS_USER pero sus credenciales no son válidas como login Oracle (ORA-{Codigo}). Se usará la conexión base.",
-                                usuario, oex.Number);
-                        }
-                    }
-
-                    var adminUsers = _configuration.GetSection("AdminUsers").Get<string[]>()
-                                    ?? [];
-                    var esAdmin = adminUsers.Contains(usuario, StringComparer.OrdinalIgnoreCase);
+                    var adminUsers  = _configuration.GetSection("AdminUsers").Get<string[]>() ?? [];
+                    var esAdmin     = adminUsers.Contains(usuario, StringComparer.OrdinalIgnoreCase);
                     var rolCorrecto = esAdmin ? "Admin" : "Trabajador";
 
+                    // La autenticación es EXCLUSIVAMENTE Oracle (CS_USER).
+                    // Si EncontrarUsuarioAsync tuvo éxito, las credenciales Oracle son válidas
+                    // y se almacenan en sesión para que los servicios conecten como el usuario.
+                    // Identity/SQLite solo gestiona la cookie de sesión web, nunca valida contraseñas.
                     var userIdentity = await _userManager.FindByNameAsync(usuario);
 
                     if (userIdentity == null)
@@ -173,8 +144,11 @@ namespace FabricaHilos.Controllers.Account
 
                         // Corregir rol si no coincide con lo esperado (ej: usuario que tenía
                         // Admin por error y ahora debe ser Trabajador, o viceversa)
-                        var tieneAdmin      = await _userManager.IsInRoleAsync(userIdentity, "Admin");
-                        var tieneTrabajador = await _userManager.IsInRoleAsync(userIdentity, "Trabajador");
+                        var rolesCheck      = await Task.WhenAll(
+                            _userManager.IsInRoleAsync(userIdentity, "Admin"),
+                            _userManager.IsInRoleAsync(userIdentity, "Trabajador"));
+                        var tieneAdmin      = rolesCheck[0];
+                        var tieneTrabajador = rolesCheck[1];
 
                         if (esAdmin && !tieneAdmin)
                         {
@@ -192,16 +166,24 @@ namespace FabricaHilos.Controllers.Account
                         }
                     }
 
+                    // Validar que el usuario tenga al menos un módulo asignado en ACCESO_WEB
+                    if (string.IsNullOrWhiteSpace(usuarioOracle.acceso_web))
+                    {
+                        _logger.LogWarning("Usuario '{Usuario}' no tiene módulo/área asignada en ACCESO_WEB.", usuario);
+                        ModelState.AddModelError(string.Empty, "Su usuario no tiene ningún módulo o área asignada. Contacte al administrador del sistema.");
+                        return View();
+                    }
+
                     // isPersistent: true → cookie duradera, no se pierde al cerrar el navegador móvil
                     await _signInManager.SignInAsync(userIdentity, isPersistent: true);
 
                     // Guardar datos de sesión Oracle.
                     // EmpresaConexion indica qué ConnectionString deben usar los servicios.
                     HttpContext.Session.SetString("OracleUser",       usuario);
+                    HttpContext.Session.SetString("OracleUserCodigo", usuarioOracle.c_codigo ?? string.Empty);
                     HttpContext.Session.SetString("AccesoWeb",        usuarioOracle.acceso_web ?? string.Empty);
                     HttpContext.Session.SetString("EmpresaConexion",  connKeyEmpresa);
-                    if (oracleCredencialesValidas)
-                        HttpContext.Session.SetString("OraclePass", password);
+                    HttpContext.Session.SetString("OraclePass",       password);
 
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                         return Redirect(returnUrl);

@@ -29,6 +29,8 @@
     string? dt        = ViewBag.Dt        as string;
     int     retPage   = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
 
+    var noAprobarOC = (bool)(ViewBag.NoAprobarOC ?? false);
+
     string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
     var grupoColorMap = items
         .Where(i => i.IdGrupo.HasValue)
@@ -65,20 +67,62 @@
                 <i class="bi bi-x-circle me-1"></i>Anular @tipoCorto
             </button>
         }
-        <a asp-action="Imprimir"
-           asp-route-dt="@dt"
-           asp-route-t="@navToken"
-           target="_blank"
-           class="btn btn-sm btn-success">
-            <i class="bi bi-printer me-1"></i>Imprimir Proveedor
-        </a>
-        <a asp-action="ImprimirContabilidad"
-           asp-route-dt="@dt"
-           asp-route-t="@navToken"
-           target="_blank"
-           class="btn btn-sm btn-outline-primary">
-            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Imprimir Contabilidad
-        </a>
+        @if (oc.Estado != "6" && oc.Estado != "9")
+        {
+            <button type="button" class="btn btn-sm btn-outline-dark"
+                    id="btnCerrarOc"
+                    data-tipo="@oc.TipoDocto"
+                    data-serie="@oc.Serie"
+                    data-numpd="@oc.NumPed">
+                <i class="bi bi-lock me-1"></i>Cerrar @tipoCorto
+            </button>
+        }
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-printer me-1"></i>Imprimir
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item"
+                       asp-action="Imprimir"
+                       asp-route-dt="@dt"
+                       asp-route-t="@navToken"
+                       target="_blank">
+                        <i class="bi bi-person me-2"></i>Para Proveedor
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item"
+                       asp-action="ImprimirContabilidad"
+                       asp-route-dt="@dt"
+                       asp-route-t="@navToken"
+                       target="_blank">
+                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>Para Contabilidad
+                    </a>
+                </li>
+            </ul>
+        </div>
+        @if (oc.Estado == "0")
+        {
+            <button type="button" class="btn btn-sm btn-warning"
+                    id="btnEnviarGerencia"
+                    data-tipo="@oc.TipoDocto"
+                    data-serie="@oc.Serie"
+                    data-numpd="@oc.NumPed">
+                <i class="bi bi-send me-1"></i>Enviar O/C a Gerencia
+            </button>
+        }
+        @if (oc.AprobGerencia != "S" && !noAprobarOC)
+        {
+            <button type="button" class="btn btn-sm btn-success"
+                    id="btnAprobarOc"
+                    data-tipo="@oc.TipoDocto"
+                    data-serie="@oc.Serie"
+                    data-numpd="@oc.NumPed">
+                <i class="bi bi-patch-check me-1"></i>Aprobar Orden de Compra
+            </button>
+        }
         <a asp-action="Index"
            asp-route-t="@navToken"
            asp-route-page="@retPage"
@@ -96,6 +140,23 @@
             <div class="col-md-4">
                 <label class="form-label text-muted small mb-0">Proveedor</label>
                 <div class="fw-semibold">@(nomProv ?? oc.CodProveed ?? "-")</div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label text-muted small mb-0">Estado</label>
+                <div>
+                    @{
+                        var (detBadge, detLabel) = (oc.Estado ?? "", oc.AprobGerencia) switch {
+                            ("2", "S") => ("bg-success", "Aprobado por Gerencia"),
+                            ("0", _)   => ("bg-secondary", "Emitida"),
+                            ("2", _)   => ("bg-warning text-dark", "Enviado a Gerencia"),
+                            ("5", _)   => ("bg-info text-dark", "Parcialmente Cerrada"),
+                            ("6", _)   => ("bg-success", "Cerrada"),
+                            ("9", _)   => ("bg-danger", "Anulada"),
+                            _          => ("bg-light text-dark", oc.Estado ?? "-")
+                        };
+                    }
+                    <span class="badge @detBadge">@detLabel</span>
+                </div>
             </div>
             <div class="col-md-2">
                 <label class="form-label text-muted small mb-0">Moneda</label>
@@ -717,6 +778,83 @@
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d.ok) { window.location = '@Url.Action("Index", "OrdenCompra", new { t = (string?)ViewBag.NavToken })'; }
+                    else { alert('Error: ' + d.error); }
+                })
+                .catch(function () { alert('Error de comunicación con el servidor.'); });
+            };
+        });
+    }
+    // ── Enviar OC a Gerencia ─────────────────────────────────────────────────
+    var btnGerencia = document.getElementById('btnEnviarGerencia');
+    if (btnGerencia) {
+        btnGerencia.addEventListener('click', function () {
+            modalTitulo.textContent = 'Enviar O/C a Gerencia';
+            modalMensaje.innerHTML  = '¿Está seguro de enviar la @tipoCorto <strong>' + btnGerencia.dataset.numpd + '</strong> a aprobación de Gerencia? El estado cambiará a <strong>Pendiente Aprobación</strong>.';
+            modalOk.className = 'btn btn-warning';
+            _formPendiente = null;
+            modalConfirmar.show();
+            modalOk.onclick = function () {
+                modalConfirmar.hide();
+                fetch('@Url.Action("EnviarGerencia", "OrdenCompra")', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
+                    body: JSON.stringify({ tipoDocto: btnGerencia.dataset.tipo, serie: parseInt(btnGerencia.dataset.serie), numPed: parseInt(btnGerencia.dataset.numpd) })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location.reload(); }
+                    else { alert('Error: ' + d.error); }
+                })
+                .catch(function () { alert('Error de comunicación con el servidor.'); });
+            };
+        });
+    }
+
+    // ── Aprobar Orden de Compra ───────────────────────────────────────────────
+    var btnAprobar = document.getElementById('btnAprobarOc');
+    if (btnAprobar) {
+        btnAprobar.addEventListener('click', function () {
+            modalTitulo.textContent = 'Aprobar Orden de Compra';
+            modalMensaje.innerHTML  = '¿Está seguro de aprobar la @tipoCorto <strong>' + btnAprobar.dataset.numpd + '</strong>? Se registrará su usuario como aprobador.';
+            modalOk.className = 'btn btn-success';
+            _formPendiente = null;
+            modalConfirmar.show();
+            modalOk.onclick = function () {
+                modalConfirmar.hide();
+                fetch('@Url.Action("AprobarOc", "OrdenCompra")', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
+                    body: JSON.stringify({ tipoDocto: btnAprobar.dataset.tipo, serie: parseInt(btnAprobar.dataset.serie), numPed: parseInt(btnAprobar.dataset.numpd) })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location.reload(); }
+                    else { alert('Error: ' + d.error); }
+                })
+                .catch(function () { alert('Error de comunicación con el servidor.'); });
+            };
+        });
+    }
+
+    // ── Cerrar Orden de Compra ────────────────────────────────────────────────
+    var btnCerrar = document.getElementById('btnCerrarOc');
+    if (btnCerrar) {
+        btnCerrar.addEventListener('click', function () {
+            modalTitulo.textContent = 'Cerrar @tipoLabel';
+            modalMensaje.innerHTML  = '¿Está seguro de cerrar la @tipoCorto <strong>' + btnCerrar.dataset.numpd + '</strong>? El estado cambiará a <strong>Cerrada</strong>.';
+            modalOk.className = 'btn btn-dark';
+            _formPendiente = null;
+            modalConfirmar.show();
+            modalOk.onclick = function () {
+                modalConfirmar.hide();
+                fetch('@Url.Action("CerrarOc", "OrdenCompra")', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
+                    body: JSON.stringify({ tipoDocto: btnCerrar.dataset.tipo, serie: parseInt(btnCerrar.dataset.serie), numPed: parseInt(btnCerrar.dataset.numpd) })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location.reload(); }
                     else { alert('Error: ' + d.error); }
                 })
                 .catch(function () { alert('Error de comunicación con el servidor.'); });
