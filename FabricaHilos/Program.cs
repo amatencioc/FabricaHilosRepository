@@ -142,6 +142,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<DepuracionJobServi
 builder.Services.AddScoped<IInspeccionService, InspeccionService>();
 builder.Services.AddScoped<IRequisicionService, RequisicionService>();
 builder.Services.AddScoped<IOrdenCompraService, OrdenCompraService>();
+builder.Services.AddScoped<IIndLogisticaService, IndLogisticaService>();
 builder.Services.AddScoped<INivelMorosidadService, NivelMorosidadService>();
 builder.Services.AddScoped<INivelTiempoService, NivelTiempoService>();
 builder.Services.AddScoped<IDesarrolloService, DesarrolloService>();

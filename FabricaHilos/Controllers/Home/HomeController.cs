@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using FabricaHilos.Controllers;
 using FabricaHilos.Data;
 using FabricaHilos.Models;
 using FabricaHilos.Services;
@@ -9,7 +10,7 @@ using System.Diagnostics;
 namespace FabricaHilos.Controllers.Home
 {
     [Authorize]
-    public class HomeController : Controller
+    public class HomeController : OracleBaseController
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<HomeController> _logger;

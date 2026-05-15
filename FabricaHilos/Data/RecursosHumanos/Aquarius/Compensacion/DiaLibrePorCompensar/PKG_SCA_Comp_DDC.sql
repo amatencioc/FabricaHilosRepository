@@ -241,6 +241,7 @@ CREATE OR REPLACE PACKAGE PKG_SCA_COMP_DDC AS
         p_fecha_inicio     IN VARCHAR2,
         p_fecha_fin        IN VARCHAR2,
         p_lista_personal   IN VARCHAR2,
+        p_lista_ddc_fechas IN VARCHAR2 DEFAULT NULL,  -- 'cod:dd/MM/yyyy,cod:dd/MM/yyyy,...' solo esos dias DDC
         p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
         cv_resultado       OUT SYS_REFCURSOR
@@ -1096,6 +1097,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
         p_fecha_inicio     IN VARCHAR2,
         p_fecha_fin        IN VARCHAR2,
         p_lista_personal   IN VARCHAR2,
+        p_lista_ddc_fechas IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_inicio  IN VARCHAR2 DEFAULT NULL,
         p_fecha_he_fin     IN VARCHAR2 DEFAULT NULL,
         cv_resultado       OUT SYS_REFCURSOR
@@ -1125,6 +1127,18 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
         v_hfr       VARCHAR2(10);
         v_fdc_str   VARCHAR2(10);
         v_dia_s     VARCHAR2(5);
+
+        -- Filtra si p_lista_ddc_fechas contiene la clave 'cod:dd/MM/yyyy'
+        FUNCTION fn_ddc_permitida(
+            p_cod IN VARCHAR2,
+            p_fec IN DATE
+        ) RETURN BOOLEAN IS
+            v_clave VARCHAR2(40);
+        BEGIN
+            IF p_lista_ddc_fechas IS NULL THEN RETURN TRUE; END IF;
+            v_clave := p_cod || ':' || TO_CHAR(p_fec, 'DD/MM/YYYY');
+            RETURN INSTR(',' || p_lista_ddc_fechas || ',', ',' || v_clave || ',') > 0;
+        END fn_ddc_permitida;
     BEGIN
         -- ID unico para este evento
         SELECT id_comp_seq.NEXTVAL INTO v_id_evento FROM DUAL;
@@ -1159,6 +1173,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DDC AS
 
                 -- Distribuir HE a DDC en orden cronologico
                 FOR j IN 1..v_dias_ddc.COUNT LOOP
+                    -- Si hay lista de fechas DDC especificas, saltar los no solicitados
+                    IF NOT fn_ddc_permitida(e.cod_personal, v_dias_ddc(j).fechamar) THEN
+                        CONTINUE;
+                    END IF;
                     v_falt_rest := v_dias_ddc(j).min_valor;
                     v_he_asig   := 0;
                     v_estado    := 'ERR';

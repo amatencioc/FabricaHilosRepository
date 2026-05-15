@@ -59,6 +59,7 @@ public class MenuOptions
     public bool Logistica                { get; set; } = false;
     public bool LogisticaRequerimiento   { get; set; } = true;
     public bool LogisticaOrdenCompra     { get; set; } = true;
+    public bool LogisticaIndicadores     { get; set; } = true;
 
     // ── Menús: Créditos y Cobranzas ───────────────────────────────────────
     public bool CreditosCobranza         { get; set; } = false;
@@ -117,6 +118,7 @@ public class MenuOptions
         Logistica              = true,
         LogisticaRequerimiento = true,
         LogisticaOrdenCompra   = true,
+        LogisticaIndicadores   = true,
 
         CreditosCobranza = true,
         CcNivelMorosidad = true,

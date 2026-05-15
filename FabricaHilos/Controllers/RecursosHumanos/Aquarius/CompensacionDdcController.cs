@@ -125,6 +125,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             string fechaInicio,
             string fechaFin,
             string listaPersonal,
+            string? listaDdcFechas = null,
             string? fechaHeInicio = null,
             string? fechaHeFin = null)
         {
@@ -135,8 +136,9 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                     fechaInicio,
                     fechaFin,
                     listaPersonal,
-                    string.IsNullOrWhiteSpace(fechaHeInicio) ? null : fechaHeInicio,
-                    string.IsNullOrWhiteSpace(fechaHeFin)    ? null : fechaHeFin);
+                    string.IsNullOrWhiteSpace(listaDdcFechas) ? null : listaDdcFechas,
+                    string.IsNullOrWhiteSpace(fechaHeInicio)  ? null : fechaHeInicio,
+                    string.IsNullOrWhiteSpace(fechaHeFin)     ? null : fechaHeFin);
 
                 return Json(new { ok = true, data = resultado });
             }

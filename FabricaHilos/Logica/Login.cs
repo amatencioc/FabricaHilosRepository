@@ -70,11 +70,19 @@ namespace FabricaHilos.Logica
             {
                 try
                 {
+                    // ROWNUM se aplica DESPUÉS del ORDER BY envolviendo en subquery para que,
+                    // si existen filas duplicadas (mismo c_user / misma clave), siempre se
+                    // tome la fila con el valor de ACCESO_WEB más representativo
+                    // (orden DESC: "Produccion" > "Inspecciones" > …).
                     var query = $@"
                         SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web
-                        FROM {tabla}
-                        WHERE c_user = :puser AND TRIM(psw_sig) = :ppsw
-                        AND ROWNUM = 1";
+                        FROM (
+                            SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web
+                            FROM {tabla}
+                            WHERE c_user = :puser AND TRIM(psw_sig) = :ppsw
+                            ORDER BY acceso_web DESC
+                        )
+                        WHERE ROWNUM = 1";
 
                     using var cmd = new OracleCommand(query, oconexion);
                     cmd.BindByName     = true;

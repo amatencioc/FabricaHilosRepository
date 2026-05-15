@@ -111,7 +111,7 @@ public class MenuService : IMenuService
         return new MenuOptions
         {
             // ?? Menús principales ?????????????????????????????????????????????
-            Dashboard = global.Dashboard,
+            Dashboard = global.Dashboard && TieneAlguno("Dashboard"),
 
             Produccion = TieneAlguno(
                 "Produccion",
@@ -157,7 +157,8 @@ public class MenuService : IMenuService
             Logistica = TieneAlguno(
                 "Logistica",
                 "LogisticaRequerimiento",
-                "LogisticaOrdenCompra"),
+                "LogisticaOrdenCompra",
+                "LogisticaIndicadores"),
 
             CreditosCobranza = TieneAlguno(
                 "CreditosCobranza",
@@ -263,6 +264,9 @@ public class MenuService : IMenuService
             LogisticaOrdenCompra = global.LogisticaOrdenCompra
                 && TieneAlguno("Logistica", "LogisticaOrdenCompra"),
 
+            LogisticaIndicadores = global.LogisticaIndicadores
+                && TieneAlguno("Logistica", "LogisticaIndicadores"),
+
             // ?? Sub-módulos: Créditos y Cobranzas ????????????????????????????
             CcNivelMorosidad = global.CcNivelMorosidad
                 && TieneAlguno("CreditosCobranza", "CcNivelMorosidad"),
@@ -308,15 +312,11 @@ public class MenuService : IMenuService
         if (menus.Ventas)           return ("Ventas",           "Index", null, null);
         if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
         if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
-        if (menus.Logistica)
-        {
-            // Aterrizar en el primer sub-módulo disponible
-            if (menus.LogisticaRequerimiento) return (null, null, null, "/Logistica/Requerimiento");
-            if (menus.LogisticaOrdenCompra)   return (null, null, null, "/Logistica/OrdenCompra");
-            return (null, null, null, "/Logistica/Requerimiento");
-        }
+        if (menus.Logistica)    return ("Logistica",        "Index", null, null);
         if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
         if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
-        return ("RegistroPreparatoria", "Index", null, null);
+        // Sin módulos asignados o AccesoWeb vacío: redirigir a login para evitar
+        // aterrizar en un módulo al que el usuario no tiene acceso.
+        return ("Account", "Login", null, null);
     }
 }

@@ -64,6 +64,13 @@ public interface IRequisicionService
     /// Actualiza el PRECIO y la MONEDA de un ítem del requerimiento.
     /// </summary>
     Task ActualizarPrecioItemAsync(string tipDoc, int serie, long numReq, int orden, decimal precio, string moneda, string usuario);
+
+    /// <summary>
+    /// Devuelve datos de firma (nombre, cargo, imagen) para los tres firmantes del requerimiento:
+    /// Hecho por (A_ADUSER), Aprobado por (AUTORIZA), Recibido por (RECIBE).
+    /// </summary>
+    Task<(FirmaOcDto? HechoPor, FirmaOcDto? AprobadoPor, FirmaOcDto? RecibidoPor)> ObtenerFirmasRequisicionAsync(
+        string? aAduser, string? autoriza, string? recibe);
 }
 
 public class RequisicionService : OracleServiceBase, IRequisicionService
@@ -1324,6 +1331,117 @@ public async Task ActualizarPrecioItemAsync(string tipDoc, int serie, long numRe
     cmd.Parameters.Add(new OracleParameter(":numReq",  OracleDbType.Decimal,  numReq,  ParameterDirection.Input));
     cmd.Parameters.Add(new OracleParameter(":orden",   OracleDbType.Int32,    orden,   ParameterDirection.Input));
     await cmd.ExecuteNonQueryAsync();
+}
+
+public async Task<(FirmaOcDto? HechoPor, FirmaOcDto? AprobadoPor, FirmaOcDto? RecibidoPor)> ObtenerFirmasRequisicionAsync(
+    string? aAduser, string? autoriza, string? recibe)
+{
+    FirmaOcDto? hechoPor = null, aprobadoPor = null, recibidoPor = null;
+
+    var codigos = new[]
+    {
+        (Codigo: aAduser,  Rol: "HECHO POR"),
+        (Codigo: autoriza, Rol: "APROBADO POR"),
+        (Codigo: recibe,   Rol: "RECIBIDO POR"),
+    };
+
+    try
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        // buildByLogin=true  → cod es C_USER (A_ADUSER), busca via CS_USER
+        // buildByLogin=false → cod es C_CODIGO (AUTORIZA, RECIBE), busca directo en RH_PERSONAS
+        async Task<FirmaOcDto?> BuildFirma(string? cod, string rol, bool buildByLogin)
+        {
+            if (string.IsNullOrWhiteSpace(cod)) return null;
+
+            string sqlP = buildByLogin
+                ? $@"SELECT ps.C_CODIGO,
+                             ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                             || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                             NVL(tc.DESCRIPCION, '') AS CARGO
+                      FROM {S}CS_USER cu
+                      JOIN {S}RH_PERSONAS ps ON ps.C_CODIGO = cu.C_CODIGO
+                      JOIN {S}RH_PERSONAL pr  ON pr.C_CODIGO = ps.C_CODIGO
+                      LEFT JOIN {S}T_CARGO tc  ON tc.C_CARGO = pr.C_CARGO
+                      WHERE UPPER(cu.C_USER) = UPPER(:cod) AND ROWNUM = 1"
+                : $@"SELECT ps.C_CODIGO,
+                             ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                             || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                             NVL(tc.DESCRIPCION, '') AS CARGO
+                      FROM {S}RH_PERSONAS ps
+                      JOIN {S}RH_PERSONAL pr ON pr.C_CODIGO = ps.C_CODIGO
+                      LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO
+                      WHERE ps.C_CODIGO = :cod AND ROWNUM = 1";
+            await using var cmdP = new OracleCommand(sqlP, conn) { BindByName = true };
+            cmdP.Parameters.Add("cod", OracleDbType.Varchar2).Value = cod;
+            await using var rp = (OracleDataReader)await cmdP.ExecuteReaderAsync();
+            if (!await rp.ReadAsync()) return null;
+
+            var dto = new FirmaOcDto
+            {
+                Codigo         = GetStr(rp, "C_CODIGO")        ?? cod,
+                NombreCompleto = GetStr(rp, "NOMBRE_COMPLETO") ?? "",
+                Cargo          = GetStr(rp, "CARGO")           ?? "",
+                RolEtiqueta    = rol,
+            };
+
+            // Cargar imagen de firma usando el C_CODIGO real resuelto
+            try
+            {
+                await using var cmdF = new OracleCommand(
+                    $"SELECT FIRMA FROM {S}RH_FIRMAS WHERE C_CODIGO = :cod", conn)
+                {
+                    InitialLONGFetchSize = -1
+                };
+                cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = dto.Codigo;
+                await using var rdr = (OracleDataReader)await cmdF.ExecuteReaderAsync();
+                if (await rdr.ReadAsync() && !rdr.IsDBNull(0))
+                {
+                    byte[]? bytes = null;
+                    var val = rdr.GetValue(0);
+                    if (val is byte[] ba && ba.Length > 0)
+                        bytes = ba;
+                    else if (val is OracleBinary ob && !ob.IsNull)
+                        bytes = ob.Value;
+
+                    if (bytes != null && bytes.Length > 0)
+                    {
+                        var mime = OrdenCompraService.DetectImageMimeType(bytes);
+                        if (mime == "image/tiff")
+                        {
+                            try
+                            {
+                                using var input  = new System.IO.MemoryStream(bytes);
+                                using var image  = SixLabors.ImageSharp.Image.Load(input);
+                                using var output = new System.IO.MemoryStream();
+                                image.Save(output, new SixLabors.ImageSharp.Formats.Png.PngEncoder());
+                                bytes = output.ToArray();
+                                mime  = "image/png";
+                            }
+                            catch { /* mantener bytes originales */ }
+                        }
+                        if (mime != null)
+                            dto.Firma = bytes;
+                    }
+                }
+            }
+            catch { /* firma no disponible */ }
+
+            return dto;
+        }
+
+        hechoPor   = await BuildFirma(aAduser,  "HECHO POR",    buildByLogin: true);
+        aprobadoPor = await BuildFirma(autoriza, "APROBADO POR", buildByLogin: false);
+        recibidoPor = await BuildFirma(recibe,   "RECIBIDO POR", buildByLogin: false);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error al obtener firmas de requerimiento");
+    }
+
+    return (hechoPor, aprobadoPor, recibidoPor);
 }
 }
 

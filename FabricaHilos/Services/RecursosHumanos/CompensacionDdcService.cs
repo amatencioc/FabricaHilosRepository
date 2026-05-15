@@ -35,6 +35,7 @@ public interface ICompensacionDdcService
         string fechaInicio,
         string fechaFin,
         string listaPersonal,
+        string? listaDdcFechas = null,
         string? fechaHeInicio = null,
         string? fechaHeFin = null);
 
@@ -295,6 +296,7 @@ public class CompensacionDdcService : ICompensacionDdcService
         string fechaInicio,
         string fechaFin,
         string listaPersonal,
+        string? listaDdcFechas = null,
         string? fechaHeInicio = null,
         string? fechaHeFin = null)
     {
@@ -325,13 +327,14 @@ public class CompensacionDdcService : ICompensacionDdcService
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.CommandText = $"{Paquete}.REGISTRAR_DDC_MASIVO";
 
-            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",     OracleDbType.Varchar2) { Value = codEmpresa });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",    OracleDbType.Varchar2) { Value = fechaInicio });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",       OracleDbType.Varchar2) { Value = fechaFin });
-            cmd.Parameters.Add(new OracleParameter("p_lista_personal",  OracleDbType.Varchar2) { Value = listaPersonal });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio", OracleDbType.Varchar2) { Value = (object?)fechaHeInicio ?? DBNull.Value });
-            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",    OracleDbType.Varchar2) { Value = (object?)fechaHeFin    ?? DBNull.Value });
-            cmd.Parameters.Add(new OracleParameter("cv_resultado",      OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
+            cmd.Parameters.Add(new OracleParameter("p_cod_empresa",      OracleDbType.Varchar2) { Value = codEmpresa });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_inicio",     OracleDbType.Varchar2) { Value = fechaInicio });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_fin",        OracleDbType.Varchar2) { Value = fechaFin });
+            cmd.Parameters.Add(new OracleParameter("p_lista_personal",   OracleDbType.Varchar2) { Value = listaPersonal });
+            cmd.Parameters.Add(new OracleParameter("p_lista_ddc_fechas", OracleDbType.Varchar2) { Value = (object?)listaDdcFechas ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_inicio",  OracleDbType.Varchar2) { Value = (object?)fechaHeInicio  ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("p_fecha_he_fin",     OracleDbType.Varchar2) { Value = (object?)fechaHeFin     ?? DBNull.Value });
+            cmd.Parameters.Add(new OracleParameter("cv_resultado",       OracleDbType.RefCursor){ Direction = ParameterDirection.Output });
 
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

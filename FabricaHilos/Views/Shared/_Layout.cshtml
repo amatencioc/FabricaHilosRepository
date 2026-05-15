@@ -357,6 +357,14 @@
                                 </a>
                             </li>
                             }
+                            @if (menus.LogisticaIndicadores)
+                            {
+                            <li>
+                                <a href="/Logistica/Indicadores" class="sidebar-link sidebar-sublink @(ctrl == "IndicadoresLogistica" ? "active" : "")">
+                                    <i class="bi bi-bar-chart-line"></i> Indicadores
+                                </a>
+                            </li>
+                            }
                         </ul>
                     </li>
                 }

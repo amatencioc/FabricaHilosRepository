@@ -65,7 +65,8 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Fecha Final <span class="text-danger">*</span></label>
                             <input id="fechaFinInput" name="fechaFin" type="datetime-local" step="60" class="form-control"
-                                   min="@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm")" required tabindex="4" />
+                                   min="@Model.FechaInicio.ToString("yyyy-MM-ddTHH:mm")"
+                                   value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required tabindex="4" />
                             <span id="fechaFinError" class="text-danger small d-none">
                                 La Fecha Final no puede ser anterior a la Fecha Inicial (@Model.FechaInicio.ToString("dd/MM/yyyy HH:mm")).
                             </span>

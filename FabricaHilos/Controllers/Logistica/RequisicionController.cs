@@ -594,6 +594,54 @@ public class RequisicionController : OracleBaseController
         return RedirectToAction(nameof(Index), new { t, page });
     }
 
+    // ── IMPRIMIR REQUERIMIENTO ─────────────────────────────────────────────────
+
+    [HttpGet("Imprimir/{tipDoc}/{serie:int}/{numReq:long}")]
+    public async Task<IActionResult> Imprimir(string tipDoc, int serie, long numReq, string? t = null)
+    {
+        var cabecera = await _service.ObtenerRequisicionAsync(tipDoc, serie, numReq);
+        if (cabecera is null) return NotFound();
+
+        var items = await _service.ObtenerItemsAsync(tipDoc, serie, numReq);
+
+        var codigosPersonal = new[] { cabecera.Responsable, cabecera.Autoriza, cabecera.Recibe }
+            .Concat(items.Select(i => i.CodSolicita))
+            .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.Nombres = await _service.ObtenerNombresPersonalAsync(codigosPersonal);
+
+        var codigosArt = items.Select(i => i.CodArt).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DescripcionesArticulos = await _service.ObtenerDescripcionesArticulosAsync(codigosArt);
+
+        var codigosCc = new[] { cabecera.CentroCosto }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!);
+        ViewBag.CentrosCosto = await _service.ObtenerDescripcionesCentroCostosAsync(codigosCc);
+
+        ViewBag.Destinos   = await _service.ObtenerDescripcionesTablaAuxiliarAsync("85",
+            new[] { cabecera.Destino }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
+        ViewBag.Prioridades = await _service.ObtenerDescripcionesTablaAuxiliarAsync("70",
+            new[] { cabecera.Prioridad }.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!));
+
+        var destsItem = items.Select(i => i.Destino).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!).Distinct();
+        ViewBag.DestinosItem = await _service.ObtenerDescripcionesCentroCostosAsync(destsItem);
+
+        var (firmaHecho, firmaAprobado, firmaRecibido) = await _service.ObtenerFirmasRequisicionAsync(
+            cabecera.AAduser, cabecera.Autoriza, cabecera.Recibe);
+        ViewBag.FirmaHecho    = firmaHecho;
+        ViewBag.FirmaAprobado = firmaAprobado;
+        ViewBag.FirmaRecibido = firmaRecibido;
+
+        var empresa = _empresaTema.GetTemaActual();
+        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
+        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion = empresa.Direccion;
+        ViewBag.EmpresaTelefono  = empresa.Telefono;
+
+        ViewBag.NavToken = t;
+
+        return View("~/Views/Logistica/Requerimiento/Imprimir.cshtml", (cabecera, items));
+    }
+
     // ── HELPERS ────────────────────────────────────────────────────────────────
 
     private string ObtenerCarpetaRaiz()

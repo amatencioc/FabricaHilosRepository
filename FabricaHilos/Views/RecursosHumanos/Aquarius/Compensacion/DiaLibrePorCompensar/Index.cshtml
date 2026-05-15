@@ -956,6 +956,7 @@ function renderPreview(data) {
             <td>
               <input type="checkbox" class="form-check-input chk-prev"
                      data-cod="${r.codPersonal}"
+                     data-fecha="${r.fechaDdcStr ?? ''}"
                      ${sinHe ? 'disabled' : 'checked'}
                      onchange="actualizarConteo()" />
             </td>
@@ -1009,7 +1010,8 @@ async function ejecutarRegistro() {
     const seleccionados = [...document.querySelectorAll('.chk-prev:not(:disabled):checked')];
     if (!seleccionados.length) return;
 
-    const codsUnicos = [...new Set(seleccionados.map(c => c.dataset.cod))];
+    const codsUnicos        = [...new Set(seleccionados.map(c => c.dataset.cod))];
+    const listaDdcFechas    = seleccionados.map(c => c.dataset.cod + ':' + c.dataset.fecha).join(',');
     const desde = document.getElementById('rangoDesde').value;
     const hasta = document.getElementById('rangoHasta').value;
 
@@ -1027,9 +1029,10 @@ async function ejecutarRegistro() {
         const heDesde = document.getElementById('rangoHeDesde').value;
         const heHasta = document.getElementById('rangoHeHasta').value;
         const params = new URLSearchParams({
-            fechaInicio:   isoADdMmYyyy(desde),
-            fechaFin:      isoADdMmYyyy(hasta),
-            listaPersonal: codsUnicos.join(','),
+            fechaInicio:      isoADdMmYyyy(desde),
+            fechaFin:         isoADdMmYyyy(hasta),
+            listaPersonal:    codsUnicos.join(','),
+            listaDdcFechas:   listaDdcFechas,
             ...(heDesde && { fechaHeInicio: isoADdMmYyyy(heDesde) }),
             ...(heHasta && { fechaHeFin:    isoADdMmYyyy(heHasta) }),
         });

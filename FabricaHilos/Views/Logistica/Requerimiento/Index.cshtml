@@ -344,6 +344,28 @@
                                    title="Ver detalle">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                <div class="btn-group ms-1">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                            title="Imprimir">
+                                        <i class="bi bi-printer"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <a class="dropdown-item"
+                                               asp-action="Imprimir"
+                                               asp-route-tipDoc="@req.TipDoc"
+                                               asp-route-serie="@req.Serie"
+                                               asp-route-numReq="@req.NumReq"
+                                               asp-route-t="@navToken"
+                                               target="_blank">
+                                                <i class="bi bi-file-earmark-text me-2"></i>Requerimiento
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
                                 @if (req.Estado == "9")
                                 {
                                     <button type="button"

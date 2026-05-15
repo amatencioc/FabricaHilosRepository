@@ -48,6 +48,19 @@ public class LogisticaController : Controller
             });
         }
 
+        if (menus.LogisticaIndicadores)
+        {
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Indicadores",
+                Descripcion = "KPIs y dashboard de requisiciones: resumen por estado, tiempos del ciclo logístico, top destinos y pendientes.",
+                Icono       = "bi-bar-chart-line",
+                ColorClase  = "text-danger",
+                Controller  = "IndicadoresLogistica",
+                Action      = "Index"
+            });
+        }
+
         return View("~/Views/Logistica/Index.cshtml", modulos);
     }
 }

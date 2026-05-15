@@ -35,9 +35,45 @@ namespace FabricaHilos.Controllers.Account
         {
             if (User.Identity?.IsAuthenticated == true)
             {
-                // Si la sesión Oracle también está activa, redirigir a la app directamente
-                if (!string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
+                var oracleUser = HttpContext.Session.GetString("OracleUser");
+                var oraclePass = HttpContext.Session.GetString("OraclePass");
+
+                // Si la sesión Oracle está activa, refrescar AccesoWeb desde Oracle antes de
+                // redirigir para evitar que una sesión obsoleta mande al usuario a un módulo
+                // incorrecto (ej: tablet compartida donde el AccesoWeb anterior era "Seguridad"
+                // y el usuario actual tiene "Produccion").
+                if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
+                {
+                    try
+                    {
+                        var loginOracle   = new Login(_configuration, _logger);
+                        var usuarioOracle = await loginOracle.EncontrarUsuarioAsync(oracleUser, oraclePass);
+                        if (!string.IsNullOrEmpty(usuarioOracle.c_user)
+                            && !string.IsNullOrWhiteSpace(usuarioOracle.acceso_web))
+                        {
+                            HttpContext.Session.SetString("AccesoWeb", usuarioOracle.acceso_web);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "No se pudo refrescar AccesoWeb desde Oracle para {Usuario}; se usará el valor de sesión.", oracleUser);
+                    }
+                    // Verificar que AccesoWeb esté en sesión antes de redirigir.
+                    // Si Oracle falló y la sesión fue limpiada por OracleBaseController,
+                    // AccesoWeb estará vacío → forzar re-login para evitar aterrizar en
+                    // un módulo incorrecto (fallback de GetLanding).
+                    var accesoActual = HttpContext.Session.GetString("AccesoWeb");
+                    if (string.IsNullOrWhiteSpace(accesoActual))
+                    {
+                        _logger.LogWarning(
+                            "Sesión Identity válida para {Usuario} pero AccesoWeb vacío tras refresh Oracle; forzando re-login.",
+                            oracleUser);
+                        await _signInManager.SignOutAsync();
+                        HttpContext.Session.Clear();
+                        return RedirectToAction("Login", new { returnUrl });
+                    }
                     return RedirectToLanding();
+                }
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
                 // → cerrar sesión web y redirigir a login limpio para evitar HTTP 400

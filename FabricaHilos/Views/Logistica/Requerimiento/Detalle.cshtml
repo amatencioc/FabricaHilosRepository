@@ -67,12 +67,33 @@
         Requerimiento &nbsp;<span class="fw-bold">@cab.TipDoc-@cab.Serie.ToString("D3")-@cab.NumReq</span>
         &nbsp;<span class="badge @badgeClass">@estadoTexto</span>
     </h4>
-    <a asp-action="Index"
-       asp-route-t="@navToken"
-       asp-route-page="@retPage"
-       class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Volver al listado
-    </a>
+    <div class="d-flex gap-2">
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-printer me-1"></i>Imprimir
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <a class="dropdown-item"
+                       asp-action="Imprimir"
+                       asp-route-tipDoc="@cab.TipDoc"
+                       asp-route-serie="@cab.Serie"
+                       asp-route-numReq="@cab.NumReq"
+                       asp-route-t="@navToken"
+                       target="_blank">
+                        <i class="bi bi-file-earmark-text me-2"></i>Requerimiento
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <a asp-action="Index"
+           asp-route-t="@navToken"
+           asp-route-page="@retPage"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver al listado
+        </a>
+    </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ CABECERA ══ -->

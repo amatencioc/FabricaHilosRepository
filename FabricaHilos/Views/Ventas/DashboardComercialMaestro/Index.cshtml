@@ -456,6 +456,7 @@
 
         var sorted = Object.entries(map)
             .map(function([a, v]) { return { asesor: a, importe: v.importe, kg: v.kg, pct: totalImp > 0 ? (v.importe / totalImp * 100) : 0 }; })
+            .filter(function(r) { return r.importe > 0; })
             .sort(function(a, b) { return b.importe - a.importe; });
 
         var fmtMil = function(n) {
@@ -586,6 +587,7 @@
         var total = source.reduce(function(s, d) { return s + (d.importe || 0); }, 0);
         var sorted = source
             .map(function(d) { return { asesor: d.asesor ?? 'Sin Asesor', importe: d.importe || 0, pct: total > 0 ? (d.importe / total * 100) : 0 }; })
+            .filter(function(r) { return r.importe > 0; })
             .sort(function(a, b) { return b.importe - a.importe; });
 
         var fmtMil = function(n) {
@@ -840,6 +842,7 @@
 
         var sorted = source
             .map(function(d) { return { asesor: d.asesor ?? 'Sin Asesor', total: d.importe || 0 }; })
+            .filter(function(r) { return r.total > 0; })
             .sort(function(a, b) { return a.total - b.total; });
 
         var fmtMil = function(n) {
