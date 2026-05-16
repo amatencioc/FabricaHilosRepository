@@ -16,8 +16,9 @@
     var empresaRuc       = ViewBag.EmpresaRuc        as string ?? "";
     var empresaDireccion = ViewBag.EmpresaDireccion  as string ?? "";
     var empresaTelefono  = ViewBag.EmpresaTelefono   as string ?? "";
-    var logoPath         = ViewBag.EmpresaLogoPath   as string ?? "";
-    var logoAlt          = ViewBag.EmpresaLogoAlt    as string ?? "Logo";
+    var logoPath          = ViewBag.EmpresaLogoPath    as string ?? "";
+    var logoAlt           = ViewBag.EmpresaLogoAlt     as string ?? "Logo";
+    var empresaNombreCorto = ViewBag.EmpresaNombreCorto as string ?? "";
 
     _ = centrosCosto.TryGetValue(cab.CentroCosto ?? "", out var nomCc);
     _ = destinos.TryGetValue(cab.Destino ?? "", out var nomDestino);
@@ -115,6 +116,18 @@
             font-size: 8pt;
             color: #1B4D3E;
             font-weight: 600;
+        }
+        .header-company {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .header-company .empresa-marca {
+            font-size: 11pt;
+            font-weight: 800;
+            color: #C8A951;
+            letter-spacing: .5px;
+            margin-bottom: 2px;
         }
         .header-company h1 {
             font-size: 13pt;
@@ -357,6 +370,7 @@
                 }
             </div>
             <div class="header-company">
+                @if (!string.IsNullOrWhiteSpace(empresaNombreCorto)) { <div class="empresa-marca">@empresaNombreCorto</div> }
                 <h1>@empresaNombre</h1>
                 <p>
                     @if (!string.IsNullOrWhiteSpace(empresaRuc))

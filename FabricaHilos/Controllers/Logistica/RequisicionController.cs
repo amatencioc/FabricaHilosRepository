@@ -630,12 +630,13 @@ public class RequisicionController : OracleBaseController
         ViewBag.FirmaRecibido = firmaRecibido;
 
         var empresa = _empresaTema.GetTemaActual();
-        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
-        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
-        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
-        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
-        ViewBag.EmpresaDireccion = empresa.Direccion;
-        ViewBag.EmpresaTelefono  = empresa.Telefono;
+        ViewBag.EmpresaNombre      = empresa.NombreCompleto;
+        ViewBag.EmpresaNombreCorto = empresa.NombreCorto;
+        ViewBag.EmpresaRuc         = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath    = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt     = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion   = empresa.Direccion;
+        ViewBag.EmpresaTelefono    = empresa.Telefono;
 
         ViewBag.NavToken = t;
 

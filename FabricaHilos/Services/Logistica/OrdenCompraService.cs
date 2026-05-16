@@ -222,10 +222,12 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                                D.NUMREQ, D.ORDEN_REQ,
                                R.CENTRO_COSTO
                         FROM {S}ITEMORD I
-                        LEFT JOIN (SELECT COD_ART, MIN(NUMREQ) AS NUMREQ, MIN(ORDEN) AS ORDEN_REQ
-                                   FROM {S}DESP_ITEMREQ
-                                   WHERE NRO_DOC_REF = TO_CHAR(:numPed)
-                                   GROUP BY COD_ART) D
+                        LEFT JOIN (SELECT COD_ART, NUMREQ, ORDEN AS ORDEN_REQ
+                                   FROM (SELECT COD_ART, NUMREQ, ORDEN,
+                                                ROW_NUMBER() OVER (PARTITION BY COD_ART ORDER BY NUMREQ ASC, ORDEN ASC) RN
+                                         FROM {S}DESP_ITEMREQ
+                                         WHERE NRO_DOC_REF = TO_CHAR(:numPed))
+                                   WHERE RN = 1) D
                                 ON D.COD_ART = I.COD_ART
                         LEFT JOIN {S}REQUISICION R ON R.NUMREQ = D.NUMREQ
                         WHERE I.TIPO_DOCTO = :tipoDocto AND I.SERIE = :serie AND I.NUM_PED = :numPed

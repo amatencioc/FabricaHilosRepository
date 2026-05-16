@@ -48,6 +48,48 @@
     .sem-verde   { background:#d4edda !important; }
     .sem-amarillo{ background:#fff3cd !important; }
     .sem-rojo    { background:#f8d7da !important; }
+
+    /* ── Resumen Ejecutivo ── */
+    .resumen-ejecutivo {
+        background: linear-gradient(135deg,#1B4D3E 0%,#2e6b55 60%,#1565C0 100%);
+        border-radius: 14px;
+        padding: .7rem 1rem .8rem;
+        color: #fff;
+        box-shadow: 0 4px 18px rgba(27,77,62,.22);
+    }
+    .resumen-header {
+        font-size: .8rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .07em; color: #a7f3d0; margin-bottom: .55rem;
+    }
+    .resumen-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: .5rem;
+    }
+    @@media (max-width: 991px) { .resumen-grid { grid-template-columns: repeat(3,1fr); } }
+    @@media (max-width: 575px) { .resumen-grid { grid-template-columns: 1fr 1fr; } }
+    .resumen-item {
+        background: rgba(255,255,255,.10);
+        border: 1px solid rgba(255,255,255,.18);
+        border-radius: 10px;
+        padding: .55rem .65rem .5rem;
+        cursor: pointer;
+        transition: background .18s, transform .15s;
+    }
+    .resumen-item:hover {
+        background: rgba(255,255,255,.20);
+        transform: translateY(-2px);
+    }
+    .resumen-num {
+        font-size: 1.7rem; font-weight: 800; line-height: 1.1;
+        color: #fff; letter-spacing: -.01em;
+    }
+    .resumen-num-danger { color: #fca5a5; }
+    .resumen-q  { font-size: .67rem; font-weight: 700; color: #a7f3d0; text-transform: uppercase; letter-spacing: .04em; margin-top: .15rem; }
+    .resumen-kpi { font-size: .65rem; color: rgba(255,255,255,.7); margin-bottom: .2rem; }
+    .resumen-badge { margin-bottom: .2rem; }
+    .resumen-link { font-size: .63rem; color: rgba(255,255,255,.55); }
+    .resumen-link:hover { color:#fff; }
 </style>
 }
 
@@ -83,6 +125,77 @@
                 <i class="bi bi-file-earmark-excel"></i> Exportar Excel
             </button>
         </div>
+    </div>
+</div>
+
+<!-- ── Resumen Ejecutivo ────────────────────────────────────────────── -->
+<div id="resumenEjecutivo" class="resumen-ejecutivo mb-3" style="display:none;">
+    <div class="resumen-header">
+        <i class="bi bi-clipboard2-pulse-fill me-2"></i>Resumen Ejecutivo
+        <span class="resumen-periodo ms-2" id="resumenPeriodo" style="font-weight:400; font-size:.78rem; color:#9ca3af;"></span>
+    </div>
+    <div class="resumen-grid">
+
+        <!-- 1. ¿El proceso cierra? -->
+        <div class="resumen-item" onclick="activarTab('tab-dashboard','ancla-pct-atendido')" title="Ver % Atendido por tipo — porcentaje de requisiciones no anuladas que ya tienen Orden de Compra emitida (ciclo cerrado). Objetivo: ≥ 70%.">
+            <div class="resumen-num" id="res-pct-atendido">—</div>
+            <div class="resumen-q">¿El proceso cierra?</div>
+            <div class="resumen-kpi">% Atendido (objetivo ≥ 70%)</div>
+            <div style="font-size:.65rem;color:#6b7280;margin-top:2px;">Requisiciones con OC emitida / total activas</div>
+            <div class="resumen-badge" id="res-pct-badge">
+                <span class="badge bg-secondary">sin datos</span>
+            </div>
+            <div class="resumen-link"><i class="bi bi-arrow-right-circle me-1"></i>Ver Dashboard KPI</div>
+        </div>
+
+        <!-- 2. ¿Dónde está el cuello HOY? -->
+        <div class="resumen-item" onclick="activarTab('tab-dashboard','ancla-bloqueados')" title="Ver Bloqueados por Etapa — ítems con saldo pendiente que llevan más de 7 días sin avanzar de etapa. Indica dónde está el atasco actual del proceso.">
+            <div class="resumen-num resumen-num-danger" id="res-bloqueados">—</div>
+            <div class="resumen-q">¿Dónde está el cuello HOY?</div>
+            <div class="resumen-kpi">Ítems bloqueados &gt;7 días</div>
+            <div style="font-size:.65rem;color:#6b7280;margin-top:2px;">Sin avanzar de etapa (Reg / Aut / Log)</div>
+            <div class="resumen-badge" id="res-bloq-badge">
+                <span class="badge bg-secondary">sin datos</span>
+            </div>
+            <div class="resumen-link"><i class="bi bi-arrow-right-circle me-1"></i>Ver Bloqueados por Etapa</div>
+        </div>
+
+        <!-- 3. ¿Qué tramo es más lento? -->
+        <div class="resumen-item" onclick="activarTab('tab-dashboard','ancla-tiempos')" title="Ver Tiempos por Etapa — muestra cuántos días promedio tarda cada etapa del ciclo logístico. T1 = Registro→Autorización, T2 = Autorización→Logística, T3 = Logística→Orden de Compra. Meta: ≤ 15 días en total.">
+            <div class="resumen-num" id="res-tramo-lento" style="font-size:1.1rem;">—</div>
+            <div class="resumen-q">¿Qué tramo es más lento?</div>
+            <div class="resumen-kpi">Ciclo total promedio (meta ≤ 15 días)</div>
+            <div style="font-size:.65rem;color:#6b7280;margin-top:2px;">T1 Reg→Aut · T2 Aut→Log · T3 Log→OC</div>
+            <div class="resumen-badge" id="res-tramo-badge">
+                <span class="badge bg-secondary">sin datos</span>
+            </div>
+            <div class="resumen-link"><i class="bi bi-arrow-right-circle me-1"></i>Ver Tiempos / Waterfall</div>
+        </div>
+
+        <!-- 4. ¿El proceso mejora o empeora? -->
+        <div class="resumen-item" onclick="activarTab('tab-tendencia','ancla-tendencia-chart')" title="Ver Tendencia Mensual — compara el ciclo promedio del último mes con el anterior. Si baja = el proceso mejora. Si sube = el proceso se está enlenteciendo.">
+            <div class="resumen-num" id="res-tendencia" style="font-size:1.3rem;">—</div>
+            <div class="resumen-q">¿El proceso mejora o empeora?</div>
+            <div class="resumen-kpi">Tendencia ciclo (últimos 2 meses)</div>
+            <div style="font-size:.65rem;color:#6b7280;margin-top:2px;">Comparación mes actual vs mes anterior</div>
+            <div class="resumen-badge" id="res-tend-badge">
+                <span class="badge bg-secondary">sin datos</span>
+            </div>
+            <div class="resumen-link"><i class="bi bi-arrow-right-circle me-1"></i>Ver Tendencia Mensual</div>
+        </div>
+
+        <!-- 5. ¿Qué ítem atender URGENTE? -->
+        <div class="resumen-item" onclick="activarTab('tab-dashboard','ancla-pendientes')" title="Ver Tabla de Ítems Pendientes — lista detallada de ítems con saldo sin despachar que llevan más de 7 días en espera. Estos son los casos que requieren acción inmediata.">
+            <div class="resumen-num resumen-num-danger" id="res-urgentes">—</div>
+            <div class="resumen-q">¿Qué ítem atender URGENTE?</div>
+            <div class="resumen-kpi">Ítems con saldo sin despachar &gt; 7 días</div>
+            <div style="font-size:.65rem;color:#6b7280;margin-top:2px;">Con cantidad pendiente &gt; 0 y tiempo de espera crítico</div>
+            <div class="resumen-badge" id="res-urg-badge">
+                <span class="badge bg-secondary">sin datos</span>
+            </div>
+            <div class="resumen-link"><i class="bi bi-arrow-right-circle me-1"></i>Ver Tabla Pendientes</div>
+        </div>
+
     </div>
 </div>
 
@@ -149,6 +262,11 @@
     // ── Mapa: paneId → nombre de función init pendiente ──────────────────
     const _pendingInit = {};
 
+    // ── Mapa: tabButtonId → anclaId pendiente de scroll ──────────────────
+    // Reemplaza los listeners inline de shown.bs.tab en activarTab(), evitando
+    // acumulación de handlers huérfanos cuando el tab ya estaba activo.
+    const _pendingScroll = {};
+
     function loadPartial(url, containerId, initFn) {
         const el = document.getElementById(containerId);
         el.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-secondary"></div><p class="mt-2 text-muted">Cargando...</p></div>';
@@ -193,21 +311,29 @@
             });
     }
 
-    // ── Ejecutar init diferido cuando el tab se hace visible ─────────────
+    // ── Ejecutar init diferido + scroll pendiente cuando el tab se hace visible ─
     document.getElementById('indTabs').addEventListener('shown.bs.tab', function (e) {
         const targetId = (e.target.getAttribute('data-bs-target') || '').replace('#', '');
         if (!targetId) return;
+
+        // init diferido
         const fn = _pendingInit[targetId];
         if (fn && typeof window[fn] === 'function') {
             delete _pendingInit[targetId];
-            // doble rAF para que Bootstrap termine el layout del tab antes de dibujar
             requestAnimationFrame(() => requestAnimationFrame(() => window[fn]()));
+        }
+
+        // scroll pendiente desde activarTab()
+        const ancla = _pendingScroll[e.target.id];
+        if (ancla) {
+            delete _pendingScroll[e.target.id];
+            scrollToAncla(ancla);
         }
     });
 
     document.getElementById('btnConsultar').addEventListener('click', function () {
         const p = getParams();
-        if (!p.fechaDesde || !p.fechaHasta) { alert('Seleccione el rango de fechas.'); return; }
+        if (!p.fechaDesde || !p.fechaHasta) { showIndAlert('Seleccione el rango de fechas antes de consultar.'); return; }
 
         loadPartial(
             `/Logistica/Indicadores/Dashboard?fechaDesde=${p.fechaDesde}&fechaHasta=${p.fechaHasta}`,
@@ -225,12 +351,189 @@
 
     document.getElementById('btnExportar').addEventListener('click', function () {
         const p = getParams();
-        if (!p.fechaDesde || !p.fechaHasta) { alert('Seleccione el rango de fechas.'); return; }
+        if (!p.fechaDesde || !p.fechaHasta) { showIndAlert('Seleccione el rango de fechas antes de exportar.'); return; }
         window.location = `/Logistica/Indicadores/ExportarExcel?fechaDesde=${p.fechaDesde}&fechaHasta=${p.fechaHasta}`;
     });
 
-    // Carga automática al abrir
-    document.addEventListener('DOMContentLoaded', () => document.getElementById('btnConsultar').click());
+    function showIndAlert(msg) {
+        document.getElementById('indAlertMsg').textContent = msg;
+        new bootstrap.Modal(document.getElementById('indAlertModal')).show();
+    }
+
+    // ── Navegación rápida desde Resumen Ejecutivo ─────────────────────
+    // tabId   : id del botón de pestaña (ej: 'tab-dashboard')
+    // anclaId : id del div ancla dentro del contenido (ej: 'ancla-bloqueados')
+    function activarTab(tabId, anclaId) {
+        const btn = document.getElementById(tabId);
+        if (!btn) return;
+        const tabInstance = bootstrap.Tab.getOrCreateInstance(btn);
+
+        if (anclaId) {
+            const paneId = btn.getAttribute('data-bs-target')?.replace('#','');
+            const pane   = paneId ? document.getElementById(paneId) : null;
+            if (pane && pane.classList.contains('active')) {
+                // Tab ya visible: scroll inmediato
+                scrollToAncla(anclaId);
+            } else {
+                // Registrar scroll en el mapa centralizado; el listener shown.bs.tab lo consume
+                _pendingScroll[tabId] = anclaId;
+                tabInstance.show();
+            }
+        } else {
+            tabInstance.show();
+        }
+    }
+
+    function scrollToAncla(anclaId) {
+        // Doble rAF para garantizar que el layout del tab ya está pintado
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const el = document.getElementById(anclaId);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+    }
+
+    // ── Actualiza el panel Resumen Ejecutivo con los datos cargados ───
+    window.updateResumenEjecutivo = function () {
+        const p = getParams();
+
+        // ── Fuentes de datos (hidden inputs inyectados por los parciales) ──
+        const pctCStr    = document.getElementById('res-data-pct-compra')?.value;
+        const pctSStr    = document.getElementById('res-data-pct-servicio')?.value;
+        const bloqStr    = document.getElementById('res-data-bloqueados')?.value;
+        const t1Str      = document.getElementById('res-data-t1')?.value;
+        const t2Str      = document.getElementById('res-data-t2')?.value;
+        const t3Str      = document.getElementById('res-data-t3')?.value;
+        const cicloStr   = document.getElementById('res-data-ciclo')?.value;
+        const urgStr     = document.getElementById('res-data-urgentes')?.value;
+        const tendStr    = document.getElementById('res-data-tendencia')?.value;  // JSON [{ciclo,mes}]
+
+        if (!pctCStr && !pctSStr) return; // Dashboard aún no cargado
+
+        const pctC    = parseFloat(pctCStr  || '0');
+        const pctS    = parseFloat(pctSStr  || '0');
+        const bloq    = parseInt(bloqStr    || '0');
+        const t1      = parseFloat(t1Str    || '0');
+        const t2      = parseFloat(t2Str    || '0');
+        const t3      = parseFloat(t3Str    || '0');
+        const ciclo   = parseFloat(cicloStr || '0');
+        const urg     = parseInt(urgStr     || '0');
+
+        // ── 1. % Atendido — -1 = tipo sin requisiciones en el período (centinela) ──
+        const tiposConDatos = [];
+        if (pctC >= 0) tiposConDatos.push({ tipo: 'COMPRA',   v: pctC });
+        if (pctS >= 0) tiposConDatos.push({ tipo: 'SERVICIO', v: pctS });
+        const badgePct = document.getElementById('res-pct-badge');
+        if (!tiposConDatos.length) {
+            document.getElementById('res-pct-atendido').textContent = '—';
+            badgePct.innerHTML = '<span class="badge bg-secondary">sin datos</span>';
+        } else {
+            const pctEfect = tiposConDatos.reduce((s, t) => s + t.v, 0) / tiposConDatos.length;
+                const pctMin   = Math.min(...tiposConDatos.map(t => t.v));
+                // Mostrar el PEOR tipo (mínimo) para que el número sea coherente con el semáforo
+                document.getElementById('res-pct-atendido').textContent = pctMin.toFixed(1) + '%';
+            if (pctMin >= 70) {
+                badgePct.innerHTML = '<span class="badge bg-success">✅ Bueno</span>';
+            } else if (pctMin >= 50) {
+                badgePct.innerHTML = '<span class="badge bg-warning text-dark">⚠️ Regular</span>';
+            } else {
+                badgePct.innerHTML = '<span class="badge bg-danger">🔴 Bajo</span>';
+            }
+        }
+
+        // ── 2. Bloqueados >7d ──────────────────────────────────────────
+        document.getElementById('res-bloqueados').textContent = bloq;
+        const badgeBloq = document.getElementById('res-bloq-badge');
+        if (bloq === 0) {
+            badgeBloq.innerHTML = '<span class="badge bg-success">✅ Sin bloqueos</span>';
+        } else if (bloq <= 5) {
+            badgeBloq.innerHTML = `<span class="badge bg-warning text-dark">⚠️ ${bloq} ítem(s)</span>`;
+        } else {
+            badgeBloq.innerHTML = `<span class="badge bg-danger">🔴 Crítico: ${bloq} ítems</span>`;
+        }
+
+        // ── 3. Tramo más lento ────────────────────────────────────────
+        const tramos = [{ n: 'T1 Reg→Aut', v: t1 }, { n: 'T2 Aut→Log', v: t2 }, { n: 'T3 Log→OC', v: t3 }];
+        const badgeTramo = document.getElementById('res-tramo-badge');
+        if (ciclo <= 0) {
+            document.getElementById('res-tramo-lento').textContent = '—';
+            badgeTramo.innerHTML = '<span class="badge bg-secondary">sin datos</span>';
+        } else {
+            const lento = tramos.reduce((a, b) => b.v > a.v ? b : a);
+            document.getElementById('res-tramo-lento').textContent = lento.n + ' (' + lento.v.toFixed(1) + 'd)';
+            const cicloLabel = 'Ciclo: ' + ciclo.toFixed(1) + 'd';
+            if (ciclo <= 15) {
+                badgeTramo.innerHTML = `<span class="badge bg-success">✅ ${cicloLabel}</span>`;
+            } else if (ciclo <= 25) {
+                badgeTramo.innerHTML = `<span class="badge bg-warning text-dark">⚠️ ${cicloLabel}</span>`;
+            } else {
+                badgeTramo.innerHTML = `<span class="badge bg-danger">🔴 ${cicloLabel}</span>`;
+            }
+        }
+
+        // ── 4. Tendencia (últimos 2 meses con datos) ───────────────────
+        let tendHTML = '—';
+        let tendBadge = '<span class="badge bg-secondary">sin datos</span>';
+        try {
+            const tend = JSON.parse(tendStr || '[]');
+            const conDatos = tend.filter(x => x.reqs > 0);
+            if (conDatos.length >= 2) {
+                const ult  = conDatos[conDatos.length - 1];
+                const prev = conDatos[conDatos.length - 2];
+                const diff = ult.ciclo - prev.ciclo;
+                if (diff < -0.5) {
+                    tendHTML  = '📉 Mejora';
+                    tendBadge = `<span class="badge bg-success">▼ ${Math.abs(diff).toFixed(1)}d menos</span>`;
+                } else if (diff > 0.5) {
+                    tendHTML  = '📈 Empeora';
+                    tendBadge = `<span class="badge bg-danger">▲ ${diff.toFixed(1)}d más</span>`;
+                } else {
+                    tendHTML  = '➡️ Estable';
+                    tendBadge = '<span class="badge bg-info text-dark">Sin variación</span>';
+                }
+            }
+        } catch (_) {}
+        document.getElementById('res-tendencia').innerHTML = tendHTML;
+        document.getElementById('res-tend-badge').innerHTML = tendBadge;
+
+        // ── 5. Urgentes (pendientes >7d) ──────────────────────────────
+        document.getElementById('res-urgentes').textContent = urg;
+        const badgeUrg = document.getElementById('res-urg-badge');
+        if (urg === 0) {
+            badgeUrg.innerHTML = '<span class="badge bg-success">✅ Sin urgentes</span>';
+        } else if (urg <= 3) {
+            badgeUrg.innerHTML = `<span class="badge bg-warning text-dark">⚠️ ${urg} ítem(s)</span>`;
+        } else {
+            badgeUrg.innerHTML = `<span class="badge bg-danger">🔴 ${urg} urgentes</span>`;
+        }
+
+        // Mostrar período
+        document.getElementById('resumenPeriodo').textContent =
+            p.fechaDesde && p.fechaHasta ? `— ${p.fechaDesde} al ${p.fechaHasta}` : '';
+
+        document.getElementById('resumenEjecutivo').style.display = '';
+    };
+
+    // Carga automática al abrir (solo si las fechas están presentes)
+    document.addEventListener('DOMContentLoaded', () => {
+        const p = getParams();
+        if (p.fechaDesde && p.fechaHasta) document.getElementById('btnConsultar').click();
+    });
 </script>
+
+<!-- Modal de avisos -->
+<div class="modal fade" id="indAlertModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>Atención</h6>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2" id="indAlertMsg"></div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 }
 

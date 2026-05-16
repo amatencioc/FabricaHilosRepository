@@ -11,15 +11,36 @@
     string periodo = $"{FmtFecha(Model.FechaDesde)} — {FmtFecha(Model.FechaHasta)}";
 
     // ── KPI Cards globales ────────────────────────────────────────────────────
-    int     totalReqs  = Model.Resumen.Sum(r => r.CantReqs);
-    int     totalItems = Model.Resumen.Sum(r => r.CantItems);
-    decimal montoTotal = Model.Resumen.Sum(r => r.MontoTotal);
+    // Excluimos ANULADAS para coherencia con PCT_ATENDIDO (que también las excluye)
+    var resumenActivos = Model.Resumen.Where(r => !string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase)).ToList();
+    var resumenAnulado = Model.Resumen.Where(r =>  string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase)).ToList();
+    int     totalReqs  = resumenActivos.Sum(r => r.CantReqs);
+    int     totalItems = resumenActivos.Sum(r => r.CantItems);
+    decimal montoTotal = resumenActivos.Sum(r => r.MontoTotal);
     int     pendItems  = Model.Pendientes.Count;
     decimal montoPend  = Model.Pendientes.Sum(p => p.MontoPendiente);
+    int     totalAnuladas = resumenAnulado.Sum(r => r.CantReqs);
 
-    // PCT_ATENDIDO: tomar el de la primera fila por TIPO (window → mismo valor por tipo)
-    var pctCompra    = Model.Resumen.FirstOrDefault(r => r.Tipo == "COMPRA")?.PctAtendido   ?? 0;
-    var pctServicio  = Model.Resumen.FirstOrDefault(r => r.Tipo == "SERVICIO")?.PctAtendido ?? 0;
+    // PCT_ATENDIDO: window OVER(PARTITION BY TIPO) → mismo valor en todas las filas del tipo.
+    // Semántica: de las reqs NO anuladas de ese tipo, qué % ya llegaron a ATENDIDO (estado=6).
+    var pctCompra    = Model.Resumen.FirstOrDefault(r => string.Equals(r.Tipo, "COMPRA",   StringComparison.OrdinalIgnoreCase) && !string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase))?.PctAtendido ?? 0;
+    var pctServicio  = Model.Resumen.FirstOrDefault(r => string.Equals(r.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase) && !string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase))?.PctAtendido ?? 0;
+    bool hasCompra   = Model.Resumen.Any(r => string.Equals(r.Tipo, "COMPRA",   StringComparison.OrdinalIgnoreCase) && !string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase));
+    bool hasServicio = Model.Resumen.Any(r => string.Equals(r.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase) && !string.Equals(r.Estado, "ANULADO", StringComparison.OrdinalIgnoreCase));
+    string PctColor(decimal pct) => pct >= 70 ? "#1B4D3E" : pct >= 50 ? "#e65100" : "#c62828";
+
+    // ── KPIs de reqs bloqueadas por etapa (calculadas del cursor Pendientes) ─
+    // ESTADO viene de TABLAS_AUXILIARES.ABREVIADA (texto exacto en español)
+    // Semáforo: >7 días en la misma etapa = crítico.
+    var bloqRegistrado = Model.Pendientes.Count(p => p.Estado != null
+        && p.Estado.Equals("REGISTRADO", StringComparison.OrdinalIgnoreCase)
+        && p.DiasEnEspera > 7);
+    var bloqVisado     = Model.Pendientes.Count(p => p.Estado != null
+        && p.Estado.Equals("VISADO", StringComparison.OrdinalIgnoreCase)
+        && p.DiasEnEspera > 7);
+    var bloqRecibido   = Model.Pendientes.Count(p => p.Estado != null
+        && p.Estado.Equals("RECIBIDO", StringComparison.OrdinalIgnoreCase)
+        && p.DiasEnEspera > 7);
 
     // ── JSON para Chart.js ────────────────────────────────────────────────────
     var resumenJson = JsonSerializer.Serialize(Model.Resumen.Select(r => new {
@@ -45,10 +66,10 @@
         tp    = c.TpDestino   // 'U'=CC, 'A'=AF
     }));
 
-    // Donut TIPO: monto COMPRA vs SERVICIO
+    // Donut TIPO: monto COMPRA vs SERVICIO — excluir ANULADAS para coincidir con el KPI "Monto Total"
     var tipoJson = JsonSerializer.Serialize(new[] {
-        new { tipo="COMPRA",   monto = Model.Resumen.Where(r=>r.Tipo=="COMPRA").Sum(r=>r.MontoTotal)   },
-        new { tipo="SERVICIO", monto = Model.Resumen.Where(r=>r.Tipo=="SERVICIO").Sum(r=>r.MontoTotal) }
+        new { tipo="COMPRA",   monto = Model.Resumen.Where(r=>r.Tipo=="COMPRA"   && !string.Equals(r.Estado,"ANULADO",StringComparison.OrdinalIgnoreCase)).Sum(r=>r.MontoTotal) },
+        new { tipo="SERVICIO", monto = Model.Resumen.Where(r=>r.Tipo=="SERVICIO" && !string.Equals(r.Estado,"ANULADO",StringComparison.OrdinalIgnoreCase)).Sum(r=>r.MontoTotal) }
     });
 }
 
@@ -58,52 +79,76 @@
     </h5>
     <p class="text-muted mb-0" style="font-size:.8rem;">Periodo: @periodo</p>
 </div>
+<div style="font-size:.76rem; color:#555; background:#fffbeb; border:1px solid #f59e0b; border-radius:6px; padding:8px 14px; margin-bottom:1.25rem;">
+    ℹ️ <strong>¿Qué muestra este panel?</strong> Consolida toda la actividad logística del período seleccionado: requisiciones de compra y servicio registradas en el sistema.
+    Las <strong>requisiciones ANULADAS se excluyen</strong> de los KPIs de volumen y porcentaje de atención (solo aparecen como referencia en el contador de anuladas).
+    Los datos se obtienen en tiempo real desde la base de datos Oracle usando las credenciales del usuario activo.
+</div>
 
 <!-- ── KPI Cards ─────────────────────────────────────────────────────── -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-xl-3">
-        <div class="kpi-card accent-green">
+        <div class="kpi-card accent-green" title="Cuenta de requisiciones (documentos formales de solicitud de compra o servicio) con estado distinto a ANULADO en el período. Una requisición puede agrupar varios artículos. Las anuladas se muestran como referencia.">
             <div class="kpi-icon">📋</div>
             <div class="kpi-label">Total Requisiciones</div>
             <div class="kpi-value" style="color:#1B4D3E;">@FmtNum(totalReqs)</div>
-            <div class="kpi-sub">en el período</div>
+            <div class="kpi-sub">activas &nbsp;<span class="text-muted" style="font-size:.68rem;">(@totalAnuladas anuladas)</span></div>
+            <div style="font-size:.65rem; color:#6b7280; margin-top:4px;">Documentos de solicitud formales registrados en el período (sin ANULADAS).</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card accent-blue">
+        <div class="kpi-card accent-blue" title="Suma de todas las líneas de artículo/servicio de las requisiciones activas. Una sola requisición puede tener múltiples ítems (ej: 5 artículos distintos = 5 ítems). Refleja el volumen de trabajo real del área de logística.">
             <div class="kpi-icon">📦</div>
             <div class="kpi-label">Total Ítems</div>
             <div class="kpi-value" style="color:#1565C0;">@FmtNum(totalItems)</div>
             <div class="kpi-sub">líneas de requisición</div>
+            <div style="font-size:.65rem; color:#6b7280; margin-top:4px;">Una req puede tener varios artículos; cada línea cuenta como 1 ítem.</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card accent-orange">
+        <div class="kpi-card accent-orange" title="Valor monetario total (S/) de todos los ítems activos del período, incluyendo IGV donde corresponda. Representa el compromiso de gasto aprobado. Excluye requisiciones ANULADAS.">
             <div class="kpi-icon">💰</div>
             <div class="kpi-label">Monto Total (S/)</div>
             <div class="kpi-value" style="color:#e65100; font-size:1.5rem;">@FmtMon(montoTotal)</div>
             <div class="kpi-sub">inc. IGV donde aplica</div>
+            <div style="font-size:.65rem; color:#6b7280; margin-top:4px;">Gasto comprometido del período (excluye anuladas).</div>
         </div>
     </div>
     <div class="col-6 col-xl-3">
-        <div class="kpi-card accent-purple">
+        <div class="kpi-card accent-purple" title="Ítems con SALDO &gt; 0: cantidad aún no despachada al área solicitante. El monto es la valorización de ese saldo pendiente. Representa la demanda no satisfecha que requiere seguimiento activo.">
             <div class="kpi-icon">⏳</div>
             <div class="kpi-label">Ítems Pendientes</div>
             <div class="kpi-value" style="color:#4A148C;">@FmtNum(pendItems)</div>
-            <div class="kpi-sub">S/ @FmtMon(montoPend) por despachar</div>
+            <div class="kpi-sub">S/ @FmtMon(montoPend) por despachar <span style="font-size:.6rem;color:#9ca3af;">(sin IGV)</span></div>
+            <div style="font-size:.65rem; color:#6b7280; margin-top:4px;">Ítems con saldo &gt; 0: demanda aún no satisfecha.</div>
         </div>
     </div>
 </div>
 
 <!-- ── % Atendido por tipo ────────────────────────────────────────────── -->
+<div id="ancla-pct-atendido"></div>
+<div style="font-size:.76rem; color:#555; background:#f0f9ff; border-left:3px solid #1565C0; border-radius:4px; padding:7px 12px; margin-bottom:.75rem;">
+    ℹ️ <strong>% Atendido:</strong> porcentaje de requisiciones <u>no anuladas</u> del período que ya alcanzaron el estado final <strong>ATENDIDO</strong> (OC emitida y ciclo cerrado). Se calcula por tipo por separado ya que COMPRA y SERVICIO tienen flujos distintos.
+    <span style="color:#1B4D3E;">🟢 ≥70%</span> es bueno · <span style="color:#e65100;">🟡 50-70%</span> es medio · <span style="color:#c62828;">🔴 &lt;50%</span> es bajo.
+</div>
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card border-0 shadow-sm p-3 text-center">
             <div style="font-size:.7rem; color:#6b7280; font-weight:700; text-transform:uppercase; letter-spacing:.05em;">
                 % Atendido — COMPRA
             </div>
-            <div class="fw-bold" style="font-size:2.4rem; color:#1B4D3E;">@FmtNum(pctCompra, 1)%</div>
-            <div style="font-size:.72rem; color:#9ca3af;">de reqs no anuladas ya atendidas</div>
+            @if (!hasCompra) {
+                <div class="fw-bold text-muted" style="font-size:1.4rem;">Sin datos</div>
+                <div style="font-size:.72rem; color:#9ca3af;">No hay requisiciones de compra en el período</div>
+            } else {
+                <div class="fw-bold" style="font-size:2.4rem; color:@PctColor(pctCompra);">@FmtNum(pctCompra, 1)%</div>
+                <div style="font-size:.72rem; color:#9ca3af;">
+                    de reqs <u>no anuladas</u> ya en estado ATENDIDO
+                    @if (pctCompra < 50) { <span class="badge bg-danger ms-1">⚠️ Bajo</span> }
+                    else if (pctCompra < 70) { <span class="badge bg-warning text-dark ms-1">⚠️ Medio</span> }
+                    else { <span class="badge bg-success ms-1">✅ Bueno</span> }
+                </div>
+            }
         </div>
     </div>
     <div class="col-md-6">
@@ -111,8 +156,61 @@
             <div style="font-size:.7rem; color:#6b7280; font-weight:700; text-transform:uppercase; letter-spacing:.05em;">
                 % Atendido — SERVICIO
             </div>
-            <div class="fw-bold" style="font-size:2.4rem; color:#1565C0;">@FmtNum(pctServicio, 1)%</div>
-            <div style="font-size:.72rem; color:#9ca3af;">de reqs no anuladas ya atendidas</div>
+            @if (!hasServicio) {
+                <div class="fw-bold text-muted" style="font-size:1.4rem;">Sin datos</div>
+                <div style="font-size:.72rem; color:#9ca3af;">No hay requisiciones de servicio en el período</div>
+            } else {
+                <div class="fw-bold" style="font-size:2.4rem; color:@PctColor(pctServicio);">@FmtNum(pctServicio, 1)%</div>
+                <div style="font-size:.72rem; color:#9ca3af;">
+                    de reqs <u>no anuladas</u> ya en estado ATENDIDO
+                    @if (pctServicio < 50) { <span class="badge bg-danger ms-1">⚠️ Bajo</span> }
+                    else if (pctServicio < 70) { <span class="badge bg-warning text-dark ms-1">⚠️ Medio</span> }
+                    else { <span class="badge bg-success ms-1">✅ Bueno</span> }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ── Reqs bloqueadas por etapa (> 7 días sin avanzar) ─────────────── -->
+<div id="ancla-bloqueados"></div>
+<div class="section-title">🚦 Ítems con Saldo Bloqueados &gt;7d por Etapa <small class="fw-normal text-muted">(ítems con SALDO&gt;0 detenidos más de 7 días en la misma etapa)</small></div>
+<div style="font-size:.76rem; color:#555; background:#fff7ed; border-left:3px solid #e65100; border-radius:4px; padding:7px 12px; margin-bottom:.75rem;">
+    ℹ️ Detecta <strong>cuellos de botella activos</strong> en el flujo. Cada contador muestra cuántos ítems llevan <strong>&gt;7 días</strong> sin avanzar de etapa:
+    <strong>📝 Esperando Autorización</strong> → req creada pero el autorizador aún no la aprobó (revisar carga del jefe/gerente).
+    <strong>📬 Esperando Recibo Log.</strong> → autorizada pero logística aún no la recibió formalmente (revisar coordinación entre áreas).
+    <strong>🛒 Esperando OC</strong> → logística la recibió pero no emitió la OC (revisar cotizaciones o negociación con proveedor).
+    Más de 5 ítems en rojo = situación crítica que requiere intervención inmediata.
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm text-center py-3 @(bloqRegistrado > 0 ? "border-danger" : "")">
+            <div class="fs-4 mb-1">📝</div>
+            <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Esperando Autorización</div>
+            <div class="fw-bold fs-3" style="color:@(bloqRegistrado > 5 ? "#c62828" : bloqRegistrado > 0 ? "#e65100" : "#1B4D3E");">
+                @bloqRegistrado
+            </div>
+            <div style="font-size:.68rem;color:#9ca3af;">ítems &gt;7d en estado REGISTRADO</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">📬</div>
+            <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Esperando Recibo Log.</div>
+            <div class="fw-bold fs-3" style="color:@(bloqVisado > 5 ? "#c62828" : bloqVisado > 0 ? "#e65100" : "#1B4D3E");">
+                @bloqVisado
+            </div>
+            <div style="font-size:.68rem;color:#9ca3af;">ítems &gt;7d en estado VISADO</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm text-center py-3">
+            <div class="fs-4 mb-1">🛒</div>
+            <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Esperando OC</div>
+            <div class="fw-bold fs-3" style="color:@(bloqRecibido > 5 ? "#c62828" : bloqRecibido > 0 ? "#e65100" : "#1B4D3E");">
+                @bloqRecibido
+            </div>
+            <div style="font-size:.68rem;color:#9ca3af;">ítems &gt;7d en estado RECIBIDO</div>
         </div>
     </div>
 </div>
@@ -122,12 +220,21 @@
     <div class="col-md-7">
         <div class="card chart-card">
             <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Requisiciones por Estado y Tipo</div>
+            <div style="font-size:.74rem; color:#555; padding:5px 12px 6px; background:#f8faff; border-bottom:1px solid #e5e7eb;">
+                ℹ️ <strong>Barras apiladas</strong> por tipo (COMPRA / SERVICIO). Cada color = un estado del flujo.
+                <span style="color:#6c757d;">■ REGISTRADO</span> = sin autorizar · <span style="color:#1565C0;">■ VISADO</span> = autorizado, sin recibir en log. · <span style="color:#e65100;">■ RECIBIDO</span> = en proceso de compra · <span style="color:#1B4D3E;">■ ATENDIDO</span> = OC emitida · <span style="color:#c62828;">■ ANULADO</span> = cancelado.
+                Una barra alta en REGISTRADO o VISADO indica acumulación antes de llegar a logística.
+            </div>
             <div class="card-body" style="height:340px;"><canvas id="chartEstados"></canvas></div>
         </div>
     </div>
     <div class="col-md-5">
         <div class="card chart-card">
             <div class="card-header small"><i class="bi bi-pie-chart-fill me-1"></i>Monto por Tipo (S/)</div>
+            <div style="font-size:.74rem; color:#555; padding:5px 12px 6px; background:#f8faff; border-bottom:1px solid #e5e7eb;">
+                ℹ️ Proporción del gasto entre <strong>COMPRA</strong> (bienes físicos: materiales, repuestos, insumos) y <strong>SERVICIO</strong> (contratación de servicios: mantenimiento, consultorías, etc.).
+                Un SERVICIO desproporcionadamente alto puede indicar alta tercerización o contratos de mantenimiento relevantes. Excluye anuladas para coincidir con el KPI «Monto Total».
+            </div>
             <div class="card-body" style="height:340px;"><canvas id="chartTipo"></canvas></div>
         </div>
     </div>
@@ -136,34 +243,73 @@
 <!-- ── Tiempos del ciclo ──────────────────────────────────────────────── -->
 @if (Model.Tiempos != null)
 {
-    <div class="section-title">⏱️ Tiempos Promedio del Ciclo Logístico (@FmtNum(Model.Tiempos.TotalReqs) requisiciones)</div>
+    <div id="ancla-tiempos"></div>
+    <div class="section-title">⏱️ Tiempos Promedio del Ciclo Logístico <small class="fw-normal text-muted">@FmtNum(Model.Tiempos.TotalReqs) requisiciones activas del período analizadas</small></div>
+    <div style="font-size:.76rem; color:#444; background:#f0fdf4; border-left:4px solid #1B4D3E; border-radius:6px; padding:10px 14px; margin-bottom:.75rem; line-height:1.7;">
+        <div style="font-size:.82rem; font-weight:700; color:#1B4D3E; margin-bottom:5px;">📖 ¿Cómo leer estos indicadores?</div>
+        Cada indicador muestra <strong>cuántos días calendario tarda en promedio</strong> el proceso entre dos etapas. El objetivo es identificar en qué etapa se pierde más tiempo.
+        El <strong>SLA</strong> (Service Level Agreement = Acuerdo de Nivel de Servicio) es el <strong>tiempo máximo aceptable</strong> que debería tomar cada etapa según la política interna.
+        <span style="color:#1B4D3E; font-weight:700;">■ Verde</span> = el promedio está dentro del tiempo aceptable &nbsp;·&nbsp; <span style="color:#c62828; font-weight:700;">■ Rojo</span> = el promedio supera el límite, requiere atención.
+        <hr style="margin:6px 0; border-color:#c6e6d0;">
+        <div style="display:grid; gap:4px;">
+            <div>📝 <strong>T1 — Registro → Autorización</strong> (Meta: ≤ 5 días):&nbsp;
+                Tiempo que pasa desde que el área solicitante <em>crea la requisición</em> en el sistema hasta que el <em>jefe o gerente la aprueba</em>.
+                Si este número es alto, el cuello de botella está en la cadena de aprobación interna (falta de tiempo del autorizador, ausencias, etc.).
+                <span style="color:#6b7280;">⚙️ Se calcula sobre <u>todas</u> las requisiciones activas del período que ya fueron autorizadas.</span>
+            </div>
+            <div>✅ <strong>T2 — Autorización → Recibo en Logística</strong> (Meta: ≤ 5 días):&nbsp;
+                Tiempo que pasa desde que la requisición está <em>aprobada</em> hasta que el <em>área de Logística la recibe formalmente</em> y la toma a su cargo.
+                Si este número es alto, hay demora en el traspaso entre el área solicitante y el área de compras/logística (coordinación, documentación física, etc.).
+                <span style="color:#6b7280;">⚙️ Se calcula sobre <u>todas</u> las requisiciones activas del período que pasaron por ambas fechas.</span>
+            </div>
+            <div>🛒 <strong>T3 — Recibo en Logística → Orden de Compra</strong> (Meta: ≤ 5 días):&nbsp;
+                Tiempo desde que Logística <em>recibe la requisición</em> hasta que <em>emite la Orden de Compra (OC)</em> al proveedor.
+                Aquí se incluye la cotización, selección de proveedor y negociación de precio.
+                Si este número es alto, el cuello está dentro del proceso de compras: falta de proveedores homologados, aprobaciones adicionales o falta de personal.
+                <span style="color:#6b7280;">⚙️ Se calcula solo sobre requisiciones <u>ya atendidas</u> (que tienen OC emitida), es decir, ciclos cerrados y completos.</span>
+            </div>
+            <div>🔄 <strong>Ciclo Total — Registro → Orden de Compra</strong> (Meta: ≤ 15 días):&nbsp;
+                Es la suma de los tres tramos anteriores: representa el tiempo total que tarda una necesidad desde que se registra en el sistema hasta que se genera la OC al proveedor.
+                Es el indicador más importante para medir la agilidad global del proceso logístico.
+                <span style="color:#6b7280;">⚙️ Se calcula solo sobre requisiciones <u>ya atendidas</u> (ciclo cerrado completo).</span>
+            </div>
+        </div>
+    </div>
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="T1: días desde que se crea la requisición hasta que el autorizador la aprueba. Calculado solo sobre reqs que SÍ fueron autorizadas en el período.">
                 <div class="fs-4 mb-1">📝</div>
-                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Reg. → Autorización</div>
-                <div class="fw-bold fs-5" style="color:#1B4D3E;">@FmtNum(Model.Tiempos.DiasRegAutorizacion,1) d</div>
+                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T1 — Reg. → Autorización</div>
+                <div class="fw-bold fs-5" style="color:@(Model.Tiempos.DiasRegAutorizacion > 5 ? "#c62828" : "#1B4D3E");">@FmtNum(Model.Tiempos.DiasRegAutorizacion,1) días</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 5 días</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:2px;">Creación → Aprobación gerencial</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="T2: días desde que la requisición fue aprobada hasta que Logística la recibe formalmente. Calculado solo sobre reqs con fecha de autorización Y fecha de recibo en logística.">
                 <div class="fs-4 mb-1">✅</div>
-                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Aut. → Recibo Log.</div>
-                <div class="fw-bold fs-5" style="color:#1565C0;">@FmtNum(Model.Tiempos.DiasAutRecibo,1) d</div>
+                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T2 — Aprobación → Logística</div>
+                <div class="fw-bold fs-5" style="color:@(Model.Tiempos.DiasAutRecibo > 5 ? "#c62828" : "#1565C0");">@FmtNum(Model.Tiempos.DiasAutRecibo,1) días</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 5 días</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:2px;">Aprobación → Recibo en Logística</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="T3: días desde que Logística recibe la requisición hasta que emite la Orden de Compra (OC) al proveedor. Calculado SOLO sobre reqs ya atendidas (OC emitida).">
                 <div class="fs-4 mb-1">🛒</div>
-                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Recibo Log. → OC</div>
-                <div class="fw-bold fs-5" style="color:#e65100;">@FmtNum(Model.Tiempos.DiasReciboOc,1) d</div>
+                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T3 — Logística → Orden de Compra</div>
+                <div class="fw-bold fs-5" style="color:@(Model.Tiempos.DiasReciboOc > 5 ? "#c62828" : "#1B4D3E");">@FmtNum(Model.Tiempos.DiasReciboOc,1) días</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 5 días</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:2px;">Recibo Logística → OC emitida al proveedor</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="Ciclo Total: suma de T1+T2+T3. Días desde que se crea la requisición hasta que se emite la Orden de Compra al proveedor. Calculado SOLO sobre reqs ya atendidas (ciclo cerrado completo).">
                 <div class="fs-4 mb-1">🔄</div>
-                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Total</div>
-                <div class="fw-bold fs-5" style="color:#4A148C;">@FmtNum(Model.Tiempos.DiasCicloTotal,1) d</div>
+                <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Total (Registro → OC)</div>
+                <div class="fw-bold fs-5" style="color:@(Model.Tiempos.DiasCicloTotal > 15 ? "#c62828" : Model.Tiempos.DiasCicloTotal > 7 ? "#e65100" : "#4A148C");">@FmtNum(Model.Tiempos.DiasCicloTotal,1) días</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 15 días</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:2px;">T1 + T2 + T3 = tiempo total del proceso</div>
             </div>
         </div>
     </div>
@@ -171,7 +317,15 @@
     <div class="row g-3 mb-4">
         <div class="col-12">
             <div class="card chart-card">
-                <div class="card-header small"><i class="bi bi-bar-chart-steps me-1"></i>Waterfall — Desglose del Ciclo (días promedio) &nbsp; <small class="text-muted fw-normal">Verde ≤5d / Rojo &gt;5d</small></div>
+                <div class="card-header small"><i class="bi bi-bar-chart-steps me-1"></i>Gráfico comparativo de tiempos por etapa (días promedio) &nbsp; <small class="text-muted fw-normal"><span style="color:#1B4D3E;">■ Verde</span> = dentro de la meta &nbsp;·&nbsp; <span style="color:#c62828;">■ Rojo</span> = supera la meta</small></div>
+                <div style="font-size:.74rem; color:#555; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                    ℹ️ <strong>¿Cómo leer este gráfico?</strong> Cada barra representa el tiempo promedio de una etapa del proceso. <strong>La barra más larga es el cuello de botella</strong>, es decir, la etapa que más retrasa el proceso completo.
+                    <br>
+                    <span style="color:#6b7280;">⚙️ <strong>Nota sobre el cálculo:</strong>
+                    <strong>T1</strong> (Registro→Aprobación) y <strong>T2</strong> (Aprobación→Logística) se calculan sobre <em>todas las requisiciones activas</em> del período que pasaron por esa etapa.
+                    <strong>T3</strong> (Logística→Orden de Compra) y <strong>Ciclo Total</strong> se calculan <em>solo sobre requisiciones ya completamente atendidas</em> (es decir, que tienen Orden de Compra emitida), porque son los únicos casos donde el ciclo está cerrado y el tiempo es medible de inicio a fin.
+                    </span>
+                </div>
                 <div class="card-body" style="height:220px;"><canvas id="chartTiempos"></canvas></div>
             </div>
         </div>
@@ -182,6 +336,12 @@
 @if (Model.TopCcosto.Any())
 {
     <div class="section-title">🏭 Top 10 Destinos por Monto — <small class="fw-normal text-muted">🔵 Centro de Costo &nbsp; 🟤 Activo Fijo</small></div>
+    <div style="font-size:.76rem; color:#555; background:#faf5ff; border-left:3px solid #7c3aed; border-radius:4px; padding:7px 12px; margin-bottom:.75rem;">
+        ℹ️ Ranking de los 10 destinos con mayor monto solicitado en el período.
+        <strong>🔵 Centro de Costo (CC)</strong>: área funcional que consume recursos operativos (producción, administración, ventas, etc.).
+        <strong>🟤 Activo Fijo (AF)</strong>: inversión en bienes capitalizables como maquinaria, equipos o infraestructura.
+        La tabla lateral permite analizar si el alto monto se debe a <em>pocos ítems costosos</em> (bajo Ítems, alto Monto) o a <em>muchos ítems pequeños</em> (alto Ítems, bajo Monto por ítem).
+    </div>
     <div class="row g-3 mb-4">
         <div class="col-lg-7">
             <div class="card chart-card">
@@ -229,14 +389,20 @@
 <!-- ── Ítems Pendientes ───────────────────────────────────────────────── -->
 @if (Model.Pendientes.Any())
 {
+    <div id="ancla-pendientes"></div>
     <div class="section-title">
         ⏳ Ítems con Saldo Pendiente
         <small class="fw-normal text-muted ms-2">
-            🟢 &lt;3d &nbsp; 🟡 3-7d &nbsp; 🔴 &gt;7d
+            🟢 &lt;3d &nbsp; 🟡 3-7d &nbsp; 🔴 &gt;7d &nbsp;|&nbsp; Días: desde F.Recibo en Log. (o desde F.Registro si aún no llega)
         </small>
     </div>
+    <div style="font-size:.76rem; color:#555; background:#fff1f2; border-left:3px solid #e11d48; border-radius:4px; padding:7px 12px; margin-bottom:.75rem;">
+        ℹ️ Lista de ítems con <strong>SALDO &gt; 0</strong> (cantidad aún no despachada al área solicitante). El semáforo indica el tiempo de espera contado desde que <em>logística recibió la req</em> (o desde el registro si aún no llegó a logística):
+        <strong>🟢 &lt;3d</strong>: recién ingresado, en tiempo normal. <strong>🟡 3-7d</strong>: requiere seguimiento. <strong>🔴 &gt;7d</strong>: urgente, supera el umbral de alerta.
+        La columna <strong>Estado</strong> indica en qué etapa del flujo se encuentra actualmente cada ítem (use esto para saber a quién escalar).
+    </div>
     <div class="card chart-card mb-4">
-        <div class="card-header small"><i class="bi bi-hourglass-split me-1"></i>Ítems con Saldo Pendiente &nbsp; <small class="fw-normal text-muted">🟢 &lt;3d &nbsp; 🟡 3-7d &nbsp; 🔴 &gt;7d</small></div>
+        <div class="card-header small"><i class="bi bi-hourglass-split me-1"></i>Ítems con Saldo Pendiente &nbsp; <small class="fw-normal text-muted">🟢 &lt;3d &nbsp; 🟡 3-7d &nbsp; 🔴 &gt;7d &nbsp;— Días cuentan desde que Logística recibió la req (o desde registro si aún no la recibió)</small></div>
         <div class="card-body p-0" style="max-height:420px; overflow-y:auto;">
             <table class="table table-sm table-hover mb-0" style="font-size:.77rem;">
                 <thead class="table-dark sticky-top">
@@ -281,7 +447,7 @@
                 </tbody>
                 <tfoot class="table-secondary fw-bold">
                     <tr>
-                        <td colspan="7" class="text-end">TOTAL:</td>
+                        <td colspan="7" class="text-end">TOTAL <span style="font-size:.72rem;font-weight:400;">(sin IGV)</span>:</td>
                         <td></td>
                         <td class="text-end">S/ @FmtMon(Model.Pendientes.Sum(p => p.MontoPendiente))</td>
                         <td></td>
@@ -292,11 +458,21 @@
     </div>
 }
 
+<!-- ── Datos para Resumen Ejecutivo ────────────────────────────────────── -->
+<input type="hidden" id="res-data-pct-compra"   value="@(hasCompra   ? pctCompra.ToString("F2",   System.Globalization.CultureInfo.InvariantCulture) : "-1")" />
+<input type="hidden" id="res-data-pct-servicio"  value="@(hasServicio ? pctServicio.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) : "-1")" />
+<input type="hidden" id="res-data-bloqueados"    value="@(bloqRegistrado + bloqVisado + bloqRecibido)" />
+<input type="hidden" id="res-data-urgentes"      value="@Model.Pendientes.Count(p => p.DiasEnEspera > 7)" />
+<input type="hidden" id="res-data-t1"    value="@((Model.Tiempos?.DiasRegAutorizacion ?? 0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))" />
+<input type="hidden" id="res-data-t2"    value="@((Model.Tiempos?.DiasAutRecibo       ?? 0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))" />
+<input type="hidden" id="res-data-t3"    value="@((Model.Tiempos?.DiasReciboOc        ?? 0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))" />
+<input type="hidden" id="res-data-ciclo" value="@((Model.Tiempos?.DiasCicloTotal      ?? 0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))" />
+
 <!-- ── JSON para Chart.js ─────────────────────────────────────────────── -->
-<input type="hidden" id="indLogResumenJson" value='@Html.Raw(resumenJson)' />
-<input type="hidden" id="indLogTiemposJson" value='@Html.Raw(tiemposJson)' />
-<input type="hidden" id="indLogTopCcJson"   value='@Html.Raw(topCcJson)'   />
-<input type="hidden" id="indLogTipoJson"    value='@Html.Raw(tipoJson)'    />
+<input type="hidden" id="indLogResumenJson" value="@resumenJson" />
+<input type="hidden" id="indLogTiemposJson" value="@tiemposJson" />
+<input type="hidden" id="indLogTopCcJson"   value="@topCcJson"   />
+<input type="hidden" id="indLogTipoJson"    value="@tipoJson"    />
 
 <script>
 window.initIndLogisticaCharts = function () {
@@ -345,19 +521,24 @@ window.initIndLogisticaCharts = function () {
     // ── 3. Waterfall Horizontal: Tiempos ────────────────────────────────
     const ctxTiempos = document.getElementById('chartTiempos');
     if (ctxTiempos && tiempos) {
-        // SLA referencial: 5 días por tramo (del comentario del SQL)
-        const vals = [tiempos.t1, tiempos.t2, tiempos.t3, tiempos.ciclo];
-        const cols = vals.map(v => v <= 5 ? '#1B4D3Ecc' : '#c62828cc');
+        // SLA por tramo: T1≤5d, T2≤5d, T3≤5d; ciclo total≤15d
+        const slaRef = [5, 5, 5, 15];
+        const vals   = [tiempos.t1, tiempos.t2, tiempos.t3, tiempos.ciclo];
+        const cols   = vals.map((v,i) => v <= slaRef[i] ? '#1B4D3Ecc' : '#c62828cc');
         new Chart(ctxTiempos, {
             type:'bar',
-            data:{ labels:['Reg. → Autorización','Aut. → Recibo Log.','Recibo Log. → OC','Ciclo Total'],
+            data:{ labels:['Reg. → Autorización','Aut. → Recibo Log.','Recibo Log. → OC','Ciclo Total (Reg→OC)'],
                    datasets:[{ label:'Días promedio', data:vals,
                                backgroundColor:cols,
                                borderColor:cols.map(c=>c.replace('cc','')), borderWidth:1 }]},
             options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
                       plugins:{ legend:{ display:false },
-                                tooltip:{ callbacks:{ label: c => ` ${c.parsed.x} días` }}},
-                      scales:{ x:{ beginAtZero:true, title:{ display:true, text:'Días' }}} }
+                                tooltip:{ callbacks:{ label: c => ` ${c.parsed.x} días`,
+                                                     afterLabel: c => {
+                                                         const ref = slaRef[c.dataIndex];
+                                                         return c.parsed.x <= ref ? `✅ Dentro del SLA (≤${ref}d)` : `⚠️ Supera SLA (ref ≤${ref}d)`;
+                                                     }}}},
+                      scales:{ x:{ beginAtZero:true, min:0, title:{ display:true, text:'Días' }}} }
         });
     }
 
@@ -379,6 +560,9 @@ window.initIndLogisticaCharts = function () {
                       scales:{ x:{ beginAtZero:true }}}
         });
     }
+
+    // ── Actualizar Resumen Ejecutivo ────────────────────────────────────
+    if (typeof window.updateResumenEjecutivo === 'function') window.updateResumenEjecutivo();
 };
 
 </script>

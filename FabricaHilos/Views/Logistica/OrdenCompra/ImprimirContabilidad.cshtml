@@ -25,8 +25,9 @@
     var empresaRuc       = ViewBag.EmpresaRuc       as string ?? "";
     var empresaDireccion = ViewBag.EmpresaDireccion as string ?? "";
     var empresaTelefono  = ViewBag.EmpresaTelefono  as string ?? "";
-    var logoPath         = ViewBag.EmpresaLogoPath  as string ?? "";
-    var logoAlt          = ViewBag.EmpresaLogoAlt   as string ?? "Logo";
+    var logoPath          = ViewBag.EmpresaLogoPath    as string ?? "";
+    var logoAlt           = ViewBag.EmpresaLogoAlt     as string ?? "Logo";
+    var empresaNombreCorto = ViewBag.EmpresaNombreCorto as string ?? "";
     var provDetalle      = ViewBag.ProveedorDetalle as FabricaHilos.Models.Logistica.ProveedorDetalleDto;
 
     var estadoTexto = oc.Estado switch {
@@ -48,9 +49,10 @@
     decimal total    = oc.PrecioVta > 0 ? oc.PrecioVta : valVenta + impIgv;
 
     // Agrupar ítems por NumReq para mostrar secciones desagregadas
+    // Ordenar numéricamente (no como string) para que REQ 9 vaya después de REQ 100
     var grupos = items
         .GroupBy(i => i.NumReq.HasValue && i.NumReq > 0 ? i.NumReq.Value.ToString() : "Sin Req.")
-        .OrderBy(g => g.Key)
+        .OrderBy(g => long.TryParse(g.Key, out var n) ? n : long.MaxValue)
         .ToList();
 }
 <!DOCTYPE html>
@@ -98,6 +100,13 @@
             display: flex; align-items: center; justify-content: center;
             background: #e8f0ec; border: 1px solid #a8c4b8; border-radius: 3px;
             font-size: 8pt; color: #1B4D3E; font-weight: 600;
+        }
+        .header-company {
+            margin-left: 10px;
+        }
+        .header-company .empresa-marca {
+            font-size: 11pt; font-weight: 800; color: #C8A951;
+            letter-spacing: .5px; margin-bottom: 2px;
         }
         .header-company h1 { font-size: 13pt; font-weight: 700; color: #1B4D3E; line-height: 1.1; }
         .header-company p  { font-size: 8pt;  color: #555; margin-top: 2px; line-height: 1.5; }
@@ -277,6 +286,7 @@
                 }
             </div>
             <div class="header-company">
+                @if (!string.IsNullOrWhiteSpace(empresaNombreCorto)) { <div class="empresa-marca">@empresaNombreCorto</div> }
                 <h1>@empresaNombre</h1>
                 <p>
                     @if (!string.IsNullOrWhiteSpace(empresaRuc))   { <text>RUC: <strong>@empresaRuc</strong></text> }
@@ -313,8 +323,10 @@
             <div class="f-val" style="font-size:8pt;color:#2c3e50;">
                 @{
                     var reqs = items.Where(i => i.NumReq.HasValue && i.NumReq > 0)
-                                    .Select(i => i.NumReq!.Value.ToString()).Distinct()
-                                    .OrderByDescending(n => n).ToList();
+                                    .Select(i => i.NumReq!.Value).Distinct()
+                                    .OrderByDescending(n => n)
+                                    .Select(n => n.ToString())
+                                    .ToList();
                 }
                 @(reqs.Any() ? string.Join(", ", reqs) : "—")
             </div>
@@ -455,6 +467,59 @@
 
 
 
+    <!-- FIRMAS -->
+    @{
+        var firmaGen = ViewBag.FirmaGenerado as FabricaHilos.Models.Logistica.FirmaOcDto;
+        var firmaApr = ViewBag.FirmaAprobado as FabricaHilos.Models.Logistica.FirmaOcDto;
+
+        string? firmaGenSrc = firmaGen?.Firma != null && firmaGen.Firma.Length > 0
+            ? FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firmaGen.Firma) is string mimeGen
+                ? $"data:{mimeGen};base64,{Convert.ToBase64String(firmaGen.Firma)}"
+                : null
+            : null;
+        string? firmaAprSrc = firmaApr?.Firma != null && firmaApr.Firma.Length > 0
+            ? FabricaHilos.Services.Logistica.OrdenCompraService.DetectImageMimeType(firmaApr.Firma) is string mimeApr
+                ? $"data:{mimeApr};base64,{Convert.ToBase64String(firmaApr.Firma)}"
+                : null
+            : null;
+    }
+    <div class="firma-section">
+        <div class="firma-box">
+            @if (firmaGenSrc != null)
+            {
+                <img class="firma-img" src="@firmaGenSrc" alt="Firma" />
+            }
+            else
+            {
+                <div class="firma-img-placeholder"></div>
+            }
+            <div class="firma-line"></div>
+            @if (!string.IsNullOrWhiteSpace(firmaGen?.NombreCompleto))
+            {
+                <div class="firma-nombre">@firmaGen!.NombreCompleto</div>
+            }
+            <div class="firma-label">@(firmaGen?.RolEtiqueta ?? "Generado por")</div>
+            <div class="firma-sublabel">@(firmaGen?.Cargo ?? "Logística")</div>
+        </div>
+        <div class="firma-box">
+            @if (firmaAprSrc != null)
+            {
+                <img class="firma-img" src="@firmaAprSrc" alt="Firma" />
+            }
+            else
+            {
+                <div class="firma-img-placeholder"></div>
+            }
+            <div class="firma-line"></div>
+            @if (!string.IsNullOrWhiteSpace(firmaApr?.NombreCompleto))
+            {
+                <div class="firma-nombre">@firmaApr!.NombreCompleto</div>
+            }
+            <div class="firma-label">@(firmaApr?.RolEtiqueta ?? "Aprobado por")</div>
+            <div class="firma-sublabel">@(firmaApr?.Cargo ?? "Gerencia")</div>
+        </div>
+    </div>
+
     <!-- AUDITORÍA -->
     <div class="audit-bar">
         <div>
@@ -472,7 +537,7 @@
         {
             <div>
                 <div class="a-lbl">Aprobado por Gerencia</div>
-                <div class="a-val">@oc.FAprobGer.Value.ToString("dd/MM/yyyy")</div>
+                <div class="a-val">@fmtUsu(oc.AprobGerencia) &nbsp; @oc.FAprobGer.Value.ToString("dd/MM/yyyy")</div>
             </div>
         }
     </div>

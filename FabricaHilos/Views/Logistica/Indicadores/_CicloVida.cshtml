@@ -9,16 +9,18 @@
 
     // ── Estadísticas generales ────────────────────────────────────────────────
     int total = Model.Items.Count;
-    decimal avgCiclo  = total > 0 ? Model.Items.Average(x => (decimal)x.TCicloTotal) : 0;
-    decimal avgT1     = total > 0 ? Model.Items.Average(x => (decimal)x.T1RegAut)    : 0;
-    decimal avgT2     = total > 0 ? Model.Items.Average(x => (decimal)x.T2AutRec)    : 0;
-    decimal avgT3     = total > 0 ? Model.Items.Average(x => (decimal)x.T3RecOc)     : 0;
+    decimal avgCiclo  = total > 0 ? Model.Items.Average(x => (decimal)Math.Max(0, x.TCicloTotal)) : 0;
+    decimal avgT1     = total > 0 ? Model.Items.Average(x => (decimal)Math.Max(0, x.T1RegAut))    : 0;
+    decimal avgT2     = total > 0 ? Model.Items.Average(x => (decimal)Math.Max(0, x.T2AutRec))    : 0;
+    decimal avgT3     = total > 0 ? Model.Items.Average(x => (decimal)Math.Max(0, x.T3RecOc))     : 0;
 
-    // OCs únicas — varias reqs pueden compartir la misma OC
-    int totalOcs = Model.Items.Select(x => x.NroOc).Distinct().Count();
+    // OCs únicas — excluir nulls (reqs sin OC aún no deberían estar aquí, pero por seguridad)
+    int totalOcs = Model.Items.Select(x => x.NroOc).Where(oc => oc != null).Distinct().Count();
 
     // Histograma del ciclo total (tramos del SQL)
+    // Nota: el bin "< 0 d" captura valores negativos (errores de cálculo en Oracle) para que sum(bins) == total
     var histData = new[] {
+        new { label = "< 0 d",     count = Model.Items.Count(x => x.TCicloTotal < 0) },
         new { label = "0 d",       count = Model.Items.Count(x => x.TCicloTotal == 0) },
         new { label = "1 d",       count = Model.Items.Count(x => x.TCicloTotal == 1) },
         new { label = "2-3 d",     count = Model.Items.Count(x => x.TCicloTotal >= 2  && x.TCicloTotal <= 3) },
@@ -30,7 +32,7 @@
 
     // JSON para gantt y histograma
     // Gantt: cada req → {numreq, oc, t1, t2, t3, total, fchReg, fchAut, fchRec, fchOc}
-    var ganttJson = JsonSerializer.Serialize(Model.Items.Take(50).Select(x => new {
+    var ganttJson = JsonSerializer.Serialize(Model.Items.TakeLast(50).Select(x => new {
         numreq = x.NumReq,
         tipo   = x.Tipo,
         oc     = x.NroOc ?? "-",
@@ -56,17 +58,32 @@
         Período: @FmtFecha(Model.FechaDesde) — @FmtFecha(Model.FechaHasta)
     </p>
 </div>
+<div style="font-size:.76rem; color:#444; background:#eff6ff; border:1px solid #3b82f6; border-radius:6px; padding:10px 14px; margin-bottom:1.25rem; line-height:1.7;">
+    <div style="font-size:.82rem; font-weight:700; color:#1565C0; margin-bottom:5px;">📖 ¿Qué muestra esta pestaña?</div>
+    Analiza el <strong>tiempo que tardó cada requisición en completarse</strong>, desde que fue creada en el sistema hasta que se emitió la <strong>Orden de Compra (OC)</strong> al proveedor.
+    <strong>¿Qué es una OC?</strong> Una Orden de Compra es el documento oficial que la empresa envía al proveedor autorizando la compra de bienes o servicios. Cuando se emite la OC, el ciclo se considera "cerrado".
+    <em>Esta pestaña solo muestra requisiciones ya completadas</em>. Las que aún están en proceso se ven en el Panel Ejecutivo (primera pestaña).
+    <hr style="margin:6px 0; border-color:#bfdbfe;">
+    <strong>El ciclo se divide en 3 tramos:</strong>
+    <div style="display:grid; gap:3px; margin-top:3px;">
+        <div>📝 <strong>T1 — Registro → Autorización</strong> (Meta: ≤ 5 días): tiempo desde que el área solicitante crea la requisición hasta que el jefe o gerente la aprueba.</div>
+        <div>✅ <strong>T2 — Autorización → Recibo en Logística</strong> (Meta: ≤ 5 días): tiempo desde la aprobación hasta que el área de Logística la recibe formalmente y la toma a su cargo.</div>
+        <div>🛒 <strong>T3 — Recibo en Logística → Orden de Compra</strong> (Meta: ≤ 5 días): tiempo desde que Logística recibe la requisición hasta que emite la OC al proveedor (incluye cotización y negociación).</div>
+        <div>🔄 <strong>Ciclo Total = T1 + T2 + T3</strong> (Meta: ≤ 15 días en total). El <strong>SLA</strong> (Acuerdo de Nivel de Servicio = tiempo máximo aceptable) es de 15 días para el ciclo completo.</div>
+    </div>
+</div>
 
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center py-3">
+        <div class="card border-0 shadow-sm text-center py-3" title="Total de requisiciones cuyo ciclo está cerrado: tienen Orden de Compra emitida en el período seleccionado.">
             <div class="fs-4 mb-1">📋</div>
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Reqs Atendidas</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Requisiciones Atendidas</div>
             <div class="fw-bold fs-4" style="color:#1B4D3E;">@total</div>
+            <div style="font-size:.62rem;color:#9ca3af;">ciclos cerrados con OC emitida</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center py-3">
+        <div class="card border-0 shadow-sm text-center py-3" title="Cantidad de Ordenes de Compra únicas emitidas para las requisiciones del período. Una OC puede consolidar múltiples requisiciones del mismo proveedor, por eso el número de OCs suele ser menor al de reqs.">
             <div class="fs-4 mb-1">🛒</div>
             <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">OCs generadas</div>
             <div class="fw-bold fs-4" style="color:#1565C0;">@totalOcs</div>
@@ -74,63 +91,77 @@
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center py-3">
+        <div class="card border-0 shadow-sm text-center py-3" title="Promedio de días del ciclo completo (Registro → OC) de todas las requisiciones atendidas. Meta interna: ≤ 15 días.">
             <div class="fs-4 mb-1">📊</div>
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Promedio</div>
-            <div class="fw-bold fs-4" style="color:#e65100;">@FmtNum(avgCiclo) d</div>
+            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Promedio (Reg → OC)</div>
+            <div class="fw-bold fs-4" style="color:@(avgCiclo > 15 ? "#c62828" : avgCiclo > 7 ? "#e65100" : "#1B4D3E");">@FmtNum(avgCiclo) días</div>
+            <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 15 días</div>
+            <div style="font-size:.60rem;color:#9ca3af;margin-top:1px;">desde Registro hasta Orden de Compra</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm text-center py-3">
+        <div class="card border-0 shadow-sm text-center py-3" title="% de requisiciones cuyo ciclo total (desde Registro hasta OC) fue de 5 días o menos. Mide con qué frecuencia el área logística resuelve una solicitud en tiempo óptimo. Objetivo: ≥ 70%.">
             <div class="fs-4 mb-1">⚡</div>
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">% SLA ≤ 5 días</div>
+            <div style="font-size:.63rem; color:#6b7280; font-weight:700; text-transform:uppercase;">% Resueltas en ≤ 5 días</div>
             @{
                 decimal pctSla = total > 0
-                    ? Math.Round(Model.Items.Count(x => x.TCicloTotal <= 5) * 100m / total, 1)
+                    ? Math.Round(Model.Items.Count(x => x.TCicloTotal >= 0 && x.TCicloTotal <= 5) * 100m / total, 1)
                     : 0;
                 string slaColor = pctSla >= 70 ? "#1B4D3E" : pctSla >= 50 ? "#e65100" : "#c62828";
             }
             <div class="fw-bold fs-4" style="color:@slaColor;">@FmtNum(pctSla)%</div>
-            <div style="font-size:.68rem; color:#9ca3af;">SLA sugerido: ≥ 70 %</div>
+            <div style="font-size:.62rem;color:#9ca3af;">Objetivo: ≥ 70% de reqs en ≤ 5 días</div>
+            <div style="font-size:.60rem;color:#9ca3af;margin-top:1px;">SLA = Acuerdo de Nivel de Servicio</div>
         </div>
     </div>
 </div>
 
 <!-- ── Desglose de tramos (promedios) ────────────────────────────────── -->
+<div style="font-size:.76rem; color:#444; background:#f0f9ff; border-left:4px solid #1565C0; border-radius:6px; padding:10px 14px; margin-bottom:.75rem; line-height:1.7;">
+    <strong>📊 Desglose del ciclo en 3 tramos</strong> — promedio calculado sobre las requisiciones atendidas del período seleccionado.
+    La <strong>barra de progreso</strong> debajo de cada valor indica visualmente cuán cerca está del límite: barra llena = proceso lento en ese tramo.
+    El tramo con la barra más larga y el número más alto es el <strong>cuello de botella</strong>, es decir, donde se pierde más tiempo.
+    <div style="display:grid; gap:2px; margin-top:4px;">
+        <div>📝 <strong>T1 — Registro → Autorización:</strong> días que tarda el jefe/gerente en aprobar la requisición. Meta: ≤ 5 días.</div>
+        <div>✅ <strong>T2 — Autorización → Recibo en Logística:</strong> días que tarda el traspaso de la requisición aprobada al área de compras. Meta: ≤ 5 días.</div>
+        <div>🛒 <strong>T3 — Recibo en Logística → Orden de Compra:</strong> días que tarda Logística en cotizar, negociar y emitir la OC al proveedor. Meta: ≤ 5 días.</div>
+        <div>🔄 <strong>Ciclo Total (T1+T2+T3):</strong> suma de los tres tramos. Meta: ≤ 15 días (referencia de la barra visual: barra llena = 15 días).</div>
+    </div>
+</div>
 <div class="row g-3 mb-4">
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm text-center py-2">
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T1 Reg → Aut.</div>
-            <div class="fw-bold" style="font-size:1.5rem; color:#1565C0;">@FmtNum(avgT1) d</div>
+        <div class="card border-0 shadow-sm text-center py-2" title="T1: días promedio desde que se crea la requisición hasta que el jefe/gerente la autoriza.">
+            <div style="font-size:.63rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T1 — Registro → Autorización</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#1565C0;">@FmtNum(avgT1) días</div>
             <div class="progress mt-1 mx-3" style="height:5px;">
-                <div class="progress-bar bg-primary" style="width:@Math.Min((double)avgT1/10*100,100)%"></div>
+                <div class="progress-bar bg-primary" style="width:@Math.Min((double)avgT1/5*100,100)%"></div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm text-center py-2">
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T2 Aut. → Log.</div>
-            <div class="fw-bold" style="font-size:1.5rem; color:#e65100;">@FmtNum(avgT2) d</div>
+        <div class="card border-0 shadow-sm text-center py-2" title="T2: días promedio desde la aprobación gerencial hasta que Logística recibe formalmente la requisición.">
+            <div style="font-size:.63rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T2 — Aprobación → Logística</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#e65100;">@FmtNum(avgT2) días</div>
             <div class="progress mt-1 mx-3" style="height:5px;">
-                <div class="progress-bar bg-warning" style="width:@Math.Min((double)avgT2/10*100,100)%"></div>
+                <div class="progress-bar bg-warning" style="width:@Math.Min((double)avgT2/5*100,100)%"></div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm text-center py-2">
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T3 Log. → OC</div>
-            <div class="fw-bold" style="font-size:1.5rem; color:#1B4D3E;">@FmtNum(avgT3) d</div>
+        <div class="card border-0 shadow-sm text-center py-2" title="T3: días promedio desde que Logística recibe la requisición hasta que emite la Orden de Compra (OC) al proveedor. Incluye cotización y negociación.">
+            <div style="font-size:.63rem; color:#6b7280; font-weight:700; text-transform:uppercase;">T3 — Logística → Orden de Compra</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#1B4D3E;">@FmtNum(avgT3) días</div>
             <div class="progress mt-1 mx-3" style="height:5px;">
-                <div class="progress-bar bg-success" style="width:@Math.Min((double)avgT3/10*100,100)%"></div>
+                <div class="progress-bar bg-success" style="width:@Math.Min((double)avgT3/5*100,100)%"></div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm text-center py-2">
-            <div style="font-size:.66rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Total (avg)</div>
-            <div class="fw-bold" style="font-size:1.5rem; color:#4A148C;">@FmtNum(avgCiclo) d</div>
+        <div class="card border-0 shadow-sm text-center py-2" title="Ciclo Total promedio = T1 + T2 + T3. Días desde que se crea la requisición hasta que se emite la Orden de Compra.">
+            <div style="font-size:.63rem; color:#6b7280; font-weight:700; text-transform:uppercase;">Ciclo Total — T1 + T2 + T3</div>
+            <div class="fw-bold" style="font-size:1.5rem; color:#4A148C;">@FmtNum(avgCiclo) días</div>
             <div class="progress mt-1 mx-3" style="height:5px;">
-                <div class="progress-bar bg-purple" style="width:@Math.Min((double)avgCiclo/20*100,100)%; background:#4A148C;"></div>
+                <div class="progress-bar bg-purple" style="width:@Math.Min((double)avgCiclo/15*100,100)%; background:#4A148C;"></div>
             </div>
         </div>
     </div>
@@ -141,12 +172,24 @@
     <div class="col-md-5">
         <div class="card chart-card">
             <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Histograma — Ciclo Total (distribución)</div>
+            <div style="font-size:.74rem; color:#444; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                ℹ️ <strong>¿Cómo leer este gráfico?</strong> Cada barra muestra <strong>cuántas requisiciones tardaron ese rango de días</strong> en completarse (desde Registro hasta OC).
+                <strong>Lo ideal:</strong> que la mayor parte de las barras estén en los rangos <em>0-5 días</em> (color verde). Si hay muchas barras en <em>&gt;14 días</em> (color rojo), la mayoría de los casos supera el tiempo aceptable.
+                <strong>¿Qué es la variabilidad?</strong> Si las barras están concentradas en un solo rango = proceso predecible y controlado. Si están dispersas en muchos rangos = el proceso es irregular y difícil de planificar.
+            </div>
             <div class="card-body" style="height:320px;"><canvas id="chartHistCiclo"></canvas></div>
         </div>
     </div>
     <div class="col-md-7">
         <div class="card chart-card">
             <div class="card-header small"><i class="bi bi-calendar3 me-1"></i>Gantt del Ciclo — últimas 50 requisiciones &nbsp;<small class="fw-normal text-muted">🔵 T1 &nbsp; 🟠 T2 &nbsp; 🟢 T3</small></div>
+            <div style="font-size:.74rem; color:#444; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                ℹ️ <strong>¿Qué es un diagrama de Gantt?</strong> Es una representación visual donde cada fila es una requisición y cada segmento de color muestra cuántos días ocupó cada etapa del proceso.
+                <strong>🔵 Azul (T1):</strong> días esperando que el jefe/gerente apruebe la requisición.
+                <strong>🟠 Naranja (T2):</strong> días esperando que Logística reciba la requisición aprobada.
+                <strong>🟢 Verde (T3):</strong> días que tomó Logística para emitir la Orden de Compra al proveedor.
+                Si la mayoría de las barras son largas en azul → el problema está en aprobaciones. Si son largas en verde → el problema está en el proceso de compra. La línea roja punteada marca el límite de 5 días por tramo. Se muestran las últimas 50 requisiciones atendidas.
+            </div>
             <div class="card-body" style="height:320px;"><canvas id="chartGantt"></canvas></div>
         </div>
     </div>
@@ -154,6 +197,15 @@
 
 <!-- ── Tabla detalle del ciclo ───────────────────────────────────────── -->
 <div class="section-title">📋 Detalle por Requisición Atendida</div>
+<div style="font-size:.76rem; color:#444; background:#f8faff; border-left:4px solid #6b7280; border-radius:6px; padding:10px 14px; margin-bottom:.75rem; line-height:1.7;">
+    ℹ️ <strong>Registro individual de cada requisición atendida.</strong> Muestra las fechas de cada etapa y cuántos días tomó cada tramo.
+    El color de la fila indica si el ciclo total fue rápido o lento:
+    <span style="background:#d1fae5; border-radius:3px; padding:1px 6px;">🟢 Verde — ≤ 5 días</span> = excelente, dentro del tiempo óptimo &nbsp;·&nbsp;
+    <span style="background:#fef9c3; border-radius:3px; padding:1px 6px;">🟡 Amarillo — 6 a 15 días</span> = dentro del límite máximo aceptable &nbsp;·&nbsp;
+    <span style="background:#fee2e2; border-radius:3px; padding:1px 6px;">🔴 Rojo — más de 15 días</span> = supera el tiempo aceptable, revisar causas.
+    <strong>Columnas T1 / T2 / T3:</strong> días de cada tramo del ciclo. Un número alto en una columna indica dónde se atascó esa requisición específica.
+    <strong>NRO OC</strong> = número de la Orden de Compra emitida al proveedor (documento que cierra el ciclo).
+</div>
 <div class="card border-0 shadow-sm mb-3">
     <div style="max-height:420px; overflow-y:auto;">
         <table class="table table-sm table-hover mb-0" style="font-size:.77rem;">
@@ -166,18 +218,19 @@
                     <th>Fch. Autoriza</th>
                     <th>Fch. Recibo Log.</th>
                     <th>Fch. OC</th>
-                    <th class="text-center">T1 (d)</th>
-                    <th class="text-center">T2 (d)</th>
-                    <th class="text-center">T3 (d)</th>
-                    <th class="text-center">Total (d)</th>
+                    <th class="text-center" title="T1: días desde Registro hasta Autorización">T1 Reg→Aut (días)</th>
+                     <th class="text-center" title="T2: días desde Autorización hasta Recibo en Logística">T2 Aut→Log (días)</th>
+                     <th class="text-center" title="T3: días desde Recibo en Logística hasta Orden de Compra">T3 Log→OC (días)</th>
+                     <th class="text-center" title="Ciclo Total = T1 + T2 + T3">Total (días)</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var x in Model.Items)
                 {
-                    string cicloClass = x.TCicloTotal == 0   ? "sem-verde"
-                                      : x.TCicloTotal <= 5   ? ""
-                                      : x.TCicloTotal <= 14  ? "sem-amarillo"
+                    // sem-verde ≤5d (fast), sem-amarillo ≤15d (dentro del SLA max del Dashboard), sem-rojo >15d; negativos = error de datos → sin color
+                    string cicloClass = x.TCicloTotal < 0    ? ""
+                                      : x.TCicloTotal <= 5   ? "sem-verde"
+                                      : x.TCicloTotal <= 15  ? "sem-amarillo"
                                       : "sem-rojo";
                     <tr class="@cicloClass">
                         <td class="fw-semibold">@x.NumReq</td>
@@ -187,10 +240,10 @@
                         <td>@FmtFecha(x.FchAutoriza)</td>
                         <td>@FmtFecha(x.FchReciboLog)</td>
                         <td>@FmtFecha(x.FchOc)</td>
-                        <td class="text-center">@x.T1RegAut</td>
-                        <td class="text-center">@x.T2AutRec</td>
-                        <td class="text-center">@x.T3RecOc</td>
-                        <td class="text-center fw-bold">@x.TCicloTotal</td>
+                        <td class="text-center">@Math.Max(0, x.T1RegAut)</td>
+                        <td class="text-center">@Math.Max(0, x.T2AutRec)</td>
+                        <td class="text-center">@Math.Max(0, x.T3RecOc)</td>
+                        <td class="text-center fw-bold">@Math.Max(0, x.TCicloTotal)</td>
                     </tr>
                 }
             </tbody>
@@ -198,8 +251,8 @@
     </div>
 </div>
 
-<input type="hidden" id="cvHistJson"  value='@Html.Raw(histJson)'  />
-<input type="hidden" id="cvGanttJson" value='@Html.Raw(ganttJson)' />
+<input type="hidden" id="cvHistJson"  value="@histJson"  />
+<input type="hidden" id="cvGanttJson" value="@ganttJson" />
 
 <script>
 window.initCicloVidaCharts = function () {
@@ -209,12 +262,30 @@ window.initCicloVidaCharts = function () {
     // ── Histograma ───────────────────────────────────────────────────────
     const ctxH = document.getElementById('chartHistCiclo');
     if (ctxH) {
+        // Colorear bins según SLA: verde = dentro del SLA (≤5d), naranja = cercano, rojo = fuera
+        const slaColors = hist.map(h => {
+            if (h.label.includes('< 0'))
+                return '#9ca3afcc'; // gris — dato inválido (error de cálculo Oracle)
+            if (h.label === '0 d' || h.label === '1 d' || h.label.includes('2-3') || h.label.includes('4-5'))
+                return '#1B4D3Ecc'; // verde — dentro del SLA ≤5d
+            if (h.label.includes('6-7') || h.label.includes('8-14'))
+                return '#ff9800cc'; // naranja — fuera del SLA pero moderado
+            return '#c62828cc';    // rojo — muy fuera del SLA (>14d)
+        });
+        const slaBorder = slaColors.map(c => c.replace('cc',''));
         new Chart(ctxH, {
                 type:'bar',
                 data:{ labels: hist.map(h=>h.label),
                        datasets:[{ label:'Reqs', data: hist.map(h=>h.count),
-                                   backgroundColor:'#1565C0cc', borderColor:'#1565C0', borderWidth:1 }]},
-                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }},
+                                   backgroundColor: slaColors,
+                                   borderColor: slaBorder, borderWidth:1 }]},
+                options:{ responsive:true, maintainAspectRatio:false,
+                          plugins:{ legend:{ display:false },
+                                    tooltip:{ callbacks:{ afterLabel: ctx => {
+                                        const total = hist.reduce((s,h)=>s+h.count,0);
+                                        const pct   = total > 0 ? (ctx.parsed.y / total * 100).toFixed(1) : 0;
+                                        return `${pct}% del total`;
+                                    }}}},
                           scales:{ y:{ beginAtZero:true, min:0, title:{ display:true, text:'Requisiciones' }}}}
             });
     }
@@ -235,7 +306,12 @@ window.initCicloVidaCharts = function () {
                 datasets:[
                     { label:'T1 Reg→Aut', data: ganttOk.map(g => Math.min(g.t1??0, maxX)), backgroundColor:'#1565C0cc' },
                     { label:'T2 Aut→Log', data: ganttOk.map(g => Math.min(g.t2??0, maxX)), backgroundColor:'#ff980099' },
-                    { label:'T3 Log→OC',  data: ganttOk.map(g => Math.min(g.t3??0, maxX)), backgroundColor:'#1B4D3Ecc' }
+                    { label:'T3 Log→OC',  data: ganttOk.map(g => Math.min(g.t3??0, maxX)), backgroundColor:'#1B4D3Ecc' },
+                    // Línea SLA de referencia: dataset de punto virtual en x=5 con grosor
+                    { label:'SLA 5d', data: ganttOk.map(() => 5), type:'line',
+                      borderColor:'#c62828', backgroundColor:'transparent',
+                      borderWidth:2, borderDash:[6,3], pointRadius:0,
+                      xAxisID:'x', yAxisID:'y', order:-1 }
                 ]
             },
             options:{
@@ -247,7 +323,7 @@ window.initCicloVidaCharts = function () {
                               return [`OC: ${g.oc}`, `Total: ${g.total ?? 0} d`, `Reg: ${g.fReg ?? '-'}`, `OC: ${g.fOc ?? '-'}`];
                           }}}},
                 scales:{ x:{ stacked:true, beginAtZero:true, min:0, suggestedMax: maxX,
-                             title:{ display:true, text:'Días' }},
+                             title:{ display:true, text:'Días (línea roja punteada = SLA 5d)' }},
                          y:{ stacked:true }}
             }
         });

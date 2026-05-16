@@ -35,6 +35,10 @@ public class IndicadoresLogisticaController : OracleBaseController
     [HttpGet("Dashboard")]
     public async Task<IActionResult> Dashboard(DateTime fechaDesde, DateTime fechaHasta)
     {
+        if (fechaDesde == default || fechaHasta == default)
+            return BadRequest("Debe indicar un rango de fechas válido.");
+        if (fechaDesde > fechaHasta)
+            return BadRequest("La fecha inicial no puede ser mayor que la fecha final.");
         try
         {
             var vm = await _service.ObtenerDashboardAsync(fechaDesde, fechaHasta);
@@ -50,6 +54,10 @@ public class IndicadoresLogisticaController : OracleBaseController
     [HttpGet("CicloVida")]
     public async Task<IActionResult> CicloVida(DateTime fechaDesde, DateTime fechaHasta)
     {
+        if (fechaDesde == default || fechaHasta == default)
+            return BadRequest("Debe indicar un rango de fechas válido.");
+        if (fechaDesde > fechaHasta)
+            return BadRequest("La fecha inicial no puede ser mayor que la fecha final.");
         try
         {
             var vm = await _service.ObtenerCicloVidaAsync(fechaDesde, fechaHasta);
@@ -65,6 +73,8 @@ public class IndicadoresLogisticaController : OracleBaseController
     [HttpGet("TendenciaMensual")]
     public async Task<IActionResult> TendenciaMensual(int mesesAtras = 12)
     {
+        if (mesesAtras <= 0 || mesesAtras > 60)
+            return BadRequest("El parámetro mesesAtras debe estar entre 1 y 60.");
         try
         {
             var vm = await _service.ObtenerTendenciaMensualAsync(mesesAtras);
@@ -80,6 +90,10 @@ public class IndicadoresLogisticaController : OracleBaseController
     [HttpGet("ExportarExcel")]
     public async Task<IActionResult> ExportarExcel(DateTime fechaDesde, DateTime fechaHasta)
     {
+        if (fechaDesde == default || fechaHasta == default)
+            return BadRequest("Debe indicar un rango de fechas válido.");
+        if (fechaDesde > fechaHasta)
+            return BadRequest("La fecha inicial no puede ser mayor que la fecha final.");
         try
         {
             var datos = await _service.ObtenerDetalleAsync(fechaDesde, fechaHasta);
@@ -131,11 +145,11 @@ public class IndicadoresLogisticaController : OracleBaseController
                 ws.Cell(row, 21).Value = (double)d.Total;
                 ws.Cell(row, 22).Value = d.Estado ?? "";
 
-                var fillColor = d.Estado?.ToUpper() switch
+                var fillColor = d.Estado?.ToUpperInvariant() switch
                 {
                     "ATENDIDO" => XLColor.FromHtml("#d4edda"),
                     "ANULADO"  => XLColor.FromHtml("#f8d7da"),
-                    _ when d.Tipo == "SERVICIO" => XLColor.FromHtml("#d1ecf1"),
+                    _ when string.Equals(d.Tipo, "SERVICIO", StringComparison.OrdinalIgnoreCase) => XLColor.FromHtml("#d1ecf1"),
                     _ => XLColor.NoColor
                 };
                 if (fillColor != XLColor.NoColor)

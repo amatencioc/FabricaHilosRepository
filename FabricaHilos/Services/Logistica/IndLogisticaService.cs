@@ -46,6 +46,27 @@ public class IndLogisticaService : IIndLogisticaService
     private static int ReadInt(System.Data.Common.DbDataReader r, string col)
         => r[col] is DBNull ? 0 : Convert.ToInt32(r[col]);
 
+    // Extrae string con Trim() para manejar columnas CHAR de Oracle (padding con espacios)
+    private static string? ReadStr(System.Data.Common.DbDataReader r, string col)
+        => r[col] is DBNull ? null : r[col].ToString()?.Trim();
+
+    // Extrae un NUMBER de Oracle como long con guard de DBNull
+    private static long ReadLong(System.Data.Common.DbDataReader r, string col)
+        => r[col] is DBNull ? 0L : Convert.ToInt64(r[col]);
+
+    // Extrae un NUMBER de Oracle como string entera (sin decimales).
+    // Necesario porque Convert.ToString(OracleDecimal) devuelve "12345.00000000000000000000".
+    private static string? ReadNumStr(System.Data.Common.DbDataReader r, string col)
+        => r[col] is DBNull ? null : Convert.ToInt64(r[col]).ToString();
+
+    // Registra un parámetro REF CURSOR de salida — evita código repetitivo en cada método
+    private static OracleParameter AddOutCursor(OracleCommand cmd, string name)
+    {
+        var p = cmd.Parameters.Add(name, OracleDbType.RefCursor);
+        p.Direction = ParameterDirection.Output;
+        return p;
+    }
+
     // P_DETALLE
     public async Task<List<IndLogisticaDetalleDto>> ObtenerDetalleAsync(DateTime fechaDesde, DateTime fechaHasta)
     {
@@ -56,30 +77,30 @@ public class IndLogisticaService : IIndLogisticaService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PKG_IND_LOGISTICA.P_DETALLE";
         cmd.CommandType = CommandType.StoredProcedure;
+        cmd.BindByName  = true;
         cmd.Parameters.Add("P_FECHA_DESDE", OracleDbType.Date).Value = fechaDesde;
         cmd.Parameters.Add("P_FECHA_HASTA", OracleDbType.Date).Value = fechaHasta;
-        var cur = cmd.Parameters.Add("P_CURSOR", OracleDbType.RefCursor);
-        cur.Direction = ParameterDirection.Output;
+        AddOutCursor(cmd, "P_CURSOR");
 
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             result.Add(new IndLogisticaDetalleDto
             {
-                Tipo         = reader["TIPO"]          as string,
-                NumReq       = Convert.ToInt64(reader["NUMREQ"]),
+                Tipo         = ReadStr(reader, "TIPO"),
+                NumReq       = ReadLong(reader, "NUMREQ"),
                 Fecha        = ReadDate(reader, "FECHA"),
                 FAutoriza    = ReadDate(reader, "F_AUTORIZA"),
                 FRecibe      = ReadDate(reader, "F_RECIBE"),
-                OrdenCompra  = reader["ORDEN_COMPRA"]  as string,
+                OrdenCompra  = ReadNumStr(reader, "ORDEN_COMPRA"),
                 FchOrden     = ReadDate(reader, "FCH_ORDEN"),
-                Destino      = reader["DESTINO"]       as string,
-                DescDestino  = reader["DESC_DESTINO"]  as string,
-                Solicita     = reader["SOLICITA"]      as string,
-                Observacion  = reader["OBSERVACION"]   as string,
-                CodArt       = reader["COD_ART"]       as string,
-                DescArticulo = reader["DESC_ARTICULO"] as string,
-                Unidad       = reader["UNIDAD"]        as string,
+                Destino      = ReadStr(reader, "DESTINO"),
+                DescDestino  = ReadStr(reader, "DESC_DESTINO"),
+                Solicita     = ReadStr(reader, "SOLICITA"),
+                Observacion  = ReadStr(reader, "OBSERVACION"),
+                CodArt       = ReadStr(reader, "COD_ART"),
+                DescArticulo = ReadStr(reader, "DESC_ARTICULO"),
+                Unidad       = ReadStr(reader, "UNIDAD"),
                 Cantidad     = ReadDec(reader, "CANTIDAD"),
                 CantDesp     = ReadDec(reader, "CANT_DESP"),
                 Saldo        = ReadDec(reader, "SALDO"),
@@ -87,9 +108,10 @@ public class IndLogisticaService : IIndLogisticaService
                 SubTotal     = ReadDec(reader, "SUB_TOTAL"),
                 Igv          = ReadDec(reader, "IGV"),
                 Total        = ReadDec(reader, "TOTAL"),
-                Estado       = reader["ESTADO"]        as string,
+                Estado       = ReadStr(reader, "ESTADO"),
             });
         }
+        _logger.LogDebug("P_DETALLE: {Count} filas ({Desde} - {Hasta})", result.Count, fechaDesde, fechaHasta);
         return result;
     }
 
@@ -104,13 +126,13 @@ public class IndLogisticaService : IIndLogisticaService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PKG_IND_LOGISTICA.P_DASHBOARD";
         cmd.CommandType = CommandType.StoredProcedure;
-        cmd.Parameters.Add("P_FECHA_DESDE",    OracleDbType.Date).Value = fechaDesde;
-        cmd.Parameters.Add("P_FECHA_HASTA",    OracleDbType.Date).Value = fechaHasta;
-
-        var pResumen   = cmd.Parameters.Add("P_CUR_RESUMEN",    OracleDbType.RefCursor); pResumen.Direction   = ParameterDirection.Output;
-        var pTiempos   = cmd.Parameters.Add("P_CUR_TIEMPOS",    OracleDbType.RefCursor); pTiempos.Direction   = ParameterDirection.Output;
-        var pTopCcosto = cmd.Parameters.Add("P_CUR_TOP_CCOSTO", OracleDbType.RefCursor); pTopCcosto.Direction = ParameterDirection.Output;
-        var pPend      = cmd.Parameters.Add("P_CUR_PENDIENTES", OracleDbType.RefCursor); pPend.Direction      = ParameterDirection.Output;
+        cmd.BindByName  = true;
+        cmd.Parameters.Add("P_FECHA_DESDE", OracleDbType.Date).Value = fechaDesde;
+        cmd.Parameters.Add("P_FECHA_HASTA", OracleDbType.Date).Value = fechaHasta;
+        var pResumen   = AddOutCursor(cmd, "P_CUR_RESUMEN");
+        var pTiempos   = AddOutCursor(cmd, "P_CUR_TIEMPOS");
+        var pTopCcosto = AddOutCursor(cmd, "P_CUR_TOP_CCOSTO");
+        var pPend      = AddOutCursor(cmd, "P_CUR_PENDIENTES");
 
         await cmd.ExecuteNonQueryAsync();
 
@@ -120,8 +142,8 @@ public class IndLogisticaService : IIndLogisticaService
             {
                 vm.Resumen.Add(new IndLogisticaResumenDto
                 {
-                    Tipo        = r["TIPO"]         as string,
-                    Estado      = r["ESTADO"]       as string,
+                    Tipo        = ReadStr(r, "TIPO"),
+                    Estado      = ReadStr(r, "ESTADO"),
                     CantReqs    = ReadInt(r, "CANT_REQS"),
                     CantItems   = ReadInt(r, "CANT_ITEMS"),
                     MontoTotal  = ReadDec(r, "MONTO_TOTAL"),
@@ -151,9 +173,9 @@ public class IndLogisticaService : IIndLogisticaService
             {
                 vm.TopCcosto.Add(new IndLogisticaTopCcostoDto
                 {
-                    Destino     = r["DESTINO"]      as string,
-                    DescDestino = r["DESC_DESTINO"] as string,
-                    TpDestino   = r["TP_DESTINO"]   as string,
+                    Destino     = ReadStr(r, "DESTINO"),
+                    DescDestino = ReadStr(r, "DESC_DESTINO"),
+                    TpDestino   = ReadStr(r, "TP_DESTINO"),
                     CantItems   = ReadInt(r, "CANT_ITEMS"),
                     CantReqs    = ReadInt(r, "CANT_REQS"),
                     MontoTotal  = ReadDec(r, "MONTO_TOTAL"),
@@ -167,13 +189,13 @@ public class IndLogisticaService : IIndLogisticaService
             {
                 vm.Pendientes.Add(new IndLogisticaPendienteDto
                 {
-                    NumReq         = Convert.ToInt64(r["NUMREQ"]),
+                    NumReq         = ReadLong(r, "NUMREQ"),
                     Fecha          = ReadDate(r, "FECHA"),
-                    Tipo           = r["TIPO"]          as string,
-                    Estado         = r["ESTADO"]        as string,
-                    Solicita       = r["SOLICITA"]      as string,
-                    CodArt         = r["COD_ART"]       as string,
-                    DescArticulo   = r["DESC_ARTICULO"] as string,
+                    Tipo           = ReadStr(r, "TIPO"),
+                    Estado         = ReadStr(r, "ESTADO"),
+                    Solicita       = ReadStr(r, "SOLICITA"),
+                    CodArt         = ReadStr(r, "COD_ART"),
+                    DescArticulo   = ReadStr(r, "DESC_ARTICULO"),
                     Saldo          = ReadDec(r, "SALDO"),
                     MontoPendiente = ReadDec(r, "MONTO_PENDIENTE"),
                     DiasEnEspera   = ReadInt(r, "DIAS_EN_ESPERA"),
@@ -181,6 +203,8 @@ public class IndLogisticaService : IIndLogisticaService
             }
         }
 
+        _logger.LogDebug("P_DASHBOARD: {Resumen} grupos, {Pend} pendientes ({Desde} - {Hasta})",
+            vm.Resumen.Count, vm.Pendientes.Count, fechaDesde, fechaHasta);
         return vm;
     }
 
@@ -195,19 +219,19 @@ public class IndLogisticaService : IIndLogisticaService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PKG_IND_LOGISTICA.P_CICLO_VIDA";
         cmd.CommandType = CommandType.StoredProcedure;
+        cmd.BindByName  = true;
         cmd.Parameters.Add("P_FECHA_DESDE", OracleDbType.Date).Value = fechaDesde;
         cmd.Parameters.Add("P_FECHA_HASTA", OracleDbType.Date).Value = fechaHasta;
-        var cur = cmd.Parameters.Add("P_CURSOR", OracleDbType.RefCursor);
-        cur.Direction = ParameterDirection.Output;
+        AddOutCursor(cmd, "P_CURSOR");
 
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             vm.Items.Add(new IndLogisticaCicloVidaDto
             {
-                NumReq       = Convert.ToInt64(reader["NUMREQ"]),
-                Tipo         = reader["TIPO"]         as string,
-                NroOc        = reader["NRO_OC"]       as string,
+                NumReq       = ReadLong(reader, "NUMREQ"),
+                Tipo         = ReadStr(reader, "TIPO"),
+                NroOc        = ReadNumStr(reader, "NRO_OC"),
                 FchRegistro  = ReadDate(reader, "FCH_REGISTRO"),
                 FchAutoriza  = ReadDate(reader, "FCH_AUTORIZA"),
                 FchReciboLog = ReadDate(reader, "FCH_RECIBO_LOG"),
@@ -218,6 +242,7 @@ public class IndLogisticaService : IIndLogisticaService
                 TCicloTotal  = ReadInt(reader, "T_CICLO_TOTAL"),
             });
         }
+        _logger.LogDebug("P_CICLO_VIDA: {Count} reqs atendidas ({Desde} - {Hasta})", vm.Items.Count, fechaDesde, fechaHasta);
         return vm;
     }
 
@@ -232,16 +257,16 @@ public class IndLogisticaService : IIndLogisticaService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PKG_IND_LOGISTICA.P_TENDENCIA_MENSUAL";
         cmd.CommandType = CommandType.StoredProcedure;
-        cmd.Parameters.Add("P_MESES_ATRAS", OracleDbType.Decimal).Value = mesesAtras;
-        var cur = cmd.Parameters.Add("P_CURSOR", OracleDbType.RefCursor);
-        cur.Direction = ParameterDirection.Output;
+        cmd.BindByName  = true;
+        cmd.Parameters.Add("P_MESES_ATRAS", OracleDbType.Int32).Value = mesesAtras;
+        AddOutCursor(cmd, "P_CURSOR");
 
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             vm.Items.Add(new IndLogisticaTendenciaMensualDto
             {
-                Mes           = reader["MES"]           as string,
+                Mes           = ReadStr(reader, "MES"),
                 CantReqs      = ReadInt(reader, "CANT_REQS"),
                 T1Avg         = ReadDec(reader, "T1_AVG"),
                 T2Avg         = ReadDec(reader, "T2_AVG"),
@@ -251,6 +276,7 @@ public class IndLogisticaService : IIndLogisticaService
                 PctHasta5Dias = ReadDec(reader, "PCT_HASTA_5DIAS"),
             });
         }
+        _logger.LogDebug("P_TENDENCIA_MENSUAL: {Count} meses (ultimos {Meses})", vm.Items.Count, mesesAtras);
         return vm;
     }
 }

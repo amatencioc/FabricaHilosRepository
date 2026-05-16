@@ -10,7 +10,7 @@
     int total = items.Sum(x => x.CantReqs);
 
     // SLA: PCT_HASTA_5DIAS ≥ 70% es bueno según comentario del SQL
-    var ultimoPct = items.LastOrDefault()?.PctHasta5Dias ?? 0;
+    var ultimoPct = items.LastOrDefault(x => x.CantReqs > 0)?.PctHasta5Dias ?? 0;
     string slaColor = ultimoPct >= 70 ? "#1B4D3E" : ultimoPct >= 50 ? "#e65100" : "#c62828";
 
     var tendenciaJson = JsonSerializer.Serialize(items.Select(x => new {
@@ -31,17 +31,31 @@
         📈 Tendencia Mensual del Ciclo Logístico
     </h5>
     <p class="text-muted mb-0" style="font-size:.8rem;">
-        Últimos @Model.MesesAtras meses — @total requisiciones atendidas en total
+        Últimos @Model.MesesAtras meses cerrados — @total requisiciones analizadas en total · <span style="font-size:.75rem;color:#9ca3af;">el mes en curso se excluye (datos incompletos)</span>
     </p>
+</div>
+<div style="font-size:.76rem; color:#444; background:#f0fdf4; border:1px solid #86efac; border-radius:6px; padding:10px 14px; margin-bottom:1.25rem; line-height:1.7;">
+    <div style="font-size:.82rem; font-weight:700; color:#1B4D3E; margin-bottom:5px;">📖 ¿Qué muestra esta pestaña?</div>
+    Muestra cómo ha <strong>evolucionado el proceso logístico mes a mes</strong> durante los últimos meses configurados. Permite responder: <em>¿estamos mejorando o empeorando?</em>
+    <hr style="margin:6px 0; border-color:#bbf7d0;">
+    <div style="display:grid; gap:3px;">
+        <div>📊 <strong>Ciclo Promedio mensual:</strong> cuántos días tardó en promedio completar una requisición ese mes (Registro → OC). Si baja con el tiempo = el proceso mejora.</div>
+        <div>🎯 <strong>% SLA ≤ 5 días:</strong> qué porcentaje de las requisiciones de ese mes se resolvieron en 5 días o menos. <strong>SLA</strong> (Acuerdo de Nivel de Servicio) es el tiempo máximo aceptable. Objetivo: ≥ 70% cada mes.</div>
+        <div>📝 <strong>T1 / T2 / T3 mensuales:</strong> promedio de cada tramo ese mes. Si un mes tiene ciclo largo, compare T1/T2/T3 para saber cuál tramo falló ese mes específico.</div>
+        <div>📅 <strong>% Mismo día:</strong> porcentaje de requisiciones resueltas el mismo día que se registraron (urgencias o compras con cotizaciones previas disponibles).</div>
+    </div>
 </div>
 
 <!-- ── KPI Cards resumen ─────────────────────────────────────────────── -->
 @if (items.Any())
 {
-    decimal avgCicloGlobal = items.Average(x => x.CicloAvg);
-    decimal avgT1 = items.Average(x => x.T1Avg);
-    decimal avgT2 = items.Average(x => x.T2Avg);
-    decimal avgT3 = items.Average(x => x.T3Avg);
+    int  totalReqsPond  = items.Sum(x => x.CantReqs);
+    // Promedios ponderados por volumen mensual (evita que meses con pocas reqs distorsionen el global)
+    decimal avgCicloGlobal = totalReqsPond > 0
+        ? items.Sum(x => x.CicloAvg * x.CantReqs) / totalReqsPond : 0;
+    decimal avgT1 = totalReqsPond > 0 ? items.Sum(x => x.T1Avg * x.CantReqs) / totalReqsPond : 0;
+    decimal avgT2 = totalReqsPond > 0 ? items.Sum(x => x.T2Avg * x.CantReqs) / totalReqsPond : 0;
+    decimal avgT3 = totalReqsPond > 0 ? items.Sum(x => x.T3Avg * x.CantReqs) / totalReqsPond : 0;
 
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
@@ -52,43 +66,68 @@
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="Promedio global del ciclo (Registro → OC) ponderado por el volumen de cada mes: los meses con más requisiciones tienen mayor peso en el cálculo.">
                 <div class="fs-4 mb-1">🔄</div>
-                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Ciclo Promedio Global</div>
-                <div class="fw-bold fs-4" style="color:#e65100;">@FmtNum(avgCicloGlobal) d</div>
+                <div style="font-size:.63rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Ciclo Promedio Global</div>
+                <div class="fw-bold fs-4" style="color:@(avgCicloGlobal > 15 ? "#c62828" : avgCicloGlobal > 7 ? "#e65100" : "#1B4D3E");">@FmtNum(avgCicloGlobal) días</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Meta interna: ≤ 15 días</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:1px;">promedio pesado por volumen mensual</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="% de requisiciones del último mes CERRADO que se completaron en 5 días o menos. El mes en curso se excluye porque sus datos están incompletos.">
                 <div class="fs-4 mb-1">🎯</div>
-                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Último % SLA ≤5d</div>
+                <div style="font-size:.63rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Último mes cerrado — % Resueltas ≤ 5 días</div>
                 <div class="fw-bold fs-4" style="color:@slaColor;">@FmtNum(ultimoPct)%</div>
-                <div style="font-size:.68rem;color:#9ca3af;">Objetivo: ≥ 70 %</div>
+                <div style="font-size:.62rem;color:#9ca3af;">Objetivo: ≥ 70% del total del mes</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:1px;">SLA = tiempo máximo aceptable · mes actual excluido</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm text-center py-3">
+            <div class="card border-0 shadow-sm text-center py-3" title="Identifica automáticamente el tramo del ciclo que más frecuentemente supera su SLA individual (&gt;5d). Si en la mayoría de los meses T1 (autorización) supera 5d, el cuello está en el proceso de aprobación gerencial. Si es T3 (compra), la demora está en negociación con proveedores o cotizaciones.">
                 <div class="fs-4 mb-1">⚡</div>
-                <div style="font-size:.66rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Cuello de Botella</div>
+                <div style="font-size:.63rem;color:#6b7280;font-weight:700;text-transform:uppercase;">Cuello de Botella Histórico</div>
                 @{
-                    string cuello = avgT1 >= avgT2 && avgT1 >= avgT3 ? "T1 Reg→Aut"
-                                  : avgT2 >= avgT3                   ? "T2 Aut→Log"
-                                                                     : "T3 Log→OC";
+                    // Cuello de botella = tramo que más meses supera su SLA individual
+                    // SLA por tramo: ≤5d (mismo criterio que Dashboard y Gantt)
+                    int t1Over = items.Count(x => x.CantReqs > 0 && x.T1Avg > 5);
+                    int t2Over = items.Count(x => x.CantReqs > 0 && x.T2Avg > 5);
+                    int t3Over = items.Count(x => x.CantReqs > 0 && x.T3Avg > 5);
+                    bool sinCuello = t1Over == 0 && t2Over == 0 && t3Over == 0;
+                    bool empateT2T3 = !sinCuello && t2Over == t3Over && t2Over > t1Over;
+                    string cuello = sinCuello                              ? "Sin cuello de botella"
+                                  : t1Over >= t2Over && t1Over >= t3Over  ? "T1 Reg→Aut"
+                                  : empateT2T3                            ? "T2 Aut→Log / T3 Log→OC"
+                                  : t2Over > t3Over                      ? "T2 Aut→Log"
+                                                                          : "T3 Log→OC";
+                    string cuelloSub = sinCuello                             ? "todos los tramos dentro del SLA (≤5d)"
+                                     : t1Over >= t2Over && t1Over >= t3Over ? $"superó SLA (>5d) en {t1Over} mes(es)"
+                                     : empateT2T3                           ? $"ambos superaron SLA (>5d) en {t2Over} mes(es)"
+                                     : t2Over > t3Over                      ? $"superó SLA (>5d) en {t2Over} mes(es)"
+                                                                            : $"superó SLA (>5d) en {t3Over} mes(es)";
                 }
                 <div class="fw-bold fs-5" style="color:#4A148C;">@cuello</div>
-                <div style="font-size:.68rem;color:#9ca3af;">tramo con mayor avg</div>
+                <div style="font-size:.62rem;color:#9ca3af;">@cuelloSub</div>
+                <div style="font-size:.60rem;color:#9ca3af;margin-top:2px;">tramo que más meses superó los 5 días</div>
             </div>
         </div>
     </div>
 }
 
 <!-- ── Gráfico principal: Stacked Bar apilado (T1+T2+T3) + línea SLA ── -->
+<div id="ancla-tendencia-chart"></div>
 <div class="row g-3 mb-4">
     <div class="col-12">
         <div class="card chart-card">
             <div class="card-header small">
-                <i class="bi bi-bar-chart-stacked me-1"></i>Stacked Bar de Tramos (días avg) + % Cumplimiento SLA ≤5d
-                &nbsp;<small class="fw-normal text-muted">🔵 T1 &nbsp; 🟠 T2 &nbsp; 🟢 T3</small>
+                <i class="bi bi-bar-chart-stacked me-1"></i>Evolución mensual de tiempos por etapa + % Cumplimiento
+                &nbsp;<small class="fw-normal text-muted">🔵 T1 Reg→Aut &nbsp; 🟠 T2 Aut→Log &nbsp; 🟢 T3 Log→OC &nbsp; — línea roja: % resueltas en ≤ 5 días</small>
+            </div>
+            <div style="font-size:.74rem; color:#444; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                ℹ️ <strong>¿Cómo leer este gráfico?</strong>
+                Cada barra mensual está dividida en tres colores: <strong>🔵 azul (T1)</strong> = días de espera de aprobación, <strong>🟠 naranja (T2)</strong> = días de traspaso a Logística, <strong>🟢 verde (T3)</strong> = días de gestión de compra. La altura total de la barra = ciclo completo de ese mes.
+                La <strong>línea roja</strong> (escala derecha en %) muestra el <strong>porcentaje de requisiciones del mes resueltas en 5 días o menos</strong>. Objetivo: que la línea roja esté <em>siempre por encima del 70%</em>.
+                <strong>¿Qué buscar?</strong> Si la línea roja baja → el proceso se está enlenteciendo ese mes. Compare qué tramo (azul/naranja/verde) creció más ese mismo mes para identificar la causa exacta.
             </div>
             <div class="card-body" style="height:360px;"><canvas id="chartTendencia"></canvas></div>
         </div>
@@ -99,13 +138,23 @@
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card chart-card">
-            <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Volumen de Reqs Atendidas por Mes</div>
+            <div class="card-header small"><i class="bi bi-bar-chart-fill me-1"></i>Volumen de Requisiciones por Mes</div>
+            <div style="font-size:.74rem; color:#444; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                ℹ️ <strong>Cantidad de requisiciones completadas</strong> (con Orden de Compra emitida) por mes.
+                Permite detectar meses de alta o baja actividad. Un mes con pocas requisiciones atendidas puede significar: <em>represamiento de pedidos</em> (muchas req en proceso sin cerrarse) o simplemente temporada de baja demanda.
+                Compare este gráfico con el de tiempos: si hay pocos casos y los tiempos son buenos, puede ser sesgo estadístico.
+            </div>
             <div class="card-body" style="height:260px;"><canvas id="chartVolumen"></canvas></div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card chart-card">
             <div class="card-header small"><i class="bi bi-graph-up me-1"></i>% Mismo Día vs % ≤5 Días (SLA)</div>
+            <div style="font-size:.74rem; color:#444; padding:6px 14px 7px; background:#f8faff; border-bottom:1px solid #e5e7eb; line-height:1.6;">
+                ℹ️ <strong>Línea verde oscura — % Mismo día:</strong> porcentaje de requisiciones resueltas el mismo día en que fueron registradas (ciclo = 0 días). Refleja gestión express o compras urgentes con cotizaciones ya disponibles.
+                <strong>Línea roja — % Resueltas en ≤ 5 días:</strong> incluye las del mismo día más las que tardaron 1 a 5 días. Es el <strong>indicador principal de SLA</strong> (Acuerdo de Nivel de Servicio). Objetivo: mantenerse ≥ 70% cada mes.
+                <strong>¿Cómo interpretar?</strong> Si la línea verde sube pero la roja no se mueve → hay reqs de 1-5 días que están subiendo. Si ambas líneas caen juntas → el ciclo general se está alargando y requiere atención.
+            </div>
             <div class="card-body" style="height:260px;"><canvas id="chartSla"></canvas></div>
         </div>
     </div>
@@ -113,6 +162,14 @@
 
 <!-- ── Tabla de datos ────────────────────────────────────────────────── -->
 <div class="section-title">📋 Datos Mensuales</div>
+<div style="font-size:.76rem; color:#444; background:#f8faff; border-left:4px solid #6b7280; border-radius:6px; padding:10px 14px; margin-bottom:.75rem; line-height:1.7;">
+    ℹ️ <strong>Resumen mensual con todos los indicadores.</strong> El color de la fila refleja qué tan bien se cumplió el objetivo de velocidad ese mes:
+    <span style="background:#d1fae5; border-radius:3px; padding:1px 6px;">🟢 Verde — ≥ 70% resueltas en ≤ 5 días</span> = buen mes &nbsp;·&nbsp;
+    <span style="background:#fef9c3; border-radius:3px; padding:1px 6px;">🟡 Amarillo — 50 a 70%</span> = mes regular, mejorable &nbsp;·&nbsp;
+    <span style="background:#fee2e2; border-radius:3px; padding:1px 6px;">🔴 Rojo — menos del 50%</span> = mes crítico, requiere análisis.
+    <strong>T1 / T2 / T3:</strong> promedio de días de cada tramo (Reg→Aut / Aut→Log / Log→OC) ese mes. Compara los meses malos con los buenos para saber cuál tramo fue el responsable.
+    <strong>% Mismo Día:</strong> requisiciones resueltas en 0 días (urgencias o compras con proveedor pre-asignado). <strong>% ≤ 5 días:</strong> indicador principal de SLA — la columna más importante de la tabla.
+</div>
 <div class="card border-0 shadow-sm mb-3">
     <div style="max-height:400px; overflow-y:auto;">
         <table class="table table-sm table-hover mb-0" style="font-size:.78rem;">
@@ -120,21 +177,21 @@
                 <tr>
                     <th>Mes</th>
                     <th class="text-end">Reqs</th>
-                    <th class="text-end">T1 (d)</th>
-                    <th class="text-end">T2 (d)</th>
-                    <th class="text-end">T3 (d)</th>
-                    <th class="text-end">Ciclo (d)</th>
-                    <th class="text-end">% Mismo Día</th>
-                    <th class="text-end">% ≤5 d (SLA)</th>
+                    <th class="text-end" title="T1: días promedio Registro → Autorización">T1 Reg→Aut</th>
+                    <th class="text-end" title="T2: días promedio Autorización → Recibo en Logística">T2 Aut→Log</th>
+                    <th class="text-end" title="T3: días promedio Recibo Logística → Orden de Compra">T3 Log→OC</th>
+                    <th class="text-end" title="Ciclo Total = T1+T2+T3 días promedio">Ciclo Total</th>
+                    <th class="text-end" title="% de requisiciones resueltas el mismo día del registro (0 días)">% Mismo Día</th>
+                    <th class="text-end" title="% de requisiciones completadas en 5 días o menos — indicador principal de SLA (objetivo ≥ 70%)">% ≤ 5 días (SLA)</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var x in items)
                 {
-                    string slaRowColor = x.PctHasta5Dias >= 70 ? "sem-verde"
+                    string slaRowColor = x.CantReqs == 0       ? ""
+                                        : x.PctHasta5Dias >= 70 ? "sem-verde"
                                         : x.PctHasta5Dias >= 50 ? "sem-amarillo"
-                                        : x.CantReqs > 0        ? "sem-rojo"
-                                        : "";
+                                                                 : "sem-rojo";
                     <tr class="@slaRowColor">
                         <td class="fw-semibold">@x.Mes</td>
                         <td class="text-end">@x.CantReqs</td>
@@ -151,7 +208,8 @@
     </div>
 </div>
 
-<input type="hidden" id="tendenciaJson" value='@Html.Raw(tendenciaJson)' />
+<input type="hidden" id="tendenciaJson" value="@tendenciaJson" />
+<input type="hidden" id="res-data-tendencia" value="@tendenciaJson" />
 
 <script>
 window.initTendenciaCharts = function () {
@@ -164,6 +222,7 @@ window.initTendenciaCharts = function () {
     const ctxT = document.getElementById('chartTendencia');
     if (ctxT) {
         new Chart(ctxT, {
+            type:'bar',
             data:{
                 labels,
                 datasets:[
@@ -198,7 +257,7 @@ window.initTendenciaCharts = function () {
         new Chart(ctxV, {
             type:'bar',
             data:{ labels, datasets:[{
-                label:'Reqs atendidas', data:data.map(d=>d.reqs),
+                label:'Requisiciones del mes', data:data.map(d=>d.reqs),
                 backgroundColor:'#1565C0cc', borderColor:'#1565C0', borderWidth:1
             }]},
             options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }},
@@ -227,5 +286,8 @@ window.initTendenciaCharts = function () {
             }
         });
     }
+
+    // ── Actualizar Resumen Ejecutivo ────────────────────────────────────
+    if (typeof window.updateResumenEjecutivo === 'function') window.updateResumenEjecutivo();
 };
 </script>

@@ -8,14 +8,25 @@
    Creado  : 15/05/2026
 
    CONVENCIONES DE VALIDACIÓN APLICADAS EN TODOS LOS CURSORES:
-     · Precios nulos     → NVL(I.PRECIO, 0)           evita NULL en montos
+     · Campos numéricos  → NVL(I.CANTIDAD,0)  NVL(I.SALDO,0)
+                           NVL(I.PRECIO,0)    NVL(R.IMPSTO,0)
+                           Evita que un NULL en cualquier operando propague NULL
+                           al resultado de SUM/producto sin dar error visible.
      · División por cero → NULLIF(denominador, 0)      evita ORA-01476
      · Porcentajes       → COUNT(DISTINCT CASE WHEN condicion THEN clave END)
                            / NULLIF(COUNT(DISTINCT clave), 0)
                            evita inflar % al contar filas de ítems en vez de reqs
      · Diferencias fecha → CASE WHEN fecha IS NOT NULL THEN ... END
-                           evita NULLs propagados cuando el tramo aún no ocurrió
-     · Montos con IGV    → DECODE(AFECTO_IGV,'S', monto*(IMPSTO+1), monto)
+                           en tramos donde la fecha puede ser NULL (T1/T2 en SUB-A).
+                           El AVG ignora NULLs, produciendo el promedio correcto
+                           solo sobre reqs que ya completaron ese tramo.
+     · Valores negativos → GREATEST(fecha_fin - fecha_ini, 0)
+                           evita días negativos por errores de captura en la BD
+                           (fecha autorización anterior a fecha registro, etc.).
+     · Montos con IGV    → DECODE(AFECTO_IGV,'S',
+                             (NVL(I.CANTIDAD,0)*NVL(I.PRECIO,0))*(NVL(R.IMPSTO,0)+1),
+                             (NVL(I.CANTIDAD,0)*NVL(I.PRECIO,0)))
+                           NVL en los tres factores: cantidad, precio e IMPSTO.
 
    PROCEDIMIENTOS EXPUESTOS:
      P_DETALLE           → listado completo req+ítems  (grid / reporte PDF)
@@ -115,9 +126,16 @@ CREATE OR REPLACE PACKAGE PKG_IND_LOGISTICA AS
            ★ Grouped Bar: CANT_REQS vs MONTO_TOTAL por TIPO/ESTADO.
 
        ── CURSOR 2: P_CUR_TIEMPOS ──────────────────────────────
-         Una sola fila con promedios del ciclo. Cada tramo se
-         calcula SOLO sobre las reqs que tienen ambas fechas del
-         tramo, evitando que NULLs contaminen el promedio.
+         Una sola fila con promedios del ciclo usando CROSS JOIN
+         de dos subqueries de una sola fila:
+
+         SUB-A (REQUISICION sola): TOTAL_REQS, T1 y T2 sobre
+         reqs no anuladas del período. Sin JOIN → sin duplicados.
+
+         SUB-B (OC real, deduplicado 1 fila/req con MIN(O.FECHA)):
+         Solo reqs ATENDIDAS (ESTADO='6') con F_RECIBE y O.FECHA
+         conocidas. Misma fuente y granularidad que P_CICLO_VIDA
+         y P_TENDENCIA_MENSUAL → coherencia garantizada.
 
          COLUMNAS: TOTAL_REQS, DIAS_REG_AUTORIZACION,
                    DIAS_AUT_RECIBO, DIAS_RECIBO_OC, DIAS_CICLO_TOTAL
@@ -191,6 +209,12 @@ CREATE OR REPLACE PACKAGE PKG_IND_LOGISTICA AS
          T3_REC_OC      — días de FCH_RECIBO_LOG a FCH_OC
          T_CICLO_TOTAL  — días de FCH_REGISTRO a FCH_OC
 
+       NOTA — 1 FILA POR REQUISICIÓN (GARANTIZADO):
+         O.FECHA fue removido del GROUP BY. Si una req fue
+         despachada a varias OCs, aparece UNA SOLA fila usando
+         MIN(O.FECHA) = fecha de la primera OC generada.
+         FCH_OC es coherente con P_TENDENCIA_MENSUAL (mismo MIN).
+
        NOTA — OCS COMPARTIDAS:
          Una OC puede agrupar hasta 5 reqs distintas (dato real
          de BD). Cada req aparece en su fila aunque compartan
@@ -227,12 +251,18 @@ CREATE OR REPLACE PACKAGE PKG_IND_LOGISTICA AS
          Permite ver la evolución histórica del proceso logístico
          a lo largo de N meses hacia atrás desde hoy.
 
-         Los % usan COUNT(DISTINCT NUMREQ) en numerador y
-         denominador para evitar inflar la cifra al contar
-         múltiples ítems de la misma requisición.
+         ESTRATEGIA ANTI-DUPLICADOS:
+           El JOIN a ITEMREQ+DESP_ITEMREQ+OC produce varias filas
+           por req (una por cada ítem × despacho). Si se promedia
+           directamente, reqs con muchos ítems pesan más en el AVG.
+           Este cursor usa un subquery que agrupa por NUMREQ primero
+           (dejando 1 fila por req con MIN(O.FECHA)) y luego agrega
+           por mes — garantizando que cada req pese igual en el
+           promedio, sin importar cuántos ítems tenga.
 
-         Los promedios de tramo usan CASE WHEN para ignorar reqs
-         donde el tramo aún no ocurrió, igual que P_CUR_TIEMPOS.
+         CANT_REQS es COUNT(*) del subquery (ya 1 fila por req).
+         PCT_MISMO_DIA y PCT_HASTA_5DIAS usan COUNT simple ya que
+         el subquery garantiza 1 fila por req.
 
        PARÁMETROS:
          P_MESES_ATRAS — meses hacia atrás a incluir (default 12)
@@ -297,8 +327,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                 I.DESTINO,
                 DECODE(I.TP_DESTINO,
                     'U', C.DESC_CCOSTO_DET,
-                    'A', F.DESCRIPCION)                                       DESC_DESTINO,
-                P.NOMBRE_CORTO                                                SOLICITA,
+                    'A', F.DESCRIPCION,
+                    I.DESTINO)                                            DESC_DESTINO,
+                NVL(P.NOMBRE_CORTO,'(ex-empleado)')                          SOLICITA,
                 R.OBSERVACION,
                 I.COD_ART,
                 DECODE(SUBSTR(I.COD_ART,1,6),
@@ -306,16 +337,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                     A.DESCRIPCION)                                            DESC_ARTICULO,
                 I.UNIDAD,
                 I.CANTIDAD,
-                (I.CANTIDAD - I.SALDO)                                        CANT_DESP,
-                I.SALDO,
+                GREATEST(NVL(I.CANTIDAD,0) - NVL(I.SALDO,0), 0)              CANT_DESP,
+                NVL(I.SALDO,0)                                                SALDO,
                 I.PRECIO                                                      PUNIT,
-                (I.CANTIDAD * NVL(I.PRECIO,0))                                SUB_TOTAL,
+                (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0))                        SUB_TOTAL,
                 DECODE(R.AFECTO_IGV,
-                    'S', (I.CANTIDAD * NVL(I.PRECIO,0)) * R.IMPSTO,
+                    'S', (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)) * NVL(R.IMPSTO,0),
                     0)                                                        IGV,
                 DECODE(R.AFECTO_IGV,
-                    'S', (I.CANTIDAD * NVL(I.PRECIO,0)) * (R.IMPSTO + 1),
-                    (I.CANTIDAD * NVL(I.PRECIO,0)))                           TOTAL,
+                    'S', (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)) * (NVL(R.IMPSTO,0) + 1),
+                    (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)))                   TOTAL,
                 T.ABREVIADA                                                   ESTADO
             FROM
                 REQUISICION        R,
@@ -339,7 +370,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                 AND D.COD_ART(+)     = I.COD_ART
                 AND T.TIPO           = 84
                 AND T.CODIGO         = R.ESTADO
-                AND P.C_CODIGO       = I.COD_SOLICITA
+                AND P.C_CODIGO(+)    = I.COD_SOLICITA
                 AND C.CCOSTO_DET(+)  = I.DESTINO
                 AND F.CODIGO(+)||'-'||F.NUMERO(+) = I.DESTINO
             ORDER BY
@@ -384,8 +415,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                     COUNT(I.COD_ART)                                          CANT_ITEMS,
                     ROUND(SUM(
                         DECODE(R.AFECTO_IGV,
-                            'S', (I.CANTIDAD * NVL(I.PRECIO,0)) * (R.IMPSTO + 1),
-                            (I.CANTIDAD * NVL(I.PRECIO,0)))
+                            'S', (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)) * (NVL(R.IMPSTO,0) + 1),
+                            (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)))
                     ), 2)                                                     MONTO_TOTAL
                 FROM
                     REQUISICION        R,
@@ -411,27 +442,78 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                     ELSE 9
                 END;
 
-        /* ── 2. TIEMPOS PROMEDIO DEL CICLO ─────────────────────── */
-        -- Cada tramo se calcula solo con las reqs que tienen ambas fechas del tramo
+        /* ── 2. TIEMPOS PROMEDIO DEL CICLO ─────────────────────────────────────────
+           Patrón CROSS JOIN de dos subqueries de una sola fila:
+
+           SUB-A (REQUISICION sola, sin JOIN a OC):
+             Cuenta TOTAL_REQS (no anuladas) y calcula T1/T2 directamente
+             desde REQUISICION. Sin riesgo de duplicados, máximo rendimiento.
+
+           SUB-B (subquery deduplicado por NUMREQ con JOIN a OC):
+             Solo reqs ATENDIDAS (ESTADO='6') con F_RECIBE y O.FECHA conocidas.
+             GROUP BY NUMREQ + MIN(O.FECHA) → 1 fila por req, igual que
+             P_TENDENCIA_MENSUAL y P_CICLO_VIDA. Coherencia garantizada.
+
+           MOTIVO DEL CAMBIO:
+             FCH_ENTREGA_LOGIST en REQUISICION solo se escribe en
+             cancelaciones masivas (CambiarEstadoAsync ESTADO='9').
+             Para reqs ATENDIDAS normalmente, el campo queda NULL y
+             el promedio resultaba incorrecto o vacío.
+        ─────────────────────────────────────────────────────────────────────────── */
         OPEN P_CUR_TIEMPOS FOR
             SELECT
-                COUNT(*)                                                              TOTAL_REQS,
-                -- Tramo 1: Registro → Autorización (reqs con F_AUTORIZA)
-                ROUND(AVG(CASE WHEN R.F_AUTORIZA IS NOT NULL
-                               THEN TRUNC(R.F_AUTORIZA) - TRUNC(R.FECHA) END), 1)   DIAS_REG_AUTORIZACION,
-                -- Tramo 2: Autorización → Recibo Logística (reqs con ambas fechas)
-                ROUND(AVG(CASE WHEN R.F_AUTORIZA IS NOT NULL AND R.F_RECIBE IS NOT NULL
-                               THEN TRUNC(R.F_RECIBE) - TRUNC(R.F_AUTORIZA) END), 1) DIAS_AUT_RECIBO,
-                -- Tramo 3: Recibo Logística → OC generada (reqs con ambas fechas)
-                ROUND(AVG(CASE WHEN R.F_RECIBE IS NOT NULL AND R.FCH_ENTREGA_LOGIST IS NOT NULL
-                               THEN TRUNC(R.FCH_ENTREGA_LOGIST) - TRUNC(R.F_RECIBE) END), 1) DIAS_RECIBO_OC,
-                -- Ciclo total: Registro → OC (solo reqs completamente atendidas)
-                ROUND(AVG(CASE WHEN R.FCH_ENTREGA_LOGIST IS NOT NULL
-                               THEN TRUNC(R.FCH_ENTREGA_LOGIST) - TRUNC(R.FECHA) END), 1) DIAS_CICLO_TOTAL
-            FROM REQUISICION R
-            WHERE
-                TRUNC(R.FECHA) BETWEEN P_FECHA_DESDE AND P_FECHA_HASTA
-                AND R.ESTADO NOT IN ('9');
+                A.TOTAL_REQS,
+                A.DIAS_REG_AUTORIZACION,
+                A.DIAS_AUT_RECIBO,
+                B.DIAS_RECIBO_OC,
+                B.DIAS_CICLO_TOTAL
+            FROM
+                /* SUB-A: T1 y T2 desde REQUISICION sola — sin JOIN, sin duplicados */
+                (
+                    SELECT
+                        COUNT(*)  TOTAL_REQS,
+                        ROUND(AVG(
+                            CASE WHEN F_AUTORIZA IS NOT NULL
+                            THEN GREATEST(TRUNC(F_AUTORIZA) - TRUNC(FECHA), 0) END
+                        ), 1)  DIAS_REG_AUTORIZACION,
+                        ROUND(AVG(
+                            CASE WHEN F_AUTORIZA IS NOT NULL AND F_RECIBE IS NOT NULL
+                            THEN GREATEST(TRUNC(F_RECIBE) - TRUNC(F_AUTORIZA), 0) END
+                        ), 1)  DIAS_AUT_RECIBO
+                    FROM REQUISICION
+                    WHERE TRUNC(FECHA) BETWEEN P_FECHA_DESDE AND P_FECHA_HASTA
+                      AND ESTADO NOT IN ('9')
+                      AND EXISTS (SELECT 1 FROM ITEMREQ II WHERE II.NUMREQ = REQUISICION.NUMREQ)
+                ) A,
+                /* SUB-B: T3 y CICLO desde OC real — deduplicado 1 fila/req */
+                (
+                    SELECT
+                        ROUND(AVG(T3),    1)  DIAS_RECIBO_OC,
+                        ROUND(AVG(CICLO), 1)  DIAS_CICLO_TOTAL
+                    FROM (
+                        SELECT
+                            GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.F_RECIBE), 0)  T3,
+                            GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.FECHA),     0)  CICLO
+                        FROM
+                            REQUISICION     R,
+                            ITEMREQ         I,
+                            DESP_ITEMREQ    D,
+                            ORDEN_DE_COMPRA O
+                        WHERE
+                            TRUNC(R.FECHA) BETWEEN P_FECHA_DESDE AND P_FECHA_HASTA
+                            AND R.ESTADO      = '6'
+                            AND R.F_RECIBE   IS NOT NULL
+                            AND I.NUMREQ      = R.NUMREQ
+                            AND D.TIPDOC      = '80'
+                            AND D.NUMREQ      = I.NUMREQ
+                            AND D.COD_ART     = I.COD_ART
+                            AND O.SERIE       = 1
+                            AND O.TIPO_DOCTO  = D.TIP_DOC_REF
+                            AND O.NUM_PED     = D.NRO_DOC_REF
+                            AND O.FECHA      IS NOT NULL
+                        GROUP BY R.NUMREQ, R.FECHA, R.F_RECIBE
+                    )
+                ) B;
 
         /* ── 3. TOP 10 DESTINOS POR MONTO ──────────────────────── */
         OPEN P_CUR_TOP_CCOSTO FOR
@@ -447,8 +529,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                     COUNT(DISTINCT R.NUMREQ)                                  CANT_REQS,
                     ROUND(SUM(
                         DECODE(R.AFECTO_IGV,
-                            'S', (I.CANTIDAD * NVL(I.PRECIO,0)) * (R.IMPSTO + 1),
-                            (I.CANTIDAD * NVL(I.PRECIO,0)))
+                            'S', (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)) * (NVL(R.IMPSTO,0) + 1),
+                            (NVL(I.CANTIDAD,0) * NVL(I.PRECIO,0)))
                     ), 2)                                                     MONTO_TOTAL
                 FROM
                     REQUISICION        R,
@@ -477,18 +559,20 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                 R.FECHA,
                 DECODE(NVL(R.IND_SERV,'N'),'N','COMPRA','S','SERVICIO')  TIPO,
                 T.ABREVIADA                                               ESTADO,
-                P.NOMBRE_CORTO                                            SOLICITA,
+                NVL(P.NOMBRE_CORTO,'(ex-empleado)')                           SOLICITA,
                 I.COD_ART,
                 DECODE(SUBSTR(I.COD_ART,1,6),
                     'PEDIDO', I.DETALLE,
                     A.DESCRIPCION)                                        DESC_ARTICULO,
                 I.SALDO,
                 ROUND(I.SALDO * NVL(I.PRECIO,0), 2)                      MONTO_PENDIENTE,
-                TRUNC(SYSDATE) - TRUNC(
-                    CASE WHEN R.F_RECIBE IS NOT NULL
-                    THEN R.F_RECIBE
-                    ELSE R.FECHA END
-                )                                                         DIAS_EN_ESPERA
+                GREATEST(
+                    TRUNC(SYSDATE) - TRUNC(
+                        CASE WHEN R.F_RECIBE IS NOT NULL
+                        THEN R.F_RECIBE
+                        ELSE R.FECHA END
+                    )
+                , 0)                                                          DIAS_EN_ESPERA
             FROM
                 REQUISICION        R,
                 ITEMREQ            I,
@@ -503,7 +587,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
                 AND A.COD_ART(+)    = I.COD_ART
                 AND T.TIPO          = 84
                 AND T.CODIGO        = R.ESTADO
-                AND P.C_CODIGO      = I.COD_SOLICITA
+                AND P.C_CODIGO(+)   = I.COD_SOLICITA
             ORDER BY DIAS_EN_ESPERA DESC, R.NUMREQ;
 
     END P_DASHBOARD;
@@ -517,19 +601,26 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
         P_CURSOR       OUT T_CURSOR
     ) AS
     BEGIN
+        /* O.FECHA NO está en GROUP BY — se usa MIN(O.FECHA) en SELECT.
+           Motivo: si una req fue despachada a 2 OCs con fechas distintas,
+           incluir O.FECHA en GROUP BY produce 2 filas por req, rompiendo
+           el Gantt y sesgando el histograma de ciclo.
+           MIN(O.FECHA) = fecha de la OC más temprana = primera vez que
+           la req fue procesada en una OC. Es la referencia correcta
+           del ciclo y coherente con P_TENDENCIA_MENSUAL. */
         OPEN P_CURSOR FOR
             SELECT
                 R.NUMREQ,
                 DECODE(NVL(R.IND_SERV,'N'),'N','COMPRA','S','SERVICIO')  TIPO,
-                MIN(D.NRO_DOC_REF)                                        NRO_OC,
-                TRUNC(R.FECHA)           FCH_REGISTRO,
-                TRUNC(R.F_AUTORIZA)      FCH_AUTORIZA,
-                TRUNC(R.F_RECIBE)        FCH_RECIBO_LOG,
-                TRUNC(O.FECHA)           FCH_OC,
-                TRUNC(R.F_AUTORIZA) - TRUNC(R.FECHA)          T1_REG_AUT,
-                TRUNC(R.F_RECIBE)   - TRUNC(R.F_AUTORIZA)     T2_AUT_REC,
-                TRUNC(O.FECHA)      - TRUNC(R.F_RECIBE)        T3_REC_OC,
-                TRUNC(O.FECHA)      - TRUNC(R.FECHA)           T_CICLO_TOTAL
+                MIN(D.NRO_DOC_REF) KEEP (DENSE_RANK FIRST ORDER BY O.FECHA)  NRO_OC,
+                TRUNC(R.FECHA)                                            FCH_REGISTRO,
+                TRUNC(R.F_AUTORIZA)                                       FCH_AUTORIZA,
+                TRUNC(R.F_RECIBE)                                         FCH_RECIBO_LOG,
+                TRUNC(MIN(O.FECHA))                                       FCH_OC,
+                GREATEST(TRUNC(R.F_AUTORIZA) - TRUNC(R.FECHA),       0)     T1_REG_AUT,
+                GREATEST(TRUNC(R.F_RECIBE)   - TRUNC(R.F_AUTORIZA),  0)     T2_AUT_REC,
+                GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.F_RECIBE),    0)     T3_REC_OC,
+                GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.FECHA),       0)     T_CICLO_TOTAL
             FROM REQUISICION R, ITEMREQ I, DESP_ITEMREQ D, ORDEN_DE_COMPRA O
             WHERE TRUNC(R.FECHA) BETWEEN P_FECHA_DESDE AND P_FECHA_HASTA
               AND R.ESTADO        = '6'
@@ -545,7 +636,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
               AND O.FECHA        IS NOT NULL
             GROUP BY
                 R.NUMREQ, R.IND_SERV,
-                R.FECHA, R.F_AUTORIZA, R.F_RECIBE, O.FECHA
+                R.FECHA, R.F_AUTORIZA, R.F_RECIBE
             ORDER BY R.FECHA DESC, R.NUMREQ;
     END P_CICLO_VIDA;
 
@@ -558,44 +649,52 @@ CREATE OR REPLACE PACKAGE BODY PKG_IND_LOGISTICA AS
     ) AS
     BEGIN
         OPEN P_CURSOR FOR
+            /* Subquery interno: 1 FILA POR NUMREQ.
+               El JOIN a ITEMREQ+DESP_ITEMREQ+OC produce múltiples filas cuando
+               una req tiene varios ítems o despachos. Si se promedia directamente,
+               una req con 5 ítems pesa 5 veces más que una con 1 ítem.
+               GROUP BY NUMREQ + MIN(O.FECHA) resuelve el problema antes de
+               calcular promedios mensuales. */
             SELECT
-                TO_CHAR(R.FECHA,'YYYY-MM')                                     MES,
-                COUNT(DISTINCT R.NUMREQ)                                        CANT_REQS,
-                -- promedios de tramos: CASE WHEN garantiza que reqs con
-                -- fechas parciales no contaminen meses con datos completos
-                ROUND(AVG(
-                    CASE WHEN R.F_AUTORIZA IS NOT NULL
-                    THEN TRUNC(R.F_AUTORIZA) - TRUNC(R.FECHA) END
-                ), 1)                                                          T1_AVG,
-                ROUND(AVG(
-                    CASE WHEN R.F_AUTORIZA IS NOT NULL AND R.F_RECIBE IS NOT NULL
-                    THEN TRUNC(R.F_RECIBE) - TRUNC(R.F_AUTORIZA) END
-                ), 1)                                                          T2_AVG,
-                ROUND(AVG(
-                    CASE WHEN R.F_RECIBE IS NOT NULL AND O.FECHA IS NOT NULL
-                    THEN TRUNC(O.FECHA) - TRUNC(R.F_RECIBE) END
-                ), 1)                                                          T3_AVG,
-                ROUND(AVG(TRUNC(O.FECHA) - TRUNC(R.FECHA)), 1)                CICLO_AVG,
-                ROUND(COUNT(DISTINCT CASE WHEN TRUNC(O.FECHA) = TRUNC(R.FECHA)
-                               THEN R.NUMREQ END)*100
-                      / NULLIF(COUNT(DISTINCT R.NUMREQ),0), 1)                 PCT_MISMO_DIA,
-                ROUND(COUNT(DISTINCT CASE WHEN TRUNC(O.FECHA)-TRUNC(R.FECHA) <= 5
-                               THEN R.NUMREQ END)*100
-                      / NULLIF(COUNT(DISTINCT R.NUMREQ),0), 1)                 PCT_HASTA_5DIAS
-            FROM REQUISICION R, ITEMREQ I, DESP_ITEMREQ D, ORDEN_DE_COMPRA O
-            WHERE R.ESTADO       = '6'
-              AND R.FECHA        >= ADD_MONTHS(TRUNC(SYSDATE,'MM'), -P_MESES_ATRAS)
-              AND R.F_AUTORIZA  IS NOT NULL
-              AND R.F_RECIBE    IS NOT NULL
-              AND I.NUMREQ       = R.NUMREQ
-              AND D.TIPDOC       = '80'
-              AND D.NUMREQ       = I.NUMREQ
-              AND D.COD_ART      = I.COD_ART
-              AND O.SERIE        = 1
-              AND O.TIPO_DOCTO   = D.TIP_DOC_REF
-              AND O.NUM_PED      = D.NRO_DOC_REF
-              AND O.FECHA       IS NOT NULL
-            GROUP BY TO_CHAR(R.FECHA,'YYYY-MM')
+                TO_CHAR(FCH_REG,'YYYY-MM')                                    MES,
+                COUNT(*)                                                        CANT_REQS,
+                ROUND(AVG(T1), 1)                                              T1_AVG,
+                ROUND(AVG(T2), 1)                                              T2_AVG,
+                ROUND(AVG(T3), 1)                                              T3_AVG,
+                ROUND(AVG(CICLO), 1)                                           CICLO_AVG,
+                -- PCT_MISMO_DIA: % de reqs cuya OC se emitió el mismo día del registro
+                ROUND(COUNT(CASE WHEN CICLO = 0 THEN 1 END) * 100
+                      / NULLIF(COUNT(*), 0), 1)                                PCT_MISMO_DIA,
+                -- PCT_HASTA_5DIAS: todas las filas del subquery tienen OC (O.FECHA IS NOT NULL
+                -- está en el WHERE interior), por tanto denominador = COUNT(*) correcto.
+                ROUND(COUNT(CASE WHEN CICLO <= 5 THEN 1 END) * 100
+                      / NULLIF(COUNT(*), 0), 1)                                PCT_HASTA_5DIAS
+            FROM (
+                SELECT
+                    R.NUMREQ,
+                    R.FECHA                                        FCH_REG,
+                    GREATEST(TRUNC(R.F_AUTORIZA) - TRUNC(R.FECHA),       0)  T1,
+                    GREATEST(TRUNC(R.F_RECIBE)   - TRUNC(R.F_AUTORIZA),  0)  T2,
+                    GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.F_RECIBE),    0)  T3,
+                    GREATEST(TRUNC(MIN(O.FECHA)) - TRUNC(R.FECHA),       0)  CICLO
+                FROM REQUISICION R, ITEMREQ I, DESP_ITEMREQ D, ORDEN_DE_COMPRA O
+                WHERE R.ESTADO       = '6'
+                  AND R.FECHA        >= ADD_MONTHS(TRUNC(SYSDATE,'MM'), -P_MESES_ATRAS)
+                  AND R.FECHA         < TRUNC(SYSDATE,'MM')
+                  AND R.F_AUTORIZA  IS NOT NULL
+                  AND R.F_RECIBE    IS NOT NULL
+                  AND I.NUMREQ       = R.NUMREQ
+                  AND D.TIPDOC       = '80'
+                  AND D.NUMREQ       = I.NUMREQ
+                  AND D.COD_ART      = I.COD_ART
+                  AND O.SERIE        = 1
+                  AND O.TIPO_DOCTO   = D.TIP_DOC_REF
+                  AND O.NUM_PED      = D.NRO_DOC_REF
+                  AND O.FECHA       IS NOT NULL
+                GROUP BY
+                    R.NUMREQ, R.FECHA, R.F_AUTORIZA, R.F_RECIBE
+            )
+            GROUP BY TO_CHAR(FCH_REG,'YYYY-MM')
             ORDER BY MES;
     END P_TENDENCIA_MENSUAL;
 

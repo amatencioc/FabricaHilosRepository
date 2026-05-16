@@ -701,12 +701,13 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.NombresUsuarios = nombresUsuarios;
 
         var empresa = _empresaTema.GetTemaActual();
-        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
-        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
-        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
-        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
-        ViewBag.EmpresaDireccion = empresa.Direccion;
-        ViewBag.EmpresaTelefono  = empresa.Telefono;
+        ViewBag.EmpresaNombre      = empresa.NombreCompleto;
+        ViewBag.EmpresaNombreCorto = empresa.NombreCorto;
+        ViewBag.EmpresaRuc         = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath    = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt     = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion   = empresa.Direccion;
+        ViewBag.EmpresaTelefono    = empresa.Telefono;
 
         var provDetalle = await _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
         ViewBag.ProveedorDetalle = provDetalle;
@@ -785,12 +786,13 @@ public class OrdenCompraController : OracleBaseController
             .ToDictionary(x => x.u, x => x.n, StringComparer.OrdinalIgnoreCase);
 
         var empresa = _empresaTema.GetTemaActual();
-        ViewBag.EmpresaNombre    = empresa.NombreCompleto;
-        ViewBag.EmpresaRuc       = _empresaTema.GetRucActual();
-        ViewBag.EmpresaLogoPath  = empresa.LogoFullPath;
-        ViewBag.EmpresaLogoAlt   = empresa.LogoAlt;
-        ViewBag.EmpresaDireccion = empresa.Direccion;
-        ViewBag.EmpresaTelefono  = empresa.Telefono;
+        ViewBag.EmpresaNombre      = empresa.NombreCompleto;
+        ViewBag.EmpresaNombreCorto = empresa.NombreCorto;
+        ViewBag.EmpresaRuc         = _empresaTema.GetRucActual();
+        ViewBag.EmpresaLogoPath    = empresa.LogoFullPath;
+        ViewBag.EmpresaLogoAlt     = empresa.LogoAlt;
+        ViewBag.EmpresaDireccion   = empresa.Direccion;
+        ViewBag.EmpresaTelefono    = empresa.Telefono;
 
         ViewBag.ProveedorDetalle = await _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
         ViewBag.NavToken = t;
