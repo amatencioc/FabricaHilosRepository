@@ -481,6 +481,29 @@
                       con el nuevo valor del tareo (06:45). Resultado: la marca de ingreso
                       desaparecia de la UI. Mismo patron que PASO 1B-HIS pero para descanso.
                       Detectado: emp 002421 (ZAPATA BERECHE MIGUEL ANGEL) 26/04/2026.
+    14/05/2026 - BUG FIX: PASO 5 horaefectiva formula incorrecta para salida anticipada
+                      Anterior (bug): LEAST(salida-entrada, tothoras) sin descontar refri
+                      ni ajustar inicio al turno programado.
+                      Causa: empleado con llegada anticipada (9 min) + salida anticipada (47 min)
+                      -> gross=(14:58-06:51)=8:07 > tothoras=8:00 -> LEAST capaba a 8:00.
+                      Aquarius calcula: (salida - entrada_fijada) - refri_real = 7:13.
+                      Formula correcta: LEAST(GREATEST(0, exit_adj - MAX(entrada,entrada_fijada)
+                                              - refri_real), tothoras)
+                      Detectado: emp 004697 (SANTOME SINTI, JOSE LUIS) 05/05/2026.
+    14/05/2026 - BUG FIX: PASO 3F condicion exclusion nocturno invertida
+                      BUG: `salida_fijada > entrada_fijada` fue escrito creyendo que
+                      identificaria turno diurno (como tiempo 15:00 > 07:00), pero
+                      salida_fijada/entrada_fijada son DATEs completas: para nocturno
+                      (cruce de medianoche) salida_fijada=dia+1 > entrada_fijada=dia ->
+                      la condicion era TRUE exactamente para los casos que debia excluir.
+                      Resultado: PASO 3F truncaba el refrigerio en nocturnos con marcas
+                      reales de refri asignadas por R4/R5 (2B-PRE desde historial).
+                      Cadena: R4/R5 asigna inirefri=20:28/finrefri=21:04 -> RT los borra
+                      -> PASO 9 los marca como "no asignados" -> H_Refri=00:00 incorrecto.
+                      Fix: `t.salida_fijada > t.entrada_fijada` -> 
+                           `TRUNC(t.salida_fijada) = TRUNC(t.entrada_fijada)`.
+                      Detectado: emp 000414 (MAMANI MATOS, JORGE ALBERTO) 05/05/2026.
+                      Horario: HORARIO 19-03 (HORTUR='T3', HORCLA='AM').
     13/05/2026 - FIX: ORDEN: Agregar ORDEN a los 22 INSERTs restantes en SCA_HISTORIAL
                       BUG: Solo PASO 0-RESTORE tenia ORDEN. Los otros 22 INSERTs del paquete
                       (PASO 0-SWAP, 0B3b, 0C, 0D, 1, 1B-HIS, 1C-NOC, 1C, 2, 2B, 3A, 3B,
@@ -3998,8 +4021,15 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         --   1. Eliminar marcas DEPURACION/0-REST de SCA_HIS para esos IR/FR.
         --   2. Limpiar inirefri/finrefri del tareo.
         --
-        -- EXCLUYE: Turnos nocturnos (entrada_fijada >= 20:00) donde salida
-        --          puede ser cronologicamente despues aunque numericamente menor.
+        -- EXCLUYE: Turnos nocturnos (salida_fijada = dia+1) donde salida 07:04
+        --          base-1900 es numericamente menor a finrefri 20:30 base-1900
+        --          aunque cronologicamente sea posterior (siguiente dia).
+        --          Deteccion: TRUNC(salida_fijada) > TRUNC(entrada_fijada).
+        --
+        -- BUG PREVIO (13/05/2026): la condicion era `salida_fijada > entrada_fijada`
+        --   (fechas completas), que es VERDADERO para nocturnos (06/05 > 05/05)
+        --   e INCLUIA exactamente los casos que debia excluir. Fix: comparar
+        --   solo la parte DATE (TRUNC) para detectar cruce de medianoche.
         --
         -- TABLAS ESCRITURA: SCA_ASISTENCIA_TAREO, SCA_HISTORIAL (DELETE DEPURACION)
         -- TABLAS CONSULTA:  SCA_HISTORIAL
@@ -4018,8 +4048,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
             AND t.finrefri IS NOT NULL
             AND t.salida IS NOT NULL
             AND TO_CHAR(t.salida, 'HH24MI') < TO_CHAR(t.finrefri, 'HH24MI')
+            -- Excluir nocturnos: salida_fijada en dia+1 -> TRUNC distintos
             AND (t.entrada_fijada IS NULL OR t.salida_fijada IS NULL
-                 OR t.salida_fijada > t.entrada_fijada)  -- NO nocturno cruzando dia
+                 OR TRUNC(t.salida_fijada) = TRUNC(t.entrada_fijada))  -- NO nocturno cruzando dia
             AND NVL(t.descanso, 'N') <> 'S'
             AND NVL(t.ind_cerrado, 'N') <> 'S'
             AND (
@@ -4045,9 +4076,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
         AND t.salida IS NOT NULL
         -- salida ANTES de finrefri = cronologicamente imposible (comparar solo hora)
         AND TO_CHAR(t.salida, 'HH24MI') < TO_CHAR(t.finrefri, 'HH24MI')
-        -- Excluir turnos nocturnos: detectar por salida_fijada < entrada_fijada (cruza dia)
+        -- Excluir nocturnos: salida_fijada en dia+1 -> TRUNC distintos (BUG 13/05/2026)
+        -- Anterior: `salida_fijada > entrada_fijada` era TRUE para nocturnos (06/05>05/05)
+        --   e INCLUIA exactamente los que debia excluir.
         AND (t.entrada_fijada IS NULL OR t.salida_fijada IS NULL
-             OR t.salida_fijada > t.entrada_fijada)
+             OR TRUNC(t.salida_fijada) = TRUNC(t.entrada_fijada))  -- NO nocturno cruzando dia
         AND NVL(t.descanso, 'N') <> 'S'
         AND NVL(t.ind_cerrado, 'N') <> 'S';
         
@@ -4468,18 +4501,40 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_DEPURA_TAREO AS
                     -- Anterior: siempre tothoras cuando existe -> 08:00 aunque solo se
                     -- trabajaron 01:55 (ej: ARREDONDO 032933, llego 6h tarde, refri limpiado
                     -- por PASO 3E -> PASO 5 seguia poniendo 08:00 = incorrecto)
-                    -- Correcto: si el empleado no completo la jornada, usar tiempo real.
-                    -- horaefectiva = GROSS (no deduce refri, igual al comportamiento Aquarius
-                    -- para dias completos donde horaefectiva = tothoras = salida-entrada).
-                    -- Verificado con otros dias de la grilla: H.Efe siempre = tothoras en
-                    -- dias completos (refri se trackea en campo separado horarefrigerio).
+                    -- FIX 14/05/2026: Bug gross incluia tiempo pre-turno y no descontaba refri.
+                    -- Anterior (bug): LEAST(salida-entrada, tothoras).
+                    -- Para SANTOME 034672 05/05: llegada 9min antes + refri 45min > salida
+                    -- anticipada 47min -> gross=8:07 > tothoras=8:00 -> LEAST=8:00 INCORRECTO.
+                    -- Aquarius calcula: (salida - entrada_fijada) - refri_real = 7:13.
+                    -- Fix: usar GREATEST(entrada, entrada_fijada) como inicio efectivo
+                    -- (no contabilizar tiempo previo al turno) y descontar refri real.
+                    -- Casos verificados:
+                    --   Dia completo con early arrival: LEAST(8:00,8:00)=8:00 ✓
+                    --   Overtime:                       LEAST(10:01,8:00)=8:00 ✓
+                    --   Salida anticipada (caso fix):   LEAST(7:13,8:00)=7:13 ✓
+                    --   Parcial 6h tarde (ARREDONDO):   LEAST(1:55,8:00)=1:55 ✓
+                    --   Nocturno salida anticipada:     LEAST(6:00,7:30)=6:00 ✓
                     LEAST(
-                        -- Horas brutas reales (con ajuste nocturno)
-                        TO_DATE('01/01/1900', 'dd/MM/yyyy') + 
-                            CASE WHEN t.salida < t.entrada
-                                 THEN (t.salida + 1 - t.entrada)
-                                 ELSE (t.salida - t.entrada)
-                            END,
+                        -- Horas efectivas reales (con ajuste nocturno, desde inicio efectivo,
+                        -- descontando refrigerio real igual que Aquarius)
+                        TO_DATE('01/01/1900', 'dd/MM/yyyy') +
+                        GREATEST(
+                            0,
+                            (   -- Salida con ajuste nocturno
+                                CASE WHEN t.salida < t.entrada
+                                     THEN t.salida + 1
+                                     ELSE t.salida
+                                END
+                            )
+                            -- Inicio efectivo: no contabilizar tiempo previo al inicio del turno
+                            - GREATEST(t.entrada, NVL(t.entrada_fijada, t.entrada))
+                            -- Descontar refrigerio real (igual que Aquarius)
+                            - CASE WHEN t.inirefri IS NOT NULL AND t.finrefri IS NOT NULL
+                                        AND t.finrefri > t.inirefri
+                                   THEN (t.finrefri - t.inirefri)
+                                   ELSE 0
+                              END
+                        ),
                         -- Cap: horas teoricas del horario (no exceder jornada)
                         -- Si tothoras no existe, usar valor muy alto (sin cap)
                         NVL(t.tothoras, TO_DATE('01/01/1900 23:59', 'dd/MM/yyyy HH24:MI'))

@@ -20,6 +20,7 @@ using QuestPDF.Infrastructure;
 using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
 using FabricaHilos.Services.Sistemas;
+using FabricaHilos.Services.RecursosHumanos;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -153,6 +154,7 @@ builder.Services.AddScoped<IAnularDocumentoService, AnularDocumentoService>();
 builder.Services.AddSingleton<AnularDocumentoJobManager>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
+builder.Services.AddScoped<AcuerdoCompHeDocxService>();
 
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);

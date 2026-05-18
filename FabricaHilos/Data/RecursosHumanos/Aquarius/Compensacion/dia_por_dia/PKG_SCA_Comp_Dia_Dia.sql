@@ -1,4 +1,4 @@
-/*******************************************************************************
+﻿/*******************************************************************************
  * PKG_SCA_COMP_DIA_DIA
  * -----------------------------------------------------------------------------
  * Compensacion tipo DIA POR DIA: un empleado trabaja en su dia de descanso
@@ -368,19 +368,33 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
     FUNCTION fn_tiempo_origen(
         p_emp IN VARCHAR2, p_per IN VARCHAR2, p_fec IN DATE, p_tipo IN CHAR
     ) RETURN NUMBER IS
-        v_dt DATE;
+        v_dt     DATE;
+        v_raw    DATE;
+        v_poraut VARCHAR2(1);
     BEGIN
         BEGIN
             SELECT CASE p_tipo
                      WHEN 'E' THEN horaextra_ajus
                      WHEN 'D' THEN horadoblesof
                      WHEN 'B' THEN horabancoh
-                   END
-            INTO   v_dt
+                   END,
+                   CASE WHEN p_tipo = 'E' THEN horaextra ELSE NULL END,
+                   CASE WHEN p_tipo = 'E' THEN NVL(hayhed_poraut,'N') ELSE 'N' END
+            INTO   v_dt, v_raw, v_poraut
             FROM   SCA_ASISTENCIA_TAREO
             WHERE  cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
-        EXCEPTION WHEN NO_DATA_FOUND THEN v_dt := NULL;
+        EXCEPTION WHEN NO_DATA_FOUND THEN RETURN 0;
         END;
+        -- Para tipo 'E':
+        --   * HE autorizada para planilla (hayhed_poraut='N'): NO disponible para compensacion
+        --   * HE pendiente sin horaextra_ajus: usar horaextra cruda
+        --   * HE pendiente con horaextra_ajus: usar horaextra_ajus
+        IF p_tipo = 'E' AND v_poraut = 'N' THEN
+            RETURN 0;   -- ya comprometida con planilla, no entra a compensacion
+        END IF;
+        IF p_tipo = 'E' AND v_poraut = 'S' AND v_dt IS NULL THEN
+            RETURN fn_date_a_min(v_raw);
+        END IF;
         RETURN fn_date_a_min(v_dt);
     END fn_tiempo_origen;
 
@@ -434,6 +448,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
         WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
 
         IF p_tipo_ori = 'E' THEN
+            -- Pre-popula horaextra_ajus=horaextra para dias nunca autorizados.
+            -- horaexofi1/2/3 se dejan NULL intencionalmente: la HE no va a planilla.
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    horaextra_ajus = horaextra
+            WHERE  cod_empresa  = p_emp
+            AND    cod_personal = p_per
+            AND    fechamar     = p_fec
+            AND    NVL(hayhed_poraut,'N') = 'S'
+            AND    horaextra_ajus IS NULL
+            AND    horaextra > c_BASE_DATE;
+
             UPDATE SCA_ASISTENCIA_TAREO
             SET horaextra_ajus = horaextra_ajus - v_min/1440
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec;
@@ -475,6 +500,16 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                   'dd/MM/yyyy HH24:MI')
             WHERE cod_empresa = p_emp AND cod_personal = p_per AND fechamar = p_fec
             AND   horaextra_ajus > hni;
+
+            -- Para dias nunca autorizados: anula tramos recalculados.
+            -- horaexofi1/2/3 deben quedar NULL: la HE no va a planilla.
+            UPDATE SCA_ASISTENCIA_TAREO
+            SET    horaexofi1 = NULL, horaexofi2 = NULL, horaexofi3 = NULL
+            WHERE  cod_empresa  = p_emp
+            AND    cod_personal = p_per
+            AND    fechamar     = p_fec
+            AND    NVL(hayhed_poraut,'N') = 'S'
+            AND    horaextraofi IS NULL;
 
             UPDATE SCA_ASISTENCIA_TAREO
             SET alerta06 = CASE WHEN horaextra_ajus = c_BASE_DATE THEN 'EC'
@@ -760,11 +795,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                     p.ape_paterno || ' ' || p.ape_materno || ' ' || p.nom_trabajador AS nombre_completo,
                     -- minutos disponibles = SUM(HE + Dobles + Banco) en el rango de horas
                     -- Mismo criterio que LISTAR_EMPLEADOS_RANGO para consistencia.
-                      NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                      NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                          THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                                 + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                          ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                                 + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                     END)
                            FROM   SCA_ASISTENCIA_TAREO s
                            WHERE  s.cod_empresa  = p.cod_empresa
                            AND    s.cod_personal = p.cod_personal
-                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                           AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                           AND    NVL(s.hayhed_poraut,'S') != 'N'), 0)
                     + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                            FROM   SCA_ASISTENCIA_TAREO s
                            WHERE  s.cod_empresa  = p.cod_empresa
@@ -873,22 +914,41 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                   || ':' ||
                 LPAD(MOD(ROUND((NVL(t.horaefectiva, c_BASE) - c_BASE) * 1440), 60), 2, '0')  AS horas_trabajadas,
                 -- HE: suma en el rango de horas (v_fec_hor_ini..v_fec_hor_fin)
-                NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                -- Solo HE pendientes de autorizar (hayhed_poraut='S')
+                NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                     THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                            + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                     ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                            + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                END)
                      FROM   SCA_ASISTENCIA_TAREO s
                      WHERE  s.cod_empresa  = t.cod_empresa
                      AND    s.cod_personal = t.cod_personal
-                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_he,
-                LPAD(TRUNC(NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                     AND    NVL(s.hayhed_poraut,'S') != 'N'), 0) AS min_he,
+                LPAD(TRUNC(NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                              THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                                     + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                              ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                                     + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                         END)
                      FROM   SCA_ASISTENCIA_TAREO s
                      WHERE  s.cod_empresa  = t.cod_empresa
                      AND    s.cod_personal = t.cod_personal
-                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) / 60), 2, '0')
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                     AND    NVL(s.hayhed_poraut,'S') != 'N'), 0) / 60), 2, '0')
                   || ':' ||
-                LPAD(MOD(NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                LPAD(MOD(NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                             THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                                    + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                             ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                                    + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                        END)
                      FROM   SCA_ASISTENCIA_TAREO s
                      WHERE  s.cod_empresa  = t.cod_empresa
                      AND    s.cod_personal = t.cod_personal
-                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0), 60), 2, '0') AS horas_he,
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                     AND    NVL(s.hayhed_poraut,'S') != 'N'), 0), 60), 2, '0') AS horas_he,
                 -- Dobles: suma en el rango de horas (v_fec_hor_ini..v_fec_hor_fin)
                 NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                      FROM   SCA_ASISTENCIA_TAREO s
@@ -924,11 +984,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                      AND    s.cod_personal = t.cod_personal
                      AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0), 60), 2, '0') AS horas_banco,
                 -- Total = HE + Dobles + Banco en el rango de horas
-                NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                     THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                            + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                     ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                            + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                END)
                      FROM   SCA_ASISTENCIA_TAREO s
                      WHERE  s.cod_empresa  = t.cod_empresa
                      AND    s.cod_personal = t.cod_personal
-                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                     AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                     AND    NVL(s.hayhed_poraut,'S') != 'N'), 0)
                   + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                      FROM   SCA_ASISTENCIA_TAREO s
                      WHERE  s.cod_empresa  = t.cod_empresa
@@ -940,11 +1006,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                      AND    s.cod_personal = t.cod_personal
                      AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0) AS min_total,
                 LPAD(TRUNC((
-                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                    NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                        THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                        ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                   END)
                          FROM   SCA_ASISTENCIA_TAREO s
                          WHERE  s.cod_empresa  = t.cod_empresa
                          AND    s.cod_personal = t.cod_personal
-                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                         AND    NVL(s.hayhed_poraut,'S') != 'N'), 0)
                     + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO s
                          WHERE  s.cod_empresa  = t.cod_empresa
@@ -958,11 +1030,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                   ) / 60), 2, '0')
                   || ':' ||
                 LPAD(MOD(
-                    NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE) - c_BASE) * 1440))
+                    NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                        THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                        ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                   END)
                          FROM   SCA_ASISTENCIA_TAREO s
                          WHERE  s.cod_empresa  = t.cod_empresa
                          AND    s.cod_personal = t.cod_personal
-                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                         AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                         AND    NVL(s.hayhed_poraut,'S') != 'N'), 0)
                     + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE) - c_BASE) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO s
                          WHERE  s.cod_empresa  = t.cod_empresa
@@ -982,10 +1060,18 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
             WHERE t.cod_empresa = p_cod_empresa
             AND   t.fechamar BETWEEN v_fec_ini AND v_fec_fin
             AND   (
-                    -- El dia especifico (t.fechamar) tiene al menos una fuente de horas.
-                    -- Independiente del rango de horas: ese rango solo afecta los totales
-                    -- de las columnas, pero no debe condicionar si el dia aparece o no.
-                    ROUND((NVL(t.horaextra_ajus, c_BASE) - c_BASE) * 1440) > 0
+                    -- El dia especifico (t.fechamar) tiene al menos una fuente de horas disponible.
+                    -- Solo HE pendientes de autorizar (hayhed_poraut='S'); HE autorizadas para planilla
+                    -- no entran al pool de compensacion.
+                    (NVL(t.hayhed_poraut,'S') != 'N'
+                     AND (   (t.horaextra_ajus IS NOT NULL
+                              AND (TO_NUMBER(TO_CHAR(t.horaextra_ajus,'HH24'))*60
+                                 + TO_NUMBER(TO_CHAR(t.horaextra_ajus,'MI'))) > 0)
+                          OR (t.horaextra_ajus IS NULL
+                              AND t.horaextra IS NOT NULL
+                              AND (TO_NUMBER(TO_CHAR(t.horaextra,'HH24'))*60
+                                 + TO_NUMBER(TO_CHAR(t.horaextra,'MI'))) > 0)
+                         ))
                     OR ROUND((NVL(t.horadoblesof, c_BASE) - c_BASE) * 1440) > 0
                     OR ROUND((NVL(t.horabancoh,   c_BASE) - c_BASE) * 1440) > 0
                   )
@@ -1118,11 +1204,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                    p.ape_paterno||' '||p.ape_materno||' '||p.nom_trabajador AS nombre_completo,
                    -- Disponibles = SUM(HE + Dobles + Banco) en el rango de horas
                    -- (mismo criterio que LISTAR y CALCULAR para consistencia)
-                   NVL((SELECT SUM(ROUND((NVL(s.horaextra_ajus, c_BASE_DATE) - c_BASE_DATE) * 1440))
+                   NVL((SELECT SUM(CASE WHEN s.horaextra_ajus IS NULL
+                                        THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                        ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                   END)
                           FROM   SCA_ASISTENCIA_TAREO s
                           WHERE  s.cod_empresa  = p.cod_empresa
                           AND    s.cod_personal = p.cod_personal
-                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin), 0)
+                          AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
+                          AND    NVL(s.hayhed_poraut,'S') != 'N'), 0)
                  + NVL((SELECT SUM(ROUND((NVL(s.horadoblesof, c_BASE_DATE) - c_BASE_DATE) * 1440))
                           FROM   SCA_ASISTENCIA_TAREO s
                           WHERE  s.cod_empresa  = p.cod_empresa
@@ -1275,13 +1367,25 @@ CREATE OR REPLACE PACKAGE BODY PKG_SCA_COMP_DIA_DIA AS
                         IF v_restante <= 0 THEN RETURN; END IF;
                         FOR rhe IN (
                             SELECT s.fechamar,
-                                   ROUND((NVL(s.horaextra_ajus, c_BASE_DATE)
-                                          - c_BASE_DATE) * 1440) AS he_min
+                                   CASE WHEN s.horaextra_ajus IS NULL
+                                        THEN NVL(TO_NUMBER(TO_CHAR(s.horaextra,      'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra,      'MI')), 0)
+                                        ELSE NVL(TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'HH24'))*60
+                                               + TO_NUMBER(TO_CHAR(s.horaextra_ajus, 'MI')), 0)
+                                   END AS he_min
                             FROM   SCA_ASISTENCIA_TAREO s
                             WHERE  s.cod_empresa  = p_cod_empresa
                             AND    s.cod_personal = e.cod_personal
                             AND    s.fechamar BETWEEN v_fec_hor_ini AND v_fec_hor_fin
-                            AND    s.horaextra_ajus > c_BASE_DATE
+                            AND    NVL(s.hayhed_poraut,'S') != 'N'   -- solo HE pendientes de autorizar
+                            AND    (  (s.horaextra_ajus IS NOT NULL
+                                       AND (TO_NUMBER(TO_CHAR(s.horaextra_ajus,'HH24'))*60
+                                          + TO_NUMBER(TO_CHAR(s.horaextra_ajus,'MI'))) > 0)
+                                   OR (s.horaextra_ajus IS NULL
+                                       AND s.horaextra IS NOT NULL
+                                       AND (TO_NUMBER(TO_CHAR(s.horaextra,'HH24'))*60
+                                          + TO_NUMBER(TO_CHAR(s.horaextra,'MI'))) > 0)
+                                   )
                             ORDER  BY s.fechamar
                         ) LOOP
                             EXIT WHEN v_restante <= 0;

@@ -1221,21 +1221,49 @@ function renderConsulta(data) {
     if (!data.length) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
     } else {
+        // Agrupar por empleado
+        const empleados = {};
         data.forEach(r => {
+            const key = r.codPersonal ?? '';
+            if (!empleados[key]) empleados[key] = { nombre: r.nombreCompleto ?? '', filas: [] };
+            empleados[key].filas.push(r);
+        });
+
+        const fechaInicio = isoADdMmYyyy(document.getElementById('consFechaIni').value);
+        const fechaFin    = isoADdMmYyyy(document.getElementById('consFechaFin').value);
+
+        Object.entries(empleados).forEach(([cod, emp]) => {
+            // Fila de subencabezado del empleado con botón exportar
+            const exportUrl = `${URL_BASE}/ExportarAcuerdo?codPersonal=${encodeURIComponent(cod)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
+            tbody.insertAdjacentHTML('beforeend', `
+              <tr style="background:var(--aq-lt);">
+                <td colspan="7" class="fw-semibold small py-1 ps-2" style="color:var(--aq-dk);">
+                  <i class="bi bi-person-fill me-1"></i><code>${cod}</code> — ${emp.nombre}
+                  <span class="ms-2 text-muted fw-normal">(${emp.filas.length} comp.)</span>
+                </td>
+                <td class="py-1 text-end pe-2">
+                  <a href="${exportUrl}" class="btn btn-sm py-0 px-2" style="background:var(--aq);color:#fff;border-color:var(--aq);" title="Exportar Acuerdo de Compensación HE" data-no-loading>
+                    <i class="bi bi-file-earmark-word me-1"></i>Acuerdo
+                  </a>
+                </td>
+              </tr>`);
+
+            emp.filas.forEach(r => {
                 const btnVer = r.idCompen
                     ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstadoDdc(${r.idCompen})" title="Ver detalle compensación ${r.idCompen}"><i class="bi bi-eye"></i></button>`
                     : '';
-            tbody.insertAdjacentHTML('beforeend', `
-              <tr>
-                <td><code>${r.idCompen ?? '—'}</code></td>
-                <td><code>${r.codPersonal ?? ''}</code></td>
-                <td class="text-truncate" style="max-width:180px;">${r.nombreCompleto ?? ''}</td>
-                <td><span class="badge" style="background:var(--aq-elt);color:var(--aq-err);">${r.fechaDestinoStr ?? ''}</span></td>
-                <td><span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${r.fechaOrigenStr ?? ''}</span></td>
-                <td class="text-end fw-semibold">${r.tiempoHhMi ?? ''}</td>
-                <td>${badgeAplicacion(r.estadoAplicacion ?? 'PENDIENTE')}</td>
-                <td>${btnVer}</td>
-              </tr>`);
+                tbody.insertAdjacentHTML('beforeend', `
+                  <tr>
+                    <td><code>${r.idCompen ?? '—'}</code></td>
+                    <td><code>${r.codPersonal ?? ''}</code></td>
+                    <td class="text-truncate" style="max-width:180px;">${r.nombreCompleto ?? ''}</td>
+                    <td><span class="badge" style="background:var(--aq-elt);color:var(--aq-err);">${r.fechaDestinoStr ?? ''}</span></td>
+                    <td><span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${r.fechaOrigenStr ?? ''}</span></td>
+                    <td class="text-end fw-semibold">${r.tiempoHhMi ?? ''}</td>
+                    <td>${badgeAplicacion(r.estadoAplicacion ?? 'PENDIENTE')}</td>
+                    <td>${btnVer}</td>
+                  </tr>`);
+            });
         });
     }
     document.getElementById('areaConsulta').style.display = 'block';

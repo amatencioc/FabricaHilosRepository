@@ -10,14 +10,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
     public class CompensacionDdcController : OracleBaseController
     {
         private readonly ICompensacionDdcService _service;
+        private readonly AcuerdoCompHeDocxService _acuerdoService;
         private readonly ILogger<CompensacionDdcController> _logger;
 
         public CompensacionDdcController(
             ICompensacionDdcService service,
+            AcuerdoCompHeDocxService acuerdoService,
             ILogger<CompensacionDdcController> logger)
         {
-            _service = service;
-            _logger  = logger;
+            _service        = service;
+            _acuerdoService = acuerdoService;
+            _logger         = logger;
         }
 
         // ── INDEX ──────────────────────────────────────────────────────────────
@@ -248,6 +251,40 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en ConsultarRango DDC");
+                return Json(new { ok = false, error = ex.Message });
+            }
+        }
+
+        // ── EXPORTAR ACUERDO COMPENSACIÓN HE (GET, devuelve .docx) ───────────
+
+        [HttpGet("ExportarAcuerdo")]
+        public async Task<IActionResult> ExportarAcuerdo(
+            string codPersonal,
+            string fechaInicio,
+            string fechaFin)
+        {
+            try
+            {
+                var datos = await _service.ConsultarRangoDdcAsync(
+                    CodEmpresaAquarius,
+                    codPersonal,
+                    fechaInicio,
+                    fechaFin);
+
+                if (!datos.Any())
+                    return Json(new { ok = false, error = "Sin registros para el empleado en el rango indicado." });
+
+                var docBytes = await _acuerdoService.GenerarAsync(datos, fechaInicio, fechaFin);
+
+                var f = fechaInicio.Replace("/", "").Replace("-", "");
+                var nombreArchivo = $"AcuerdoCompHE_{codPersonal}_{f}.docx";
+                return File(docBytes,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    nombreArchivo);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ExportarAcuerdo DDC cod={Cod}", codPersonal);
                 return Json(new { ok = false, error = ex.Message });
             }
         }

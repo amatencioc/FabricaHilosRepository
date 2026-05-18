@@ -623,9 +623,69 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                 t.horaextra,
                 t.horaextraofi,
                 t.horaextra_ajus,
-                t.horaexofi1,
-                t.horaexofi2,
-                t.horaexofi3,
+                -- ---------------------------------------------------------------
+                -- horaexofi1/2/3 se calculan en minutos para evitar el problema de
+                -- fecha-base inconsistente (31/12/1899 vs 01/01/1900) que ocurre
+                -- cuando la autorización fue grabada por el sistema original (sin
+                -- llamar a sp_SCA_Upd_Tar_InsAut) y deja la fecha-base errónea.
+                -- ---------------------------------------------------------------
+                -- H25%: minutos autorizados hasta el tope h25f
+                CASE
+                    WHEN t.tippagohe = '1'
+                         AND t.horaextra_ajus IS NOT NULL
+                         AND (  TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                              + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI'))  ) > 0
+                    THEN TO_DATE('01/01/1900', 'dd/MM/yyyy')
+                         + LEAST(
+                               TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                             + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI')),
+                               NVL(  TO_NUMBER(TO_CHAR(t.h25f, 'HH24')) * 60
+                                   + TO_NUMBER(TO_CHAR(t.h25f, 'MI')),
+                                   99999)
+                           ) / 1440.0
+                    ELSE NULL
+                END                                                                 horaexofi1,
+                -- H35%: minutos entre h35i y min(ajus, h35f)
+                CASE
+                    WHEN t.tippagohe = '1'
+                         AND t.horaextra_ajus IS NOT NULL
+                         AND t.h35i IS NOT NULL
+                         AND (  TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                              + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI'))  )
+                           > (  TO_NUMBER(TO_CHAR(t.h35i, 'HH24')) * 60
+                              + TO_NUMBER(TO_CHAR(t.h35i, 'MI'))  )
+                    THEN TO_DATE('01/01/1900', 'dd/MM/yyyy')
+                         + (  LEAST(
+                                  TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                                + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI')),
+                                  NVL(  TO_NUMBER(TO_CHAR(t.h35f, 'HH24')) * 60
+                                      + TO_NUMBER(TO_CHAR(t.h35f, 'MI')),
+                                      99999)
+                              )
+                            - NVL(  TO_NUMBER(TO_CHAR(t.h25f, 'HH24')) * 60
+                                  + TO_NUMBER(TO_CHAR(t.h25f, 'MI')),
+                                  0)
+                           ) / 1440.0
+                    ELSE NULL
+                END                                                                 horaexofi2,
+                -- H50%/Doble: minutos por encima de hni (cuando aplica)
+                CASE
+                    WHEN t.tippagohe = '1'
+                         AND t.horaextra_ajus IS NOT NULL
+                         AND t.hni IS NOT NULL
+                         AND (  TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                              + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI'))  )
+                           > (  TO_NUMBER(TO_CHAR(t.hni, 'HH24')) * 60
+                              + TO_NUMBER(TO_CHAR(t.hni, 'MI'))  )
+                    THEN TO_DATE('01/01/1900', 'dd/MM/yyyy')
+                         + (  TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'HH24')) * 60
+                            + TO_NUMBER(TO_CHAR(t.horaextra_ajus, 'MI'))
+                            - NVL(  TO_NUMBER(TO_CHAR(t.h35f, 'HH24')) * 60
+                                  + TO_NUMBER(TO_CHAR(t.h35f, 'MI')),
+                                  0)
+                           ) / 1440.0
+                    ELSE NULL
+                END                                                                 horaexofi3,
                 NVL(t.hayhed_poraut, 'N')                                           hayhed_poraut,
                 t.haypagohe,
                 -- Horas Dobles / Descanso trabajado (HEO)
@@ -1060,10 +1120,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                     ) num_fotocheck,
                     -- Días con HE de cualquier tipo en el período.
                     -- Lógica: el PROCESO es el árbitro de qué cuenta como HE real:
-                    --   HED/HEO: hayhed_poraut/hayheo_poraut IN ('S','N')
-                    --             ('S'=pendiente, 'N'=ya autorizado)
-                    --   HEA:     horaextantesofi IS NOT NULL con tiempo > 0
-                    --             (el proceso la setea cuando supera el umbral)
+                    --   HED: hayhed_poraut IN ('S','N')  → proceso confirmó HE ≥ umbral
+                    --        OR (NULL + alerta06='EE')    → exceso de razonabilidad
+                    --   HEO: hayheo_poraut IN ('S','N')
+                    --   HEA: horaextantesofi IS NOT NULL con tiempo > 0
+                    --
+                    --   EXCLUIDO: NULL + alerta06 distinto ('EE') = sub-umbral, sin HE real.
                     (SELECT COUNT(*)
                      FROM   SCA_ASISTENCIA_TAREO t
                      WHERE  t.cod_empresa  = p.cod_empresa
@@ -1071,6 +1133,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
                        AND  (
                                 t.hayhed_poraut IN ('S','N')
+                             OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE')
                              OR (   t.horaextantesofi IS NOT NULL
                                 AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
                              OR t.hayheo_poraut IN ('S','N')
@@ -1084,6 +1147,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
                        AND  (
                                 t.hayhed_poraut IN ('S','N')
+                             OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE')
                              OR (   t.horaextantesofi IS NOT NULL
                                 AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
                              OR t.hayheo_poraut IN ('S','N')
@@ -1105,15 +1169,15 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  a.tip_authe   IN ('1','2','5')
                     ) dias_autorizados,
                     -- Minutos HED pendientes de autorizar.
-                    -- hayhed_poraut='S': el proceso lo marcó como pendiente
-                    -- (solo cuando HED >= min_a_part_hextra → evita sumar valores
-                    -- sub-umbral que la UI no muestra ni permite autorizar)
+                    -- hayhed_poraut='S': pendiente explícito por proceso.
+                    -- hayhed_poraut=NULL + alerta06='EE': exceso razonabilidad, también
+                    -- requiere autorización. Sub-umbral (NULL sin EE) queda excluido.
                     NVL((SELECT SUM(ROUND((t.horaextra - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
                            AND  t.cod_personal = p.cod_personal
                            AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                           AND  t.hayhed_poraut = 'S'
+                           AND  (t.hayhed_poraut = 'S' OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE'))
                          ), 0)  min_hed,
                     -- Minutos HEA pendientes de autorizar.
                     -- Usa horaextantesofi (seteado por el proceso cuando supera
@@ -1134,7 +1198,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                                       AND  a.tip_authe    = '1')
                          ), 0) min_hea,
                     -- Minutos HEO pendientes de autorizar.
-                    -- hayheo_poraut='S': el proceso lo marcó como pendiente
+                    -- hayheo_poraut='S': pendiente (proceso confirmó HEO >= umbral).
                     NVL((SELECT SUM(ROUND((t.horadobles - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
