@@ -1,0 +1,469 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
+@using FabricaHilos.Models.Produccion.Planeamiento
+
+@{
+    ViewData["Title"] = $"Pedido {Model.Serie}-{Model.NumPed}";
+    var primerItem = Model.Items.FirstOrDefault();
+    var pasoMap = Model.Pasos.ToDictionary(p => p.CodPaso);
+}
+
+@section Styles {
+<style>
+    .timeline-step {
+        position: relative; padding: .5rem 1rem .5rem 2.5rem;
+        border-left: 3px solid #dee2e6; margin-left: 1rem;
+    }
+    .timeline-step::before {
+        content: ''; position: absolute; left: -9px; top: .9rem;
+        width: 15px; height: 15px; border-radius: 50%;
+        background: var(--step-color, #dee2e6); border: 2px solid #fff;
+    }
+    .timeline-step.activo { border-left-color: var(--step-color, #0d6efd); }
+    .timeline-step.completado { border-left-color: #198754; }
+    .timeline-step.completado::before { background: #198754; }
+    .evento-badge { font-size: .72rem; }
+    .paso-badge-lg { font-size: .85rem; padding: .4em .9em; border-radius: .6rem; font-weight: 600; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item"><a asp-action="Dashboard">Dashboard</a></li>
+    <li class="breadcrumb-item active">Pedido @Model.Serie-@Model.NumPed</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-diagram-3 me-2 text-primary"></i>
+        Trazabilidad — Pedido <strong>@Model.Serie-@Model.NumPed</strong>
+    </h4>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="Trazabilidad" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+           class="btn btn-outline-info btn-sm">
+            <i class="bi bi-diagram-3 me-1"></i>Trazabilidad
+        </a>
+        <a asp-action="PedidoGantt" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+           class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+        </a>
+        <div class="dropdown">
+            <button class="btn btn-outline-warning btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-gear me-1"></i>Acciones
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#modalReprogramar">
+                        <i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar despacho
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#modalRecalcular">
+                        <i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalCerrar">
+                        <i class="bi bi-x-circle me-2"></i>Cerrar ítem
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+@if (primerItem != null)
+{
+    <!-- Cabecera del pedido -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-sm-6 col-md-3">
+                    <div class="text-muted small">Cliente</div>
+                    <div class="fw-semibold">@primerItem.NombreCliente</div>
+                    <div class="text-muted small">@primerItem.CodCliente</div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="text-muted small">Fecha pedido</div>
+                    <div class="fw-semibold">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="text-muted small">Entrega comprometida</div>
+                    <div class="fw-semibold @(primerItem.EstaRetrasado ? "text-danger" : "")">
+                        @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                        @if (primerItem.EstaRetrasado)
+                        {
+                            <span class="badge bg-danger ms-1">+@primerItem.DiasRetraso d</span>
+                        }
+                    </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="text-muted small">Estado general</div>
+                    <span class="paso-badge-lg text-white" style="background-color:@primerItem.ColorUi;">
+                        @primerItem.CodPasoAct — @primerItem.NombrePaso
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Alertas del pedido -->
+@if (Model.Alertas.Any())
+{
+    <div class="mb-4">
+        @foreach (var a in Model.Alertas)
+        {
+            <div class="alert alert-@a.NivelColor d-flex align-items-center gap-2 py-2 mb-2">
+                <i class="bi bi-bell-fill"></i>
+                <div>
+                    <strong>@a.TipoTexto</strong>
+                    @if (a.Nro.HasValue)
+                    {
+                        <span class="badge bg-light text-dark border ms-1">Det.@a.Nro</span>
+                    }
+                    — @a.Titulo
+                    @if (a.FchLimite.HasValue)
+                    {
+                        <span class="ms-2 small">Límite: @a.FchLimite.Value.ToString("dd/MM/yyyy")</span>
+                    }
+                    @if (a.HorasSinResolver.HasValue)
+                    {
+                        var h = (int)a.HorasSinResolver.Value;
+                        <span class="ms-2 small text-muted"><i class="bi bi-clock me-1"></i>@(h >= 24 ? $"{h/24}d {h%24}h" : $"{h}h") sin resolver</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<!-- Sublotes / ítems del pedido -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold py-2">
+        <i class="bi bi-list-check me-1"></i> Sublotes del pedido
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Det.</th>
+                        <th>Artículo</th>
+                        <th>Título / Color</th>
+                        <th class="text-end">Kg orig.</th>
+                        <th class="text-end">Kg pend.</th>
+                        <th>Etapa</th>
+                        <th>Avance</th>
+                        <th>F.Est. despacho</th>
+                        <th>Ciclo</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
+                    {
+                        <tr>
+                            <td>@s.NumDet</td>
+                            <td class="text-truncate" style="max-width:110px;">@s.CodArt</td>
+                            <td><span class="fw-semibold">@s.Titulo</span> <small class="text-muted">@s.Color</small></td>
+                            <td class="text-end">@s.CantidadOrig.ToString("N0")</td>
+                            <td class="text-end @(s.KgPendientes > 0 ? "fw-bold" : "text-muted")">@s.KgPendientes.ToString("N0")</td>
+                            @* acciones inline por sublote *@
+                            <td>
+                                <span class="badge" style="background-color:@s.ColorUi; font-size:.75rem;">
+                                    @s.CodPasoAct — @s.NombrePaso
+                                </span>
+                                @if (s.EstaEnReproceso)
+                                {
+                                    <span class="badge bg-danger ms-1">Rep.@s.NroCiclo</span>
+                                }
+                            </td>
+                            <td style="min-width:90px;">
+                                <div class="progress" style="height:5px;">
+                                    <div class="progress-bar" style="width:@s.PctAvance%;background-color:@s.ColorUi;"></div>
+                                </div>
+                                <small class="text-muted">@s.PctAvance%</small>
+                            </td>
+                            <td>@(s.FchEstDespacho?.ToString("dd/MM/yy") ?? "—")</td>
+                            <td><span class="badge bg-secondary">C.@s.NroCiclo</span></td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a asp-action="Historial" asp-route-idSeguim="@s.IdSeguim"
+                                       class="btn btn-outline-secondary btn-sm py-0" title="Historial recálculos">
+                                        <i class="bi bi-clock-history"></i>
+                                    </a>
+                                    <form asp-action="RecalcularFechas" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="serie"   value="@Model.Serie" />
+                                        <input type="hidden" name="numPed"  value="@Model.NumPed" />
+                                        <input type="hidden" name="nro"     value="@s.Nro" />
+                                        <input type="hidden" name="numDet"  value="@s.NumDet" />
+                                        <input type="hidden" name="motivo"  value="REP" />
+                                        <button type="submit" class="btn btn-outline-info btn-sm py-0"
+                                                title="Recalcular fechas" onclick="return confirm('¿Recalcular fechas para Det.@s.NumDet?')">
+                                            <i class="bi bi-calculator"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Timeline: Máquina de estados -->
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold py-2">
+                <i class="bi bi-clock-history me-1"></i> Flujo de producción
+            </div>
+            <div class="card-body pt-3">
+                @{
+                    var primerSub = Model.Items.OrderBy(x => x.NumDet).FirstOrDefault();
+                }
+                @if (primerSub != null)
+                {
+                    @foreach (var ec in Model.Pasos.OrderBy(p => p.OrdenPaso))
+                    {
+                        var esCodPasoActual = primerSub.CodPasoAct == ec.CodPaso;
+                        var ordenActual = pasoMap.ContainsKey(primerSub.CodPasoAct) ? pasoMap[primerSub.CodPasoAct].OrdenPaso : 0;
+                        var completado  = ec.OrdenPaso < ordenActual;
+                        var claseStep   = esCodPasoActual ? "activo" : completado ? "completado" : "";
+                        var color       = completado ? "#198754" : esCodPasoActual ? ec.ColorUi : "#dee2e6";
+
+                        // Fechas estimadas y reales según el paso
+                        string? fchEst = ec.CodPaso switch {
+                            "02" => primerSub.FchRealProgramado?.ToString("dd/MM/yy"),
+                            "03" => primerSub.FchEstHilanderia?.ToString("dd/MM/yy"),
+                            "04" => primerSub.FchEstPartida?.ToString("dd/MM/yy"),
+                            "06" => primerSub.FchEstTinIni?.ToString("dd/MM/yy"),
+                            "07" => primerSub.FchEstTinFin?.ToString("dd/MM/yy"),
+                            "08" => primerSub.FchEstSecado?.ToString("dd/MM/yy"),
+                            "09" => primerSub.FchEstCalidad?.ToString("dd/MM/yy"),
+                            "14" => primerSub.FchEstDespacho?.ToString("dd/MM/yy"),
+                            _ => null
+                        };
+                        string? fchReal = ec.CodPaso switch {
+                            "02" => primerSub.FchRealProgramado?.ToString("dd/MM/yy"),
+                            "03" => primerSub.FchRealProduccion?.ToString("dd/MM/yy"),
+                            "04" => primerSub.FchRealPartida?.ToString("dd/MM/yy"),
+                            "06" => primerSub.FchRealTinIni?.ToString("dd/MM/yy"),
+                            "07" => primerSub.FchRealTinFin?.ToString("dd/MM/yy"),
+                            "08" => primerSub.FchRealSecado?.ToString("dd/MM/yy"),
+                            "09" => primerSub.FchRealCcTinto?.ToString("dd/MM/yy"),
+                            "9R" => primerSub.FchRealCcRechazo?.ToString("dd/MM/yy"),
+                            "10" => primerSub.FchRealDevanado?.ToString("dd/MM/yy"),
+                            "11" => primerSub.FchRealCalidad?.ToString("dd/MM/yy"),
+                            "12" => primerSub.FchRealAlmPt?.ToString("dd/MM/yy"),
+                            "14" => primerSub.FchRealDespacho?.ToString("dd/MM/yy"),
+                            _ => null
+                        };
+
+                        <div class="timeline-step @claseStep" style="--step-color:@color">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="badge" style="background-color:@color; font-size:.75rem;">@ec.CodPaso</span>
+                                <span class="fw-semibold">@ec.NombrePaso</span>
+                                <small class="text-muted">@ec.Area</small>
+                                @if (esCodPasoActual)
+                                {
+                                    <span class="badge bg-primary ms-1">Actual</span>
+                                }
+                            </div>
+                            @if (fchEst != null || fchReal != null)
+                            {
+                                <div class="d-flex gap-3 mt-1">
+                                    @if (fchEst != null)
+                                    {
+                                        <small class="text-muted"><i class="bi bi-calendar me-1"></i>Est: @fchEst</small>
+                                    }
+                                    @if (fchReal != null)
+                                    {
+                                        <small class="text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>Real: @fchReal</small>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Modales de acción POST ─────────────────────────────────── -->
+
+    <!-- Modal: Reprogramar despacho -->
+    <div class="modal fade" id="modalReprogramar" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="Reprogramar" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="serie"  value="@Model.Serie" />
+                    <input type="hidden" name="numPed" value="@Model.NumPed" />
+                    <div class="modal-header">
+                        <h6 class="modal-title"><i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar fecha de despacho</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Sublote (Det.)</label>
+                            <select name="nro" class="form-select form-select-sm" required>
+                                @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
+                                {
+                                    <option value="@s.Nro" data-det="@s.NumDet">Det.@s.NumDet — @s.Titulo (@s.Color)</option>
+                                }
+                            </select>
+                        </div>
+                        <input type="hidden" name="numDet" id="reprNumDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nueva fecha de despacho</label>
+                            <input type="date" name="nuevaFchDesp" class="form-control form-control-sm" required
+                                   min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Motivo</label>
+                            <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
+                                   placeholder="Ej: Cliente solicitó extensión de plazo" required />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-save me-1"></i>Reprogramar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Recalcular fechas (pedido completo) -->
+    <div class="modal fade" id="modalRecalcular" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <form asp-action="RecalcularFechas" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="serie"  value="@Model.Serie" />
+                    <input type="hidden" name="numPed" value="@Model.NumPed" />
+                    <input type="hidden" name="nro"    value="@(Model.Items.FirstOrDefault()?.Nro ?? 0)" />
+                    <input type="hidden" name="numDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
+                    <div class="modal-header">
+                        <h6 class="modal-title"><i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas estimadas</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Motivo del recálculo</label>
+                            <select name="motivo" class="form-select form-select-sm">
+                                <option value="REP">REP — Reprogramado</option>
+                                <option value="PED">PED — Pedido</option>
+                                <option value="PLA">PLA — Planificado</option>
+                                <option value="MAQ">MAQ — Cambio máquina</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info small py-1 mb-0">
+                            Recalcula todas las fechas estimadas del primer sublote y guarda historial.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-info btn-sm text-white"><i class="bi bi-arrow-repeat me-1"></i>Recalcular</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Cerrar ítem -->
+    <div class="modal fade" id="modalCerrar" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content border-danger">
+                <form asp-action="CerrarItem" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="numPed" value="@Model.NumPed" />
+                    <input type="hidden" name="serie"  value="@Model.Serie" />
+                    <div class="modal-header bg-danger text-white">
+                        <h6 class="modal-title"><i class="bi bi-x-circle me-2"></i>Cerrar ítem manualmente</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Sublote a cerrar</label>
+                            <select name="idSeguim" class="form-select form-select-sm" required>
+                                @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
+                                {
+                                    <option value="@s.IdSeguim">Det.@s.NumDet — @s.Titulo (ID @s.IdSeguim)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Motivo del cierre</label>
+                            <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
+                                   placeholder="Ej: Cierre manual por ajuste" value="CIERRE_MANUAL" required />
+                        </div>
+                        <div class="alert alert-danger small py-1 mb-0">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Esta acción es irreversible.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Cerrar ítem</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historial de eventos -->
+        <div class="col-lg-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold py-2">
+                <i class="bi bi-journal-text me-1"></i> Historial de eventos
+            </div>
+            <div class="card-body p-0" style="max-height:500px; overflow-y:auto;">
+                @if (!Model.Eventos.Any())
+                {
+                    <div class="p-3 text-muted small">Sin eventos registrados.</div>
+                }
+                else
+                {
+                    <div class="list-group list-group-flush">
+                        @foreach (var ev in Model.Eventos)
+                        {
+                            var badgeColor = ev.TipoEvento == "RE" ? "bg-danger" : "bg-success";
+                            <div class="list-group-item py-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <span class="badge @badgeColor evento-badge me-1">
+                                            @(ev.TipoEvento == "RE" ? "Reproceso" : "Avance")
+                                        </span>
+                                        <span class="fw-semibold small">@ev.NombrePaso</span>
+                                        @if (ev.NroCiclo > 1)
+                                        {
+                                            <span class="badge bg-secondary evento-badge ms-1">C.@ev.NroCiclo</span>
+                                        }
+                                    </div>
+                                    <small class="text-muted">@ev.FchEvento.ToString("dd/MM/yy HH:mm")</small>
+                                </div>
+                                @if (!string.IsNullOrEmpty(ev.Observacion))
+                                {
+                                    <div class="text-muted small mt-1">@ev.Observacion</div>
+                                }
+                                @if (ev.KgCantidad.HasValue)
+                                {
+                                    <div class="text-muted small"><i class="bi bi-box me-1"></i>@ev.KgCantidad.Value.ToString("N0") kg</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

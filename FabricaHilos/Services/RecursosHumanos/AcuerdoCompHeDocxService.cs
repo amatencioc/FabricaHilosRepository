@@ -86,22 +86,45 @@ public class AcuerdoCompHeDocxService
         string fechaInicio,
         string fechaFin)
     {
-        var nombreEmpleado = datos.FirstOrDefault()?.NombreCompleto ?? "";
+        var fechasHe  = datos
+            .Where(d => !string.IsNullOrEmpty(d.FechaOrigenStr))
+            .Select(d => DateTime.TryParse(d.FechaOrigenStr, out var f) ? (DateTime?)f : null)
+            .Where(f => f.HasValue)
+            .Select(f => f!.Value)
+            .ToList();
 
-        // Corregir ortografía y acentuación de la plantilla
+        var fechasDdc = datos
+            .Where(d => !string.IsNullOrEmpty(d.FechaDestinoStr))
+            .Select(d => DateTime.TryParse(d.FechaDestinoStr, out var f) ? (DateTime?)f : null)
+            .Where(f => f.HasValue)
+            .Select(f => f!.Value)
+            .ToList();
+
+        var semanaHe  = fechasHe.Any()  ? System.Globalization.ISOWeek.GetWeekOfYear(fechasHe.Min()).ToString()  : "";
+        var semanaDdc = fechasDdc.Any() ? System.Globalization.ISOWeek.GetWeekOfYear(fechasDdc.Min()).ToString() : "";
+
+        // ── Corregir ortografía y acentuación de la plantilla ─────────────────
         xml = CorregirTextos(xml);
 
-        // Reemplazar marcadores de texto plano (están en <w:t> sin fragmentar)
-        // ______________  → FECHA
+        // ── Reemplazar marcadores ─────────────────────────────────────────────
+        // ______________  → FECHA (inicio del rango DDC)
         xml = ReemplazarWt(xml, "______________", fechaInicio);
-        // ____________    → ÁREA / Nombre empleado
-        xml = ReemplazarWt(xml, "____________",   nombreEmpleado.ToUpper());
-        // _________       → SEMANA N°
-        xml = ReemplazarWt(xml, "_________",      "");
-        // DEL___________AL___________ → rango de fechas
-        xml = ReemplazarWt(xml, "DEL___________AL___________", $"DEL {fechaInicio} AL {fechaFin}");
+        // ____________    → ÁREA (sin datos disponibles, se deja en blanco)
+        xml = ReemplazarWt(xml, "____________",   "");
+        // _________       → SEMANA N° (semana de las horas extras)
+        xml = ReemplazarWt(xml, "_________",      semanaHe);
+        // DEL___________AL___________ → rango de búsqueda (Desde/Hasta del historial)
+        // El run en la plantilla tiene un espacio inicial: " DEL___________AL___________"
+        xml = ReemplazarWt(xml, " DEL___________AL___________", $" DEL {fechaInicio} AL {fechaFin}");
 
-        // Reemplazar filas de la tabla con los datos DDC
+        // ── Párrafo 2: sustituir los dos N°… con los números de semana ────────
+        // Primer  N°… = semana del día inasistido (FechaDestinoStr)
+        xml = ReemplazarWt(xml, " días inasistidos durante la semana N°…",
+                                $" días inasistidos durante la semana N°{semanaDdc}");
+        // Segundo N°… = semana de la hora extra (FechaOrigenStr) — run aislado " N°…"
+        xml = ReemplazarWt(xml, " N°…", $" N°{semanaHe}");
+
+        // ── Reemplazar filas de la tabla con los datos DDC ────────────────────
         xml = ReemplazarFilasTabla(xml, datos);
 
         return xml;
@@ -135,10 +158,7 @@ public class AcuerdoCompHeDocxService
                       ", pero sí percibió las remuneraciones");
 
         // ── Párrafo 2: correcciones por run exacto ────────────────────────────
-        // Doble espacio: "el día y/o  los días"
-        xml = Rw(xml, "el día y/o  los días inasistidos durante la semana N°…",
-                      "el día y/o los días inasistidos durante la semana N°...");
-        // "efectuara" → "efectuará"
+        // "efectuara" → "efectuará"  (el N°… se sustituye dinámicamente en ModificarDocumentXml)
         xml = Rw(xml, "efectuara ", "efectuará ");
 
         // ── Párrafo 3: correcciones por run exacto ────────────────────────────
@@ -155,25 +175,20 @@ public class AcuerdoCompHeDocxService
     }
 
     /// <summary>
-    /// Reemplaza el texto de un nodo <w:t> que contiene exactamente <paramref name="buscar"/>.
+    /// Reemplaza el texto de un nodo &lt;w:t&gt; que contiene exactamente <paramref name="buscar"/>.
+    /// Conserva los atributos originales del tag (ej: xml:space="preserve").
     /// </summary>
     private static string ReemplazarWt(string xml, string buscar, string reemplazar)
     {
-        // Buscar tanto sin atributos como con atributos (ej: xml:space="preserve")
-        // Patrón: <w:t>TEXTO</w:t>  o  <w:t atributo="...">TEXTO</w:t>
-        var idx = xml.IndexOf($">{buscar}</w:t>", StringComparison.Ordinal);
+        var patron = $">{buscar}</w:t>";
+        var idx = xml.IndexOf(patron, StringComparison.Ordinal);
         if (idx < 0) return xml;
 
-        // Preservar espacios si el reemplazo empieza/termina con espacio
-        var needSpace = reemplazar.StartsWith(' ') || reemplazar.EndsWith(' ');
-        string newContent = needSpace
-            ? $" xml:space=\"preserve\">{reemplazar}</w:t>"
-            : $">{reemplazar}</w:t>";
-
-        // El idx apunta al '>' antes del texto; buscar el inicio del tag <w:t para reemplazar atributos si es necesario
-        // Como el atributo xml:space puede ya estar, simplemente reemplazamos desde '>' hasta '</w:t>'
-        int closeIdx = idx + 1 + buscar.Length + "</w:t>".Length; // fin del </w:t>
-        return xml.Substring(0, idx) + newContent + xml.Substring(closeIdx);
+        // Sustituir solo el texto entre '>' y '</w:t>', sin alterar los atributos del tag de apertura.
+        return xml.Substring(0, idx + 1)        // incluye el '>'
+             + reemplazar
+             + "</w:t>"
+             + xml.Substring(idx + patron.Length);
     }
 
     /// <summary>

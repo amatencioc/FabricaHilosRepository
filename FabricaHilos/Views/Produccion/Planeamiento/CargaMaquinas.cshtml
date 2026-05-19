@@ -1,0 +1,193 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnCargaDiaria>
+
+@{
+    ViewData["Title"] = "Carga de Máquinas";
+    var items = Model.ToList();
+
+    // BUG FIX: usar EstadoCarga (derivado de PctCarga en Oracle, §8.5 PKG_PLN) en lugar de
+    // recalcular umbrales con PctUtilizacion — los dos campos pueden diverger.
+    var sobrecargadas  = items.Count(x => x.EstadoCarga == "SOBRECARGADA");
+    var cargaAlta      = items.Count(x => x.EstadoCarga == "CARGA_ALTA");
+    var disponibles    = items.Count(x => x.EstadoCarga == "DISPONIBLE");
+    var total          = items.Count;
+
+    // BUG FIX: agrupar por Area (derivada de TpMaq); estaba ignorada en la vista anterior.
+    var grupos = items
+        .GroupBy(x => string.IsNullOrEmpty(x.Area) ? "Otras" : x.Area)
+        .OrderBy(g => g.Key);
+}
+
+@section Styles {
+<style>
+    .maq-card { border-radius: .75rem; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+    .maq-gauge { height: 12px; border-radius: 6px; }
+    .semaforo-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .leyenda-item { display: flex; align-items: center; font-size: .8rem; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Carga de Máquinas</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0"><i class="bi bi-gear-wide-connected me-2 text-primary"></i>Carga de Máquinas</h4>
+    <div class="d-flex gap-2 align-items-center">
+        <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy")</span>
+        <a asp-action="PendientesDespacho" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-truck me-1"></i>Pendientes despacho
+        </a>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalRefreshCarga">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refrescar carga
+        </button>
+    </div>
+</div>
+
+<!-- Modal: Refrescar carga diaria -->
+<div class="modal fade" id="modalRefreshCarga" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="RefreshCargaDiaria" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h6 class="modal-title"><i class="bi bi-arrow-clockwise me-2 text-primary"></i>Refrescar carga diaria</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small mb-3">Ejecuta <code>PKG_PLN.SP_PLN_CARGA_DIARIA_REFRESH</code> para recalcular <code>PLN_CARGA_DIARIA</code> en el rango indicado.</p>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">Fecha inicio</label>
+                            <input type="date" name="fchIni" class="form-control form-control-sm"
+                                   value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">Fecha fin</label>
+                            <input type="date" name="fchFin" class="form-control form-control-sm"
+                                   value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+                    <div class="alert alert-warning small py-1 mt-2 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        El job automático <code>JOB_PLN_CARGA</code> lo ejecuta a las 23:30. Use esto solo para actualización manual urgente.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Ejecutar refresco
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Resumen KPIs — BUG FIX: basados en EstadoCarga (Oracle PctCarga), no PctUtilizacion -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card maq-card text-center p-3">
+            <div class="fs-2 fw-bold text-primary">@total</div>
+            <div class="text-muted small">🏭 Máquinas</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card maq-card text-center p-3">
+            <div class="fs-2 fw-bold text-danger">@sobrecargadas</div>
+            <div class="text-muted small">🔴 Sobrecargadas (&gt;95%)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card maq-card text-center p-3">
+            <div class="fs-2 fw-bold text-warning">@cargaAlta</div>
+            <div class="text-muted small">🟠 Carga alta (80–95%)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card maq-card text-center p-3">
+            <div class="fs-2 fw-bold text-success">@disponibles</div>
+            <div class="text-muted small">🟢 Disponibles (&lt;50%)</div>
+        </div>
+    </div>
+</div>
+
+<!-- BUG FIX: leyenda con umbrales reales de Oracle (PctCarga, no PctUtilizacion) -->
+<div class="d-flex gap-4 mb-3 flex-wrap">
+    <div class="leyenda-item"><span class="semaforo-dot" style="background:#198754;"></span>Disponible (&lt;50%)</div>
+    <div class="leyenda-item"><span class="semaforo-dot" style="background:#ffc107;"></span>Carga media (50–80%)</div>
+    <div class="leyenda-item"><span class="semaforo-dot" style="background:#fd7e14;"></span>Carga alta (80–95%)</div>
+    <div class="leyenda-item"><span class="semaforo-dot" style="background:#dc3545;"></span>Sobrecargada (&gt;95%)</div>
+</div>
+
+@if (!items.Any())
+{
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay datos de carga para hoy.</div>
+}
+else
+{
+    <!-- BUG FIX: agrupar por Area (Hilandería / Tintorería), antes se mostraba todo plano -->
+    @foreach (var grupo in grupos)
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold py-2">
+                <i class="bi bi-diagram-3 me-1"></i>@grupo.Key
+                <span class="badge bg-secondary ms-2">@grupo.Count() máquina(s)</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Máquina</th>
+                            <th style="min-width:180px;">Carga (PctCarga)</th>
+                            <th class="text-end">Kg asignados</th>
+                            <th class="text-end">Kg capacidad</th>
+                            <th class="text-end">Diferencia Kg</th>
+                            <th class="text-end">Pedidos</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in grupo.OrderByDescending(x => x.PctCarga))
+                        {
+                            // BUG FIX: usar PctCarga (campo Oracle) para la barra y el porcentaje mostrado.
+                            // PctUtilizacion se conserva como dato auxiliar en el tooltip.
+                            var pct   = Math.Min(m.PctCarga, 100);
+                            var color = m.ColorSemaforo;
+                            var estadoBadge = m.EstadoCarga switch {
+                                "SOBRECARGADA" => ("bg-danger",       "⚠ Sobrecargada"),
+                                "CARGA_ALTA"   => ("bg-warning text-dark", "Carga alta"),
+                                "CARGA_MEDIA"  => ("bg-info text-dark",    "Carga media"),
+                                _              => ("bg-success",      "Disponible"),
+                            };
+                            var difKg    = m.DiferenciaKg;
+                            var difClass = difKg > 0 ? "text-danger fw-bold" : difKg < 0 ? "text-success" : "text-muted";
+                            <tr class="@(m.EstadoCarga == "SOBRECARGADA" ? "table-danger" : m.EstadoCarga == "CARGA_ALTA" ? "table-warning" : "")">
+                                <td class="fw-semibold">@m.CodMaq</td>
+                                <td>
+                                    <div class="progress maq-gauge mb-1">
+                                        <div class="progress-bar" style="width:@pct%;background-color:@color;"
+                                             title="PctUtilizacion: @m.PctUtilizacion.ToString("N1")%"></div>
+                                    </div>
+                                    <small class="fw-semibold" style="color:@color;">@m.PctCarga.ToString("N1")%</small>
+                                </td>
+                                <td class="text-end">@m.KgAsignados.ToString("N0")</td>
+                                <td class="text-end text-muted">@m.KgCapacidad.ToString("N0")</td>
+                                <td class="text-end @difClass">
+                                    @(difKg > 0 ? "+" : "")@difKg.ToString("N0")
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-light text-dark border">@m.NroPedidos</span>
+                                </td>
+                                <td>
+                                    <span class="badge @estadoBadge.Item1">@estadoBadge.Item2</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}

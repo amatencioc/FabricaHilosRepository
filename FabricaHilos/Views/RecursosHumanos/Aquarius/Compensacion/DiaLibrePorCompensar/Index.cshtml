@@ -327,14 +327,10 @@
                         <table class="table table-comp table-hover mb-0">
                             <thead>
                                 <tr>
-                                    <th>ID Comp.</th>
                                     <th>Cód.</th>
                                     <th>Nombre</th>
-                                    <th>Fecha DDC</th>
-                                    <th>Fecha HE</th>
-                                    <th class="text-end">Tiempo</th>
-                                    <th>Estado</th>
-                                    <th></th>
+                                    <th class="text-center">Compensaciones</th>
+                                    <th class="text-end">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="bodyConsulta"></tbody>
@@ -344,6 +340,36 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- ── Modal detalle compensaciones por empleado (historial) ────────── -->
+<div class="modal fade" id="modalDetalleEmp" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header aq-modal-header py-2">
+                <h6 class="modal-title" id="modalDetalleEmpTitulo"><i class="bi bi-list-ul me-2"></i>Compensaciones del empleado</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" style="max-height:70vh;overflow-y:auto;">
+                <table class="table table-comp table-sm table-hover mb-0">
+                    <thead class="sticky-top" style="top:0;z-index:1;">
+                        <tr>
+                            <th>ID Comp.</th>
+                            <th>Fecha DDC</th>
+                            <th>Fecha HE</th>
+                            <th class="text-end">Tiempo</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="bodyDetalleEmp"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1215,58 +1241,77 @@ async function consultarRango() {
     }
 }
 
+// Almacén de filas por empleado para el modal de detalle
+const _consultaEmpleados = {};
+
 function renderConsulta(data) {
     const tbody = document.getElementById('bodyConsulta');
     tbody.innerHTML = '';
-    if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
-    } else {
-        // Agrupar por empleado
-        const empleados = {};
-        data.forEach(r => {
-            const key = r.codPersonal ?? '';
-            if (!empleados[key]) empleados[key] = { nombre: r.nombreCompleto ?? '', filas: [] };
-            empleados[key].filas.push(r);
-        });
+    // Limpiar almacén
+    Object.keys(_consultaEmpleados).forEach(k => delete _consultaEmpleados[k]);
 
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
+    } else {
         const fechaInicio = isoADdMmYyyy(document.getElementById('consFechaIni').value);
         const fechaFin    = isoADdMmYyyy(document.getElementById('consFechaFin').value);
 
-        Object.entries(empleados).forEach(([cod, emp]) => {
-            // Fila de subencabezado del empleado con botón exportar
+        // Agrupar por empleado
+        data.forEach(r => {
+            const key = r.codPersonal ?? '';
+            if (!_consultaEmpleados[key]) _consultaEmpleados[key] = { nombre: r.nombreCompleto ?? '', filas: [] };
+            _consultaEmpleados[key].filas.push(r);
+        });
+
+        Object.entries(_consultaEmpleados).forEach(([cod, emp]) => {
             const exportUrl = `${URL_BASE}/ExportarAcuerdo?codPersonal=${encodeURIComponent(cod)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
             tbody.insertAdjacentHTML('beforeend', `
-              <tr style="background:var(--aq-lt);">
-                <td colspan="7" class="fw-semibold small py-1 ps-2" style="color:var(--aq-dk);">
-                  <i class="bi bi-person-fill me-1"></i><code>${cod}</code> — ${emp.nombre}
-                  <span class="ms-2 text-muted fw-normal">(${emp.filas.length} comp.)</span>
+              <tr>
+                <td><code style="color:var(--aq-dk);">${cod}</code></td>
+                <td class="fw-semibold">${emp.nombre}</td>
+                <td class="text-center">
+                  <span class="badge rounded-pill" style="background:var(--aq-lt);color:var(--aq-dk);border:1px solid var(--aq-mid);">${emp.filas.length} comp.</span>
                 </td>
-                <td class="py-1 text-end pe-2">
-                  <a href="${exportUrl}" class="btn btn-sm py-0 px-2" style="background:var(--aq);color:#fff;border-color:var(--aq);" title="Exportar Acuerdo de Compensación HE" data-no-loading>
+                <td class="text-end pe-2 d-flex gap-1 justify-content-end">
+                  <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                          onclick="verDetalleEmpleado('${cod}')"
+                          title="Ver días compensados">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <a href="${exportUrl}" class="btn btn-sm py-0 px-2"
+                     style="background:var(--aq);color:#fff;border-color:var(--aq);"
+                     title="Exportar Acuerdo de Compensación HE" data-no-loading>
                     <i class="bi bi-file-earmark-word me-1"></i>Acuerdo
                   </a>
                 </td>
               </tr>`);
-
-            emp.filas.forEach(r => {
-                const btnVer = r.idCompen
-                    ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstadoDdc(${r.idCompen})" title="Ver detalle compensación ${r.idCompen}"><i class="bi bi-eye"></i></button>`
-                    : '';
-                tbody.insertAdjacentHTML('beforeend', `
-                  <tr>
-                    <td><code>${r.idCompen ?? '—'}</code></td>
-                    <td><code>${r.codPersonal ?? ''}</code></td>
-                    <td class="text-truncate" style="max-width:180px;">${r.nombreCompleto ?? ''}</td>
-                    <td><span class="badge" style="background:var(--aq-elt);color:var(--aq-err);">${r.fechaDestinoStr ?? ''}</span></td>
-                    <td><span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${r.fechaOrigenStr ?? ''}</span></td>
-                    <td class="text-end fw-semibold">${r.tiempoHhMi ?? ''}</td>
-                    <td>${badgeAplicacion(r.estadoAplicacion ?? 'PENDIENTE')}</td>
-                    <td>${btnVer}</td>
-                  </tr>`);
-            });
         });
     }
     document.getElementById('areaConsulta').style.display = 'block';
+}
+
+function verDetalleEmpleado(cod) {
+    const emp = _consultaEmpleados[cod];
+    if (!emp) return;
+    document.getElementById('modalDetalleEmpTitulo').innerHTML =
+        `<i class="bi bi-list-ul me-2"></i><code>${cod}</code> — ${emp.nombre} <span class="ms-2 fw-normal small">(${emp.filas.length} compensaciones)</span>`;
+    const tbody = document.getElementById('bodyDetalleEmp');
+    tbody.innerHTML = '';
+    emp.filas.forEach(r => {
+        const btnVer = r.idCompen
+            ? `<button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="verEstadoDdc(${r.idCompen})" title="Ver detalle compensación ${r.idCompen}"><i class="bi bi-eye"></i></button>`
+            : '';
+        tbody.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td><code>${r.idCompen ?? '—'}</code></td>
+            <td><span class="badge" style="background:var(--aq-elt);color:var(--aq-err);">${r.fechaDestinoStr ?? ''}</span></td>
+            <td><span class="badge" style="background:var(--aq-wlt);color:var(--aq-warn);">${r.fechaOrigenStr ?? ''}</span></td>
+            <td class="text-end fw-semibold">${r.tiempoHhMi ?? ''}</td>
+            <td>${badgeAplicacion(r.estadoAplicacion ?? 'PENDIENTE')}</td>
+            <td>${btnVer}</td>
+          </tr>`);
+    });
+    new bootstrap.Modal(document.getElementById('modalDetalleEmp')).show();
 }
 
 async function verEstadoDdc(idCompen) {

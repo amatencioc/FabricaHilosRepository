@@ -21,6 +21,7 @@ using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
 using FabricaHilos.Services.Sistemas;
 using FabricaHilos.Services.RecursosHumanos;
+using FabricaHilos.Services.Produccion.Planeamiento;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -155,6 +156,11 @@ builder.Services.AddSingleton<AnularDocumentoJobManager>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 builder.Services.AddScoped<AcuerdoCompHeDocxService>();
+
+// Planeamiento
+builder.Services.AddScoped<IPlnSeguimientoService, PlnSeguimientoService>();
+builder.Services.AddScoped<IPlnAlertaService, PlnAlertaService>();
+builder.Services.AddScoped<IPlnKpiService, PlnKpiService>();
 
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);

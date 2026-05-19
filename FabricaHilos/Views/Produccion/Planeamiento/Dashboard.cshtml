@@ -1,0 +1,224 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnSeguimiento>
+@using FabricaHilos.Models.Produccion.Planeamiento
+
+@{
+    ViewData["Title"] = "Dashboard de Seguimiento";
+    var estados = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? [];
+    var filtroCliente = ViewBag.FiltroCliente as string ?? "";
+    var filtroPaso    = ViewBag.FiltroPaso    as string ?? "";
+
+    var items = Model.ToList();
+    var totalActivos    = items.Count;
+    var totalRetrasados = items.Count(x => x.EstaRetrasado);
+    var totalUrgentes   = items.Count(x => x.EsUrgente);
+    var totalReprocesos = items.Count(x => x.EstaEnReproceso);
+}
+
+@section Styles {
+<style>
+    .paso-badge { font-size: .75rem; padding: .35em .65em; border-radius: .5rem; font-weight: 600; }
+    .progress-thin { height: 6px; border-radius: 3px; }
+    .row-urgente { border-left: 4px solid #dc3545 !important; }
+    .row-retrasado td:first-child { border-left: 4px solid #fd7e14; }
+    .tbl-seguimiento td { vertical-align: middle; }
+    .kpi-card { border: none; box-shadow: 0 2px 6px rgba(0,0,0,.1); border-radius: .75rem; }
+    .filtros-bar { background: #f8f9fa; border-radius: .5rem; padding: 1rem; margin-bottom: 1.25rem; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Dashboard</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0"><i class="bi bi-kanban me-2 text-primary"></i>Dashboard de Seguimiento</h4>
+    <span class="text-muted small">Actualizado: @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
+</div>
+
+<!-- KPIs resumen -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="fs-2 fw-bold text-primary">@totalActivos</div>
+            <div class="text-muted small">Ítems activos</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="fs-2 fw-bold text-danger">@totalRetrasados</div>
+            <div class="text-muted small">Con retraso</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="fs-2 fw-bold text-warning">@totalUrgentes</div>
+            <div class="text-muted small">Urgentes</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="fs-2 fw-bold text-info">@totalReprocesos</div>
+            <div class="text-muted small">En reproceso</div>
+        </div>
+    </div>
+</div>
+
+<!-- Swimlane por paso -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold py-2">
+        <i class="bi bi-bar-chart-steps me-1"></i> Ítems por etapa
+    </div>
+    <div class="card-body p-2">
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var ec in estados.OrderBy(e => e.OrdenPaso))
+            {
+                var cnt = items.Count(x => x.CodPasoAct == ec.CodPaso);
+                if (cnt == 0) continue;
+                <div class="text-center" style="min-width:80px;">
+                    <div class="badge w-100 py-2" style="background-color:@ec.ColorUi; font-size:.8rem;">
+                        @ec.CodPaso
+                    </div>
+                    <div class="fw-bold fs-5">@cnt</div>
+                    <div class="text-muted" style="font-size:.7rem;">@ec.NombrePaso</div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="filtros-bar">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label fw-semibold mb-1 small">Cliente</label>
+            <input name="codCliente" value="@filtroCliente" class="form-control form-control-sm" placeholder="Cód. cliente..." />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold mb-1 small">Etapa</label>
+            <select name="codPaso" class="form-select form-select-sm">
+                <option value="">— Todas —</option>
+                @foreach (var ec in estados.OrderBy(e => e.OrdenPaso))
+                {
+                    <option value="@ec.CodPaso" selected="@(filtroPaso == ec.CodPaso ? "selected" : null)">
+                        @ec.CodPaso — @ec.NombrePaso
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-funnel me-1"></i>Filtrar
+            </button>
+        </div>
+        <div class="col-md-2">
+            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm w-100">
+                <i class="bi bi-x-circle me-1"></i>Limpiar
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Tabla de seguimiento -->
+@if (!items.Any())
+{
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay ítems activos con los filtros seleccionados.</div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0 tbl-seguimiento">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Pedido</th>
+                            <th>Cliente</th>
+                            <th>Artículo</th>
+                            <th>Título / Color</th>
+                            <th>Etapa actual</th>
+                            <th>Avance</th>
+                            <th class="text-end">Kg pend.</th>
+                            <th>F. entrega</th>
+                            <th>Retraso</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in items)
+                        {
+                            <tr class="@(s.EsUrgente ? "table-danger" : s.EstaRetrasado ? "table-warning" : "")">
+                                <td>
+                                    <a asp-action="Pedido" asp-route-numPed="@s.NumPed" asp-route-serie="@s.Serie"
+                                       class="fw-semibold text-decoration-none">
+                                        @s.Serie-@s.NumPed
+                                    </a>
+                                    @if (s.EsUrgente)
+                                    {
+                                        <span class="badge bg-danger ms-1" title="Urgente">⚡</span>
+                                    }
+                                    @if (s.EsStock)
+                                    {
+                                        <span class="badge bg-secondary ms-1">Stock</span>
+                                    }
+                                </td>
+                                <td class="text-truncate" style="max-width:130px;" title="@s.NombreCliente">@s.NombreCliente</td>
+                                <td class="text-truncate" style="max-width:110px;" title="@s.CodArt">@s.CodArt</td>
+                                <td>
+                                    <span class="fw-semibold">@s.Titulo</span>
+                                    @if (!string.IsNullOrEmpty(s.Color))
+                                    {
+                                        <br /><small class="text-muted">@s.Color</small>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="paso-badge text-white" style="background-color:@s.ColorUi;">
+                                        @s.CodPasoAct — @s.NombrePaso
+                                    </span>
+                                    @if (s.EstaEnReproceso)
+                                    {
+                                        <span class="badge bg-danger ms-1">Reproceso C.@s.NroCiclo</span>
+                                    }
+                                </td>
+                                <td style="min-width:100px;">
+                                    <div class="progress progress-thin mt-1">
+                                        <div class="progress-bar" role="progressbar"
+                                             style="width:@s.PctAvance%;background-color:@s.ColorUi;"
+                                             title="@s.PctAvance%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">@s.PctAvance%</small>
+                                </td>
+                                <td class="text-end fw-semibold">@s.KgPendientes.ToString("N0")</td>
+                                <td>
+                                    @if (s.FchEntregaComp.HasValue)
+                                    {
+                                        <span class="@(s.EstaRetrasado ? "text-danger fw-bold" : "")">
+                                            @s.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (s.DiasRetraso > 0)
+                                    {
+                                        <span class="badge @(s.DiasRetraso >= 7 ? "bg-danger" : s.DiasRetraso >= 3 ? "bg-warning text-dark" : "bg-secondary")">
+                                            +@s.DiasRetraso d
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    <a asp-action="Pedido" asp-route-numPed="@s.NumPed" asp-route-serie="@s.Serie"
+                                       class="btn btn-outline-primary btn-sm py-0" title="Ver trazabilidad">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="text-muted small mt-2">@items.Count ítems mostrados</div>
+}

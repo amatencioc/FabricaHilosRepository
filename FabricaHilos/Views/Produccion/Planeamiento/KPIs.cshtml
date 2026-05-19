@@ -1,0 +1,226 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnKpiResumen
+
+@{
+    ViewData["Title"] = "KPIs de Planeamiento";
+    var otifMensual = Model.OtifMensual.OrderByDescending(k => k.Periodo).ToList();
+    var kpiProd = (IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnKpiProduccion>)ViewBag.KpiProduccion ?? Enumerable.Empty<FabricaHilos.Models.Produccion.Planeamiento.PlnKpiProduccion>();
+}
+
+@section Styles {
+<style>
+    .kpi-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
+    .kpi-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+    .kpi-label { font-size: .8rem; color: #6c757d; margin-top: .25rem; }
+    .gauge-bar { height: 10px; border-radius: 5px; }
+    .tbl-kpi td, .tbl-kpi th { vertical-align: middle; }
+    .area-badge { font-size: .75rem; padding: .3em .7em; border-radius: .5rem; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">KPIs</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>KPIs de Planeamiento</h4>
+    <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
+</div>
+
+<!-- KPIs resumen globales -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="kpi-value @(Model.OtifPromedio >= 95 ? "text-success" : Model.OtifPromedio >= 85 ? "text-warning" : "text-danger")">
+                @Model.OtifPromedio.ToString("N1")%
+            </div>
+            <div class="kpi-label">📦 OTIF Promedio (6m)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="kpi-value @(Model.TasaReproceso <= 2 ? "text-success" : Model.TasaReproceso <= 5 ? "text-warning" : "text-danger")">
+                @Model.TasaReproceso.ToString("N1")%
+            </div>
+            <div class="kpi-label">🔁 Tasa Reproceso</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="kpi-value @(Model.RetrasosCriticos == 0 ? "text-success" : "text-danger")">
+                @Model.RetrasosCriticos
+            </div>
+            <div class="kpi-label">🔴 Retrasos críticos</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card kpi-card text-center p-3">
+            <div class="kpi-value text-info">
+                @Model.CicloPromedioTotal.ToString("N1")d
+            </div>
+            <div class="kpi-label">⏱ Ciclo promedio</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla OTIF mensual -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold py-2">
+        <i class="bi bi-calendar3 me-1"></i> OTIF mensual (últimos 6 meses)
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm tbl-kpi mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Período</th>
+                        <th class="text-end">Ítems cerrados</th>
+                        <th class="text-end">A tiempo</th>
+                        <th class="text-end">Tarde</th>
+                        <th style="min-width:160px;">OTIF</th>
+                        <th class="text-end">Kg despachados</th>
+                        <th class="text-end">Ciclo prom. (d)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var k in otifMensual)
+                    {
+                        var pctNum = k.PctOtif;
+                        var barColor = pctNum >= 95 ? "#198754" : pctNum >= 85 ? "#ffc107" : "#dc3545";
+                        <tr>
+                            <td class="fw-semibold">@k.Periodo.ToString("MM/yyyy")</td>
+                            <td class="text-end">@k.TotalItemsCerrados</td>
+                            <td class="text-end text-success">@k.EntregadosATiempo</td>
+                            <td class="text-end text-danger">@k.EntregadosTarde</td>
+                            <td>
+                                <div class="progress gauge-bar mb-1">
+                                    <div class="progress-bar" style="width:@pctNum%;background:@barColor;"></div>
+                                </div>
+                                <span class="fw-semibold" style="color:@barColor;">@k.PctOtif.ToString("N1")%</span>
+                            </td>
+                            <td class="text-end">@k.KgTotalDespachados.ToString("N0")</td>
+                            <td class="text-end">@k.CicloPromedioDias.ToString("N1")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficos de producción por máquina (V_PLN_KPI_PRODUCCION) -->
+@if (kpiProd.Any())
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold py-2">
+            <i class="bi bi-speedometer2 me-1"></i> KPIs de Producción por Máquina (últimos 12 meses)
+        </div>
+        <div class="card-body">
+            <div id="chartKpiProduccion" style="min-height:400px;"></div>
+        </div>
+    </div>
+}
+
+<!-- Retrasos por área -->
+@if (Model.RetrasosPorArea.Any())
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold py-2">
+            <i class="bi bi-bar-chart-fill me-1"></i> Retrasos por área
+        </div>
+        <div class="card-body">
+            @{
+                var maxCnt = Model.RetrasosPorArea.Max(r => r.CantRetrasos);
+            }
+            @foreach (var r in Model.RetrasosPorArea.OrderByDescending(x => x.CantRetrasos))
+            {
+                var pct = maxCnt > 0 ? (double)r.CantRetrasos / maxCnt * 100 : 0;
+                var color = r.CantRetrasos >= 5 ? "#dc3545" : r.CantRetrasos >= 2 ? "#ffc107" : "#198754";
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-semibold small">@(string.IsNullOrEmpty(r.Area) ? "Sin área" : r.Area)</span>
+                        <div class="d-flex gap-3 align-items-center">
+                            <small class="text-muted">Prom. @r.DiasPromedio.ToString("N1") d</small>
+                            <span class="area-badge text-white" style="background:@color;">@r.CantRetrasos retraso(s)</span>
+                        </div>
+                    </div>
+                    <div class="progress gauge-bar">
+                        <div class="progress-bar" style="width:@pct%;background:@color;"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+@if (kpiProd.Any())
+{
+    <text>
+    var kpiData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(kpiProd.OrderBy(k => k.Periodo).ThenBy(k => k.TpMaq).ThenBy(k => k.CodMaq)));
+
+    // Agrupar por máquina
+    var series = {};
+    kpiData.forEach(function(d) {
+        var key = d.tpMaq + '-' + d.codMaq;
+        if (!series[key]) {
+            series[key] = {
+                name: d.codMaq + ' (' + d.area + ')',
+                data: []
+            };
+        }
+        series[key].data.push({
+            x: new Date(d.periodo).getTime(),
+            y: d.kgPorHora.toFixed(2),
+            kg: d.kgProducidos.toFixed(0),
+            horas: d.horasPromTurno.toFixed(1),
+            parada: d.horasPromParada.toFixed(1),
+            dias: d.diasActivos
+        });
+    });
+
+    var seriesArray = Object.values(series);
+
+    var optionsProduccion = {
+        chart: {
+            type: 'line',
+            height: 400,
+            toolbar: { show: true }
+        },
+        series: seriesArray,
+        xaxis: {
+            type: 'datetime',
+            labels: { format: 'MMM yyyy' }
+        },
+        yaxis: {
+            title: { text: 'Kg por hora' },
+            labels: { formatter: function(v) { return v.toFixed(1); } }
+        },
+        stroke: { width: 3, curve: 'smooth' },
+        markers: { size: 5 },
+        tooltip: {
+            x: { format: 'MMM yyyy' },
+            y: {
+                formatter: function(val, opts) {
+                    var d = opts.w.config.series[opts.seriesIndex].data[opts.dataPointIndex];
+                    return val + ' kg/h<br/>' +
+                           '<b>Kg producidos:</b> ' + d.kg + '<br/>' +
+                           '<b>Horas turno:</b> ' + d.horas + '<br/>' +
+                           '<b>Horas parada:</b> ' + d.parada + '<br/>' +
+                           '<b>Días activos:</b> ' + d.dias;
+                }
+            }
+        },
+        legend: { position: 'top' },
+        colors: ['#0d6efd','#6610f2','#6f42c1','#d63384','#dc3545','#fd7e14','#ffc107','#198754','#20c997']
+    };
+
+    var chartProduccion = new ApexCharts(document.querySelector("#chartKpiProduccion"), optionsProduccion);
+    chartProduccion.render();
+    </text>
+}
+</script>
+}

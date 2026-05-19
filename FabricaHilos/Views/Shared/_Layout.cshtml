@@ -96,6 +96,52 @@
                     </ul>
                 </li>
                 }
+                @if (menus.Planeamiento)
+                {
+                <li class="sidebar-section">PLANEAMIENTO</li>
+                }
+                @if (menus.Planeamiento)
+                {
+                <li>
+                    <a asp-controller="Planeamiento" asp-action="Index" class="sidebar-link @(ctrl == "Planeamiento" ? "active" : "")">
+                        <i class="bi bi-kanban"></i> Planeamiento
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        @if (menus.PlaneamientoDashboard)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Dashboard" ? "active" : "")">
+                                <i class="bi bi-speedometer2"></i> Dashboard
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoCargaMaquinas)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
+                                <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoAlertas)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
+                                <i class="bi bi-bell"></i> Alertas
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoKPIs)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="KPIs" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "KPIs" ? "active" : "")">
+                                <i class="bi bi-graph-up-arrow"></i> KPIs
+                            </a>
+                        </li>
+                        }
+                    </ul>
+                </li>
+                }
                 @if (menus.Sgc)
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>

@@ -1,6 +1,17 @@
 # Copilot Instructions — Sistema SIG · Módulo PLN_ Planeamiento de Planta
 > Empresa manufacturera de **hilandería y tintorería de hilados**. Base de datos Oracle 11.2.0.4 (esquema SIG).
-> Fecha de referencia: 18/05/2026
+> Fecha de referencia: 18/05/2026 · **Migración PKG_PLN completada: 2025-07**
+
+---
+
+## ⚠️ REGLA ABSOLUTA DE MIGRACIÓN (vigente desde 2025-07)
+
+**NUNCA escribir SQL de negocio en los servicios C#.**
+Todo query debe apuntar a una **vista `V_PLN_*`** o **tabla `PLN_*`** definida en `PKG_PLN.sql`.
+Todo procedimiento debe llamarse como `BEGIN PKG_PLN.<nombre>(...); END;`.
+
+> Antes de añadir cualquier query en C#, verificar que el objeto Oracle exista en `PKG_PLN.sql`.
+> Si la vista no expone el dato, **modificar la vista en Oracle**, nunca construir un query ad-hoc en C#.
 
 ---
 
@@ -58,12 +69,13 @@ FabricaHilos/
 │   ├── OracleBaseController.cs      ← base abstracta: verifica sesión Oracle en OnActionExecuting
 │   ├── Account/                     ← login, logout, acceso denegado
 │   └── Produccion/
-│       └── PlaneamientoController.cs ← nuevo: Dashboard, Pedido, CargaMaquinas, Alertas, KPIs
+│       └── PlaneamientoController.cs ← Dashboard, Pedido, PedidoGantt, CargaMaquinas, Alertas, KPIs
 ├── Views/
 │   ├── Produccion/
 │   │   └── Planeamiento/
 │   │       ├── Dashboard.cshtml
 │   │       ├── Pedido.cshtml
+│   │       ├── PedidoGantt.cshtml
 │   │       ├── CargaMaquinas.cshtml
 │   │       ├── Alertas.cshtml
 │   │       └── KPIs.cshtml
@@ -71,18 +83,25 @@ FabricaHilos/
 │       └── _Layout.cshtml
 ├── Services/
 │   ├── OracleServiceBase.cs         ← base abstracta: GetOracleConnectionString(), S (prefijo esquema)
-│   └── Produccion/
-│       ├── IPlnSeguimientoService.cs + PlnSeguimientoService.cs
-│       ├── IPlnAlertaService.cs     + PlnAlertaService.cs
-│       └── IPlnKpiService.cs        + PlnKpiService.cs
+│   └── Produccion/Planeamiento/
+│       ├── IPlnSeguimientoService.cs + PlnSeguimientoService.cs  ← lectura + wrappers PKG_PLN
+│       ├── IPlnAlertaService.cs     + PlnAlertaService.cs        ← V_PLN_ALERTAS_ACTIVAS
+│       └── IPlnKpiService.cs        + PlnKpiService.cs           ← V_PLN_KPI_* + carga máquinas
 ├── Models/
-│   └── Produccion/
-│       ├── PlnSeguimiento.cs
-│       ├── PlnAlerta.cs
-│       ├── PlnEstadoCodigo.cs
-│       ├── PlnCargaDiaria.cs
-│       └── PlnKpi.cs
-├── Data/
+│   └── Produccion/Planeamiento/
+│       ├── PlnSeguimiento.cs        ← V_PLN_ESTADO_ITEM / PLN_SEGUIMIENTO
+│       ├── PlnAlerta.cs             ← V_PLN_ALERTAS_ACTIVAS / PLN_ALERTA
+│       ├── PlnEstadoCodigo.cs       ← PLN_ESTADO_CODIGO
+│       ├── PlnCargaDiaria.cs        ← V_PLN_CARGA_MAQUINAS
+│       ├── PlnEstadoPedido.cs       ← V_PLN_ESTADO_PEDIDO
+│       ├── PlnPendienteDespacho.cs  ← V_PLN_PENDIENTES_DESP
+│       ├── PlnLogEvento.cs          ← PLN_LOG_EVENTOS
+│       ├── PlnFechaEstimada.cs      ← PLN_FECHAS_ESTIMADAS
+│       ├── PlnTrazabilidad.cs       ← V_PLN_TRAZABILIDAD
+│       ├── PlnKpi.cs                ← V_PLN_KPI_CUMPLIMIENTO (PlnKpi + PlnKpiResumen + PlnRetrasoArea)
+│       ├── PlnKpiProduccion.cs      ← V_PLN_KPI_PRODUCCION
+│       └── PlnPedidoViewModel.cs    ← ViewModel detalle pedido
+
 │   └── ApplicationDbContext.cs      ← EF Core solo para Identity (SQLite)
 └── wwwroot/
     └── js/charts/                   ← configuraciones ApexCharts

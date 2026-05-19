@@ -1,0 +1,172 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnTrazabilidad>
+
+@{
+    ViewData["Title"] = "Trazabilidad de Pedido";
+    var numPed = ViewBag.NumPed;
+    var serie = ViewBag.Serie;
+}
+
+@section Styles {
+<style>
+    .traza-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
+    .tbl-traza td, .tbl-traza th { vertical-align: middle; font-size: .85rem; }
+    .badge-desvio { font-size: .75rem; padding: .3em .6em; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Trazabilidad</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-diagram-3 me-2 text-primary"></i>
+        Trazabilidad de Pedido @numPed-@serie
+    </h4>
+    <a asp-action="Pedido" asp-route-numPed="@numPed" asp-route-serie="@serie" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver al pedido
+    </a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>No se encontró información de trazabilidad para este pedido.
+    </div>
+}
+else
+{
+    <div class="card traza-card mb-4">
+        <div class="card-header bg-white fw-semibold py-2">
+            <i class="bi bi-calendar3-week me-1"></i> Timeline completo de fechas (estimadas vs. reales)
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm tbl-traza table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ítem</th>
+                            <th>Cliente</th>
+                            <th>Artículo</th>
+                            <th>Fch Pedido</th>
+                            <th>Fch Aprobación</th>
+                            <th>Fch Planeada</th>
+                            <th>Fch Entrega Plan</th>
+                            <th>Fch Est Cono 1</th>
+                            <th>Fch Est Teñido</th>
+                            <th>Fch Real Programado</th>
+                            <th>Fch Real Producción</th>
+                            <th>Fch Real Partida</th>
+                            <th>Fch Real TT Ini</th>
+                            <th>Fch Prog TT</th>
+                            <th>Fch Real TT Fin</th>
+                            <th>Fch Real Secado</th>
+                            <th>Fch Real Calidad</th>
+                            <th>Fch Real Alm PT</th>
+                            <th>Fch Real Despacho</th>
+                            <th>Fch Compromiso Cliente</th>
+                            <th class="text-center">Desvío Cliente</th>
+                            <th>Ciclo total (d)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Model.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+                        {
+                            <tr>
+                                <td class="fw-semibold">@t.Nro.@t.NumDet</td>
+                                <td>@t.CodCliente</td>
+                                <td>@t.CodArt</td>
+                                <td>@t.FchPedido.ToString("dd/MM/yyyy")</td>
+                                <td>@(t.FchAprobPedido?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchPlaneada?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchEntregaPlan?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchEstCono1?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchEstTenido?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealProgramado?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealProduccion?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealPartida?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealTinIni?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchProgTin?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealTinFin?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealSecado?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealCalidad?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealAlmPt?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchRealDespacho?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(t.FchCompromisoCliente?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td class="text-center">
+                                    @if (t.DiasDesvioCliente.HasValue)
+                                    {
+                                        <span class="badge-desvio badge @t.DesvioClienteCss">
+                                            @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N0") d
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@(t.DiasTotalCiclo?.ToString("N1") ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card traza-card">
+        <div class="card-header bg-white fw-semibold py-2">
+            <i class="bi bi-clock-history me-1"></i> Métricas de tiempo (días)
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm tbl-traza table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ítem</th>
+                            <th>Pedido → Partida</th>
+                            <th>En Tintorería</th>
+                            <th>Partida → Alm PT</th>
+                            <th>Alm PT → Despacho</th>
+                            <th>Ciclo total</th>
+                            <th>Desvío vs Cliente</th>
+                            <th>Paso actual</th>
+                            <th>Retraso</th>
+                            <th>Ciclo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Model.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+                        {
+                            <tr>
+                                <td class="fw-semibold">@t.Nro.@t.NumDet</td>
+                                <td>@(t.DiasPedidoAPartida?.ToString("N1") ?? "-")</td>
+                                <td>@(t.DiasEnTintoreria?.ToString("N1") ?? "-")</td>
+                                <td>@(t.DiasPartidaAAlmPt?.ToString("N1") ?? "-")</td>
+                                <td>@(t.DiasAlmPtADespacho?.ToString("N1") ?? "-")</td>
+                                <td>@(t.DiasTotalCiclo?.ToString("N1") ?? "-")</td>
+                                <td>
+                                    @if (t.DiasDesvioCliente.HasValue)
+                                    {
+                                        <span class="badge-desvio badge @t.DesvioClienteCss">
+                                            @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N1")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@t.CodPasoAct</td>
+                                <td class="@(t.DiasRetraso > 0 ? "text-danger fw-semibold" : "")">@t.DiasRetraso</td>
+                                <td>@t.NroCiclo</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

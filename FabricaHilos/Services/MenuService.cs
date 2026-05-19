@@ -274,6 +274,30 @@ public class MenuService : IMenuService
             CcNivelTiempo = global.CcNivelTiempo
                 && TieneAlguno("CreditosCobranza", "CcNivelTiempo"),
 
+            // ?? Planeamiento ???????????????????????????????????????????????????
+            Planeamiento = TieneAlguno(
+                "Planeamiento",
+                "PlaneamientoDashboard",
+                "PlaneamientoPedido",
+                "PlaneamientoCargaMaquinas",
+                "PlaneamientoAlertas",
+                "PlaneamientoKPIs"),
+
+            PlaneamientoDashboard = global.PlaneamientoDashboard
+                && TieneAlguno("Planeamiento", "PlaneamientoDashboard"),
+
+            PlaneamientoPedido = global.PlaneamientoPedido
+                && TieneAlguno("Planeamiento", "PlaneamientoPedido"),
+
+            PlaneamientoCargaMaquinas = global.PlaneamientoCargaMaquinas
+                && TieneAlguno("Planeamiento", "PlaneamientoCargaMaquinas"),
+
+            PlaneamientoAlertas = global.PlaneamientoAlertas
+                && TieneAlguno("Planeamiento", "PlaneamientoAlertas"),
+
+            PlaneamientoKPIs = global.PlaneamientoKPIs
+                && TieneAlguno("Planeamiento", "PlaneamientoKPIs"),
+
             // ?? Sub-módulos: Sistemas ?????????????????????????????????????????
             // Sub-padre SistemasIndicadores visible si tiene también cualquier hijo suyo
             SistemasIndicadores = global.SistemasIndicadores
@@ -314,6 +338,7 @@ public class MenuService : IMenuService
         if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
         if (menus.Logistica)    return ("Logistica",        "Index", null, null);
         if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
+        if (menus.Planeamiento)  return ("Planeamiento",     "Index", null, null);
         if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
         // Sin módulos asignados o AccesoWeb vacío: redirigir a login para evitar
         // aterrizar en un módulo al que el usuario no tiene acceso.

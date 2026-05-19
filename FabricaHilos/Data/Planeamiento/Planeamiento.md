@@ -4037,4 +4037,190 @@ VALIDACIÓN FUNCIONAL
 
 ---
 
+## 14. MIGRACIÓN PKG_PLN.sql → CAPA C# (.NET 8)
+
+> **Estado**: ✅ Migración completa — todos los queries ad-hoc eliminados.
+> **Fecha**: 2025-07 · Rama: `main`
+
+### 14.1 Principio rector
+
+La capa C# es **solo un proxy**. Toda la lógica de negocio reside en Oracle:
+
+| Capa | Responsabilidad |
+|---|---|
+| **PKG_PLN (Oracle)** | Lógica: triggers, procedimientos, KPIs, alertas, fechas estimadas |
+| **Vistas V_PLN_*** | Contratos de lectura: exponen JOINs complejos como filas planas |
+| **Servicios C#** | Ejecutan SELECT sobre vistas / CALL a procedimientos. Sin SQL de negocio |
+| **DTOs C#** | Reflejo 1:1 de las columnas de vistas/tablas. Sólo propiedades de UI (computed) |
+
+**Regla absoluta**: Nunca añadir lógica de negocio en C#. Si la vista no expone el dato, modificar la vista en Oracle, no construir un query ad-hoc en el servicio.
+
+---
+
+### 14.2 Mapa completo: Objetos Oracle → C#
+
+#### Tablas base (lectura directa)
+
+| Tabla Oracle | Método C# | Servicio | DTO |
+|---|---|---|---|
+| `PLN_SEGUIMIENTO` | `GetPorPedidoAsync` | `PlnSeguimientoService` | `PlnSeguimiento` |
+| `PLN_ESTADO_CODIGO` | `GetEstadosAsync` | `PlnSeguimientoService` | `PlnEstadoCodigo` |
+| `PLN_LOG_EVENTOS` | `GetEventosPorPedidoAsync` | `PlnSeguimientoService` | `PlnLogEvento` |
+| `PLN_FECHAS_ESTIMADAS` | `GetFechasEstimadasAsync` | `PlnSeguimientoService` | `PlnFechaEstimada` |
+| `PLN_ALERTA` | `ResolverAsync` / `IgnorarAsync` | `PlnAlertaService` | — (UPDATE directo) |
+
+#### Vistas (lectura vía SELECT *)
+
+| Vista Oracle (§8 PKG_PLN) | Método C# | Servicio | DTO |
+|---|---|---|---|
+| `V_PLN_ESTADO_ITEM` | `GetActivosAsync` | `PlnSeguimientoService` | `PlnSeguimiento` |
+| `V_PLN_TRAZABILIDAD` | `GetTrazabilidadAsync` | `PlnSeguimientoService` | `PlnTrazabilidad` |
+| `V_PLN_ALERTAS_ACTIVAS` | `GetActivasAsync` / `GetAlertasPorPedidoAsync` | `PlnAlertaService` / `PlnSeguimientoService` | `PlnAlerta` |
+| `V_PLN_ESTADO_PEDIDO` | `GetEstadoPedidosAsync` | `PlnKpiService` | `PlnEstadoPedido` |
+| `V_PLN_CARGA_MAQUINAS` | `GetCargaMaquinasAsync` | `PlnKpiService` | `PlnCargaDiaria` |
+| `V_PLN_PENDIENTES_DESP` | `GetPendientesDespachoAsync` | `PlnKpiService` | `PlnPendienteDespacho` |
+| `V_PLN_KPI_CUMPLIMIENTO` | `GetResumenAsync` | `PlnKpiService` | `PlnKpi` / `PlnKpiResumen` |
+| `V_PLN_KPI_PRODUCCION` | `GetKpiProduccionAsync` | `PlnKpiService` | `PlnKpiProduccion` |
+
+#### Procedimientos del paquete (escritura)
+
+| Procedimiento Oracle (§6 PKG_PLN) | Método C# | Servicio | Notas |
+|---|---|---|---|
+| `PKG_PLN.SP_PLN_AVANZA_PASO` | `AvanzaPasoAsync` | `PlnSeguimientoService` | Solo correcciones manuales. Los triggers llaman al mismo SP automáticamente |
+| `PKG_PLN.SP_PLN_CIERRE_ITEM` | `CierreItemAsync` | `PlnSeguimientoService` | SP hace COMMIT interno |
+| `PKG_PLN.SP_PLN_REPROGRAMAR` | `ReprogramarAsync` | `PlnSeguimientoService` | Nueva `FCH_EST_DESPACHO` + historial en `PLN_FECHAS_ESTIMADAS` |
+
+> Los procedimientos `SP_PLN_INIT_SEGUIMIENTO`, `SP_PLN_CALCULA_FECHAS` y `SP_PLN_GENERA_ALERTAS` son invocados exclusivamente desde **triggers Oracle o Jobs** y **no tienen wrapper C#** — es el comportamiento correcto.
+
+---
+
+### 14.3 Catálogo de DTOs
+
+| DTO | Archivo | Vista/Tabla origen | Propiedades UI (computed) |
+|---|---|---|---|
+| `PlnSeguimiento` | `PlnSeguimiento.cs` | `V_PLN_ESTADO_ITEM` / `PLN_SEGUIMIENTO` | `PctAvance`, `EstaRetrasado`, `EsUrgente`, `EstaEnReproceso`, `EsStock`, `SemaforoCss` |
+| `PlnEstadoCodigo` | `PlnEstadoCodigo.cs` | `PLN_ESTADO_CODIGO` | `Area` (switch sobre `CodPaso`) |
+| `PlnLogEvento` | `PlnLogEvento.cs` | `PLN_LOG_EVENTOS` | `TipoEventoDesc`, `TipoEventoCss` |
+| `PlnFechaEstimada` | `PlnFechaEstimada.cs` | `PLN_FECHAS_ESTIMADAS` | `MotivoDesc`, `DiferCss` |
+| `PlnTrazabilidad` | `PlnTrazabilidad.cs` | `V_PLN_TRAZABILIDAD` | `DesvioClienteCss`, `DespachadoATiempo`, `DespachadoTardio` |
+| `PlnAlerta` | `PlnAlerta.cs` | `V_PLN_ALERTAS_ACTIVAS` / `PLN_ALERTA` | `NivelDesc`, `NivelCss`, `EstaVencida` |
+| `PlnEstadoPedido` | `PlnEstadoPedido.cs` | `V_PLN_ESTADO_PEDIDO` | `EstaRetrasado`, `EstaCerrado`, `SemaforoCss` |
+| `PlnCargaDiaria` | `PlnCargaDiaria.cs` | `V_PLN_CARGA_MAQUINAS` | `Area` (switch sobre `TpMaq`), `EstaSobrecargada`, `ColorSemaforo` |
+| `PlnPendienteDespacho` | `PlnPendienteDespacho.cs` | `V_PLN_PENDIENTES_DESP` | `EsUrgente`, `EstaVencido`, `SemaforoCss` |
+| `PlnKpi` | `PlnKpi.cs` | `V_PLN_KPI_CUMPLIMIENTO` | — |
+| `PlnKpiResumen` | `PlnKpi.cs` | Agregado en C# | `CicloPromedioTotal`, colecciones `OtifMensual`, `RetrasosPorArea` |
+| `PlnKpiProduccion` | `PlnKpiProduccion.cs` | `V_PLN_KPI_PRODUCCION` | `PeriodoStr`, `Area`, `EficienciaCss` |
+
+---
+
+### 14.4 Arquitectura de servicios
+
+```
+PlaneamientoController
+├── IPlnSeguimientoService  →  PlnSeguimientoService
+│   ├── GetActivosAsync()              → V_PLN_ESTADO_ITEM
+│   ├── GetPorPedidoAsync()            → PLN_SEGUIMIENTO + V_PLN_ESTADO_ITEM
+│   ├── GetEstadosAsync()              → PLN_ESTADO_CODIGO  (caché 30 min)
+│   ├── GetEventosPorPedidoAsync()     → PLN_LOG_EVENTOS
+│   ├── GetAlertasPorPedidoAsync()     → V_PLN_ALERTAS_ACTIVAS
+│   ├── GetTrazabilidadAsync()         → V_PLN_TRAZABILIDAD
+│   ├── GetFechasEstimadasAsync()      → PLN_FECHAS_ESTIMADAS
+│   ├── AvanzaPasoAsync()              → PKG_PLN.SP_PLN_AVANZA_PASO
+│   ├── CierreItemAsync()              → PKG_PLN.SP_PLN_CIERRE_ITEM
+│   └── ReprogramarAsync()             → PKG_PLN.SP_PLN_REPROGRAMAR
+│
+├── IPlnAlertaService       →  PlnAlertaService
+│   ├── GetActivasAsync()              → V_PLN_ALERTAS_ACTIVAS
+│   ├── ResolverAsync()                → PLN_ALERTA (UPDATE)
+│   └── IgnorarAsync()                 → PLN_ALERTA (UPDATE)
+│
+└── IPlnKpiService          →  PlnKpiService
+    ├── GetResumenAsync()              → V_PLN_KPI_CUMPLIMIENTO + V_PLN_ESTADO_ITEM
+    ├── GetCargaMaquinasAsync()        → V_PLN_CARGA_MAQUINAS
+    ├── GetEstadoPedidosAsync()        → V_PLN_ESTADO_PEDIDO
+    ├── GetPendientesDespachoAsync()   → V_PLN_PENDIENTES_DESP
+    └── GetKpiProduccionAsync()        → V_PLN_KPI_PRODUCCION
+```
+
+---
+
+### 14.5 Convenciones técnicas adoptadas
+
+#### Helpers en servicios
+
+```csharp
+// Todos los servicios comparten los mismos helpers locales (no estáticos globales):
+private static DateTime? SafeDate(object? v)   // NULL-safe → DateTime?
+private static string    SafeStr(object? v)    // NULL-safe → string vacío
+private static T         SafeVal<T>(object? v) // NULL-safe → T con default(T)
+```
+
+#### Caché de catálogo
+
+`PLN_ESTADO_CODIGO` se cachea en memoria 30 minutos (`IMemoryCache`). El método `GetEstadosAsync()` es el único que usa caché. Los eventos usan el diccionario en memoria para resolver `NombrePaso` sin JOIN en BD.
+
+#### Parámetros Oracle
+
+- Siempre `cmd.BindByName = true` cuando hay más de un parámetro.
+- Fechas: `OracleDbType.Date` (no `Varchar2`).
+- Nullable decimals/strings: `OracleParameter` explícito con `DBNull.Value`.
+- Nunca usar `OracleDbType.NVarchar2`; el charset de BD es `WE8ISO8859P15`.
+
+#### Esquema dinámico
+
+Todos los queries usan `{S}` como prefijo de esquema (propiedad heredada de `OracleServiceBase`), lo que permite deploys en esquemas distintos (SIG, SIG_TEST) sin cambios de código.
+
+#### Ordinals pre-calculados
+
+`MapSeguimientoOrd` usa `GetOrdinal()` una sola vez antes del bucle para evitar el costo de búsqueda por nombre en cada fila.
+
+---
+
+### 14.6 Rutas de acceso (Controller → View)
+
+| Ruta | Acción | Datos principales |
+|---|---|---|
+| `GET /Planeamiento` | `Index()` | Cards del módulo (flags de menú) |
+| `GET /Planeamiento/Dashboard` | `Dashboard(?codCliente,?codPaso)` | `V_PLN_ESTADO_ITEM` |
+| `GET /Planeamiento/Pedido?numPed=&serie=` | `Pedido()` | `PLN_SEGUIMIENTO` + `PLN_LOG_EVENTOS` + `V_PLN_ALERTAS_ACTIVAS` |
+| `GET /Planeamiento/PedidoGantt?numPed=&serie=` | `PedidoGantt()` | Igual que Pedido + Gantt JS |
+| `GET /Planeamiento/CargaMaquinas` | `CargaMaquinas()` | `V_PLN_CARGA_MAQUINAS` |
+| `GET /Planeamiento/Alertas` | `Alertas()` | `V_PLN_ALERTAS_ACTIVAS` |
+| `POST /Planeamiento/ResolverAlerta` | `ResolverAlerta(idAlerta)` | UPDATE `PLN_ALERTA` |
+| `POST /Planeamiento/IgnorarAlerta` | `IgnorarAlerta(idAlerta)` | UPDATE `PLN_ALERTA` |
+| `GET /Planeamiento/KPIs` | `KPIs()` | `V_PLN_KPI_CUMPLIMIENTO` + `V_PLN_ESTADO_ITEM` |
+
+---
+
+### 14.7 Pendientes / Backlog .NET
+
+| # | Descripción | Prioridad | Depende de |
+|---|---|---|---|
+| P01 | Exponer `GetTrazabilidadAsync` desde el controller (GET `/Planeamiento/Trazabilidad`) | Alta | — |
+| P02 | Exponer `GetKpiProduccionAsync` en la vista KPIs.cshtml | Alta | — |
+| P03 | Agregar endpoint AJAX para `AvanzaPasoAsync` (corrección manual de paso) | Media | Validar autorización por rol |
+| P04 | Agregar endpoint AJAX para `ReprogramarAsync` (nueva fecha de despacho) | Media | Modal de confirmación |
+| P05 | Vista `/Planeamiento/Historial` usando `GetFechasEstimadasAsync` | Media | — |
+| P06 | Agregar `SP_PLN_INIT_SEGUIMIENTO` como endpoint de prueba para soporte | Baja | Solo admins |
+| P07 | Worker Service nocturno en `FabricaHilos.Notificaciones` que llame `SP_PLN_GENERA_ALERTAS` | Media | Job ya existe en Oracle; wrapper C# opcional |
+
+---
+
+### 14.8 Bugs resueltos durante la migración
+
+| Bug | Síntoma | Corrección |
+|---|---|---|
+| `ORA-00904 AREA` | `PLN_ESTADO_CODIGO` no tiene columna `AREA` | `Area` se computa en `PlnEstadoCodigo.cs` (switch sobre `CodPaso`) |
+| `ORA-00904 COD_PASO` | `PLN_CARGA_DIARIA` no tiene `COD_PASO` | Eliminado del query; `Area` se computa en `PlnCargaDiaria.cs` |
+| `horas_sin_resolver` | La vista devuelve días decimales, no horas | Multiplicado × 24 en el mapper de C# |
+| `TO_CHAR(periodo)` en KPI | `PlnKpi.Periodo` era `string`, query usaba `TO_CHAR` | Cambiado a `DateTime`; query usa columna DATE directa |
+| SQL ad-hoc en `GetResumenAsync` | Query mezclaba lógica de negocio en C# | Reemplazado por `V_PLN_KPI_CUMPLIMIENTO` + `V_PLN_ESTADO_ITEM` |
+| JOIN redundante en `GetPorPedidoAsync` | Query hacía JOIN a `V_PLN_TRAZABILIDAD` innecesariamente | Simplificado: `PLN_SEGUIMIENTO` JOIN `V_PLN_ESTADO_ITEM` |
+
+---
+
+*Sección 14 agregada: 2025-07 · Migración PKG_PLN.sql → C# completada · .NET 8 / C# 12*
+
+---
+
 *Documento generado: 16/05/2026 · Fuente: Oracle 11.2.0.4 · Esquema SIG · 1.016 tablas · 157 vistas · 18 paquetes*

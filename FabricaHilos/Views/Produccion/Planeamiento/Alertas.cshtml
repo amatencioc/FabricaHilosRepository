@@ -1,0 +1,236 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnAlerta>
+
+@{
+    ViewData["Title"] = "Alertas de Planeamiento";
+    var items = Model.ToList();
+    var criticas  = items.Count(x => x.Nivel == "C");
+    var altas     = items.Count(x => x.Nivel == "A");
+    var medias    = items.Count(x => x.Nivel == "M");
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Alertas</li>
+}
+
+<!-- Modal de confirmación Bootstrap -->
+<div class="modal fade" id="modalConfirm" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalConfirmTitle">Confirmar acción</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2" id="modalConfirmBody">¿Está seguro?</div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formConfirm" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary btn-sm" id="btnConfirmOk">Confirmar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0"><i class="bi bi-bell-fill me-2 text-danger"></i>Alertas activas</h4>
+    <div class="d-flex gap-2 align-items-center">
+        <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalGenerarAlertas">
+            <i class="bi bi-arrow-repeat me-1"></i>Generar alertas
+        </button>
+    </div>
+</div>
+
+<!-- Modal: Generar alertas -->
+<div class="modal fade" id="modalGenerarAlertas" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title"><i class="bi bi-arrow-repeat me-2 text-primary"></i>Generar / Actualizar alertas</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small mb-2">Ejecuta <code>PKG_PLN.SP_PLN_GENERA_ALERTAS</code> manualmente.</p>
+                <div class="alert alert-info small py-1 mb-0">
+                    El job automático lo ejecuta cada hora. Úselo solo si necesita actualización inmediata.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <form asp-action="GenerarAlertas" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-arrow-repeat me-1"></i>Ejecutar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+    <div class="col-4 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-2 fw-bold text-danger">@criticas</div>
+            <div class="text-muted small">🔴 Críticas</div>
+        </div>
+    </div>
+    <div class="col-4 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-2 fw-bold text-warning">@altas</div>
+            <div class="text-muted small">🟠 Altas</div>
+        </div>
+    </div>
+    <div class="col-4 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-2 fw-bold text-info">@medias</div>
+            <div class="text-muted small">🟡 Medias</div>
+        </div>
+    </div>
+</div>
+
+@if (!items.Any())
+{
+    <div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>No hay alertas activas en este momento.</div>
+}
+else
+{
+    @foreach (var nivel in new[] { "C", "A", "M" })
+    {
+        var grupo = items.Where(x => x.Nivel == nivel).OrderBy(x => x.FchLimite).ToList();
+        var nivelLabel = nivel == "C" ? "Crítica" : nivel == "A" ? "Alta" : "Media";
+        var nivelClass = nivel == "C" ? "danger" : nivel == "A" ? "warning" : "info";
+
+        if (grupo.Any())
+        {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold py-2">
+                <span class="badge bg-@nivelClass me-2">@nivelLabel</span>
+                @grupo.Count alerta(s)
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                   <th>Pedido</th>
+                                   <th>Ítem</th>
+                                   <th>Cliente</th>
+                                   <th>Tipo</th>
+                                   <th>Título</th>
+                                   <th>Sin resolver</th>
+                                   <th>Límite</th>
+                                   <th>Generada</th>
+                                   <th></th>
+                               </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in grupo)
+                            {
+                                <tr class="@(nivel == "C" ? "table-danger" : nivel == "A" ? "table-warning" : "")">
+                                     <td>
+                                         <a asp-action="Pedido" asp-route-numPed="@a.NumPed" asp-route-serie="@a.Serie"
+                                            class="fw-semibold text-decoration-none">
+                                             @a.Serie-@a.NumPed
+                                         </a>
+                                     </td>
+                                     <td>
+                                         @if (a.Nro.HasValue)
+                                         {
+                                             <span class="badge bg-light text-dark border">Det.@a.Nro</span>
+                                         }
+                                         else
+                                         {
+                                             <span class="text-muted">—</span>
+                                         }
+                                     </td>
+                                     <td class="text-truncate" style="max-width:120px;" title="@a.NombreCliente">@a.NombreCliente</td>
+                                     <td><span class="badge bg-secondary">@a.TipoTexto</span></td>
+                                     <td>@a.Titulo</td>
+                                     <td>
+                                         @if (a.HorasSinResolver.HasValue)
+                                         {
+                                             var horas = (int)a.HorasSinResolver.Value;
+                                             var dias  = horas / 24;
+                                             var hRest = horas % 24;
+                                             <span class="@(horas >= 48 ? "text-danger fw-bold" : horas >= 24 ? "text-warning fw-bold" : "text-muted")" title="@horas h sin resolver">
+                                                 @if (dias > 0) { <text>@dias d @hRest h</text> }
+                                                 else           { <text>@horas h</text> }
+                                             </span>
+                                         }
+                                         else
+                                         {
+                                             <span class="text-muted">—</span>
+                                         }
+                                     </td>
+                                    <td>
+                                        @if (a.FchLimite.HasValue)
+                                        {
+                                            var diasLimite = (a.FchLimite.Value - DateTime.Today).Days;
+                                            <span class="@(diasLimite < 0 ? "text-danger fw-bold" : diasLimite == 0 ? "text-warning fw-bold" : "")">
+                                                @a.FchLimite.Value.ToString("dd/MM/yy")
+                                                @if (diasLimite < 0)
+                                                {
+                                                    <span class="badge bg-danger ms-1">Vencida</span>
+                                                }
+                                                else if (diasLimite == 0)
+                                                {
+                                                    <span class="badge bg-warning text-dark ms-1">Hoy</span>
+                                                }
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </td>
+                                    <td><small class="text-muted">@a.FchGeneracion.ToString("dd/MM/yy")</small></td>
+                                    <td>
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-outline-success btn-sm py-0"
+                                                    onclick="confirmarAccion('@Url.Action("ResolverAlerta","Planeamiento")', @a.IdAlerta, 'Resolver', 'Marcar la alerta como resuelta')"
+                                                    title="Resolver">
+                                                <i class="bi bi-check2"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm py-0"
+                                                    onclick="confirmarAccion('@Url.Action("IgnorarAlerta","Planeamiento")', @a.IdAlerta, 'Ignorar', 'Ignorar esta alerta')"
+                                                    title="Ignorar">
+                                                <i class="bi bi-eye-slash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        }
+    }
+}
+
+@section Scripts {
+<script>
+    function confirmarAccion(url, idAlerta, accion, descripcion) {
+        document.getElementById('modalConfirmTitle').textContent = accion + ' alerta';
+        document.getElementById('modalConfirmBody').textContent = descripcion + ' #' + idAlerta + '. ¿Confirmar?';
+        document.getElementById('formConfirm').action = url;
+        document.getElementById('btnConfirmOk').textContent = accion;
+
+        // agrega el idAlerta como campo oculto
+        const existing = document.getElementById('hiddenIdAlerta');
+        if (existing) existing.remove();
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden'; hidden.name = 'idAlerta'; hidden.id = 'hiddenIdAlerta';
+        hidden.value = idAlerta;
+        document.getElementById('formConfirm').appendChild(hidden);
+
+        new bootstrap.Modal(document.getElementById('modalConfirm')).show();
+    }
+</script>
+}

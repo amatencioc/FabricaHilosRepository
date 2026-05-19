@@ -1,0 +1,119 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnFechaEstimada>
+
+@{
+    ViewData["Title"] = "Historial de Recálculos";
+    var idSeguim = ViewBag.IdSeguim;
+}
+
+@section Styles {
+<style>
+    .hist-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
+    .tbl-hist td, .tbl-hist th { vertical-align: middle; font-size: .85rem; }
+    .badge-difer { font-size: .75rem; padding: .3em .6em; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Historial de Recálculos</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-clock-history me-2 text-primary"></i>
+        Historial de Recálculos de Fechas
+    </h4>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back();">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </button>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>No se encontraron recálculos para este ítem (ID @idSeguim).
+    </div>
+}
+else
+{
+    <div class="card hist-card">
+        <div class="card-header bg-white fw-semibold py-2">
+            <i class="bi bi-calendar-range me-1"></i> Historial completo de recálculos de fechas estimadas
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm tbl-hist table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha cálculo</th>
+                            <th>Motivo</th>
+                            <th>Hilandería</th>
+                            <th>Partida</th>
+                            <th>TT Ini</th>
+                            <th>TT Fin</th>
+                            <th>Secado</th>
+                            <th>Calidad</th>
+                            <th>Despacho</th>
+                            <th class="text-center">Δ días</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var idx = 1;
+                        }
+                        @foreach (var h in Model.OrderByDescending(x => x.FchCalculo))
+                        {
+                            <tr>
+                                <td class="fw-semibold">@idx</td>
+                                <td>@h.FchCalculo.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>
+                                    <span class="badge bg-secondary" title="@h.MotivoRecalculo">
+                                        @h.MotivoDesc
+                                    </span>
+                                </td>
+                                <td>@(h.FchEstHilanderia?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstPartida?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstTinIni?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstTinFin?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstSecado?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstCalidad?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@(h.FchEstDespacho?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td class="text-center">
+                                    @if (h.DiferDias.HasValue)
+                                    {
+                                        <span class="badge-difer badge @h.DiferCss">
+                                            @(h.DiferDias.Value > 0 ? "+" : "")@h.DiferDias.Value
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>@h.Usuario</td>
+                            </tr>
+                            idx++;
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-light mt-3">
+        <small class="text-muted">
+            <i class="bi bi-info-circle me-1"></i>
+            <b>Motivos de recálculo:</b>
+            <span class="badge bg-secondary me-1">INIT</span> Inicialización,
+            <span class="badge bg-secondary me-1">REPR</span> Reprogramación manual,
+            <span class="badge bg-secondary me-1">PART</span> Partida real,
+            <span class="badge bg-secondary me-1">RETR</span> Retraso detectado,
+            <span class="badge bg-secondary me-1">CAPA</span> Cambio de capacidad.
+            <br/>
+            <b>Δ días:</b> Diferencia en días respecto al cálculo anterior (positivo = se adelantó, negativo = se retrasó).
+        </small>
+    </div>
+}

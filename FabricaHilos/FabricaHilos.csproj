@@ -85,10 +85,8 @@
   <ItemGroup>
     <Content Include="Data\CreditoCobranza\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Data\Sistemas\Indicadores\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Data\RecursosHumanos\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Folder Include="Data\Logistica\" />
-
-    <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
-    <Folder Include="Data\RecursosHumanos\Indicadores\EvolucionMensualMasaSalarial\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
   </ItemGroup>
 

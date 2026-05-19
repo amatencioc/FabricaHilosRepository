@@ -75,6 +75,14 @@ public class MenuOptions
     public bool SistemasRequerimientos                      { get; set; } = true;
     public bool SistemasRequerimientosAnularDocumento       { get; set; } = true;
 
+    // ── Menús: Planeamiento ──────────────────────────────────────────────
+    public bool Planeamiento              { get; set; } = false;
+    public bool PlaneamientoDashboard     { get; set; } = true;
+    public bool PlaneamientoPedido        { get; set; } = true;
+    public bool PlaneamientoCargaMaquinas { get; set; } = true;
+    public bool PlaneamientoAlertas       { get; set; } = true;
+    public bool PlaneamientoKPIs          { get; set; } = true;
+
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
     /// Se usa para usuarios Administrador, que no tienen restricciones.
@@ -123,6 +131,13 @@ public class MenuOptions
         CreditosCobranza = true,
         CcNivelMorosidad = true,
         CcNivelTiempo    = true,
+
+        Planeamiento              = true,
+        PlaneamientoDashboard     = true,
+        PlaneamientoPedido        = true,
+        PlaneamientoCargaMaquinas = true,
+        PlaneamientoAlertas       = true,
+        PlaneamientoKPIs          = true,
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,
