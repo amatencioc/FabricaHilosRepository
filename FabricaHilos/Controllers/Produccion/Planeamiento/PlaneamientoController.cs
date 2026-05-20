@@ -14,17 +14,20 @@ public class PlaneamientoController : OracleBaseController
     private readonly IPlnSeguimientoService  _seguimiento;
     private readonly IPlnAlertaService       _alerta;
     private readonly IPlnKpiService          _kpi;
+    private readonly IPlnParamService        _param;
 
     public PlaneamientoController(
         IMenuService           menuService,
         IPlnSeguimientoService seguimiento,
         IPlnAlertaService      alerta,
-        IPlnKpiService         kpi)
+        IPlnKpiService         kpi,
+        IPlnParamService       param)
     {
         _menuService = menuService;
         _seguimiento = seguimiento;
         _alerta      = alerta;
         _kpi         = kpi;
+        _param       = param;
     }
 
     // GET /Planeamiento
@@ -77,18 +80,45 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "KPIs"
             });
 
+        if (menus.PlaneamientoPendientesDespacho)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Pendientes de Despacho",
+                Descripcion = "Ítems listos en almacén PT pendientes de ser despachados al cliente.",
+                Icono       = "bi-truck",
+                ColorClase  = "text-info",
+                Controller  = "Planeamiento",
+                Action      = "PendientesDespacho"
+            });
+
+        modulos.Add(new SgcModuloDto
+        {
+            Nombre      = "Parámetros",
+            Descripcion = "Configuración de umbrales, horas de turno y buffers del módulo PLN_.",
+            Icono       = "bi-sliders",
+            ColorClase  = "text-secondary",
+            Controller  = "Planeamiento",
+            Action      = "Parametros"
+        });
+
         return View(modulos);
     }
 
     // GET /Planeamiento/Dashboard
-    public async Task<IActionResult> Dashboard(string? codCliente, string? codPaso)
+    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed)
     {
-        var tItems   = _seguimiento.GetActivosAsync(codCliente, codPaso);
+        var tItems   = _seguimiento.GetActivosAsync(busquedaCliente, codPaso, numPed);
         var tEstados = _seguimiento.GetEstadosAsync();
-        await Task.WhenAll(tItems, tEstados);
-        ViewBag.Estados       = tEstados.Result;
-        ViewBag.FiltroCliente = codCliente;
-        ViewBag.FiltroPaso    = codPaso;
+        var tAlertas = _alerta.GetActivasAsync();
+        await Task.WhenAll(tItems, tEstados, tAlertas);
+        ViewBag.Estados          = tEstados.Result;
+        ViewBag.FiltroCliente    = busquedaCliente;
+        ViewBag.FiltroPaso       = codPaso;
+        ViewBag.FiltroNumPed     = numPed;
+        // Diccionario Serie|NumPed -> cantidad de alertas activas, para mostrar badge en fila de pedido
+        ViewBag.AlertasPorPedido = tAlertas.Result
+            .GroupBy(a => $"{a.Serie}|{a.NumPed}")
+            .ToDictionary(g => g.Key, g => g.Count());
         return View(tItems.Result);
     }
 
@@ -113,6 +143,16 @@ public class PlaneamientoController : OracleBaseController
         return View(vm);
     }
 
+    // GET /Planeamiento/GetArticuloInfo?codArt=xxx  — JSON: { descripcion, fibra }
+    [HttpGet]
+    public async Task<IActionResult> GetArticuloInfo(string codArt)
+    {
+        if (string.IsNullOrWhiteSpace(codArt))
+            return Json(new { descripcion = "", fibra = "" });
+        var (desc, fibra) = await _seguimiento.GetArticuloInfoAsync(codArt);
+        return Json(new { descripcion = desc, fibra });
+    }
+
     // GET /Planeamiento/CargaMaquinas
     public async Task<IActionResult> CargaMaquinas()
     {
@@ -125,6 +165,14 @@ public class PlaneamientoController : OracleBaseController
     {
         var alertas = await _alerta.GetActivasAsync();
         return View(alertas);
+    }
+
+    // GET /Planeamiento/HistorialAlertas?ultDias=30
+    public async Task<IActionResult> HistorialAlertas(int ultDias = 30)
+    {
+        var historial = await _alerta.GetHistorialAsync(ultDias);
+        ViewBag.UltDias = ultDias;
+        return View(historial);
     }
 
     // POST /Planeamiento/ResolverAlerta
@@ -195,6 +243,35 @@ public class PlaneamientoController : OracleBaseController
         return View(hist);
     }
 
+    // GET /Planeamiento/HistorialEventos?idSeguim=&numPed=&serie=&tipoEvento=&nroCiclo=&pagina=
+    public async Task<IActionResult> HistorialEventos(long idSeguim, long numPed, int serie,
+                                                       string? tipoEvento = null,
+                                                       int?    nroCiclo   = null,
+                                                       int     pagina     = 1,
+                                                       int     tamPagina  = 25)
+    {
+        var (items, total) = await _seguimiento.GetEventosPorSeguimAsync(
+                                idSeguim, tipoEvento, nroCiclo, pagina, tamPagina);
+        ViewBag.IdSeguim   = idSeguim;
+        ViewBag.NumPed     = numPed;
+        ViewBag.Serie      = serie;
+        ViewBag.TipoEvento = tipoEvento;
+        ViewBag.NroCiclo   = nroCiclo;
+        ViewBag.Pagina     = pagina;
+        ViewBag.TamPagina  = tamPagina;
+        ViewBag.Total      = total;
+        ViewBag.TotalPags  = (int)Math.Ceiling(total / (double)tamPagina);
+        // Obtener ciclos distintos para el filtro
+        var todosEventos = await _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
+        ViewBag.CiclosDisponibles = todosEventos
+            .Where(e => e.IdSeguim == idSeguim)
+            .Select(e => e.NroCiclo)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+        return View(items);
+    }
+
     // POST /Planeamiento/Reprogramar
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -214,6 +291,87 @@ public class PlaneamientoController : OracleBaseController
     {
         await _seguimiento.CalcularFechasAsync(serie, numPed, nro, numDet, motivo);
         return RedirectToAction(nameof(Pedido), new { numPed, serie });
+    }
+
+    // POST /Planeamiento/PlanificarItem
+    // ─────────────────────────────────────────────────────────────────────────
+    // Propósito : Lanzar el PRIMER cálculo de fechas estimadas para un ítem que
+    //             aún está en el paso '01 — Pedido Registrado', es decir, que
+    //             Planeamiento no le ha asignado aún número de programación (NROPROG).
+    //
+    // Por qué existe este endpoint y no usa RecalcularFechas:
+    //   RecalcularFechas usa motivo 'REP' (reprogramación), que en PLN_FECHAS_ESTIMADAS
+    //   queda registrado como un ajuste posterior. El motivo 'PLA' (planificado) indica
+    //   que es el cálculo inicial que autoriza el avance al paso '02', y es el que
+    //   SP_PLN_AVANZA_PASO espera encontrar en PLN_FECHAS_ESTIMADAS para validar que
+    //   el ítem tiene fechas antes de avanzar a producción.
+    //
+    // Flujo esperado:
+    //   Gantt (paso 01) → click "Planificar" → POST aquí
+    //   → SP_PLN_CALCULA_FECHAS(motivo='PLA') rellena FCH_EST_* en PLN_SEGUIMIENTO
+    //   → Se inserta fila en PLN_FECHAS_ESTIMADAS
+    //   → Redirect al Gantt, que ahora mostrará barras estimadas en todas las etapas
+    //
+    // Parámetros:
+    //   serie/numPed/nro/numDet → identifican unívocamente el ítem en PLN_SEGUIMIENTO
+    //   (clave compuesta, no hay columna ID_SEGUIM en el formulario del Gantt)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PlanificarItem(int serie, long numPed, int nro, int numDet)
+    {
+        try
+        {
+            await _seguimiento.CalcularFechasAsync(serie, numPed, nro, numDet, "PLA");
+            TempData["Exito"] = $"Fechas estimadas calculadas correctamente para el ítem {serie}-{numPed}/{nro}/{numDet}. " +
+                                 "Ya puede ver el Gantt con el cronograma estimado completo.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            // SP_PLN_CALCULA_FECHAS puede lanzar una excepción descriptiva si el ítem
+            // no cumple las condiciones previas (ej. estado inválido). Se captura aquí
+            // para mostrarlo en un modal de error en lugar de dejar que suba como HTTP 500.
+            TempData["Error09B"] = ex.Message;
+            return RedirectToAction(nameof(Dashboard));
+        }
+        return RedirectToAction(nameof(PedidoGantt), new { numPed, serie });
+    }
+
+    // POST /Planeamiento/AvanzarPaso
+    // ─────────────────────────────────────────────────────────────────────────
+    // Propósito : Avance manual autorizado de un ítem de seguimiento a un paso
+    //             específico. Llama a PKG_PLN.SP_PLN_AVANZA_PASO con origen 'MANUAL'.
+    //
+    // Cuándo se usa:
+    //   - Cuando un operario o planificador necesita corregir manualmente el paso
+    //     actual de un ítem (ej. el trigger automático de planta no disparó).
+    //   - Para avanzar a '09B — Gaseado' solo si el ítem tiene PROCESO='24'.
+    //     Cualquier otro intento lanza InvalidOperationException (BUG#35 de PKG_PLN)
+    //     y se captura aquí para mostrar un modal explicativo sin error HTTP 500.
+    //
+    // Parámetros:
+    //   proceso → se pasa desde la vista para que el service pueda validar la
+    //             restricción 09B antes de llegar al paquete Oracle.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AvanzarPaso(int serie, long numPed, int nro, int numDet,
+                                                  string nuevoPaso, string? proceso = null,
+                                                  string? observacion = null, decimal? kgCantidad = null)
+    {
+        try
+        {
+            await _seguimiento.AvanzaPasoAsync(serie, numPed, nro, numDet,
+                                               nuevoPaso, observacion, kgCantidad, proceso);
+            TempData["Exito"] = $"Ítem {serie}-{numPed}/{nro}/{numDet} avanzado correctamente al paso '{nuevoPaso}'.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            // La excepción descriptiva es lanzada por PlnSeguimientoService.AvanzaPasoAsync
+            // cuando el intento de avanzar a '09B' no cumple la restricción PROCESO='24'
+            // (BUG#35 de PKG_PLN). Se guarda en TempData["Error09B"] para que el Dashboard
+            // abra automáticamente el modal de error al cargarse, evitando el error HTTP 500.
+            TempData["Error09B"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Dashboard));
     }
 
     // POST /Planeamiento/RefreshCargaDiaria
@@ -262,5 +420,23 @@ public class PlaneamientoController : OracleBaseController
     {
         var pendientes = await _kpi.GetPendientesDespachoAsync();
         return View(pendientes);
+    }
+
+    // GET /Planeamiento/Parametros
+    public async Task<IActionResult> Parametros()
+    {
+        var parametros = await _param.GetAllAsync();
+        return View(parametros);
+    }
+
+    // POST /Planeamiento/ActualizarParam
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ActualizarParam(string codParam, decimal valorNum)
+    {
+        var usuario = User.Identity?.Name ?? "sistema";
+        await _param.UpdateAsync(codParam, valorNum, usuario);
+        TempData["Exito"] = $"Parámetro '{codParam}' actualizado a {valorNum}.";
+        return RedirectToAction(nameof(Parametros));
     }
 }

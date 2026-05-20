@@ -28,8 +28,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
     private static string SafeStr(object? val) =>
         val == null || val == DBNull.Value ? "" : val.ToString()!;
 
-    private static T SafeVal<T>(object? val, T def = default!) =>
-        val == null || val == DBNull.Value ? def : (T)Convert.ChangeType(val, typeof(T));
+    private static T SafeVal<T>(object? val, T def = default!)
+    {
+        if (val == null || val == DBNull.Value) return def;
+        var underlying = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+        return (T)Convert.ChangeType(val, underlying);
+    }
 
     // ── V_PLN_ESTADO_ITEM — vista autorizada por PKG_PLN §8.2 ──────────────────
     // Reemplaza el SQL ad-hoc SeguimientoSelect. Alias clave:
@@ -53,7 +57,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int oFchRealCcTinto, int oFchRealCcRechazo, int oFchRealDevanado,
         int oFchRealCalidad, int oFchRealAlmPt, int oFchRealDespacho,
         int oKgProducidos, int oKgEnTin, int oKgEnAlmPt, int oKgDespachados, int oKgPendientes,
-        int oIndRetraso, int oDiasRetraso, int oIndUrgente, int oIndReproceso, int oEstado)
+        int oIndRetraso, int oDiasRetraso, int oIndUrgente, int oIndReproceso, int oEstado,
+        int oFchRealGaseado = -1)   // v2.1: opcional — solo '09B' PROCESO='24'
         => new()
         {
             IdSeguim          = SafeVal<long>(r[oIdSeguim]),
@@ -90,6 +95,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             FchRealSecado     = SafeDate(r[oFchRealSecado]),
             FchRealCcTinto    = SafeDate(r[oFchRealCcTinto]),
             FchRealCcRechazo  = SafeDate(r[oFchRealCcRechazo]),
+            FchRealGaseado    = oFchRealGaseado >= 0 ? SafeDate(r[oFchRealGaseado]) : null,
             FchRealDevanado   = SafeDate(r[oFchRealDevanado]),
             FchRealCalidad    = SafeDate(r[oFchRealCalidad]),
             FchRealAlmPt      = SafeDate(r[oFchRealAlmPt]),
@@ -132,18 +138,22 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                NULL AS FCH_REAL_SECADO,
                NULL AS FCH_REAL_CC_TINTO, NULL AS FCH_REAL_CC_RECHAZO,
                NULL AS FCH_REAL_DEVANADO, NULL AS FCH_REAL_CALIDAD,
-               NULL AS FCH_REAL_ALM_PT
+               NULL AS FCH_REAL_ALM_PT,
+               NULL AS FCH_REAL_GASEADO
         FROM   {S}V_PLN_ESTADO_ITEM v";
 
     public async Task<IEnumerable<PlnSeguimiento>> GetActivosAsync(
-        string? codCliente = null, string? codPaso = null)
+        string? busquedaCliente = null, string? codPaso = null, string? numPed = null)
     {
         // Usa V_PLN_ESTADO_ITEM (§8.2 PKG_PLN): ya incluye JOINs a CLIENTES,
         // ARTICUL y PLN_ESTADO_CODIGO. Filtro ESTADO='A' equivale a estado_seguim='A'.
         var sql = EstadoItemSelect
             + " WHERE v.estado_seguim = 'A'"
-            + (!string.IsNullOrWhiteSpace(codCliente) ? " AND v.cod_cliente = :codCliente" : "")
-            + (!string.IsNullOrWhiteSpace(codPaso)    ? " AND v.cod_paso_act = :codPaso"   : "")
+            + (!string.IsNullOrWhiteSpace(busquedaCliente)
+                ? " AND (UPPER(v.nom_cliente) LIKE UPPER('%'||:busquedaCliente||'%') OR UPPER(v.cod_cliente) LIKE UPPER('%'||:busquedaCliente||'%'))"
+                : "")
+            + (!string.IsNullOrWhiteSpace(codPaso)         ? " AND v.cod_paso_act = :codPaso"   : "")
+            + (!string.IsNullOrWhiteSpace(numPed)          ? " AND v.num_ped = :numPed"          : "")
             + " ORDER BY v.ind_urgente DESC, v.dias_retraso DESC, v.fch_entrega_comp";
 
         var list = new List<PlnSeguimiento>();
@@ -151,10 +161,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
         cmd.BindByName = true;
-        if (!string.IsNullOrWhiteSpace(codCliente))
-            cmd.Parameters.Add("codCliente", codCliente);
+        if (!string.IsNullOrWhiteSpace(busquedaCliente))
+            cmd.Parameters.Add("busquedaCliente", busquedaCliente);
         if (!string.IsNullOrWhiteSpace(codPaso))
             cmd.Parameters.Add("codPaso", codPaso);
+        if (!string.IsNullOrWhiteSpace(numPed))
+            cmd.Parameters.Add("numPed", numPed);
 
         await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
         if (!await r.ReadAsync()) return list;
@@ -248,6 +260,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.FCH_REAL_TIN_INI,  s.FCH_REAL_TIN_FIN,
                    s.FCH_REAL_SECADO,
                    s.FCH_REAL_CC_TINTO, s.FCH_REAL_CC_RECHAZO,
+                   s.FCH_REAL_GASEADO,
                    s.FCH_REAL_DEVANADO, s.FCH_REAL_CALIDAD,
                    s.FCH_REAL_ALM_PT,   s.FCH_REAL_DESPACHO,
                    s.KG_PRODUCIDOS, s.KG_EN_TIN, s.KG_EN_ALM_PT,
@@ -297,6 +310,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             oFchRealSecado = r.GetOrdinal("FCH_REAL_SECADO"),
             oFchRealCcTinto = r.GetOrdinal("FCH_REAL_CC_TINTO"),
             oFchRealCcRechazo = r.GetOrdinal("FCH_REAL_CC_RECHAZO"),
+            oFchRealGaseado = r.GetOrdinal("FCH_REAL_GASEADO"),
             oFchRealDevanado = r.GetOrdinal("FCH_REAL_DEVANADO"),
             oFchRealCalidad = r.GetOrdinal("FCH_REAL_CALIDAD"),
             oFchRealAlmPt = r.GetOrdinal("FCH_REAL_ALM_PT"),
@@ -327,10 +341,107 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oFchRealCcTinto, oFchRealCcRechazo, oFchRealDevanado,
                 oFchRealCalidad, oFchRealAlmPt, oFchRealDespacho,
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
-                oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado));
+                oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
+                oFchRealGaseado));
         } while (await r.ReadAsync());
 
         return list;
+    }
+
+    public Task<PlnSeguimiento?> GetByIdAsync(long idSeguim)
+        => GetSingleByWhereAsync("s.ID_SEGUIM = :p1", cmd => cmd.Parameters.Add("p1", idSeguim));
+
+    public Task<PlnSeguimiento?> GetByItemAsync(int serie, long numPed, int nro, int numDet)
+        => GetSingleByWhereAsync(
+            "s.SERIE = :serie AND s.NUM_PED = :numPed AND s.NRO = :nro AND s.NUM_DET = :numDet",
+            cmd =>
+            {
+                cmd.Parameters.Add("serie",  serie);
+                cmd.Parameters.Add("numPed", numPed);
+                cmd.Parameters.Add("nro",    nro);
+                cmd.Parameters.Add("numDet", numDet);
+            });
+
+    /// <summary>
+    /// Helper compartido por GetByIdAsync / GetByItemAsync.
+    /// Ejecuta el mismo SELECT completo que GetPorPedidoAsync pero con WHERE dinámico;
+    /// devuelve el primer resultado o null.
+    /// </summary>
+    private async Task<PlnSeguimiento?> 
+    GetSingleByWhereAsync(
+        string whereClause, Action<OracleCommand> bindParams)
+    {
+        var sql = $@"
+            SELECT s.ID_SEGUIM,
+                   s.SERIE, s.NUM_PED, s.NRO, s.NUM_DET,
+                   s.COD_CLIENTE,
+                   v.NOM_CLIENTE          AS NOMBRE_CLIENTE,
+                   s.COD_ART,
+                   s.COLOR, s.TITULO, s.PROCESO,
+                   s.CANTIDAD_ORIG,
+                   s.SOLO_DESPACHO,
+                   s.COD_PASO_ACT,
+                   v.NOMBRE_PASO, v.COLOR_UI,
+                   s.NRO_CICLO,
+                   s.FCH_PEDIDO,
+                   s.FCH_ENTREGA_COMP,
+                   s.FCH_EST_HILANDERIA, s.FCH_EST_PARTIDA,
+                   s.FCH_EST_TIN_INI,   s.FCH_EST_TIN_FIN,
+                   s.FCH_EST_SECADO,    s.FCH_EST_CALIDAD, s.FCH_EST_DESPACHO,
+                   s.FCH_REAL_PROGRAMADO, s.FCH_REAL_PRODUCCION,
+                   s.FCH_REAL_PARTIDA,
+                   s.FCH_REAL_TIN_INI,  s.FCH_REAL_TIN_FIN,
+                   s.FCH_REAL_SECADO,
+                   s.FCH_REAL_CC_TINTO, s.FCH_REAL_CC_RECHAZO,
+                   s.FCH_REAL_GASEADO,
+                   s.FCH_REAL_DEVANADO, s.FCH_REAL_CALIDAD,
+                   s.FCH_REAL_ALM_PT,   s.FCH_REAL_DESPACHO,
+                   s.KG_PRODUCIDOS, s.KG_EN_TIN, s.KG_EN_ALM_PT,
+                   s.KG_DESPACHADOS,    s.KG_PENDIENTES,
+                   s.IND_RETRASO, s.DIAS_RETRASO,
+                   s.IND_URGENTE, s.IND_REPROCESO,
+                   s.ESTADO
+            FROM   {S}PLN_SEGUIMIENTO s
+            JOIN   {S}V_PLN_ESTADO_ITEM v ON v.ID_SEGUIM = s.ID_SEGUIM
+            WHERE  {whereClause}";
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        bindParams(cmd);
+
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        if (!await r.ReadAsync()) return null;
+
+        return MapSeguimientoOrd(r,
+            r.GetOrdinal("ID_SEGUIM"), r.GetOrdinal("SERIE"),
+            r.GetOrdinal("NUM_PED"), r.GetOrdinal("NRO"), r.GetOrdinal("NUM_DET"),
+            r.GetOrdinal("COD_CLIENTE"), r.GetOrdinal("NOMBRE_CLIENTE"),
+            r.GetOrdinal("COD_ART"), r.GetOrdinal("COLOR"), r.GetOrdinal("TITULO"),
+            r.GetOrdinal("PROCESO"), r.GetOrdinal("CANTIDAD_ORIG"),
+            r.GetOrdinal("SOLO_DESPACHO"), r.GetOrdinal("COD_PASO_ACT"),
+            r.GetOrdinal("NOMBRE_PASO"), r.GetOrdinal("COLOR_UI"),
+            r.GetOrdinal("NRO_CICLO"), r.GetOrdinal("FCH_PEDIDO"),
+            r.GetOrdinal("FCH_ENTREGA_COMP"),
+            r.GetOrdinal("FCH_EST_HILANDERIA"), r.GetOrdinal("FCH_EST_PARTIDA"),
+            r.GetOrdinal("FCH_EST_TIN_INI"),   r.GetOrdinal("FCH_EST_TIN_FIN"),
+            r.GetOrdinal("FCH_EST_SECADO"),    r.GetOrdinal("FCH_EST_CALIDAD"),
+            r.GetOrdinal("FCH_EST_DESPACHO"),
+            r.GetOrdinal("FCH_REAL_PROGRAMADO"), r.GetOrdinal("FCH_REAL_PRODUCCION"),
+            r.GetOrdinal("FCH_REAL_PARTIDA"),
+            r.GetOrdinal("FCH_REAL_TIN_INI"),  r.GetOrdinal("FCH_REAL_TIN_FIN"),
+            r.GetOrdinal("FCH_REAL_SECADO"),
+            r.GetOrdinal("FCH_REAL_CC_TINTO"), r.GetOrdinal("FCH_REAL_CC_RECHAZO"),
+            r.GetOrdinal("FCH_REAL_DEVANADO"), r.GetOrdinal("FCH_REAL_CALIDAD"),
+            r.GetOrdinal("FCH_REAL_ALM_PT"),   r.GetOrdinal("FCH_REAL_DESPACHO"),
+            r.GetOrdinal("KG_PRODUCIDOS"), r.GetOrdinal("KG_EN_TIN"),
+            r.GetOrdinal("KG_EN_ALM_PT"),  r.GetOrdinal("KG_DESPACHADOS"),
+            r.GetOrdinal("KG_PENDIENTES"),
+            r.GetOrdinal("IND_RETRASO"),   r.GetOrdinal("DIAS_RETRASO"),
+            r.GetOrdinal("IND_URGENTE"),   r.GetOrdinal("IND_REPROCESO"),
+            r.GetOrdinal("ESTADO"),
+            r.GetOrdinal("FCH_REAL_GASEADO"));
     }
 
     public async Task<IEnumerable<PlnEstadoCodigo>> GetEstadosAsync()
@@ -378,7 +489,9 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         var sql = $@"
             SELECT ev.ID_EVENTO, ev.ID_SEGUIM, ev.NUM_PED, ev.SERIE, ev.NRO, ev.NUM_DET,
                    ev.COD_PASO, ev.TIPO_EVENTO, ev.FCH_EVENTO,
-                   ev.TABLA_ORIGEN, ev.KG_CANTIDAD, ev.OBSERVACION, ev.USUARIO, ev.NRO_CICLO
+                   ev.TABLA_ORIGEN, ev.ID_OBJETO_ORIGEN, ev.KG_CANTIDAD,
+                   ev.FCH_ESTIMADA_ANT, ev.FCH_ESTIMADA_NUE,
+                   ev.OBSERVACION, ev.USUARIO
             FROM   {S}PLN_LOG_EVENTOS ev
             WHERE  ev.NUM_PED = :numPed AND ev.SERIE = :serie
             ORDER  BY ev.FCH_EVENTO DESC";
@@ -396,28 +509,104 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             var codPaso = SafeStr(r["COD_PASO"]);
             list.Add(new PlnLogEvento
             {
-                IdEvento    = SafeVal<long>(r["ID_EVENTO"]),
-                IdSeguim    = SafeVal<long>(r["ID_SEGUIM"]),
-                NumPed      = SafeVal<long>(r["NUM_PED"]),
-                Serie       = SafeVal<int>(r["SERIE"]),
-                Nro         = SafeVal<int>(r["NRO"]),
-                NumDet      = SafeVal<int>(r["NUM_DET"]),
-                CodPaso     = codPaso,
-                NombrePaso  = estados.TryGetValue(codPaso, out var nom) ? nom : codPaso,
-                TipoEvento  = SafeStr(r["TIPO_EVENTO"]),
-                FchEvento   = SafeVal<DateTime>(r["FCH_EVENTO"]),
-                TablaOrigen = SafeStr(r["TABLA_ORIGEN"]),
-                KgCantidad  = r["KG_CANTIDAD"] == DBNull.Value ? null : SafeVal<decimal?>(r["KG_CANTIDAD"]),
-                Observacion = SafeStr(r["OBSERVACION"]),
-                Usuario     = SafeStr(r["USUARIO"]),
-                NroCiclo    = SafeVal<int>(r["NRO_CICLO"]),
+                IdEvento        = SafeVal<long>(r["ID_EVENTO"]),
+                IdSeguim        = SafeVal<long>(r["ID_SEGUIM"]),
+                NumPed          = SafeVal<long>(r["NUM_PED"]),
+                Serie           = SafeVal<int>(r["SERIE"]),
+                Nro             = SafeVal<int>(r["NRO"]),
+                NumDet          = SafeVal<int>(r["NUM_DET"]),
+                CodPaso         = codPaso,
+                NombrePaso      = estados.TryGetValue(codPaso, out var nom) ? nom : codPaso,
+                TipoEvento      = SafeStr(r["TIPO_EVENTO"]),
+                FchEvento       = SafeVal<DateTime>(r["FCH_EVENTO"]),
+                TablaOrigen     = SafeStr(r["TABLA_ORIGEN"]),
+                IdObjetoOrigen  = r["ID_OBJETO_ORIGEN"] == DBNull.Value ? null : SafeVal<long?>(r["ID_OBJETO_ORIGEN"]),
+                KgCantidad      = r["KG_CANTIDAD"] == DBNull.Value ? null : SafeVal<decimal?>(r["KG_CANTIDAD"]),
+                FchEstimadaAnt  = SafeDate(r["FCH_ESTIMADA_ANT"]),
+                FchEstimadaNue  = SafeDate(r["FCH_ESTIMADA_NUE"]),
+                Observacion     = SafeStr(r["OBSERVACION"]),
+                Usuario         = SafeStr(r["USUARIO"]),
+                NroCiclo        = 0,
             });
         }
         return list;
     }
 
-    public async Task<IEnumerable<PlnAlerta>> GetAlertasPorPedidoAsync(long numPed, int serie)
+    public async Task<(IEnumerable<PlnLogEvento> Items, int TotalRegistros)> GetEventosPorSeguimAsync(
+        long idSeguim, string? tipoEvento = null, int? nroCiclo = null, int pagina = 1, int tamPagina = 25)
     {
+        var estados = (await GetEstadosAsync()).ToDictionary(e => e.CodPaso, e => e.NombrePaso);
+
+        // Cláusulas de filtro opcionales
+        var where = new System.Text.StringBuilder("WHERE ev.ID_SEGUIM = :idSeguim");
+        if (!string.IsNullOrEmpty(tipoEvento)) where.Append(" AND ev.TIPO_EVENTO = :tipoEvento");
+        // NRO_CICLO no existe en PLN_LOG_EVENTOS (§2.4 PKG_PLN.sql); filtro ignorado.
+
+        var sqlCount = $"SELECT COUNT(*) FROM {S}PLN_LOG_EVENTOS ev {where}";
+        var sqlData  = $@"
+            SELECT * FROM (
+                SELECT sub.*, ROWNUM AS RN FROM (
+                    SELECT ev.ID_EVENTO, ev.ID_SEGUIM, ev.NUM_PED, ev.SERIE, ev.NRO, ev.NUM_DET,
+                           ev.COD_PASO, ev.TIPO_EVENTO, ev.FCH_EVENTO,
+                           ev.TABLA_ORIGEN, ev.ID_OBJETO_ORIGEN, ev.KG_CANTIDAD,
+                           ev.FCH_ESTIMADA_ANT, ev.FCH_ESTIMADA_NUE,
+                           ev.OBSERVACION, ev.USUARIO
+                    FROM   {S}PLN_LOG_EVENTOS ev
+                    {where}
+                    ORDER  BY ev.FCH_EVENTO DESC
+                ) sub
+                WHERE ROWNUM <= :offsetFin
+            ) WHERE RN > :offset";
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        // Contar total
+        await using var cmdCnt = new OracleCommand(sqlCount, conn);
+        cmdCnt.BindByName = true;
+        cmdCnt.Parameters.Add("idSeguim", idSeguim);
+        if (!string.IsNullOrEmpty(tipoEvento)) cmdCnt.Parameters.Add("tipoEvento", tipoEvento);
+        var total = Convert.ToInt32(await cmdCnt.ExecuteScalarAsync() ?? 0);
+
+        // Página de datos
+        await using var cmdData = new OracleCommand(sqlData, conn);
+        cmdData.BindByName = true;
+        cmdData.Parameters.Add("idSeguim",  idSeguim);
+        if (!string.IsNullOrEmpty(tipoEvento)) cmdData.Parameters.Add("tipoEvento", tipoEvento);
+        cmdData.Parameters.Add("offset",    (pagina - 1) * tamPagina);
+        cmdData.Parameters.Add("offsetFin", pagina * tamPagina);
+
+        var list = new List<PlnLogEvento>();
+        await using var r = await cmdData.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            var codPaso = SafeStr(r["COD_PASO"]);
+            list.Add(new PlnLogEvento
+            {
+                IdEvento        = SafeVal<long>(r["ID_EVENTO"]),
+                IdSeguim        = SafeVal<long>(r["ID_SEGUIM"]),
+                NumPed          = SafeVal<long>(r["NUM_PED"]),
+                Serie           = SafeVal<int>(r["SERIE"]),
+                Nro             = SafeVal<int>(r["NRO"]),
+                NumDet          = SafeVal<int>(r["NUM_DET"]),
+                CodPaso         = codPaso,
+                NombrePaso      = estados.TryGetValue(codPaso, out var nom) ? nom : codPaso,
+                TipoEvento      = SafeStr(r["TIPO_EVENTO"]),
+                FchEvento       = SafeVal<DateTime>(r["FCH_EVENTO"]),
+                TablaOrigen     = SafeStr(r["TABLA_ORIGEN"]),
+                IdObjetoOrigen  = r["ID_OBJETO_ORIGEN"] == DBNull.Value ? null : SafeVal<long?>(r["ID_OBJETO_ORIGEN"]),
+                KgCantidad      = r["KG_CANTIDAD"] == DBNull.Value ? null : SafeVal<decimal?>(r["KG_CANTIDAD"]),
+                FchEstimadaAnt  = SafeDate(r["FCH_ESTIMADA_ANT"]),
+                FchEstimadaNue  = SafeDate(r["FCH_ESTIMADA_NUE"]),
+                Observacion     = SafeStr(r["OBSERVACION"]),
+                Usuario         = SafeStr(r["USUARIO"]),
+                NroCiclo        = 0,
+            });
+        }
+        return (list, total);
+    }
+
+    public async Task<IEnumerable<PlnAlerta>> GetAlertasPorPedidoAsync(long numPed, int serie)    {
         // V_PLN_ALERTAS_ACTIVAS (§8.4 PKG_PLN): ya incluye nom_cliente y horas_sin_resolver.
         // JOIN a PLN_SEGUIMIENTO para filtrar por num_ped/serie y obtener cod_paso_act/color_ui.
         var sql = $@"
@@ -479,9 +668,13 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         var sql = $@"
             SELECT t.num_ped, t.nro, t.num_det,
                    t.cod_cliente, t.cod_art,
+                   t.color, t.titulo,
                    t.fch_pedido, t.fch_aprob_pedido,
                    t.fch_planeada, t.fch_entrega_plan,
                    t.fch_est_cono1, t.fch_est_tenido,
+                   t.fch_est_hilanderia, t.fch_est_partida,
+                   t.fch_est_tin_ini,   t.fch_est_tin_fin,
+                   t.fch_est_secado,    t.fch_est_calidad, t.fch_est_despacho,
                    t.fch_real_programado, t.fch_real_produccion,
                    t.fch_real_partida, t.fch_real_tin_ini,
                    t.fch_prog_tin, t.fch_real_tin_fin,
@@ -513,12 +706,21 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 NumDet                = SafeVal<int>(r["num_det"]),
                 CodCliente            = SafeStr(r["cod_cliente"]),
                 CodArt                = SafeStr(r["cod_art"]),
+                Color                 = SafeStr(r["color"]),
+                Titulo                = SafeStr(r["titulo"]),
                 FchPedido             = SafeVal<DateTime>(r["fch_pedido"]),
                 FchAprobPedido        = SafeDate(r["fch_aprob_pedido"]),
                 FchPlaneada           = SafeDate(r["fch_planeada"]),
                 FchEntregaPlan        = SafeDate(r["fch_entrega_plan"]),
                 FchEstCono1           = SafeDate(r["fch_est_cono1"]),
                 FchEstTenido          = SafeDate(r["fch_est_tenido"]),
+                FchEstHilanderia      = SafeDate(r["fch_est_hilanderia"]),
+                FchEstPartida         = SafeDate(r["fch_est_partida"]),
+                FchEstTinIni          = SafeDate(r["fch_est_tin_ini"]),
+                FchEstTinFin          = SafeDate(r["fch_est_tin_fin"]),
+                FchEstSecado          = SafeDate(r["fch_est_secado"]),
+                FchEstCalidad         = SafeDate(r["fch_est_calidad"]),
+                FchEstDespacho        = SafeDate(r["fch_est_despacho"]),
                 FchRealProgramado     = SafeDate(r["fch_real_programado"]),
                 FchRealProduccion     = SafeDate(r["fch_real_produccion"]),
                 FchRealPartida        = SafeDate(r["fch_real_partida"]),
@@ -590,12 +792,31 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
 
     public async Task AvanzaPasoAsync(
         int serie, long numPed, int nro, int numDet,
-        string nuevoPaso, string? observacion = null, decimal? kgCantidad = null)
+        string nuevoPaso, string? observacion = null, decimal? kgCantidad = null,
+        string? proceso = null)
     {
         // PKG_PLN.SP_PLN_AVANZA_PASO (§6 PKG_PLN): correcciones manuales autorizadas.
         // Los triggers de planta llaman al mismo SP de forma automática.
         // COMMIT interno NO debe usarse en trigger (ORA-04092); pero en llamada directa el SP
         // devuelve sin COMMIT, por eso se hace COMMIT explícito desde aquí.
+        //
+        // ── Regla BUG#35 del paquete PKG_PLN ────────────────────────────────────
+        // SP_PLN_AVANZA_PASO en Oracle verifica PROCESO='24' antes de permitir el avance a
+        // PASO '09B' (Gaseado). Esta etapa solo existe para hilos especiales (ej. merino)
+        // porque el proceso de gaseado quema las fibras superficiales para dar brillo y
+        // suavidad, y no aplica a hilados estándar.
+        //
+        // Si se intenta avanzar a '09B' con un ítem de otro proceso, Oracle lo descarta
+        // silenciosamente. Aquí lanzamos una excepción descriptiva para que el usuario
+        // (o el código llamador) sepa exactamente por qué no se puede avanzar, en lugar
+        // de recibir un resultado vacío confuso.
+        if (nuevoPaso == "09B" && !string.Equals(proceso, "24", StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"El paso '09B — Gaseado' solo está habilitado para ítems con PROCESO='24' " +
+                $"(hilo especial / merino). El ítem actual tiene PROCESO='{proceso ?? "desconocido"}'. " +
+                $"Verifique que el artículo corresponda a un proceso de gaseado antes de avanzar. " +
+                $"Restricción definida en PKG_PLN.SP_PLN_AVANZA_PASO (BUG#35).");
+
         const string sql = "BEGIN PKG_PLN.SP_PLN_AVANZA_PASO(:serie,:numPed,:nro,:numDet,:paso,'MANUAL',NULL,:kg,:obs); COMMIT; END;";
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
@@ -665,7 +886,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         cmd.Parameters.Add("numPed",  numPed);
         cmd.Parameters.Add("nro",     nro);
         cmd.Parameters.Add("numDet",  numDet);
-        cmd.Parameters.Add(new OracleParameter("pasoIni", OracleDbType.Varchar2, 2) { Value = (object)pasoIni });
+        cmd.Parameters.Add(new OracleParameter("pasoIni", OracleDbType.Varchar2, 3) { Value = (object)pasoIni });
         await cmd.ExecuteNonQueryAsync();
     }
 
@@ -686,5 +907,19 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         cmd.Parameters.Add("numDet",  numDet);
         cmd.Parameters.Add(new OracleParameter("motivo", OracleDbType.Varchar2, 3) { Value = (object)motivo });
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<(string Descripcion, string Fibra)> GetArticuloInfoAsync(string codArt)
+    {
+        const string sql = "SELECT DESCRIPCION, FIBRA FROM ARTICUL WHERE COD_ART = :codArt";
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        cmd.Parameters.Add(new OracleParameter("codArt", OracleDbType.Varchar2, 25) { Value = (object)(codArt ?? "") });
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (await r.ReadAsync())
+            return (SafeStr(r["DESCRIPCION"]), SafeStr(r["FIBRA"]));
+        return ("", "");
     }
 }

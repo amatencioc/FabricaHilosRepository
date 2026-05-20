@@ -6,10 +6,27 @@
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
 <style>
-    .hist-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
-    .tbl-hist td, .tbl-hist th { vertical-align: middle; font-size: .85rem; }
-    .badge-difer { font-size: .75rem; padding: .3em .6em; }
+    /* — Info strip — */
+    .hist-strip{background:linear-gradient(135deg,#2d3748 0%,#4a5568 100%);color:#f7fafc;border-radius:.5rem;padding:.9rem 1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+    .hist-strip-cell{display:flex;flex-direction:column;gap:.1rem;}
+    .hist-strip-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#a0aec0;font-weight:600;}
+    .hist-strip-val{font-size:.9rem;font-weight:700;color:#f7fafc;}
+    .hist-strip-sep{width:1px;height:36px;background:rgba(255,255,255,.2);align-self:center;}
+    .hist-strip-actions{margin-left:auto;display:flex;align-items:center;}
+    /* — Snapshot cards — */
+    .rcalc-card{border:1px solid #e2e8f0;border-radius:.5rem;margin-bottom:.65rem;overflow:hidden;}
+    .rcalc-hd{display:flex;align-items:center;gap:.5rem;padding:.45rem .75rem;background:#f7fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;}
+    .rcalc-num{font-size:.78rem;font-weight:700;color:#718096;min-width:24px;}
+    .rcalc-fch{font-size:.78rem;color:#4a5568;font-weight:600;}
+    .rcalc-usr{font-size:.72rem;color:#9ca3af;margin-left:auto;}
+    /* date chips */
+    .rcalc-dates{display:flex;gap:.4rem;flex-wrap:wrap;padding:.5rem .75rem;background:#fff;}
+    .rcalc-chip{display:flex;flex-direction:column;align-items:center;padding:.25rem .5rem;background:#edf2f7;border-radius:.35rem;min-width:78px;border:1px solid #e2e8f0;}
+    .rcalc-chip-lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:#718096;font-weight:700;white-space:nowrap;}
+    .rcalc-chip-val{font-size:.8rem;font-weight:700;color:#2d3748;}
+    .rcalc-chip-none{font-size:.8rem;font-weight:400;color:#a0aec0;}
 </style>
 }
 
@@ -19,14 +36,23 @@
     <li class="breadcrumb-item active">Historial de Recálculos</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0">
-        <i class="bi bi-clock-history me-2 text-primary"></i>
-        Historial de Recálculos de Fechas
-    </h4>
-    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="history.back();">
-        <i class="bi bi-arrow-left me-1"></i>Volver
-    </button>
+<!-- ── Info strip ───────────────────────────────────────────── -->
+<div class="hist-strip">
+    <div class="hist-strip-cell">
+        <span class="hist-strip-lbl"><i class="bi bi-clock-history me-1"></i>Ítem</span>
+        <span class="hist-strip-val">#@idSeguim</span>
+    </div>
+    <div class="hist-strip-sep"></div>
+    <div class="hist-strip-cell">
+        <span class="hist-strip-lbl">Recálculos</span>
+        <span class="hist-strip-val">@Model.Count()</span>
+        <span style="font-size:.72rem;color:#cbd5e0;">en historial</span>
+    </div>
+    <div class="hist-strip-actions">
+        <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#f7fafc;border:1px solid rgba(255,255,255,.3);" onclick="history.back();">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </button>
+    </div>
 </div>
 
 @if (!Model.Any())
@@ -37,83 +63,79 @@
 }
 else
 {
-    <div class="card hist-card">
-        <div class="card-header bg-white fw-semibold py-2">
-            <i class="bi bi-calendar-range me-1"></i> Historial completo de recálculos de fechas estimadas
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm tbl-hist table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Fecha cálculo</th>
-                            <th>Motivo</th>
-                            <th>Hilandería</th>
-                            <th>Partida</th>
-                            <th>TT Ini</th>
-                            <th>TT Fin</th>
-                            <th>Secado</th>
-                            <th>Calidad</th>
-                            <th>Despacho</th>
-                            <th class="text-center">Δ días</th>
-                            <th>Usuario</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @{
-                            var idx = 1;
-                        }
-                        @foreach (var h in Model.OrderByDescending(x => x.FchCalculo))
-                        {
-                            <tr>
-                                <td class="fw-semibold">@idx</td>
-                                <td>@h.FchCalculo.ToString("dd/MM/yyyy HH:mm")</td>
-                                <td>
-                                    <span class="badge bg-secondary" title="@h.MotivoRecalculo">
-                                        @h.MotivoDesc
-                                    </span>
-                                </td>
-                                <td>@(h.FchEstHilanderia?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstPartida?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstTinIni?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstTinFin?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstSecado?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstCalidad?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(h.FchEstDespacho?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td class="text-center">
-                                    @if (h.DiferDias.HasValue)
-                                    {
-                                        <span class="badge-difer badge @h.DiferCss">
-                                            @(h.DiferDias.Value > 0 ? "+" : "")@h.DiferDias.Value
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>@h.Usuario</td>
-                            </tr>
-                            idx++;
-                        }
-                    </tbody>
-                </table>
+    var rcIdx = 1;
+    @foreach (var h in Model.OrderByDescending(x => x.FchCalculo))
+    {
+        <div class="rcalc-card">
+            <div class="rcalc-hd">
+                <span class="rcalc-num">#@rcIdx</span>
+                <span class="badge bg-secondary" title="@h.MotivoRecalculo">@h.MotivoDesc</span>
+                <span class="rcalc-fch"><i class="bi bi-clock me-1 opacity-50"></i>@h.FchCalculo.ToString("dd/MM/yyyy HH:mm")</span>
+                @if (h.DiferDias.HasValue)
+                {
+                    <span class="badge @h.DiferCss">@(h.DiferDias.Value > 0 ? "+" : "")@h.DiferDias.Value d</span>
+                }
+                <span class="rcalc-usr"><i class="bi bi-person me-1"></i>@h.Usuario</span>
+            </div>
+            <div class="rcalc-dates">
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">Hilandería</span>
+                    @if (h.FchEstHilanderia.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstHilanderia.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">Partida</span>
+                    @if (h.FchEstPartida.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstPartida.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">TT Inicio</span>
+                    @if (h.FchEstTinIni.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstTinIni.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">TT Fin</span>
+                    @if (h.FchEstTinFin.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstTinFin.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">Secado</span>
+                    @if (h.FchEstSecado.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstSecado.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip">
+                    <span class="rcalc-chip-lbl">Calidad</span>
+                    @if (h.FchEstCalidad.HasValue)
+                    { <span class="rcalc-chip-val">@h.FchEstCalidad.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
+                <div class="rcalc-chip" style="border-color:#bee3f8;background:#ebf8ff;">
+                    <span class="rcalc-chip-lbl" style="color:#2c7a7b;">Despacho</span>
+                    @if (h.FchEstDespacho.HasValue)
+                    { <span class="rcalc-chip-val" style="color:#1a365d;">@h.FchEstDespacho.Value.ToString("dd/MM/yy")</span> }
+                    else { <span class="rcalc-chip-none">—</span> }
+                </div>
             </div>
         </div>
-    </div>
+        rcIdx++;
+    }
 
     <div class="alert alert-light mt-3">
         <small class="text-muted">
             <i class="bi bi-info-circle me-1"></i>
-            <b>Motivos de recálculo:</b>
-            <span class="badge bg-secondary me-1">INIT</span> Inicialización,
-            <span class="badge bg-secondary me-1">REPR</span> Reprogramación manual,
-            <span class="badge bg-secondary me-1">PART</span> Partida real,
-            <span class="badge bg-secondary me-1">RETR</span> Retraso detectado,
-            <span class="badge bg-secondary me-1">CAPA</span> Cambio de capacidad.
+            <b>Motivos de recálculo (PKG_PLN §4):</b>
+            <span class="badge bg-secondary me-1">AV</span> Avance de paso (recálculo automático al avanzar etapa),
+            <span class="badge bg-secondary me-1">PED</span> Registro de pedido,
+            <span class="badge bg-secondary me-1">PLA</span> Planificación (NROPROG asignado),
+            <span class="badge bg-secondary me-1">REP</span> Reprogramación manual,
+            <span class="badge bg-secondary me-1">MAQ</span> Cambio de máquina.
             <br/>
-            <b>Δ días:</b> Diferencia en días respecto al cálculo anterior (positivo = se adelantó, negativo = se retrasó).
+            <b>Δ días:</b> Diferencia en días respecto al cálculo anterior (<span class="text-danger fw-semibold">positivo = se demoró más</span>, <span class="text-success fw-semibold">negativo = se adelantó</span>).
         </small>
     </div>
 }

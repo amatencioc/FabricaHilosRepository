@@ -7,13 +7,30 @@
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
 <style>
-    .kpi-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
-    .kpi-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
-    .kpi-label { font-size: .8rem; color: #6c757d; margin-top: .25rem; }
-    .gauge-bar { height: 10px; border-radius: 5px; }
+    /* KPIs: estilos exclusivos de la vista */
+
+    .kpi-card { border: none; box-shadow: 0 1px 4px rgba(0,0,0,.09); border-radius: .75rem; transition: box-shadow .15s; }
+    .kpi-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.14); }
+    .kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+    .kpi-label { font-size: .75rem; color: #6c757d; margin-top: .2rem; }
+    .gauge-bar { height: 8px; border-radius: 4px; }
+
+    .tbl-kpi { font-size: .82rem; }
+    .tbl-kpi thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
     .tbl-kpi td, .tbl-kpi th { vertical-align: middle; }
-    .area-badge { font-size: .75rem; padding: .3em .7em; border-radius: .5rem; }
+    .tbl-kpi tbody tr.row-ok   { background: #f0fdf4; }
+    .tbl-kpi tbody tr.row-warn { background: #fffbeb; }
+    .tbl-kpi tbody tr.row-err  { background: #fef2f2; }
+
+    .otif-tt { font-size: .8rem; min-width: 220px; text-align: left; }
+    .otif-tt .tt-row   { display: flex; justify-content: space-between; gap: .75rem; padding: .1rem 0; }
+    .otif-tt .tt-label { color: #adb5bd; }
+    .otif-tt .tt-val   { font-weight: 600; }
+    .otif-tt .up       { color: #86efac; }
+    .otif-tt .down     { color: #fca5a5; }
+    .otif-tt .neu      { color: #d1d5db; }
 </style>
 }
 
@@ -23,44 +40,104 @@
     <li class="breadcrumb-item active">KPIs</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="d-flex align-items-center justify-content-between mb-2">
     <h4 class="mb-0"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>KPIs de Planeamiento</h4>
     <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
 </div>
+<p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Indicadores de desempeño mensual: cuántos pedidos se entregaron a tiempo (OTIF), cuánto demoran los procesos clave y cómo está rindiendo cada máquina. Los colores verde / amarillo / rojo indican si el valor está dentro del objetivo. Los umbrales se pueden ajustar con el botón “Umbrales”.</p>
 
 <!-- KPIs resumen globales -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
+@{
+    var tinProm  = Model.OtifMensual.Any() ? Model.OtifMensual.Average(k => k.DiasPromTintoreria)    : 0;
+    var lotProm  = Model.OtifMensual.Any() ? Model.OtifMensual.Average(k => k.DiasPromPedidoPartida) : 0;
+}
+<div class="row g-2 mb-3">
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
             <div class="kpi-value @(Model.OtifPromedio >= 95 ? "text-success" : Model.OtifPromedio >= 85 ? "text-warning" : "text-danger")">
                 @Model.OtifPromedio.ToString("N1")%
             </div>
-            <div class="kpi-label">📦 OTIF Promedio (6m)</div>
+            <div class="kpi-label"><i class="bi bi-patch-check-fill me-1"></i>OTIF Promedio (6m)</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
             <div class="kpi-value @(Model.TasaReproceso <= 2 ? "text-success" : Model.TasaReproceso <= 5 ? "text-warning" : "text-danger")">
                 @Model.TasaReproceso.ToString("N1")%
             </div>
-            <div class="kpi-label">🔁 Tasa Reproceso</div>
+            <div class="kpi-label"><i class="bi bi-arrow-repeat me-1"></i>Tasa Reproceso</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
             <div class="kpi-value @(Model.RetrasosCriticos == 0 ? "text-success" : "text-danger")">
                 @Model.RetrasosCriticos
             </div>
-            <div class="kpi-label">🔴 Retrasos críticos</div>
+            <div class="kpi-label"><i class="bi bi-exclamation-circle-fill text-danger me-1"></i>Retrasos críticos</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
             <div class="kpi-value text-info">
                 @Model.CicloPromedioTotal.ToString("N1")d
             </div>
-            <div class="kpi-label">⏱ Ciclo promedio</div>
+            <div class="kpi-label"><i class="bi bi-stopwatch me-1"></i>Ciclo promedio</div>
         </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
+            <div id="kpiCardTin" class="kpi-value @(tinProm <= 5 ? "text-success" : tinProm <= 10 ? "text-warning" : "text-danger")">
+                @tinProm.ToString("N1")d
+            </div>
+            <div class="kpi-label"><i class="bi bi-droplet-half me-1"></i>Prom. días Tintorería</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="card kpi-card text-center p-2">
+            <div id="kpiCardLot" class="kpi-value @(lotProm <= 15 ? "text-success" : lotProm <= 25 ? "text-warning" : "text-danger")">
+                @lotProm.ToString("N1")d
+            </div>
+            <div class="kpi-label"><i class="bi bi-building me-1"></i>Prom. días Pedido → Lote</div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráfico de tendencia mensual + umbrales ajustables -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+        <span class="fw-semibold"><i class="bi bi-clock-history me-1"></i> Tendencia mensual de tiempos de proceso</span>
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUmbrales" aria-expanded="false">
+            <i class="bi bi-sliders me-1"></i>Umbrales
+        </button>
+    </div>
+    <div class="collapse" id="collapseUmbrales">
+        <div class="card-body border-bottom pb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label small mb-1 d-block">🧪 Tin. amarillo (d)</label>
+                    <input id="tinUmbralAma" type="number" min="1" max="30" value="5" class="form-control form-control-sm" style="width:75px;">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1 d-block">🧪 Tin. rojo (d)</label>
+                    <input id="tinUmbralRoj" type="number" min="1" max="60" value="10" class="form-control form-control-sm" style="width:75px;">
+                </div>
+                <div class="col-auto ms-3">
+                    <label class="form-label small mb-1 d-block">🏭 Ped→Lote amarillo (d)</label>
+                    <input id="lotUmbralAma" type="number" min="1" max="60" value="15" class="form-control form-control-sm" style="width:75px;">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1 d-block">🏭 Ped→Lote rojo (d)</label>
+                    <input id="lotUmbralRoj" type="number" min="1" max="90" value="25" class="form-control form-control-sm" style="width:75px;">
+                </div>
+                <div class="col-auto">
+                    <button id="btnAplicarUmbrales" class="btn btn-primary btn-sm">Aplicar</button>
+                    <button id="btnResetUmbrales" class="btn btn-outline-secondary btn-sm ms-1" title="Restablecer defaults"><i class="bi bi-arrow-counterclockwise"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="chartTendenciaTiempos" style="min-height:300px;"></div>
     </div>
 </div>
 
@@ -81,6 +158,8 @@
                         <th style="min-width:160px;">OTIF</th>
                         <th class="text-end">Kg despachados</th>
                         <th class="text-end">Ciclo prom. (d)</th>
+                        <th class="text-end" title="Promedio de días entre FCH_REAL_TIN_INI y FCH_REAL_TIN_FIN">Tint. (d) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
+                        <th class="text-end" title="Promedio de días entre fecha pedido y disponibilidad del lote (FCH_REAL_PARTIDA)">Ped→Lot. (d) <i class="bi bi-info-circle text-muted" style="font-size:.75rem;"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -88,7 +167,7 @@
                     {
                         var pctNum = k.PctOtif;
                         var barColor = pctNum >= 95 ? "#198754" : pctNum >= 85 ? "#ffc107" : "#dc3545";
-                        <tr>
+                        <tr data-row-tin="@k.DiasPromTintoreria" data-row-lot="@k.DiasPromPedidoPartida" data-periodo="@k.Periodo.ToString("yyyy-MM")">
                             <td class="fw-semibold">@k.Periodo.ToString("MM/yyyy")</td>
                             <td class="text-end">@k.TotalItemsCerrados</td>
                             <td class="text-end text-success">@k.EntregadosATiempo</td>
@@ -101,9 +180,46 @@
                             </td>
                             <td class="text-end">@k.KgTotalDespachados.ToString("N0")</td>
                             <td class="text-end">@k.CicloPromedioDias.ToString("N1")</td>
+                            <td class="text-end @(k.DiasPromTintoreria <= 5 ? "text-success" : k.DiasPromTintoreria <= 10 ? "text-warning" : "text-danger")" data-tin="@k.DiasPromTintoreria">
+                                @k.DiasPromTintoreria.ToString("N1")
+                            </td>
+                            <td class="text-end @(k.DiasPromPedidoPartida <= 15 ? "text-success" : k.DiasPromPedidoPartida <= 25 ? "text-warning" : "text-danger")" data-lot="@k.DiasPromPedidoPartida">
+                                @k.DiasPromPedidoPartida.ToString("N1")
+                            </td>
                         </tr>
                     }
                 </tbody>
+                @{
+                    var totalItems  = otifMensual.Sum(k => k.TotalItemsCerrados);
+                    var totalATime  = otifMensual.Sum(k => k.EntregadosATiempo);
+                    var totalTarde  = otifMensual.Sum(k => k.EntregadosTarde);
+                    var totalKg     = otifMensual.Sum(k => k.KgTotalDespachados);
+                    var promOtif    = otifMensual.Any() ? otifMensual.Average(k => k.PctOtif)           : 0;
+                    var promCiclo   = otifMensual.Any() ? otifMensual.Average(k => k.CicloPromedioDias)  : 0;
+                    var promTin     = otifMensual.Any() ? otifMensual.Average(k => k.DiasPromTintoreria)  : 0;
+                    var promLot     = otifMensual.Any() ? otifMensual.Average(k => k.DiasPromPedidoPartida) : 0;
+                    var footOtifColor  = promOtif  >= 95 ? "#198754" : promOtif  >= 85 ? "#ffc107" : "#dc3545";
+                    var footTinClass   = promTin   <= 5  ? "text-success" : promTin  <= 10 ? "text-warning" : "text-danger";
+                    var footLotClass   = promLot   <= 15 ? "text-success" : promLot  <= 25 ? "text-warning" : "text-danger";
+                }
+                <tfoot>
+                    <tr class="fw-bold border-top" style="background:#f8f9fa;font-size:.85rem;">
+                        <td>Total / Prom.</td>
+                        <td class="text-end">@totalItems</td>
+                        <td class="text-end text-success">@totalATime</td>
+                        <td class="text-end text-danger">@totalTarde</td>
+                        <td>
+                            <div class="progress gauge-bar mb-1">
+                                <div class="progress-bar" style="width:@promOtif%;background:@footOtifColor;"></div>
+                            </div>
+                            <span style="color:@footOtifColor;">@promOtif.ToString("N1")%</span>
+                        </td>
+                        <td class="text-end">@totalKg.ToString("N0")</td>
+                        <td class="text-end">@promCiclo.ToString("N1")</td>
+                        <td class="text-end @footTinClass">@promTin.ToString("N1")</td>
+                        <td class="text-end @footLotClass">@promLot.ToString("N1")</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -113,14 +229,167 @@
 @if (kpiProd.Any())
 {
     <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white fw-semibold py-2">
-            <i class="bi bi-speedometer2 me-1"></i> KPIs de Producción por Máquina (últimos 12 meses)
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+            <span class="fw-semibold"><i class="bi bi-speedometer2 me-1"></i> KPIs de Producción por Máquina</span>
+            <div class="d-flex gap-2 align-items-center">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Período">
+                    <input type="radio" class="btn-check" name="maqPeriodo" id="maqP3"  value="3"  autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="maqP3">3 m</label>
+                    <input type="radio" class="btn-check" name="maqPeriodo" id="maqP6"  value="6"  autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="maqP6">6 m</label>
+                    <input type="radio" class="btn-check" name="maqPeriodo" id="maqP12" value="12" autocomplete="off" checked>
+                    <label class="btn btn-outline-secondary" for="maqP12">12 m</label>
+                </div>
+                <button id="btnExportarMaq" class="btn btn-outline-success btn-sm" title="Exportar gráfico">
+                    <i class="bi bi-download me-1"></i>Exportar
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUmbralesMaq" aria-expanded="false">
+                    <i class="bi bi-sliders me-1"></i>Umbrales kg/h
+                </button>
+            </div>
+        </div>
+        <div class="collapse" id="collapseUmbralesMaq">
+            <div class="card-body border-bottom pb-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label small mb-1 d-block">🟡 Rendimiento bajo (kg/h)</label>
+                        <input id="maqUmbralBaj" type="number" min="1" max="200" value="10" class="form-control form-control-sm" style="width:85px;">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label small mb-1 d-block">🔴 Rendimiento crítico (kg/h)</label>
+                        <input id="maqUmbralCri" type="number" min="1" max="200" value="5" class="form-control form-control-sm" style="width:85px;">
+                    </div>
+                    <div class="col-auto">
+                        <button id="btnAplicarUmbralesMaq" class="btn btn-primary btn-sm">Aplicar</button>
+                        <button id="btnResetUmbralesMaq" class="btn btn-outline-secondary btn-sm ms-1" title="Restaurar defaults"><i class="bi bi-arrow-counterclockwise"></i></button>
+                    </div>
+                    <div class="col-auto">
+                        <small class="text-muted">Líneas de referencia sobre el gráfico (persistidas en el navegador)</small>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="card-body">
             <div id="chartKpiProduccion" style="min-height:400px;"></div>
+            <div id="resumenMaqCritico" class="mt-2"></div>
         </div>
     </div>
 }
+
+@{
+    // Tabla detallada: una fila resumen por máquina, colapsable con el historial mensual.
+    // Permite identificar rápidamente qué máquina tiene el menor rendimiento promedio
+    // sin necesidad de leer el gráfico línea a línea.
+    var maquinasGrupo = kpiProd
+        .GroupBy(k => new { k.TpMaq, k.CodMaq })
+        .Select(g =>
+        {
+            var hist    = g.OrderByDescending(x => x.Periodo).ToList();
+            var kgHProm = hist.Average(x => x.KgPorHora);
+            var kgTotal = hist.Sum(x => x.KgProducidos);
+            return (
+                CodMaq:   g.Key.CodMaq,
+                Area:     hist.First().Area,
+                TpMaq:    g.Key.TpMaq,
+                KgHProm:  kgHProm,
+                KgTotal:  kgTotal,
+                DiasAct:  (int)hist.Average(x => x.DiasActivos),
+                Historial: hist
+            );
+        })
+        .OrderBy(m => m.TpMaq).ThenByDescending(m => m.KgHProm)
+        .ToList();
+}
+@if (maquinasGrupo.Any())
+    {
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <span class="fw-semibold"><i class="bi bi-table me-1"></i> Detalle por máquina (historial mensual)</span>
+                <div class="d-flex gap-2">
+                    <button type="button" id="btnExpandAllMaq" class="btn btn-outline-secondary btn-sm"
+                            title="Expandir todas las máquinas">
+                        <i class="bi bi-chevron-double-down me-1"></i>Expandir todo
+                    </button>
+                    <button type="button" id="btnCollapseAllMaq" class="btn btn-outline-secondary btn-sm"
+                            title="Colapsar todas las máquinas">
+                        <i class="bi bi-chevron-double-up me-1"></i>Colapsar todo
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 tbl-kpi">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:30px;"></th>
+                                <th>Máquina</th>
+                                <th>Área</th>
+                                <th class="text-end">Kg/h prom.</th>
+                                <th class="text-end">Kg producidos tot.</th>
+                                <th class="text-end" title="Promedio de días activos por período">Días activos prom.</th>
+                                <th class="text-center">Rendimiento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in maquinasGrupo)
+                            {
+                                var colId    = $"maq-{m.TpMaq}-{m.CodMaq}";
+                                var eficCss  = m.KgHProm >= 15 ? "success" : m.KgHProm >= 10 ? "info" : m.KgHProm >= 5 ? "warning" : "danger";
+                                var eficTxt  = m.KgHProm >= 15 ? "Alto" : m.KgHProm >= 10 ? "Normal" : m.KgHProm >= 5 ? "Bajo" : "Crítico";
+                                <tr class="maq-header" style="cursor:pointer;"
+                                    data-bs-toggle="collapse" data-bs-target="#@colId"
+                                    aria-expanded="false" aria-controls="@colId">
+                                    <td class="text-center">
+                                        <i class="bi bi-chevron-right toggle-icon-maq" style="font-size:.75rem;transition:transform .2s;"></i>
+                                    </td>
+                                    <td class="fw-semibold"><i class="bi bi-gear me-1 text-muted"></i>@m.CodMaq</td>
+                                    <td><span class="badge bg-light text-dark border">@m.Area</span></td>
+                                    <td class="text-end fw-semibold text-@eficCss">@m.KgHProm.ToString("N1")</td>
+                                    <td class="text-end">@m.KgTotal.ToString("N0")</td>
+                                    <td class="text-end">@m.DiasAct</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-@eficCss text-white" style="font-size:.75rem;">@eficTxt</span>
+                                    </td>
+                                </tr>
+                                <tr class="collapse" id="@colId">
+                                    <td colspan="7" class="p-0">
+                                        <table class="table table-sm mb-0" style="font-size:.78rem;background:#fafbfc;">
+                                            <thead>
+                                                <tr style="font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;color:#868e96;background:#f1f3f5;">
+                                                    <th style="width:28px;padding-left:2.5rem;"></th>
+                                                    <th>Período</th>
+                                                    <th class="text-end">Kg/h</th>
+                                                    <th class="text-end">Kg producidos</th>
+                                                    <th class="text-end">Hs turno prom.</th>
+                                                    <th class="text-end">Hs parada prom.</th>
+                                                    <th class="text-end">Días activos</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var h in m.Historial)
+                                                {
+                                                    var hCss = h.KgPorHora >= 15 ? "text-success" : h.KgPorHora >= 10 ? "text-info" : h.KgPorHora >= 5 ? "text-warning" : "text-danger";
+                                                    <tr>
+                                                        <td style="padding-left:2.5rem;"><i class="bi bi-calendar3 text-muted" style="font-size:.7rem;"></i></td>
+                                                        <td>@h.PeriodoStr</td>
+                                                        <td class="text-end fw-semibold @hCss">@h.KgPorHora.ToString("N2")</td>
+                                                        <td class="text-end">@h.KgProducidos.ToString("N0")</td>
+                                                        <td class="text-end">@h.HorasPromTurno.ToString("N1")</td>
+                                                        <td class="text-end">@h.HorasPromParada.ToString("N1")</td>
+                                                        <td class="text-end">@h.DiasActivos</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 
 <!-- Retrasos por área -->
 @if (Model.RetrasosPorArea.Any())
@@ -184,13 +453,76 @@
 
     var seriesArray = Object.values(series);
 
+    // ── Filtrado por período ──────────────────────────────────────────────────
+    function getSeriesFiltradas(meses) {
+        var corte = new Date();
+        corte.setMonth(corte.getMonth() - meses);
+        var corteMs = corte.getTime();
+        return seriesArray.map(function(s) {
+            return { name: s.name, data: s.data.filter(function(p) { return p.x >= corteMs; }) };
+        });
+    }
+
+    function getMesesSeleccionados() {
+        var radio = document.querySelector('input[name="maqPeriodo"]:checked');
+        return radio ? parseInt(radio.value) : 12;
+    }
+
+    function avgSerie(s) {
+        if (!s.data.length) return 0;
+        return s.data.reduce(function(acc, p) { return acc + parseFloat(p.y); }, 0) / s.data.length;
+    }
+
+    function colorForAvg(avg, baj, cri) {
+        if (avg >= baj) return '#198754';
+        if (avg >= cri) return '#ffc107';
+        return '#dc3545';
+    }
+
+    function buildSeriesColors(baj, cri) {
+        return seriesArray.map(function(s) { return colorForAvg(avgSerie(s), baj, cri); });
+    }
+
+    function actualizarResumenDeSeries(arr, baj, cri) {
+        var criticas = [], bajas = [];
+        arr.forEach(function(s) {
+            var avg = avgSerie(s);
+            if (cri > avg) criticas.push({ name: s.name, avg: avg });
+            else if (baj > avg) bajas.push({ name: s.name, avg: avg });
+        });
+        var D = '\x3c', E = '\x3e', Q = '"';
+        var html = '';
+        if (criticas.length) {
+            html += D + 'div class=' + Q + 'alert alert-danger py-2 mb-1' + Q + E +
+                    D + 'strong' + E + '\uD83D\uDD34 Rendimiento cr\u00edtico (&lt; ' + cri + ' kg/h):' + D + '/strong' + E + ' ' +
+                    criticas.map(function(m) { return m.name + ' ' + D + 'span class=' + Q + 'fw-semibold' + Q + E + '(' + m.avg.toFixed(1) + ' kg/h)' + D + '/span' + E; }).join(', ') +
+                    D + '/div' + E;
+        }
+        if (bajas.length) {
+            html += D + 'div class=' + Q + 'alert alert-warning py-2 mb-1' + Q + E +
+                    D + 'strong' + E + '\uD83D\uDFE1 Rendimiento bajo (&lt; ' + baj + ' kg/h):' + D + '/strong' + E + ' ' +
+                    bajas.map(function(m) { return m.name + ' ' + D + 'span class=' + Q + 'fw-semibold' + Q + E + '(' + m.avg.toFixed(1) + ' kg/h)' + D + '/span' + E; }).join(', ') +
+                    D + '/div' + E;
+        }
+        if (!criticas.length && !bajas.length) {
+            html = D + 'div class=' + Q + 'alert alert-success py-2 mb-1' + Q + E +
+                   D + 'strong' + E + '\u2705 Todas las m\u00e1quinas' + D + '/strong' + E +
+                   ' superan el umbral de rendimiento bajo (' + baj + ' kg/h).' + D + '/div' + E;
+        }
+        document.getElementById('resumenMaqCritico').innerHTML = html;
+    }
+
+    function actualizarResumen(baj, cri) {
+        actualizarResumenDeSeries(getSeriesFiltradas(getMesesSeleccionados()), baj, cri);
+    }
+
     var optionsProduccion = {
         chart: {
             type: 'line',
             height: 400,
             toolbar: { show: true }
         },
-        series: seriesArray,
+        series: getSeriesFiltradas(getMesesSeleccionados()),
         xaxis: {
             type: 'datetime',
             labels: { format: 'MMM yyyy' }
@@ -220,7 +552,328 @@
 
     var chartProduccion = new ApexCharts(document.querySelector("#chartKpiProduccion"), optionsProduccion);
     chartProduccion.render();
+
+    // Exportar imagen PNG
+    document.getElementById('btnExportarMaq').addEventListener('click', function () {
+        chartProduccion.dataURI().then(function(r) {
+            var a = document.createElement('a');
+            a.href = r.imgURI;
+            a.download = 'kpi_produccion_maquinas.png';
+            a.click();
+        });
+    });
+
+    // Selector de período
+    document.querySelectorAll('input[name="maqPeriodo"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            var meses = getMesesSeleccionados();
+            var filtradas = getSeriesFiltradas(meses);
+            var mu2 = loadMaqUmbrales();
+            chartProduccion.updateOptions({
+                series: filtradas,
+                colors: filtradas.map(function(s) {
+                    var avg = s.data.length ? s.data.reduce(function(a,p){return a+parseFloat(p.y);},0)/s.data.length : 0;
+                    return colorForAvg(avg, mu2.baj, mu2.cri);
+                })
+            });
+            actualizarResumenDeSeries(filtradas, mu2.baj, mu2.cri);
+        });
+    });
+
+    // ── Umbrales kg/hora ──────────────────────────────────────────────────────
+    var LS_MAQ = 'pln_kpi_maq_umbrales';
+    var MAQ_DEF = { baj: 10, cri: 5 };
+
+    function loadMaqUmbrales() {
+        try {
+            var raw = localStorage.getItem(LS_MAQ);
+            if (raw) {
+                var p = JSON.parse(raw);
+                return { baj: p.baj || MAQ_DEF.baj, cri: p.cri || MAQ_DEF.cri };
+            }
+        } catch (_) { }
+        return Object.assign({}, MAQ_DEF);
+    }
+
+    function saveMaqUmbrales(u) {
+        try { localStorage.setItem(LS_MAQ, JSON.stringify(u)); } catch (_) { }
+    }
+
+    function buildMaqAnnotations(baj, cri) {
+        return {
+            yaxis: [
+                { y: baj, borderColor: '#ffc107', strokeDashArray: 5,
+                  label: { text: 'Bajo (' + baj + ' kg/h)', borderColor: '#ffc107',
+                           style: { color: '#fff', background: '#ffc107', fontSize: '10px' } } },
+                { y: cri, borderColor: '#dc3545', strokeDashArray: 5,
+                  label: { text: 'Crítico (' + cri + ' kg/h)', borderColor: '#dc3545',
+                           style: { color: '#fff', background: '#dc3545', fontSize: '10px' } } }
+            ]
+        };
+    }
+
+    function applyMaqUmbrales(baj, cri) {
+        chartProduccion.updateOptions({
+            annotations: buildMaqAnnotations(baj, cri),
+            colors: buildSeriesColors(baj, cri)
+        });
+        document.getElementById('maqUmbralBaj').value = baj;
+        document.getElementById('maqUmbralCri').value = cri;
+        actualizarResumen(baj, cri);
+    }
+
+    // Inicializar con valores guardados
+    var mu = loadMaqUmbrales();
+    applyMaqUmbrales(mu.baj, mu.cri);
+
+    document.getElementById('btnAplicarUmbralesMaq').addEventListener('click', function () {
+        var baj = parseInt(document.getElementById('maqUmbralBaj').value) || MAQ_DEF.baj;
+        var cri = parseInt(document.getElementById('maqUmbralCri').value) || MAQ_DEF.cri;
+        saveMaqUmbrales({ baj: baj, cri: cri });
+        applyMaqUmbrales(baj, cri);
+    });
+
+    document.getElementById('btnResetUmbralesMaq').addEventListener('click', function () {
+        localStorage.removeItem(LS_MAQ);
+        applyMaqUmbrales(MAQ_DEF.baj, MAQ_DEF.cri);
+    });
     </text>
 }
+</script>
+<script>
+(function () {
+    var LS_KEY = 'pln_kpi_umbrales';
+
+    // ── Defaults ──────────────────────────────────────────────────────────────
+    var DEFAULTS = { tinAma: 5, tinRoj: 10, lotAma: 15, lotRoj: 25 };
+
+    // ── Carga guardada o defaults ──────────────────────────────────────────────
+    function loadUmbrales() {
+        try {
+            var raw = localStorage.getItem(LS_KEY);
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                return {
+                    tinAma: parsed.tinAma || DEFAULTS.tinAma,
+                    tinRoj: parsed.tinRoj || DEFAULTS.tinRoj,
+                    lotAma: parsed.lotAma || DEFAULTS.lotAma,
+                    lotRoj: parsed.lotRoj || DEFAULTS.lotRoj
+                };
+            }
+        } catch (_) { }
+        return Object.assign({}, DEFAULTS);
+    }
+
+    function saveUmbrales(u) {
+        try { localStorage.setItem(LS_KEY, JSON.stringify(u)); } catch (_) { }
+    }
+
+    var u = loadUmbrales();
+    var tinAma = u.tinAma, tinRoj = u.tinRoj, lotAma = u.lotAma, lotRoj = u.lotRoj;
+
+    // ── Inicializar inputs con el valor cargado ────────────────────────────────
+    document.getElementById('tinUmbralAma').value = tinAma;
+    document.getElementById('tinUmbralRoj').value = tinRoj;
+    document.getElementById('lotUmbralAma').value = lotAma;
+    document.getElementById('lotUmbralRoj').value = lotRoj;
+
+    // ── Datos de la vista ──────────────────────────────────────────────────────
+    var otifRaw = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.OtifMensual.OrderBy(k => k.Periodo)
+            .Select(k => new { per = k.Periodo, tin = k.DiasPromTintoreria, lot = k.DiasPromPedidoPartida })
+    ));
+
+    var seriesTin = otifRaw.map(function(d) { return { x: new Date(d.per).getTime(), y: d.tin }; });
+    var seriesLot = otifRaw.map(function(d) { return { x: new Date(d.per).getTime(), y: d.lot }; });
+
+    var tinProm = seriesTin.length > 0 ? seriesTin.reduce(function(s,p){return s+p.y;},0)/seriesTin.length : 0;
+    var lotProm = seriesLot.length > 0 ? seriesLot.reduce(function(s,p){return s+p.y;},0)/seriesLot.length : 0;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function buildAnnotations() {
+        return {
+            yaxis: [
+                { y: tinAma, borderColor: '#ffc107', strokeDashArray: 6,
+                  label: { text: 'Tin. ama', borderColor: '#ffc107', style: { color: '#fff', background: '#ffc107', fontSize: '10px' } } },
+                { y: tinRoj, borderColor: '#dc3545', strokeDashArray: 6,
+                  label: { text: 'Tin. roj', borderColor: '#dc3545', style: { color: '#fff', background: '#dc3545', fontSize: '10px' } } },
+                { y: lotAma, borderColor: '#fd7e14', strokeDashArray: 3,
+                  label: { text: 'Lot. ama', borderColor: '#fd7e14', position: 'right', style: { color: '#fff', background: '#fd7e14', fontSize: '10px' } } },
+                { y: lotRoj, borderColor: '#6f42c1', strokeDashArray: 3,
+                  label: { text: 'Lot. roj', borderColor: '#6f42c1', position: 'right', style: { color: '#fff', background: '#6f42c1', fontSize: '10px' } } }
+            ]
+        };
+    }
+
+    function applyColor(el, val, ama, roj) {
+        if (!el) return;
+        el.classList.remove('text-success', 'text-warning', 'text-danger');
+        el.classList.add(val <= ama ? 'text-success' : val <= roj ? 'text-warning' : 'text-danger');
+    }
+
+    function rowLevel(tin, lot, tAma, tRoj, lAma, lRoj) {
+        var tinLvl = tin <= tAma ? 0 : tin <= tRoj ? 1 : 2;
+        var lotLvl = lot <= lAma ? 0 : lot <= lRoj ? 1 : 2;
+        return Math.max(tinLvl, lotLvl);
+    }
+
+    function applyAll() {
+        chartTend.updateOptions({ annotations: buildAnnotations() });
+        document.querySelectorAll('[data-tin]').forEach(function(td) {
+            applyColor(td, parseFloat(td.getAttribute('data-tin')), tinAma, tinRoj);
+        });
+        document.querySelectorAll('[data-lot]').forEach(function(td) {
+            applyColor(td, parseFloat(td.getAttribute('data-lot')), lotAma, lotRoj);
+        });
+        document.querySelectorAll('tr[data-row-tin]').forEach(function(tr) {
+            var tin = parseFloat(tr.getAttribute('data-row-tin'));
+            var lot = parseFloat(tr.getAttribute('data-row-lot'));
+            var lvl = rowLevel(tin, lot, tinAma, tinRoj, lotAma, lotRoj);
+            tr.classList.remove('row-ok', 'row-warn', 'row-err');
+            tr.classList.add(lvl === 0 ? 'row-ok' : lvl === 1 ? 'row-warn' : 'row-err');
+        });
+        applyColor(document.getElementById('kpiCardTin'), tinProm, tinAma, tinRoj);
+        applyColor(document.getElementById('kpiCardLot'), lotProm, lotAma, lotRoj);
+    }
+
+    // ── Gráfico ───────────────────────────────────────────────────────────────
+    var chartTend = new ApexCharts(document.querySelector('#chartTendenciaTiempos'), {
+        chart: { type: 'line', height: 300, toolbar: { show: false }, animations: { enabled: false } },
+        series: [
+            { name: '🧪 Tintorería (d)', data: seriesTin },
+            { name: '🏭 Pedido→Lote (d)', data: seriesLot }
+        ],
+        colors: ['#6f42c1', '#0d6efd'],
+        xaxis: { type: 'datetime', labels: { format: 'MM/yyyy' } },
+        yaxis: { title: { text: 'Días promedio' }, min: 0, labels: { formatter: function(v) { return v.toFixed(1); } } },
+        stroke: { width: 3, curve: 'smooth' },
+        markers: { size: 5 },
+        annotations: buildAnnotations(),
+        tooltip: { x: { format: 'MM/yyyy' }, y: { formatter: function(v) { return v.toFixed(1) + ' d'; } } },
+        legend: { position: 'top' }
+    });
+    chartTend.render();
+
+    // ── Aplicar umbrales guardados al renderizar ───────────────────────────────
+    applyAll();
+
+    // ── Botón Aplicar ─────────────────────────────────────────────────────────
+    document.getElementById('btnAplicarUmbrales').addEventListener('click', function () {
+        tinAma = parseInt(document.getElementById('tinUmbralAma').value) || DEFAULTS.tinAma;
+        tinRoj = parseInt(document.getElementById('tinUmbralRoj').value) || DEFAULTS.tinRoj;
+        lotAma = parseInt(document.getElementById('lotUmbralAma').value) || DEFAULTS.lotAma;
+        lotRoj = parseInt(document.getElementById('lotUmbralRoj').value) || DEFAULTS.lotRoj;
+
+        saveUmbrales({ tinAma: tinAma, tinRoj: tinRoj, lotAma: lotAma, lotRoj: lotRoj });
+        applyAll();
+    });
+
+    document.getElementById('btnResetUmbrales').addEventListener('click', function () {
+        localStorage.removeItem(LS_KEY);
+        tinAma = DEFAULTS.tinAma; tinRoj = DEFAULTS.tinRoj;
+        lotAma = DEFAULTS.lotAma; lotRoj = DEFAULTS.lotRoj;
+        document.getElementById('tinUmbralAma').value = tinAma;
+        document.getElementById('tinUmbralRoj').value = tinRoj;
+        document.getElementById('lotUmbralAma').value = lotAma;
+        document.getElementById('lotUmbralRoj').value = lotRoj;
+        applyAll();
+    });
+}());
+
+// ── Tooltips OTIF mes a mes ───────────────────────────────────────────────────
+(function () {
+    var otifTooltip = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.OtifMensual.OrderBy(k => k.Periodo).Select(k => new {
+            per   = k.Periodo.ToString("yyyy-MM"),
+            label = k.Periodo.ToString("MM/yyyy"),
+            items = k.TotalItemsCerrados,
+            aTime = k.EntregadosATiempo,
+            tarde = k.EntregadosTarde,
+            otif  = k.PctOtif,
+            kg    = k.KgTotalDespachados,
+            ciclo = k.CicloPromedioDias,
+            tin   = k.DiasPromTintoreria,
+            lot   = k.DiasPromPedidoPartida
+        })
+    ));
+
+    function fmt(v, dec) { return (typeof v === 'number' ? v.toFixed(dec) : String(v)); }
+
+    function deltaHtml(cur, prev, dec, invertir) {
+        if (prev === null || prev === undefined) return '';
+        var d = cur - prev;
+        if (Math.abs(d) < Math.pow(10, -(dec + 1))) return '<span class="neu">\u2192 sin cambio</span>';
+        var good  = invertir ? (d < 0) : (d > 0);
+        var cls   = good ? 'up' : 'down';
+        var arrow = d > 0 ? '\u25b2' : '\u25bc';
+        return '<span class="' + cls + '">' + arrow + ' ' + (d > 0 ? '+' : '') + fmt(d, dec) + '</span>';
+    }
+
+    function buildHtml(cur, prev) {
+        var D = '\x3c', E = '\x3e';
+        var rows = [
+            { lbl: 'OTIF',        val: fmt(cur.otif,  1) + '%', dt: deltaHtml(cur.otif,  prev && prev.otif,  1, false) },
+            { lbl: '\u00cdtems',       val: fmt(cur.items, 0),      dt: deltaHtml(cur.items, prev && prev.items, 0, false) },
+            { lbl: 'A tiempo',    val: fmt(cur.aTime, 0),      dt: deltaHtml(cur.aTime, prev && prev.aTime, 0, false) },
+            { lbl: 'Tard\u00edos',     val: fmt(cur.tarde, 0),      dt: deltaHtml(cur.tarde, prev && prev.tarde, 0, true)  },
+            { lbl: 'Kg desp.',    val: fmt(cur.kg,    0),      dt: deltaHtml(cur.kg,    prev && prev.kg,    0, false) },
+            { lbl: 'Ciclo (d)',   val: fmt(cur.ciclo, 1),      dt: deltaHtml(cur.ciclo, prev && prev.ciclo, 1, true)  },
+            { lbl: 'Tint. (d)',   val: fmt(cur.tin,   1),      dt: deltaHtml(cur.tin,   prev && prev.tin,   1, true)  },
+            { lbl: 'Ped\u2192Lot (d)', val: fmt(cur.lot,   1),      dt: deltaHtml(cur.lot,   prev && prev.lot,   1, true)  }
+        ];
+        var h = D + 'div class="otif-tt"' + E +
+                D + 'div class="fw-bold mb-1 border-bottom pb-1"' + E + cur.label + D + '/div' + E;
+        rows.forEach(function(r) {
+            h += D + 'div class="tt-row"' + E +
+                 D + 'span class="tt-label"' + E + r.lbl + ':' + D + '/span' + E +
+                 D + 'span class="tt-val"' + E + r.val + (r.dt ? ' ' + r.dt : '') + D + '/span' + E +
+                 D + '/div' + E;
+        });
+        if (!prev) {
+            h += D + 'div class="text-muted mt-1" style="font-size:.75rem"' + E +
+                 'Sin per\u00edodo anterior' + D + '/div' + E;
+        }
+        h += D + '/div' + E;
+        return h;
+    }
+
+    document.querySelectorAll('tr[data-periodo]').forEach(function(tr) {
+        var per = tr.getAttribute('data-periodo');
+        var idx = otifTooltip.findIndex(function(d) { return d.per === per; });
+        if (idx < 0) return;
+        var cur  = otifTooltip[idx];
+        var prev = idx > 0 ? otifTooltip[idx - 1] : null;
+        tr.setAttribute('title', buildHtml(cur, prev));
+        new bootstrap.Tooltip(tr, { html: true, sanitize: false, placement: 'left' });
+    });
+}());
+</script>
+<script>
+// ── Tabla de máquinas: expandir/colapsar y rotar chevrones ───────────────────
+// El mismo patrón de la tabla de pedidos del Dashboard: una fila resumen colapsable
+// por entidad (aquí, máquina) con las filas de detalle anidadas debajo.
+(function () {
+    document.querySelectorAll('.collapse[id^="maq-"]').forEach(function (el) {
+        el.addEventListener('show.bs.collapse', function () {
+            var row = document.querySelector('[data-bs-target="#' + this.id + '"]');
+            if (row) { var ic = row.querySelector('.toggle-icon-maq'); if (ic) ic.style.transform = 'rotate(90deg)'; }
+        });
+        el.addEventListener('hide.bs.collapse', function () {
+            var row = document.querySelector('[data-bs-target="#' + this.id + '"]');
+            if (row) { var ic = row.querySelector('.toggle-icon-maq'); if (ic) ic.style.transform = ''; }
+        });
+    });
+
+    document.getElementById('btnExpandAllMaq')?.addEventListener('click', function () {
+        document.querySelectorAll('.collapse[id^="maq-"]').forEach(function (el) {
+            if (!el.classList.contains('show')) new bootstrap.Collapse(el, { toggle: false }).show();
+        });
+    });
+    document.getElementById('btnCollapseAllMaq')?.addEventListener('click', function () {
+        document.querySelectorAll('.collapse[id^="maq-"]').forEach(function (el) {
+            if (el.classList.contains('show')) new bootstrap.Collapse(el, { toggle: false }).hide();
+        });
+    });
+}());
 </script>
 }

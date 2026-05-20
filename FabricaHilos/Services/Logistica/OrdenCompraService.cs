@@ -48,6 +48,7 @@ public interface IOrdenCompraService
     Task<string?> CerrarOcAsync(string tipoDocto, long numPed);
     Task<string?> EnviarGerenciaAsync(string tipoDocto, long numPed);
     Task<string?> AprobarOcAsync(string tipoDocto, long numPed, string codAprob);
+    Task<string?> NoAprobarOcAsync(string tipoDocto, long numPed, string codAprob);
 
     /// <summary>
     /// Devuelve los ID_GRUPO que están en ITEMREQ vinculados a los ítems de esta O/C
@@ -1314,18 +1315,21 @@ END;";
             cmd.CommandType = System.Data.CommandType.Text;
             cmd.BindByName  = true;
             cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
-                                    SET ESTADO = '2'
+                                    SET ESTADO         = '2',
+                                        APROB_GERENCIA = '',
+                                        F_APROB_GER    = NULL,
+                                        COD_APROB      = NULL
                                   WHERE TIPO_DOCTO = :p_tipo_docto
                                     AND SERIE      = :p_serie
                                     AND NUM_PED    = :p_num_ped
-                                    AND ESTADO     = '0'";
+                                    AND ESTADO     IN ('0', '3')";
             cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
             cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
             cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
 
             int rows = await cmd.ExecuteNonQueryAsync();
             if (rows == 0)
-                return "No se actualizó la orden. Verifique que esté en estado Emitida (0).";
+                return "No se actualizó la orden. Verifique que esté en estado Emitida (0) o No Aprobada por Gerencia (3).";
 
             return null;
         }
@@ -1368,6 +1372,43 @@ END;";
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al aprobar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            return $"Error interno: {ex.Message}";
+        }
+    }
+
+    // ── NoAprobarOcAsync ───────────────────────────────────────────────────────
+
+    public async Task<string?> NoAprobarOcAsync(string tipoDocto, long numPed, string codAprob)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandType = System.Data.CommandType.Text;
+            cmd.BindByName  = true;
+            cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
+                                    SET ESTADO         = '3',
+                                        APROB_GERENCIA = 'N',
+                                        F_APROB_GER    = SYSDATE,
+                                        COD_APROB      = :p_cod_aprob
+                                  WHERE TIPO_DOCTO = :p_tipo_docto
+                                    AND SERIE      = :p_serie
+                                    AND NUM_PED    = :p_num_ped";
+            cmd.Parameters.Add(new OracleParameter("p_cod_aprob",  OracleDbType.Varchar2) { Value = codAprob });
+            cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+
+            int rows = await cmd.ExecuteNonQueryAsync();
+            if (rows == 0)
+                return "No se encontró la orden de compra.";
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al no aprobar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
         }
     }

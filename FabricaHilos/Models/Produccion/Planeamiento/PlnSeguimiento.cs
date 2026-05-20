@@ -44,6 +44,7 @@ public class PlnSeguimiento
     public DateTime? FchRealSecado     { get; set; }
     public DateTime? FchRealCcTinto    { get; set; }
     public DateTime? FchRealCcRechazo  { get; set; }
+    public DateTime? FchRealGaseado    { get; set; }    // v2.1: PASO '09B', solo PROCESO='24'
     public DateTime? FchRealDevanado   { get; set; }
     public DateTime? FchRealCalidad    { get; set; }
     public DateTime? FchRealAlmPt      { get; set; }

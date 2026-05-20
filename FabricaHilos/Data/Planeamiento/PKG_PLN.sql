@@ -1,171 +1,150 @@
-/* ============================================================
+﻿/* ============================================================
    PKG_PLN.sql
    ============================================================
-   MÓDULO  : PLN_ — Planeamiento, Seguimiento y Control de Planta
-   SISTEMA : SIG — Fabricación de Hilos (Hilandería y Tintorería)
-   BD      : Oracle 11.2.0.4 · Esquema SIG (multi-empresa: SIG / ARBONA / SOLSA)
-   FECHA   : 18/05/2026
+   MODULO     : PLN_ - Planeamiento, Seguimiento y Control de Planta
+   SISTEMA    : SIG - Fabricacion de Hilos (Hilanderia y Tintoreria)
+   BD         : Oracle 11.2.0.4 - Esquema SIG (multi-empresa: SIG / ARBONA / SOLSA)
+   CREADO     : 18/05/2026
+   ULTIMA MOD : 20/05/2026
+   VERSION    : 43 correcciones acumuladas (BUGs #1-#40 + Fix A-F)
    ============================================================
 
-   ── PROPÓSITO ────────────────────────────────────────────────
-   Módulo de trazabilidad automática de pedidos de producción.
+   -- PROPOSITO --------------------------------------------------
+   Modulo de trazabilidad automatica de pedidos de produccion.
    Funciona como un "tablero de control en tiempo real" que lee
    los sistemas legacy mediante triggers y los transforma en un
-   estado unificado por ítem de pedido en PLN_SEGUIMIENTO.
+   estado unificado por item de pedido en PLN_SEGUIMIENTO.
 
    Los empleados NO modifican sus pantallas ni flujos de trabajo.
-   Cada operación que ya realizan (registrar en ITEMPED, crear
+   Cada operacion que ya realizan (registrar en ITEMPED, crear
    PARTIDA, aprobar CC, despachar) dispara un trigger que actualiza
-   PLN_SEGUIMIENTO automáticamente sin intervención adicional.
+   PLN_SEGUIMIENTO automaticamente sin intervencion adicional.
 
-   ── STACK TECNOLÓGICO DE LA CAPA .NET ────────────────────────
-   Framework : ASP.NET Core MVC (.NET 8) — Controllers + Views
-   ORM       : Dapper con SQL explícito (NO Entity Framework para Oracle)
-   Driver    : Oracle.ManagedDataAccess.Core (ODP.NET)
-   Autent.   : ASP.NET Core Identity (SQLite) + Session Oracle
-   Gráficos  : ApexCharts.js (Timeline, Swimlane, Heatmap, RangeBar)
-   Estilos   : Bootstrap 5 + Bootstrap Icons
-   Logging   : Serilog rolling files (Logs/log-YYYYMMDD.txt, 30 días)
-   Multi-emp.: SIG (LaColonial) / ARBONA / SOLSA
-     - Empresa activa en: HttpContext.Session["EmpresaConexion"]
-     - Prefijo de esquema: "SIG." / "ARBONA." / "SOLSA." (prop. S)
+   NOTA IMPORTANTE: Ejecutar este archivo completo hace un
+   DROP+RECREATE total (parr.0). Siempre re-ejecutar parr.10 despues
+   para re-inicializar los items activos de PLN_SEGUIMIENTO.
 
-   Patrón Controllers:
-     Todos los controllers Oracle heredan de OracleBaseController.
-     Verifica Session["OracleUser"] en OnActionExecuting.
-     Redirect a Login si la sesión Oracle expiró.
+   -- PEDIDO BASE DE REFERENCIA (evidencia real de BD) -----------
+   Todo el diseno del flujo se baso en el analisis del pedido:
+     NUM_PED=88501  NRO=5  PARTIDA=158938
+   Ciclo completo: 31/03/2026 -> 18/05/2026 (48 dias)
 
-   Patrón Services:
-     Todos los services Oracle heredan de OracleServiceBase.
-     GetOracleConnectionString() → cadena según empresa activa.
-     Propiedad S → prefijo de esquema ("SIG." / "ARBONA." / "SOLSA.").
-     Uso en queries: $"SELECT * FROM {S}PLN_SEGUIMIENTO WHERE ..."
+   Linea de tiempo real confirmada en BD Oracle:
+     31/03/2026  ITEMPED INSERT                     -> PASO '01'
+     01/04/2026  ITEMPED_DET UPDATE (NROPROG)       -> PASO '02'
+     01/05/2026  L_VALIDA_RECETA UPDATE ESTADO='3'  -> PASO '05' (LAB)
+     08/05/2026  PARTIDA 158938 INSERT              -> PASO '03' (hilo entra produccion)
+     18/05/2026  H_RPRODUC INSERT GUIA=158938       -> PASO '04' (produccion finalizada)
+     18/05/2026  LOTES UPDATE S_TRANSAC='21'        -> PASO '14' (despachado)
 
-   Convenciones Dapper/Oracle:
-     - Parámetros con prefijo ':' (no '@'): :numPed, :serie, :paso
-     - Fechas: TO_DATE(:fecha,'DD/MM/YYYY') en SQL embebido
-     - decimal C# para KGs; double solo para porcentajes UI
-     - Tipos nullable en modelos (DBNull.Value → null)
-     - COMMIT interno en cada SP; no usar TransactionScope externo
+   HALLAZGO CRITICO (origen BUG #40):
+   El laboratorio aprueba la receta ANTES que la PARTIDA exista.
+   La PARTIDA se crea ANTES que H_RPRODUC registre la produccion.
+   Orden real cronologico: '05' -> '03' -> '04' (NO '03' -> '04' -> '05').
 
-   ── CONTENIDO (en orden de despliegue obligatorio) ───────────
-     §0  Limpieza previa   DROP idempotente (jobs, triggers, pkg, vistas, tablas, secuencias)
-     §1  Secuencias        PLN_SEQ_SEGUIM / EVENTO / ALERTA / FECHAS
-     §2  Tablas            7 tablas PLN_*
-     §3  Índices           14 índices de performance
-     §4  Datos catálogo    9 parámetros + 16 pasos
-     §5  PKG_PLN SPEC      7 procedimientos públicos
-     §6  PKG_PLN BODY      implementación completa
-     §7  Triggers          12 triggers → PKG_PLN.*
-     §8  Vistas            8 vistas V_PLN_*
-     §9  Jobs              JOB_PLN_ALERTAS (cada hora) + JOB_PLN_CARGA (23:30)
-     §10 Población inicial migración de pedidos activos existentes
+   -- FLUJO DE PRODUCCION --- MAQUINA DE ESTADOS (16 PASOS) -----
+   Ciclo sin reproceso: 12-18 dias habiles.
+   Ciclo con reproceso ('9R'): 14-22 dias habiles.
 
-   ── FLUJO DE PRODUCCIÓN — MÁQUINA DE ESTADOS (16 PASOS) ──────
-   Ciclo completo sin reproceso: 12–18 días hábiles.
-   Ciclo con reproceso (9R):     14–22 días hábiles.
+   ORDEN | PASO  | NOMBRE               | TABLA QUE LO ACTIVA                    | AREA
+   ------+-------+----------------------+----------------------------------------+--------------
+      1  | '01'  | Pedido Registrado    | ITEMPED INSERT                         | Ventas
+      2  | '02'  | Planificado          | ITEMPED_DET UPDATE (NROPROG asignado)  | Planeamiento
+      3  | '05'  | Laboratorio          | L_VALIDA_RECETA UPDATE ESTADO='3'      | Laboratorio
+      4  | '03'  | En Hilanderia        | PARTIDA INSERT (NROPROG NOT NULL)      | Hilanderia
+      5  | '04'  | Lote Disponible      | H_RPRODUC INSERT (GUIA NOT NULL)       | Hilanderia
+      6  | '06'  | En Tintoreria        | PARTIDA UPDATE SITU_PART='R001'        | Tintoreria
+      7  | '07'  | Tenido Completo      | TT_RPRODUC UPDATE ESTADO='3' (todos)   | Tintoreria
+      8  | '08'  | Secado               | TT_RSECADO INSERT                      | Tintoreria
+      9  | '09'  | CC TT Aprobado       | CTCALIDAD_D EST_EVAL='32' RES aprobado | Calidad
+     10  | '09B' | Gaseado (*)          | H_RPRODUC INSERT TP_MAQ='G'            | Acabados
+     11  | '9R'  | Reproceso CC         | CTCALIDAD_D EST_EVAL='32' RES='30'     | Tintoreria
+     12  | '10'  | Devanado             | REVISADO_G INSERT (GUIA NOT NULL)      | Devanado
+     13  | '11'  | Revisado             | REVISADO_D INSERT (APROBADO > 0)       | Calidad
+     14  | '12'  | Ingresado Alm PT     | LOTES INSERT TP='16' ALM IN(03,07,22,30)| Almacen PT
+     15  | '13'  | Listo para Despacho  | (automatico: SP_PLN_AVANZA_PASO)       | Almacen PT
+     16  | '14'  | Despachado/Cerrado   | LOTES UPDATE S_TRANSAC IN ('21','23')  | Despacho
 
-   PASO  NOMBRE                TABLA QUE LO ACTIVA              ÁREA           COLOR
-   ───── ───────────────────── ──────────────────────────────── ────────────── ────────
-   '01'  Pedido Registrado     ITEMPED INSERT                   Ventas         #6c757d
-   '02'  Planificado           ITEMPED_DET UPDATE (NROPROG≠NULL) Planeamiento  #0d6efd
-   '03'  En Hilandería         H_RPRODUC INSERT (GUIA≠NULL)     Hilandería     #0dcaf0
-   '04'  Lote Disponible       PARTIDA INSERT (NROPROG≠NULL)    Hilandería     #17a2b8
-   '05'  Laboratorio           L_VALIDA_RECETA UPDATE ESTADO='3' Laboratorio   #6610f2
-   '06'  En Tintorería         PARTIDA UPDATE SITU_PART='R001'  Tintorería     #6f42c1
-   '07'  Tenido Completo       TT_RPRODUC UPDATE ESTADO='3'     Tintorería     #d63384
-                               (solo cuando TODOS los baños OK)
-   '08'  Secado                TT_RSECADO INSERT                Tintorería     #20c997
-   '09'  CC TT Aprobado        CTCALIDAD_D EST='32' RES='01','29','21' Calidad #fd7e14
-   '09B' Gaseado               (solo PROCESO='24', sin trigger) Acabados       #ffd700
-   '9R'  Reproceso             CTCALIDAD_D EST='32' RES='30'    Tintorería     #dc3545
-   '10'  Devanado              H_PROGRAMACION (sin trigger)     Devanado       #ffc107
-   '11'  Revisado              REVISADO_D INSERT APROBADO>0     Calidad        #0d6efd
-   '12'  Ingresado Almacén PT  LOTES INSERT COD_ALM '03'|'07' TP='16' Almacén #198754
-   '13'  Listo para Despacho   (vista calculada, sin trigger)   Almacén PT     #20c997
-   '14'  Despachado/Cerrado    LOTES UPDATE S_TRANSAC '21'|'23' Despacho      #198754
+   (*) PASO '09B' Gaseado: SOLO si PROCESO='24' (PEINADO GASEADO).
+       Para PROCESO='01' (Cardado) y '20' (Peinado): flujo salta '09'->'10'.
 
-   Nota: PASO '09B' → H_RPRODUC TP_MAQ='G' (solo si PROCESO='24').
-         PASO '10' → REVISADO_G INSERT (trigger §7.10 — BUG #32 corrección).
-         PASO '13' → calculado automáticamente por SP_PLN_AVANZA_PASO.
-         El flujo normal salta: '09' → '10' → '11' directamente via triggers.
+   Flujo normal:
+     [01]->[02]->[05]->[03]->[04]->[06]->[07]->[08]->[09]->[10]->[11]->[12]->[13]->[14]
+   Con gaseado (PROCESO='24'):
+     [01]->[02]->[05]->[03]->[04]->[06]->[07]->[08]->[09]->[09B]->[10]->[11]->[12]->[13]->[14]
+   Reproceso:
+     ...[09]->[9R]->[06]->[07]->[08]->[09]... (NRO_CICLO +1 en cada '9R')
+   Stock directo (SOLO_DESPACHO='S'):
+     [01]->[13] (sin produccion)
+
+   NOTA: Los PASOS '06' y '07' NO disparan para PARTIDA.NUMERO >= 158000
+   (sistema nuevo de tintoreria - no usa TT_RPRODUC ni SITU_PART='R001').
+   El flujo para partidas nuevas salta: ...[04]->[08]->[09]...
+   Gap de diseno conocido, no es un bug del modulo PLN_.
 
    Porcentaje de avance (PctAvance en C#):
-     '01'→6%  '02'→13%  '03'→19%  '04'→25%  '05'→31%  '06'→38%
-     '07'→44% '08'→50%  '09'→56%  '09B'→62% '10'→69%  '11'→75%
-     '12'→81% '13'→88%  '14'→100%
+     '01'->6%  '02'->13%  '03'->19%  '04'->25%  '05'->31%  '06'->38%
+     '07'->44% '08'->50%  '09'->56%  '09B'->62% '10'->69%  '11'->75%
+     '12'->81% '13'->88%  '14'->100%
 
-   ── REGLAS DE NEGOCIO CRÍTICAS ───────────────────────────────
-   1. TRAZABILIDAD POR NROPROG (no por LOTE):
-      ITEMPED_DET.NROPROG = PARTIDA.NROPROG es la única relación 1:1
-      confiable. El campo LOTE es reutilizable entre pedidos.
+   Colores UI (PLN_ESTADO_CODIGO.COLOR_UI):
+     '01'->#6c757d  '02'->#0d6efd  '05'->#6610f2  '03'->#0dcaf0  '04'->#17a2b8
+     '06'->#6f42c1  '07'->#d63384  '08'->#20c997  '09'->#fd7e14  '09B'->#ffd700
+     '9R'->#dc3545  '10'->#ffc107  '11'->#0d6efd  '12'->#198754  '13'->#20c997
+     '14'->#198754
 
-   2. BAÑOS MÚLTIPLES (PASO '07'):
-      El 75% de las partidas tienen 2+ baños en TT_RPRODUC.
-      El trigger TUA_PLN_FROM_TT_RPRODUC avanza a '07' SOLO cuando
-      TODOS los baños de esa partida están en ESTADO='3'.
-      Un baño suelto no dispara el avance.
+   -- CONTENIDO (orden de despliegue obligatorio) ----------------
+     parr.0  Limpieza     DROP idempotente (jobs->triggers->pkg->vistas->tablas->secuencias)
+     parr.1  Secuencias   PLN_SEQ_SEGUIM / EVENTO / ALERTA / FECHAS
+     parr.2  Tablas       7 tablas PLN_*
+     parr.3  Indices      14 indices de performance
+     parr.4  Catalogo     parr.4.1 PLN_PARAM (9 filas) - parr.4.2 PLN_ESTADO_CODIGO (16 filas)
+                          parr.4.3 UPDATE ORDEN_PASO para tabla ya deployada (BUG #40)
+     parr.5  PKG SPEC     7 procedimientos publicos
+     parr.6  PKG BODY     implementacion completa
+     parr.7  Triggers     13 triggers -> PKG_PLN.*
+     parr.8  Vistas       8 vistas V_PLN_*
+     parr.9  Jobs         JOB_PLN_ALERTAS (cada hora) + JOB_PLN_CARGA (23:30 diario)
+     parr.10 Init         SP_PLN_INIT_SEGUIMIENTO para pedidos activos (idempotente)
 
-   3. GASEADO CONDICIONAL (PASO '09B'):
-      Solo aplica si PLN_SEGUIMIENTO.PROCESO = '24' (PEINADO GASEADO).
-      Para los demás procesos ('01'=Cardado, '20'=Peinado), el flujo
-      salta directamente de '09' a '10'.
+   -- TABLAS PLN_ ------------------------------------------------
+   PLN_PARAM             PK: COD_PARAM              -- 9 parametros configurables
+   PLN_ESTADO_CODIGO     PK: COD_PASO               -- 16 pasos del flujo
+   PLN_SEGUIMIENTO       PK: ID_SEGUIM (surrogate)  -- 1 fila por (SERIE,NUM_PED,NRO,NUM_DET)
+   PLN_LOG_EVENTOS       PK: ID_EVENTO              -- historial inmutable de transiciones
+   PLN_ALERTA            PK: ID_ALERTA              -- alertas para supervisores
+   PLN_CARGA_DIARIA      PK: (FECHA, COD_MAQ)       -- capacidad de maquinas por dia
+   PLN_FECHAS_ESTIMADAS  PK: ID_FECH                -- historial de recalculos de fechas
 
-   4. REPROCESO (PASO '9R'):
-      CTCALIDAD_D.RESULTADO = '30' → reproceso.
-      NRO_CICLO se incrementa (+1). Las fechas reales de TT se limpian.
-      PLN_LOG_EVENTOS conserva el historial completo de todos los ciclos.
-      Frecuencia real de rechazo CC: ~2.7% de los lotes evaluados.
+   -- PROCEDIMIENTOS PUBLICOS (PKG_PLN.*) ------------------------
+   SP_PLN_INIT_SEGUIMIENTO(serie, ped, nro, det, paso_ini)
+     Crea la fila inicial en PLN_SEGUIMIENTO + primer evento AV.
+     Idempotente: DUP_VAL_ON_INDEX -> NULL (si ya existe, no hace nada).
+     paso_ini='01' para pedidos normales; paso_ini='13' para SOLO_DESPACHO='S'.
+     Llamado por triggers TIA_PLN_FROM_ITEMPED y TUA_PLN_FROM_ITEMPED_DET.
+     SIN COMMIT interno (ORA-04092 -- el padre hace el commit).
 
-   5. DESPACHO PARCIAL (retroceso a '13'):
-      Si KG_DESPACHADOS + kg_nuevo < CANTIDAD_ORIG, el ítem retrocede
-      automáticamente a '13' (Listo para Despacho). Solo cierra
-      (ESTADO='C') cuando KG_DESPACHADOS >= CANTIDAD_ORIG.
+   SP_PLN_AVANZA_PASO(serie, ped, nro, det, nuevo_paso, tabla, id, kg, obs)
+     Motor central del modulo. Realiza en una sola operacion:
+       - Guard anti-retroceso: si ORDEN_PASO_NEW < ORDEN_PASO_ACT -> RETURN
+         (excepciones: despacho parcial->'13', reinicio reproceso desde '9R')
+       - Actualiza COD_PASO_ACT / COD_PASO_ANT
+       - Actualiza la fecha real (FCH_REAL_*) correspondiente al nuevo paso
+       - Acumula KGs: KG_PRODUCIDOS solo en PASO '03' (PARTIDA.PESO_NETO) [BUG #40]
+                      KG_DESPACHADOS solo en PASO '14'
+       - Despacho parcial: si KG_DESPACHADOS < CANTIDAD_ORIG -> PASO='13'
+       - Cierra item: ESTADO='C' cuando KG_DESPACHADOS >= CANTIDAD_ORIG
+       - Incrementa NRO_CICLO en PASO '9R'
+       - Recalcula IND_RETRASO y DIAS_RETRASO
+       - Inserta en PLN_LOG_EVENTOS (TIPO_EVENTO: 'AV' o 'RE')
+     SELECT FOR UPDATE para concurrencia segura.
+     NO_DATA_FOUND -> NULL (si el item aun no existe en PLN_, se ignora).
+     SIN COMMIT interno (ORA-04092).
 
-   6. SOLO_DESPACHO = 'S' (stock / maquila / re-venta):
-      El trigger TIA_PLN_FROM_ITEMPED detecta ITEMPED.SOLO_DESPACHO='S'
-      e inicializa directamente en PASO '13'. No pasa por producción.
-      La app debe mostrar badge "Stock" visual diferenciado.
-
-   7. FCH_ENTREGA_COMP (fecha compromiso al cliente):
-      Prioridad: ITEMPED.F_MAXPED → PEDIDO.FECHA + PEDIDO.PLAZO_ENTREGA.
-      Es el único campo que determina retraso: SYSDATE > FCH_ENTREGA_COMP.
-
-   8. STOCK NUNCA MANUAL:
-      ALMACEN.STOCK es mantenido exclusivamente por triggers Oracle.
-      La app solo lee; nunca calcula ni actualiza el stock.
-
-   9. SUBLOTES (múltiples NUM_DET):
-      Para mostrar el estado de un ítem en el dashboard, usar el
-      peor paso activo (MIN ORDEN_PASO) entre todos sus NUM_DET.
-
-   10. URGENCIA (IND_URGENTE='S'):
-       Si ITEMPED_DET.URGENTE='S' ó hay anticipo cobrado → IND_URGENTE='S'.
-       Aparece primero en TODAS las listas (ORDER BY IND_URGENTE DESC).
-
-   ── PROCEDIMIENTOS PÚBLICOS (PKG_PLN.*) ──────────────────────
-   SP_PLN_INIT_SEGUIMIENTO(serie,ped,nro,det,paso_ini)
-     Crea la fila inicial en PLN_SEGUIMIENTO + evento AV.
-     Idempotente: DUP_VAL_ON_INDEX → NULL (si ya existe, no hace nada).
-     Llamado por triggers '01' y '02'. paso_ini='13' para SOLO_DESPACHO.
-
-   SP_PLN_AVANZA_PASO(serie,ped,nro,det,nuevo_paso,tabla,id,kg,obs)
-     Motor central del módulo. Actualiza:
-       · COD_PASO_ACT (con lógica de despacho parcial → '13')
-       · Fechas reales (FCH_REAL_* según el paso)
-       · KGs acumulados (KG_PRODUCIDOS solo PASO '04', KG_DESPACHADOS solo '14')
-       · ESTADO='C' cuando despacho completo
-       · NRO_CICLO +1 en PASO '9R'
-       · DIAS_RETRASO e IND_RETRASO en cada avance
-       · Inserta en PLN_LOG_EVENTOS (TIPO_EVENTO: 'AV' o 'RE')
-     Usa SELECT FOR UPDATE para concurrencia segura.
-     NO_DATA_FOUND → NULL (si el seguimiento no existe aún, se ignora).
-
-   SP_PLN_CALCULA_FECHAS(serie,ped,nro,det,motivo)
-     Recalcula todas las fechas estimadas del ítem.
-     Motivos: 'PED'=pedido / 'PLA'=planificado / 'REP'=reprogramado / 'MAQ'=máquina
-     Algoritmo:
-       v_fch_base   = FCH_REAL_PROGRAMADO (o SYSDATE si NULL)
+   SP_PLN_CALCULA_FECHAS(serie, ped, nro, det, motivo)
+     Recalcula todas las FCH_EST_* del item. Motivos:
+       'PED'=al crear pedido / 'PLA'=al planificar / 'REP'=reprogramacion / 'MAQ'=cambio maquina
+     Algoritmo (a partir de FCH_REAL_PROGRAMADO, o SYSDATE si aun NULL):
        FCH_EST_HILANDERIA = fch_base
        FCH_EST_PARTIDA    = fch_base + CEIL(cantidad / (kgr_hr * HRS_HILANDERIA))
        FCH_EST_TIN_INI    = FCH_EST_PARTIDA + DIAS_BUFFER_LAB
@@ -173,187 +152,237 @@
        FCH_EST_SECADO     = FCH_EST_TIN_FIN + (HRS_SECADO / 24)
        FCH_EST_CALIDAD    = TRUNC(FCH_EST_SECADO) + DIAS_BUFFER_QC
        FCH_EST_DESPACHO   = FCH_EST_CALIDAD + DIAS_BUFFER_DESP
-     kgr_hr: primero busca la máquina asignada en ITEMPED_DET (ctrutas_titulo);
-             si no hay, usa MAX(kgr_hr) para ese título/proceso; fallback: 10.
+     kgr_hr: maquina asignada en ITEMPED_DET (ctrutas_titulo) ->
+             MAX(kgr_hr) para titulo/proceso -> fallback: 10.
      Guarda historial en PLN_FECHAS_ESTIMADAS.
      Sincroniza ITEMPED_DET.FCH_ESTIMA_TENIDO y FCH_ESTIMA_CONO_UNO.
 
    SP_PLN_GENERA_ALERTAS
-     Motor de alertas. Ejecutar vía JOB_PLN_ALERTAS (cada hora).
-     Tipos generados:
-       'RET1' Retraso crítico  → dias_retraso >= DIAS_ALERTA_CRIT (7)
-       'RET2' Retraso alto     → dias_retraso >= DIAS_ALERTA_ALTA (3)
-       'SMP'  Sin planificación → más de 2 días en PASO '01'
-       'STN'  Sin ingresar TT  → en PASO '05' después de FCH_EST_TIN_INI
-       'QCF'  CC rechazado     → en PASO '9R'
-     Usa NOT EXISTS para no duplicar alertas activas.
+     Motor de alertas. Ejecutado por JOB_PLN_ALERTAS cada hora.
+       'RET1' CRITICO  -> dias_retraso >= DIAS_ALERTA_CRIT (7)
+       'RET2' ALTO     -> dias_retraso >= DIAS_ALERTA_ALTA (3)
+       'SMP'  ALTO     -> mas de 2 dias en PASO '01' sin planificar
+       'STN'  CRITICO  -> en PASO '05' y ya paso FCH_EST_TIN_INI
+       'QCF'  CRITICO  -> en PASO '9R' (CC rechazado)
+     NOT EXISTS para no duplicar alertas activas. Hace COMMIT propio.
 
    SP_PLN_CARGA_DIARIA_REFRESH(fch_ini, fch_fin)
-     Recalcula PLN_CARGA_DIARIA para el rango de fechas dado.
-     Ejecutar vía JOB_PLN_CARGA (23:30 diario).
-     DELETE + INSERT desde h_produccion_d + UPDATE porcentajes.
+     DELETE + INSERT en PLN_CARGA_DIARIA para el rango de fechas.
+     Fuente: h_produccion_d. Calcula PCT_UTILIZACION e IND_SOBRECARGADA.
+     Ejecutado por JOB_PLN_CARGA a las 23:30. Hace COMMIT propio.
 
    SP_PLN_CIERRE_ITEM(id_seguim, motivo, usuario)
-     Cierre manual: ESTADO='A' → 'C'. Inserta evento 'CI'.
-     Usar solo para correcciones operativas autorizadas.
+     Cierre manual autorizado: ESTADO='A' -> 'C'. Inserta evento 'CI'.
+     Solo para correcciones operativas supervisadas.
 
-   SP_PLN_REPROGRAMAR(serie,ped,nro,det,nueva_fch_desp,motivo,usuario)
-     Actualiza FCH_EST_DESPACHO. Recalcula IND_RETRASO.
+   SP_PLN_REPROGRAMAR(serie, ped, nro, det, nueva_fch_desp, motivo, usuario)
+     Actualiza FCH_EST_DESPACHO. Recalcula IND_RETRASO/DIAS_RETRASO.
      Guarda en PLN_FECHAS_ESTIMADAS (MOTIVO_RECALCULO='REP').
      Inserta evento TIPO_EVENTO='RE' en PLN_LOG_EVENTOS.
 
-   ── CÓMO LLAMAR DESDE C# / DAPPER ────────────────────────────
-   // Corrección manual (solo supervisores autorizados):
+   -- TRIGGERS (13; TODOS con EXCEPTION WHEN OTHERS THEN NULL) --
+   TIA_PLN_FROM_ITEMPED          -> PASO '01'       AFTER INSERT ITEMPED
+   TUA_PLN_FROM_ITEMPED_DET      -> PASO '02'       AFTER UPDATE ITEMPED_DET (NROPROG asignado)
+   TUA_PLN_FROM_L_VALIDA_RECETA  -> PASO '05'       AFTER UPDATE L_VALIDA_RECETA (ESTADO='3')
+   TIA_PLN_FROM_PARTIDA          -> PASO '03'       AFTER INSERT PARTIDA (NROPROG NOT NULL)
+   TIA_PLN_FROM_H_RPRODUC        -> PASO '04'/'09B' AFTER INSERT H_RPRODUC (GUIA NOT NULL)
+                                                     TP_MAQ='G' -> '09B'; resto -> '04'
+   TUA_PLN_FROM_PARTIDA          -> PASO '06'       AFTER UPDATE PARTIDA (SITU_PART='R001')
+   TUA_PLN_FROM_TT_RPRODUC       -> PASO '07'       AFTER UPDATE TT_RPRODUC (ESTADO='3')
+                                                     Solo avanza cuando TODOS los banos OK
+   TIA_PLN_FROM_TT_RSECADO       -> PASO '08'       AFTER INSERT TT_RSECADO
+   TUA_PLN_FROM_CTCALIDAD        -> PASO '09'/'9R'  AFTER UPDATE CTCALIDAD_D (EST_EVAL='32')
+                                                     RESULTADO IN ('01','21','29') -> '09'
+                                                     RESULTADO = '30' -> '9R'
+   TIA_PLN_FROM_REVISADO_G       -> PASO '10'       AFTER INSERT REVISADO_G (GUIA NOT NULL)
+   TIA_PLN_FROM_REVISADO         -> PASO '11'       AFTER INSERT REVISADO_D (APROBADO > 0)
+   TIA_PLN_FROM_LOTES_PT         -> PASO '12'       AFTER INSERT LOTES (TP='16', ALM IN '03','07','22','30')
+   TUA_PLN_FROM_LOTES_DESPACHO   -> PASO '14'       AFTER UPDATE LOTES (S_TRANSAC IN '21','23')
+
+   PASO '13' calculado internamente por SP_PLN_AVANZA_PASO (despacho parcial).
+
+   -- VISTAS V_PLN_* ---------------------------------------------
+   V_PLN_ESTADO_PEDIDO    Dashboard -- estado por pedido completo (agrupado)
+   V_PLN_ESTADO_ITEM      Detalle -- por item con semaforo y join a CLIENTES/ARTICUL
+   V_PLN_TRAZABILIDAD     Timeline -- todas las fechas estimadas vs. reales
+   V_PLN_ALERTAS_ACTIVAS  Panel -- alertas ESTADO='A' ordenadas C>A>M>B
+   V_PLN_CARGA_MAQUINAS   Gantt -- proximos 30 dias (SOBRECARGADA/ALTA/MEDIA/DISPONIBLE)
+   V_PLN_PENDIENTES_DESP  Lista de despacho -- pasos '12' y '13', stock disponible
+   V_PLN_KPI_CUMPLIMIENTO OTIF mensual -- pct_otif, ciclo_prom, retraso_prom
+   V_PLN_KPI_PRODUCCION   KPIs por maquina y mes -- kg_hora, eficiencia
+
+   -- PLN_PARAM --- PARAMETROS CONFIGURABLES ---------------------
+   Modificar sin recompilar: UPDATE PLN_PARAM SET VALOR_NUM=x WHERE COD_PARAM='...';
+
+   COD_PARAM         VALOR  DESCRIPCION
+   ----------------  -----  -------------------------------------
+   HRS_HILANDERIA      22   Horas/dia operativas hilanderia
+   HRS_TINTORERIA      24   Horas/dia operativas tintoreria
+   HRS_SECADO           8   Horas buffer post-secado
+   DIAS_BUFFER_LAB      1   Dias laboratorio antes de TT (receta)
+   DIAS_BUFFER_QC       1   Dias control calidad post-secado
+   DIAS_BUFFER_DESP     1   Dias para preparar despacho
+   DIAS_ALERTA_CRIT     7   Dias retraso -> alerta CRITICA ('C')
+   DIAS_ALERTA_ALTA     3   Dias retraso -> alerta ALTA ('A')
+   DIAS_ALERTA_MEDIA    1   Dias retraso -> alerta MEDIA ('M')
+
+   -- ALERTAS (PLN_ALERTA) ---------------------------------------
+   TIP_ALERTA | NIVEL | CONDICION
+   -----------+-------+------------------------------------------
+   'RET1'     | 'C'   | dias_retraso >= DIAS_ALERTA_CRIT (7)
+   'RET2'     | 'A'   | dias_retraso >= DIAS_ALERTA_ALTA (3)
+   'SMP'      | 'A'   | PASO '01' > 2 dias sin planificar
+   'STN'      | 'C'   | PASO '05' paso FCH_EST_TIN_INI sin entrar a TT
+   'QCF'      | 'C'   | PASO '9R' (CC rechazado)
+   Estado: 'A'=Activa  'R'=Resuelta  'I'=Ignorada
+   NivelColor C#: 'C'->"danger" | 'A'->"warning" | 'M'->"info" | 'B'->"secondary"
+
+   -- TIPOS DE EVENTO (PLN_LOG_EVENTOS.TIPO_EVENTO) --------------
+   'AV' = Avance automatico de paso (trigger)
+   'RE' = Reprogramacion de fecha (manual)
+   'AL' = Generacion de alerta
+   'CI' = Cierre manual de item
+
+   -- MOTIVOS RECALCULO (PLN_FECHAS_ESTIMADAS.MOTIVO_RECALCULO) --
+   'PED' = Al crear el pedido
+   'PLA' = Al planificar (NROPROG asignado)
+   'REP' = Reprogramacion manual (SP_PLN_REPROGRAMAR)
+   'MAQ' = Cambio de maquina asignada
+
+   -- NAVEGACION CLAVE (legacy -> PLN_SEGUIMIENTO) ---------------
+   ITEMPED_DET.NROPROG    = PARTIDA.NROPROG       (1:1 -- unica clave confiable)
+   H_RPRODUC.GUIA         = PARTIDA.NUMERO
+   TT_RSECADO.GUIA        = PARTIDA.NUMERO
+   ING_RECETAS_G.R_NUMERO = PARTIDA.NUMERO        (NO .GUIA -- columna GUIA no existe)
+   CTCALIDAD_D.GUIA       = PARTIDA.NUMERO
+   CTCALIDAD_D.NRO_PEDIDO = ITEMPED_DET.NUM_PED
+   CTCALIDAD_D.SER_PARTIDA= ITEMPED_DET.NRO       (item del pedido)
+   CTCALIDAD_D.NROPART    = ITEMPED_DET.NRO_DET   (sub-lote)
+   REVISADO_G.GUIA        = PARTIDA.NUMERO
+   LOTES.PARTIDA          = PARTIDA.NUMERO
+   CLIENTES.NOMBRE        (NO .DESCRIPCION -- verificado en BD)
+   ITEMPED columna LOTE   NO EXISTE (solo en ITEMPED_DET)
+
+   -- ESTADOS PARTIDA.SITU_PART (semaforo fisico) ----------------
+   (vacio)        -> En hilanderia / disponible    (PASOS '03'-'04')
+   'R001'         -> Recibida en tintoreria        (PASO  '06')
+   'P'            -> En proceso de tenido          (PASO  '07')
+   'A'            -> Acabada / salio de TT         (PASOS '08'-'09')
+   'X' + ESTADO=9 -> Cerrada / despachada          (PASO  '14')
+
+   -- ALMACENES PT VALIDOS (LOTES.COD_ALM -> PASO '12') ---------
+   '03' = Almacen PT principal     (42,000+ articulos)
+   '07' = Almacen PT externo
+   '22' = Almacen PT secundario
+   '30' = Almacen Madeja/HANK
+   '01' = Administrativo (37 articulos, stock=0) -- NO activa PASO '12'
+
+   -- TIPOS DE DESPACHO (LOTES.S_TRANSAC -> PASO '14') ----------
+   '21' = Despacho mercado nacional
+   '23' = Despacho exportacion
+
+   -- CTCALIDAD_D.RESULTADO --- CC TINTORERIA --------------------
+   Aprobados: '01', '21', '29'  -> PASO '09' CC Aprobado
+   Reproceso: '30'              -> PASO '9R' CC Rechazado
+   Frecuencia real de rechazo: ~2.7% de lotes evaluados.
+
+   -- REGLAS DE NEGOCIO CRITICAS ---------------------------------
+   R1. TRAZABILIDAD POR NROPROG:
+       ITEMPED_DET.NROPROG = PARTIDA.NROPROG es la unica relacion 1:1
+       confiable. El campo LOTE se reutiliza entre pedidos.
+
+   R2. FK desde PLN_SEGUIMIENTO a ITEMPED: NUNCA NOT DEFERRABLE IMMEDIATE.
+       En Oracle 11g, el trigger AFTER INSERT ON ITEMPED no puede ver el
+       padre aun no commiteado -> ORA-02291 silenciado -> ningun item se
+       registra. FK eliminada del DDL. (BUG #39 -- corregido)
+
+   R3. SP_PLN_AVANZA_PASO y SP_PLN_INIT_SEGUIMIENTO SIN COMMIT.
+       ORA-04092 prohibe COMMIT dentro de un trigger. El COMMIT lo hace
+       la transaccion padre. Cuando se llaman manualmente desde la app,
+       ejecutar COMMIT por separado despues de la llamada al SP.
+
+   R4. BANOS MULTIPLES DE TINTORERIA (75% de los casos):
+       TUA_PLN_FROM_TT_RPRODUC avanza a '07' SOLO cuando TODOS los
+       registros TT_RPRODUC de esa partida tienen ESTADO='3'.
+
+   R5. DESPACHO PARCIAL:
+       Si KG_DESPACHADOS < CANTIDAD_ORIG -> COD_PASO_ACT retrocede a '13'.
+       El item cierra (ESTADO='C') unicamente cuando KG_DESPACHADOS >= CANTIDAD_ORIG.
+
+   R6. ESTADO CON MULTIPLES SUBLOTES:
+       Para el dashboard, mostrar el peor paso (MIN ORDEN_PASO) entre
+       todos los NUM_DET activos del mismo (SERIE, NUM_PED, NRO).
+
+   R7. SOLO_DESPACHO='S' (stock / maquila / re-venta):
+       SP_PLN_INIT_SEGUIMIENTO inicializa directamente en PASO '13'.
+       La app debe mostrar badge "Stock" diferenciado.
+
+   R8. FCH_ENTREGA_COMP (fecha compromiso):
+       Prioridad: ITEMPED.F_MAXPED -> PEDIDO.FECHA + PEDIDO.PLAZO_ENTREGA.
+       Es el unico campo que determina retraso: SYSDATE > FCH_ENTREGA_COMP.
+
+   R9. ALMACEN.STOCK NUNCA MANUAL:
+       Lo mantienen triggers Oracle. La app solo lee.
+
+   R10. PLN_ NUNCA BLOQUEA OPERACIONES DE PLANTA:
+        Todos los triggers usan EXCEPTION WHEN OTHERS THEN NULL.
+        Si PLN_ falla, la operacion de planta continua. El dato de
+        seguimiento se puede recuperar re-ejecutando parr.10.
+
+   -- COMO LLAMAR DESDE C# / DAPPER -----------------------------
+   // Parametros Oracle: ':' (no '@')
+   // Correccion manual (solo supervisores autorizados):
    await conn.ExecuteAsync(
        "BEGIN PKG_PLN.SP_PLN_AVANZA_PASO(:serie,:ped,:nro,:det,:paso,'MANUAL',NULL,:kg,:obs); END;",
-       new { serie, ped, nro, det, paso, kg = (decimal?)null, obs = "Corrección manual" });
+       new { serie, ped, nro, det, paso, kg = (decimal?)null, obs = "Correccion manual" });
+   await conn.ExecuteAsync("COMMIT");
 
-   // Reprogramación de fecha de despacho:
+   // Reprogramacion de fecha de despacho:
    await conn.ExecuteAsync(
        "BEGIN PKG_PLN.SP_PLN_REPROGRAMAR(:serie,:ped,:nro,:det,:fch,:motivo,:usuario); END;",
        new { serie, ped, nro, det, fch = nuevaFecha, motivo, usuario = User.Identity!.Name });
 
-   // Consulta típica para el Dashboard (con prefijo de esquema S):
+   // Consulta Dashboard (prefijo de esquema {S}):
    // $"SELECT s.id_seguim, s.num_ped, ... FROM {S}PLN_SEGUIMIENTO s WHERE s.estado='A'"
 
-   ── TRIGGERS (13 triggers; TODOS con EXCEPTION WHEN OTHERS THEN NULL) ─
-   TIA_PLN_FROM_ITEMPED          → PASO '01'     (INSERT ITEMPED)
-   TUA_PLN_FROM_ITEMPED_DET      → PASO '02'     (UPDATE ITEMPED_DET: NROPROG asignado)
-   TIA_PLN_FROM_H_RPRODUC        → PASO '03'/'09B' (INSERT H_RPRODUC: GUIA NOT NULL; TP_MAQ='G' → '09B')
-   TIA_PLN_FROM_PARTIDA          → PASO '04'     (INSERT PARTIDA: NROPROG NOT NULL)
-   TUA_PLN_FROM_L_VALIDA_RECETA  → PASO '05'     (UPDATE L_VALIDA_RECETA: ESTADO='3')
-   TUA_PLN_FROM_PARTIDA          → PASO '06'     (UPDATE PARTIDA: SITU_PART='R001')
-   TUA_PLN_FROM_TT_RPRODUC       → PASO '07'     (UPDATE TT_RPRODUC: ESTADO='3' + TODOS OK)
-   TIA_PLN_FROM_TT_RSECADO       → PASO '08'     (INSERT TT_RSECADO)
-   TUA_PLN_FROM_CTCALIDAD        → PASO '09'/'9R' (UPDATE CTCALIDAD_D: EST_EVALUACION='32')
-   TIA_PLN_FROM_REVISADO_G       → PASO '10'     (INSERT REVISADO_G: GUIA NOT NULL)  ← BUG #32
-   TIA_PLN_FROM_REVISADO         → PASO '11'     (INSERT REVISADO_D: APROBADO>0)
-   TIA_PLN_FROM_LOTES_PT         → PASO '12'     (INSERT LOTES: TP='16', ALM IN '03','07','22','30') ← BUG #33
-   TUA_PLN_FROM_LOTES_DESPACHO   → PASO '14'     (UPDATE LOTES: S_TRANSAC IN '21','23')
+   -- STACK TECNOLOGICO DE LA CAPA .NET --------------------------
+   Framework : ASP.NET Core MVC (.NET 8) -- Controllers + Views
+   ORM       : Dapper con SQL explicito (NO Entity Framework para Oracle)
+   Driver    : Oracle.ManagedDataAccess.Core (ODP.NET)
+   Multi-emp.: SIG (LaColonial) / ARBONA / SOLSA
+     - Empresa activa: HttpContext.Session["EmpresaConexion"]
+     - Prefijo esquema: propiedad S -> "SIG." / "ARBONA." / "SOLSA."
+     - Queries: $"SELECT * FROM {S}PLN_SEGUIMIENTO WHERE ..."
+   Patron controllers: heredar OracleBaseController (verifica Session["OracleUser"])
+   Patron services   : heredar OracleServiceBase (GetOracleConnectionString(), S)
+   Convenciones Dapper:
+     - Parametros con ':': :numPed, :serie, :paso (no '@')
+     - Fechas: TO_DATE(:fecha,'DD/MM/YYYY')
+     - decimal C# para KGs; double solo para porcentajes UI
+     - Tipos nullable en modelos (DBNull.Value -> null)
+     - SP_PLN_GENERA_ALERTAS y SP_PLN_CARGA_DIARIA_REFRESH hacen COMMIT propio
+     - SP_PLN_AVANZA_PASO y SP_PLN_INIT_SEGUIMIENTO NO hacen COMMIT (ORA-04092)
 
-   PASO '13' calculado automáticamente por SP_PLN_AVANZA_PASO (despacho parcial).
+   -- OBJETOS INVALIDOS PRE-EXISTENTES (no relacionados al PLN_) --
+   PKG_COMERCIAL BODY -> PLS-00103 (error de sintaxis)
+   POST_TO_API        -> PLS-00302 (columna inexistente)
+   REGISTRA_LOGIN     -> ORA-00942 (tabla inexistente)
+   V_DRAW             -> ORA-00918 (columna ambigua)
 
-   ── NAVEGACIÓN CLAVE (de tabla legacy a PLN_SEGUIMIENTO) ─────
-   H_RPRODUC.GUIA         → PARTIDA.NUMERO
-   PARTIDA.NROPROG        → ITEMPED_DET.(SERIE, NUM_PED, NRO, NUM_DET) ← clave única
-   ING_RECETAS_G.NUMERO   → TT_RPRODUC.RECETA
-   ING_RECETAS_G.R_NUMERO → PARTIDA.NUMERO  (verificado en BD: columna GUIA no existe en ING_RECETAS_G)
-   TT_RSECADO.GUIA        → PARTIDA.NUMERO
-   CTCALIDAD_D.NRO_PEDIDO → ITEMPED_DET.NUM_PED
-   CTCALIDAD_D.SER_PARTIDA → ITEMPED_DET.NRO  (= ítem de pedido)
-   CTCALIDAD_D.NROPART    → ITEMPED_DET.NUM_DET (= sub-lote)
-   REVISADO_D.NUMERO      → REVISADO_G.GUIA → PARTIDA.NUMERO
-   LOTES.PARTIDA          → PARTIDA.NUMERO
-
-   ── ESTADOS PARTIDA.SITU_PART (semáforo físico) ──────────────
-   (vacío)        → En hilandería / disponible      (PASOS '03'–'04')
-   'R001'         → Recibida en tintorería          (PASO  '06')
-   'P'            → En proceso de tenido            (PASO  '07')
-   'A'            → Acabada / salió de TT           (PASOS '08'–'09')
-   'X' + ESTADO=9 → Cerrada / despachada            (PASO  '14')
-
-   ── ALMACENES PT RECONOCIDOS (LOTES.COD_ALM) ─────────────────
-   '03' = Almacén PT principal   (INSERT → PASO '12')
-   '07' = Almacén PT externo     (INSERT → PASO '12')
-
-   ── TIPOS DE DESPACHO (LOTES.S_TRANSAC) ──────────────────────
-   '21' = Despacho mercado nacional   (UPDATE → PASO '14')
-   '23' = Despacho exportación        (UPDATE → PASO '14')
-
-   ── VISTAS V_PLN_* Y SU USO DESDE .NET ───────────────────────
-   V_PLN_ESTADO_PEDIDO     → Dashboard: agrupado por pedido completo
-                             (total_items, items_cerrados, kg_pendientes, etc.)
-   V_PLN_ESTADO_ITEM       → Detalle: por ítem con semáforo R/A/Y/G
-                             y join a CLIENTES, ARTICUL, PLN_ESTADO_CODIGO
-   V_PLN_TRAZABILIDAD      → Timeline: todas las fechas est. vs. reales
-                             con días de ciclo calculados
-   V_PLN_ALERTAS_ACTIVAS   → Panel: alertas ESTADO='A' ordenadas C>A>M>B
-   V_PLN_CARGA_MAQUINAS    → Gantt: próximos 30 días con ESTADO_CARGA
-                             (SOBRECARGADA/CARGA_ALTA/CARGA_MEDIA/DISPONIBLE)
-   V_PLN_PENDIENTES_DESP   → Lista de despacho: pasos '12' y '13', stock disponible
-   V_PLN_KPI_CUMPLIMIENTO  → OTIF mensual (pct_otif, ciclo_prom, retraso_prom)
-   V_PLN_KPI_PRODUCCION    → KPIs por máquina y mes (kg_hora, eficiencia)
-
-   ── PLN_PARAM — PARÁMETROS CONFIGURABLES (cambiar sin tocar código) ─
-   COD_PARAM        VALOR  DESCRIPCIÓN
-   ─────────────── ─────── ───────────────────────────────────
-   HRS_HILANDERIA    22    Horas/día operativas hilandería
-   HRS_TINTORERIA    24    Horas/día operativas tintorería
-   HRS_SECADO         8    Horas buffer post-secado
-   DIAS_BUFFER_LAB    1    Días laboratorio antes de TT (receta)
-   DIAS_BUFFER_QC     1    Días control calidad post-secado
-   DIAS_BUFFER_DESP   1    Días para preparar despacho
-   DIAS_ALERTA_CRIT   7    Días retraso → alerta CRÍTICA ('C')
-   DIAS_ALERTA_ALTA   3    Días retraso → alerta ALTA ('A')
-   DIAS_ALERTA_MEDIA  1    Días retraso → alerta MEDIA ('M')
-
-   ── TIPOS Y NIVELES DE ALERTA ────────────────────────────────
-   TIP_ALERTA | NIVEL | CONDICIÓN DE GENERACIÓN
-   ────────── | ───── | ──────────────────────────────────────
-   'RET1'     | 'C'   | dias_retraso >= DIAS_ALERTA_CRIT (7)
-   'RET2'     | 'A'   | dias_retraso >= DIAS_ALERTA_ALTA (3)
-   'SMP'      | 'A'   | PASO '01' > 2 días sin planificación
-   'STN'      | 'C'   | PASO '05' pasó FCH_EST_TIN_INI sin ingresar a TT
-   'QCF'      | 'C'   | PASO '9R' (CC rechazado, en reproceso)
-   Estado alerta: 'A'=Activa  'R'=Resuelta  'I'=Ignorada
-   NivelColor C#: 'C'→"danger" | 'A'→"warning" | 'M'→"info" | 'B'→"secondary"
-
-   ── TIPOS DE EVENTO (PLN_LOG_EVENTOS.TIPO_EVENTO) ─────────────
-   'AV' = Avance de paso (trigger automático)
-   'RE' = Reprogramación de fecha (manual/automática)
-   'AL' = Generación de alerta
-   'CI' = Cierre manual de ítem
-
-   ── MOTIVOS RECÁLCULO (PLN_FECHAS_ESTIMADAS.MOTIVO_RECALCULO) ─
-   'PED' = Al crear el pedido (trigger ITEMPED)
-   'PLA' = Al planificar (trigger ITEMPED_DET NROPROG)
-   'REP' = Reprogramación manual (SP_PLN_REPROGRAMAR)
-   'MAQ' = Cambio de máquina asignada
-
-   ── REGLA ABSOLUTA: PLN_ NUNCA BLOQUEA OPERACIONES DE PLANTA ─
-   Todos los triggers usan EXCEPTION WHEN OTHERS THEN NULL.
-   Si el módulo PLN_ falla por cualquier causa, la operación de
-   planta se completa igualmente. Solo se pierde el registro de
-   tracking, que puede recuperarse ejecutando §10 nuevamente.
-
-   ── CORRECCIONES INCORPORADAS (vs. Propuesta.md original) ────
-   · FCH_REAL_PARTIDA   → correctamente asignado en PASO '04' (no '05')
-   · FCH_REAL_TIN_FIN   → correctamente en PASO '07' (separado de SECADO)
-   · KG_PRODUCIDOS      → solo se acumula en PASO '04' (Lote Disponible)
-   · KG_DESPACHADOS     → solo se acumula en PASO '14' (Despacho)
-   · ESTADO='C'         → solo cuando KG_DESPACHADOS >= CANTIDAD_ORIG
-   · Despacho parcial   → COD_PASO_ACT retrocede automáticamente a '13'
-   · NRO_CICLO          → incrementa en PASO '9R' (no en '09' aprobado)
-   · SP_PLN_CALCULA_FECHAS: kgr_hr de máquina asignada (no MAX global)
-   · SP_PLN_CALCULA_FECHAS: incluye DIAS_BUFFER_LAB antes de TT
-   · SP_PLN_INIT_SEGUIMIENTO: FCH_ENTREGA_COMP usa F_MAXPED si existe
-   · SP_PLN_INIT_SEGUIMIENTO: p_paso_ini para SOLO_DESPACHO='S'
-   · PLN_SEGUIMIENTO: añadidos NRO_CICLO y SOLO_DESPACHO
-   · PLN_PARAM: añadido DIAS_BUFFER_LAB (default 1)
-   · PLN_ESTADO_CODIGO: añadido PASO '09B' (Gaseado PROCESO='24')
-   · V_PLN_PENDIENTES_DESP: filtro corregido a pasos '12','13'
-   · V_PLN_KPI_CUMPLIMIENTO: filtro corregido a ESTADO='C' AND PASO='14'
-   · Todos los triggers invocan PKG_PLN.* (no standalone procedures)
-
-   ── OBJETOS INVÁLIDOS PRE-EXISTENTES (resolver ANTES de desplegar) ─
-   PKG_COMERCIAL BODY   → PLS-00103 error de sintaxis en línea 1
-   POST_TO_API          → PLS-00302
-   REGISTRA_LOGIN       → ORA-00942 tabla no encontrada
-   V_DRAW               → ORA-00918 columna ambigua
-
-   ── ORDEN DE DESPLIEGUE ───────────────────────────────────────
-   0. §0  Limpieza previa  (DROP jobs → triggers → pkg → vistas → tablas → secuencias)
-   1. §1  Secuencias  (ya no se necesita DROP manual; §0 lo hace automáticamente)
-   2. §2  Tablas
-   3. §3  Índices
-   4. §4  Datos catálogo  (INSERT + COMMIT)
-   5. §5  Package SPEC
-   6. §6  Package BODY
-   7. §7  Triggers
-   8. §8  Vistas
-   9. §9  Jobs  (enabled=>FALSE en DEV, TRUE en PROD)
-   10. §10 Población inicial  (UNA VEZ, idempotente via NOT EXISTS)
+   -- ORDEN DE DESPLIEGUE ----------------------------------------
+   0. parr.0  Limpieza   jobs -> triggers -> pkg -> vistas -> tablas -> secuencias
+   1. parr.1  Secuencias
+   2. parr.2  Tablas
+   3. parr.3  Indices
+   4. parr.4  Catalogo   PLN_PARAM + PLN_ESTADO_CODIGO + UPDATEs BUG #40
+   5. parr.5  PKG SPEC
+   6. parr.6  PKG BODY
+   7. parr.7  Triggers
+   8. parr.8  Vistas
+   9. parr.9  Jobs       enabled=>FALSE en DEV / TRUE en PROD
+   10. parr.10 Init      SP_PLN_INIT_SEGUIMIENTO para pedidos activos (UNA VEZ, idempotente)
    ============================================================ */
+
 
 
 -- ============================================================
@@ -369,6 +398,9 @@
 --   · Paquete antes de tablas: usa %ROWTYPE de PLN_SEGUIMIENTO.
 --   · Tablas con CASCADE CONSTRAINTS: elimina FKs hijos en cascada.
 -- ============================================================
+
+-- Permite líneas en blanco dentro de bloques SQL al ejecutar con @
+SET SQLBLANKLINES ON
 
 PROMPT ============================================================
 PROMPT §0  Limpieza previa PLN_ (re-despliegue idempotente)
@@ -526,7 +558,7 @@ CREATE TABLE PLN_PARAM (
 -- Consulta típica desde C#:
 --   JOIN pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act — Catálogo de pasos ──────────────
 CREATE TABLE PLN_ESTADO_CODIGO (
-  COD_PASO    VARCHAR2(2)    NOT NULL,
+  COD_PASO    VARCHAR2(3)    NOT NULL,  -- '09B' tiene 3 chars (BUG #39)
   NOMBRE_PASO VARCHAR2(60)   NOT NULL,
   DESCRIPCION VARCHAR2(200),
   ORDEN_PASO  NUMBER(2)      NOT NULL,
@@ -541,8 +573,9 @@ CREATE TABLE PLN_ESTADO_CODIGO (
 -- ────────────────────────────────────────────────────────────
 -- UNA FILA por ítem de pedido + sub-lote (SERIE, NUM_PED, NRO, NUM_DET).
 -- PK surrogate ID_SEGUIM + UK (SERIE, NUM_PED, NRO, NUM_DET).
--- FK a ITEMPED (SERIE, NUM_PED, NRO) — registrada pero sin ON DELETE CASCADE
--- para no bloquear operaciones legacy.
+-- FK a ITEMPED (SERIE, NUM_PED, NRO) — ELIMINADA (BUG #39): NOT DEFERRABLE IMMEDIATE
+-- causaba ORA-02291 dentro del AFTER INSERT trigger. La integridad referencial
+-- la garantiza SP_PLN_INIT_SEGUIMIENTO (lee ITEMPED antes de insertar).
 --
 -- DUALIDAD DE FECHAS:
 --   FCH_EST_* = fechas estimadas calculadas por SP_PLN_CALCULA_FECHAS.
@@ -551,7 +584,7 @@ CREATE TABLE PLN_ESTADO_CODIGO (
 --                Son inmutables (log histórico en PLN_LOG_EVENTOS).
 --
 -- ACUMULACIÓN DE KG (cuándo se suma cada campo):
---   KG_PRODUCIDOS  : solo PASO '04' (Lote Disponible — hilo crudo creado)
+--   KG_PRODUCIDOS  : solo PASO '03' (En Hilandería — PARTIDA creada) [BUG #40]
 --   KG_EN_TIN      : solo PASO '06' (ingresó físicamente a tintorería)
 --   KG_EN_ALM_PT   : solo PASO '12' (LOTES INSERT almacén PT)
 --   KG_DESPACHADOS : solo PASO '14' (LOTES UPDATE despacho, puede ser parcial)
@@ -593,8 +626,8 @@ CREATE TABLE PLN_SEGUIMIENTO (
   SOLO_DESPACHO     VARCHAR2(1)     DEFAULT 'N',  -- 'S' = omite flujo de producción
 
   -- Paso actual
-  COD_PASO_ACT      VARCHAR2(2)     NOT NULL,
-  COD_PASO_ANT      VARCHAR2(2),
+  COD_PASO_ACT      VARCHAR2(3)     NOT NULL,  -- '09B' tiene 3 chars (BUG #39)
+  COD_PASO_ANT      VARCHAR2(3),
 
   -- Reproceso
   NRO_CICLO         NUMBER(3)       DEFAULT 1 NOT NULL,  -- incrementa en cada reproceso
@@ -655,9 +688,13 @@ CREATE TABLE PLN_SEGUIMIENTO (
   A_MDFECHA         DATE,
 
   CONSTRAINT PK_PLN_SEGUIMIENTO PRIMARY KEY (ID_SEGUIM),
-  CONSTRAINT UK_PLN_SEGUIM      UNIQUE (SERIE, NUM_PED, NRO, NUM_DET),
-  CONSTRAINT FK_PLN_SEG_ITEMPED FOREIGN KEY (SERIE, NUM_PED, NRO)
-    REFERENCES ITEMPED (SERIE, NUM_PED, NRO)
+  CONSTRAINT UK_PLN_SEGUIM      UNIQUE (SERIE, NUM_PED, NRO, NUM_DET)
+  -- FK_PLN_SEG_ITEMPED removido intencionalmente (BUG #39):
+  -- Un FK NOT DEFERRABLE IMMEDIATE hacia ITEMPED falla con ORA-02291 cuando
+  -- TIA_PLN_FROM_ITEMPED (AFTER INSERT ON ITEMPED) intenta insertar en esta tabla,
+  -- porque el padre ITEMPED aún no ha hecho COMMIT en el contexto del trigger.
+  -- La integridad referencial la garantiza SP_PLN_INIT_SEGUIMIENTO (lee ITEMPED
+  -- antes de insertar), por lo que el FK es innecesario y perjudicial aquí.
 );
 
 -- ────────────────────────────────────────────────────────────
@@ -685,7 +722,7 @@ CREATE TABLE PLN_LOG_EVENTOS (
   NUM_PED          NUMBER(8)       NOT NULL,
   NRO              NUMBER(2)       NOT NULL,
   NUM_DET          NUMBER(3)       NOT NULL,
-  COD_PASO         VARCHAR2(2)     NOT NULL,
+  COD_PASO         VARCHAR2(3)     NOT NULL,  -- '09B' tiene 3 chars (BUG #39)
   DESC_PASO        VARCHAR2(100),
   TABLA_ORIGEN     VARCHAR2(30),
   ID_OBJETO_ORIGEN NUMBER(12),
@@ -877,27 +914,44 @@ COMMIT;
 -- ── §4.2  Catálogo de pasos del flujo (PLN_ESTADO_CODIGO) ───────
 -- Columnas: COD_PASO, NOMBRE_PASO, DESCRIPCION, ORDEN_PASO,
 --            TABLA_ORIGEN, ES_FINAL, COLOR_UI
--- Orden de avance normal: 01→02→03→04→05→06→07→08→09→(09B)→10→11→12→13→14
+-- Orden de avance REAL (confirmado 19/05/2026): 01→02→05→03→04→06→07→08→09→(09B)→10→11→12→13→14
 -- Orden de reproceso:     ...→09→9R→06→07→08→09→... (ciclo adicional)
+-- BUG #40 FIX: '05' LAB (ORDEN=3) ocurre ANTES que '03' PARTIDA (ORDEN=4) en producción real.
+--   L_VALIDA_RECETA se aprueba → luego PARTIDA se crea → luego H_RPRODUC finishing.
 -- Solo PASO '14' tiene ES_FINAL='S'. El trigger TUA_PLN_FROM_LOTES_DESPACHO
 -- es el único que puede llevar un ítem a ESTADO='C' en PLN_SEGUIMIENTO.
 -- Los colores son los hex de Bootstrap 5 + paleta corporativa:
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('01','Pedido Registrado',        'Ítem de pedido creado en ITEMPED',                                              1,'ITEMPED',          'N','#6c757d');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('02','Planificado',              'Etapa asignada en ITEMPED_DET (NROPROG asignado)',                               2,'ITEMPED_DET',      'N','#0d6efd');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('03','En Hilandería',            'H_RPRODUC INSERT — inicio de producción',                                        3,'H_RPRODUC',        'N','#0dcaf0');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('04','Lote Disponible',          'PARTIDA INSERT — hilo crudo producido',                                          4,'PARTIDA',          'N','#17a2b8');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('05','Laboratorio',              'L_VALIDA_RECETA UPDATE ESTADO=3 — receta validada',                              5,'L_VALIDA_RECETA',  'N','#6610f2');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('06','En Tintorería',            'PARTIDA UPDATE SITU_PART=R001 — ingresó a TT',                                   6,'PARTIDA',          'N','#6f42c1');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('07','Tenido Completo',          'TT_RPRODUC UPDATE ESTADO=3 — TODOS los baños completos',                         7,'TT_RPRODUC',       'N','#d63384');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('08','Secado',                   'TT_RSECADO INSERT — secado registrado',                                          8,'TT_RSECADO',       'N','#20c997');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('09','CC TT Aprobado',           'CTCALIDAD_D RESULTADO IN (01,21,29,30) — aprobado/concesionado (BUG #28)',       9,'CTCALIDAD_D',      'N','#fd7e14');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('09B','Gaseado',                 'H_RPRODUC INSERT TP_MAQ=G GUIA NOT NULL — gaseado (solo PROCESO=24, BUG #31)',  10,'H_RPRODUC',        'N','#ffd700');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('9R','CC TT Rechazado→Reproceso','CTCALIDAD_D RESULTADO NOT IN (01,21,29,30) — rechazado, requiere reproceso',     11,'CTCALIDAD_D',      'N','#dc3545');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('10','Devanado',                 'REVISADO_G INSERT GUIA=PARTIDA — inicio devanado/rewinding (BUG #32)',            12,'REVISADO_G',      'N','#ffc107');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('11','Revisado',                 'REVISADO_D INSERT APROBADO>0 — calidad final aprobada',                          13,'REVISADO_D',       'N','#0d6efd');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('03','En Hilandería',            'PARTIDA INSERT - lote ingresado a produccion hilanderia (BUG #40)',              4,'PARTIDA',          'N','#0dcaf0');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('04','Lote Disponible',          'H_RPRODUC INSERT - produccion finalizada, lote disponible (BUG #40)',            5,'H_RPRODUC',        'N','#17a2b8');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('05','Laboratorio',              'L_VALIDA_RECETA UPDATE ESTADO=3 - receta validada',                              3,'L_VALIDA_RECETA',  'N','#6610f2');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('06','En Tintorería',            'PARTIDA UPDATE SITU_PART=R001 - ingreso a TT',                                   6,'PARTIDA',          'N','#6f42c1');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('07','Tenido Completo',          'TT_RPRODUC UPDATE ESTADO=3 - TODOS los banios completos',                         7,'TT_RPRODUC',       'N','#d63384');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('08','Secado',                   'TT_RSECADO INSERT - secado registrado',                                          8,'TT_RSECADO',       'N','#20c997');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('09','CC TT Aprobado',           'CTCALIDAD_D RESULTADO IN (01,21,29,30) - aprobado/concesionado (BUG #28)',       9,'CTCALIDAD_D',      'N','#fd7e14');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('09B','Gaseado',                 'H_RPRODUC INSERT TP_MAQ=G GUIA NOT NULL - gaseado (solo PROCESO=24, BUG #31)',  10,'H_RPRODUC',        'N','#ffd700');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('9R','CC TT Rechazado/Reproceso','CTCALIDAD_D RESULTADO NOT IN (01,21,29,30) - rechazado, requiere reproceso',      11,'CTCALIDAD_D',      'N','#dc3545');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('10','Devanado',                 'REVISADO_G INSERT GUIA=PARTIDA - inicio devanado/rewinding (BUG #32)',            12,'REVISADO_G',      'N','#ffc107');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('11','Revisado',                 'REVISADO_D INSERT APROBADO>0 - calidad final aprobada',                          13,'REVISADO_D',       'N','#0d6efd');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('12','Ingresado Almacén PT',     'LOTES INSERT COD_ALM IN (03,07,22,30) TP_TRANSAC=16 (BUG #33)',                  14,'LOTES',            'N','#198754');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('13','Listo para Despacho',      'Stock en almacén, saldo pendiente de despacho',                                  15,NULL,               'N','#20c997');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('14','Despachado/Cerrado',       'LOTES UPDATE S_TRANSAC IN (21,23) — despacho completo',                          16,'LOTES',            'S','#198754');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('14','Despachado/Cerrado',       'LOTES UPDATE S_TRANSAC IN (21,23) - despacho completo',                          16,'LOTES',            'S','#198754');
+COMMIT;
+
+-- ── §4.3  BUG #40 FIX — Corrección ORDEN_PASO ya deployado en Oracle ─────────
+-- Ejecutar UNA SOLA VEZ contra la BD de producción para corregir la tabla
+-- PLN_ESTADO_CODIGO que fue deployada con ORDENes incorrectos (19/05/2026).
+-- Orden real confirmado con pedido 88501 NRO=5:
+--   L_VALIDA_RECETA aprobada (01/05) ANTES que PARTIDA creada (08/05)
+--   PARTIDA creada (08/05) ANTES que H_RPRODUC finishing (18/05)
+-- Por lo tanto: '05' ORDEN=3, '03' ORDEN=4, '04' ORDEN=5
+UPDATE PLN_ESTADO_CODIGO SET ORDEN_PASO=3, DESCRIPCION='L_VALIDA_RECETA UPDATE ESTADO=3 - receta validada'
+  WHERE COD_PASO='05';
+UPDATE PLN_ESTADO_CODIGO SET ORDEN_PASO=4, DESCRIPCION='PARTIDA INSERT - lote ingresado a produccion hilanderia (BUG #40)'
+  WHERE COD_PASO='03';
+UPDATE PLN_ESTADO_CODIGO SET ORDEN_PASO=5, DESCRIPCION='H_RPRODUC INSERT - produccion finalizada, lote disponible (BUG #40)'
+  WHERE COD_PASO='04';
 COMMIT;
 
 
@@ -1109,7 +1163,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
   -- REGLAS CRÍTICAS (correcciones incorporadas vs. Propuesta.md original):
   --   · FCH_REAL_PARTIDA  → solo PASO '04' (Lote Disponible, hilo crudo producido)
   --   · FCH_REAL_TIN_FIN  → solo PASO '07' (Tenido completo, NO con SECADO '08')
-  --   · KG_PRODUCIDOS     → solo se SUMA en PASO '04' (no en '03' ni '05')
+  --   · KG_PRODUCIDOS     → solo se SUMA en PASO '03' (no en '04' ni '05') [BUG #40]
   --   · KG_EN_TIN         → solo se SUMA en PASO '06' (entrada física a TT)
   --   · KG_EN_ALM_PT      → solo se SUMA en PASO '12' (ingreso almacén PT)
   --   · KG_DESPACHADOS    → solo se SUMA en PASO '14' (puede ser parcial)
@@ -1192,6 +1246,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                               ELSE p_nuevo_paso
                             END,
       -- ── Fechas reales por paso ──────────────────────────────
+      -- ── Número de programa (BUG #41: NROPROG viene como p_id_origen en PASO '02') ──
+      NUM_PROGRAMA        = CASE WHEN p_nuevo_paso='02' THEN p_id_origen ELSE NUM_PROGRAMA END,
       FCH_REAL_PROGRAMADO = CASE WHEN p_nuevo_paso='02' THEN SYSDATE ELSE FCH_REAL_PROGRAMADO END,
       FCH_REAL_PRODUCCION = CASE WHEN p_nuevo_paso='03' THEN SYSDATE ELSE FCH_REAL_PRODUCCION END,
       FCH_REAL_PARTIDA    = CASE WHEN p_nuevo_paso='04' THEN SYSDATE ELSE FCH_REAL_PARTIDA    END,
@@ -1209,7 +1265,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       FCH_REAL_DESPACHO   = CASE WHEN p_nuevo_paso='14' AND v_nuevo_kg >= CANTIDAD_ORIG
                                     THEN SYSDATE ELSE FCH_REAL_DESPACHO END,
       -- ── KG acumulados ──────────────────────────────────────
-      KG_PRODUCIDOS       = CASE WHEN p_nuevo_paso='04'
+      KG_PRODUCIDOS       = CASE WHEN p_nuevo_paso='03'
                                    THEN KG_PRODUCIDOS + NVL(p_kg_cantidad,0) ELSE KG_PRODUCIDOS END,
       KG_EN_TIN           = CASE WHEN p_nuevo_paso='06'
                                    THEN KG_EN_TIN    + NVL(p_kg_cantidad,0) ELSE KG_EN_TIN    END,
@@ -1251,6 +1307,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     -- ORA-04092: mismo motivo que SP_PLN_INIT_SEGUIMIENTO.
     -- SELECT FOR UPDATE bloquea la fila hasta el COMMIT de la transacción padre (correcto).
     -- Llamada manual desde app: BEGIN PKG_PLN.SP_PLN_AVANZA_PASO(...); COMMIT; END;
+
+    -- Recalcular FCH_EST_* tras cada cambio de paso.
+    -- SP_PLN_CALCULA_FECHAS re-lee PLN_SEGUIMIENTO (ve las FCH_REAL_* ya actualizadas
+    -- en esta misma transacción) y ancla los estimados pendientes desde el último paso real.
+    SP_PLN_CALCULA_FECHAS(p_serie, p_num_ped, p_nro, p_num_det, 'AV');
 
   EXCEPTION
     WHEN NO_DATA_FOUND THEN NULL;  -- seguimiento no existe aún → ignorar
@@ -1366,20 +1427,27 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     EXCEPTION WHEN NO_DATA_FOUND THEN NULL;
     END;
 
-    -- Fecha base
+    -- Fecha base: inicio del ciclo (programación real o SYSDATE)
     v_fch_base := NVL(v_seg.fch_real_programado, SYSDATE);
 
-    -- Cálculo de fechas
-    v_est_hil  := TRUNC(v_fch_base);
-    -- BUG #37: usar v_seg.cantidad_orig (ya cargado desde PLN_SEGUIMIENTO) en lugar de
-    -- v_item.cantidad (total del ítem). Si hay sub-lotes (NUM_DET>0), ITEMPED_DET.CANTIDAD
-    -- almacena el kgr del sub-lote en CANTIDAD_ORIG; ITEMPED.CANTIDAD es el total del ítem.
-    v_est_part := TRUNC(v_fch_base) + CEIL(v_seg.cantidad_orig / NULLIF(v_kgr_hr * v_hrs_hil, 0));
-    v_est_tini := v_est_part + v_buf_lab;           -- buffer laboratorio antes de TT
-    v_est_tfin := v_est_tini + (v_hrs_tin / 24);
-    v_est_sec  := v_est_tfin + (v_hrs_sec / 24);
-    v_est_cal  := TRUNC(v_est_sec)  + v_buf_qc;
-    v_est_desp := v_est_cal + v_buf_desp;
+    -- Cálculo de fechas: si el paso ya ocurrió usa la FCH_REAL_* como ancla;
+    -- si no, proyecta desde el paso anterior estimado o real.
+    -- BUG #37: usar v_seg.cantidad_orig (PLN_SEGUIMIENTO) en vez de v_item.cantidad (ITEMPED).
+    v_est_hil  := NVL(v_seg.fch_real_produccion,
+                      TRUNC(v_fch_base));
+    v_est_part := NVL(v_seg.fch_real_partida,
+                      TRUNC(NVL(v_seg.fch_real_produccion, v_fch_base))
+                      + CEIL(v_seg.cantidad_orig / NULLIF(v_kgr_hr * v_hrs_hil, 0)));
+    v_est_tini := NVL(v_seg.fch_real_tin_ini,
+                      NVL(v_seg.fch_real_partida, v_est_part) + v_buf_lab);
+    v_est_tfin := NVL(v_seg.fch_real_tin_fin,
+                      NVL(v_seg.fch_real_tin_ini, v_est_tini) + (v_hrs_tin / 24));
+    v_est_sec  := NVL(v_seg.fch_real_secado,
+                      NVL(v_seg.fch_real_tin_fin, v_est_tfin) + (v_hrs_sec / 24));
+    v_est_cal  := NVL(v_seg.fch_real_calidad,
+                      TRUNC(NVL(v_seg.fch_real_secado, v_est_sec)) + v_buf_qc);
+    v_est_desp := NVL(v_seg.fch_real_despacho,
+                      NVL(v_seg.fch_real_calidad, v_est_cal)  + v_buf_desp);
 
     -- Actualizar PLN_SEGUIMIENTO
     UPDATE PLN_SEGUIMIENTO SET
@@ -1762,7 +1830,7 @@ AFTER INSERT ON ITEMPED
 FOR EACH ROW
 DECLARE
   v_solo_desp VARCHAR2(1) := 'N';
-  v_paso_ini  VARCHAR2(2) := '01';
+  v_paso_ini  VARCHAR2(3) := '01';
 BEGIN
   -- Si el ítem es solo-despacho, inicia en PASO '13'
   -- Usar :NEW directamente evita ORA-04091 (tabla mutante) en inserciones bulk.
@@ -1834,10 +1902,10 @@ END TUA_PLN_FROM_ITEMPED_DET;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.3  TIA_PLN_FROM_H_RPRODUC — PASO '03'/'09B' Hilandería o Gaseado
+-- §7.3  TIA_PLN_FROM_H_RPRODUC — PASO '04'/'09B' Lote Disponible o Gaseado
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER INSERT ON H_RPRODUC FOR EACH ROW WHEN (NEW.GUIA IS NOT NULL)
--- Acción   : Avanza a PASO '03' (hilandería) o '09B' (gaseado para PROCESO='24')
+-- Acción   : Avanza a PASO '04' (lote disponible) o '09B' (gaseado para PROCESO='24')
 -- Tabla     : H_RPRODUC — registro de producción de hilandería y acabados
 -- Navegación (GUIA → NROPROG → item):
 --   H_RPRODUC.GUIA → PARTIDA.NUMERO
@@ -1845,11 +1913,14 @@ END TUA_PLN_FROM_ITEMPED_DET;
 --   PARTIDA.SERIE + PARTIDA.NRO_PEDIDO → identifica el pedido
 -- Campos clave en :NEW:
 --   GUIA      → número de PARTIDA (lote de hilo en producción)
---   PESO_NETO → kg producidos en esta corrida
+--   PESO_NETO → kg procesados en esta corrida
 --   COD_MAQ   → máquina usada (ej. 'GAS01', 'GAS02' para gaseadora)
---   TP_MAQ    → 'G'=GASEADORA → PASO '09B' / demás → PASO '03'
+--   TP_MAQ    → 'G'=GASEADORA → PASO '09B' / demás → PASO '04'
 -- BUG #31 CORREGIDO: TP_MAQ='G' (GASEADORA) avanzaba incorrectamente a '03'.
 --   Ahora: si TP_MAQ='G' → intenta PASO '09B' (SP valida que PROCESO='24').
+-- BUG #40 CORREGIDO: PASO '03'/'04' estaban invertidos. H_RPRODUC finishing ocurre
+--   DESPUÉS de que la PARTIDA es creada, por lo que corresponde a PASO '04'
+--   (Lote Disponible), no a PASO '03' (En Hilandería).
 -- EXCEPTION WHEN OTHERS THEN NULL → no bloquea el INSERT de H_RPRODUC.
 CREATE OR REPLACE TRIGGER TIA_PLN_FROM_H_RPRODUC
 AFTER INSERT ON H_RPRODUC
@@ -1873,7 +1944,8 @@ BEGIN
   WHERE d.nroprog = v_nroprog AND ROWNUM = 1;
 
   -- BUG #31: Diferenciar GASEADORA (TP_MAQ='G') → PASO '09B'
-  v_nuevo_paso := CASE WHEN :NEW.tp_maq = 'G' THEN '09B' ELSE '03' END;
+  -- BUG #40: H_RPRODUC finishing ocurre DESPUÉS de PARTIDA → PASO '04' (no '03')
+  v_nuevo_paso := CASE WHEN :NEW.tp_maq = 'G' THEN '09B' ELSE '04' END;
 
   PKG_PLN.SP_PLN_AVANZA_PASO(
     v_serie, v_num_ped, v_nro, v_num_det,
@@ -1887,10 +1959,10 @@ END TIA_PLN_FROM_H_RPRODUC;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.4  TIA_PLN_FROM_PARTIDA — PASO '04' Lote Disponible
+-- §7.4  TIA_PLN_FROM_PARTIDA — PASO '03' En Hilandería
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER INSERT ON PARTIDA FOR EACH ROW WHEN (NEW.NROPROG IS NOT NULL)
--- Acción   : Avanza a PASO '04' indicando que el hilo crudo está producido
+-- Acción   : Avanza a PASO '03' indicando que el lote fue asignado a producción
 -- Tabla     : PARTIDA — representa un lote físico de hilo (unidad de tintorería)
 -- Navegación simplificada (corrección aplicada):
 --   :NEW.SERIE + :NEW.NRO_PEDIDO → ya identifican pedido y serie directamente
@@ -1900,6 +1972,9 @@ END TIA_PLN_FROM_H_RPRODUC;
 --   NRO y NUM_DET se derivan SIEMPRE vía ITEMPED_DET WHERE nroprog = :NEW.nroprog.
 -- KG_PRODUCIDOS: se suma :NEW.PESO_NETO en SP_PLN_AVANZA_PASO
 --   (es el único paso donde KG_PRODUCIDOS se acumula).
+-- BUG #40 CORREGIDO: PARTIDA INSERT es el primer evento de producción (el lote
+--   entra a hilandería/producción antes que H_RPRODUC finishing) → PASO '03',
+--   no '04'. El trigger TIA_PLN_FROM_H_RPRODUC fue actualizado a PASO '04'.
 -- EXCEPTION WHEN OTHERS THEN NULL → no bloquea el INSERT de PARTIDA.
 CREATE OR REPLACE TRIGGER TIA_PLN_FROM_PARTIDA
 AFTER INSERT ON PARTIDA
@@ -1915,7 +1990,7 @@ BEGIN
 
   PKG_PLN.SP_PLN_AVANZA_PASO(
     :NEW.serie, :NEW.nro_pedido, v_nro, v_num_det,
-    '04', 'PARTIDA', :NEW.numero, :NEW.peso_neto,
+    '03', 'PARTIDA', :NEW.numero, :NEW.peso_neto,
     'Lote disponible - NROPROG:'||:NEW.nroprog
   );
 EXCEPTION
@@ -2144,7 +2219,7 @@ WHEN (NEW.EST_EVALUACION = '32'
            OR NVL(OLD.RESULTADO,'__') <> NVL(NEW.RESULTADO,'__')))
 DECLARE
   v_serie NUMBER;
-  v_paso  VARCHAR2(2);
+  v_paso  VARCHAR2(3);
 BEGIN
   -- FIX #28: '30' es aprobado según TUA_CTCALIDADD_RESULTADO de producción
   v_paso := CASE
@@ -2219,7 +2294,7 @@ END TIA_PLN_FROM_REVISADO_G;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.12  TIA_PLN_FROM_REVISADO — PASO '11' Revisado
+-- §7.11  TIA_PLN_FROM_REVISADO — PASO '11' Revisado
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER INSERT ON REVISADO_D FOR EACH ROW WHEN (NEW.APROBADO > 0)
 -- Acción   : Avanza a PASO '11' (calidad final aprobada — conos revisados)
@@ -2266,7 +2341,7 @@ END TIA_PLN_FROM_REVISADO;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.13  TIA_PLN_FROM_LOTES_PT — PASO '12' Ingresado Almacén PT
+-- §7.12  TIA_PLN_FROM_LOTES_PT — PASO '12' Ingresado Almacén PT
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER INSERT ON LOTES FOR EACH ROW
 -- Condición: NEW.TP_TRANSAC='16' AND NEW.PARTIDA IS NOT NULL AND NEW.COD_ALM IN ('03','07','22','30')
@@ -2320,7 +2395,7 @@ END TIA_PLN_FROM_LOTES_PT;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.12  TUA_PLN_FROM_LOTES_DESPACHO — PASO '14' Despachado/Cerrado
+-- §7.13  TUA_PLN_FROM_LOTES_DESPACHO — PASO '14' Despachado/Cerrado
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER UPDATE OF S_TRANSAC ON LOTES FOR EACH ROW
 -- Condición: NEW.S_TRANSAC IN ('21','23') AND OLD.S_TRANSAC NOT IN ('21','23') AND NEW.PARTIDA IS NOT NULL
@@ -2513,10 +2588,18 @@ SELECT
   s.cod_art,
   pe.fecha                AS fch_pedido,
   pe.f_aprobacion         AS fch_aprob_pedido,
-  id.fhc_prog             AS fch_planeada,
+  COALESCE(id.fhc_prog, s.fch_real_programado) AS fch_planeada,  -- fallback a FCH_REAL_PROGRAMADO si FHC_PROG es null
   id.fhc_entrega          AS fch_entrega_plan,
   id.fch_estima_cono_uno  AS fch_est_cono1,
   id.fch_estima_tenido    AS fch_est_tenido,
+  -- Fechas estimadas calculadas por SP_PLN_CALCULA_FECHAS (PLN_SEGUIMIENTO)
+  s.fch_est_hilanderia,
+  s.fch_est_partida,
+  s.fch_est_tin_ini,
+  s.fch_est_tin_fin,
+  s.fch_est_secado,
+  s.fch_est_calidad,
+  s.fch_est_despacho,
   s.fch_real_programado,
   s.fch_real_produccion,
   s.fch_real_partida,
@@ -2664,7 +2747,13 @@ LEFT JOIN clientes    cl ON cl.cod_cliente = s.cod_cliente
 LEFT JOIN articul     ar ON ar.cod_art     = s.cod_art
 JOIN pedido            p ON p.serie=s.serie AND p.num_ped=s.num_ped
 JOIN pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
-LEFT JOIN almacen al ON al.cod_art=s.cod_art AND al.cod_alm='01'
+-- BUG #38 CORRECCIÓN: COD_ALM='01' tiene 0 stock (solo 37 artículos de admin).
+-- PT real está en almacenes '03' (principal), '07' (externo), '22' (secundario), '30' (madeja).
+-- Se usa subquery que agrega el stock a través de los 4 almacenes PT confirmados en BD.
+LEFT JOIN (SELECT cod_art, SUM(NVL(stock,0)) AS stock
+           FROM almacen
+           WHERE cod_alm IN ('03','07','22','30')
+           GROUP BY cod_art) al ON al.cod_art = s.cod_art
 WHERE s.cod_paso_act IN ('12','13')   -- ← corrección: almacén PT y listo para despacho
   AND s.kg_pendientes > 0
   AND s.estado = 'A'
@@ -2838,31 +2927,32 @@ END;
 --   y deberá construirse por separado (ver §11 cuando corresponda).
 -- ============================================================
 
-PROMPT ============================================================
-PROMPT §10  Activando jobs PLN_ en producción
-PROMPT ============================================================
-
-PROMPT >>> §10.1 Activando JOB_PLN_ALERTAS (cada hora en punto)...
-BEGIN
-  DBMS_SCHEDULER.ENABLE('JOB_PLN_ALERTAS');
-END;
-/
-
-PROMPT >>> §10.2 Activando JOB_PLN_CARGA (diario 23:30)...
-BEGIN
-  DBMS_SCHEDULER.ENABLE('JOB_PLN_CARGA');
-END;
-/
-
-PROMPT >>> Verificando estado de los jobs PLN_:
-SELECT job_name,
-       state,
-       TO_CHAR(next_run_date, 'DD/MM/YYYY HH24:MI') AS proxima_ejecucion,
-       enabled
-FROM   user_scheduler_jobs
-WHERE  job_name LIKE 'JOB_PLN_%'
-ORDER  BY job_name;
-/
+-- PROMPT ============================================================
+-- PROMPT §10  Activando jobs PLN_ en producción
+-- PROMPT ============================================================
+-- -- Ejecutar manualmente DESPUÉS de verificar el despliegue:
+--
+-- PROMPT >>> §10.1 Activando JOB_PLN_ALERTAS (cada hora en punto)...
+-- BEGIN
+--   DBMS_SCHEDULER.ENABLE('JOB_PLN_ALERTAS');
+-- END;
+-- /
+--
+-- PROMPT >>> §10.2 Activando JOB_PLN_CARGA (diario 23:30)...
+-- BEGIN
+--   DBMS_SCHEDULER.ENABLE('JOB_PLN_CARGA');
+-- END;
+-- /
+--
+-- PROMPT >>> Verificando estado de los jobs PLN_:
+-- SELECT job_name,
+--        state,
+--        TO_CHAR(next_run_date, 'DD/MM/YYYY HH24:MI') AS proxima_ejecucion,
+--        enabled
+-- FROM   user_scheduler_jobs
+-- WHERE  job_name LIKE 'JOB_PLN_%'
+-- ORDER  BY job_name;
+-- /
 
 PROMPT
 PROMPT ============================================================

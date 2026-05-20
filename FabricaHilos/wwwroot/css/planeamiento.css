@@ -1,0 +1,444 @@
+/*
+ * planeamiento.css — Sistema de diseño industrial unificado
+ * Módulo: Planeamiento de Planta (PLN_)
+ * Base visual: PedidoGantt.cshtml
+ *
+ * Todas las vistas de /Planeamiento/ referencian este archivo.
+ * Estilos específicos de cada vista se mantienen en su propio @section Styles.
+ */
+
+/* ════════════════════════════════════════════════════════
+   1. TOKENS — Variables de color y tipografía
+   ════════════════════════════════════════════════════════ */
+:root {
+    /* Escala gris oscuro (cabeceras industriales) */
+    --pln-dark-deep:  #1a202c;
+    --pln-dark-bg:    #2d3748;
+    --pln-gray-700:   #4a5568;
+    --pln-gray-600:   #718096;
+    --pln-gray-500:   #a0aec0;
+    --pln-gray-300:   #cbd5e0;
+    --pln-gray-200:   #e2e8f0;
+    --pln-gray-100:   #edf2f7;
+    --pln-gray-50:    #f7fafc;
+
+    /* Texto sobre fondos oscuros */
+    --pln-light-text: #e2e8f0;
+    --pln-light-muted:#a0aec0;
+    --pln-accent-blue:#90cdf4;
+
+    /* Estados semáforo */
+    --pln-danger:     #e53e3e;
+    --pln-warning:    #fd7e14;
+    --pln-success-dk: #2f855a;
+    --pln-success-lt: #c6f6d5;
+    --pln-blue-dk:    #3182ce;
+    --pln-blue-lt:    #bee3f8;
+    --pln-blue-bg:    #ebf8ff;
+
+    /* Bordes */
+    --pln-border:     1px solid var(--pln-gray-200);
+    --pln-border-sep: 2px solid var(--pln-gray-700);
+
+    /* Sombras */
+    --pln-shadow-sm:  0 1px 3px rgba(0,0,0,.08);
+    --pln-shadow-md:  0 2px 6px rgba(0,0,0,.12);
+    --pln-shadow-lg:  0 3px 10px rgba(0,0,0,.16);
+}
+
+/* ════════════════════════════════════════════════════════
+   2. SEPARADOR DE SEGMENTO  (.section-sep)
+   Estilo industrial: gradiente, borde grueso, uppercase bold
+   ════════════════════════════════════════════════════════ */
+.section-sep {
+    font-size: .75rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--pln-gray-700);
+    border-bottom: var(--pln-border-sep);
+    padding-bottom: .4rem;
+    margin: 1.2rem 0 .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    background: linear-gradient(to right, var(--pln-gray-200) 0%, transparent 100%);
+    padding-left: .5rem;
+}
+
+/* ════════════════════════════════════════════════════════
+   3. BADGE DE PASO  (.paso-badge)
+   Rectangular, industrial. El color de fondo se inyecta
+   inline (style="background-color:...") desde el modelo.
+   ════════════════════════════════════════════════════════ */
+.paso-badge {
+    font-size: .7rem;
+    padding: .3em .6em;
+    border-radius: 2px;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid rgba(0,0,0,.15);
+    text-shadow: 0 1px 1px rgba(0,0,0,.1);
+    display: inline-block;
+    line-height: 1.3;
+}
+
+/* ════════════════════════════════════════════════════════
+   4. TARJETA BASE (.pln-card)
+   Diseño industrial: borde gris sólido, sin border-radius,
+   sombra contenida. Cabecera oscura opcional.
+   ════════════════════════════════════════════════════════ */
+.pln-card {
+    border: 2px solid var(--pln-gray-300);
+    box-shadow: var(--pln-shadow-md);
+    border-radius: 0;
+    background: #fff;
+}
+
+.pln-card .card-header,
+.pln-card-header {
+    background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
+    color: var(--pln-light-text);
+    font-weight: 800;
+    font-size: .78rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border-bottom: 3px solid var(--pln-dark-deep);
+    padding: .6rem .9rem;
+}
+
+.pln-card .card-header i,
+.pln-card-header i { color: var(--pln-accent-blue); }
+
+/* ════════════════════════════════════════════════════════
+   5. STRIP INFO-PEDIDO (.pln-info-strip / .pln-strip-cell)
+   Cabecera oscura industrial con datos del pedido.
+   Usada en Pedido.cshtml, PedidoGantt.cshtml, Trazabilidad.
+   ════════════════════════════════════════════════════════ */
+.pln-info-strip {
+    background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
+    border: 2px solid var(--pln-dark-deep);
+}
+.pln-strip-cell {
+    padding: .7rem 1.25rem;
+    border-right: 1px solid rgba(255,255,255,.1);
+    min-width: 150px;
+}
+.pln-strip-cell:last-child { border-right: none; }
+.pln-strip-lbl {
+    font-size: .62rem;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--pln-accent-blue);
+    font-weight: 800;
+}
+.pln-strip-val {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--pln-light-text);
+    margin-top: .15rem;
+    line-height: 1.2;
+}
+.pln-strip-sub  { font-size: .65rem; color: var(--pln-light-muted); }
+.pln-strip-actions {
+    padding: .7rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    border-left: 1px solid rgba(255,255,255,.1);
+    margin-left: auto;
+}
+
+/* ════════════════════════════════════════════════════════
+   6. TIRA DE KPIs (.kpi-strip / .kpi-tile)
+   Usada en Dashboard. Tiles horizontales con ícono + valor.
+   ════════════════════════════════════════════════════════ */
+.kpi-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .65rem;
+    margin-bottom: .5rem;
+}
+
+.kpi-tile {
+    flex: 1 1 140px;
+    max-width: 200px;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: #fff;
+    border: var(--pln-border);
+    border-radius: .65rem;
+    padding: .7rem .9rem;
+    box-shadow: var(--pln-shadow-sm);
+}
+
+.kpi-icon { font-size: 1.5rem; flex-shrink: 0; }
+.kpi-val  { font-size: 1.65rem; font-weight: 700; line-height: 1; }
+.kpi-lbl  { font-size: .72rem; color: var(--pln-gray-600); margin-top: .1rem; }
+
+/* ════════════════════════════════════════════════════════
+   6. TARJETAS DE MÉTRICAS (.kpi-card)
+   Usada en KPIs. Vertical, con número grande.
+   ════════════════════════════════════════════════════════ */
+.kpi-card {
+    border: none;
+    box-shadow: var(--pln-shadow-sm);
+    border-radius: .75rem;
+    transition: box-shadow .15s;
+}
+.kpi-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.14); }
+.kpi-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+.kpi-label { font-size: .75rem; color: var(--pln-gray-600); margin-top: .2rem; }
+.gauge-bar { height: 8px; border-radius: 4px; }
+
+/* ════════════════════════════════════════════════════════
+   7. FILTROS (.filter-card / .filtro-bar)
+   Usada en Dashboard, HistorialEventos y Alertas.
+   ════════════════════════════════════════════════════════ */
+.filter-card,
+.filtro-bar {
+    background: #fff;
+    border: var(--pln-border);
+    border-radius: .65rem;
+    margin-bottom: .6rem;
+    box-shadow: var(--pln-shadow-sm);
+    overflow: hidden;
+}
+
+/* filtro-bar es la variante compacta sin header colapsable */
+.filtro-bar { border-radius: .5rem; padding: 1rem 1.25rem; }
+
+.filter-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .55rem .85rem;
+    cursor: pointer;
+    background: var(--pln-gray-50);
+    user-select: none;
+}
+.filter-header:hover { background: #f0f4fa; }
+
+.fh-title { font-size: .8rem; font-weight: 600; color: var(--pln-blue-dk); }
+.filter-body { padding: .75rem .85rem; }
+
+/* ════════════════════════════════════════════════════════
+   8. FEED DE EVENTOS (.evento-item / .evento-dot / ...)
+   Estilo industrial: cuadrado, borde izquierdo highlight,
+   punto cuadrado con sombra interior.
+   ════════════════════════════════════════════════════════ */
+.evento-item {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    gap: .4rem .7rem;
+    align-items: start;
+    padding: .6rem .9rem;
+    border-bottom: 2px solid var(--pln-gray-200);
+    border-left: 3px solid transparent;
+    transition: all .15s;
+}
+.evento-item:last-child { border-bottom: none; }
+.evento-item:hover {
+    background: var(--pln-gray-100);
+    border-left-color: var(--pln-gray-700);
+}
+
+.evento-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 1px;        /* cuadrado industrial */
+    margin-top: .35rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,.2);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.3);
+}
+
+.evento-badge {
+    font-size: .68rem;
+    padding: .2em .5em;
+    font-weight: 700;
+    border: 1px solid rgba(0,0,0,.15);
+}
+
+.evento-hora {
+    font-size: .7rem;
+    color: var(--pln-gray-600);
+    white-space: nowrap;
+    margin-top: .05rem;
+    font-weight: 600;
+}
+
+.evento-det { font-size: .68rem; color: var(--pln-gray-600); }
+
+/* ════════════════════════════════════════════════════════
+   9. TIMELINE DE FLUJO (.timeline-step)
+   Usada en Pedido.cshtml. Nodos con estados.
+   ════════════════════════════════════════════════════════ */
+.timeline-wrap { padding: .25rem 0; }
+
+.timeline-step {
+    position: relative;
+    padding: .55rem 1rem .55rem 2.8rem;
+    border-left: 3px solid var(--pln-gray-200);
+    margin-left: 1.1rem;
+    transition: background .12s;
+}
+.timeline-step:last-child { border-left-color: transparent; }
+.timeline-step::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: .8rem;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--pln-gray-200);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px var(--pln-gray-200);
+}
+
+.timeline-step.completado { border-left-color: var(--pln-success-lt); }
+.timeline-step.completado::before {
+    background: var(--pln-success-dk);
+    box-shadow: 0 0 0 2px var(--pln-success-lt);
+}
+.timeline-step.completado::after {
+    content: '✓';
+    position: absolute;
+    left: -7px;
+    top: .82rem;
+    font-size: .55rem;
+    color: #fff;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    width: 10px;
+}
+
+.timeline-step.activo {
+    border-left-color: var(--step-color, var(--pln-blue-dk));
+    background: #f5f8ff;
+    border-radius: 0 .4rem .4rem 0;
+}
+.timeline-step.activo::before {
+    background: var(--step-color, var(--pln-blue-dk));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-color, var(--pln-blue-dk)) 25%, transparent);
+    animation: pln-pulse-dot 1.8s infinite;
+}
+
+@keyframes pln-pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--step-color, var(--pln-blue-dk)) 25%, transparent); }
+    50%       { box-shadow: 0 0 0 6px color-mix(in srgb, var(--step-color, var(--pln-blue-dk)) 10%, transparent); }
+}
+
+.timeline-step.pendiente { opacity: .55; }
+
+/* ════════════════════════════════════════════════════════
+   10. ESTADOS DE FILA (.row-urgente / .row-retraso / .row-ok)
+   Franjas de color izquierda — Dashboard, Pedido, Alertas
+   ════════════════════════════════════════════════════════ */
+.row-urgente td { border-left: 3px solid var(--pln-danger) !important; }
+.row-retraso td { border-left: 3px solid var(--pln-warning) !important; }
+.row-ok td      { border-left: 3px solid var(--pln-gray-200); }
+
+/* ════════════════════════════════════════════════════════
+   11. TABLA — cabecera estándar del módulo
+   ════════════════════════════════════════════════════════ */
+.pln-table thead th {
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--pln-gray-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    white-space: nowrap;
+    border-bottom: 2px solid #dee2e6;
+    padding: .45rem .5rem;
+    background: var(--pln-gray-50);
+}
+.pln-table td {
+    vertical-align: middle;
+    font-size: .82rem;
+    padding: .4rem .5rem;
+}
+
+/* ════════════════════════════════════════════════════════
+   12. UTILIDADES VARIAS
+   ════════════════════════════════════════════════════════ */
+
+/* Barra de progreso fina */
+.progress-thin { height: 5px; border-radius: 3px; background: var(--pln-gray-200); }
+
+/* Botón de acción cuadrado (iconos en grillas) */
+.btn-accion {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: .3rem;
+    font-size: .78rem;
+}
+
+/* Ícono chevron animado (expand/collapse) */
+.toggle-icon,
+.toggle-icon-alerta { transition: transform .2s ease; }
+.toggle-icon.rotated,
+.toggle-icon-alerta.rotated { transform: rotate(90deg); }
+
+/* Indentación de primer nivel en sub-tablas */
+.item-indent { width: 24px; text-align: center; }
+
+/* Barra de leyenda del Gantt */
+.leyenda-bar {
+    display: inline-block;
+    width: 28px;
+    height: 14px;
+    border-radius: 1px;
+    vertical-align: middle;
+    margin-right: 6px;
+    border: 2px solid rgba(0,0,0,.2);
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+}
+
+/* Punto semáforo */
+.semaforo-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+/* Badges de métrica/desvío/área (tipografía uniforme) */
+.badge-difer,
+.badge-desvio,
+.badge-tipo,
+.area-badge {
+    font-size: .73rem;
+    padding: .28em .6em;
+    font-weight: 700;
+}
+
+/* Info de paginación */
+.pag-info { font-size: .82rem; color: var(--pln-gray-600); }
+
+/* Card de módulo del Index (hover lift) */
+.card-dashboard {
+    transition: transform .2s, box-shadow .2s;
+    border: none;
+    box-shadow: var(--pln-shadow-sm);
+}
+.card-dashboard:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+
+/* ════════════════════════════════════════════════════════
+   13. FILAS DE EVENTOS ESPECIALES (HistorialEventos)
+   ════════════════════════════════════════════════════════ */
+.row-repro  { background: rgba(255,193,7,.07); }
+.row-alerta { background: rgba(220,53,69,.06); }
+.row-cierre { background: rgba(108,117,125,.06); }

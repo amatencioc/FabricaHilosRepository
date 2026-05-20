@@ -18,6 +18,7 @@ public class PlnAlerta
     public long?    NumPed        { get; set; }
     public int?     Serie         { get; set; }
     public int?     Nro           { get; set; }  // BUG FIX: V_PLN_ALERTAS_ACTIVAS.nro no se mapeaba
+    public string?  CodArt        { get; set; }
     public string?  CodCliente    { get; set; }
     public string?  NombreCliente { get; set; }
     public string?  CodPasoAct    { get; set; }
@@ -25,6 +26,10 @@ public class PlnAlerta
 
     // BUG FIX: V_PLN_ALERTAS_ACTIVAS.horas_sin_resolver (en realidad son días decimales; se convierte a horas al leer)
     public double?  HorasSinResolver { get; set; }
+
+    // Campos de resolución (solo presentes en historial: ESTADO='R'/'I')
+    public DateTime? FchResolucion  { get; set; }
+    public string?   UsuarioResuelve { get; set; }
 
     // Alias para la vista
     public DateTime FchGeneracion => FchAlerta;

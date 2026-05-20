@@ -5,6 +5,10 @@
     ViewData["Title"] = $"Gantt — Pedido {Model.Serie}-{Model.NumPed}";
 
     var primerItem = Model.Items.FirstOrDefault();
+    var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
+    var detCodArt  = Model.Items
+        .DistinctBy(x => x.Nro)
+        .ToDictionary(x => x.Nro, x => x.CodArt);
 
     // Rango de fechas del eje X
     var todasFechas = Model.Items
@@ -38,74 +42,355 @@
         return Math.Max(0.8, (fin.Value - ini.Value).TotalDays / totalDias * 100);
     };
 
-    // Cada etapa es una tupla: (CodPaso, Nombre, Color, EstIni, EstFin, RealIni, RealFin)
+    // Pasos que usan fechas aproximadas (no tienen campo propio en el modelo)
+    // Se muestra con icono de advertencia en la fila del Gantt
+    // NOTA: '03'=Laboratorio (v2.1 PLN_ESTADO_CODIGO: ord 3), '04'=Hilandería, '05'=Lote Disponible
+    var pasosAproximados = new HashSet<string> { "03", "07", "11", "12" };
+    var descripcionAprox = new Dictionary<string, string>
+    {
+        ["03"] = "Hito estimado: el laboratorio aprueba la receta justo antes de entrar a Tintorería. Se muestra en la fecha de inicio de producción.",
+        ["07"] = "Hito estimado: todos los baños del lote están aprobados. Se muestra en la fecha de fin de TT.",
+        ["11"] = "Hito estimado: revisión final de calidad. Se muestra en la fecha de aprobación CC.",
+        ["12"] = "Hito estimado: ingreso físico al almacén PT. Se muestra en la fecha real de Almacén PT.",
+    };
+
+    // EffEst: si FCH_EST_* quedó desfasada (ej. backfill con SYSDATE) pero el
+    // evento real ya ocurrió, usa la fecha real como fallback para la barra estimada.
+    Func<DateTime?, DateTime?, DateTime?> EffEst = (est, real) =>
+        (est == null || (real.HasValue && est.Value.Date > real.Value.Date)) ? real : est;
+
     Func<PlnSeguimiento, List<(string Cod, string Nom, string Color,
          DateTime? EI, DateTime? EF, DateTime? RI, DateTime? RF)>> etapasDe = s =>
         new List<(string, string, string, DateTime?, DateTime?, DateTime?, DateTime?)>
         {
-            ("01", "Pedido",     "#6c757d", s.FchPedido,         s.FchRealProgramado ?? s.FchEstHilanderia,
-                                            s.FchPedido,         s.FchRealProgramado),
-            ("02", "Programado", "#0d6efd", s.FchRealProgramado, s.FchEstHilanderia,
-                                            s.FchRealProgramado, s.FchRealProduccion),
-            ("03", "Hilandería", "#6f42c1", s.FchEstHilanderia,  s.FchEstPartida,
-                                            s.FchRealProduccion, s.FchRealPartida),
-            ("04", "Partida",    "#20c997", s.FchEstPartida,     s.FchEstTinIni,
-                                            s.FchRealPartida,    s.FchRealTinIni),
-            ("06", "Tintorería", "#fd7e14", s.FchEstTinIni,      s.FchEstTinFin,
-                                            s.FchRealTinIni,     s.FchRealTinFin),
-            ("08", "Secado",     "#17a2b8", s.FchEstTinFin,      s.FchEstSecado,
-                                            s.FchRealTinFin,     s.FchRealSecado),
-            ("09", "C.Calidad",  "#198754", s.FchEstSecado,      s.FchEstCalidad,
-                                            s.FchRealSecado,     s.FchRealCcTinto ?? s.FchRealCalidad),
-            ("10", "Devanado",   "#0dcaf0", s.FchEstCalidad,     s.FchEstDespacho,
-                                            s.FchRealDevanado,   s.FchRealAlmPt),
-            ("14", "Despacho",   "#dc3545", s.FchEstDespacho,    s.FchEntregaComp,
-                                            s.FchRealAlmPt,      s.FchRealDespacho),
+            ("01", "Pedido",        "#5a6570", s.FchPedido,                                        s.FchRealProgramado ?? EffEst(s.FchEstHilanderia, s.FchRealProduccion),
+                                               s.FchPedido,                                       s.FchRealProgramado),
+            ("02", "Programado",    "#2563eb", s.FchRealProgramado,                               EffEst(s.FchEstHilanderia, s.FchRealProduccion),
+                                               s.FchRealProgramado,                               s.FchRealProduccion),
+            // Paso 03 — Laboratorio: ORDEN 3 en PLN_ESTADO_CODIGO v2.1 (COD_PASO='03').
+            // No tiene FCH_REAL_* propio; usa FCH_REAL_PRODUCCION (= PARTIDA.FECHA) como
+            // proxy del hito: lab debería estar aprobado al arrancar la producción.
+            ("03", "Laboratorio",   "#7c3aed", EffEst(s.FchEstHilanderia, s.FchRealProduccion), EffEst(s.FchEstHilanderia, s.FchRealProduccion),
+                                               s.FchRealProduccion,                               s.FchRealProduccion),
+            // Paso 04 — En Hilandería: ORDEN 4. FCH_REAL_PRODUCCION = PARTIDA.FECHA.
+            ("04", "Hilandería",    "#0891b2", EffEst(s.FchEstHilanderia, s.FchRealProduccion), EffEst(s.FchEstPartida, s.FchRealPartida),
+                                               s.FchRealProduccion,                               s.FchRealPartida),
+            // Paso 05 — Lote Disponible: ORDEN 5. FCH_REAL_PARTIDA = H_RPRODUC o PARTIDA.FECHA fallback.
+            ("05", "Lote Disp.",    "#0e7490", EffEst(s.FchEstPartida, s.FchRealPartida),       EffEst(s.FchEstTinIni, s.FchRealTinFin),
+                                               s.FchRealPartida,                                  s.FchRealTinIni),
+            ("06", "Tintorería",    "#7e22ce", EffEst(s.FchEstTinIni,  s.FchRealTinFin),        EffEst(s.FchEstTinFin, s.FchRealTinFin),
+                                               s.FchRealTinIni,                                   s.FchRealTinFin),
+            // Paso 07 — Teñido Completo: hito = fin TT
+            ("07", "Teñido Comp.",  "#be185d", EffEst(s.FchEstTinFin, s.FchRealTinFin),         EffEst(s.FchEstTinFin, s.FchRealTinFin),
+                                               s.FchRealTinFin,                                   s.FchRealTinFin),
+            ("08", "Secado",        "#059669", EffEst(s.FchEstTinFin, s.FchRealTinFin),         EffEst(s.FchEstSecado, s.FchRealSecado),
+                                               s.FchRealTinFin,                                   s.FchRealSecado),
+            ("09", "C.Calidad",     "#dc2626", EffEst(s.FchEstSecado, s.FchRealSecado),          EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad),
+                                               s.FchRealSecado,                                   s.FchRealCcTinto ?? s.FchRealCalidad),
+            // Paso 09B — Gaseado: solo PROCESO='24' (PEINADO GASEADO). Hito entre CC TT y Devanado.
+            // Si no aplica (PROCESO != '24') la barra tendrá ancho cero (EI==EF) y se oculta en CSS.
+            ("09B","Gaseado",       "#d4a800", s.Proceso == "24" ? EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad) : null,
+                                               s.Proceso == "24" ? EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad) : null,
+                                               s.Proceso == "24" ? s.FchRealGaseado : null,
+                                               s.Proceso == "24" ? s.FchRealGaseado : null),
+            ("10", "Devanado",      "#d97706", EffEst(s.FchEstCalidad, s.FchRealDevanado),       EffEst(s.FchEstDespacho, s.FchRealAlmPt),
+                                               s.FchRealDevanado,                                 s.FchRealAlmPt),
+            // Paso 11 — Revisado: hito entre devanado y almacén PT
+            ("11", "Revisado",      "#1d4ed8", EffEst(s.FchEstCalidad, s.FchRealCalidad),        EffEst(s.FchEstCalidad, s.FchRealCalidad),
+                                               s.FchRealCalidad,                                  s.FchRealCalidad),
+            // Paso 12 — Almacén PT: hito post-QC
+            ("12", "Almacén PT",    "#047857", EffEst(s.FchEstCalidad, s.FchRealAlmPt),          EffEst(s.FchEstCalidad, s.FchRealAlmPt),
+                                               s.FchRealAlmPt,                                    s.FchRealAlmPt),
+            // Paso 13 — Listo Despacho: entre AlmPT y fecha compromiso
+            ("13", "Listo Despacho","#10b981", EffEst(s.FchEstDespacho, s.FchRealAlmPt),        s.FchEntregaComp,
+                                               s.FchRealAlmPt,                                    s.FchRealDespacho),
+            ("14", "Despacho",      "#065f46", EffEst(s.FchEstDespacho, s.FchRealAlmPt),        s.FchEntregaComp,
+                                               s.FchRealAlmPt,                                    s.FchRealDespacho),
         };
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
-    .gantt-wrap      { overflow-x: auto; }
-    .gantt-grid      { display: grid; grid-template-columns: 220px 1fr; min-width: 860px; }
+    /* ── Gantt: estilos exclusivos de la vista ──────────── */
 
-    .gantt-hdr-label { background: #f8f9fa; border-right: 1px solid #dee2e6;
-                       padding: .4rem .75rem; font-weight: 600; font-size: .8rem;
-                       border-bottom: 2px solid #dee2e6; position: sticky; left: 0; z-index: 2; }
-    .gantt-hdr-axis  { position: relative; border-bottom: 2px solid #dee2e6;
-                       background: #f8f9fa; height: 36px; }
-    .gantt-tick      { position: absolute; top: 0; height: 100%; border-left: 1px dashed #dee2e6;
-                       font-size: .65rem; color: #adb5bd; padding-left: 2px; padding-top: .25rem;
-                       white-space: nowrap; }
-    .gantt-tick.hoy  { border-left: 2px solid #dc3545; color: #dc3545; font-weight: 700; }
+    /* ── Contenedor del Gantt ────────────────────────────── */
+    .gantt-wrap {
+        overflow-x: hidden;
+        border-radius: 0;
+        border: 1px solid #dee2e6;
+    }
+    .gantt-grid {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        background: #f8f9fa;
+    }
 
-    .gantt-row-label { background: #fff; border-right: 1px solid #dee2e6;
-                       border-bottom: 1px solid #f0f0f0; padding: .3rem .75rem;
-                       font-size: .78rem; display: flex; flex-direction: column;
-                       justify-content: center; min-height: 52px;
-                       position: sticky; left: 0; z-index: 1; }
-    .gantt-row-body  { position: relative; border-bottom: 1px solid #f0f0f0;
-                       background: #fff; min-height: 52px; }
-    .gantt-row-body:hover { background: #f8fbff; }
+    /* ── Cabecera del eje X ──────────────────────────────── */
+    .gantt-hdr-label {
+        background: #f1f3f5;
+        border-right: 1px solid #dee2e6;
+        padding: .6rem .85rem;
+        font-weight: 700;
+        font-size: .73rem;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: #495057;
+        border-bottom: 1px solid #dee2e6;
+        position: sticky;
+        left: 0;
+        z-index: 3;
+    }
+    .gantt-hdr-axis {
+        position: relative;
+        border-bottom: 1px solid #dee2e6;
+        background: #f1f3f5;
+        height: 46px;
+    }
+    .gantt-tick {
+        position: absolute; top: 0; height: 100%;
+        border-left: 1px solid #dee2e6;
+        font-size: .66rem;
+        color: #868e96;
+        font-weight: 600;
+        padding-left: 5px;
+        padding-top: .4rem;
+        white-space: nowrap;
+        user-select: none;
+    }
+    .gantt-tick.hoy {
+        border-left: 2px solid #dc3545;
+        color: #dc3545;
+        font-weight: 700;
+        z-index: 2;
+        background: rgba(220,53,69,.04);
+    }
+    .gantt-tick.semana {
+        border-left: 1px solid #adb5bd;
+        color: #6c757d;
+        font-weight: 700;
+    }
+    .gantt-tick.dia {
+        color: #ced4da;
+        font-weight: 500;
+        font-size: .58rem;
+    }
 
-    .gantt-bar       { position: absolute; height: 14px; border-radius: 4px;
-                       cursor: help; transition: filter .15s; }
-    .gantt-bar:hover { filter: brightness(.85); }
-    .gantt-bar.est   { top: 8px;  opacity: .3; }
-    .gantt-bar.real  { top: 28px; }
-    .gantt-bar.borde-derecho { border-right: 3px dashed rgba(0,0,0,.25); }
+    /* ── Filas del Gantt ─────────────────────────────────── */
+    .gantt-row-label {
+        background: #ffffff;
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #f1f3f5;
+        padding: .45rem .7rem .45rem .9rem;
+        font-size: .8rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 70px;
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        border-left: 3px solid transparent;
+        transition: border-left-color .15s;
+        font-weight: 500;
+    }
+    .gantt-row-label.paso-activo {
+        border-left-color: var(--paso-color, #0d6efd);
+        background: #ffffff;
+    }
+    .gantt-row-label.paso-completado {
+        border-left-color: #198754;
+        background: #ffffff;
+    }
+    .gantt-row-label.paso-pendiente { opacity: .45; }
 
-    .gantt-hito      { position: absolute; width: 10px; height: 10px; border-radius: 50%;
-                       border: 2px solid #fff; box-shadow: 0 0 0 1px #555; top: 21px; }
-    .gantt-hoy-line  { position: absolute; top: 0; bottom: 0; width: 2px;
-                       background: rgba(220,53,69,.35); pointer-events: none; z-index: 0; }
+    .gantt-row-body {
+        position: relative;
+        border-bottom: 1px solid #f1f3f5;
+        background-color: #ffffff;
+        background-image:
+            linear-gradient(90deg, rgba(0,0,0,.09) 0, rgba(0,0,0,.09) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,.04) 0, rgba(0,0,0,.04) 1px, transparent 1px);
+        background-size: var(--week-pct) 100%, var(--day-pct) 100%;
+        background-repeat: repeat-x;
+        min-height: 72px;
+    }
+    .gantt-row-body.paso-activo  { background-color: #ffffff; }
+    .gantt-row-body.paso-completado { background-color: #ffffff; }
 
-    .sublote-sep     { grid-column: 1 / -1; background: #f0f4ff;
-                       padding: .25rem .75rem; font-size: .75rem; font-weight: 700;
-                       color: #3d5a99; border-bottom: 1px solid #d0d9f0; }
+    /* ── Barras del Gantt ────────────────────────────────── */
+    .gantt-bar {
+        position: absolute;
+        border-radius: 3px;
+        cursor: help;
+        transition: filter .15s;
+    }
+    .gantt-bar:hover {
+        filter: brightness(.9);
+        z-index: 10;
+    }
+    /* Estimada: franja superior semitransparente */
+    .gantt-bar.est {
+        top: 10px;
+        height: 18px;
+        opacity: .35;
+        border: 1px solid rgba(0,0,0,.1);
+    }
+    /* Real: barra principal */
+    .gantt-bar.real {
+        top: 32px;
+        height: 26px;
+        border: none;
+        opacity: .88;
+    }
+    .gantt-bar.borde-derecho {
+        border-right: 2px dashed rgba(0,0,0,.25);
+        border-radius: 3px 0 0 3px;
+    }
+    /* Etiqueta de fecha */
+    .gantt-bar-label {
+        position: absolute;
+        top: 34px;
+        height: 20px;
+        font-size: .62rem;
+        color: #fff;
+        font-weight: 700;
+        padding: 0 6px;
+        line-height: 20px;
+        pointer-events: none;
+        overflow: hidden;
+        white-space: nowrap;
+        text-shadow: 0 1px 1px rgba(0,0,0,.45);
+        letter-spacing: .02em;
+    }
 
-    .leyenda-bar     { display: inline-block; width: 28px; height: 10px;
-                       border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+    /* ── Hitos (diamantes) ───────────────────────────────── */
+    .gantt-hito {
+        position: absolute;
+        width: 13px;
+        height: 13px;
+        border-radius: 2px;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 2px currentColor, 0 2px 4px rgba(0,0,0,.2);
+        top: 21px;
+        transform: translateX(-50%) rotate(45deg);
+        cursor: help;
+        transition: transform .15s;
+    }
+    .gantt-hito:hover {
+        transform: translateX(-50%) rotate(45deg) scale(1.15);
+    }
+    .gantt-hito-diamond {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        transform: translateX(-50%) rotate(45deg);
+        top: 22px;
+        cursor: help;
+        box-shadow: 0 2px 4px rgba(0,0,0,.15);
+    }
+
+    /* ── Línea de hoy ────────────────────────────────────── */
+    .gantt-hoy-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: rgba(220,53,69,.7);
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    /* ── Separador de sublote ────────────────────────────── */
+    .sublote-sep {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        background: #f1f3f5;
+        font-size: .76rem;
+        font-weight: 600;
+        color: #343a40;
+        border-top: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        cursor: pointer;
+        user-select: none;
+    }
+    .sublote-sep-label {
+        padding: .5rem .7rem .5rem .9rem;
+        display: flex;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: .3rem;
+        border-right: 1px solid #dee2e6;
+        overflow: hidden;
+    }
+    .sublote-sep-axis {
+        padding: .5rem .7rem;
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        overflow: hidden;
+    }
+    .sublote-sep:hover { background: #e9ecef; }
+    .sublote-toggle {
+        transition: transform .2s;
+        color: #6c757d;
+        flex-shrink: 0;
+    }
+    .sublote-sep[aria-expanded="false"] .sublote-toggle {
+        transform: rotate(-90deg);
+    }
+    .sublote-rows {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 220px 1fr;
+    }
+    .sublote-rows.collapsing { grid-column: 1 / -1; }
+
+    /* .evento-item, .evento-dot, .evento-badge, .evento-hora → planeamiento.css */
+    /* .leyenda-bar → planeamiento.css */
+
+    /* ─── Strip de info (gantt header) ───────────────────── */
+    /* ─── Strip info-pedido: ver planeamiento.css §5 ────── */
+
+    /* ─── Aviso cronograma pendiente ──────────────────────── */
+    .pln-aviso-strip {
+        border: 1px solid #93c5fd;
+        border-left: 3px solid #0d6efd;
+        background: #f0f7ff;
+        padding: .55rem 1rem;
+        font-size: .82rem;
+        color: #084298;
+    }
+
+    /* ─── Panel notas de lectura + leyenda ────────────────── */
+    .pln-notas-toggle {
+        background: #f8f9fa;
+        color: #495057;
+        border: 1px solid #dee2e6;
+        font-size: .78rem;
+        letter-spacing: .03em;
+        border-radius: 0;
+    }
+    .pln-notas-toggle:hover, .pln-notas-toggle:focus {
+        background: #e9ecef;
+        color: #212529;
+        border-color: #adb5bd;
+    }
+    .pln-notas-panel {
+        border: 1px solid #dee2e6;
+        border-top: none;
+        background: #ffffff;
+        padding: 1rem 1.2rem;
+    }
+    .pln-notas-body {
+        font-size: .82rem;
+        color: #495057;
+        padding: .5rem .75rem;
+        background: #f8f9fa;
+        border-left: 3px solid #adb5bd;
+        margin-bottom: .75rem;
+    }
 </style>
 }
 
@@ -116,26 +401,74 @@
     <li class="breadcrumb-item active">Gantt @Model.Serie-@Model.NumPed</li>
 }
 
-<!-- Encabezado -->
-<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-    <h4 class="mb-0">
-        <i class="bi bi-bar-chart-steps me-2 text-primary"></i>
-        Gantt — Pedido <strong>@Model.Serie-@Model.NumPed</strong>
+<!-- ── Strip industrial: info + botones ────────────────── -->
+<div class="pln-info-strip mb-3">
+    <div class="d-flex align-items-stretch flex-wrap">
+        <div class="pln-strip-cell" style="min-width:180px;">
+            <div class="pln-strip-lbl"><i class="bi bi-bar-chart-steps me-1"></i>Diagrama Gantt</div>
+            <div class="pln-strip-val">@Model.Serie-@Model.NumPed</div>
+            @if (primerItem != null)
+            {
+                <div class="pln-strip-sub">@primerItem.NombreCliente</div>
+            }
+        </div>
         @if (primerItem != null)
         {
-            <small class="text-muted fs-6 ms-2">@primerItem.NombreCliente</small>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Fecha pedido</div>
+                <div class="pln-strip-val">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Entrega comprometida</div>
+                <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
+                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                    @if (primerItem.EstaRetrasado)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
+                    }
+                </div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Etapa actual</div>
+                <div class="mt-1">
+                    <span class="paso-badge text-white" style="background-color:@primerItem.ColorUi;">
+                        @primerItem.CodPasoAct — @primerItem.NombrePaso
+                    </span>
+                </div>
+            </div>
+            @if (Model.Items.Any(x => x.EsUrgente))
+            {
+                <div class="pln-strip-cell">
+                    <div class="pln-strip-lbl">Estado</div>
+                    <div class="pln-strip-val"><span class="badge bg-danger">⚡ URGENTE</span></div>
+                </div>
+            }
         }
-    </h4>
-    <div class="d-flex gap-2">
-        <a asp-action="Pedido" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
-           class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-diagram-3 me-1"></i>Ver trazabilidad
-        </a>
-        <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i>Volver
-        </a>
+        <div class="pln-strip-actions">
+            <a asp-action="Pedido" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+               class="btn btn-sm btn-primary fw-semibold" style="font-size:.75rem;">
+                <i class="bi bi-clipboard2-data me-1"></i>Detalle
+            </a>
+            <a asp-action="Trazabilidad" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+               class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.75rem;">
+                <i class="bi bi-diagram-3 me-1"></i>Trazabilidad
+            </a>
+            <a asp-action="Dashboard"
+               class="btn btn-sm btn-outline-secondary fw-semibold" style="font-size:.75rem;">
+                <i class="bi bi-arrow-left me-1"></i>Volver
+            </a>
+        </div>
     </div>
 </div>
+
+@* Aviso compacto: cronograma pendiente (condicional) *@
+@if (Model.Items.Any(x => !x.FchEstHilanderia.HasValue))
+{
+    <div class="pln-aviso-strip mb-2 d-flex gap-2 align-items-center">
+        <i class="bi bi-hourglass-split flex-shrink-0"></i>
+        <span><strong>Cronograma pendiente:</strong> Uno o más sublotes no tienen fechas estimadas. Use el botón <strong>PLANIFICAR</strong> en el sublote correspondiente para calcularlas.</span>
+    </div>
+}
 
 <!-- Alertas -->
 @if (Model.Alertas.Any())
@@ -143,13 +476,14 @@
     <div class="mb-3">
         @foreach (var a in Model.Alertas)
         {
-            <div class="alert alert-@a.NivelColor py-2 d-flex align-items-center gap-2 mb-1">
+            <div class="alert alert-@a.NivelColor py-2 d-flex align-items-center gap-2 mb-1" style="font-size:.82rem;">
                 <i class="bi bi-bell-fill"></i>
                 <div>
                     <strong>@a.TipoTexto</strong>
                     @if (a.Nro.HasValue)
                     {
-                        <span class="badge bg-light text-dark border ms-1">Det.@a.Nro</span>
+                        var detLabel = detCodArt.TryGetValue(a.Nro.Value, out var ca) ? ca : $"Det.{a.Nro}";
+                        <span class="badge bg-light text-dark border ms-1">@detLabel</span>
                     }
                     — @a.Titulo
                     @if (a.FchLimite.HasValue)
@@ -171,17 +505,69 @@
     </div>
 }
 
-<!-- Leyenda -->
-<div class="d-flex gap-4 mb-3 align-items-center flex-wrap small">
-    <div><span class="leyenda-bar" style="background:#0d6efd;opacity:.3;"></span>Estimado</div>
-    <div><span class="leyenda-bar" style="background:#0d6efd;"></span>Real</div>
-    <div><i class="bi bi-circle-fill text-danger me-1" style="font-size:.6rem;"></i>Hoy</div>
-    <div class="text-muted">Pasa el cursor sobre las barras para ver fechas</div>
+@* Panel colapsable único: notas de lectura + leyenda *@
+<div class="mb-3">
+    <button class="btn btn-sm pln-notas-toggle fw-bold" type="button"
+            data-bs-toggle="collapse" data-bs-target="#ganttNotas" aria-expanded="false">
+        <i class="bi bi-info-circle me-1"></i>NOTAS DE LECTURA Y LEYENDA DE ETAPAS
+        <i class="bi bi-chevron-down ms-1 toggle-icon"></i>
+    </button>
+    <div class="collapse" id="ganttNotas">
+        <div class="pln-notas-panel">
+            <div class="pln-notas-body mb-3">
+                Las barras <strong>con patrón diagonal</strong> son fechas <strong>ESTIMADAS</strong> (barra superior, semitransparente) y las <strong>sólidas</strong> son fechas <strong>REALES</strong> (barra inferior). La línea <span class="text-danger fw-bold">ROJA GRUESA</span> marca hoy. Si la barra real supera la estimada, hay retraso en esa etapa. Los pasos con <i class="bi bi-pin-angle-fill text-warning"></i> son <strong>orientativos</strong>: <strong>03 — Laboratorio</strong>, <strong>07 — Teñido Completo</strong>, <strong>11 — Revisado</strong> y <strong>12 — Almacén PT</strong> no tienen duración programada fija. Para fechas exactas consulte el <a asp-action="HistorialEventos" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie" asp-route-idSeguim="@(primerItem?.IdSeguim ?? 0)" class="fw-semibold">Historial de eventos</a>.
+            </div>
+            <div class="row g-2 small">
+                <div class="col-12 mb-1" style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5568;border-left:3px solid #4a5568;padding-left:.5rem;">Leyenda de etapas</div>
+                @{
+                    var leyendaEtapas = new[]
+                    {
+                        ("#5a6570", "01", "01 — Pedido Registrado",    "Ventas registra el ítem en el sistema.",                          false),
+                        ("#2563eb", "02", "02 — Planificado",           "Planeamiento asigna número de programación (NROPROG).",            false),
+                        ("#7c3aed", "03", "03 — Laboratorio",           "Laboratorio aprueba la receta de tintorería antes de iniciar producción (fecha orientativa).", true),
+                        ("#0891b2", "04", "04 — En Hilandería",         "PARTIDA creada en planta: se inicia la producción del lote.",     false),
+                        ("#0e7490", "05", "05 — Lote Disponible",       "H_RPRODUC confirma la producción completa; el lote está listo para entrar a tintorería.", false),
+                        ("#7e22ce", "06", "06 — En Tintorería",         "El lote entra al proceso de teñido (baños).",                    false),
+                        ("#be185d", "07", "07 — Teñido Completo",       "Todos los baños aprobados. Fecha orientativa.",                   true),
+                        ("#059669", "08", "08 — Secado",                "Finalizado el teñido; el lote pasa a secado.",                   false),
+                        ("#dc2626", "09", "09 — C.Calidad Aprobado",    "Control de calidad aprueba el lote teñido.",                     false),
+                        ("#d97706", "10", "10 — Devanado / Almacén PT", "Devanado y revisión final antes del despacho.",                  false),
+                        ("#1d4ed8", "11", "11 — Revisado",              "Revisión final de calidad. Fecha orientativa.",                   true),
+                        ("#047857", "12", "12 — Ingresado Almacén PT",  "Ingreso físico al almacén PT. Fecha orientativa.",                true),
+                        ("#10b981", "13", "13 — Listo para Despacho",   "El lote está disponible y pendiente de despacho.",               false),
+                        ("#065f46", "14", "14 — Despachado/Cerrado",              "El lote ha sido despachado total o parcialmente al cliente.",     false),
+                    };
+                    var pasoActivo = primerItem?.CodPasoAct ?? "";
+                }
+                @foreach (var (color, cod, nombre, desc, esAprox) in leyendaEtapas)
+                {
+                    var esActivo = pasoActivo.StartsWith(cod);
+                    <div class="col-sm-6 col-lg-4 d-flex align-items-start gap-2"
+                         style="@(esActivo ? $"background:linear-gradient(135deg,{color}28,{color}12);border:2px solid {color};border-radius:2px;padding:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.05);" : "")">
+                        <span style="display:inline-block;width:26px;min-width:26px;height:14px;background:@color;border-radius:1px;margin-top:4px;border:1px solid rgba(0,0,0,.2);box-shadow:0 2px 4px rgba(0,0,0,.18);@(esActivo ? $"box-shadow:0 0 0 2px #fff,0 0 0 4px {color},0 3px 6px rgba(0,0,0,.25);" : "")"></span>
+                        <div>
+                            <span class="fw-bold" style="font-size:.82rem;">@nombre</span>
+                            @if (esActivo)
+                            {
+                                <span class="badge ms-1 text-white" style="background:@color;font-size:.68rem;font-weight:800;border:1px solid rgba(0,0,0,.2);text-shadow:1px 1px 1px rgba(0,0,0,.2);">⬤ ACTIVO</span>
+                            }
+                            @if (esAprox)
+                            {
+                                <span class="badge bg-warning text-dark ms-1 border border-dark" style="font-size:.64rem;font-weight:700;" title="Fecha aproximada: este paso no tiene una duración programada, por lo que se ubica en la posición más cercana disponible."><i class="bi bi-pin-angle-fill me-1"></i>ORIENTATIVO</span>
+                            }
+                            <br /><span class="text-muted" style="font-size:.76rem;">@desc</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Gantt -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-0 gantt-wrap">
+<div class="section-sep"><i class="bi bi-bar-chart-steps"></i> DIAGRAMA GANTT — @Model.Items.Count() SUBLOTE(S)</div>
+<div class="card border-0 shadow-sm" style="border:1px solid #4a5568 !important;border-radius:0 !important;">
+    <div class="card-body p-0 gantt-wrap"
+         style="--day-pct:@((100.0/totalDias).ToString("F4",System.Globalization.CultureInfo.InvariantCulture))%;--week-pct:@((700.0/totalDias).ToString("F4",System.Globalization.CultureInfo.InvariantCulture))%;">
         <div class="gantt-grid">
 
             <!-- Cabecera -->
@@ -192,95 +578,215 @@
                 }
                 @while (tickDate <= fechaMax.Date)
                 {
-                    var left   = (tickDate - fechaMin).TotalDays / totalDias * 100;
-                    var esHoy2 = tickDate == hoy;
-                    var label  = esHoy2 ? "Hoy" : tickDate.ToString("dd/MM");
-                    <div class="gantt-tick @(esHoy2 ? "hoy" : "")"
+                    var left     = (tickDate - fechaMin).TotalDays / totalDias * 100;
+                    var esHoy2   = tickDate == hoy;
+                    var esSemana = tickDate.DayOfWeek == DayOfWeek.Monday;
+                    var esPrimero = tickDate == fechaMin.Date;
+                    var label    = esHoy2 ? "Hoy"
+                                 : (esSemana || esPrimero) ? tickDate.ToString("dd/MM")
+                                 : tickDate.Day.ToString();
+                    var cls      = esHoy2 ? "hoy" : (esSemana || esPrimero) ? "semana" : "dia";
+                    <div class="gantt-tick @cls"
                          style="left:@left.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%;">
                         @label
                     </div>
-                    tickDate = tickDate.AddDays(3);
+                    tickDate = tickDate.AddDays(1);
                 }
             </div>
 
             <!-- Filas por sublote -->
             @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
             {
-                <!-- Separador -->
-                <div class="sublote-sep">
-                    Det. @s.NumDet — @s.CodArt
-                    @if (!string.IsNullOrEmpty(s.Titulo))
+                <!-- Separador de sublote -->
+                <div class="sublote-sep"
+                     data-bs-toggle="collapse" data-bs-target="#seg-@(s.IdSeguim)"
+                     aria-expanded="true" aria-controls="seg-@(s.IdSeguim)"
+                     data-codartt="@s.CodArt">
+                    <div class="sublote-sep-label">
+                        <div style="display:flex;align-items:center;gap:.45rem;">
+                            <i class="bi bi-chevron-down sublote-toggle"></i>
+                            <span class="fw-bold" style="font-size:.82rem;letter-spacing:.02em;">@s.CodArt</span>
+                            @if (s.NumDet > 0)
+                            {
+                                <span class="badge" style="background:#1a202c;font-size:.68rem;font-weight:800;border:1px solid rgba(255,255,255,.2);">DET.@s.NumDet</span>
+                            }
+                        </div>
+                        <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;padding-left:1.5rem;">
+                            <span class="badge" style="background-color:@s.ColorUi;font-size:.68rem;font-weight:800;border:2px solid rgba(0,0,0,.25);text-shadow:1px 1px 1px rgba(0,0,0,.2);">
+                                @s.CodPasoAct &mdash; @s.NombrePaso
+                            </span>
+                            @if (s.EstaEnReproceso)
+                            {
+                                <span class="badge" style="background:#991b1b;font-weight:800;border:2px solid rgba(0,0,0,.3);">REPROCESO C.@s.NroCiclo</span>
+                            }
+                            @if (s.EsUrgente)
+                            {
+                                <span class="badge" style="background:#dc2626;font-weight:800;border:2px solid rgba(0,0,0,.3);">&#x26A1; URGENTE</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="sublote-sep-axis">
+                        <div style="flex:1 1 0;min-width:0;overflow:hidden;display:flex;align-items:center;gap:.5rem;">
+                            <span class="art-desc-info" style="font-size:.72rem;color:#6c757d;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+                            @if (!string.IsNullOrEmpty(s.Titulo))
+                            {
+                                <span style="font-size:.68rem;color:#6c757d;white-space:nowrap;flex-shrink:0;">Tít.: <strong style="color:#343a40;">@s.Titulo</strong>@(!string.IsNullOrEmpty(s.Color) ? " · " + s.Color : "")</span>
+                            }
+                        </div>
+                        @if (s.FchEntregaComp.HasValue)
+                        {
+                            <span class="small" style="color:#495057;font-weight:700;flex-shrink:0;"
+                                  title="Fecha compromiso de entrega al cliente">
+                                <i class="bi bi-calendar-event me-1"></i><span style="font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;margin-right:.35rem;">Entrega:</span>@s.FchEntregaComp.Value.ToString("dd/MM/yyyy")
+                            </span>
+                        }
+                    @if (!s.FchEstHilanderia.HasValue)
                     {
-                        <span class="fw-normal text-secondary ms-1">@s.Titulo @s.Color</span>
+                        // Botón Planificar: solo aparece cuando el ítem está en paso '01' y
+                        // no tiene fechas estimadas calculadas todavía. Al pulsarlo se ejecuta
+                        // SP_PLN_CALCULA_FECHAS(motivo='PLA'), que:
+                        //   1. Calcula FCH_EST_HILANDERIA, FCH_EST_PARTIDA, FCH_EST_TIN_INI,
+                        //      FCH_EST_TIN_FIN, FCH_EST_SECADO, FCH_EST_CALIDAD, FCH_EST_DESPACHO
+                        //      a partir de los tiempos estándar por proceso y la carga de máquinas.
+                        //   2. Inserta un registro en PLN_FECHAS_ESTIMADAS con motivo='PLA'
+                        //      para mantener trazabilidad del primer cálculo.
+                        //   3. Después de que se ejecute, el Gantt se recargará mostrando
+                        //      barras grises (estimadas) en todas las etapas.
+                        // NOTA: esto NO avanza el ítem al paso '02'; ese avance lo hace
+                        // Planeamiento al emitir el NROPROG desde el sistema de pedidos.
+                        <form asp-action="PlanificarItem" method="post" class="m-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="serie"   value="@s.Serie"  />
+                            <input type="hidden" name="numPed"  value="@s.NumPed" />
+                            <input type="hidden" name="nro"     value="@s.Nro"    />
+                            <input type="hidden" name="numDet"  value="@s.NumDet" />
+                            <button type="submit" class="btn btn-sm fw-bold" 
+                                    style="background:#047857;color:#fff;border:2px solid #065f46;font-size:.72rem;letter-spacing:.04em;"
+                                    title="Calcular fechas estimadas para este ítem ejecutando SP_PLN_CALCULA_FECHAS (motivo='PLA'). Permite ver el cronograma estimado en el Gantt antes de que Planeamiento emita el NROPROG (paso 02).">
+                                <i class="bi bi-calendar-check me-1"></i>PLANIFICAR
+                            </button>
+                        </form>
                     }
-                    <span class="badge ms-2"
-                          style="background-color:@s.ColorUi; font-size:.7rem;">
-                        @s.CodPasoAct — @s.NombrePaso
-                    </span>
-                    @if (s.EstaEnReproceso)
-                    {
-                        <span class="badge bg-danger ms-1">Reproceso C.@s.NroCiclo</span>
-                    }
-                    @if (s.EsUrgente)
-                    {
-                        <span class="badge bg-danger ms-1">⚡ Urgente</span>
-                    }
+                    </div>
                 </div>
 
+                <div class="sublote-rows collapse show" id="seg-@(s.IdSeguim)">
                 @foreach (var e in etapasDe(s))
                 {
                     var tieneEst  = e.EI.HasValue && e.EF.HasValue;
                     var tieneReal = e.RI.HasValue;
 
-                    if (!tieneEst && !tieneReal) { continue; }
+                    // Paso 01 sin FCH_EST_*: el ítem aún no fue planificado (SP_PLN_CALCULA_FECHAS
+                    // no se ejecuta hasta el paso '02'). Se muestra la fila como "pendiente" para
+                    // que el usuario vea el flujo completo. Las barras no se dibujan (sin fechas).
+                    var esPendienteSinFechas = !tieneEst && !tieneReal;
+                    var esCodPaso01 = e.Cod == "01";
+                    var esActual  = s.CodPasoAct == e.Cod;
+                    var itemEnPaso01 = s.CodPasoAct == "01";
 
-                    var esActual = s.CodPasoAct == e.Cod;
+                    // Saltar "01" si no tiene datos (no debería ocurrir, FchPedido siempre existe)
+                    if (esPendienteSinFechas && esCodPaso01) { continue; }
+                    // Para ítems que ya pasaron el paso 01, saltar etapas sin fechas que no son la activa
+                    if (esPendienteSinFechas && !esActual && !itemEnPaso01) { continue; }
+
+                    var mostrarFilaPendiente = esPendienteSinFechas; // solo llegaremos aquí si itemEnPaso01
+
                     var eIniL    = pctLeft(e.EI).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var eW       = pctWidth(e.EI, e.EF).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var rIniL    = pctLeft(e.RI).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var rW       = pctWidth(e.RI, e.RF).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var hoyL     = pctLeft(hoy).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
+                    var esAproxFila = pasosAproximados.Contains(e.Cod);
+                    var ttAprox = esAproxFila && descripcionAprox.TryGetValue(e.Cod, out var da) ? da : "";
                     var ttEst  = tieneEst
-                        ? $"{e.Nom} (Est): {e.EI!.Value:dd/MM/yy} → {e.EF!.Value:dd/MM/yy}"
+                        ? $"{e.Nom} (Est): {e.EI!.Value:dd/MM/yy} → {e.EF!.Value:dd/MM/yy}" +
+                          (esAproxFila ? " ⚠ Fecha orientativa" : "")
                         : "";
                     var ttReal = tieneReal
                         ? $"{e.Nom} (Real): {e.RI!.Value:dd/MM/yy}" +
-                          (e.RF.HasValue ? $" → {e.RF.Value:dd/MM/yy}" : " → en curso")
+                          (e.RF.HasValue ? $" → {e.RF.Value:dd/MM/yy}" : " → en curso") +
+                          (esAproxFila ? " ⚠ Fecha orientativa" : "")
                         : "";
 
-                    <div class="gantt-row-label @(esActual ? "fw-semibold" : "")">
-                        <div style="color:@e.Color;">
-                            @e.Nom
-                            @if (esActual)
+                    @if (mostrarFilaPendiente)
+                    {
+                        <div class="gantt-row-label" style="opacity:.45;">
+                            <div style="color:@e.Color;">@e.Nom</div>
+                            <small class="text-muted" style="font-size:.6rem;font-style:italic;">pendiente de planificación</small>
+                        </div>
+                        <div class="gantt-row-body" style="opacity:.25;background:repeating-linear-gradient(90deg,#dee2e6 0,#dee2e6 4px,transparent 4px,transparent 16px);">
+                            <div class="gantt-hoy-line" style="left:@pctLeft(hoy).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%;"></div>
+                        </div>
+                    }
+                    else
+                    {
+                        var ordenActualStep = pasoMap.ContainsKey(s.CodPasoAct) ? pasoMap[s.CodPasoAct].OrdenPaso : 0;
+                        var ordenEtapa      = pasoMap.ContainsKey(e.Cod)         ? pasoMap[e.Cod].OrdenPaso         : 0;
+                        var esCompletadoRow = !esActual && ordenEtapa < ordenActualStep;
+                        var labelClase = esActual ? "paso-activo" : esCompletadoRow ? "paso-completado" : "";
+                        <div class="gantt-row-label @labelClase"
+                             style="@(esActual ? $"--paso-color:{e.Color};" : "")">
+                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                    <span class="paso-badge text-white" style="background:@e.Color;text-shadow:1px 1px 1px rgba(0,0,0,.3);">@e.Cod</span>
+                                    <span class="fw-bold @(esActual ? "" : esCompletadoRow ? "text-success" : "text-muted")"
+                                          style="font-size:.82rem;letter-spacing:.01em;">@e.Nom</span>
+                                </div>
+                                @if (esActual)
+                                {
+                                    <span class="badge mt-1 text-white" style="background:@e.Color;font-size:.64rem;font-weight:800;border:1px solid rgba(0,0,0,.25);text-shadow:1px 1px 1px rgba(0,0,0,.2);">⬤ ACTIVO</span>
+                                }
+                                else if (esCompletadoRow)
+                                {
+                                    <small class="fw-bold" style="font-size:.65rem;color:#047857;"><i class="bi bi-check-circle-fill me-1"></i>COMPLETADO</small>
+                                }
+                                else if (esAproxFila)
+                                {
+                                    <small class="text-warning fw-bold" style="font-size:.62rem;" title="@ttAprox"><i class="bi bi-pin-angle-fill me-1"></i>ORIENTATIVO</small>
+                                }
+                                else if (tieneReal && !e.RF.HasValue)
+                                {
+                                    <small class="fw-bold" style="font-size:.65rem;color:#2563eb;"><i class="bi bi-gear-fill me-1"></i>EN CURSO</small>
+                                }
+                                @* Fechas impresas bajo el nombre de etapa *@
+                                @if (tieneEst)
+                                {
+                                    <div style="font-size:.62rem;color:#718096;margin-top:2px;white-space:nowrap;font-weight:700;">
+                                        <i class="bi bi-calendar2 me-1"></i>EST: @e.EI!.Value.ToString("dd/MM/yy")@(e.EF.HasValue && e.EF != e.EI ? $" → {e.EF.Value:dd/MM/yy}" : "")
+                                    </div>
+                                }
+                                @if (tieneReal)
+                                {
+                                    <div style="font-size:.62rem;color:#1d4ed8;margin-top:2px;white-space:nowrap;font-weight:700;">
+                                        <i class="bi bi-calendar2-check me-1"></i>REAL: @e.RI!.Value.ToString("dd/MM/yy")@(e.RF.HasValue && e.RF != e.RI ? $" → {e.RF.Value:dd/MM/yy}" : e.RF.HasValue ? "" : " → hoy")
+                                    </div>
+                                }
+                        </div>
+                        <div class="gantt-row-body @labelClase">
+                            <div class="gantt-hoy-line" style="left:@hoyL%;"></div>
+
+                            @if (tieneEst)
                             {
-                                <span class="badge ms-1"
-                                      style="background:@e.Color; font-size:.6rem;">actual</span>
+                                <div class="gantt-bar est"
+                                     style="left:@eIniL%;width:@eW%;background:@e.Color;"
+                                     title="@ttEst">
+                                </div>
+                            }
+                            @if (tieneReal)
+                            {
+                                var rWNum = e.RF.HasValue ? double.Parse(rW, System.Globalization.CultureInfo.InvariantCulture) : 1.5;
+                                <div class="gantt-bar real @(!e.RF.HasValue ? "borde-derecho" : "")"
+                                     style="left:@rIniL%;width:@rWNum.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)%;background:@e.Color;"
+                                     title="@ttReal">
+                                </div>
+                                @if (e.RI.HasValue && rWNum > 5)
+                                {
+                                    <div class="gantt-bar-label"
+                                         style="left:@rIniL%;background:transparent;">@e.RI.Value.ToString("dd/MM")</div>
+                                }
                             }
                         </div>
-                        @if (tieneReal && !e.RF.HasValue)
-                        {
-                            <small class="text-primary" style="font-size:.65rem;">⚙ en curso</small>
-                        }
-                    </div>
-                    <div class="gantt-row-body">
-                        <div class="gantt-hoy-line" style="left:@hoyL%;"></div>
-
-                        @if (tieneEst)
-                        {
-                            <div class="gantt-bar est"
-                                 style="left:@eIniL%;width:@eW%;background:@e.Color;"
-                                 title="@ttEst">
-                            </div>
-                        }
-                        @if (tieneReal)
-                        {
-                            <div class="gantt-bar real @(!e.RF.HasValue ? "borde-derecho" : "")"
-                                 style="left:@rIniL%;width:@(e.RF.HasValue ? rW + "%" : "1.2%");background:@e.Color;"
-                                 title="@ttReal">
-                            </div>
-                        }
-                    </div>
+                    }
                 }
 
                 <!-- Hito: entrega comprometida -->
@@ -288,75 +794,53 @@
                 {
                     var hitoL     = pctLeft(s.FchEntregaComp).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var hoyHitoL  = pctLeft(hoy).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
-                    var hitoColor = s.EstaRetrasado ? "#dc3545" : "#198754";
+                    var hitoColor = s.EstaRetrasado ? "#dc2626" : "#047857";
 
-                    <div class="gantt-row-label" style="font-size:.72rem;color:@hitoColor;font-weight:600;">
-                        Entrega comp.
+                    <div class="gantt-row-label" style="font-size:.78rem;color:@hitoColor;font-weight:800;letter-spacing:.02em;">
+                        ENTREGA COMP.
                     </div>
                     <div class="gantt-row-body">
                         <div class="gantt-hoy-line" style="left:@hoyHitoL%;"></div>
                         <div class="gantt-hito"
-                             style="left:calc(@hitoL% - 5px);background:@hitoColor;"
+                             style="left:calc(@hitoL% - 8px);background:@hitoColor;"
                              title="Entrega comprometida: @s.FchEntregaComp.Value.ToString("dd/MM/yyyy")">
                         </div>
                         @if (s.EstaRetrasado)
                         {
-                            <span style="position:absolute;top:16px;left:calc(@hitoL% + 8px);
-                                         font-size:.65rem;color:#dc3545;font-weight:700;white-space:nowrap;">
-                                +@s.DiasRetraso d
+                            <span style="position:absolute;top:16px;left:calc(@hitoL% + 10px);
+                                         font-size:.7rem;color:#dc2626;font-weight:900;white-space:nowrap;text-shadow:1px 1px 1px rgba(255,255,255,.5);">
+                                +@s.DiasRetraso D
                             </span>
                         }
                     </div>
                 }
+                </div>@* /sublote-rows *@
             }
         </div>
     </div>
 </div>
 
-<!-- Historial de eventos -->
-@if (Model.Eventos.Any())
-{
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white fw-semibold py-2">
-            <i class="bi bi-clock-history me-1"></i> Historial de eventos
-        </div>
-        <div class="card-body p-0" style="max-height:260px;overflow-y:auto;">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Tipo</th>
-                            <th>Etapa</th>
-                            <th>Det.</th>
-                            <th class="text-end">Kg</th>
-                            <th>Obs.</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var ev in Model.Eventos)
-                        {
-                            <tr>
-                                <td class="text-nowrap">@ev.FchEvento.ToString("dd/MM/yy HH:mm")</td>
-                                <td>
-                                    <span class="badge @(ev.TipoEvento == "RE" ? "bg-danger" : "bg-success")"
-                                          style="font-size:.7rem;">
-                                        @(ev.TipoEvento == "RE" ? "Reproceso" : "Avance")
-                                    </span>
-                                </td>
-                                <td class="small">@ev.NombrePaso</td>
-                                <td class="small text-muted">@ev.NumDet</td>
-                                <td class="text-end small">
-                                    @(ev.KgCantidad.HasValue ? ev.KgCantidad.Value.ToString("N0") : "—")
-                                </td>
-                                <td class="small text-muted text-truncate" style="max-width:180px;">
-                                    @ev.Observacion
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+<div style="margin-bottom:1.5rem;"></div>
+
+@section Scripts {
+<script>
+    // Carga descripción + material de artículos via endpoint (reutiliza GetArticuloInfo)
+    (async function () {
+        const seps  = document.querySelectorAll('[data-codartt]');
+        const unique = [...new Set([...seps].map(c => c.dataset.codartt).filter(Boolean))];
+        for (const cod of unique) {
+            try {
+                const res  = await fetch(`/Planeamiento/GetArticuloInfo?codArt=${encodeURIComponent(cod)}`);
+                if (!res.ok) continue;
+                const info = await res.json();
+                const parts = [info.descripcion, info.fibra].filter(x => x);
+                if (!parts.length) continue;
+                const text = parts.join(' · ');
+                document.querySelectorAll(`[data-codartt="${CSS.escape(cod)}"] .art-desc-info`)
+                        .forEach(el => el.textContent = text);
+            } catch { /* silencioso */ }
+        }
+    })();
+</script>
 }
+

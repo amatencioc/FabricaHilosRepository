@@ -15,14 +15,35 @@
     var grupos = items
         .GroupBy(x => string.IsNullOrEmpty(x.Area) ? "Otras" : x.Area)
         .OrderBy(g => g.Key);
+
+    // Datos para el Heatmap ApexCharts (30 días × máquinas).
+    // Fuente: GetCargaMaquinasAsync() ya devuelve la ventana completa desde V_PLN_CARGA_MAQUINAS.
+    var allDates = items.Select(x => x.Fecha.Date).Distinct().OrderBy(d => d).ToList();
+    var byMaq    = items.GroupBy(x => x.CodMaq).OrderBy(g => g.Key).ToList();
+    var heatSeriesJson = System.Text.Json.JsonSerializer.Serialize(
+        byMaq.Select(g => new {
+            name = g.Key,
+            data = allDates.Select(d => {
+                var e = g.FirstOrDefault(x => x.Fecha.Date == d);
+                return new { x = d.ToString("dd/MM"), y = (int)Math.Round(e?.PctCarga ?? 0) };
+            }).ToList()
+        }).ToList()
+    );
+    var showHeatmap = allDates.Count > 1 && byMaq.Count > 0;
+    var heatFechaRango = allDates.Count > 1
+        ? $"{allDates.First():dd/MM} – {allDates.Last():dd/MM/yy}"
+        : allDates.Count == 1 ? allDates[0].ToString("dd/MM/yy") : "—";
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
 <style>
+    /* CargaMaquinas: estilos exclusivos de la vista */
     .maq-card { border-radius: .75rem; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
-    .maq-gauge { height: 12px; border-radius: 6px; }
-    .semaforo-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-    .leyenda-item { display: flex; align-items: center; font-size: .8rem; }
+    .maq-gauge { height: 10px; border-radius: 5px; }
+    .leyenda-item { display: flex; align-items: center; font-size: .78rem; }
+    .tbl-carga { font-size: .82rem; }
+    .tbl-carga thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
 </style>
 }
 
@@ -32,7 +53,7 @@
     <li class="breadcrumb-item active">Carga de Máquinas</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="d-flex align-items-center justify-content-between mb-2">
     <h4 class="mb-0"><i class="bi bi-gear-wide-connected me-2 text-primary"></i>Carga de Máquinas</h4>
     <div class="d-flex gap-2 align-items-center">
         <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy")</span>
@@ -44,6 +65,7 @@
         </button>
     </div>
 </div>
+<p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Indica cuánta capacidad tiene cada máquina disponible hoy. 🟢 Disponible: tiene margen para asignar más trabajo. 🟡 Carga alta: próxima a su límite. 🔴 Sobrecargada: supera el 100% de ocupación. Use “Refrescar carga” para recalcular con los datos del día.</p>
 
 <!-- Modal: Refrescar carga diaria -->
 <div class="modal fade" id="modalRefreshCarga" tabindex="-1">
@@ -121,6 +143,25 @@
     <div class="leyenda-item"><span class="semaforo-dot" style="background:#dc3545;"></span>Sobrecargada (&gt;95%)</div>
 </div>
 
+@* ── Heatmap ApexCharts: ocupación 30 días ─────────────────── *@
+@if (showHeatmap)
+{
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-2" style="font-size:.84rem;">
+            <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>
+            <strong>Ocupación por máquina — próximos 30 días</strong>
+            <small class="text-muted ms-2">@heatFechaRango</small>
+        </div>
+        <div class="card-body pb-1 px-2">
+            <div id="chartCargaHeatmap"></div>
+        </div>
+        <div class="card-footer text-muted py-1" style="font-size:.72rem;">
+            Intensidad = % carga Oracle (PctCarga). Fuente: <code>V_PLN_CARGA_MAQUINAS</code>.
+            Celdas grises = sin datos (máquina sin pedidos asignados ese día).
+        </div>
+    </div>
+}
+
 @if (!items.Any())
 {
     <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay datos de carga para hoy.</div>
@@ -136,7 +177,7 @@ else
                 <span class="badge bg-secondary ms-2">@grupo.Count() máquina(s)</span>
             </div>
             <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0 align-middle">
+                <table class="table table-sm table-hover mb-0 align-middle tbl-carga">
                     <thead class="table-light">
                         <tr>
                             <th>Máquina</th>
@@ -190,4 +231,60 @@ else
             </div>
         </div>
     }
+}
+
+@section Scripts {
+@if (showHeatmap)
+{
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3/dist/apexcharts.min.js"></script>
+<script>
+(function () {
+    var series = @Html.Raw(heatSeriesJson);
+    // Altura dinámica: mínimo 250px, 22px por máquina
+    var chartH = Math.max(250, series.length * 22);
+
+    var options = {
+        chart: {
+            type:        'heatmap',
+            height:      chartH,
+            toolbar:     { show: false },
+            animations:  { enabled: false },
+            fontFamily:  'inherit'
+        },
+        series: series,
+        dataLabels: { enabled: false },
+        plotOptions: {
+            heatmap: {
+                shadeIntensity: 0.6,
+                radius:         2,
+                useFillColorAsStroke: false,
+                colorScale: {
+                    ranges: [
+                        { from: 0,   to: 0,   color: '#e2e8f0', name: 'Sin datos'          },
+                        { from: 1,   to: 50,  color: '#198754', name: 'Disponible (<50%)'  },
+                        { from: 51,  to: 80,  color: '#ffc107', name: 'Carga media (50-80%)' },
+                        { from: 81,  to: 95,  color: '#fd7e14', name: 'Carga alta (80-95%)' },
+                        { from: 96,  to: 300, color: '#dc3545', name: 'Sobrecargada (>95%)' }
+                    ]
+                }
+            }
+        },
+        xaxis: {
+            type:   'category',
+            labels: { style: { fontSize: '10px' }, rotate: -45, rotateAlways: true }
+        },
+        yaxis: {
+            labels: { style: { fontSize: '10px', fontWeight: '600' } }
+        },
+        tooltip: {
+            y: { formatter: function (val) { return val === 0 ? 'Sin datos' : val + '% carga'; } }
+        },
+        legend: { show: true, position: 'top', fontSize: '11px', horizontalAlign: 'left' },
+        stroke: { width: 1, colors: ['#fff'] }
+    };
+
+    new ApexCharts(document.querySelector('#chartCargaHeatmap'), options).render();
+})();
+</script>
+}
 }

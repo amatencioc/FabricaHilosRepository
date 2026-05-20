@@ -1,4 +1,4 @@
-@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnSeguimiento>
+﻿@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnSeguimiento>
 @using FabricaHilos.Models.Produccion.Planeamiento
 
 @{
@@ -6,23 +6,178 @@
     var estados = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? [];
     var filtroCliente = ViewBag.FiltroCliente as string ?? "";
     var filtroPaso    = ViewBag.FiltroPaso    as string ?? "";
+    var filtroNumPed  = ViewBag.FiltroNumPed  as string ?? "";
 
     var items = Model.ToList();
-    var totalActivos    = items.Count;
-    var totalRetrasados = items.Count(x => x.EstaRetrasado);
-    var totalUrgentes   = items.Count(x => x.EsUrgente);
-    var totalReprocesos = items.Count(x => x.EstaEnReproceso);
+    var alertasPorPedido = ViewBag.AlertasPorPedido as Dictionary<string, int> ?? new Dictionary<string, int>();
+    var totalPedidos      = items.Select(x => new { x.Serie, x.NumPed }).Distinct().Count();
+    var totalActivos      = items.Count;
+    var totalRetrasados   = items.Count(x => x.EstaRetrasado);
+    var totalUrgentes     = items.Count(x => x.EsUrgente);
+    var totalReprocesos   = items.Count(x => x.EstaEnReproceso);
+    var totalSinPlanificar  = items.Count(x => x.CodPasoAct == "01");
+    var totalPlanificados   = totalActivos - totalSinPlanificar;
+
+    // ── Swimlane ApexCharts: pedidos activos agrupados por área ──────────────
+    var swAreaOrder = new[] { "VENTAS", "PLANEAMIENTO", "LABORATORIO", "HILANDERÍA",
+                               "TINTORERÍA", "ACABADOS", "DEVANADO", "CALIDAD", "ALMACÉN PT", "DESPACHO" };
+    Func<string, string> swArea = codPaso => codPaso switch {
+        "01"                          => "VENTAS",
+        "02"                          => "PLANEAMIENTO",
+        "03"                          => "LABORATORIO",      // v2.1: L_VALIDA_RECETA
+        "04" or "05"                  => "HILANDERÍA",       // v2.1: PARTIDA / H_RPRODUC
+        "06" or "07" or "08" or "09" or "9R" => "TINTORERÍA",
+        "09B"                         => "ACABADOS",
+        "10"                          => "DEVANADO",
+        "11"                          => "CALIDAD",
+        "12" or "13"                  => "ALMACÉN PT",
+        "14"                          => "DESPACHO",
+        _                             => "OTROS"
+    };
+    Func<DateTime, string> swFmt = d => d.Date.ToString("yyyy-MM-dd");
+    var swByArea = swAreaOrder.ToDictionary(a => a, _ => new System.Collections.Generic.List<object>());
+
+    foreach (var item in items.Where(x => x.Estado == "A"))
+    {
+        var area = swArea(item.CodPasoAct);
+        if (!swByArea.ContainsKey(area)) continue;
+        // Fecha inicio y fin estimados para la etapa actual (v2.1)
+        DateTime? ini = item.CodPasoAct switch {
+            "01" or "02"                          => (DateTime?)item.FchPedido,
+            "03"                                  => (DateTime?)(item.FchRealProgramado ?? item.FchPedido),
+            "04"                                  => item.FchEstHilanderia,
+            "05"                                  => item.FchEstPartida,
+            "06" or "07" or "08" or "09" or "9R" => item.FchEstTinIni,
+            "09B" or "10"                         => item.FchEstTinFin,
+            "11"                                  => item.FchEstSecado,
+            "12" or "13" or "14"                  => item.FchEstCalidad,
+            _                                     => (DateTime?)item.FchPedido
+        };
+        DateTime? fin = item.CodPasoAct switch {
+            "01" or "02"                          => item.FchEstHilanderia ?? item.FchEntregaComp,
+            "03"                                  => item.FchEstHilanderia,
+            "04"                                  => item.FchEstPartida,
+            "05"                                  => item.FchEstTinIni,
+            "06" or "07" or "08" or "09" or "9R" => item.FchEstTinFin,
+            "09B" or "10"                         => item.FchEstSecado,
+            "11"                                  => item.FchEstCalidad,
+            "12" or "13" or "14"                  => item.FchEstDespacho ?? item.FchEntregaComp,
+            _                                     => item.FchEntregaComp
+        };
+        if (!ini.HasValue) ini = item.FchPedido;
+        if (!fin.HasValue) fin = ini.Value.AddDays(7);
+        if (fin.Value <= ini.Value) fin = ini.Value.AddDays(1);
+
+        var label = $"{item.Serie}-{item.NumPed}/{item.Nro} {item.CodArt}";
+        var color = item.EstaRetrasado ? "#dc3545" : item.EsUrgente ? "#fd7e14" : "#0d6efd";
+        swByArea[area].Add(new { x = label, y = new[] { swFmt(ini.Value), swFmt(fin.Value) }, fillColor = color });
+    }
+
+    var swSeries = swAreaOrder
+        .Where(a => swByArea[a].Count > 0)
+        .Select(a => (object)new { name = a, data = swByArea[a] })
+        .ToList();
+    var swSeriesJson  = System.Text.Json.JsonSerializer.Serialize(swSeries);
+    var showSwimlane  = swSeries.Count > 0;
+    // Altura dinámica: 40px por swim lane (área), mínimo 200px
+    var swChartHeight = Math.Max(200, swSeries.Count * 40);
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
 <style>
-    .paso-badge { font-size: .75rem; padding: .35em .65em; border-radius: .5rem; font-weight: 600; }
-    .progress-thin { height: 6px; border-radius: 3px; }
-    .row-urgente { border-left: 4px solid #dc3545 !important; }
-    .row-retrasado td:first-child { border-left: 4px solid #fd7e14; }
-    .tbl-seguimiento td { vertical-align: middle; }
-    .kpi-card { border: none; box-shadow: 0 2px 6px rgba(0,0,0,.1); border-radius: .75rem; }
-    .filtros-bar { background: #f8f9fa; border-radius: .5rem; padding: 1rem; margin-bottom: 1.25rem; }
+    /* ── Dashboard: estilos exclusivos ─────────────────────────── */
+
+    /* Header strip oscuro con KPIs inline */
+    .dash-strip {
+        background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
+        color: var(--pln-light-text);
+        border-radius: .5rem .5rem 0 0;
+        padding: .55rem 1rem;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .5rem;
+        border-bottom: 3px solid var(--pln-dark-deep);
+        box-shadow: var(--pln-shadow-md);
+    }
+    .dash-strip-title {
+        font-size: .82rem; font-weight: 800; letter-spacing: .08em;
+        text-transform: uppercase; color: #f7fafc; white-space: nowrap;
+        margin-right: .25rem;
+    }
+    .dash-strip-sep { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+    .dash-kpi {
+        display: inline-flex; align-items: center; gap: .25rem;
+        background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+        border-radius: 999px; padding: .18rem .6rem;
+        font-size: .7rem; white-space: nowrap; color: var(--pln-light-text);
+    }
+    .dash-kpi-val { font-weight: 700; font-size: .82rem; }
+    .dash-strip-ts { margin-left: auto; font-size: .68rem; color: var(--pln-light-muted); white-space: nowrap; }
+    .dash-strip-ts a { color: var(--pln-light-muted); }
+    .dash-strip-ts a:hover { color: var(--pln-accent-blue); }
+
+    /* Panel de filtros siempre visible (sin colapsar) */
+    .dash-filter {
+        background: #f8fafc;
+        border: 1px solid var(--pln-gray-200);
+        border-top: none;
+        border-radius: 0 0 .45rem .45rem;
+        padding: .55rem .9rem;
+        margin-bottom: .85rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    }
+
+    /* Cards de pedido */
+    .ped-card {
+        border: 1px solid var(--pln-gray-200);
+        border-radius: .4rem;
+        margin-bottom: .4rem;
+        box-shadow: var(--pln-shadow-sm);
+        overflow: hidden;
+        background: #fff;
+    }
+    .ped-card.urg  { border-left: 4px solid var(--pln-danger); }
+    .ped-card.ret  { border-left: 4px solid var(--pln-warning); }
+    .ped-card.norm { border-left: 4px solid var(--pln-gray-200); }
+
+    .ped-head {
+        display: flex; align-items: center; flex-wrap: nowrap; gap: .45rem;
+        padding: .45rem .7rem; cursor: pointer; user-select: none;
+        background: #fafbfd; transition: background .12s;
+        overflow: hidden;
+    }
+    .ped-head:hover { background: #edf2ff; }
+    /* Columna 1 — número de pedido (fijo) */
+    .ped-num { font-weight: 700; font-size: .88rem; color: #2d3748; white-space: nowrap; flex: 0 0 90px; }
+    .ped-num a { color: inherit; text-decoration: none; }
+    .ped-num a:hover { color: var(--pln-blue-dk); text-decoration: underline; }
+    /* Columna 2 — cliente (flexible, muestra nombre completo) */
+    .ped-cliente {
+        font-size: .78rem; color: #718096;
+        flex: 1 1 240px; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Columna 3 — kg + fecha (fijo) */
+    .ped-meta  { flex: 0 0 195px; display: flex; align-items: center; gap: .45rem; overflow: hidden; }
+    /* Columna 4 — etapa + badge "más" (justo antes de acciones) */
+    .ped-etapa { flex: 0 0 215px; display: flex; align-items: center; gap: .3rem; overflow: hidden; }
+    .ped-meta-num { font-size: .72rem; color: #718096; white-space: nowrap; }
+    .ped-actions { display: flex; gap: .25rem; flex-shrink: 0; }
+
+    /* Sub-tabla de ítems colapsable — compacta con fondo ligeramente más oscuro */
+    .subtbl { font-size: .77rem; background: #eef1f6; }
+    .subtbl thead th {
+        font-size: .68rem; font-weight: 700; color: var(--pln-gray-600);
+        text-transform: uppercase; letter-spacing: .04em;
+        border-bottom: 2px solid #cdd4e0; padding: .28rem .45rem;
+        background: #e2e7f0;
+    }
+    .subtbl td { vertical-align: middle; }
+    .subtbl tbody td { padding: .25rem .45rem; }
+    .subtbl tbody tr { background: #eef1f6; }
+    .subtbl tbody tr:hover td { background: #dde4f0; }
 </style>
 }
 
@@ -32,76 +187,161 @@
     <li class="breadcrumb-item active">Dashboard</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0"><i class="bi bi-kanban me-2 text-primary"></i>Dashboard de Seguimiento</h4>
-    <span class="text-muted small">Actualizado: @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
-</div>
+@{
+    // TempData["Error09B"]: mensaje de error cuando se intenta avanzar al paso '09B — Gaseado'
+    // con un ítem que no tiene PROCESO='24'. El controller captura la InvalidOperationException
+    // lanzada por PlnSeguimientoService.AvanzaPasoAsync y guarda el mensaje aquí.
+    // Se muestra en un modal Bootstrap en lugar de dejar que suba como error 500,
+    // porque es un error de negocio esperado (no un fallo técnico) y el usuario
+    // necesita un mensaje claro para saber qué acción tomar.
+    var errorMsg  = TempData["Error09B"]  as string;
+    var warnMsg   = TempData["Advertencia"] as string;
+    var okMsg     = TempData["Exito"]       as string;
+}
 
-<!-- KPIs resumen -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="fs-2 fw-bold text-primary">@totalActivos</div>
-            <div class="text-muted small">Ítems activos</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="fs-2 fw-bold text-danger">@totalRetrasados</div>
-            <div class="text-muted small">Con retraso</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="fs-2 fw-bold text-warning">@totalUrgentes</div>
-            <div class="text-muted small">Urgentes</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card kpi-card text-center p-3">
-            <div class="fs-2 fw-bold text-info">@totalReprocesos</div>
-            <div class="text-muted small">En reproceso</div>
-        </div>
-    </div>
-</div>
-
-<!-- Swimlane por paso -->
-<div class="card mb-4 border-0 shadow-sm">
-    <div class="card-header bg-white fw-semibold py-2">
-        <i class="bi bi-bar-chart-steps me-1"></i> Ítems por etapa
-    </div>
-    <div class="card-body p-2">
-        <div class="d-flex flex-wrap gap-2">
-            @foreach (var ec in estados.OrderBy(e => e.OrdenPaso))
-            {
-                var cnt = items.Count(x => x.CodPasoAct == ec.CodPaso);
-                if (cnt == 0) continue;
-                <div class="text-center" style="min-width:80px;">
-                    <div class="badge w-100 py-2" style="background-color:@ec.ColorUi; font-size:.8rem;">
-                        @ec.CodPaso
-                    </div>
-                    <div class="fw-bold fs-5">@cnt</div>
-                    <div class="text-muted" style="font-size:.7rem;">@ec.NombrePaso</div>
+@* Modal de error de negocio (ej. intento de avanzar a 09B sin PROCESO='24') *@
+@if (!string.IsNullOrEmpty(errorMsg))
+{
+    <div class="modal fade" id="modalError09B" tabindex="-1" aria-labelledby="modalError09BLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-danger">
+                <div class="modal-header bg-danger text-white py-2">
+                    <h6 class="modal-title" id="modalError09BLabel">
+                        <i class="bi bi-exclamation-octagon-fill me-2"></i>Operación no permitida
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-            }
+                <div class="modal-body small">
+                    @* El mensaje explica exactamente por qué no se puede avanzar, incluyendo
+                       el proceso actual del ítem y la restricción BUG#35 de PKG_PLN *@
+                    <p class="mb-0">@errorMsg</p>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-danger btn-sm" data-bs-dismiss="modal">Entendido</button>
+                </div>
+            </div>
         </div>
     </div>
+}
+
+@* Modal de advertencia genérica *@
+@if (!string.IsNullOrEmpty(warnMsg))
+{
+    <div class="modal fade" id="modalAdvertencia" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-warning">
+                <div class="modal-header bg-warning py-2">
+                    <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Advertencia</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body small">@warnMsg</div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-warning btn-sm" data-bs-dismiss="modal">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal de éxito / confirmación *@
+@if (!string.IsNullOrEmpty(okMsg))
+{
+    <div class="modal fade" id="modalExito" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-success">
+                <div class="modal-header bg-success text-white py-2">
+                    <h6 class="modal-title"><i class="bi bi-check-circle-fill me-2"></i>Operación exitosa</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body small">@okMsg</div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-success btn-sm" data-bs-dismiss="modal">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Cabecera + KPIs inline + Filtros ─────────────────── *@
+<div class="dash-strip">
+    <i class="bi bi-kanban-fill" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="dash-strip-title">Dashboard de Seguimiento</span>
+    <span class="dash-strip-sep"></span>
+
+    <span class="dash-kpi" title="Total de pedidos activos (agrupados por N° de pedido).">
+        <i class="bi bi-cart-check" style="color:#90cdf4;"></i>
+        <span class="dash-kpi-val">@totalPedidos</span>
+        <span style="opacity:.75">pedidos</span>
+    </span>
+    <span class="dash-kpi" title="Total de ítems con ESTADO='A'. Incluye todos los pasos activos (01 al 13).">
+        <i class="bi bi-boxes" style="color:#90cdf4;"></i>
+        <span class="dash-kpi-val">@totalActivos</span>
+        <span style="opacity:.75">ítems</span>
+    </span>
+    <span class="dash-kpi" style="@(totalRetrasados > 0 ? "" : "opacity:.45")"
+          title="Ítems con IND_RETRASO='S': SYSDATE supera FCH_ENTREGA_COMP.">
+        <i class="bi bi-clock-history" style="color:#fc8181;"></i>
+        <span class="dash-kpi-val" style="@(totalRetrasados > 0 ? "color:#fc8181;" : "")">@totalRetrasados</span>
+        <span style="opacity:.75">retraso</span>
+    </span>
+    <span class="dash-kpi" style="@(totalUrgentes > 0 ? "" : "opacity:.45")"
+          title="Ítems con IND_URGENTE='S'. Activado por Ventas o por PKG_PLN.">
+        <i class="bi bi-lightning-charge-fill" style="color:#f6ad55;"></i>
+        <span class="dash-kpi-val" style="@(totalUrgentes > 0 ? "color:#f6ad55;" : "")">@totalUrgentes</span>
+        <span style="opacity:.75">urgentes</span>
+    </span>
+    <span class="dash-kpi" style="@(totalReprocesos > 0 ? "" : "opacity:.45")"
+          title="Ítems con IND_REPROCESO='S': fallaron CC en paso 09 y reinician en 9R.">
+        <i class="bi bi-arrow-repeat" style="color:#76e4f7;"></i>
+        <span class="dash-kpi-val" style="@(totalReprocesos > 0 ? "color:#76e4f7;" : "")">@totalReprocesos</span>
+        <span style="opacity:.75">reprocesos</span>
+    </span>
+    <span class="dash-kpi" title="Ítems con paso activo >= '02': tienen NROPROG y fechas estimadas asignadas.">
+        <i class="bi bi-check2-circle" style="color:#68d391;"></i>
+        <span class="dash-kpi-val" style="color:#68d391;">@totalPlanificados</span>
+        <span style="opacity:.75">planificados</span>
+    </span>
+    <span class="dash-kpi" style="@(totalSinPlanificar > 0 ? "" : "opacity:.45")"
+          title="Ítems en paso '01' sin fechas estimadas. No generan alertas ni carga de máquinas. Use Gantt → Planificar.">
+        <i class="bi bi-hourglass-split" style="color:#fbd38d;"></i>
+        <span class="dash-kpi-val" style="@(totalSinPlanificar > 0 ? "color:#fbd38d;" : "")">@totalSinPlanificar</span>
+        <span style="opacity:.75">sin planif.</span>
+    </span>
+    <span class="dash-strip-ts">
+        <i class="bi bi-arrow-clockwise me-1"></i>@DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+        <a href="#" class="ms-1" data-bs-toggle="tooltip"
+           title="Vista general de pedidos activos (ESTADO='A'). Rojo = urgente, amarillo = con retraso. ⚙ = PROCESO='24' (merino/especial, candidato a 09B). Filtre por cliente o etapa.">
+            <i class="bi bi-info-circle"></i>
+        </a>
+    </span>
 </div>
 
-<!-- Filtros -->
-<div class="filtros-bar">
+@* Filtros — siempre visibles, compactos *@
+<div class="dash-filter">
     <form method="get" class="row g-2 align-items-end">
         <div class="col-md-4">
-            <label class="form-label fw-semibold mb-1 small">Cliente</label>
-            <input name="codCliente" value="@filtroCliente" class="form-control form-control-sm" placeholder="Cód. cliente..." />
+            <label class="form-label fw-semibold mb-1 small">
+                <i class="bi bi-person me-1 text-secondary"></i>Cliente (nombre o RUC)
+            </label>
+            <input name="busquedaCliente" value="@filtroCliente" class="form-control form-control-sm" placeholder="Buscar por nombre o RUC..." />
         </div>
-        <div class="col-md-4">
-            <label class="form-label fw-semibold mb-1 small">Etapa</label>
+        <div class="col-md-2">
+            <label class="form-label fw-semibold mb-1 small">
+                <i class="bi bi-hash me-1 text-secondary"></i>N.° Pedido
+            </label>
+            <input name="numPed" value="@filtroNumPed" class="form-control form-control-sm" placeholder="Ej. 88797..." />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label fw-semibold mb-1 small">
+                <i class="bi bi-diagram-3 me-1 text-secondary"></i>Etapa
+            </label>
             <select name="codPaso" class="form-select form-select-sm">
                 <option value="">— Todas —</option>
                 @foreach (var ec in estados.OrderBy(e => e.OrdenPaso))
                 {
-                    <option value="@ec.CodPaso" selected="@(filtroPaso == ec.CodPaso ? "selected" : null)">
+                    <option value="@ec.CodPaso"
+                            title="@ec.Tooltip"
+                            selected="@(filtroPaso == ec.CodPaso ? "selected" : null)">
                         @ec.CodPaso — @ec.NombrePaso
                     </option>
                 }
@@ -110,6 +350,10 @@
         <div class="col-md-2">
             <button type="submit" class="btn btn-primary btn-sm w-100">
                 <i class="bi bi-funnel me-1"></i>Filtrar
+                @if (!string.IsNullOrEmpty(filtroCliente) || !string.IsNullOrEmpty(filtroPaso) || !string.IsNullOrEmpty(filtroNumPed))
+                {
+                    <span class="badge bg-white text-primary ms-1" style="font-size:.6rem;">activo</span>
+                }
             </button>
         </div>
         <div class="col-md-2">
@@ -120,75 +364,230 @@
     </form>
 </div>
 
-<!-- Tabla de seguimiento -->
+@* ── Pedidos activos (cards) ──────────────────────────── *@
+<div class="section-sep"><i class="bi bi-stack"></i> Pedidos activos</div>
+@{
+    // Mapa CodPaso → OrdenPaso para determinar la etapa más crítica (regla §9: mínimo OrdenPaso).
+    var ordenPasoMap = estados.ToDictionary(e => e.CodPaso, e => e.OrdenPaso);
+
+    // El orden dentro de cada grupo respeta el ítem con mayor retraso primero.
+    var pedidosGrupo = items
+        .GroupBy(x => new { x.Serie, x.NumPed })
+        .Select(g =>
+        {
+            var lista       = g.OrderByDescending(x => x.DiasRetraso).ToList();
+            var esUrgente   = lista.Any(x => x.EsUrgente);
+            var retrasado   = lista.Any(x => x.EstaRetrasado);
+            var maxRetraso  = lista.Max(x => x.DiasRetraso);
+            var kgTotal     = lista.Sum(x => x.KgPendientes);
+            var fchMin      = lista.Where(x => x.FchEntregaComp.HasValue)
+                                   .Select(x => x.FchEntregaComp!.Value)
+                                   .DefaultIfEmpty()
+                                   .Min();
+            var etapas      = lista.Select(x => x.CodPasoAct).Distinct().ToList();
+            // Etapa crítica = ítem con menor OrdenPaso (el más atrasado en el flujo, regla §9).
+            // Ante igualdad de orden, se elige el de mayor DiasRetraso.
+            var peorItem    = lista
+                .OrderBy(x => ordenPasoMap.TryGetValue(x.CodPasoAct, out var op) ? op : 99)
+                .ThenByDescending(x => x.DiasRetraso)
+                .First();
+            var peorColor   = peorItem.ColorUi   ?? "#6c757d";
+            var peorNombre  = peorItem.NombrePaso ?? "";
+            var peorCodigo  = peorItem.CodPasoAct ?? "";
+            var cliente     = lista.First().NombreCliente;
+            var serie       = g.Key.Serie;
+            var numPed      = g.Key.NumPed;
+            return (serie, numPed, cliente, lista, esUrgente, retrasado, maxRetraso,
+                    kgTotal, fchMin, etapas, peorColor, peorNombre, peorCodigo);
+        })
+        .OrderByDescending(p => p.numPed)
+        .ThenByDescending(p => p.esUrgente)
+        .ThenByDescending(p => p.maxRetraso)
+        .ThenBy(p => p.fchMin == default ? DateTime.MaxValue : p.fchMin)
+        .ToList();
+}
 @if (!items.Any())
 {
     <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay ítems activos con los filtros seleccionados.</div>
 }
 else
 {
-    <div class="card border-0 shadow-sm">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover table-sm mb-0 tbl-seguimiento">
-                    <thead class="table-light">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted small">@pedidosGrupo.Count pedidos · @items.Count ítems activos</span>
+        <div class="d-flex gap-2">
+            <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm"
+                    title="Expandir todos los pedidos para ver sus ítems">
+                <i class="bi bi-chevron-double-down me-1"></i>Expandir todo
+            </button>
+            <button type="button" id="btnCollapseAll" class="btn btn-outline-secondary btn-sm"
+                    title="Colapsar todos los pedidos">
+                <i class="bi bi-chevron-double-up me-1"></i>Colapsar todo
+            </button>
+        </div>
+    </div>
+
+    @foreach (var p in pedidosGrupo)
+    {
+        var collapseId = $"items-{p.serie}-{p.numPed}";
+        var cardCls    = p.esUrgente ? "urg" : p.retrasado ? "ret" : "norm";
+        var keyAlerta  = $"{p.serie}|{p.numPed}";
+        var cntAlerta  = alertasPorPedido.TryGetValue(keyAlerta, out var ca) ? ca : 0;
+        <div class="ped-card @cardCls">
+            @* Cabecera: clic = expandir/colapsar *@
+            <div class="ped-head"
+                 data-collapse-target="@collapseId"
+                 onclick="togglePedidoRow(event, '@collapseId')">
+                <i class="bi bi-chevron-right toggle-icon" style="font-size:.7rem;flex-shrink:0;color:#718096;"></i>
+
+                <span class="ped-num">
+                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie">
+                        @p.serie-@p.numPed
+                    </a>
+                    @if (p.esUrgente)
+                    {
+                        <span class="badge bg-danger ms-1" title="Pedido urgente"><i class="bi bi-lightning-charge-fill"></i></span>
+                    }
+                    @if (cntAlerta > 0)
+                    {
+                        <span class="badge bg-warning text-dark ms-1"
+                              title="@cntAlerta alerta(s) activa(s) en este pedido. Abra la bandeja de Alertas para ver el detalle.">
+                            <i class="bi bi-bell-fill me-1"></i>@cntAlerta
+                        </span>
+                    }
+                </span>
+
+                <span class="ped-cliente" title="@p.cliente">@p.cliente</span>
+
+                @* Columna 3 — métricas (kg + fecha, ancho fijo .ped-meta) *@
+                <span class="ped-meta">
+                    <span class="ped-meta-num" title="Suma de kg pendientes">
+                        <i class="bi bi-box2 me-1 text-secondary"></i>@p.kgTotal.ToString("N0") kg
+                    </span>
+                    @if (p.fchMin != default)
+                    {
+                        <span class="ped-meta-num" title="Fecha compromiso más próxima">
+                            <i class="bi bi-calendar3 me-1 text-secondary"></i>
+                            <span class="@(p.retrasado ? "text-danger fw-bold" : "")">@p.fchMin.ToString("dd/MM/yy")</span>
+                        </span>
+                    }
+                </span>
+
+                @if (p.maxRetraso > 0)
+                {
+                    <span class="badge @(p.maxRetraso >= 7 ? "bg-danger" : p.maxRetraso >= 3 ? "bg-warning text-dark" : "bg-secondary")"
+                          title="Días de retraso máximo entre todos los ítems del pedido.">
+                        +@p.maxRetraso d
+                    </span>
+                }
+                <span class="badge bg-secondary" title="@p.lista.Count ítems activos">@p.lista.Count</span>
+
+                @* Etapa crítica — justo antes de los botones de acción *@
+                <span class="ped-etapa">
+                    <span class="paso-badge text-white" style="background-color:@p.peorColor;font-size:.7rem;">
+                        @p.peorCodigo — @p.peorNombre
+                    </span>
+                    @if (p.etapas.Count > 1)
+                    {
+                        <span class="badge bg-light text-muted border" style="font-size:.65rem;"
+                              title="Este pedido tiene ítems en @p.etapas.Count etapas distintas.">
+                            +@(p.etapas.Count - 1) más
+                        </span>
+                    }
+                </span>
+
+                <div class="ped-actions ms-auto">
+                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                       class="btn btn-outline-primary btn-accion" title="Detalle del pedido">
+                        <i class="bi bi-clipboard2-data"></i>
+                    </a>
+                    <a asp-action="PedidoGantt" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                       class="btn btn-outline-success btn-accion" title="Gantt del pedido">
+                        <i class="bi bi-bar-chart-steps"></i>
+                    </a>
+                    <a asp-action="Trazabilidad" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                       class="btn btn-outline-info btn-accion" title="Trazabilidad del pedido">
+                        <i class="bi bi-signpost-split"></i>
+                    </a>
+                </div>
+            </div>
+
+            @* Ítems del pedido (colapsable) *@
+            <div class="collapse" id="@collapseId">
+                <table class="table table-sm mb-0 subtbl">
+                    <thead>
                         <tr>
-                            <th>Pedido</th>
-                            <th>Cliente</th>
+                            <th class="item-indent" style="width:28px;"></th>
                             <th>Artículo</th>
+                            <th>Proceso</th>
                             <th>Título / Color</th>
-                            <th>Etapa actual</th>
+                            <th>Etapa</th>
                             <th>Avance</th>
                             <th class="text-end">Kg pend.</th>
                             <th>F. entrega</th>
                             <th>Retraso</th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var s in items)
+                        @foreach (var s in p.lista)
                         {
-                            <tr class="@(s.EsUrgente ? "table-danger" : s.EstaRetrasado ? "table-warning" : "")">
-                                <td>
-                                    <a asp-action="Pedido" asp-route-numPed="@s.NumPed" asp-route-serie="@s.Serie"
-                                       class="fw-semibold text-decoration-none">
-                                        @s.Serie-@s.NumPed
-                                    </a>
+                            var subClass = s.EsUrgente ? "table-danger" : s.EstaRetrasado ? "table-warning" : "";
+                            <tr class="@subClass">
+                                <td class="item-indent">
                                     @if (s.EsUrgente)
                                     {
-                                        <span class="badge bg-danger ms-1" title="Urgente">⚡</span>
+                                        <i class="bi bi-lightning-charge-fill text-danger" title="Urgente"></i>
                                     }
-                                    @if (s.EsStock)
+                                    else if (s.EstaRetrasado)
                                     {
-                                        <span class="badge bg-secondary ms-1">Stock</span>
+                                        <i class="bi bi-clock-history text-warning" title="Con retraso"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-dot text-muted"></i>
                                     }
                                 </td>
-                                <td class="text-truncate" style="max-width:130px;" title="@s.NombreCliente">@s.NombreCliente</td>
-                                <td class="text-truncate" style="max-width:110px;" title="@s.CodArt">@s.CodArt</td>
+                                <td class="text-truncate" style="max-width:120px;" title="@s.CodArt">@s.CodArt</td>
                                 <td>
-                                    <span class="fw-semibold">@s.Titulo</span>
+                                    @if (!string.IsNullOrEmpty(s.Proceso))
+                                    {
+                                        <span class="badge @(s.Proceso == "24" ? "text-white" : "bg-light text-dark border") fw-semibold"
+                                              style="@(s.Proceso == "24" ? "background:#6f42c1;" : "")"
+                                              title="PROCESO='@s.Proceso'@(s.Proceso == "24" ? ": hilo especial — candidato a paso 09B." : ": flujo estándar.")">
+                                            @s.Proceso
+                                        </span>
+                                    }
+                                    else { <span class="text-muted">—</span> }
+                                </td>
+                                <td>
+                                    <span>@s.Titulo</span>
                                     @if (!string.IsNullOrEmpty(s.Color))
                                     {
-                                        <br /><small class="text-muted">@s.Color</small>
+                                        <br /><span class="text-muted" style="font-size:.7rem;">@s.Color</span>
                                     }
                                 </td>
                                 <td>
-                                    <span class="paso-badge text-white" style="background-color:@s.ColorUi;">
+                                    <span class="paso-badge text-white" style="background-color:@s.ColorUi;font-size:.68rem;">
                                         @s.CodPasoAct — @s.NombrePaso
                                     </span>
                                     @if (s.EstaEnReproceso)
                                     {
-                                        <span class="badge bg-danger ms-1">Reproceso C.@s.NroCiclo</span>
+                                        <span class="badge bg-danger ms-1" title="Reproceso ciclo @s.NroCiclo">C.@s.NroCiclo</span>
+                                    }
+                                    @if (s.Proceso == "24")
+                                    {
+                                        <i class="bi bi-gear-fill ms-1" style="color:#6f42c1;font-size:.72rem;" title="Hilo especial — candidato a 09B"></i>
+                                    }
+                                    @if (s.CodPasoAct == "01")
+                                    {
+                                        <i class="bi bi-hourglass-split ms-1 text-muted" style="font-size:.7rem;" title="Sin planificar — sin fechas estimadas"></i>
                                     }
                                 </td>
-                                <td style="min-width:100px;">
+                                <td style="min-width:90px;">
                                     <div class="progress progress-thin mt-1">
                                         <div class="progress-bar" role="progressbar"
-                                             style="width:@s.PctAvance%;background-color:@s.ColorUi;"
-                                             title="@s.PctAvance%">
-                                        </div>
+                                             style="width:@s.PctAvance%;background-color:@s.ColorUi;"></div>
                                     </div>
-                                    <small class="text-muted">@s.PctAvance%</small>
+                                    <span class="text-muted" style="font-size:.7rem;">@s.PctAvance%</span>
                                 </td>
                                 <td class="text-end fw-semibold">@s.KgPendientes.ToString("N0")</td>
                                 <td>
@@ -207,18 +606,108 @@ else
                                         </span>
                                     }
                                 </td>
-                                <td>
-                                    <a asp-action="Pedido" asp-route-numPed="@s.NumPed" asp-route-serie="@s.Serie"
-                                       class="btn btn-outline-primary btn-sm py-0" title="Ver trazabilidad">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
         </div>
-    </div>
-    <div class="text-muted small mt-2">@items.Count ítems mostrados</div>
+    }
 }
+
+@section Scripts {
+<script>
+    // Esta función se llama desde el onclick de cada <tr class="pedido-header">.
+    // Solo expande/colapsa si el click NO fue en un enlace (<a>) o botón (<button>).
+    // Esto permite que los enlaces dentro de la fila naveguen normalmente sin expandir.
+    function togglePedidoRow(event, collapseId) {
+        // Si el click fue en un <a>, <button>, o dentro de un <td> marcado con stopPropagation, ignorar
+        const target = event.target;
+        const clickedOnInteractive = target.closest('a, button') !== null;
+        const clickedOnStopCell = target.closest('td[onclick*="stopPropagation"]') !== null;
+
+        if (clickedOnInteractive || clickedOnStopCell) return;
+
+        // Expandir/colapsar el panel
+        const collapseEl = document.getElementById(collapseId);
+        if (collapseEl) {
+            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl);
+            bsCollapse.toggle();
+        }
+    }
+
+    // Inicializar tooltips de Bootstrap para todos los encabezados y badges
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+        new bootstrap.Tooltip(el, { placement: 'top' }));
+
+    // ── Persistir pedidos expandidos en localStorage ────────────────────────
+    // Cuando el usuario navega al detalle de un pedido y regresa, la tabla recuerda
+    // qué pedidos estaban abiertos y los restaura automáticamente, evitando que tenga
+    // que volver a expandirlos uno a uno.
+    const LS_EXPANDED = 'pln_dash_expanded';
+
+    function getExpandedSet() {
+        try { return new Set(JSON.parse(localStorage.getItem(LS_EXPANDED) || '[]')); }
+        catch (_) { return new Set(); }
+    }
+    function saveExpandedSet(s) {
+        try { localStorage.setItem(LS_EXPANDED, JSON.stringify([...s])); } catch (_) { }
+    }
+
+    // Los pedidos siempre arrancan colapsados; se limpia cualquier estado previo
+    saveExpandedSet(new Set());
+
+    // Rotar el ícono chevron cuando se expande/colapsa la fila de ítems del pedido.
+    // El evento 'show.bs.collapse' se dispara al comenzar a expandirse el panel colapsable.
+    document.querySelectorAll('.collapse').forEach(collapseEl => {
+        collapseEl.addEventListener('show.bs.collapse', function () {
+            const row = document.querySelector(`[data-collapse-target="${this.id}"]`);
+            if (row) row.querySelector('.toggle-icon')?.classList.add('rotated');
+            const s = getExpandedSet(); s.add(this.id); saveExpandedSet(s);
+        });
+        collapseEl.addEventListener('hide.bs.collapse', function () {
+            const row = document.querySelector(`[data-collapse-target="${this.id}"]`);
+            if (row) row.querySelector('.toggle-icon')?.classList.remove('rotated');
+            const s = getExpandedSet(); s.delete(this.id); saveExpandedSet(s);
+        });
+    });
+
+    // Expandir/colapsar todo: primero actúa sobre el DOM, luego persiste
+    document.getElementById('btnExpandAll')?.addEventListener('click', () => {
+        const s = getExpandedSet();
+        document.querySelectorAll('.collapse[id^="items-"]').forEach(el => {
+            s.add(el.id);
+            if (!el.classList.contains('show'))
+                bootstrap.Collapse.getOrCreateInstance(el).show();
+        });
+        saveExpandedSet(s);
+    });
+    document.getElementById('btnCollapseAll')?.addEventListener('click', () => {
+        document.querySelectorAll('.collapse[id^="items-"]').forEach(el => {
+            if (el.classList.contains('show'))
+                bootstrap.Collapse.getOrCreateInstance(el).hide();
+        });
+        saveExpandedSet(new Set());
+    });
+
+    // Abrir automáticamente el modal que corresponda según TempData.
+    // Se usa show() en lugar de depender del atributo data-bs-toggle en un botón
+    // porque el modal fue colocado por el servidor (TempData), no por acción del usuario.
+    // Razón: el usuario realizó una operación POST (ej. intentar avanzar a 09B) y fue
+    // redirigido de vuelta al Dashboard. El modal aparece de inmediato para informarle
+    // el resultado sin necesidad de que haga scroll o busque un mensaje de alerta.
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <text>new bootstrap.Modal(document.getElementById('modalError09B')).show();</text>
+    }
+    @if (!string.IsNullOrEmpty(warnMsg))
+    {
+        <text>new bootstrap.Modal(document.getElementById('modalAdvertencia')).show();</text>
+    }
+    @if (!string.IsNullOrEmpty(okMsg))
+    {
+        <text>new bootstrap.Modal(document.getElementById('modalExito')).show();</text>
+    }
+</script>
+}
+

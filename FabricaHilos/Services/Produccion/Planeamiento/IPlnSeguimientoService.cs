@@ -4,11 +4,28 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public interface IPlnSeguimientoService
 {
-    Task<IEnumerable<PlnSeguimiento>>    GetActivosAsync(string? codCliente = null, string? codPaso = null);
+    Task<IEnumerable<PlnSeguimiento>>    GetActivosAsync(string? busquedaCliente = null, string? codPaso = null, string? numPed = null);
     Task<IEnumerable<PlnSeguimiento>>    GetPorPedidoAsync(long numPed, int serie);
+
+    /// <summary>Lee un único ítem por clave sustituta ID_SEGUIM. Devuelve null si no existe.</summary>
+    Task<PlnSeguimiento?>                GetByIdAsync(long idSeguim);
+
+    /// <summary>Lee un único ítem por clave natural (SERIE, NUM_PED, NRO, NUM_DET). Devuelve null si no existe.</summary>
+    Task<PlnSeguimiento?>                GetByItemAsync(int serie, long numPed, int nro, int numDet);
     Task<IEnumerable<PlnEstadoCodigo>>   GetEstadosAsync();
     Task<IEnumerable<PlnLogEvento>>      GetEventosPorPedidoAsync(long numPed, int serie);
     Task<IEnumerable<PlnAlerta>>         GetAlertasPorPedidoAsync(long numPed, int serie);
+
+    /// <summary>
+    /// Devuelve el log de eventos de un ítem (PLN_LOG_EVENTOS) con filtros opcionales
+    /// por tipo de evento y ciclo, con paginación del lado del servidor.
+    /// </summary>
+    Task<(IEnumerable<PlnLogEvento> Items, int TotalRegistros)> GetEventosPorSeguimAsync(
+        long idSeguim,
+        string? tipoEvento = null,
+        int?    nroCiclo   = null,
+        int     pagina     = 1,
+        int     tamPagina  = 25);
     /// <summary>Devuelve filas de V_PLN_TRAZABILIDAD para el Timeline ApexCharts.</summary>
     Task<IEnumerable<PlnTrazabilidad>>   GetTrazabilidadAsync(long numPed, int serie);
     /// <summary>Devuelve historial de recálculos de PLN_FECHAS_ESTIMADAS de un ítem.</summary>
@@ -20,7 +37,8 @@ public interface IPlnSeguimientoService
     /// No debe usarse en el flujo automático (eso lo hacen los triggers Oracle).
     /// </summary>
     Task AvanzaPasoAsync(int serie, long numPed, int nro, int numDet,
-                         string nuevoPaso, string? observacion = null, decimal? kgCantidad = null);
+                         string nuevoPaso, string? observacion = null, decimal? kgCantidad = null,
+                         string? proceso = null);
 
     /// <summary>Llama a PKG_PLN.SP_PLN_CIERRE_ITEM (cierre manual de ítem).</summary>
     Task CierreItemAsync(long idSeguim, string motivo, string usuario);
@@ -42,4 +60,7 @@ public interface IPlnSeguimientoService
     /// </summary>
     Task InitSeguimientoAsync(int serie, long numPed, int nro, int numDet = 0,
                               string pasoIni = "01");
+
+    /// <summary>Obtiene descripción y material (FIBRA) de un artículo por COD_ART.</summary>
+    Task<(string Descripcion, string Fibra)> GetArticuloInfoAsync(string codArt);
 }

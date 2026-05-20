@@ -29,7 +29,7 @@
     string? dt        = ViewBag.Dt        as string;
     int     retPage   = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
 
-    var noAprobarOC = (bool)(ViewBag.NoAprobarOC ?? false);
+    var noAprobarOC = ViewBag.NoAprobarOC is bool bNoAprobar && bNoAprobar;
 
     string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
     var grupoColorMap = items
@@ -103,7 +103,7 @@
                 </li>
             </ul>
         </div>
-        @if (oc.Estado == "0")
+        @if (oc.Estado == "0" || (oc.Estado == "3" && oc.AprobGerencia == "N"))
         {
             <button type="button" class="btn btn-sm btn-warning"
                     id="btnEnviarGerencia"
@@ -113,14 +113,22 @@
                 <i class="bi bi-send me-1"></i>Enviar O/C a Gerencia
             </button>
         }
-        @if (oc.AprobGerencia != "S" && !noAprobarOC)
+        @if (oc.AprobGerencia != "S" && !noAprobarOC
+             && oc.Estado != "9" && oc.Estado != "6" && oc.Estado != "5")
         {
             <button type="button" class="btn btn-sm btn-success"
                     id="btnAprobarOc"
                     data-tipo="@oc.TipoDocto"
                     data-serie="@oc.Serie"
                     data-numpd="@oc.NumPed">
-                <i class="bi bi-patch-check me-1"></i>Aprobar Orden de Compra
+                <i class="bi bi-patch-check me-1"></i>Aprobar O/C
+            </button>
+            <button type="button" class="btn btn-sm btn-danger"
+                    id="btnNoAprobarOc"
+                    data-tipo="@oc.TipoDocto"
+                    data-serie="@oc.Serie"
+                    data-numpd="@oc.NumPed">
+                <i class="bi bi-x-circle me-1"></i>No Aprobar O/C
             </button>
         }
         <a asp-action="Index"
@@ -149,6 +157,7 @@
                             ("2", "S") => ("bg-success", "Aprobado por Gerencia"),
                             ("0", _)   => ("bg-secondary", "Emitida"),
                             ("2", _)   => ("bg-warning text-dark", "Enviado a Gerencia"),
+                            ("3", "N") => ("bg-danger", "No Aprob. Gerencia"),
                             ("5", _)   => ("bg-info text-dark", "Parcialmente Cerrada"),
                             ("6", _)   => ("bg-success", "Cerrada"),
                             ("9", _)   => ("bg-danger", "Anulada"),
@@ -814,7 +823,7 @@
     var btnAprobar = document.getElementById('btnAprobarOc');
     if (btnAprobar) {
         btnAprobar.addEventListener('click', function () {
-            modalTitulo.textContent = 'Aprobar Orden de Compra';
+            modalTitulo.textContent = 'Aprobar O/C';
             modalMensaje.innerHTML  = '¿Está seguro de aprobar la @tipoCorto <strong>' + btnAprobar.dataset.numpd + '</strong>? Se registrará su usuario como aprobador.';
             modalOk.className = 'btn btn-success';
             _formPendiente = null;
@@ -825,6 +834,32 @@
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
                     body: JSON.stringify({ tipoDocto: btnAprobar.dataset.tipo, serie: parseInt(btnAprobar.dataset.serie), numPed: parseInt(btnAprobar.dataset.numpd) })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location.reload(); }
+                    else { alert('Error: ' + d.error); }
+                })
+                .catch(function () { alert('Error de comunicación con el servidor.'); });
+            };
+        });
+    }
+
+    // ── No Aprobar Orden de Compra ────────────────────────────────────────────
+    var btnNoAprobar = document.getElementById('btnNoAprobarOc');
+    if (btnNoAprobar) {
+        btnNoAprobar.addEventListener('click', function () {
+            modalTitulo.textContent = 'No Aprobar Orden de Compra';
+            modalMensaje.innerHTML  = '¿Está seguro de <strong>no aprobar</strong> la @tipoCorto <strong>' + btnNoAprobar.dataset.numpd + '</strong>? El estado cambiará a <strong>No Aprob. Gerencia</strong>.';
+            modalOk.className = 'btn btn-danger';
+            _formPendiente = null;
+            modalConfirmar.show();
+            modalOk.onclick = function () {
+                modalConfirmar.hide();
+                fetch('@Url.Action("NoAprobarOc", "OrdenCompra")', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
+                    body: JSON.stringify({ tipoDocto: btnNoAprobar.dataset.tipo, serie: parseInt(btnNoAprobar.dataset.serie), numPed: parseInt(btnNoAprobar.dataset.numpd) })
                 })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {

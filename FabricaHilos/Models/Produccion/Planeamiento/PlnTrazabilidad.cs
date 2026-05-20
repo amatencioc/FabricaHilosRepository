@@ -13,6 +13,8 @@ public class PlnTrazabilidad
     public int      NumDet               { get; set; }
     public string   CodCliente           { get; set; } = "";
     public string   CodArt               { get; set; } = "";
+    public string   Color                { get; set; } = "";
+    public string   Titulo               { get; set; } = "";
 
     // Fechas del pedido y planificación
     public DateTime  FchPedido           { get; set; }
@@ -21,6 +23,15 @@ public class PlnTrazabilidad
     public DateTime? FchEntregaPlan      { get; set; }
     public DateTime? FchEstCono1         { get; set; }
     public DateTime? FchEstTenido        { get; set; }
+
+    // Fechas estimadas calculadas por SP_PLN_CALCULA_FECHAS (PLN_SEGUIMIENTO.FCH_EST_*)
+    public DateTime? FchEstHilanderia    { get; set; }
+    public DateTime? FchEstPartida       { get; set; }
+    public DateTime? FchEstTinIni        { get; set; }
+    public DateTime? FchEstTinFin        { get; set; }
+    public DateTime? FchEstSecado        { get; set; }
+    public DateTime? FchEstCalidad       { get; set; }
+    public DateTime? FchEstDespacho      { get; set; }
 
     // Fechas reales de producción (FCH_REAL_*)
     public DateTime? FchRealProgramado   { get; set; }
@@ -60,4 +71,27 @@ public class PlnTrazabilidad
     };
     public bool DespachadoATiempo  => DiasDesvioCliente <= 0;
     public bool DespachadoTardio   => DiasDesvioCliente > 0;
+
+    // Métricas estimadas (calculadas en C# cuando los reales son null)
+    public double? EstDiasPedidoAPartida =>
+        FchEstPartida.HasValue ? (FchEstPartida.Value - FchPedido).TotalDays : null;
+    public double? EstDiasEnTintoreria =>
+        (FchEstTinIni.HasValue && FchEstTinFin.HasValue)
+            ? (FchEstTinFin.Value - FchEstTinIni.Value).TotalDays : null;
+    public double? EstDiasPartidaADespacho =>
+        (FchEstPartida.HasValue && FchEstDespacho.HasValue)
+            ? (FchEstDespacho.Value - FchEstPartida.Value).TotalDays : null;
+    public double? EstDiasTotalCiclo =>
+        FchEstDespacho.HasValue ? (FchEstDespacho.Value - FchPedido).TotalDays : null;
+    public double? EstDiasDesvioCliente =>
+        (FchEstDespacho.HasValue && FchCompromisoCliente.HasValue)
+            ? (FchEstDespacho.Value - FchCompromisoCliente.Value).TotalDays : null;
+    public string EstDesvioClienteCss => EstDiasDesvioCliente switch
+    {
+        null   => "secondary",
+        > 7    => "danger",
+        > 3    => "warning",
+        > 0    => "info",
+        _      => "success"
+    };
 }

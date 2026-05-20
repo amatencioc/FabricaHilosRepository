@@ -37,6 +37,9 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    entregados_tarde            AS pedidos_retrasados,
                    pct_otif,
                    ciclo_promedio_dias,
+                   dias_prom_tintoreria,
+                   dias_prom_pedido_partida,
+                   retraso_promedio_dias,
                    kg_total_despachados        AS kg_despachados
             FROM   {S}V_PLN_KPI_CUMPLIMIENTO
             WHERE  periodo >= ADD_MONTHS(TRUNC(SYSDATE,'MM'), -6)";
@@ -55,6 +58,9 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                     EntregadosTarde        = SafeVal<int>(r["pedidos_retrasados"]),
                     PctOtif                = SafeVal<double>(r["pct_otif"]),
                     CicloPromedioDias      = SafeVal<double>(r["ciclo_promedio_dias"]),
+                    DiasPromTintoreria     = SafeVal<double>(r["dias_prom_tintoreria"]),
+                    DiasPromPedidoPartida  = SafeVal<double>(r["dias_prom_pedido_partida"]),
+                    RetrasoPromedioDias    = SafeVal<double>(r["retraso_promedio_dias"]),
                     KgTotalDespachados     = SafeVal<decimal>(r["kg_despachados"]),
                 });
             }
@@ -97,8 +103,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 {
                     "01"             => "Ventas",
                     "02"             => "Planeamiento",
-                    "03" or "04"     => "Hilandería",
-                    "05"             => "Laboratorio",
+                    "03"             => "Laboratorio",       // v2.1: L_VALIDA_RECETA
+                    "04" or "05"     => "Hilandería",         // v2.1: PARTIDA / H_RPRODUC
                     "06" or "07" or "08" or "9R" => "Tintorería",
                     "09"             => "Calidad",
                     "09B"            => "Acabados",
@@ -133,6 +139,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
         // V_PLN_CARGA_MAQUINAS (§8.5): ventana 30 días, incluye ESTADO_CARGA y PCT_CARGA.
         // ORA-00904 corregido: PLN_CARGA_DIARIA no tiene COD_PASO ni AREA; TP_MAQ se usa
         // para derivar Area en el modelo (PlnCargaDiaria.Area).
+        // Sin filtro de fecha adicional: la vista V_PLN_CARGA_MAQUINAS ya filtra internamente
+        // BETWEEN TRUNC(SYSDATE) AND TRUNC(SYSDATE)+30, entregando la ventana completa de 30 días.
         var sql = $@"
             SELECT fecha, cod_maq, tp_maq,
                    horas_capacidad, kg_capacidad,
@@ -142,14 +150,67 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    pct_utilizacion, pct_carga,
                    ind_sobrecargada, estado_carga
             FROM   {S}V_PLN_CARGA_MAQUINAS
-            WHERE  fecha = TRUNC(SYSDATE)
-            ORDER  BY tp_maq, cod_maq";
+            ORDER  BY fecha, tp_maq, cod_maq";
 
         var list = new List<PlnCargaDiaria>();
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
         await using var r   = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnCargaDiaria
+            {
+                Fecha           = SafeVal<DateTime>(r["fecha"]),
+                CodMaq          = SafeStr(r["cod_maq"]),
+                TpMaq           = SafeStr(r["tp_maq"]),
+                HorasCapacidad  = SafeVal<double>(r["horas_capacidad"]),
+                KgCapacidad     = SafeVal<decimal>(r["kg_capacidad"]),
+                HorasAsignadas  = SafeVal<double>(r["horas_asignadas"]),
+                KgAsignados     = SafeVal<decimal>(r["kg_asignados"]),
+                NroPedidos      = SafeVal<int>(r["nro_pedidos"]),
+                HorasReal       = SafeVal<double>(r["horas_real"]),
+                KgReal          = SafeVal<decimal>(r["kg_real"]),
+                PctUtilizacion  = SafeVal<double>(r["pct_utilizacion"]),
+                PctCarga        = SafeVal<double>(r["pct_carga"]),
+                IndSobrecargada = SafeStr(r["ind_sobrecargada"]),
+                EstadoCarga     = SafeStr(r["estado_carga"]),
+            });
+        }
+        return list;
+    }
+
+    public async Task<IEnumerable<PlnCargaDiaria>> GetCargaMaquinasRangoAsync(DateTime fchIni, DateTime fchFin)
+    {
+        // Lee PLN_CARGA_DIARIA directamente (sin filtro de vista) para rangos arbitrarios.
+        // V_PLN_CARGA_MAQUINAS solo cubre TRUNC(SYSDATE) a TRUNC(SYSDATE)+30.
+        // Calcula ESTADO_CARGA con la misma lógica que la vista.
+        var sql = $@"
+            SELECT c.fecha, c.cod_maq, c.tp_maq,
+                   c.horas_capacidad, c.kg_capacidad,
+                   c.horas_asignadas, c.kg_asignados,
+                   c.nro_pedidos,
+                   c.horas_real, c.kg_real,
+                   c.pct_utilizacion, c.pct_carga,
+                   c.ind_sobrecargada,
+                   CASE
+                     WHEN c.pct_carga > 95 THEN 'SOBRECARGADA'
+                     WHEN c.pct_carga > 80 THEN 'CARGA_ALTA'
+                     WHEN c.pct_carga > 50 THEN 'CARGA_MEDIA'
+                     ELSE 'DISPONIBLE'
+                   END AS estado_carga
+            FROM   {S}PLN_CARGA_DIARIA c
+            WHERE  c.fecha BETWEEN TRUNC(:fchIni) AND TRUNC(:fchFin)
+            ORDER  BY c.fecha, c.tp_maq, c.cod_maq";
+
+        var list = new List<PlnCargaDiaria>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        cmd.Parameters.Add(new OracleParameter("fchIni", OracleDbType.Date) { Value = fchIni });
+        cmd.Parameters.Add(new OracleParameter("fchFin", OracleDbType.Date) { Value = fchFin });
+        await using var r = await cmd.ExecuteReaderAsync();
         while (await r.ReadAsync())
         {
             list.Add(new PlnCargaDiaria

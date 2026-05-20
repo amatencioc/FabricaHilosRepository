@@ -6,6 +6,7 @@ namespace FabricaHilos.Models.Produccion.Planeamiento;
 /// </summary>
 public class PlnPendienteDespacho
 {
+    public int      Serie             { get; set; }   // FK de PLN_SEGUIMIENTO
     public long     NumPed            { get; set; }
     public int      Nro               { get; set; }
     public string   CodCliente        { get; set; } = "";

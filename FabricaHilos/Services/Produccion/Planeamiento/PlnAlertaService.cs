@@ -17,8 +17,13 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
     private static string SafeStr(object? v) =>
         v == null || v == DBNull.Value ? "" : v.ToString()!;
 
-    private static T SafeVal<T>(object? v, T def = default!) =>
-        v == null || v == DBNull.Value ? def : (T)Convert.ChangeType(v, typeof(T));
+    private static T SafeVal<T>(object? v, T def = default!)
+    {
+        if (v == null || v == DBNull.Value) return def;
+        var t = typeof(T);
+        var u = Nullable.GetUnderlyingType(t) ?? t;
+        return (T)Convert.ChangeType(v, u);
+    }
 
     public async Task<IEnumerable<PlnAlerta>> GetActivasAsync()
     {
@@ -28,7 +33,9 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
             SELECT a.id_alerta, a.tip_alerta, a.nivel, a.titulo, a.detalle,
                    a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro,
                    a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado,
-                   a.horas_sin_resolver
+                   a.horas_sin_resolver,
+                   (SELECT MIN(s.cod_art) FROM {S}PLN_SEGUIMIENTO s
+                    WHERE s.num_ped = a.num_ped AND s.nro = a.nro) AS cod_art
             FROM   {S}V_PLN_ALERTAS_ACTIVAS a";
 
         var list = new List<PlnAlerta>();
@@ -36,9 +43,12 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
         await using var r   = await cmd.ExecuteReaderAsync();
+        // Usar ordinal + GetDouble para horas_sin_resolver: evita DecimalConv.GetDecimal overflow
+        // (SYSDATE-DATE devuelve NUMBER de alta precisión que desborda decimal de C#)
+        int oHoras = r.GetOrdinal("horas_sin_resolver");
         while (await r.ReadAsync())
         {
-            var diasSinResolver = r["horas_sin_resolver"] == DBNull.Value ? null : SafeVal<double?>(r["horas_sin_resolver"]);
+            double? horasSinResolver = r.IsDBNull(oHoras) ? null : (double?)r.GetDouble(oHoras);
             list.Add(new PlnAlerta
             {
                 IdAlerta         = SafeVal<long>(r["id_alerta"]),
@@ -55,7 +65,56 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 Nro              = r["nro"] == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
                 CodCliente       = SafeStr(r["cod_cliente"]),
                 NombreCliente    = SafeStr(r["nom_cliente"]),
-                HorasSinResolver = diasSinResolver.HasValue ? diasSinResolver.Value * 24 : null,
+                CodArt           = r["cod_art"] == DBNull.Value ? null : SafeStr(r["cod_art"]),
+                HorasSinResolver = horasSinResolver,  // vista ya devuelve horas (ROUND(*24,2))
+            });
+        }
+        return list;
+    }
+
+    public async Task<IEnumerable<PlnAlerta>> GetHistorialAsync(int ultDias = 30)
+    {
+        // Lee PLN_ALERTA directamente (ESTADO IN ('R','I')) para historial de alertas
+        // resueltas o ignoradas. V_PLN_ALERTAS_ACTIVAS filtra solo ESTADO='A'.
+        var sql = $@"
+            SELECT a.id_alerta, a.tip_alerta, a.nivel, a.titulo, a.detalle,
+                   a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro,
+                   a.cod_cliente, cl.nombre AS nom_cliente, a.cod_maq, a.estado,
+                   a.fch_resolucion, a.usuario_resuelve,
+                   NULL AS horas_sin_resolver
+            FROM   {S}PLN_ALERTA a
+            LEFT   JOIN {S}CLIENTES cl ON cl.cod_cliente = a.cod_cliente
+            WHERE  a.estado IN ('R','I')
+              AND  a.fch_alerta >= SYSDATE - :dias
+            ORDER  BY a.fch_alerta DESC";
+
+        var list = new List<PlnAlerta>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        cmd.Parameters.Add("dias", ultDias);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnAlerta
+            {
+                IdAlerta         = SafeVal<long>(r["id_alerta"]),
+                TipAlerta        = SafeStr(r["tip_alerta"]),
+                Nivel            = SafeStr(r["nivel"]),
+                Titulo           = SafeStr(r["titulo"]),
+                Detalle          = SafeStr(r["detalle"]),
+                FchAlerta        = SafeVal<DateTime>(r["fch_alerta"]),
+                FchLimite        = SafeDate(r["fch_limite"]),
+                DiasRetraso      = r["dias_retraso"] == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso"]),
+                CodMaq           = SafeStr(r["cod_maq"]),
+                Estado           = SafeStr(r["estado"]),
+                NumPed           = r["num_ped"] == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
+                Nro              = r["nro"]     == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
+                CodCliente       = SafeStr(r["cod_cliente"]),
+                NombreCliente    = SafeStr(r["nom_cliente"]),
+                FchResolucion    = SafeDate(r["fch_resolucion"]),
+                UsuarioResuelve  = SafeStr(r["usuario_resuelve"]),
             });
         }
         return list;

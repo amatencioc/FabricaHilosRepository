@@ -373,6 +373,37 @@
     </div>
 </div>
 
+<!-- ── Modal visor Acuerdo DOCX ───────────────────────────────────────── -->
+<div class="modal fade" id="modalVisorAcuerdo" tabindex="-1" aria-labelledby="modalVisorAcuerdoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="height:90vh;">
+            <div class="modal-header py-2 aq-modal-header">
+                <h6 class="modal-title text-white" id="modalVisorAcuerdoLabel">
+                    <i class="bi bi-file-earmark-word me-1"></i><span id="visorAcuerdoNombre">Acuerdo</span>
+                </h6>
+                <div class="ms-auto d-flex gap-2 align-items-center">
+                    <button type="button" id="visorAcuerdoBtnImprimir" class="btn btn-sm btn-outline-light" title="Imprimir">
+                        <i class="bi bi-printer"></i>
+                    </button>
+                    <a id="visorAcuerdoBtnDescargar" href="#" class="btn btn-sm btn-outline-light" title="Descargar" download>
+                        <i class="bi bi-download"></i>
+                    </a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 d-flex align-items-center justify-content-center" style="overflow:auto;height:100%;">
+                <div id="visorAcuerdoDocx" style="width:100%;height:100%;overflow:auto;padding:1rem;display:none;"></div>
+                <div id="visorAcuerdoSpinner" class="text-center text-muted py-5">
+                    <div class="spinner-border text-primary mb-2"></div><br/>Cargando…
+                </div>
+                <div id="visorAcuerdoError" class="text-center text-danger py-5" style="display:none;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>No se pudo cargar el documento.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Modal HE disponibles por empleado ──────────────────────────────── -->
 <div class="modal" id="modalHe" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -453,6 +484,8 @@
 </div>
 
 @section Scripts {
+<script src="~/lib/jszip/jszip.min.js"></script>
+<script src="~/lib/docx-preview/docx-preview.min.js"></script>
 <script>
 const URL_BASE = '/RecursosHumanos/Aquarius/CompensacionDdc';
 
@@ -1278,11 +1311,12 @@ function renderConsulta(data) {
                           title="Ver días compensados">
                     <i class="bi bi-eye"></i>
                   </button>
-                  <a href="${exportUrl}" class="btn btn-sm py-0 px-2"
-                     style="background:var(--aq);color:#fff;border-color:var(--aq);"
-                     title="Exportar Acuerdo de Compensación HE" data-no-loading>
+                  <button class="btn btn-sm py-0 px-2"
+                          style="background:var(--aq);color:#fff;border-color:var(--aq);"
+                          title="Ver / Descargar Acuerdo de Compensación HE"
+                          onclick="abrirVisorAcuerdo('${exportUrl}', 'AcuerdoCompHE_${cod}.docx')">
                     <i class="bi bi-file-earmark-word me-1"></i>Acuerdo
-                  </a>
+                  </button>
                 </td>
               </tr>`);
         });
@@ -1455,5 +1489,86 @@ function _limpiarYRecargar() {
     _limpiar();
     buscarRango();
 }
+
+// ── Visor Acuerdo DOCX ───────────────────────────────────────────────────
+var _modalVisorAcuerdo     = null;
+var _visorAcuerdoDocxEl    = document.getElementById('visorAcuerdoDocx');
+var _visorAcuerdoSpinnerEl = document.getElementById('visorAcuerdoSpinner');
+var _visorAcuerdoErrorEl   = document.getElementById('visorAcuerdoError');
+var _visorAcuerdoDescBtn   = document.getElementById('visorAcuerdoBtnDescargar');
+var _visorAcuerdoImpBtn    = document.getElementById('visorAcuerdoBtnImprimir');
+var _visorAcuerdoNombreEl  = document.getElementById('visorAcuerdoNombre');
+var _visorAcuerdoBuf       = null;
+
+function abrirVisorAcuerdo(url, nombre) {
+    if (!_modalVisorAcuerdo) {
+        _modalVisorAcuerdo = new bootstrap.Modal(document.getElementById('modalVisorAcuerdo'));
+    }
+
+    _visorAcuerdoNombreEl.textContent  = nombre;
+    _visorAcuerdoBtnDescargar          = _visorAcuerdoDescBtn;
+    _visorAcuerdoDescBtn.href          = url;
+    _visorAcuerdoDescBtn.setAttribute('download', nombre);
+
+    _visorAcuerdoDocxEl.style.display    = 'none';
+    _visorAcuerdoDocxEl.innerHTML        = '';
+    _visorAcuerdoSpinnerEl.style.display = 'block';
+    _visorAcuerdoErrorEl.style.display   = 'none';
+    _visorAcuerdoBuf                     = null;
+
+    _modalVisorAcuerdo.show();
+
+    fetch(url, { noLoading: true })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.arrayBuffer();
+        })
+        .then(function (buf) {
+            _visorAcuerdoBuf = buf;
+            _visorAcuerdoSpinnerEl.style.display = 'none';
+            _visorAcuerdoDocxEl.style.display    = 'block';
+            return docx.renderAsync(buf, _visorAcuerdoDocxEl, null, {
+                className: 'docx-preview',
+                inWrapper: true,
+                ignoreWidth: true,
+                ignoreHeight: true
+            });
+        })
+        .catch(function (err) {
+            console.error('Error al renderizar Acuerdo:', err);
+            _visorAcuerdoSpinnerEl.style.display = 'none';
+            _visorAcuerdoDocxEl.style.display    = 'none';
+            _visorAcuerdoErrorEl.style.display   = 'block';
+        });
+}
+
+document.getElementById('visorAcuerdoBtnImprimir').addEventListener('click', function () {
+    var contenido = _visorAcuerdoDocxEl.innerHTML;
+    if (!contenido) return;
+    var win = window.open('', '_blank');
+    win.document.write(
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Acuerdo</title>' +
+        '<style>' +
+        '@@page{size:A4;margin:8mm 10mm 8mm 10mm;}' +
+        '*{box-sizing:border-box;}' +
+        'body{font-family:Arial,sans-serif;margin:0;padding:0;font-size:9pt;color:#000;background:#fff;}' +
+        '.docx-wrapper,.docx-wrapper>section{background:#fff!important;box-shadow:none!important;padding:0!important;margin:0!important;width:100%!important;}' +
+        'table{width:100%!important;border-collapse:collapse;font-size:8pt;}' +
+        'td,th{border:1px solid #000;padding:2px 4px;color:#000;background:#fff!important;}' +
+        'p{margin:0 0 3pt 0;}' +
+        '@@media print{body{margin:0;}@@page{margin:8mm 10mm 8mm 10mm;}}' +
+        '<\/style>' +
+        '<\/head><body>' + contenido + '<\/body><\/html>'
+    );
+    win.document.close();
+    win.focus();
+    win.onload = function () { win.print(); };
+});
+
+document.getElementById('modalVisorAcuerdo').addEventListener('hidden.bs.modal', function () {
+    _visorAcuerdoDocxEl.innerHTML     = '';
+    _visorAcuerdoDocxEl.style.display = 'none';
+    _visorAcuerdoBuf                  = null;
+});
 </script>
 }

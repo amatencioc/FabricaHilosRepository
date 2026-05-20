@@ -45,7 +45,7 @@ const GlobalLoading = {
 
     hide: function() {
         if (this.overlay) {
-            this.activeRequests--;
+            if (this.activeRequests > 0) this.activeRequests--;
             if (this.activeRequests <= 0) {
                 this.activeRequests = 0;
                 this.overlay.classList.remove('show');
@@ -108,12 +108,15 @@ const GlobalLoading = {
             // Verificar si la URL tiene el atributo data-no-loading
             const url = args[0];
             const options = args[1] || {};
+            const method = (options.method || 'GET').toUpperCase();
 
-            if (!options.noLoading) {
-                // Determinar mensaje según el método
-                const method = (options.method || 'GET').toUpperCase();
+            // Solo activar overlay para peticiones que modifican datos (POST/PUT/DELETE/PATCH).
+            // Las peticiones GET son carga de datos de componentes (ApexCharts, etc.) y
+            // no deben disparar el overlay para evitar parpadeos en la carga de página.
+            const activateOverlay = !options.noLoading && method !== 'GET';
+
+            if (activateOverlay) {
                 let message = 'Cargando datos...';
-
                 if (method === 'POST') {
                     message = 'Guardando...';
                 } else if (method === 'PUT') {
@@ -121,19 +124,18 @@ const GlobalLoading = {
                 } else if (method === 'DELETE') {
                     message = 'Eliminando...';
                 }
-
                 self.show(message);
             }
 
             return originalFetch.apply(this, args)
                 .then(response => {
-                    if (!options.noLoading) {
+                    if (activateOverlay) {
                         self.hide();
                     }
                     return response;
                 })
                 .catch(error => {
-                    if (!options.noLoading) {
+                    if (activateOverlay) {
                         self.hide();
                     }
                     throw error;

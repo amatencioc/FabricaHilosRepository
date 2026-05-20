@@ -5,7 +5,18 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 public interface IPlnKpiService
 {
     Task<PlnKpiResumen>                      GetResumenAsync();
+
+    /// <summary>
+    /// Carga de máquinas para la ventana de los próximos 30 días (fuente: V_PLN_CARGA_MAQUINAS).
+    /// Incluye la fecha de hoy hasta hoy+30. Usar para el Gantt/Heatmap en CargaMaquinas.cshtml.
+    /// </summary>
     Task<IEnumerable<PlnCargaDiaria>>        GetCargaMaquinasAsync();
+
+    /// <summary>
+    /// Carga de máquinas para un rango de fechas arbitrario (fuente: PLN_CARGA_DIARIA directamente).
+    /// Usar cuando el rango supera la ventana de 30 días de V_PLN_CARGA_MAQUINAS.
+    /// </summary>
+    Task<IEnumerable<PlnCargaDiaria>>        GetCargaMaquinasRangoAsync(DateTime fchIni, DateTime fchFin);
     /// <summary>V_PLN_ESTADO_PEDIDO §8.1: resumen por pedido (estado, avance, retrasos).</summary>
     Task<IEnumerable<PlnEstadoPedido>>       GetEstadoPedidosAsync();
     /// <summary>V_PLN_PENDIENTES_DESP §8.6: ítems listos para despachar priorizados.</summary>

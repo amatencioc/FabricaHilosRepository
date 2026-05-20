@@ -55,7 +55,7 @@
                 @if (menus.Produccion)
                 {
                 <li>
-                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ctrl == "Produccion" || ctrl == "RegistroPreparatoria" || ctrl == "Autoconer" ? "active" : "")">
+                    <a asp-controller="Produccion" asp-action="Index" class="sidebar-link @(ctrl == "Produccion" || ctrl == "RegistroPreparatoria" || ctrl == "Autoconer" || ctrl == "Planeamiento" ? "active" : "")">
                         <i class="bi bi-gear-wide-connected"></i> Producción
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -93,50 +93,46 @@
                             </ul>
                         </li>
                         }
-                    </ul>
-                </li>
-                }
-                @if (menus.Planeamiento)
-                {
-                <li class="sidebar-section">PLANEAMIENTO</li>
-                }
-                @if (menus.Planeamiento)
-                {
-                <li>
-                    <a asp-controller="Planeamiento" asp-action="Index" class="sidebar-link @(ctrl == "Planeamiento" ? "active" : "")">
-                        <i class="bi bi-kanban"></i> Planeamiento
-                    </a>
-                    <ul class="list-unstyled ps-3">
-                        @if (menus.PlaneamientoDashboard)
+                        @if (menus.Planeamiento)
                         {
                         <li>
-                            <a asp-controller="Planeamiento" asp-action="Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Dashboard" ? "active" : "")">
-                                <i class="bi bi-speedometer2"></i> Dashboard
+                            <a class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" ? "active" : "")" data-bs-toggle="collapse" href="#submenuPlaneamiento" role="button" aria-expanded="@(ctrl == "Planeamiento" ? "true" : "false")" aria-controls="submenuPlaneamiento">
+                                <i class="bi bi-kanban"></i> Planeamiento
                             </a>
-                        </li>
-                        }
-                        @if (menus.PlaneamientoCargaMaquinas)
-                        {
-                        <li>
-                            <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
-                                <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
-                            </a>
-                        </li>
-                        }
-                        @if (menus.PlaneamientoAlertas)
-                        {
-                        <li>
-                            <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
-                                <i class="bi bi-bell"></i> Alertas
-                            </a>
-                        </li>
-                        }
-                        @if (menus.PlaneamientoKPIs)
-                        {
-                        <li>
-                            <a asp-controller="Planeamiento" asp-action="KPIs" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "KPIs" ? "active" : "")">
-                                <i class="bi bi-graph-up-arrow"></i> KPIs
-                            </a>
+                            <ul class="collapse @(ctrl == "Planeamiento" ? "show" : "") list-unstyled ps-3" id="submenuPlaneamiento">
+                                @if (menus.PlaneamientoDashboard)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Dashboard" ? "active" : "")">
+                                        <i class="bi bi-speedometer2"></i> Dashboard
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoCargaMaquinas)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
+                                        <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoAlertas)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
+                                        <i class="bi bi-bell"></i> Alertas
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoKPIs)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="KPIs" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "KPIs" ? "active" : "")">
+                                        <i class="bi bi-graph-up-arrow"></i> KPIs
+                                    </a>
+                                </li>
+                                }
+                            </ul>
                         </li>
                         }
                     </ul>

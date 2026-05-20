@@ -81,7 +81,8 @@ public class MenuOptions
     public bool PlaneamientoPedido        { get; set; } = true;
     public bool PlaneamientoCargaMaquinas { get; set; } = true;
     public bool PlaneamientoAlertas       { get; set; } = true;
-    public bool PlaneamientoKPIs          { get; set; } = true;
+    public bool PlaneamientoKPIs                { get; set; } = true;
+    public bool PlaneamientoPendientesDespacho   { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -138,6 +139,7 @@ public class MenuOptions
         PlaneamientoCargaMaquinas = true,
         PlaneamientoAlertas       = true,
         PlaneamientoKPIs          = true,
+        PlaneamientoPendientesDespacho = true,
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,

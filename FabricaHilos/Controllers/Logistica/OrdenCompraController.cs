@@ -838,9 +838,25 @@ public class OrdenCompraController : OracleBaseController
         return Json(new { ok = true });
     }
 
+    // ── NO APROBAR ORDEN DE COMPRA ────────────────────────────────────────────
+
+    [HttpPost("NoAprobarOc")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NoAprobarOc([FromBody] AnularOcRequest request)
+    {
+        var codAprob = HttpContext.Session.GetString("OracleUserCodigo") ?? string.Empty;
+        var error = await _service.NoAprobarOcAsync(
+            request.TipoDocto ?? string.Empty, request.NumPed, codAprob);
+
+        if (!string.IsNullOrEmpty(error))
+            return Json(new { ok = false, error });
+
+        TempData["Success"] = $"O/C N° {request.NumPed} marcada como No Aprobada.";
+        return Json(new { ok = true });
+    }
+
     // ── CERRAR ORDEN DE COMPRA ─────────────────────────────────────────────────
 
-    [HttpPost("CerrarOc")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CerrarOc([FromBody] AnularOcRequest request)
     {

@@ -26,6 +26,7 @@ public class PlnFechaEstimada
     // Helpers UI
     public string MotivoDesc => MotivoRecalculo switch
     {
+        "AV"  => "Avance de paso",
         "PED" => "Registro de pedido",
         "PLA" => "Planificación",
         "REP" => "Reprogramación manual",

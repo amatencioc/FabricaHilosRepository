@@ -1,0 +1,257 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnAlerta>
+
+@{
+    ViewData["Title"] = "Historial de Alertas";
+    var ultDias = (int)(ViewBag.UltDias ?? 30);
+    var items   = Model.ToList();
+
+    var resueltas = items.Count(x => x.Estado == "R");
+    var ignoradas = items.Count(x => x.Estado == "I");
+
+    // Agrupar por pedido igual que Alertas.cshtml
+    var porPedido = items
+        .GroupBy(x => new { x.Serie, x.NumPed })
+        .Select(g =>
+        {
+            var lista   = g.OrderByDescending(x => x.FchAlerta).ToList();
+            return (serie: g.Key.Serie, numPed: g.Key.NumPed,
+                    cliente: lista.First().NombreCliente,
+                    lista);
+        })
+        .OrderByDescending(p => p.lista.Max(a => a.FchAlerta))
+        .ToList();
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
+<style>
+    .hist-alerta-badge-R  { background:#198754; color:#fff; }
+    .hist-alerta-badge-I  { background:#6c757d; color:#fff; }
+    .pedido-header-hist:hover td { background-color:rgba(0,0,0,.025); }
+    .pedido-header-hist td { border-bottom:1px solid #dee2e6 !important; cursor:pointer; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item"><a asp-action="Alertas">Alertas</a></li>
+    <li class="breadcrumb-item active">Historial</li>
+}
+
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <h4 class="mb-0">
+        <i class="bi bi-clock-history me-2 text-secondary"></i>Historial de alertas
+    </h4>
+    <div class="d-flex gap-2 align-items-center">
+        <form asp-action="HistorialAlertas" method="get" class="d-flex gap-2 align-items-center">
+            <label class="form-label mb-0 small text-muted">Últimos</label>
+            <select name="ultDias" class="form-select form-select-sm" style="width:auto;"
+                    onchange="this.form.submit()">
+                @foreach (var d in new[] { 15, 30, 60, 90 })
+                {
+                    if (ultDias == d) { <option value="@d" selected="selected">@d días</option> }
+                    else              { <option value="@d">@d días</option> }
+                }
+            </select>
+        </form>
+        <a asp-action="Alertas" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-bell-fill me-1"></i>Alertas activas
+        </a>
+    </div>
+</div>
+<p class="text-muted small mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    Alertas ya resueltas o ignoradas en los últimos @ultDias días.
+    Solo lectura — para gestionar alertas activas use la bandeja de
+    <a asp-action="Alertas">Alertas</a>.
+</p>
+
+<!-- KPIs de historial -->
+<div class="row g-2 mb-3">
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-secondary">@items.Count</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-clock-history me-1"></i>Total historial</div>
+        </div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-success">@resueltas</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-check2-circle me-1"></i>Resueltas</div>
+        </div>
+    </div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-secondary">@ignoradas</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-bell-slash me-1"></i>Ignoradas</div>
+        </div>
+    </div>
+</div>
+
+@if (!items.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No hay alertas resueltas ni ignoradas en los últimos @ultDias días.
+    </div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted small">@porPedido.Count pedidos · @items.Count alertas en historial</span>
+        <div class="d-flex gap-2">
+            <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-chevron-double-down me-1"></i>Expandir todo
+            </button>
+            <button type="button" id="btnCollapseAll" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-chevron-double-up me-1"></i>Colapsar todo
+            </button>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle" style="font-size:.82rem;">
+                    <thead class="table-light"
+                           style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+                        <tr>
+                            <th style="width:30px;"></th>
+                            <th>Pedido</th>
+                            <th>Cliente</th>
+                            <th class="text-center">Alertas</th>
+                            <th>Última alerta</th>
+                            <th style="width:60px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in porPedido)
+                        {
+                            var colId = $"hista-{p.serie}-{p.numPed}";
+                            <tr class="pedido-header-hist"
+                                data-bs-toggle="collapse" data-bs-target="#@colId"
+                                aria-expanded="false" aria-controls="@colId">
+                                <td class="text-center">
+                                    <i class="bi bi-chevron-right toggle-icon-hist"
+                                       style="font-size:.75rem;transition:transform .2s;"></i>
+                                </td>
+                                <td class="fw-semibold">
+                                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                                       class="text-decoration-none" onclick="event.stopPropagation()">
+                                        @p.serie-@p.numPed
+                                    </a>
+                                </td>
+                                <td class="text-truncate" style="max-width:140px;" title="@p.cliente">@p.cliente</td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">@p.lista.Count</span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">@p.lista.Max(a => a.FchAlerta).ToString("dd/MM/yy")</small>
+                                </td>
+                                <td onclick="event.stopPropagation()">
+                                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                                       class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                       style="width:28px;height:28px;padding:0;border-radius:.35rem;"
+                                       title="Ver detalle del pedido">
+                                        <i class="bi bi-clipboard2-data"></i>
+                                    </a>
+                                </td>
+                            </tr>
+
+                            @* Sub-filas colapsables *@
+                            <tr class="collapse" id="@colId">
+                                <td colspan="6" class="p-0">
+                                    <table class="table table-sm mb-0" style="font-size:.78rem;background:#fafbfc;">
+                                        <thead>
+                                            <tr style="font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;
+                                                       color:#868e96;background:#f1f3f5;">
+                                                <th style="padding-left:2.5rem;width:28px;"></th>
+                                                <th>Ítem</th>
+                                                <th>Tipo</th>
+                                                <th>Nivel</th>
+                                                <th>Título</th>
+                                                <th>Generada</th>
+                                                <th>Estado</th>
+                                                <th>Resuelta por</th>
+                                                <th>Fecha resolución</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var a in p.lista)
+                                            {
+                                                var nivelCss  = a.Nivel == "C" ? "danger"  :
+                                                                a.Nivel == "A" ? "warning" :
+                                                                a.Nivel == "M" ? "info"    : "secondary";
+                                                var estadoTxt = a.Estado == "R" ? "Resuelta" : "Ignorada";
+                                                var estadoCss = a.Estado == "R" ? "hist-alerta-badge-R" : "hist-alerta-badge-I";
+                                                <tr>
+                                                    <td style="padding-left:2.5rem;">
+                                                        @if (a.Nivel == "C") { <i class="bi bi-exclamation-octagon-fill text-danger"></i> }
+                                                        else if (a.Nivel == "A") { <i class="bi bi-exclamation-triangle-fill text-warning"></i> }
+                                                        else { <i class="bi bi-info-circle-fill text-info"></i> }
+                                                    </td>
+                                                    <td>
+                                                        @if (a.Nro.HasValue)
+                                                        { <span class="badge bg-light text-dark border">Det.@a.Nro</span> }
+                                                        else { <span class="text-muted">—</span> }
+                                                    </td>
+                                                    <td><span class="badge bg-secondary">@a.TipoTexto</span></td>
+                                                    <td><span class="badge bg-@nivelCss">@a.NivelTexto</span></td>
+                                                    <td>@a.Titulo</td>
+                                                    <td><small class="text-muted">@a.FchGeneracion.ToString("dd/MM/yy HH:mm")</small></td>
+                                                    <td>
+                                                        <span class="badge @estadoCss px-2 py-1">@estadoTxt</span>
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrEmpty(a.UsuarioResuelve))
+                                                        { <small>@a.UsuarioResuelve</small> }
+                                                        else { <span class="text-muted">—</span> }
+                                                    </td>
+                                                    <td>
+                                                        @if (a.FchResolucion.HasValue)
+                                                        { <small class="text-muted">@a.FchResolucion.Value.ToString("dd/MM/yy HH:mm")</small> }
+                                                        else { <span class="text-muted">—</span> }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+    document.getElementById('btnExpandAll')?.addEventListener('click', () => {
+        document.querySelectorAll('.pedido-header-hist').forEach(row => {
+            const col = document.querySelector(row.getAttribute('data-bs-target'));
+            if (col && !col.classList.contains('show'))
+                new bootstrap.Collapse(col, { toggle: false }).show();
+        });
+    });
+    document.getElementById('btnCollapseAll')?.addEventListener('click', () => {
+        document.querySelectorAll('.pedido-header-hist').forEach(row => {
+            const col = document.querySelector(row.getAttribute('data-bs-target'));
+            if (col && col.classList.contains('show'))
+                new bootstrap.Collapse(col, { toggle: false }).hide();
+        });
+    });
+    document.querySelectorAll('.collapse').forEach(el => {
+        el.addEventListener('show.bs.collapse', function () {
+            document.querySelector(`[data-bs-target="#${this.id}"]`)
+                ?.querySelector('.toggle-icon-hist')?.classList.add('rotated');
+        });
+        el.addEventListener('hide.bs.collapse', function () {
+            document.querySelector(`[data-bs-target="#${this.id}"]`)
+                ?.querySelector('.toggle-icon-hist')?.classList.remove('rotated');
+        });
+    });
+</script>
+}

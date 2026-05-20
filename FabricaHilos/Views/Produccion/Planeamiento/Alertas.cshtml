@@ -2,10 +2,40 @@
 
 @{
     ViewData["Title"] = "Alertas de Planeamiento";
-    var items = Model.ToList();
+    var items     = Model.ToList();
     var criticas  = items.Count(x => x.Nivel == "C");
     var altas     = items.Count(x => x.Nivel == "A");
     var medias    = items.Count(x => x.Nivel == "M");
+
+    // Agrupa alertas por pedido (Serie+NumPed) para mostrar una fila padre colapsable
+    // igual que en el Dashboard. El ítem más crítico de cada pedido determina el color
+    // y nivel que aparece en la fila padre.
+    var alertasPorPedido = items
+        .GroupBy(x => new { x.Serie, x.NumPed })
+        .Select(g =>
+        {
+            var lista      = g.OrderBy(x => x.Nivel == "C" ? 0 : x.Nivel == "A" ? 1 : 2)
+                              .ThenBy(x => x.FchLimite).ToList();
+            var peorNivel  = lista.First().Nivel;
+            var cliente    = lista.First().NombreCliente;
+            var serie      = g.Key.Serie;
+            var numPed     = g.Key.NumPed;
+            var fchMin     = lista.Where(x => x.FchLimite.HasValue).Select(x => x.FchLimite!.Value)
+                                  .DefaultIfEmpty().Min();
+            return (serie, numPed, cliente, lista, peorNivel, fchMin);
+        })
+        .OrderBy(p => p.peorNivel == "C" ? 0 : p.peorNivel == "A" ? 1 : 2)
+        .ThenBy(p => p.fchMin)
+        .ToList();
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
+<style>
+    /* Alertas: estilos exclusivos de la vista */
+    .pedido-header-alerta:hover td { background-color: rgba(0,0,0,.025); }
+    .pedido-header-alerta td { border-bottom: 1px solid #dee2e6 !important; cursor: pointer; }
+</style>
 }
 
 @section Breadcrumb {
@@ -34,15 +64,19 @@
     </div>
 </div>
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="d-flex align-items-center justify-content-between mb-2">
     <h4 class="mb-0"><i class="bi bi-bell-fill me-2 text-danger"></i>Alertas activas</h4>
     <div class="d-flex gap-2 align-items-center">
         <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</span>
+        <a asp-action="HistorialAlertas" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-clock-history me-1"></i>Historial
+        </a>
         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalGenerarAlertas">
             <i class="bi bi-arrow-repeat me-1"></i>Generar alertas
         </button>
     </div>
 </div>
+<p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Pedidos que requieren atención inmediata: retrasos críticos (>7 días), pedidos sin planificar, lotes sin ingresar a tintotería o rechazados en control de calidad. Las alertas se actualizan automáticamente cada hora.</p>
 
 <!-- Modal: Generar alertas -->
 <div class="modal fade" id="modalGenerarAlertas" tabindex="-1">
@@ -72,23 +106,23 @@
 </div>
 
 <!-- KPIs -->
-<div class="row g-3 mb-4">
-    <div class="col-4 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="fs-2 fw-bold text-danger">@criticas</div>
-            <div class="text-muted small">🔴 Críticas</div>
+<div class="row g-2 mb-3">
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-danger">@criticas</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-exclamation-octagon-fill me-1"></i>Críticas</div>
         </div>
     </div>
-    <div class="col-4 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="fs-2 fw-bold text-warning">@altas</div>
-            <div class="text-muted small">🟠 Altas</div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-warning">@altas</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>Altas</div>
         </div>
     </div>
-    <div class="col-4 col-md-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-            <div class="fs-2 fw-bold text-info">@medias</div>
-            <div class="text-muted small">🟡 Medias</div>
+    <div class="col-4 col-md">
+        <div class="card border-0 shadow-sm text-center p-2">
+            <div class="fs-3 fw-bold text-info">@medias</div>
+            <div class="text-muted" style="font-size:.73rem;"><i class="bi bi-info-circle-fill me-1"></i>Medias</div>
         </div>
     </div>
 </div>
@@ -99,123 +133,207 @@
 }
 else
 {
-    @foreach (var nivel in new[] { "C", "A", "M" })
-    {
-        var grupo = items.Where(x => x.Nivel == nivel).OrderBy(x => x.FchLimite).ToList();
-        var nivelLabel = nivel == "C" ? "Crítica" : nivel == "A" ? "Alta" : "Media";
-        var nivelClass = nivel == "C" ? "danger" : nivel == "A" ? "warning" : "info";
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted small">@alertasPorPedido.Count pedidos · @items.Count alertas activas</span>
+        <div class="d-flex gap-2">
+            <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm"
+                    title="Expandir todos los pedidos">
+                <i class="bi bi-chevron-double-down me-1"></i>Expandir todo
+            </button>
+            <button type="button" id="btnCollapseAll" class="btn btn-outline-secondary btn-sm"
+                    title="Colapsar todos los pedidos">
+                <i class="bi bi-chevron-double-up me-1"></i>Colapsar todo
+            </button>
+        </div>
+    </div>
 
-        if (grupo.Any())
-        {
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white fw-semibold py-2">
-                <span class="badge bg-@nivelClass me-2">@nivelLabel</span>
-                @grupo.Count alerta(s)
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                   <th>Pedido</th>
-                                   <th>Ítem</th>
-                                   <th>Cliente</th>
-                                   <th>Tipo</th>
-                                   <th>Título</th>
-                                   <th>Sin resolver</th>
-                                   <th>Límite</th>
-                                   <th>Generada</th>
-                                   <th></th>
-                               </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var a in grupo)
-                            {
-                                <tr class="@(nivel == "C" ? "table-danger" : nivel == "A" ? "table-warning" : "")">
-                                     <td>
-                                         <a asp-action="Pedido" asp-route-numPed="@a.NumPed" asp-route-serie="@a.Serie"
-                                            class="fw-semibold text-decoration-none">
-                                             @a.Serie-@a.NumPed
-                                         </a>
-                                     </td>
-                                     <td>
-                                         @if (a.Nro.HasValue)
-                                         {
-                                             <span class="badge bg-light text-dark border">Det.@a.Nro</span>
-                                         }
-                                         else
-                                         {
-                                             <span class="text-muted">—</span>
-                                         }
-                                     </td>
-                                     <td class="text-truncate" style="max-width:120px;" title="@a.NombreCliente">@a.NombreCliente</td>
-                                     <td><span class="badge bg-secondary">@a.TipoTexto</span></td>
-                                     <td>@a.Titulo</td>
-                                     <td>
-                                         @if (a.HorasSinResolver.HasValue)
-                                         {
-                                             var horas = (int)a.HorasSinResolver.Value;
-                                             var dias  = horas / 24;
-                                             var hRest = horas % 24;
-                                             <span class="@(horas >= 48 ? "text-danger fw-bold" : horas >= 24 ? "text-warning fw-bold" : "text-muted")" title="@horas h sin resolver">
-                                                 @if (dias > 0) { <text>@dias d @hRest h</text> }
-                                                 else           { <text>@horas h</text> }
-                                             </span>
-                                         }
-                                         else
-                                         {
-                                             <span class="text-muted">—</span>
-                                         }
-                                     </td>
-                                    <td>
-                                        @if (a.FchLimite.HasValue)
-                                        {
-                                            var diasLimite = (a.FchLimite.Value - DateTime.Today).Days;
-                                            <span class="@(diasLimite < 0 ? "text-danger fw-bold" : diasLimite == 0 ? "text-warning fw-bold" : "")">
-                                                @a.FchLimite.Value.ToString("dd/MM/yy")
-                                                @if (diasLimite < 0)
-                                                {
-                                                    <span class="badge bg-danger ms-1">Vencida</span>
-                                                }
-                                                else if (diasLimite == 0)
-                                                {
-                                                    <span class="badge bg-warning text-dark ms-1">Hoy</span>
-                                                }
-                                            </span>
-                                        }
-                                        else
-                                        {
-                                            <span>—</span>
-                                        }
-                                    </td>
-                                    <td><small class="text-muted">@a.FchGeneracion.ToString("dd/MM/yy")</small></td>
-                                    <td>
-                                        <div class="d-flex gap-1">
-                                            <button type="button" class="btn btn-outline-success btn-sm py-0"
-                                                    onclick="confirmarAccion('@Url.Action("ResolverAlerta","Planeamiento")', @a.IdAlerta, 'Resolver', 'Marcar la alerta como resuelta')"
-                                                    title="Resolver">
-                                                <i class="bi bi-check2"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm py-0"
-                                                    onclick="confirmarAccion('@Url.Action("IgnorarAlerta","Planeamiento")', @a.IdAlerta, 'Ignorar', 'Ignorar esta alerta')"
-                                                    title="Ignorar">
-                                                <i class="bi bi-eye-slash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle" style="font-size:.82rem;">
+                    <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+                        <tr>
+                            <th style="width:30px;"></th>
+                            <th>Pedido</th>
+                            <th>Cliente</th>
+                            <th class="text-center">Alertas</th>
+                            <th>Nivel máx.</th>
+                            <th>Próx. límite</th>
+                            <th style="width:60px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in alertasPorPedido)
+                        {
+                            var colId      = $"alerta-{p.serie}-{p.numPed}";
+                            var nivelClass = p.peorNivel == "C" ? "danger" : p.peorNivel == "A" ? "warning" : "info";
+                            var nivelLabel = p.peorNivel == "C" ? "Crítica" : p.peorNivel == "A" ? "Alta" : "Media";
+                            var rowClass   = p.peorNivel == "C" ? "table-danger" : p.peorNivel == "A" ? "table-warning" : "";
+                            <tr class="@rowClass pedido-header-alerta" style="cursor:pointer;"
+                                data-bs-toggle="collapse" data-bs-target="#@colId"
+                                aria-expanded="false" aria-controls="@colId">
+                                <td class="text-center">
+                                    <i class="bi bi-chevron-right toggle-icon-alerta" style="font-size:.75rem;transition:transform .2s;"></i>
+                                </td>
+                                <td class="fw-semibold">
+                                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                                       class="text-decoration-none" onclick="event.stopPropagation()">
+                                        @p.serie-@p.numPed
+                                    </a>
+                                </td>
+                                <td class="text-truncate" style="max-width:140px;" title="@p.cliente">@p.cliente</td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">@p.lista.Count</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@nivelClass">@nivelLabel</span>
+                                </td>
+                                <td>
+                                    @if (p.fchMin != default)
+                                    {
+                                        var dias = (p.fchMin - DateTime.Today).Days;
+                                        <span class="@(dias < 0 ? "text-danger fw-bold" : dias == 0 ? "text-warning fw-bold" : "")">
+                                            @p.fchMin.ToString("dd/MM/yy")
+                                            @if (dias < 0) { <span class="badge bg-danger ms-1">Vencida</span> }
+                                            else if (dias == 0) { <span class="badge bg-warning text-dark ms-1">Hoy</span> }
+                                        </span>
+                                    }
+                                </td>
+                                <td onclick="event.stopPropagation()">
+                                    <a asp-action="Pedido" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
+                                       class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                       style="width:28px;height:28px;padding:0;border-radius:.35rem;"
+                                       title="Ver detalle del pedido">
+                                        <i class="bi bi-clipboard2-data"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            @* Sub-filas colapsables: una alerta por fila *@
+                            <tr class="collapse" id="@colId">
+                                <td colspan="7" class="p-0">
+                                    <table class="table table-sm mb-0" style="font-size:.78rem;background:#fafbfc;">
+                                        <thead>
+                                            <tr style="font-size:.68rem;text-transform:uppercase;letter-spacing:.03em;color:#868e96;background:#f1f3f5;">
+                                                <th style="padding-left:2.5rem;width:28px;"></th>
+                                                <th>Ítem</th>
+                                                <th>Tipo</th>
+                                                <th>Título</th>
+                                                <th>Sin resolver</th>
+                                                <th>Límite</th>
+                                                <th>Generada</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var a in p.lista)
+                                            {
+                                                var subClass = a.Nivel == "C" ? "table-danger" : a.Nivel == "A" ? "table-warning" : "";
+                                                <tr class="@subClass">
+                                                    <td style="padding-left:2.5rem;">
+                                                        @if (a.Nivel == "C") { <i class="bi bi-exclamation-octagon-fill text-danger"></i> }
+                                                        else if (a.Nivel == "A") { <i class="bi bi-exclamation-triangle-fill text-warning"></i> }
+                                                        else { <i class="bi bi-info-circle-fill text-info"></i> }
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrEmpty(a.CodArt))
+                                                        {
+                                                            <span class="badge bg-light text-dark border">@a.CodArt</span>
+                                                        }
+                                                        else if (a.Nro.HasValue)
+                                                        {
+                                                            <span class="badge bg-light text-dark border">Det.@a.Nro</span>
+                                                        }
+                                                        else { <span class="text-muted">—</span> }
+                                                    </td>
+                                                    <td><span class="badge bg-secondary">@a.TipoTexto</span></td>
+                                                    <td>@a.Titulo</td>
+                                                    <td>
+                                                        @if (a.HorasSinResolver.HasValue)
+                                                        {
+                                                            var horas = (int)a.HorasSinResolver.Value;
+                                                            var dias  = horas / 24;
+                                                            var hRest = horas % 24;
+                                                            <span class="@(horas >= 48 ? "text-danger fw-bold" : horas >= 24 ? "text-warning fw-bold" : "text-muted")" title="@horas h">
+                                                                @if (dias > 0) { <text>@dias d @hRest h</text> } else { <text>@horas h</text> }
+                                                            </span>
+                                                        }
+                                                        else { <span class="text-muted">—</span> }
+                                                    </td>
+                                                    <td>
+                                                        @if (a.FchLimite.HasValue)
+                                                        {
+                                                            var diasL = (a.FchLimite.Value - DateTime.Today).Days;
+                                                            <span class="@(diasL < 0 ? "text-danger fw-bold" : diasL == 0 ? "text-warning fw-bold" : "")">
+                                                                @a.FchLimite.Value.ToString("dd/MM/yy")
+                                                                @if (diasL < 0) { <span class="badge bg-danger ms-1">Vencida</span> }
+                                                                else if (diasL == 0) { <span class="badge bg-warning text-dark ms-1">Hoy</span> }
+                                                            </span>
+                                                        }
+                                                        else { <span>—</span> }
+                                                    </td>
+                                                    <td><small class="text-muted">@a.FchGeneracion.ToString("dd/MM/yy")</small></td>
+                                                    <td>
+                                                        <div class="d-flex gap-1">
+                                                            <button type="button"
+                                                                    class="btn btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                                                    style="width:28px;height:28px;padding:0;border-radius:.35rem;"
+                                                                    onclick="confirmarAccion('@Url.Action("ResolverAlerta","Planeamiento")', @a.IdAlerta, 'Resolver', 'Marcar la alerta como resuelta')"
+                                                                    title="Marcar como resuelta">
+                                                                <i class="bi bi-check2-circle"></i>
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                                                                    style="width:28px;height:28px;padding:0;border-radius:.35rem;"
+                                                                    onclick="confirmarAccion('@Url.Action("IgnorarAlerta","Planeamiento")', @a.IdAlerta, 'Ignorar', 'Ignorar esta alerta')"
+                                                                    title="Ignorar alerta">
+                                                                <i class="bi bi-bell-slash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         </div>
-        }
-    }
+    </div>
 }
 
 @section Scripts {
 <script>
+    // ── Expandir todo / Colapsar todo ──────────────────────────
+    document.getElementById('btnExpandAll')?.addEventListener('click', () => {
+        document.querySelectorAll('.pedido-header-alerta').forEach(row => {
+            const collapseEl = document.querySelector(row.getAttribute('data-bs-target'));
+            if (collapseEl && !collapseEl.classList.contains('show'))
+                new bootstrap.Collapse(collapseEl, { toggle: false }).show();
+        });
+    });
+    document.getElementById('btnCollapseAll')?.addEventListener('click', () => {
+        document.querySelectorAll('.pedido-header-alerta').forEach(row => {
+            const collapseEl = document.querySelector(row.getAttribute('data-bs-target'));
+            if (collapseEl && collapseEl.classList.contains('show'))
+                new bootstrap.Collapse(collapseEl, { toggle: false }).hide();
+        });
+    });
+
+    // ── Chevron rotate ─────────────────────────────────────────
+    document.querySelectorAll('.collapse').forEach(el => {
+        el.addEventListener('show.bs.collapse', function () {
+            document.querySelector(`[data-bs-target="#${this.id}"]`)
+                ?.querySelector('.toggle-icon-alerta')?.classList.add('rotated');
+        });
+        el.addEventListener('hide.bs.collapse', function () {
+            document.querySelector(`[data-bs-target="#${this.id}"]`)
+                ?.querySelector('.toggle-icon-alerta')?.classList.remove('rotated');
+        });
+    });
+
     function confirmarAccion(url, idAlerta, accion, descripcion) {
         document.getElementById('modalConfirmTitle').textContent = accion + ' alerta';
         document.getElementById('modalConfirmBody').textContent = descripcion + ' #' + idAlerta + '. ¿Confirmar?';

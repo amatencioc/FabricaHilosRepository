@@ -1,28 +1,115 @@
-@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
+﻿@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
 @using FabricaHilos.Models.Produccion.Planeamiento
 
 @{
     ViewData["Title"] = $"Pedido {Model.Serie}-{Model.NumPed}";
     var primerItem = Model.Items.FirstOrDefault();
-    var pasoMap = Model.Pasos.ToDictionary(p => p.CodPaso);
+    var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
+    var detCodArt  = Model.Items
+        .DistinctBy(x => x.Nro)
+        .ToDictionary(x => x.Nro, x => x.CodArt);
+
+    // ── Timeline ApexCharts: estimado vs. real (primer sublote) ──────────
+    var tlEstData  = new System.Collections.Generic.List<object>();
+    var tlRealData = new System.Collections.Generic.List<object>();
+    Func<DateTime, string> tlFmt = d => d.Date.ToString("yyyy-MM-dd");
+
+    if (primerItem != null)
+    {
+        var s = primerItem;
+        // Estimados
+        if (s.FchEstHilanderia.HasValue && s.FchEstPartida.HasValue)
+            tlEstData.Add(new { x = "Hilandería", y = new[] { tlFmt(s.FchEstHilanderia.Value), tlFmt(s.FchEstPartida.Value) }, fillColor = "#0891b266" });
+        if (s.FchEstTinIni.HasValue && s.FchEstTinFin.HasValue)
+            tlEstData.Add(new { x = "Tintorería", y = new[] { tlFmt(s.FchEstTinIni.Value), tlFmt(s.FchEstTinFin.Value) }, fillColor = "#7e22ce66" });
+        if (s.FchEstTinFin.HasValue && s.FchEstSecado.HasValue)
+            tlEstData.Add(new { x = "Secado/CC", y = new[] { tlFmt(s.FchEstTinFin.Value), tlFmt(s.FchEstSecado.Value) }, fillColor = "#05996966" });
+        if (s.FchEstSecado.HasValue && s.FchEstCalidad.HasValue)
+            tlEstData.Add(new { x = "Calidad", y = new[] { tlFmt(s.FchEstSecado.Value), tlFmt(s.FchEstCalidad.Value) }, fillColor = "#dc262666" });
+        if (s.FchEstCalidad.HasValue && s.FchEstDespacho.HasValue)
+            tlEstData.Add(new { x = "Despacho", y = new[] { tlFmt(s.FchEstCalidad.Value), tlFmt(s.FchEstDespacho.Value) }, fillColor = "#06543666" });
+        // Reales
+        if (s.FchRealProduccion.HasValue && s.FchRealPartida.HasValue)
+            tlRealData.Add(new { x = "Hilandería", y = new[] { tlFmt(s.FchRealProduccion.Value), tlFmt(s.FchRealPartida.Value) }, fillColor = "#0891b2" });
+        if (s.FchRealTinIni.HasValue && s.FchRealTinFin.HasValue)
+            tlRealData.Add(new { x = "Tintorería", y = new[] { tlFmt(s.FchRealTinIni.Value), tlFmt(s.FchRealTinFin.Value) }, fillColor = "#7e22ce" });
+        if (s.FchRealTinFin.HasValue && s.FchRealSecado.HasValue)
+            tlRealData.Add(new { x = "Secado/CC", y = new[] { tlFmt(s.FchRealTinFin.Value), tlFmt(s.FchRealSecado.Value) }, fillColor = "#059669" });
+        if (s.FchRealSecado.HasValue && (s.FchRealCcTinto.HasValue || s.FchRealCalidad.HasValue))
+        {
+            var ccEnd = s.FchRealCcTinto ?? s.FchRealCalidad;
+            tlRealData.Add(new { x = "Calidad", y = new[] { tlFmt(s.FchRealSecado.Value), tlFmt(ccEnd!.Value) }, fillColor = "#dc2626" });
+        }
+        if (s.FchRealAlmPt.HasValue && s.FchRealDespacho.HasValue)
+            tlRealData.Add(new { x = "Despacho", y = new[] { tlFmt(s.FchRealAlmPt.Value), tlFmt(s.FchRealDespacho.Value) }, fillColor = "#065f46" });
+    }
+
+    var tlSeriesJson  = System.Text.Json.JsonSerializer.Serialize(new object[] {
+        new { name = "Estimado", data = (object)tlEstData },
+        new { name = "Real",     data = (object)tlRealData }
+    });
+    var showTimeline  = tlEstData.Count > 0 || tlRealData.Count > 0;
+    var tlSubtitle    = primerItem != null
+        ? $"Det.{primerItem.NumDet} — {primerItem.CodArt} {primerItem.Color} {primerItem.Titulo}"
+        : "";
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
-    .timeline-step {
-        position: relative; padding: .5rem 1rem .5rem 2.5rem;
-        border-left: 3px solid #dee2e6; margin-left: 1rem;
-    }
-    .timeline-step::before {
-        content: ''; position: absolute; left: -9px; top: .9rem;
-        width: 15px; height: 15px; border-radius: 50%;
-        background: var(--step-color, #dee2e6); border: 2px solid #fff;
-    }
-    .timeline-step.activo { border-left-color: var(--step-color, #0d6efd); }
-    .timeline-step.completado { border-left-color: #198754; }
-    .timeline-step.completado::before { background: #198754; }
-    .evento-badge { font-size: .72rem; }
-    .paso-badge-lg { font-size: .85rem; padding: .4em .9em; border-radius: .6rem; font-weight: 600; }
+    /* ─── Strip info-pedido: ver planeamiento.css §5 ────── */
+
+    /* ─── Cards de sublotes ─────────────────────────────────── */
+    .sublote-card { background: #fff; border: 2px solid #e2e8f0; margin-bottom: .5rem; border-left: 4px solid #cbd5e0; transition: border-left-color .15s, box-shadow .15s; }
+    .sublote-card:hover { border-left-color: #4a5568; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .sublote-card.urgente { border-left-color: #e53e3e; }
+    .sublote-card.retraso { border-left-color: #fd7e14; }
+    .sublote-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .45rem .9rem; background: linear-gradient(to right, #f7fafc 0%, #fff 100%); border-bottom: 1px solid #e2e8f0; }
+    .sublote-art { font-size: .82rem; font-weight: 700; color: #2d3748; }
+    .sublote-meta { font-size: .78rem; color: #4a5568; }
+    .kg-pend { color: #e53e3e; font-weight: 700; }
+    .sublote-body { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; padding: .5rem .9rem; }
+    .sublote-avance { display: flex; align-items: center; gap: .5rem; min-width: 130px; }
+    .avance-pct { font-size: .7rem; font-weight: 600; }
+    .sublote-fecha { display: flex; flex-direction: column; line-height: 1.2; }
+    .sublote-fecha .slbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; color: #718096; font-weight: 700; }
+    .sublote-fecha .sval { font-size: .82rem; font-weight: 700; color: #2d3748; }
+    /* ─── Panel flujo por sublote ────────────────────────────── */
+    .sublote-panel { border-top: 2px solid #e2e8f0; background: #f0f4f8; }
+    .sublote-panel-toggle { display: flex; align-items: center; gap: .4rem; padding: .32rem .9rem; font-size: .71rem; font-weight: 700; color: #4a5568; cursor: pointer; user-select: none; background: none; border: none; width: 100%; text-align: left; letter-spacing: .02em; }
+    .sublote-panel-toggle:hover { background: #e2e8f0; color: #2d3748; }
+    .sublote-panel-toggle[aria-expanded="true"] { background: #e2e8f0; color: #2d3748; }
+    .sublote-panel-toggle .toggle-ico { transition: transform .2s; font-size: .65rem; margin-left: auto; }
+    .sublote-panel-toggle[aria-expanded="true"] .toggle-ico { transform: rotate(180deg); }
+    .sublote-panel-body { padding: .6rem .75rem .7rem; background: #fff; border-top: 1px solid #e2e8f0; }
+    /* mini-tabs por sublote */
+    .sub-tabs { border-bottom: 2px solid #cbd5e0; margin-bottom: 0; display: flex; gap: 2px; background: #f7fafc; padding: .3rem .5rem 0; }
+    .sub-tabs .nav-link { border-radius: 3px 3px 0 0; font-size: .73rem; font-weight: 600; color: #4a5568; border: 1px solid transparent; border-bottom: none; padding: .28rem .75rem; }
+    .sub-tabs .nav-link:hover { background: #edf2f7; color: #2d3748; }
+    .sub-tabs .nav-link.active { color: #2d3748; background: #fff; border-color: #cbd5e0; border-bottom-color: #fff; font-weight: 800; }
+    .sub-tab-panel { border: 1px solid #cbd5e0; border-top: none; background: #fff; min-height: 60px; }
+
+    /* ─── Tabs industriales ─────────────────────────────────── */
+    .pln-tabs { border-bottom: 2px solid #cbd5e0; margin-bottom: 0; }
+    .pln-tabs .nav-link { border-radius: 0; font-size: .8rem; font-weight: 600; color: #4a5568; border: 2px solid transparent; border-bottom: none; padding: .5rem 1rem; margin-right: 2px; }
+    .pln-tabs .nav-link:hover { background: #f7fafc; color: #2d3748; }
+    .pln-tabs .nav-link.active { color: #2d3748; background: #fff; border-color: #cbd5e0; border-bottom-color: #fff; font-weight: 800; }
+    .pln-tab-panel { border: 2px solid #cbd5e0; border-top: none; background: #fff; }
+
+    /* ─── Timeline compacto en cuadrícula 2 columnas ──────── */
+    .tl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+    @@media (max-width: 768px) { .tl-grid { grid-template-columns: 1fr; } }
+    .tl-step { display: flex; align-items: flex-start; gap: .55rem; padding: .38rem .75rem; border-bottom: 1px solid #f0f2f5; transition: background .12s; }
+    .tl-step:hover { background: #f7fafc; }
+    .tl-step.pendiente { opacity: .5; }
+    .tl-dot { width: 9px; height: 9px; border-radius: 1px; flex-shrink: 0; margin-top: .38rem; border: 1px solid rgba(0,0,0,.15); }
+    .tl-cod { flex-shrink: 0; }
+    .tl-nombre { font-size: .8rem; flex: 1; line-height: 1.3; }
+    .tl-nombre.completado { color: #2f855a; }
+    .tl-nombre.activo { color: #2d3748; font-weight: 700; }
+    .tl-nombre.pendiente { color: #a0aec0; }
+    .tl-fechas { font-size: .65rem; color: #718096; display: flex; flex-direction: column; gap: .08rem; flex-shrink: 0; text-align: right; }
+    .tl-fech-real { color: #2f855a; font-weight: 700; }
 </style>
 }
 
@@ -33,11 +120,134 @@
     <li class="breadcrumb-item active">Pedido @Model.Serie-@Model.NumPed</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0">
-        <i class="bi bi-diagram-3 me-2 text-primary"></i>
-        Trazabilidad — Pedido <strong>@Model.Serie-@Model.NumPed</strong>
-    </h4>
+@* ── Modales de acción POST (fuera de cualquier grid) ──────── *@
+
+@* Modal: Reprogramar despacho *@
+<div class="modal fade" id="modalReprogramar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Reprogramar" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="serie"  value="@Model.Serie" />
+                <input type="hidden" name="numPed" value="@Model.NumPed" />
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar fecha de despacho</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Sublote (Det.)</label>
+                        <select name="nro" class="form-select form-select-sm" required>
+                            @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
+                            {
+                                <option value="@s.Nro" data-det="@s.NumDet">Det.@s.NumDet — @s.Titulo (@s.Color)</option>
+                            }
+                        </select>
+                    </div>
+                    <input type="hidden" name="numDet" id="reprNumDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Nueva fecha de despacho</label>
+                        <input type="date" name="nuevaFchDesp" class="form-control form-control-sm" required
+                               min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Motivo</label>
+                        <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
+                               placeholder="Ej: Cliente solicitó extensión de plazo" required />
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-save me-1"></i>Reprogramar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* Modal: Recalcular fechas *@
+<div class="modal fade" id="modalRecalcular" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form asp-action="RecalcularFechas" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="serie"  value="@Model.Serie" />
+                <input type="hidden" name="numPed" value="@Model.NumPed" />
+                <input type="hidden" name="nro"    value="@(Model.Items.FirstOrDefault()?.Nro ?? 0)" />
+                <input type="hidden" name="numDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas estimadas</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Motivo del recálculo</label>
+                        <select name="motivo" class="form-select form-select-sm">
+                            <option value="REP">REP — Reprogramado</option>
+                            <option value="PED">PED — Pedido</option>
+                            <option value="PLA">PLA — Planificado</option>
+                            <option value="MAQ">MAQ — Cambio máquina</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-info small py-1 mb-0">
+                        Recalcula todas las fechas estimadas del primer sublote y guarda historial.
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info btn-sm text-white"><i class="bi bi-arrow-repeat me-1"></i>Recalcular</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* Modal: Cerrar ítem *@
+<div class="modal fade" id="modalCerrar" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content border-danger">
+            <form asp-action="CerrarItem" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="numPed" value="@Model.NumPed" />
+                <input type="hidden" name="serie"  value="@Model.Serie" />
+                <div class="modal-header bg-danger text-white py-2">
+                    <h6 class="modal-title"><i class="bi bi-x-circle me-2"></i>Cerrar ítem manualmente</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Sublote a cerrar</label>
+                        <select name="idSeguim" class="form-select form-select-sm" required>
+                            @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
+                            {
+                                <option value="@s.IdSeguim">Det.@s.NumDet — @s.Titulo (ID @s.IdSeguim)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Motivo del cierre</label>
+                        <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
+                               placeholder="Ej: Cierre manual por ajuste" value="CIERRE_MANUAL" required />
+                    </div>
+                    <div class="alert alert-danger small py-1 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Esta acción es irreversible.
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Cerrar ítem</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ── Encabezado de página ──────────────────────────────────── *@
+<div class="d-flex align-items-center justify-content-between mb-1">
+    <h5 class="mb-0 fw-bold">
+        <i class="bi bi-clipboard2-data me-2 text-primary"></i>
+        Detalle del Pedido <strong>@Model.Serie-@Model.NumPed</strong>
+    </h5>
     <div class="d-flex gap-2 flex-wrap">
         <a asp-action="Trazabilidad" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
            class="btn btn-outline-info btn-sm">
@@ -47,94 +257,132 @@
            class="btn btn-outline-primary btn-sm">
             <i class="bi bi-bar-chart-steps me-1"></i>Gantt
         </a>
+        @*
         <div class="dropdown">
             <button class="btn btn-outline-warning btn-sm dropdown-toggle" data-bs-toggle="dropdown">
                 <i class="bi bi-gear me-1"></i>Acciones
             </button>
-            <ul class="dropdown-menu">
+            <ul class="dropdown-menu dropdown-menu-end">
                 <li>
-                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#modalReprogramar">
+                    <button class="dropdown-item small" data-bs-toggle="modal" data-bs-target="#modalReprogramar">
                         <i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar despacho
                     </button>
                 </li>
                 <li>
-                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#modalRecalcular">
+                    <button class="dropdown-item small" data-bs-toggle="modal" data-bs-target="#modalRecalcular">
                         <i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas
                     </button>
                 </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
-                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#modalCerrar">
+                    <button class="dropdown-item small text-danger" data-bs-toggle="modal" data-bs-target="#modalCerrar">
                         <i class="bi bi-x-circle me-2"></i>Cerrar ítem
                     </button>
                 </li>
             </ul>
         </div>
+        *@
         <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i>Volver
         </a>
     </div>
 </div>
+<p class="text-muted mb-3" style="font-size:.7rem;border-bottom:1px solid #e9ecef;padding-bottom:.5rem;">
+    Vista detallada del pedido: estado de cada sublote, fechas planificadas vs. reales y acciones disponibles.
+    Use <strong>Trazabilidad</strong> para el paso a paso y <strong>Gantt</strong> para la línea de tiempo.
+</p>
 
+@* ── ZONA A: Strip industrial de información del pedido ─────── *@
 @if (primerItem != null)
 {
-    <!-- Cabecera del pedido -->
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-sm-6 col-md-3">
-                    <div class="text-muted small">Cliente</div>
-                    <div class="fw-semibold">@primerItem.NombreCliente</div>
-                    <div class="text-muted small">@primerItem.CodCliente</div>
-                </div>
-                <div class="col-sm-6 col-md-3">
-                    <div class="text-muted small">Fecha pedido</div>
-                    <div class="fw-semibold">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
-                </div>
-                <div class="col-sm-6 col-md-3">
-                    <div class="text-muted small">Entrega comprometida</div>
-                    <div class="fw-semibold @(primerItem.EstaRetrasado ? "text-danger" : "")">
-                        @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
-                        @if (primerItem.EstaRetrasado)
-                        {
-                            <span class="badge bg-danger ms-1">+@primerItem.DiasRetraso d</span>
-                        }
-                    </div>
-                </div>
-                <div class="col-sm-6 col-md-3">
-                    <div class="text-muted small">Estado general</div>
-                    <span class="paso-badge-lg text-white" style="background-color:@primerItem.ColorUi;">
-                        @primerItem.CodPasoAct — @primerItem.NombrePaso
-                    </span>
+    <div class="pln-info-strip mb-3">
+        <div class="d-flex align-items-stretch flex-wrap">
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Cliente</div>
+                <div class="pln-strip-val">@primerItem.NombreCliente</div>
+                <div class="pln-strip-sub">@primerItem.CodCliente</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Fecha pedido</div>
+                <div class="pln-strip-val">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Entrega comprometida</div>
+                <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
+                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                    @if (primerItem.EstaRetrasado)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
+                    }
                 </div>
             </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Sublotes</div>
+                <div class="pln-strip-val">@Model.Items.Count()</div>
+                <div class="pln-strip-sub">@Model.Items.Sum(x => x.CantidadOrig).ToString("N0") kg en total</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Días para entrega</div>
+                @{
+                    var fchComp = Model.Items.Select(x => x.FchEntregaComp).Where(f => f.HasValue).Min();
+                    var diasRest = fchComp.HasValue ? (fchComp.Value - DateTime.Today).Days : (int?)null;
+                }
+                @if (diasRest.HasValue)
+                {
+                    var colorDias = diasRest.Value < 0 ? "#fc8181" : diasRest.Value <= 5 ? "#f6ad55" : "#e2e8f0";
+                    <div class="pln-strip-val" style="color:@colorDias;">
+                        @(diasRest.Value < 0 ? $"{Math.Abs(diasRest.Value)}d vencido" : $"{diasRest.Value}d restantes")
+                    </div>
+                    <div class="pln-strip-sub">@fchComp!.Value.ToString("dd/MM/yyyy")</div>
+                }
+                else
+                {
+                    <div class="pln-strip-val">—</div>
+                }
+            </div>
+            @if (Model.Items.Any(x => x.EsUrgente))
+            {
+                <div class="pln-strip-cell" style="background:rgba(229,62,62,.15);">
+                    <div class="pln-strip-lbl" style="color:#fc8181;">Estado</div>
+                    <div class="pln-strip-val"><span class="badge bg-danger">⚡ URGENTE</span></div>
+                </div>
+            }
+            else if (Model.Items.Any(x => x.EstaRetrasado))
+            {
+                <div class="pln-strip-cell" style="background:rgba(253,126,20,.12);">
+                    <div class="pln-strip-lbl" style="color:#f6ad55;">Estado</div>
+                    <div class="pln-strip-val" style="font-size:.82rem;color:#fed7aa;">⚠ Con retraso</div>
+                </div>
+            }
         </div>
     </div>
 }
 
-<!-- Alertas del pedido -->
+@* ── SEGMENTO 2: Alertas activas ──────────────────────────── *@
 @if (Model.Alertas.Any())
 {
-    <div class="mb-4">
+    <div class="section-sep"><i class="bi bi-bell-fill"></i> Alertas activas <span class="badge bg-danger ms-1">@Model.Alertas.Count()</span></div>
+    <div class="mb-3">
         @foreach (var a in Model.Alertas)
         {
-            <div class="alert alert-@a.NivelColor d-flex align-items-center gap-2 py-2 mb-2">
-                <i class="bi bi-bell-fill"></i>
-                <div>
+            <div class="alert alert-@a.NivelColor d-flex align-items-start gap-2 py-2 mb-2">
+                <i class="bi bi-bell-fill mt-1 flex-shrink-0"></i>
+                <div style="font-size:.82rem;">
                     <strong>@a.TipoTexto</strong>
                     @if (a.Nro.HasValue)
                     {
-                        <span class="badge bg-light text-dark border ms-1">Det.@a.Nro</span>
+                        var detLabel = detCodArt.TryGetValue(a.Nro.Value, out var ca) ? ca : $"Det.{a.Nro}";
+                        <span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">@detLabel</span>
                     }
                     — @a.Titulo
                     @if (a.FchLimite.HasValue)
                     {
-                        <span class="ms-2 small">Límite: @a.FchLimite.Value.ToString("dd/MM/yyyy")</span>
+                        <span class="ms-2" style="font-size:.75rem;">Límite: @a.FchLimite.Value.ToString("dd/MM/yyyy")</span>
                     }
                     @if (a.HorasSinResolver.HasValue)
                     {
                         var h = (int)a.HorasSinResolver.Value;
-                        <span class="ms-2 small text-muted"><i class="bi bi-clock me-1"></i>@(h >= 24 ? $"{h/24}d {h%24}h" : $"{h}h") sin resolver</span>
+                        <span class="ms-2 text-muted" style="font-size:.72rem;"><i class="bi bi-clock me-1"></i>@(h >= 24 ? $"{h/24}d {h%24}h" : $"{h}h") sin resolver</span>
                     }
                 </div>
             </div>
@@ -142,328 +390,257 @@
     </div>
 }
 
-<!-- Sublotes / ítems del pedido -->
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white fw-semibold py-2">
-        <i class="bi bi-list-check me-1"></i> Sublotes del pedido
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Det.</th>
-                        <th>Artículo</th>
-                        <th>Título / Color</th>
-                        <th class="text-end">Kg orig.</th>
-                        <th class="text-end">Kg pend.</th>
-                        <th>Etapa</th>
-                        <th>Avance</th>
-                        <th>F.Est. despacho</th>
-                        <th>Ciclo</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
-                    {
-                        <tr>
-                            <td>@s.NumDet</td>
-                            <td class="text-truncate" style="max-width:110px;">@s.CodArt</td>
-                            <td><span class="fw-semibold">@s.Titulo</span> <small class="text-muted">@s.Color</small></td>
-                            <td class="text-end">@s.CantidadOrig.ToString("N0")</td>
-                            <td class="text-end @(s.KgPendientes > 0 ? "fw-bold" : "text-muted")">@s.KgPendientes.ToString("N0")</td>
-                            @* acciones inline por sublote *@
-                            <td>
-                                <span class="badge" style="background-color:@s.ColorUi; font-size:.75rem;">
-                                    @s.CodPasoAct — @s.NombrePaso
-                                </span>
-                                @if (s.EstaEnReproceso)
-                                {
-                                    <span class="badge bg-danger ms-1">Rep.@s.NroCiclo</span>
-                                }
-                            </td>
-                            <td style="min-width:90px;">
-                                <div class="progress" style="height:5px;">
-                                    <div class="progress-bar" style="width:@s.PctAvance%;background-color:@s.ColorUi;"></div>
-                                </div>
-                                <small class="text-muted">@s.PctAvance%</small>
-                            </td>
-                            <td>@(s.FchEstDespacho?.ToString("dd/MM/yy") ?? "—")</td>
-                            <td><span class="badge bg-secondary">C.@s.NroCiclo</span></td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    <a asp-action="Historial" asp-route-idSeguim="@s.IdSeguim"
-                                       class="btn btn-outline-secondary btn-sm py-0" title="Historial recálculos">
-                                        <i class="bi bi-clock-history"></i>
-                                    </a>
-                                    <form asp-action="RecalcularFechas" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="serie"   value="@Model.Serie" />
-                                        <input type="hidden" name="numPed"  value="@Model.NumPed" />
-                                        <input type="hidden" name="nro"     value="@s.Nro" />
-                                        <input type="hidden" name="numDet"  value="@s.NumDet" />
-                                        <input type="hidden" name="motivo"  value="REP" />
-                                        <button type="submit" class="btn btn-outline-info btn-sm py-0"
-                                                title="Recalcular fechas" onclick="return confirm('¿Recalcular fechas para Det.@s.NumDet?')">
-                                            <i class="bi bi-calculator"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+@* ── ZONA C: Sublotes del pedido (cards) ──────────────────── *@
+<div class="section-sep"><i class="bi bi-list-check"></i> Sublotes del pedido</div>
+<div class="mb-3">
+    @{
+        int subIdx = 0;
+        var pasosOrientativos = new HashSet<string> { "05", "07", "11", "12" };
+    }
+    @foreach (var s in Model.Items.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+    {
+        subIdx++;
+        var urgClase     = s.EsUrgente ? "urgente" : s.EstaRetrasado ? "retraso" : "";
+        var panelId      = $"subpanel-{subIdx}";
+        var tabFlujoId   = $"tab-flujo-{subIdx}";
+        var tabEventosId = $"tab-eventos-{subIdx}";
+        var ordenActSub  = pasoMap.ContainsKey(s.CodPasoAct) ? pasoMap[s.CodPasoAct].OrdenPaso : 0;
+        var eventosSub   = Model.Eventos.Where(e => e.IdSeguim == s.IdSeguim).ToList();
 
-<!-- Timeline: Máquina de estados -->
-<div class="row g-4">
-    <div class="col-lg-7">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold py-2">
-                <i class="bi bi-clock-history me-1"></i> Flujo de producción
-            </div>
-            <div class="card-body pt-3">
-                @{
-                    var primerSub = Model.Items.OrderBy(x => x.NumDet).FirstOrDefault();
-                }
-                @if (primerSub != null)
+        <div class="sublote-card @urgClase" data-codartt="@s.CodArt">
+            <div class="sublote-head">
+                <span class="badge bg-dark" style="font-size:.65rem;letter-spacing:.04em;border-radius:1px;">@s.Nro</span>
+                <span class="sublote-art">@s.CodArt</span>
+                <span class="art-desc-info text-muted" style="font-size:.72rem;"></span>
+                <span class="sublote-meta">
+                    <strong><span class="text-muted" style="font-size:.7rem;font-weight:400;">Tít.:</span> @s.Titulo</strong>
+                    @if (!string.IsNullOrEmpty(s.Color)) { <text> / @s.Color</text> }
+                </span>
+                <span class="sublote-meta text-muted ms-1">@s.CantidadOrig.ToString("N0") kg orig.</span>
+                @if (s.KgPendientes > 0)
                 {
-                    @foreach (var ec in Model.Pasos.OrderBy(p => p.OrdenPaso))
+                    <span class="kg-pend sublote-meta">@s.KgPendientes.ToString("N0") kg pend.</span>
+                }
+                @if (s.EstaEnReproceso)
+                {
+                    <span class="badge bg-danger ms-1" style="font-size:.65rem;border-radius:1px;">Rep.@s.NroCiclo</span>
+                }
+            </div>
+            <div class="sublote-body">
+                <div>
+                    <span class="paso-badge text-white" style="background-color:@s.ColorUi;">
+                        @s.CodPasoAct — @s.NombrePaso
+                    </span>
+                    @if (s.CodPasoAct == "01")
                     {
-                        var esCodPasoActual = primerSub.CodPasoAct == ec.CodPaso;
-                        var ordenActual = pasoMap.ContainsKey(primerSub.CodPasoAct) ? pasoMap[primerSub.CodPasoAct].OrdenPaso : 0;
-                        var completado  = ec.OrdenPaso < ordenActual;
-                        var claseStep   = esCodPasoActual ? "activo" : completado ? "completado" : "";
-                        var color       = completado ? "#198754" : esCodPasoActual ? ec.ColorUi : "#dee2e6";
+                        <i class="bi bi-hourglass-split ms-1 text-muted" style="font-size:.7rem;" title="Sin planificar"></i>
+                    }
+                </div>
+                <div class="sublote-avance">
+                    <div class="progress progress-thin" style="width:90px;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width:@s.PctAvance%;background-color:@s.ColorUi;"
+                             aria-valuenow="@s.PctAvance" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <span class="avance-pct" style="color:@s.ColorUi;" title="@s.NombrePaso — @s.PctAvance% completado">@s.PctAvance%</span>
+                </div>
+                <div class="sublote-fecha">
+                    <span class="slbl">Est. despacho</span>
+                    <span class="sval">@(s.FchEstDespacho?.ToString("dd/MM/yy") ?? "—")</span>
+                </div>
+                <div>
+                    <span class="badge bg-secondary" style="font-size:.68rem;border-radius:1px;" title="Ciclo de reproceso">C.@s.NroCiclo</span>
+                </div>
+            </div>
 
-                        // Fechas estimadas y reales según el paso
-                        string? fchEst = ec.CodPaso switch {
-                            "02" => primerSub.FchRealProgramado?.ToString("dd/MM/yy"),
-                            "03" => primerSub.FchEstHilanderia?.ToString("dd/MM/yy"),
-                            "04" => primerSub.FchEstPartida?.ToString("dd/MM/yy"),
-                            "06" => primerSub.FchEstTinIni?.ToString("dd/MM/yy"),
-                            "07" => primerSub.FchEstTinFin?.ToString("dd/MM/yy"),
-                            "08" => primerSub.FchEstSecado?.ToString("dd/MM/yy"),
-                            "09" => primerSub.FchEstCalidad?.ToString("dd/MM/yy"),
-                            "14" => primerSub.FchEstDespacho?.ToString("dd/MM/yy"),
-                            _ => null
-                        };
-                        string? fchReal = ec.CodPaso switch {
-                            "02" => primerSub.FchRealProgramado?.ToString("dd/MM/yy"),
-                            "03" => primerSub.FchRealProduccion?.ToString("dd/MM/yy"),
-                            "04" => primerSub.FchRealPartida?.ToString("dd/MM/yy"),
-                            "06" => primerSub.FchRealTinIni?.ToString("dd/MM/yy"),
-                            "07" => primerSub.FchRealTinFin?.ToString("dd/MM/yy"),
-                            "08" => primerSub.FchRealSecado?.ToString("dd/MM/yy"),
-                            "09" => primerSub.FchRealCcTinto?.ToString("dd/MM/yy"),
-                            "9R" => primerSub.FchRealCcRechazo?.ToString("dd/MM/yy"),
-                            "10" => primerSub.FchRealDevanado?.ToString("dd/MM/yy"),
-                            "11" => primerSub.FchRealCalidad?.ToString("dd/MM/yy"),
-                            "12" => primerSub.FchRealAlmPt?.ToString("dd/MM/yy"),
-                            "14" => primerSub.FchRealDespacho?.ToString("dd/MM/yy"),
-                            _ => null
-                        };
+            @* ── Panel colapsable: Flujo + Eventos por sublote ── *@
+            <div class="sublote-panel">
+                <button class="sublote-panel-toggle" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#@panelId"
+                        aria-expanded="false" aria-controls="@panelId">
+                    <i class="bi bi-chevron-down toggle-ico"></i>
+                    <i class="bi bi-diagram-3 me-1"></i>Flujo de producción e historial de eventos
+                    @if (eventosSub.Any())
+                    {
+                        <span class="badge bg-secondary ms-1" style="font-size:.6rem;">@eventosSub.Count ev.</span>
+                    }
+                </button>
+                <div class="collapse" id="@panelId">
+                    <div class="sublote-panel-body">
+                        @* mini-tabs *@
+                        <ul class="nav sub-tabs" id="tabs-@subIdx" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" data-bs-toggle="tab"
+                                        data-bs-target="#@tabFlujoId" type="button" role="tab">
+                                    <i class="bi bi-clock-history me-1"></i>Flujo de producción
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" data-bs-toggle="tab"
+                                        data-bs-target="#@tabEventosId" type="button" role="tab">
+                                    <i class="bi bi-journal-text me-1"></i>Historial de eventos
+                                    @if (eventosSub.Any())
+                                    {
+                                        <span class="badge bg-secondary ms-1" style="font-size:.6rem;">@eventosSub.Count</span>
+                                    }
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content sub-tab-panel">
 
-                        <div class="timeline-step @claseStep" style="--step-color:@color">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="badge" style="background-color:@color; font-size:.75rem;">@ec.CodPaso</span>
-                                <span class="fw-semibold">@ec.NombrePaso</span>
-                                <small class="text-muted">@ec.Area</small>
-                                @if (esCodPasoActual)
+                            @* Tab Flujo *@
+                            <div class="tab-pane fade show active" id="@tabFlujoId" role="tabpanel">
+                                <div class="tl-grid">
+                                    @foreach (var ec in Model.Pasos.OrderBy(p => p.OrdenPaso))
+                                    {
+                                        var esActivo    = s.CodPasoAct == ec.CodPaso;
+                                        var completado  = ec.OrdenPaso < ordenActSub;
+                                        var clase       = esActivo ? "activo" : completado ? "completado" : "pendiente";
+                                        var colorPaso   = completado ? "#2f855a" : esActivo ? ec.ColorUi : "#ced4da";
+                                        var esOrient    = pasosOrientativos.Contains(ec.CodPaso);
+
+                                        string? fEst = ec.CodPaso switch {
+                                            "01" => s.FchPedido.ToString("dd/MM/yy"),
+                                            "02" => s.FchRealProgramado?.ToString("dd/MM/yy"),
+                                            "03" => s.FchEstHilanderia?.ToString("dd/MM/yy"),
+                                            "04" => s.FchEstPartida?.ToString("dd/MM/yy"),
+                                            "05" => s.FchEstHilanderia?.ToString("dd/MM/yy"),
+                                            "06" => s.FchEstTinIni?.ToString("dd/MM/yy"),
+                                            "07" => s.FchEstTinFin?.ToString("dd/MM/yy"),
+                                            "08" => s.FchEstSecado?.ToString("dd/MM/yy"),
+                                            "09" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                            "10" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                            "11" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                            "12" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                            "13" => s.FchEstDespacho?.ToString("dd/MM/yy"),
+                                            "14" => s.FchEstDespacho?.ToString("dd/MM/yy"),
+                                            _    => null
+                                        };
+                                        string? fReal = ec.CodPaso switch {
+                                            "01" => s.FchPedido.ToString("dd/MM/yy"),
+                                            "02" => s.FchRealProgramado?.ToString("dd/MM/yy"),
+                                            "03" => s.FchRealProduccion?.ToString("dd/MM/yy"),
+                                            "04" => s.FchRealPartida?.ToString("dd/MM/yy"),
+                                            "05" => null,
+                                            "06" => s.FchRealTinIni?.ToString("dd/MM/yy"),
+                                            "07" => s.FchRealTinFin?.ToString("dd/MM/yy"),
+                                            "08" => s.FchRealSecado?.ToString("dd/MM/yy"),
+                                            "09" => s.FchRealCcTinto?.ToString("dd/MM/yy"),
+                                            "9R" => s.FchRealCcRechazo?.ToString("dd/MM/yy"),
+                                            "10" => s.FchRealDevanado?.ToString("dd/MM/yy"),
+                                            "11" => s.FchRealCalidad?.ToString("dd/MM/yy"),
+                                            "12" => s.FchRealAlmPt?.ToString("dd/MM/yy"),
+                                            "13" => s.FchRealAlmPt?.ToString("dd/MM/yy"),
+                                            "14" => s.FchRealDespacho?.ToString("dd/MM/yy"),
+                                            _    => null
+                                        };
+
+                                        <div class="tl-step @clase">
+                                            <div class="tl-dot" style="background:@colorPaso;"></div>
+                                            <div class="tl-cod">
+                                                <span class="badge" style="background:@colorPaso;color:#fff;font-size:.63rem;min-width:24px;text-align:center;border-radius:1px;">@ec.CodPaso</span>
+                                            </div>
+                                            <div class="tl-nombre @clase">
+                                                @ec.NombrePaso
+                                                @if (!string.IsNullOrEmpty(ec.Area))
+                                                {
+                                                    <span class="badge bg-light text-secondary border ms-1" style="font-size:.58rem;font-weight:500;">@ec.Area</span>
+                                                }
+                                                @if (esActivo)
+                                                {
+                                                    <span class="badge ms-1" style="background:@colorPaso;font-size:.6rem;color:#fff;border-radius:1px;">● Activo</span>
+                                                }
+                                                @if (esOrient)
+                                                {
+                                                    <i class="bi bi-pin-angle ms-1 text-warning" style="font-size:.68rem;" title="Fecha orientativa"></i>
+                                                }
+                                            </div>
+                                            @if (fEst != null || fReal != null)
+                                            {
+                                                <div class="tl-fechas">
+                                                    @if (fEst != null) { <span><i class="bi bi-calendar2 me-1"></i>@fEst</span> }
+                                                    @if (fReal != null) { <span class="tl-fech-real"><i class="bi bi-check2 me-1"></i>@fReal</span> }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            @* Tab Historial de eventos *@
+                            <div class="tab-pane fade" id="@tabEventosId" role="tabpanel">
+                                @if (!eventosSub.Any())
                                 {
-                                    <span class="badge bg-primary ms-1">Actual</span>
+                                    <div class="p-3 text-muted small"><i class="bi bi-info-circle me-1"></i>Sin eventos registrados para este sublote.</div>
+                                }
+                                else
+                                {
+                                    @foreach (var ev in eventosSub)
+                                    {
+                                        var dotColorEv = ev.TipoEvento switch {
+                                            "AV" => "#198754",
+                                            "RE" => "#dc3545",
+                                            "AL" => "#fd7e14",
+                                            "CI" => "#6c757d",
+                                            _    => "#0d6efd"
+                                        };
+                                        <div class="evento-item">
+                                            <div class="evento-dot" style="background:@dotColorEv;"></div>
+                                            <div>
+                                                <div class="d-flex align-items-center gap-1 flex-wrap">
+                                                    <span class="badge bg-@ev.TipoEventoCss evento-badge">@ev.TipoEventoDesc</span>
+                                                    <span class="fw-semibold" style="font-size:.8rem;">@ev.NombrePaso</span>
+                                                    @if (ev.NroCiclo > 1)
+                                                    {
+                                                        <span class="badge bg-secondary" style="font-size:.63rem;">C.@ev.NroCiclo</span>
+                                                    }
+                                                </div>
+                                                @if (ev.KgCantidad.HasValue)
+                                                {
+                                                    <div class="text-muted mt-1" style="font-size:.72rem;"><i class="bi bi-box me-1"></i>@ev.KgCantidad.Value.ToString("N0") kg</div>
+                                                }
+                                                @if (!string.IsNullOrEmpty(ev.Observacion))
+                                                {
+                                                    <div class="text-muted" style="font-size:.72rem;">@ev.Observacion</div>
+                                                }
+                                            </div>
+                                            <div class="evento-hora">@ev.FchEvento.ToString("dd/MM/yy")<br/>@ev.FchEvento.ToString("HH:mm")</div>
+                                        </div>
+                                    }
                                 }
                             </div>
-                            @if (fchEst != null || fchReal != null)
-                            {
-                                <div class="d-flex gap-3 mt-1">
-                                    @if (fchEst != null)
-                                    {
-                                        <small class="text-muted"><i class="bi bi-calendar me-1"></i>Est: @fchEst</small>
-                                    }
-                                    @if (fchReal != null)
-                                    {
-                                        <small class="text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>Real: @fchReal</small>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    }
-                }
-            </div>
-        </div>
-    </div>
 
-    <!-- ── Modales de acción POST ─────────────────────────────────── -->
+                        </div>@* /tab-content *@
+                    </div>@* /sublote-panel-body *@
+                </div>@* /collapse *@
+            </div>@* /sublote-panel *@
 
-    <!-- Modal: Reprogramar despacho -->
-    <div class="modal fade" id="modalReprogramar" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form asp-action="Reprogramar" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="serie"  value="@Model.Serie" />
-                    <input type="hidden" name="numPed" value="@Model.NumPed" />
-                    <div class="modal-header">
-                        <h6 class="modal-title"><i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar fecha de despacho</h6>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Sublote (Det.)</label>
-                            <select name="nro" class="form-select form-select-sm" required>
-                                @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
-                                {
-                                    <option value="@s.Nro" data-det="@s.NumDet">Det.@s.NumDet — @s.Titulo (@s.Color)</option>
-                                }
-                            </select>
-                        </div>
-                        <input type="hidden" name="numDet" id="reprNumDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Nueva fecha de despacho</label>
-                            <input type="date" name="nuevaFchDesp" class="form-control form-control-sm" required
-                                   min="@DateTime.Today.ToString("yyyy-MM-dd")" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Motivo</label>
-                            <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
-                                   placeholder="Ej: Cliente solicitó extensión de plazo" required />
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-save me-1"></i>Reprogramar</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Recalcular fechas (pedido completo) -->
-    <div class="modal fade" id="modalRecalcular" tabindex="-1">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-                <form asp-action="RecalcularFechas" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="serie"  value="@Model.Serie" />
-                    <input type="hidden" name="numPed" value="@Model.NumPed" />
-                    <input type="hidden" name="nro"    value="@(Model.Items.FirstOrDefault()?.Nro ?? 0)" />
-                    <input type="hidden" name="numDet" value="@(Model.Items.FirstOrDefault()?.NumDet ?? 0)" />
-                    <div class="modal-header">
-                        <h6 class="modal-title"><i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas estimadas</h6>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Motivo del recálculo</label>
-                            <select name="motivo" class="form-select form-select-sm">
-                                <option value="REP">REP — Reprogramado</option>
-                                <option value="PED">PED — Pedido</option>
-                                <option value="PLA">PLA — Planificado</option>
-                                <option value="MAQ">MAQ — Cambio máquina</option>
-                            </select>
-                        </div>
-                        <div class="alert alert-info small py-1 mb-0">
-                            Recalcula todas las fechas estimadas del primer sublote y guarda historial.
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-info btn-sm text-white"><i class="bi bi-arrow-repeat me-1"></i>Recalcular</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Cerrar ítem -->
-    <div class="modal fade" id="modalCerrar" tabindex="-1">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content border-danger">
-                <form asp-action="CerrarItem" method="post">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="numPed" value="@Model.NumPed" />
-                    <input type="hidden" name="serie"  value="@Model.Serie" />
-                    <div class="modal-header bg-danger text-white">
-                        <h6 class="modal-title"><i class="bi bi-x-circle me-2"></i>Cerrar ítem manualmente</h6>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Sublote a cerrar</label>
-                            <select name="idSeguim" class="form-select form-select-sm" required>
-                                @foreach (var s in Model.Items.OrderBy(x => x.NumDet))
-                                {
-                                    <option value="@s.IdSeguim">Det.@s.NumDet — @s.Titulo (ID @s.IdSeguim)</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Motivo del cierre</label>
-                            <input type="text" name="motivo" class="form-control form-control-sm" maxlength="200"
-                                   placeholder="Ej: Cierre manual por ajuste" value="CIERRE_MANUAL" required />
-                        </div>
-                        <div class="alert alert-danger small py-1 mb-0">
-                            <i class="bi bi-exclamation-triangle me-1"></i>Esta acción es irreversible.
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Cerrar ítem</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Historial de eventos -->
-        <div class="col-lg-5">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold py-2">
-                <i class="bi bi-journal-text me-1"></i> Historial de eventos
-            </div>
-            <div class="card-body p-0" style="max-height:500px; overflow-y:auto;">
-                @if (!Model.Eventos.Any())
-                {
-                    <div class="p-3 text-muted small">Sin eventos registrados.</div>
-                }
-                else
-                {
-                    <div class="list-group list-group-flush">
-                        @foreach (var ev in Model.Eventos)
-                        {
-                            var badgeColor = ev.TipoEvento == "RE" ? "bg-danger" : "bg-success";
-                            <div class="list-group-item py-2">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <span class="badge @badgeColor evento-badge me-1">
-                                            @(ev.TipoEvento == "RE" ? "Reproceso" : "Avance")
-                                        </span>
-                                        <span class="fw-semibold small">@ev.NombrePaso</span>
-                                        @if (ev.NroCiclo > 1)
-                                        {
-                                            <span class="badge bg-secondary evento-badge ms-1">C.@ev.NroCiclo</span>
-                                        }
-                                    </div>
-                                    <small class="text-muted">@ev.FchEvento.ToString("dd/MM/yy HH:mm")</small>
-                                </div>
-                                @if (!string.IsNullOrEmpty(ev.Observacion))
-                                {
-                                    <div class="text-muted small mt-1">@ev.Observacion</div>
-                                }
-                                @if (ev.KgCantidad.HasValue)
-                                {
-                                    <div class="text-muted small"><i class="bi bi-box me-1"></i>@ev.KgCantidad.Value.ToString("N0") kg</div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
+        </div>@* /sublote-card *@
+    }
 </div>
+
+
+@section Scripts {
+<script>
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
+        new bootstrap.Tooltip(el, { placement: 'top' }));
+
+    // Carga descripción + material de artículos sin cambiar el modelo
+    (async function () {
+        const cards = document.querySelectorAll('[data-codartt]');
+        const unique = [...new Set([...cards].map(c => c.dataset.codartt).filter(Boolean))];
+        for (const cod of unique) {
+            try {
+                const res  = await fetch(`/Planeamiento/GetArticuloInfo?codArt=${encodeURIComponent(cod)}`);
+                if (!res.ok) continue;
+                const info = await res.json();
+                const parts = [info.descripcion, info.fibra].filter(x => x);
+                if (!parts.length) continue;
+                const text = parts.join(' · ');
+                document.querySelectorAll(`[data-codartt="${CSS.escape(cod)}"] .art-desc-info`)
+                        .forEach(el => el.textContent = text);
+            } catch { /* silencioso */ }
+        }
+    })();
+</script>
+}

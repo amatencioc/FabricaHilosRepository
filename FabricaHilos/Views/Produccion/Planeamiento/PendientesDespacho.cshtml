@@ -1,3 +1,7 @@
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
+}
+
 @model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnPendienteDespacho>
 @{
     ViewData["Title"] = "Pendientes de Despacho";
@@ -5,10 +9,9 @@
 }
 
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
             <h4 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>Pendientes de Despacho</h4>
-            <small class="text-muted">V_PLN_PENDIENTES_DESP &mdash; ítems en almacén PT listos para despachar</small>
         </div>
         <div class="d-flex gap-2">
             <span class="badge bg-danger fs-6">@lista.Count(x => x.EsUrgente) urgentes</span>
@@ -18,6 +21,7 @@
             </a>
         </div>
     </div>
+    <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Ítems ya en almacén de Producto Terminado que están listos para ser despachados al cliente. Los marcados en amarillo son urgentes o tienen la fecha de entrega próxima a vencer.</p>
 
     @if (!lista.Any())
     {
@@ -30,8 +34,8 @@
         <div class="card shadow-sm">
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0">
-                        <thead class="table-dark">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+                        <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
                             <tr>
                                 <th>Pedido</th>
                                 <th>Ítem</th>
@@ -53,7 +57,7 @@
                                     <td>
                                         <a asp-action="Pedido"
                                            asp-route-numPed="@item.NumPed"
-                                           asp-route-serie="0"
+                                           asp-route-serie="@item.Serie"
                                            class="fw-bold text-decoration-none">
                                             @item.NumPed
                                         </a>

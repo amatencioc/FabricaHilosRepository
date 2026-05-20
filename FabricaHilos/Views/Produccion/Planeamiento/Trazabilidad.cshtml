@@ -1,36 +1,108 @@
 @model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnTrazabilidad>
+@using System.Text.Json
 
 @{
     ViewData["Title"] = "Trazabilidad de Pedido";
     var numPed = ViewBag.NumPed;
-    var serie = ViewBag.Serie;
+    var serie  = ViewBag.Serie;
+    var lista  = Model.ToList();
+
+    var colorPasoTraza = new Dictionary<string, string>
+    {
+        ["01"]="#6c757d",["02"]="#0d6efd",["03"]="#6610f2",["04"]="#0dcaf0",
+        ["05"]="#17a2b8",["06"]="#6f42c1",["07"]="#d63384",["08"]="#20c997",
+        ["09"]="#fd7e14",["09B"]="#ffd700",["9R"]="#dc3545",["10"]="#ffc107",
+        ["11"]="#0d6efd",["12"]="#198754",["13"]="#20c997",["14"]="#198754",
+    };
+    var nombrePasoTraza = new Dictionary<string, string>
+    {
+        ["01"]="Pedido Registrado", ["02"]="Planificado",           ["03"]="Laboratorio",
+        ["04"]="En Hilandería",    ["05"]="Lote Disponible",        ["06"]="Ingreso Tintorería",
+        ["07"]="Teñido Completo",   ["08"]="Secado",               ["09"]="CC TT Aprobado",
+        ["09B"]="Gaseado",          ["9R"]="CC TT Rechazado",        ["10"]="Devanado",
+        ["11"]="Revisado",          ["12"]="Ingresado Almacén PT", ["13"]="Listo para Despacho",
+        ["14"]="Despachado/Cerrado",
+    };
 }
 
 @section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
 <style>
-    .traza-card { border: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); border-radius: .75rem; }
-    .tbl-traza td, .tbl-traza th { vertical-align: middle; font-size: .85rem; }
-    .badge-desvio { font-size: .75rem; padding: .3em .6em; }
+    /* Trazabilidad: estilos exclusivos de la vista */
+
+    .traza-card {
+        border: 2px solid var(--pln-gray-300);
+        box-shadow: var(--pln-shadow-md);
+        border-radius: 0;
+    }
+    .traza-card .card-header {
+        background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
+        color: var(--pln-light-text);
+        font-weight: 800; font-size: .78rem; letter-spacing: .06em;
+        text-transform: uppercase; border-bottom: 3px solid var(--pln-dark-deep);
+        padding: .6rem .9rem;
+    }
+    .traza-card .card-header i { color: var(--pln-accent-blue); }
+    .tbl-traza td, .tbl-traza th { vertical-align: middle; font-size: .82rem; }
+    #chartDuraciones { min-height: 340px; }
+    #chartDesvios    { min-height: 200px; }
+    /* — Info strip — */
+    .traza-strip{background:linear-gradient(135deg,#2d3748 0%,#4a5568 100%);color:#f7fafc;border-radius:.5rem;padding:.9rem 1.1rem;margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+    .traza-strip-cell{display:flex;flex-direction:column;gap:.1rem;}
+    .traza-strip-lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:#a0aec0;font-weight:600;}
+    .traza-strip-val{font-size:.9rem;font-weight:700;color:#f7fafc;}
+    .traza-strip-sep{width:1px;height:36px;background:rgba(255,255,255,.2);align-self:center;}
+    .traza-strip-actions{margin-left:auto;display:flex;align-items:center;}
+    /* — Accordion fechas — */
+    .traza-acc-item .accordion-button{background:#f8fafc;font-size:.85rem;padding:.55rem .85rem;}
+    .traza-acc-item .accordion-button:not(.collapsed){background:#edf2f7;box-shadow:none;}
+    .traza-acc-item .accordion-body{padding:.75rem;}
+    .traza-dates-tbl td,.traza-dates-tbl th{vertical-align:middle;font-size:.80rem;padding:.28rem .45rem;}
+    .traza-dates-tbl thead th{background:#2d3748;color:#e2e8f0;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;border-color:#4a5568;}
+    .traza-dates-tbl tbody tr td:first-child{font-weight:600;color:#4a5568;font-size:.72rem;white-space:nowrap;width:100px;}
+    .traza-dates-tbl .td-est{color:#718096;}
+    .traza-dates-tbl .td-real{font-weight:600;color:#2d3748;}
+    .traza-dates-tbl .td-real.late{color:#c53030;}
+    /* metrics dark thead */
+    .tbl-metrics-hd th{background:#2d3748;color:#e2e8f0;font-size:.70rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;border-color:#4a5568;}
+    /* ApexCharts tooltip personalizado */
+    .apx-tt{background:#1a202c;color:#f7fafc;border-radius:6px;padding:9px 13px;min-width:210px;box-shadow:0 4px 14px rgba(0,0,0,.45);font-family:inherit;}
+    .apx-tt-etapa{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#90cdf4;font-weight:700;margin-bottom:3px;}
+    .apx-tt-desc{font-size:.74rem;color:#a0aec0;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:5px;}
+    .apx-tt-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:.78rem;margin-top:3px;}
+    .apx-tt-ser{color:#cbd5e0;}
+    .apx-tt-val{font-weight:700;color:#f7fafc;}
 </style>
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
     <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item"><a asp-action="Pedido" asp-route-numPed="@numPed" asp-route-serie="@serie">Pedido @serie-@numPed</a></li>
     <li class="breadcrumb-item active">Trazabilidad</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0">
-        <i class="bi bi-diagram-3 me-2 text-primary"></i>
-        Trazabilidad de Pedido @numPed-@serie
-    </h4>
-    <a asp-action="Pedido" asp-route-numPed="@numPed" asp-route-serie="@serie" class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Volver al pedido
-    </a>
+<!-- ── Info strip ───────────────────────────────────────────── -->
+<div class="traza-strip">
+    <div class="traza-strip-cell">
+        <span class="traza-strip-lbl"><i class="bi bi-diagram-3 me-1"></i>Pedido</span>
+        <span class="traza-strip-val">@serie-@numPed</span>
+    </div>
+    <div class="traza-strip-sep"></div>
+    <div class="traza-strip-cell">
+        <span class="traza-strip-lbl">Ítems</span>
+        <span class="traza-strip-val">@lista.Count</span>
+        <span style="font-size:.72rem;color:#cbd5e0;">en trazabilidad</span>
+    </div>
+    <div class="traza-strip-actions">
+        <a asp-action="Pedido" asp-route-numPed="@numPed" asp-route-serie="@serie"
+           class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#f7fafc;border:1px solid rgba(255,255,255,.3);">
+            <i class="bi bi-arrow-left me-1"></i>Volver al pedido
+        </a>
+    </div>
 </div>
 
-@if (!Model.Any())
+@if (!lista.Any())
 {
     <div class="alert alert-info">
         <i class="bi bi-info-circle me-2"></i>No se encontró información de trazabilidad para este pedido.
@@ -38,130 +110,282 @@
 }
 else
 {
+    <!-- ── Gráfico: Duración por Etapa (Est. vs Real) + Desvío ── -->
     <div class="card traza-card mb-4">
-        <div class="card-header bg-white fw-semibold py-2">
-            <i class="bi bi-calendar3-week me-1"></i> Timeline completo de fechas (estimadas vs. reales)
+        <div class="card-header">
+            <i class="bi bi-bar-chart-fill me-1"></i> Duración por etapa — Estimado vs. Real (días)
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm tbl-traza table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Ítem</th>
-                            <th>Cliente</th>
-                            <th>Artículo</th>
-                            <th>Fch Pedido</th>
-                            <th>Fch Aprobación</th>
-                            <th>Fch Planeada</th>
-                            <th>Fch Entrega Plan</th>
-                            <th>Fch Est Cono 1</th>
-                            <th>Fch Est Teñido</th>
-                            <th>Fch Real Programado</th>
-                            <th>Fch Real Producción</th>
-                            <th>Fch Real Partida</th>
-                            <th>Fch Real TT Ini</th>
-                            <th>Fch Prog TT</th>
-                            <th>Fch Real TT Fin</th>
-                            <th>Fch Real Secado</th>
-                            <th>Fch Real Calidad</th>
-                            <th>Fch Real Alm PT</th>
-                            <th>Fch Real Despacho</th>
-                            <th>Fch Compromiso Cliente</th>
-                            <th class="text-center">Desvío Cliente</th>
-                            <th>Ciclo total (d)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var t in Model.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
-                        {
-                            <tr>
-                                <td class="fw-semibold">@t.Nro.@t.NumDet</td>
-                                <td>@t.CodCliente</td>
-                                <td>@t.CodArt</td>
-                                <td>@t.FchPedido.ToString("dd/MM/yyyy")</td>
-                                <td>@(t.FchAprobPedido?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchPlaneada?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchEntregaPlan?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchEstCono1?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchEstTenido?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealProgramado?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealProduccion?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealPartida?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealTinIni?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchProgTin?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealTinFin?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealSecado?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealCalidad?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealAlmPt?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchRealDespacho?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td>@(t.FchCompromisoCliente?.ToString("dd/MM/yyyy") ?? "-")</td>
-                                <td class="text-center">
-                                    @if (t.DiasDesvioCliente.HasValue)
-                                    {
-                                        <span class="badge-desvio badge @t.DesvioClienteCss">
-                                            @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N0") d
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
-                                    }
-                                </td>
-                                <td>@(t.DiasTotalCiclo?.ToString("N1") ?? "-")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+        <div class="card-body px-3 pt-3 pb-1">
+            <div id="chartDuraciones"></div>
+            <div class="d-flex align-items-center gap-3 flex-wrap mt-2 pb-2" style="font-size:.75rem;color:#718096;border-top:1px solid #e2e8f0;padding-top:.5rem;">
+                <span><span style="display:inline-block;width:14px;height:10px;background:#90cdf4;border-radius:2px;opacity:.55;"></span> <strong>Estimado</strong> — duración planificada por el sistema</span>
+                <span><span style="display:inline-block;width:14px;height:10px;background:#2563eb;border-radius:2px;"></span> <strong>Real</strong> — duración registrada entre fechas reales</span>
+                <span><span style="display:inline-block;width:14px;height:10px;background:#e2e8f0;border:1px solid #cbd5e0;border-radius:2px;"></span> <strong>Pendiente</strong> — etapa aún no completada (sin fecha real)</span>
+                <span class="ms-auto text-muted"><i class="bi bi-info-circle me-1"></i>Pase el cursor sobre cada barra para ver detalle y desvío</span>
+            </div>
+        </div>
+    </div>
+    <div class="card traza-card mb-4">
+        <div class="card-header">
+            <i class="bi bi-arrow-left-right me-1"></i> Desvío neto por etapa (días reales − días estimados)
+        </div>
+        <div class="card-body px-3 pt-3 pb-1">
+            <div id="chartDesvios"></div>
+            <div class="d-flex align-items-center gap-3 flex-wrap mt-2 pb-2" style="font-size:.75rem;color:#718096;border-top:1px solid #e2e8f0;padding-top:.5rem;">
+                <span><span style="display:inline-block;width:14px;height:10px;background:#047857;border-radius:2px;"></span> <strong style="color:#047857;">En tiempo / Más rápido</strong> — desvío ≤ 0 días</span>
+                <span><span style="display:inline-block;width:14px;height:10px;background:#dc2626;border-radius:2px;"></span> <strong style="color:#dc2626;">Retraso</strong> — la etapa tomó más días de lo estimado</span>
+                <span><span style="display:inline-block;width:14px;height:10px;background:#cbd5e0;border:1px solid #a0aec0;border-radius:2px;"></span> <strong>Pendiente</strong> — aún sin fechas reales registradas</span>
+                <span class="ms-auto text-muted"><i class="bi bi-info-circle me-1"></i>Pase el cursor sobre cada barra para ver el desvío exacto</span>
             </div>
         </div>
     </div>
 
+    <!-- ── Fechas por ítem (accordion) ───────────────────────── -->
+    <div class="card traza-card mb-4">
+        <div class="card-header">
+            <i class="bi bi-calendar3-week me-1"></i> Fechas completas (estimadas vs. reales)
+        </div>
+        <div class="card-body p-2">
+            <div class="accordion" id="accordionTraza">
+                @{
+                    int accIdx = 0;
+                }
+                @foreach (var t in lista.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+                {
+                    accIdx++;
+                    var cpColor  = colorPasoTraza.TryGetValue(t.CodPasoAct, out var cp)  ? cp  : "#6c757d";
+                    var cpNombre = nombrePasoTraza.TryGetValue(t.CodPasoAct, out var cn) ? cn  : t.CodPasoAct;
+                    <div class="accordion-item traza-acc-item border-0 mb-1">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#accTraza@(accIdx)" aria-expanded="false">
+                                <div style="flex:1;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                                    <span class="fw-bold" style="min-width:48px;font-size:.85rem">@(t.Nro).@(t.NumDet)</span>
+                                    @if (!string.IsNullOrEmpty(t.CodArt))
+                                    {
+                                        <span class="text-muted" style="font-size:.78rem">@t.CodArt
+                                            @if (!string.IsNullOrEmpty(t.Color) || !string.IsNullOrEmpty(t.Titulo))
+                                            {
+                                                <span>· @t.Color @t.Titulo</span>
+                                            }
+                                        </span>
+                                    }
+                                    <span class="badge text-white ms-1" style="background:@cpColor;font-size:.7rem;">@t.CodPasoAct — @cpNombre</span>
+                                    @if (t.DiasDesvioCliente.HasValue)
+                                    {
+                                        <span class="badge @t.DesvioClienteCss">
+                                            @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N0") d
+                                        </span>
+                                    }
+                                    @if (t.NroCiclo > 1)
+                                    {
+                                        <span class="badge bg-warning text-dark">C.@t.NroCiclo</span>
+                                    }
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="accTraza@(accIdx)" class="accordion-collapse collapse" data-bs-parent="#accordionTraza">
+                            <div class="accordion-body">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <table class="table table-sm traza-dates-tbl mb-0">
+                                            <thead>
+                                                <tr><th colspan="2"><i class="bi bi-clock me-1"></i>Fechas estimadas</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>Cono1 (E)</td><td class="td-est">@(t.FchEstCono1?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Hilandería (E)</td><td class="td-est">@(t.FchEstHilanderia?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Lote disponible (E)</td><td class="td-est">@(t.FchEstPartida?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>TT Inicio (E)</td><td class="td-est">@(t.FchEstTinIni?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>TT Fin (E)</td><td class="td-est">@(t.FchEstTinFin?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Secado (E)</td><td class="td-est">@(t.FchEstSecado?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Calidad (E)</td><td class="td-est">@(t.FchEstCalidad?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Despacho (E)</td><td class="td-est">@(t.FchEstDespacho?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Compromiso cliente</td><td class="td-est fw-semibold" style="color:#1a365d;">@(t.FchCompromisoCliente?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <table class="table table-sm traza-dates-tbl mb-0">
+                                            <thead>
+                                                <tr><th colspan="2"><i class="bi bi-check2-circle me-1"></i>Fechas reales</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td>Pedido registrado</td><td class="td-real">@t.FchPedido.ToString("dd/MM/yy")</td></tr>
+                                                <tr><td>Aprobación</td><td class="td-real">@(t.FchAprobPedido?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Planeada</td><td class="td-real">@(t.FchPlaneada?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Programado</td><td class="td-real">@(t.FchRealProgramado?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Hilandería</td><td class="td-real">@(t.FchRealProduccion?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Lote disponible</td><td class="td-real">@(t.FchRealPartida?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>TT Inicio</td><td class="td-real">@(t.FchRealTinIni?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Prog. TT</td><td class="td-real">@(t.FchProgTin?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>TT Fin</td><td class="td-real">@(t.FchRealTinFin?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Secado</td><td class="td-real">@(t.FchRealSecado?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Calidad</td><td class="td-real">@(t.FchRealCalidad?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Almacén PT</td><td class="td-real">@(t.FchRealAlmPt?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Despacho</td>
+                                                    <td class="td-real @(t.DiasDesvioCliente.HasValue && t.DiasDesvioCliente.Value > 0 ? "late" : "")">
+                                                        @(t.FchRealDespacho?.ToString("dd/MM/yy") ?? "—")
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="mt-2 d-flex gap-2 flex-wrap" style="font-size:.78rem;color:#718096;">
+                                    <span><strong>Ciclo total:</strong> @(t.DiasTotalCiclo?.ToString("N1") ?? "—") días</span>
+                                    <span>·</span>
+                                    <span><strong>Retraso:</strong> @t.DiasRetraso días</span>
+                                    @if (t.DiasDesvioCliente.HasValue)
+                                    {
+                                        <span>·</span>
+                                        <span><strong>Desvío cliente:</strong>
+                                            <span class="badge @t.DesvioClienteCss ms-1">
+                                                @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N0") d
+                                            </span>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Métricas de tiempo ──────────────────────────────────── -->
     <div class="card traza-card">
         <div class="card-header bg-white fw-semibold py-2">
-            <i class="bi bi-clock-history me-1"></i> Métricas de tiempo (días)
+            <i class="bi bi-stopwatch me-1"></i> Métricas de tiempo (días entre etapas)
+            <span class="text-muted fw-normal ms-2" style="font-size:.75rem;">
+                — <strong class="text-dark">valor</strong> = real (etapa completada) &nbsp;|&nbsp;
+                  <strong class="text-secondary">~valor</strong> = estimado (etapa aún en curso o futura) &nbsp;|&nbsp;
+                  <strong class="text-muted">—</strong> = sin datos &nbsp;|&nbsp;
+                  <i class="bi bi-info-circle"></i> pasa el cursor sobre cada celda para ver las fechas comparadas
+            </span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
+                @{
+                    // Calcula días entre dos fechas (TotalDays, incluye fracción horaria): prioriza real, cae a estimado.
+                    (double? r, double? e) Dias(DateTime? ra, DateTime? rb, DateTime? ea, DateTime? eb) => (
+                        ra.HasValue && rb.HasValue ? (double?)(rb.Value - ra.Value).TotalDays : null,
+                        ea.HasValue && eb.HasValue ? (double?)(eb.Value - ea.Value).TotalDays : null
+                    );
+                    // Normaliza a medianoche los campos que vienen de Oracle DATE sin hora (PEDIDO.FECHA, F_MAXPED).
+                    DateTime? D(DateTime? dt) => dt?.Date;
+                    // Formatea fecha para tooltip: omite hora si es exactamente medianoche.
+                    string FD(DateTime? dt) => !dt.HasValue ? "—" :
+                        dt.Value.TimeOfDay == TimeSpan.Zero
+                            ? dt.Value.ToString("dd/MM/yy")
+                            : dt.Value.ToString("dd/MM/yy HH:mm");
+                    // Renderiza celda con tooltip explicativo. ~ = estimado (etapa aún no ocurrió).
+                    Microsoft.AspNetCore.Html.HtmlString RD(double? r, double? e, string tip) =>
+                        r.HasValue ? new($"<span title='{tip}'>{r.Value:N1}</span>") :
+                        e.HasValue ? new($"<span class='text-secondary' title='Estimado · {tip}'>~{e.Value:N1}</span>") :
+                                     new($"<span class='text-muted' title='Sin datos · {tip}'>—</span>");
+                    // Color badge para desvío
+                    string BC(double? d) => d switch { null=>"secondary", >7=>"danger", >3=>"warning", >0=>"info", _=>"success" };
+                }
                 <table class="table table-sm tbl-traza table-hover mb-0">
-                    <thead class="table-light">
+                    <thead class="tbl-metrics-hd">
                         <tr>
-                            <th>Ítem</th>
-                            <th>Pedido → Partida</th>
-                            <th>En Tintorería</th>
-                            <th>Partida → Alm PT</th>
-                            <th>Alm PT → Despacho</th>
-                            <th>Ciclo total</th>
-                            <th>Desvío vs Cliente</th>
-                            <th>Paso actual</th>
-                            <th>Retraso</th>
-                            <th>Ciclo</th>
+                            <th>Ítem / Artículo</th>
+                            <th class="text-end" title="Días desde pedido hasta asignación de programa (PASO 02)">Ped→Prog</th>
+                            <th class="text-end" title="Hilandería: inicio producción → lote disponible (PASO 03→04)">Hilandería</th>
+                            <th class="text-end" title="Espera TT: lote disponible → ingreso a tintorería, incluye buffer lab (PASO 04→06)">Espera TT</th>
+                            <th class="text-end" title="Tintorería: inicio → fin de baños (PASO 06→07)">Tintorería</th>
+                            <th class="text-end" title="Secado: fin tintorería → fin secado (PASO 07→08)">Secado</th>
+                            <th class="text-end" title="C.Calidad: fin secado → CC aprobado / revisado (PASO 08→09/11)">Calidad</th>
+                            <th class="text-end fw-semibold" title="Ciclo total: pedido → despacho (PASO 01→14)">Ciclo total</th>
+                            <th class="text-center" title="Desvío respecto a fecha compromiso con el cliente">Desvío</th>
+                            <th class="text-center">Paso actual</th>
+                            <th class="text-end">Retraso (d)</th>
+                            <th class="text-center">Ciclo N°</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var t in Model.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+                        @foreach (var t in lista.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
                         {
+                            // Ped→Prog y Ciclo/Desvío usan D() porque FchPedido/FchCompromisoCliente
+                            // vienen de Oracle DATE sin hora. Las etapas intermedias son SYSDATE→SYSDATE.
+                            var (rProg,  eProg ) = Dias(D(t.FchPedido),              D(t.FchRealProgramado),      null,                    null);
+                            var (rHil,   eHil  ) = Dias(t.FchRealProduccion,         t.FchRealPartida,            t.FchEstHilanderia,      t.FchEstPartida);
+                            var (rEspTT, eEspTT) = Dias(t.FchRealPartida,            t.FchRealTinIni,             t.FchEstPartida,         t.FchEstTinIni);
+                            var (rTin,   eTin  ) = Dias(t.FchRealTinIni,             t.FchRealTinFin,             t.FchEstTinIni,          t.FchEstTinFin);
+                            var (rSec,   eSec  ) = Dias(t.FchRealTinFin,             t.FchRealSecado,             t.FchEstTinFin,          t.FchEstSecado);
+                            var (rCal,   eCal  ) = Dias(t.FchRealSecado,             t.FchRealCalidad,            t.FchEstSecado,          t.FchEstCalidad);
+                            var (rTotal, eTotal) = Dias(D(t.FchPedido),              t.FchRealDespacho,           D(t.FchPedido),          t.FchEstDespacho);
+                            var (rDesv,  eDesv ) = Dias(D(t.FchCompromisoCliente),   t.FchRealDespacho,           D(t.FchCompromisoCliente), t.FchEstDespacho);
+                            var desv    = rDesv ?? eDesv;
+                            var desvEst = !rDesv.HasValue && eDesv.HasValue;
+                            // Tooltips: muestran las fechas exactas que se compararon (reales o estimadas)
+                            var ttProg  = $"Pedido: {FD(t.FchPedido)} → Programado: {FD(t.FchRealProgramado)}";
+                            var ttHil   = rHil.HasValue
+                                ? $"Real · Inicio prod.: {FD(t.FchRealProduccion)} → Lote listo: {FD(t.FchRealPartida)}"
+                                : $"Est.  · Inicio hil.: {FD(t.FchEstHilanderia)} → Lote listo: {FD(t.FchEstPartida)}";
+                            var ttEspTT = rEspTT.HasValue
+                                ? $"Real · Lote listo: {FD(t.FchRealPartida)} → Entrada TT: {FD(t.FchRealTinIni)}"
+                                : $"Est.  · Lote listo: {FD(t.FchEstPartida)} → Entrada TT: {FD(t.FchEstTinIni)}";
+                            var ttTin   = rTin.HasValue
+                                ? $"Real · Inicio TT: {FD(t.FchRealTinIni)} → Fin baños: {FD(t.FchRealTinFin)}"
+                                : $"Est.  · Inicio TT: {FD(t.FchEstTinIni)} → Fin baños: {FD(t.FchEstTinFin)}";
+                            var ttSec   = rSec.HasValue
+                                ? $"Real · Fin TT: {FD(t.FchRealTinFin)} → Fin secado: {FD(t.FchRealSecado)}"
+                                : $"Est.  · Fin TT: {FD(t.FchEstTinFin)} → Fin secado: {FD(t.FchEstSecado)}";
+                            var ttCal   = rCal.HasValue
+                                ? $"Real · Fin secado: {FD(t.FchRealSecado)} → CC aprobado: {FD(t.FchRealCalidad)}"
+                                : $"Est.  · Fin secado: {FD(t.FchEstSecado)} → CC aprobado: {FD(t.FchEstCalidad)}";
+                            var ttTotal = rTotal.HasValue
+                                ? $"Real · Pedido: {FD(t.FchPedido)} → Despacho: {FD(t.FchRealDespacho)}"
+                                : $"Est.  · Pedido: {FD(t.FchPedido)} → Despacho est.: {FD(t.FchEstDespacho)}";
+                            var ttDesv  = rDesv.HasValue
+                                ? $"Real · Compromiso: {FD(t.FchCompromisoCliente)} → Despacho: {FD(t.FchRealDespacho)}"
+                                : eDesv.HasValue
+                                    ? $"Est.  · Compromiso: {FD(t.FchCompromisoCliente)} → Desp.est.: {FD(t.FchEstDespacho)}"
+                                    : $"Compromiso: {FD(t.FchCompromisoCliente)}";
                             <tr>
-                                <td class="fw-semibold">@t.Nro.@t.NumDet</td>
-                                <td>@(t.DiasPedidoAPartida?.ToString("N1") ?? "-")</td>
-                                <td>@(t.DiasEnTintoreria?.ToString("N1") ?? "-")</td>
-                                <td>@(t.DiasPartidaAAlmPt?.ToString("N1") ?? "-")</td>
-                                <td>@(t.DiasAlmPtADespacho?.ToString("N1") ?? "-")</td>
-                                <td>@(t.DiasTotalCiclo?.ToString("N1") ?? "-")</td>
                                 <td>
-                                    @if (t.DiasDesvioCliente.HasValue)
+                                    <span class="fw-semibold">@t.Nro.@t.NumDet</span>
+                                    @if (!string.IsNullOrEmpty(t.CodArt))
                                     {
-                                        <span class="badge-desvio badge @t.DesvioClienteCss">
-                                            @(t.DiasDesvioCliente.Value > 0 ? "+" : "")@t.DiasDesvioCliente.Value.ToString("N1")
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted">-</span>
+                                        <br/>
+                                        <span class="text-muted" style="font-size:.75rem;">@t.CodArt</span>
+                                        @if (!string.IsNullOrEmpty(t.Color) || !string.IsNullOrEmpty(t.Titulo))
+                                        {
+                                            <span class="text-secondary" style="font-size:.72rem;"> · @t.Color @t.Titulo</span>
+                                        }
                                     }
                                 </td>
-                                <td>@t.CodPasoAct</td>
-                                <td class="@(t.DiasRetraso > 0 ? "text-danger fw-semibold" : "")">@t.DiasRetraso</td>
-                                <td>@t.NroCiclo</td>
+                                <td class="text-end">@RD(rProg,  eProg,  ttProg)</td>
+                                <td class="text-end">@RD(rHil,   eHil,   ttHil)</td>
+                                <td class="text-end">@RD(rEspTT, eEspTT, ttEspTT)</td>
+                                <td class="text-end">@RD(rTin,   eTin,   ttTin)</td>
+                                <td class="text-end">@RD(rSec,   eSec,   ttSec)</td>
+                                <td class="text-end">@RD(rCal,   eCal,   ttCal)</td>
+                                <td class="text-end fw-semibold">@RD(rTotal, eTotal, ttTotal)</td>
+                                <td class="text-center">
+                                    @if (desv.HasValue)
+                                    {
+                                        <span class="badge-desvio badge @BC(desv)" title="@ttDesv">
+                                            @(desvEst ? "~" : "")@(desv.Value > 0 ? "+" : "")@desv.Value.ToString("N0")
+                                        </span>
+                                    }
+                                    else { <span class="text-muted" title="@($"Compromiso: {FD(t.FchCompromisoCliente)}")">—</span> }
+                                </td>
+                                <td class="text-center">
+                                    @{
+                                        var cpColor  = colorPasoTraza.TryGetValue(t.CodPasoAct, out var cp)  ? cp  : "#6c757d";
+                                        var cpNombre = nombrePasoTraza.TryGetValue(t.CodPasoAct, out var cn) ? cn  : t.CodPasoAct;
+                                    }
+                                    <span class="badge text-white d-inline-flex align-items-center gap-1" style="background:@cpColor;font-size:.72rem;white-space:normal;text-align:left;line-height:1.3;">
+                                        <span>⬤</span>
+                                        <span>@t.CodPasoAct — @cpNombre</span>
+                                    </span>
+                                </td>
+                                <td class="text-end @(t.DiasRetraso > 0 ? "text-danger fw-semibold" : "text-muted")">@t.DiasRetraso</td>
+                                <td class="text-center"><span class="badge bg-light text-dark border">C.@t.NroCiclo</span></td>
                             </tr>
                         }
                     </tbody>
@@ -169,4 +393,441 @@ else
             </div>
         </div>
     </div>
+}
+
+@section Scripts {
+@if (lista.Any())
+{
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3"></script>
+<script>
+(function () {
+    @{
+        // ── Etapas fijas ──────────────────────────────────────────────
+        var etapas = new[]
+        {
+            "Ped→Prog",
+            "Hilandería",
+            "Espera TT",
+            "Tintorería",
+            "Secado",
+            "Calidad",
+            "Despacho"
+        };
+
+        // ── Por ítem: calcula días reales y estimados ────────────────
+        var itemsData = lista.OrderBy(x => x.Nro).ThenBy(x => x.NumDet).Select(t =>
+        {
+            // TotalDays con fracción horaria (válida para el gráfico: barras proporcionales por duración real)
+            double? Dif(DateTime? a, DateTime? b) =>
+                a.HasValue && b.HasValue && b >= a ? (double?)(b.Value - a.Value).TotalDays : null;
+
+            var lbl = !string.IsNullOrEmpty(t.CodArt)
+                ? (t.CodArt.Length > 14 ? t.CodArt[..12] + "…" : t.CodArt)
+                : $"{t.Nro}.{t.NumDet}";
+
+            var rDias = new double?[]
+            {
+                Dif(t.FchPedido.Date,   t.FchRealProgramado?.Date), // igual que D() en tabla: Oracle DATE sin hora
+                Dif(t.FchRealProduccion, t.FchRealPartida),
+                Dif(t.FchRealPartida,    t.FchRealTinIni),
+                Dif(t.FchRealTinIni,     t.FchRealTinFin),
+                Dif(t.FchRealTinFin,     t.FchRealSecado),
+                Dif(t.FchRealSecado,     t.FchRealCalidad),
+                Dif(t.FchRealAlmPt,      t.FchRealDespacho),
+            };
+
+            var eDias = new double?[]
+            {
+                null,                                                // Ped→Prog sin est. directa
+                Dif(t.FchEstHilanderia, t.FchEstPartida),            // = tabla: inicio hil → lote listo (PASO 03→04)
+                Dif(t.FchEstPartida,    t.FchEstTinIni),             // = tabla: lote listo → entrada TT (PASO 04→06)
+                Dif(t.FchEstTinIni,     t.FchEstTinFin),
+                Dif(t.FchEstTinFin,     t.FchEstSecado),
+                Dif(t.FchEstSecado,     t.FchEstCalidad),
+                Dif(t.FchEstCalidad,    t.FchEstDespacho ?? t.FchCompromisoCliente),
+            };
+
+            return new { Lbl = lbl, R = rDias, E = eDias };
+        }).ToList();
+
+        // ── Agregado: promedio de días por etapa (todas los ítems) ──
+        double? Avg(IEnumerable<double?> vals)
+        {
+            var v = vals.Where(x => x.HasValue && x > 0).Select(x => x!.Value).ToList();
+            return v.Any() ? (double?)v.Average() : null;
+        }
+
+        var realProm = Enumerable.Range(0, etapas.Length)
+            .Select(i => Avg(itemsData.Select(d => d.R[i]))).ToArray();
+        var estProm  = Enumerable.Range(0, etapas.Length)
+            .Select(i => Avg(itemsData.Select(d => d.E[i]))).ToArray();
+        var desvProm = Enumerable.Range(0, etapas.Length)
+            .Select(i =>
+            {
+                var r = realProm[i]; var e = estProm[i];
+                return r.HasValue && e.HasValue ? (double?)(r.Value - e.Value) : null;
+            }).ToArray();
+
+        string JsArr(double?[] arr) =>
+            "[" + string.Join(",", arr.Select(v => v.HasValue ? v.Value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) : "null")) + "]";
+
+        string JsArrNull(double?[] arr) =>
+            "[" + string.Join(",", arr.Select(v => v.HasValue ? v.Value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) : "null")) + "]";
+
+        // Para las barras reales: null → 0 (barra gris "pendiente"), real → valor
+        string JsArrReal(double?[] arr) =>
+            "[" + string.Join(",", arr.Select(v => v.HasValue ? v.Value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) : "0")) + "]";
+
+        // Marca cuáles posiciones son null (para colorear diferente en JS)
+        string JsArrIsNull(double?[] arr) =>
+            "[" + string.Join(",", arr.Select(v => v.HasValue ? "false" : "true")) + "]";
+
+        // Colores de desvío: verde si <0 (más rápido), rojo si >0 (retraso), gris si null
+        var desvColors = desvProm.Select(v =>
+            !v.HasValue ? "'#adb5bd'" : v.Value <= 0 ? "'#047857'" : "'#dc2626'").ToArray();
+        var desvColorsStr = "[" + string.Join(",", desvColors) + "]";
+
+        // Series por ítem (si hay más de 1 ítem, dibujamos una línea por ítem)
+        bool multiItem = itemsData.Count > 1;
+        var itemSeriesEst  = itemsData.Select((d, i) => new {
+            name  = d.Lbl + " Est.",
+            type  = "bar",
+            data  = d.E
+        }).ToList();
+        var itemSeriesReal = itemsData.Select((d, i) => new {
+            name  = d.Lbl + " Real",
+            type  = "bar",
+            data  = d.R
+        }).ToList();
+    }
+
+    // ════════════════════════════════════════════════════════
+    // GRÁFICO 1: Duración por etapa — barras agrupadas Est vs Real
+    // null real → 0 (barra gris "Sin datos aún")
+    // ════════════════════════════════════════════════════════
+    var realEsNull  = @Html.Raw(JsArrIsNull(realProm));   // true si no hay fecha real para esa etapa
+    var estEsNull   = @Html.Raw(JsArrIsNull(estProm));    // true si no hay fecha estimada
+    var realData    = @Html.Raw(JsArrReal(realProm));      // null → 0
+    var estData     = @Html.Raw(JsArr(estProm));           // null sigue siendo null
+
+    var etapaDescsGlobal = {
+        'Ped\u2192Prog':   'Pedido registrado \u2192 Asignado a programa (PASO 01\u219202)',
+        'Hilander\u00eda': 'Inicio producci\u00f3n \u2192 Lote disponible (PASO 03\u219204)',
+        'Espera TT':       'Lote disponible \u2192 Ingreso tintor\u00eda (PASO 04\u219206)',
+        'Tintor\u00eda':   'Inicio TT \u2192 Fin de ba\u00f1os (PASO 06\u219207)',
+        'Secado':          'Fin tintor\u00eda \u2192 Fin secado (PASO 07\u219208)',
+        'Calidad':         'Fin secado \u2192 CC aprobado (PASO 08\u219209/11)',
+        'Despacho':        'Alm\u00e9c. PT \u2192 Despacho (PASO 12\u219214)',
+    };
+
+    var optDur = {
+        series: [
+            {
+                name: 'Estimado (d\u00edas)',
+                type: 'bar',
+                data: estData
+            },
+            {
+                name: 'Real (d\u00edas)',
+                type: 'bar',
+                data: realData
+            }
+        ],
+        chart: {
+            type: 'bar',
+            height: 360,
+            fontFamily: 'inherit',
+            toolbar: { show: false },
+            animations: { enabled: true, speed: 500 }
+        },
+        colors: ['#90cdf4', '#2563eb'],
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '55%',
+                borderRadius: 3,
+                dataLabels: { position: 'top' },
+                minHeight: 6
+            }
+        },
+        dataLabels: {
+            enabled: true,
+            formatter: function(v, opts) {
+                const si  = opts.seriesIndex;
+                const dpi = opts.dataPointIndex;
+                if (si === 0) {
+                    // Estimado
+                    return estEsNull[dpi] ? '' : (v === 0 ? '0d' : v.toFixed(1) + 'd');
+                } else {
+                    // Real
+                    if (realEsNull[dpi]) return 'pend.';
+                    return v === 0 ? '0d' : v.toFixed(1) + 'd';
+                }
+            },
+            offsetY: -20,
+            style: {
+                fontSize: '11px',
+                fontWeight: 700,
+                colors: ['#2b6cb0', '#1a365d']
+            }
+        },
+        fill: {
+            type: ['solid', 'solid'],
+            opacity: [
+                0.45,
+                // Real: si es nulo (pendiente) → muy transparente, si tiene dato → sólido
+                1
+            ]
+        },
+        stroke: { show: true, width: 2, colors: ['transparent'] },
+        xaxis: {
+            categories: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(etapas)),
+            labels: {
+                style: { fontWeight: 700, fontSize: '12px', colors: '#4a5568' }
+            }
+        },
+        yaxis: {
+            min: 0,
+            title: {
+                text: 'D\u00edas',
+                style: { fontWeight: 700, color: '#718096', fontSize: '11px' }
+            },
+            labels: {
+                formatter: v => v != null ? v.toFixed(0) + 'd' : ''
+            }
+        },
+        legend: {
+            position: 'top',
+            fontSize: '12px',
+            fontWeight: 600,
+            customLegendItems: ['Estimado (d\u00edas)', 'Real (d\u00edas)', 'Sin datos a\u00fan (pendiente)'],
+            markers: {
+                radius: 2,
+                fillColors: ['#90cdf4', '#2563eb', '#cbd5e0']
+            }
+        },
+        grid: {
+            borderColor: '#e2e8f0',
+            strokeDashArray: 4,
+            yaxis: { lines: { show: true } }
+        },
+        tooltip: {
+            custom: function({ series, seriesIndex, dataPointIndex, w }) {
+                const etapa   = w.globals.labels[dataPointIndex];
+                const desc    = etapaDescsGlobal[etapa] || etapa;
+                const vEst    = estData[dataPointIndex];
+                const vReal   = realData[dataPointIndex];
+                const sinEst  = estEsNull[dataPointIndex];
+                const sinReal = realEsNull[dataPointIndex];
+
+                const fmtEst  = sinEst  ? '<em style="color:#a0aec0">Sin fecha estimada</em>'
+                                        : (vEst === 0 ? '0.0 d\u00edas (mismo d\u00eda)' : vEst.toFixed(1) + '\u00a0d\u00edas');
+                const fmtReal = sinReal ? '<em style="color:#fc8181">\u23f3 A\u00fan no registrado</em>'
+                                        : (vReal === 0 ? '0.0 d\u00edas (mismo d\u00eda)' : vReal.toFixed(1) + '\u00a0d\u00edas');
+
+                let desvHtml = '';
+                if (!sinEst && !sinReal && vEst != null) {
+                    const desv = vReal - vEst;
+                    const color = desv <= 0 ? '#68d391' : '#fc8181';
+                    const signo = desv >= 0 ? '+' : '';
+                    const texto = desv === 0 ? 'Exactamente en tiempo' : desv < 0 ? 'M\u00e1s r\u00e1pido de lo estimado' : 'Retraso vs. estimado';
+                    desvHtml = `<div class="apx-tt-row" style="border-top:1px solid rgba(255,255,255,.1);margin-top:5px;padding-top:5px;"><span class="apx-tt-ser">Desv\u00edo</span><span class="apx-tt-val" style="color:${color}">${signo}${desv.toFixed(1)}d \u00b7 ${texto}</span></div>`;
+                }
+
+                return `<div class="apx-tt">
+                    <div class="apx-tt-etapa">${etapa}</div>
+                    <div class="apx-tt-desc">${desc}</div>
+                    <div class="apx-tt-row"><span class="apx-tt-ser"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#90cdf4;margin-right:5px;"></span>Estimado</span><span class="apx-tt-val">${fmtEst}</span></div>
+                    <div class="apx-tt-row"><span class="apx-tt-ser"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${sinReal ? '#cbd5e0' : '#2563eb'};margin-right:5px;"></span>Real</span><span class="apx-tt-val">${fmtReal}</span></div>
+                    ${desvHtml}
+                </div>`;
+            }
+        },
+        noData: {
+            text: 'Sin datos de fechas suficientes para calcular duraciones.',
+            style: { fontSize: '13px', color: '#718096' }
+        }
+    };
+
+    // Colorear barras reales: pendiente → gris claro, con dato → azul normal
+    // ApexCharts grouped bar no soporta per-bar color nativo,
+    // pero sí soporta colores por función en single-series.
+    // En grouped usamos un hack post-render para recolorear las barras pendientes.
+    var chartDur = new ApexCharts(document.querySelector('#chartDuraciones'), optDur);
+    chartDur.render().then(function() {
+        // Recolorear barras reales (serie índice 1) que son "pendiente"
+        var svgBars = document.querySelectorAll('#chartDuraciones .apexcharts-bar-series');
+        if (svgBars.length >= 2) {
+            var realBars = svgBars[1].querySelectorAll('path, rect');
+            realBars.forEach(function(el, i) {
+                if (realEsNull[i]) {
+                    el.setAttribute('fill', '#e2e8f0');
+                    el.setAttribute('stroke', '#cbd5e0');
+                    el.style.opacity = '0.8';
+                }
+            });
+        }
+    });
+
+    // ════════════════════════════════════════════════════════
+    // GRÁFICO 2: Desvío neto por etapa (Real − Est)
+    // null → 0 con barra gris "pendiente"
+    // ════════════════════════════════════════════════════════
+    var desvRaw      = @Html.Raw(JsArrNull(desvProm));      // null = sin datos reales aún
+    var desvEsNull   = @Html.Raw(JsArrIsNull(desvProm));    // true donde no hay dato real
+    // Para graficar: null → 0 (barra gris pendiente), valor real → valor real
+    var desvGrafico  = desvRaw.map(v => v === null ? 0 : v);
+
+    // Valor mínimo del eje Y: garantizar que el eje siempre muestre ≥ ±1 aunque todos sean 0
+    var desvMin = Math.min(...desvRaw.filter(v => v !== null).concat([0]));
+    var desvMax = Math.max(...desvRaw.filter(v => v !== null).concat([0]));
+
+    var optDesv = {
+        series: [{
+            name: 'Desv\u00edo (d\u00edas)',
+            data: desvGrafico
+        }],
+        chart: {
+            type: 'bar',
+            height: 260,
+            fontFamily: 'inherit',
+            toolbar: { show: false },
+            animations: { enabled: true, speed: 500 }
+        },
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '50%',
+                borderRadius: 3,
+                minHeight: 6,
+                dataLabels: { position: 'top' }
+            }
+        },
+        // Colores por barra: pendiente → gris, ≤0 → verde, >0 → rojo
+        colors: [function({ value, dataPointIndex }) {
+            if (desvEsNull[dataPointIndex]) return '#cbd5e0';
+            return value <= 0 ? '#047857' : '#dc2626';
+        }],
+        dataLabels: {
+            enabled: true,
+            formatter: function(v, opts) {
+                const dpi = opts.dataPointIndex;
+                if (desvEsNull[dpi]) return 'pend.';
+                if (v === 0)         return '\u22120d \u2713';
+                return (v > 0 ? '+' : '') + v.toFixed(1) + 'd';
+            },
+            offsetY: function(seriesIndex, dataPointIndex) {
+                // Etiqueta arriba de la barra (positiva) o debajo (negativa)
+                return -18;
+            },
+            style: {
+                fontSize: '11px',
+                fontWeight: 700,
+                colors: [function({ value, dataPointIndex }) {
+                    if (desvEsNull[dataPointIndex]) return '#718096';
+                    return value <= 0 ? '#047857' : '#dc2626';
+                }]
+            }
+        },
+        xaxis: {
+            categories: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(etapas)),
+            labels: {
+                style: { fontWeight: 700, fontSize: '12px', colors: '#4a5568' },
+                // Añadir ícono semáforo debajo de cada etiqueta
+                formatter: function(val) { return val; }
+            }
+        },
+        yaxis: {
+            min: Math.min(desvMin - 1, -1),
+            max: Math.max(desvMax + 1,  1),
+            title: {
+                text: 'Real \u2212 Estimado (d\u00edas)',
+                style: { fontWeight: 700, color: '#718096', fontSize: '11px' }
+            },
+            labels: {
+                formatter: v => v === 0 ? '0d' : (v > 0 ? '+' : '') + v.toFixed(0) + 'd',
+                style: { colors: '#718096', fontSize: '11px' }
+            }
+        },
+        grid: {
+            borderColor: '#e2e8f0',
+            strokeDashArray: 4,
+            yaxis: { lines: { show: true } }
+        },
+        annotations: {
+            yaxis: [{
+                y: 0,
+                borderColor: '#2d3748',
+                borderWidth: 2,
+                strokeDashArray: 0,
+                label: {
+                    text: '\u2714 En tiempo',
+                    position: 'right',
+                    offsetX: -10,
+                    style: {
+                        color: '#fff',
+                        background: '#2d3748',
+                        fontWeight: 700,
+                        fontSize: '10px',
+                        padding: { left: 6, right: 6, top: 2, bottom: 2 }
+                    }
+                }
+            }]
+        },
+        tooltip: {
+            custom: function({ series, seriesIndex, dataPointIndex, w }) {
+                const etapaDescs = {
+                    'Ped\u2192Prog':   'Pedido registrado \u2192 Asignado a programa',
+                    'Hilander\u00eda': 'Inicio producci\u00f3n \u2192 Lote disponible',
+                    'Espera TT':       'Lote disponible \u2192 Ingreso a tintor\u00eda',
+                    'Tintor\u00eda':   'Inicio TT \u2192 Fin de ba\u00f1os',
+                    'Secado':          'Fin tintor\u00eda \u2192 Fin secado',
+                    'Calidad':         'Fin secado \u2192 CC aprobado / revisado',
+                    'Despacho':        'Alm\u00e9c. PT \u2192 Despacho',
+                };
+                const etapa   = w.globals.labels[dataPointIndex];
+                const desc    = etapaDescs[etapa] || etapa;
+                const isPend  = desvEsNull[dataPointIndex];
+                const v       = desvRaw[dataPointIndex];
+
+                let valorHtml, icono, color;
+                if (isPend) {
+                    color    = '#a0aec0';
+                    icono    = '\u23f3';
+                    valorHtml = '<em style="color:#a0aec0">A\u00fan sin fechas reales registradas</em>';
+                } else if (v === 0) {
+                    color    = '#68d391';
+                    icono    = '\u2714';
+                    valorHtml = '<strong style="color:#68d391">0.0 d\u00edas \u00b7 Exactamente en tiempo</strong>';
+                } else if (v < 0) {
+                    color    = '#68d391';
+                    icono    = '\u2b06';
+                    valorHtml = `<strong style="color:#68d391">${v.toFixed(1)} d\u00edas m\u00e1s r\u00e1pido</strong> que lo estimado`;
+                } else {
+                    color    = '#fc8181';
+                    icono    = '\u26a0';
+                    valorHtml = `<strong style="color:#fc8181">+${v.toFixed(1)} d\u00edas de retraso</strong> vs. estimado`;
+                }
+
+                return `<div class="apx-tt">
+                    <div class="apx-tt-etapa">${icono} ${etapa}</div>
+                    <div class="apx-tt-desc">${desc}</div>
+                    <div class="apx-tt-row" style="margin-top:6px;">
+                        <span class="apx-tt-ser">Desv\u00edo</span>
+                        <span class="apx-tt-val">${valorHtml}</span>
+                    </div>
+                </div>`;
+            }
+        },
+        noData: {
+            text: 'A\u00fan no hay etapas con fechas reales \u2014 las barras aparecer\u00e1n conforme avance el pedido.',
+            style: { fontSize: '12px', color: '#718096' }
+        }
+    };
+
+    var chartDesv = new ApexCharts(document.querySelector('#chartDesvios'), optDesv);
+    chartDesv.render();
+})();
+</script>
+}
 }

@@ -1,0 +1,135 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnParam>
+
+@{
+    ViewData["Title"] = "Parámetros PLN";
+    var okMsg = TempData["Exito"] as string;
+    var params_ = Model.ToList();
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" />
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-action="Index">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Parámetros</li>
+}
+
+@if (!string.IsNullOrEmpty(okMsg))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@okMsg
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-sliders fs-4 text-secondary"></i>
+    <h4 class="mb-0">Parámetros del módulo PLN_</h4>
+</div>
+<p class="text-muted small mb-4">
+    Controlan umbrales de alertas, horas de turno y buffers de producción.
+    Los cambios se aplican de inmediato en la próxima ejecución de <code>PKG_PLN</code>.
+</p>
+
+@if (!params_.Any())
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        No se encontraron parámetros en <code>PLN_PARAM</code>. Verifique que la tabla esté cargada.
+    </div>
+}
+else
+{
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:200px;">Parámetro</th>
+                        <th>Descripción</th>
+                        <th class="text-center" style="width:130px;">Valor actual</th>
+                        <th class="text-center" style="width:200px;">Nuevo valor</th>
+                        <th style="width:140px;">Última modificación</th>
+                        <th style="width:80px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in params_)
+                    {
+                        <tr>
+                            <td>
+                                <code class="text-primary fw-semibold">@p.CodParam</code>
+                            </td>
+                            <td class="text-muted small">
+                                @if (!string.IsNullOrEmpty(p.Descripcion))
+                                {
+                                    @p.Descripcion
+                                }
+                                else if (FabricaHilos.Models.Produccion.Planeamiento.PlnParam.Defaults.TryGetValue(p.CodParam, out var def))
+                                {
+                                    @def.Descripcion
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-center fw-bold">
+                                @if (p.ValorNum.HasValue)
+                                {
+                                    <span class="badge bg-primary fs-6 px-3">@p.ValorNum.Value.ToString("G29")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <form asp-action="ActualizarParam" method="post" class="d-flex gap-2 justify-content-center align-items-center">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="codParam" value="@p.CodParam" />
+                                    <input type="number"
+                                           name="valorNum"
+                                           class="form-control form-control-sm text-center"
+                                           style="width:90px;"
+                                           step="any"
+                                           min="0"
+                                           required
+                                           value="@(p.ValorNum.HasValue ? p.ValorNum.Value.ToString("G29") : "")"
+                                           title="Ingrese el nuevo valor numérico para @p.CodParam" />
+                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Guardar">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                </form>
+                            </td>
+                            <td class="small text-muted">
+                                @if (p.AMdfecha.HasValue)
+                                {
+                                    <span title="Usuario: @p.AMduser">
+                                        @p.AMdfecha.Value.ToString("dd/MM/yy HH:mm")
+                                        @if (!string.IsNullOrEmpty(p.AMduser))
+                                        {
+                                            <br /><span class="text-secondary">@p.AMduser</span>
+                                        }
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Sin modificar</span>
+                                }
+                            </td>
+                            <td></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-3 small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Solo se actualiza <strong>VALOR_NUM</strong>. Los cambios quedan registrados en <code>A_MDUSER</code> y <code>A_MDFECHA</code>.
+    </div>
+}

@@ -281,7 +281,8 @@ public class MenuService : IMenuService
                 "PlaneamientoPedido",
                 "PlaneamientoCargaMaquinas",
                 "PlaneamientoAlertas",
-                "PlaneamientoKPIs"),
+                "PlaneamientoKPIs",
+                "PlaneamientoPendientesDespacho"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
                 && TieneAlguno("Planeamiento", "PlaneamientoDashboard"),
@@ -298,7 +299,10 @@ public class MenuService : IMenuService
             PlaneamientoKPIs = global.PlaneamientoKPIs
                 && TieneAlguno("Planeamiento", "PlaneamientoKPIs"),
 
-            // ?? Sub-módulos: Sistemas ?????????????????????????????????????????
+            PlaneamientoPendientesDespacho = global.PlaneamientoPendientesDespacho
+                && TieneAlguno("Planeamiento", "PlaneamientoPendientesDespacho"),
+
+            // ?? Sub-m
             // Sub-padre SistemasIndicadores visible si tiene también cualquier hijo suyo
             SistemasIndicadores = global.SistemasIndicadores
                 && TieneAlguno("Sistemas", "SistemasIndicadores",
