@@ -67,10 +67,10 @@ public interface IRequisicionService
 
     /// <summary>
     /// Devuelve datos de firma (nombre, cargo, imagen) para los tres firmantes del requerimiento:
-    /// Hecho por (A_ADUSER), Aprobado por (AUTORIZA), Recibido por (RECIBE).
+    /// Hecho por (RESPONSABLE), Aprobado por (AUTORIZA), Recibido por (RECIBE).
     /// </summary>
     Task<(FirmaOcDto? HechoPor, FirmaOcDto? AprobadoPor, FirmaOcDto? RecibidoPor)> ObtenerFirmasRequisicionAsync(
-        string? aAduser, string? autoriza, string? recibe);
+        string? responsable, string? autoriza, string? recibe);
 }
 
 public class RequisicionService : OracleServiceBase, IRequisicionService
@@ -100,6 +100,8 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
         string? buscar, DateTime? fechaInicio, DateTime? fechaFin,
         string? estado, int page = 1, int pageSize = 20)
     {
+        buscar = buscar?.Trim();
+
         var connStr   = GetOracleConnectionString();
         var items     = new List<RequisicionDto>();
         int total     = 0;
@@ -1334,15 +1336,15 @@ public async Task ActualizarPrecioItemAsync(string tipDoc, int serie, long numRe
 }
 
 public async Task<(FirmaOcDto? HechoPor, FirmaOcDto? AprobadoPor, FirmaOcDto? RecibidoPor)> ObtenerFirmasRequisicionAsync(
-    string? aAduser, string? autoriza, string? recibe)
+    string? responsable, string? autoriza, string? recibe)
 {
     FirmaOcDto? hechoPor = null, aprobadoPor = null, recibidoPor = null;
 
     var codigos = new[]
     {
-        (Codigo: aAduser,  Rol: "HECHO POR"),
-        (Codigo: autoriza, Rol: "APROBADO POR"),
-        (Codigo: recibe,   Rol: "RECIBIDO POR"),
+        (Codigo: responsable, Rol: "HECHO POR"),
+        (Codigo: autoriza,    Rol: "APROBADO POR"),
+        (Codigo: recibe,      Rol: "RECIBIDO POR"),
     };
 
     try
@@ -1432,7 +1434,7 @@ public async Task<(FirmaOcDto? HechoPor, FirmaOcDto? AprobadoPor, FirmaOcDto? Re
             return dto;
         }
 
-        hechoPor   = await BuildFirma(aAduser,  "HECHO POR",    buildByLogin: true);
+        hechoPor   = await BuildFirma(responsable, "HECHO POR",    buildByLogin: false);
         aprobadoPor = await BuildFirma(autoriza, "APROBADO POR", buildByLogin: false);
         recibidoPor = await BuildFirma(recibe,   "RECIBIDO POR", buildByLogin: false);
     }

@@ -624,7 +624,7 @@ public class RequisicionController : OracleBaseController
         ViewBag.DestinosItem = await _service.ObtenerDescripcionesCentroCostosAsync(destsItem);
 
         var (firmaHecho, firmaAprobado, firmaRecibido) = await _service.ObtenerFirmasRequisicionAsync(
-            cabecera.AAduser, cabecera.Autoriza, cabecera.Recibe);
+            cabecera.Responsable, cabecera.Autoriza, cabecera.Recibe);
         ViewBag.FirmaHecho    = firmaHecho;
         ViewBag.FirmaAprobado = firmaAprobado;
         ViewBag.FirmaRecibido = firmaRecibido;

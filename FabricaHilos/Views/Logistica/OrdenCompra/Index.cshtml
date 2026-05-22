@@ -137,14 +137,14 @@
                             <td class="text-center">
                                 @{
                                     var (badgeClass, estadoLabel) = (oc.Estado ?? "", oc.AprobGerencia) switch {
-                                        ("2", "S") => ("bg-success", "Aprobado Gerencia"),
-                                        ("0", _)   => ("bg-secondary", "Emitida"),
+                                        ("2", "S") => ("bg-success",          "Aprobado Gerencia"),
                                         ("2", _)   => ("bg-warning text-dark", "En Aprobación"),
-                                        ("3", "N") => ("bg-danger", "No Aprob. Gerencia"),
-                                        ("5", _)   => ("bg-info text-dark", "Parc. Cerrada"),
-                                        ("6", _)   => ("bg-success", "Cerrada"),
-                                        ("9", _)   => ("bg-danger", "Anulada"),
-                                        _          => ("bg-light text-dark", oc.Estado ?? "-")
+                                        ("3", "N") => ("bg-danger",            "No Aprob. Gerencia"),
+                                        ("0", _)   => ("bg-secondary",         "Emitida"),
+                                        ("5", _)   => ("bg-info text-dark",    "Parc. Cerrada"),
+                                        ("6", _)   => ("bg-success",           "Cerrada"),
+                                        ("9", _)   => ("bg-danger",            "Anulada"),
+                                        _          => ("bg-light text-dark",   oc.Estado ?? "-")
                                     };
                                 }
                                 <span class="badge @badgeClass">@estadoLabel</span>
@@ -187,7 +187,7 @@
                                             </li>
                                         </ul>
                                     </div>
-                                    @if (oc.Estado != "6" && oc.Estado != "9")
+                                    @if (oc.Estado != "6" && oc.Estado != "9" && oc.Estado != "2")
                                     {
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-dark btn-cerrar-oc"

@@ -44,6 +44,12 @@
                                 border-bottom:1px solid #e0e0e0; border-radius:12px 12px 0 0!important; }
     .chart-card .card-body { background:#fafaf8; border-radius:0 0 12px 12px; }
     .tab-content-panel { min-height: 260px; }
+    /* ─── Tabs unificados (mismo estilo que PLN) ────────────── */
+    #indTabs.nav-tabs { display:flex; gap:2px; background:#cfdce9; border-bottom:2px solid #8ea8c3; padding:.35rem .5rem 0; border-radius:4px 4px 0 0; flex-wrap:wrap; }
+    #indTabs .nav-link { border-radius:4px 4px 0 0; font-size:.8rem; font-weight:600; color:#4a5568; border:1px solid transparent; border-bottom:none; padding:.38rem .9rem; background:transparent; }
+    #indTabs .nav-link:hover { background:#dce9f5; color:#2d3748; }
+    #indTabs .nav-link.active { color:#1a365d; background:#eef4fc; border-color:#8ea8c3; border-bottom-color:#eef4fc; border-top:2px solid #3b6ea5; font-weight:800; }
+    #indTabContent { background:#eef4fc !important; border-color:#8ea8c3 !important; border-top:none !important; }
     /* Semáforo pendientes */
     .sem-verde   { background:#d4edda !important; }
     .sem-amarillo{ background:#fff3cd !important; }
@@ -218,7 +224,7 @@
     </li>
 </ul>
 
-<div class="tab-content border border-top-0 rounded-bottom bg-white p-3 shadow-sm">
+<div class="tab-content border rounded-bottom p-3 shadow-sm" id="indTabContent">
 
     <div class="tab-pane fade show active tab-content-panel" id="pane-dashboard">
         <div id="kpi-container">

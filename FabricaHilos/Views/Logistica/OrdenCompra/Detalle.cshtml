@@ -29,7 +29,9 @@
     string? dt        = ViewBag.Dt        as string;
     int     retPage   = ViewBag.ReturnPage != null ? (int)ViewBag.ReturnPage : 1;
 
-    var noAprobarOC = ViewBag.NoAprobarOC is bool bNoAprobar && bNoAprobar;
+    var noAprobarOC           = ViewBag.NoAprobarOC          is bool bNoAprobar  && bNoAprobar;
+    var mostrarAnularOC      = ViewBag.MostrarAnularOC      is bool bMostAnular && bMostAnular;
+    var mostrarEnviarGerenciaOC = ViewBag.MostrarEnviarGerenciaOC is bool bMostGer && bMostGer;
 
     string[] _coloresGrupo = { "primary", "success", "danger", "warning", "info", "secondary", "dark" };
     var grupoColorMap = items
@@ -57,7 +59,7 @@
         @tipoLabel @oc.TipoDocto-@oc.Serie.ToString("D3")-@oc.NumPed
     </h4>
     <div class="d-flex gap-2">
-        @if (oc.Estado == "0")
+        @if (mostrarAnularOC && oc.Estado == "0")
         {
             <button type="button" class="btn btn-sm btn-outline-danger"
                     id="btnAnularOc"
@@ -67,7 +69,7 @@
                 <i class="bi bi-x-circle me-1"></i>Anular @tipoCorto
             </button>
         }
-        @if (oc.Estado != "6" && oc.Estado != "9")
+        @if (oc.Estado != "6" && oc.Estado != "9" && oc.Estado != "2")
         {
             <button type="button" class="btn btn-sm btn-outline-dark"
                     id="btnCerrarOc"
@@ -103,7 +105,7 @@
                 </li>
             </ul>
         </div>
-        @if (oc.Estado == "0" || (oc.Estado == "3" && oc.AprobGerencia == "N"))
+        @if (mostrarEnviarGerenciaOC && (oc.Estado == "0" || (oc.Estado == "3" && oc.AprobGerencia == "N")))
         {
             <button type="button" class="btn btn-sm btn-warning"
                     id="btnEnviarGerencia"
@@ -154,14 +156,14 @@
                 <div>
                     @{
                         var (detBadge, detLabel) = (oc.Estado ?? "", oc.AprobGerencia) switch {
-                            ("2", "S") => ("bg-success", "Aprobado por Gerencia"),
-                            ("0", _)   => ("bg-secondary", "Emitida"),
+                            ("2", "S") => ("bg-success",          "Aprobado por Gerencia"),
                             ("2", _)   => ("bg-warning text-dark", "Enviado a Gerencia"),
-                            ("3", "N") => ("bg-danger", "No Aprob. Gerencia"),
-                            ("5", _)   => ("bg-info text-dark", "Parcialmente Cerrada"),
-                            ("6", _)   => ("bg-success", "Cerrada"),
-                            ("9", _)   => ("bg-danger", "Anulada"),
-                            _          => ("bg-light text-dark", oc.Estado ?? "-")
+                            ("3", "N") => ("bg-danger",            "No Aprob. Gerencia"),
+                            ("0", _)   => ("bg-secondary",         "Emitida"),
+                            ("5", _)   => ("bg-info text-dark",    "Parcialmente Cerrada"),
+                            ("6", _)   => ("bg-success",           "Cerrada"),
+                            ("9", _)   => ("bg-danger",            "Anulada"),
+                            _          => ("bg-light text-dark",   oc.Estado ?? "-")
                         };
                     }
                     <span class="badge @detBadge">@detLabel</span>
@@ -768,6 +770,44 @@
         form.submit();
     });
 
+    // ── Helper: ejecutar acción O/C de forma resiliente ─────────────────────
+    // keepalive:true → el navegador mantiene la petición aunque la página
+    // navegue o se cierre. En catch recargamos igual porque el backend pudo
+    // haber completado la operación antes de que se cortara la red.
+    function ejecutarAccionOc(url, payload, btnEl, onSuccess) {
+        if (btnEl) btnEl.disabled = true;
+        fetch(url, {
+            method:    'POST',
+            keepalive: true,
+            headers: {
+                'Content-Type':              'application/json',
+                'RequestVerificationToken':  document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d.ok) { onSuccess(d); }
+            else {
+                if (btnEl) btnEl.disabled = false;
+                mostrarModalError('Error', d.error || 'No se pudo completar la operación.');
+            }
+        })
+        .catch(function () {
+            // Sin respuesta del servidor: la acción pudo haberse grabado.
+            // Recargamos para obtener el estado real desde la base de datos.
+            window.location.reload();
+        });
+    }
+
+    function mostrarModalError(titulo, mensaje) {
+        modalTitulo.textContent = titulo;
+        modalMensaje.innerHTML  = '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>' + mensaje + '</span>';
+        modalOk.className       = 'btn btn-secondary';
+        modalOk.onclick         = function () { modalConfirmar.hide(); };
+        modalConfirmar.show();
+    }
+
     // ── Anular O/C ───────────────────────────────────────────────────────────
     var btnAnular = document.getElementById('btnAnularOc');
     if (btnAnular) {
@@ -779,17 +819,12 @@
             modalConfirmar.show();
             modalOk.onclick = function () {
                 modalConfirmar.hide();
-                fetch('@Url.Action("Anular", "OrdenCompra")', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
-                    body: JSON.stringify({ tipoDocto: btnAnular.dataset.tipo, serie: parseInt(btnAnular.dataset.serie), numPed: parseInt(btnAnular.dataset.numpd) })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) { window.location = '@Url.Action("Index", "OrdenCompra", new { t = (string?)ViewBag.NavToken })'; }
-                    else { alert('Error: ' + d.error); }
-                })
-                .catch(function () { alert('Error de comunicación con el servidor.'); });
+                ejecutarAccionOc(
+                    '@Url.Action("Anular", "OrdenCompra")',
+                    { tipoDocto: btnAnular.dataset.tipo, serie: parseInt(btnAnular.dataset.serie), numPed: parseInt(btnAnular.dataset.numpd) },
+                    btnAnular,
+                    function () { window.location = '@Url.Action("Index", "OrdenCompra", new { t = (string?)ViewBag.NavToken })'; }
+                );
             };
         });
     }
@@ -804,17 +839,12 @@
             modalConfirmar.show();
             modalOk.onclick = function () {
                 modalConfirmar.hide();
-                fetch('@Url.Action("EnviarGerencia", "OrdenCompra")', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
-                    body: JSON.stringify({ tipoDocto: btnGerencia.dataset.tipo, serie: parseInt(btnGerencia.dataset.serie), numPed: parseInt(btnGerencia.dataset.numpd) })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) { window.location.reload(); }
-                    else { alert('Error: ' + d.error); }
-                })
-                .catch(function () { alert('Error de comunicación con el servidor.'); });
+                ejecutarAccionOc(
+                    '@Url.Action("EnviarGerencia", "OrdenCompra")',
+                    { tipoDocto: btnGerencia.dataset.tipo, serie: parseInt(btnGerencia.dataset.serie), numPed: parseInt(btnGerencia.dataset.numpd) },
+                    btnGerencia,
+                    function () { window.location.reload(); }
+                );
             };
         });
     }
@@ -830,17 +860,12 @@
             modalConfirmar.show();
             modalOk.onclick = function () {
                 modalConfirmar.hide();
-                fetch('@Url.Action("AprobarOc", "OrdenCompra")', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
-                    body: JSON.stringify({ tipoDocto: btnAprobar.dataset.tipo, serie: parseInt(btnAprobar.dataset.serie), numPed: parseInt(btnAprobar.dataset.numpd) })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) { window.location.reload(); }
-                    else { alert('Error: ' + d.error); }
-                })
-                .catch(function () { alert('Error de comunicación con el servidor.'); });
+                ejecutarAccionOc(
+                    '@Url.Action("AprobarOc", "OrdenCompra")',
+                    { tipoDocto: btnAprobar.dataset.tipo, serie: parseInt(btnAprobar.dataset.serie), numPed: parseInt(btnAprobar.dataset.numpd) },
+                    btnAprobar,
+                    function () { window.location.reload(); }
+                );
             };
         });
     }
@@ -856,17 +881,12 @@
             modalConfirmar.show();
             modalOk.onclick = function () {
                 modalConfirmar.hide();
-                fetch('@Url.Action("NoAprobarOc", "OrdenCompra")', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
-                    body: JSON.stringify({ tipoDocto: btnNoAprobar.dataset.tipo, serie: parseInt(btnNoAprobar.dataset.serie), numPed: parseInt(btnNoAprobar.dataset.numpd) })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) { window.location.reload(); }
-                    else { alert('Error: ' + d.error); }
-                })
-                .catch(function () { alert('Error de comunicación con el servidor.'); });
+                ejecutarAccionOc(
+                    '@Url.Action("NoAprobarOc", "OrdenCompra")',
+                    { tipoDocto: btnNoAprobar.dataset.tipo, serie: parseInt(btnNoAprobar.dataset.serie), numPed: parseInt(btnNoAprobar.dataset.numpd) },
+                    btnNoAprobar,
+                    function () { window.location.reload(); }
+                );
             };
         });
     }
@@ -882,17 +902,12 @@
             modalConfirmar.show();
             modalOk.onclick = function () {
                 modalConfirmar.hide();
-                fetch('@Url.Action("CerrarOc", "OrdenCompra")', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' },
-                    body: JSON.stringify({ tipoDocto: btnCerrar.dataset.tipo, serie: parseInt(btnCerrar.dataset.serie), numPed: parseInt(btnCerrar.dataset.numpd) })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (d.ok) { window.location.reload(); }
-                    else { alert('Error: ' + d.error); }
-                })
-                .catch(function () { alert('Error de comunicación con el servidor.'); });
+                ejecutarAccionOc(
+                    '@Url.Action("CerrarOc", "OrdenCompra")',
+                    { tipoDocto: btnCerrar.dataset.tipo, serie: parseInt(btnCerrar.dataset.serie), numPed: parseInt(btnCerrar.dataset.numpd) },
+                    btnCerrar,
+                    function () { window.location.reload(); }
+                );
             };
         });
     }

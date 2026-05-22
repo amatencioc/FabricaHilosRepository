@@ -3,6 +3,22 @@ using Oracle.ManagedDataAccess.Client;
 namespace FabricaHilos.Services;
 
 /// <summary>
+/// Se lanza cuando Oracle rechaza las credenciales del usuario logueado (ORA-01017).
+/// El controlador debe capturarla y redirigir al login con un mensaje explicativo.
+/// Ocurre cuando la contraseña en CS_USER (psw_sig) difiere de la contraseña
+/// del usuario en la base de datos Oracle (ej: fue cambiada con ALTER USER desde Toad).
+/// </summary>
+public sealed class OracleCredencialesInvalidasException : Exception
+{
+    public string OracleUser { get; }
+    public OracleCredencialesInvalidasException(string oracleUser)
+        : base($"Las credenciales Oracle del usuario '{oracleUser}' son inválidas (ORA-01017). Verifique que la contraseña en CS_USER.psw_sig coincida con la contraseña del usuario en la base de datos Oracle.")
+    {
+        OracleUser = oracleUser;
+    }
+}
+
+/// <summary>
 /// Clase base para todos los servicios que ejecutan queries Oracle.
 /// Centraliza:
 ///   - GetOracleConnectionString(): conexión dinámica según el usuario logueado.
@@ -38,10 +54,46 @@ public abstract class OracleServiceBase
 
     // ── Conexión dinámica ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Devuelve el connection string de la empresa activa.
+    /// Siempre usa las credenciales de la aplicación (SIG/STARK) definidas en appsettings.
+    /// El usuario logueado (CS_USER) es solo para autenticación en la app, no en Oracle.
+    /// </summary>
     protected string GetOracleConnectionString()
     {
-        var session  = _httpContextAccessor.HttpContext?.Session;
-        var connKey  = session?.GetString("EmpresaConexion") ?? "LaColonialConnection";
+        var connKey = GetEmpresaConnKey();
+        return _configuration.GetConnectionString(connKey) ?? _fallbackConnectionString;
+    }
+
+    // ── Apertura de conexión ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Abre la conexión Oracle con las credenciales de la aplicación.
+    /// </summary>
+    protected async Task<OracleConnection> AbrirConexionAsync()
+    {
+        var conn = new OracleConnection(GetOracleConnectionString());
+        try
+        {
+            await conn.OpenAsync();
+            return conn;
+        }
+        catch
+        {
+            await conn.DisposeAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Devuelve el connection string con las credenciales BASE de la aplicación (no del usuario logueado).
+    /// Usar para consultas SELECT de solo lectura donde el usuario Oracle puede tener VPD/RLS
+    /// que filtraría sus propias filas (ej: listado de producción).
+    /// Para DML (INSERT/UPDATE/DELETE) seguir usando GetOracleConnectionString().
+    /// </summary>
+    protected string GetBaseOracleConnectionString()
+    {
+        var connKey = GetEmpresaConnKey();
         return _configuration.GetConnectionString(connKey) ?? _fallbackConnectionString;
     }
 

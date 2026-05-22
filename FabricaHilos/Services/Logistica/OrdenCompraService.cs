@@ -17,6 +17,8 @@ public interface IOrdenCompraService
 
     Task<List<ItemOrdDto>> ObtenerItemsAsync(string tipoDocto, int serie, long numPed);
 
+    Task<List<ItemOrdDestinoDto>> ObtenerDestinosPorOcAsync(string tipoDocto, int serie, long numPed);
+
     Task<Dictionary<string, string>> ObtenerNombresProveedoresAsync(IEnumerable<string> codigos);
 
     Task<ProveedorDetalleDto?> ObtenerDetalleProveedorAsync(string codProveedor);
@@ -142,8 +144,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
 
         try
         {
-            await using var conn = new OracleConnection(GetOracleConnectionString());
-            await conn.OpenAsync();
+            await using var conn = await AbrirConexionAsync();
             await using var cmd = new OracleCommand(sql, conn);
             cmd.BindByName = true;
 
@@ -275,6 +276,52 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
             _logger.LogError(ex, "Error al obtener ítems de orden de compra {TipoDocto}-{Serie}-{NumPed}", tipoDocto, serie, numPed);
         }
         return items;
+    }
+
+    // ── DESTINOS POR OC (para Imprimir Contabilidad desagregado) ──────────────
+
+    public async Task<List<ItemOrdDestinoDto>> ObtenerDestinosPorOcAsync(string tipoDocto, int serie, long numPed)
+    {
+        var result = new List<ItemOrdDestinoDto>();
+        // Trae todos los ítems de ITEMREQ vinculados a esta OC via DESP_ITEMREQ,
+        // incluyendo su destino, solicitante, cantidad y precio
+        string sql = $@"SELECT D.NUMREQ, D.ORDEN,
+                               I.COD_ART, I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                               I.CANTIDAD, I.PRECIO,
+                               (I.CANTIDAD * I.PRECIO) AS IMPORTE
+                        FROM {S}DESP_ITEMREQ D
+                        JOIN {S}ITEMREQ I ON I.NUMREQ = D.NUMREQ AND I.ORDEN = D.ORDEN
+                        WHERE D.NRO_DOC_REF = TO_CHAR(:numPed)
+                        ORDER BY D.NUMREQ ASC, I.ORDEN ASC";
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+            cmd.Parameters.Add("numPed", OracleDbType.Decimal).Value = numPed;
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new ItemOrdDestinoDto
+                {
+                    NumReq      = GetLong(reader, "NUMREQ"),
+                    OrdenReq    = GetInt(reader,  "ORDEN"),
+                    CodArt      = GetStr(reader,  "COD_ART"),
+                    TpDestino   = GetStr(reader,  "TP_DESTINO"),
+                    Destino     = GetStr(reader,  "DESTINO"),
+                    CodSolicita = GetStr(reader,  "COD_SOLICITA"),
+                    Cantidad    = GetDec(reader,  "CANTIDAD"),
+                    Precio      = GetDec(reader,  "PRECIO"),
+                    Importe     = GetDec(reader,  "IMPORTE"),
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener destinos por OC {TipoDocto}-{Serie}-{NumPed}", tipoDocto, serie, numPed);
+        }
+        return result;
     }
 
     // ── PROVEEDORES ────────────────────────────────────────────────────────────
@@ -1235,6 +1282,20 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
+
+            // Leer estado actual (idempotencia: si ya está anulada retorna éxito)
+            await using var cmdSel = conn.CreateCommand();
+            cmdSel.CommandType = System.Data.CommandType.Text;
+            cmdSel.BindByName  = true;
+            cmdSel.CommandText = $"SELECT ESTADO FROM {S}ORDEN_DE_COMPRA WHERE TIPO_DOCTO = :p_tipo_docto AND SERIE = :p_serie AND NUM_PED = :p_num_ped AND ROWNUM = 1";
+            cmdSel.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmdSel.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmdSel.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+            var estadoActual = (await cmdSel.ExecuteScalarAsync())?.ToString();
+
+            if (estadoActual == "9") return null; // ya anulada, idempotente
+            if (estadoActual == null) return "No se encontró la orden de compra.";
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = System.Data.CommandType.Text;
             cmd.BindByName  = true;
@@ -1259,12 +1320,24 @@ END;";
             await cmd.ExecuteNonQueryAsync();
 
             var rawErr = cmd.Parameters["p_msgerror"].Value;
-            string? err = rawErr == DBNull.Value ? null : rawErr?.ToString();
-            return string.IsNullOrWhiteSpace(err) ? null : err;
+            string? err = null;
+            if (rawErr != null && rawErr != DBNull.Value)
+            {
+                if (rawErr is Oracle.ManagedDataAccess.Types.OracleString os)
+                    err = os.IsNull ? null : os.Value;
+                else
+                    err = rawErr.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(err))
+            {
+                _logger.LogInformation("OC {TipoDocto}-{NumPed} anulada por {Usuario}", tipoDocto, numPed, usuario);
+                return null;
+            }
+            return err;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al anular OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            _logger.LogError(ex, "Error al anular OC {TipoDocto}-{NumPed}", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
         }
     }
@@ -1311,6 +1384,22 @@ END;";
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
+
+            // Leer estado actual (idempotencia: si ya está en '2', éxito silencioso)
+            await using var cmdSel = conn.CreateCommand();
+            cmdSel.CommandType = System.Data.CommandType.Text;
+            cmdSel.BindByName  = true;
+            cmdSel.CommandText = $"SELECT ESTADO FROM {S}ORDEN_DE_COMPRA WHERE TIPO_DOCTO = :p_tipo_docto AND SERIE = :p_serie AND NUM_PED = :p_num_ped AND ROWNUM = 1";
+            cmdSel.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmdSel.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmdSel.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+            var estadoActual = (await cmdSel.ExecuteScalarAsync())?.ToString();
+
+            if (estadoActual == "2") return null; // ya enviada a gerencia, idempotente
+            if (estadoActual == null) return "No se encontró la orden de compra.";
+            if (estadoActual != "0" && !(estadoActual == "3"))
+                return $"La orden tiene estado '{estadoActual}' y no puede enviarse a gerencia.";
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = System.Data.CommandType.Text;
             cmd.BindByName  = true;
@@ -1328,14 +1417,14 @@ END;";
             cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
 
             int rows = await cmd.ExecuteNonQueryAsync();
-            if (rows == 0)
-                return "No se actualizó la orden. Verifique que esté en estado Emitida (0) o No Aprobada por Gerencia (3).";
+            if (rows == 0) return null; // otra instancia ya lo actualizó, idempotente
 
+            _logger.LogInformation("OC {TipoDocto}-{NumPed} enviada a gerencia", tipoDocto, numPed);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al enviar OC {TipoDocto}-1-{NumPed} a gerencia", tipoDocto, numPed);
+            _logger.LogError(ex, "Error al enviar OC {TipoDocto}-{NumPed} a gerencia", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
         }
     }
@@ -1348,30 +1437,48 @@ END;";
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
+
+            // Leer estado actual (idempotencia)
+            await using var cmdSel = conn.CreateCommand();
+            cmdSel.CommandType = System.Data.CommandType.Text;
+            cmdSel.BindByName  = true;
+            cmdSel.CommandText = $"SELECT APROB_GERENCIA, ESTADO FROM {S}ORDEN_DE_COMPRA WHERE TIPO_DOCTO = :p_tipo_docto AND SERIE = :p_serie AND NUM_PED = :p_num_ped AND ROWNUM = 1";
+            cmdSel.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmdSel.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmdSel.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+            await using var rdr = await cmdSel.ExecuteReaderAsync();
+            string? aprobActual = null, estadoActual = null;
+            if (await rdr.ReadAsync()) { aprobActual = rdr.IsDBNull(0) ? null : rdr.GetString(0); estadoActual = rdr.IsDBNull(1) ? null : rdr.GetString(1); }
+            await rdr.CloseAsync();
+
+            if (aprobActual == "S") return null; // ya aprobada, idempotente
+            if (estadoActual == null) return "No se encontró la orden de compra.";
+            if (estadoActual == "9") return "La orden está anulada y no puede aprobarse.";
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = System.Data.CommandType.Text;
             cmd.BindByName  = true;
             cmd.CommandText = $@"UPDATE {S}ORDEN_DE_COMPRA
-                                    SET APROB_GERENCIA = 'S',
+                                    SET ESTADO         = '2',
+                                        APROB_GERENCIA = 'S',
                                         F_APROB_GER    = SYSDATE,
                                         COD_APROB      = :p_cod_aprob
                                   WHERE TIPO_DOCTO = :p_tipo_docto
                                     AND SERIE      = :p_serie
-                                    AND NUM_PED    = :p_num_ped";
+                                    AND NUM_PED    = :p_num_ped
+                                    AND (APROB_GERENCIA IS NULL OR APROB_GERENCIA != 'S')";
             cmd.Parameters.Add(new OracleParameter("p_cod_aprob",  OracleDbType.Varchar2) { Value = codAprob });
             cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
             cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
             cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
 
-            int rows = await cmd.ExecuteNonQueryAsync();
-            if (rows == 0)
-                return "No se encontró la orden de compra.";
-
+            await cmd.ExecuteNonQueryAsync();
+            _logger.LogInformation("OC {TipoDocto}-{NumPed} aprobada por {CodAprob}", tipoDocto, numPed, codAprob);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al aprobar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            _logger.LogError(ex, "Error al aprobar OC {TipoDocto}-{NumPed}", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
         }
     }
@@ -1384,6 +1491,24 @@ END;";
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
+
+            // Leer estado actual (idempotencia)
+            await using var cmdSel = conn.CreateCommand();
+            cmdSel.CommandType = System.Data.CommandType.Text;
+            cmdSel.BindByName  = true;
+            cmdSel.CommandText = $"SELECT ESTADO, APROB_GERENCIA FROM {S}ORDEN_DE_COMPRA WHERE TIPO_DOCTO = :p_tipo_docto AND SERIE = :p_serie AND NUM_PED = :p_num_ped AND ROWNUM = 1";
+            cmdSel.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
+            cmdSel.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
+            cmdSel.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
+            await using var rdr = await cmdSel.ExecuteReaderAsync();
+            string? estadoActual = null, aprobActual = null;
+            if (await rdr.ReadAsync()) { estadoActual = rdr.IsDBNull(0) ? null : rdr.GetString(0); aprobActual = rdr.IsDBNull(1) ? null : rdr.GetString(1); }
+            await rdr.CloseAsync();
+
+            if (estadoActual == "3" && aprobActual == "N") return null; // ya rechazada, idempotente
+            if (estadoActual == null) return "No se encontró la orden de compra.";
+            if (estadoActual == "9") return "La orden está anulada.";
+
             await using var cmd = conn.CreateCommand();
             cmd.CommandType = System.Data.CommandType.Text;
             cmd.BindByName  = true;
@@ -1392,23 +1517,22 @@ END;";
                                         APROB_GERENCIA = 'N',
                                         F_APROB_GER    = SYSDATE,
                                         COD_APROB      = :p_cod_aprob
-                                  WHERE TIPO_DOCTO = :p_tipo_docto
-                                    AND SERIE      = :p_serie
-                                    AND NUM_PED    = :p_num_ped";
+                                  WHERE TIPO_DOCTO     = :p_tipo_docto
+                                    AND SERIE          = :p_serie
+                                    AND NUM_PED        = :p_num_ped
+                                    AND NOT (ESTADO = '3' AND APROB_GERENCIA = 'N')";
             cmd.Parameters.Add(new OracleParameter("p_cod_aprob",  OracleDbType.Varchar2) { Value = codAprob });
             cmd.Parameters.Add(new OracleParameter("p_tipo_docto", OracleDbType.Varchar2) { Value = tipoDocto });
             cmd.Parameters.Add(new OracleParameter("p_serie",      OracleDbType.Int32)    { Value = 1 });
             cmd.Parameters.Add(new OracleParameter("p_num_ped",    OracleDbType.Decimal)  { Value = numPed });
 
-            int rows = await cmd.ExecuteNonQueryAsync();
-            if (rows == 0)
-                return "No se encontró la orden de compra.";
-
+            await cmd.ExecuteNonQueryAsync();
+            _logger.LogInformation("OC {TipoDocto}-{NumPed} no aprobada por {CodAprob}", tipoDocto, numPed, codAprob);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al no aprobar OC {TipoDocto}-1-{NumPed}", tipoDocto, numPed);
+            _logger.LogError(ex, "Error al no aprobar OC {TipoDocto}-{NumPed}", tipoDocto, numPed);
             return $"Error interno: {ex.Message}";
         }
     }
@@ -1429,12 +1553,12 @@ END;";
             await using var conn = new OracleConnection(connStr);
             await conn.OpenAsync();
 
-            // ── Paso 1: obtener A_ADUSER (generó) y APROB_GERENCIA (aprobó) de la O/C ──
-            string? codGenerado  = null;
-            string? codAprobado  = null;
-            DateTime? fechaDoc   = null;
-            string?   aprobGer   = null;
-            DateTime? fAprobGer  = null;
+            // ── Paso 1: obtener C_CODIGO (creador), FECHA, APROB_GERENCIA, COD_APROB de la O/C ──
+            string?   codCreador  = null;
+            string?   codAprobado = null;
+            DateTime? fechaDoc    = null;
+            string?   aprobGer    = null;
+            DateTime? fAprobGer   = null;
 
             var sqlOc = $@"SELECT C_CODIGO, FECHA, APROB_GERENCIA, F_APROB_GER, COD_APROB
                            FROM {S}ORDEN_DE_COMPRA
@@ -1448,52 +1572,112 @@ END;";
                 await using var r = (OracleDataReader)await cmdOc.ExecuteReaderAsync();
                 if (await r.ReadAsync())
                 {
-                    codGenerado = GetStr(r, "C_CODIGO");
+                    codCreador  = GetStr(r, "C_CODIGO");
+                    fechaDoc    = GetDt(r,  "FECHA");
                     aprobGer    = GetStr(r, "APROB_GERENCIA");
-                    fAprobGer   = GetDt(r, "F_APROB_GER");
-                    fechaDoc    = GetDt(r, "FECHA");
-                    // Solo cargar firma de gerencia si APROB_GERENCIA = 'S', usando COD_APROB
+                    fAprobGer   = GetDt(r,  "F_APROB_GER");
                     codAprobado = string.Equals(aprobGer, "S", StringComparison.OrdinalIgnoreCase)
                         ? GetStr(r, "COD_APROB")
                         : null;
                 }
             }
 
-            // ── Paso 2: resolver nombre, cargo de cada usuario ──
-            async Task<FirmaOcDto?> BuildFirma(string? cod, string rolEtiqueta)
+            // ── Paso 2: obtener C_COSTO del área creadora ──
+            string? vCCosto = null;
+            if (!string.IsNullOrWhiteSpace(codCreador))
             {
-                if (string.IsNullOrWhiteSpace(cod)) return null;
-
-                var sqlP = $@"SELECT ps.C_CODIGO,
-                                     ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
-                                     || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
-                                     NVL(tc.DESCRIPCION, '') AS CARGO
-                              FROM {S}RH_PERSONAS ps
-                              JOIN {S}RH_PERSONAL pr ON pr.C_CODIGO = ps.C_CODIGO
-                              LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO = pr.C_CARGO
-                              WHERE ps.C_CODIGO = :cod AND ROWNUM = 1";
-                await using var cmdP = new OracleCommand(sqlP, conn) { BindByName = true };
-                cmdP.Parameters.Add("cod", OracleDbType.Varchar2).Value = cod;
-                await using var rp = (OracleDataReader)await cmdP.ExecuteReaderAsync();
-                if (!await rp.ReadAsync()) return null;
-
-                return new FirmaOcDto
-                {
-                    Codigo         = GetStr(rp, "C_CODIGO")        ?? cod,
-                    NombreCompleto = GetStr(rp, "NOMBRE_COMPLETO") ?? "",
-                    Cargo          = GetStr(rp, "CARGO")           ?? "",
-                    RolEtiqueta    = rolEtiqueta,
-                    Firma          = null,
-                    FechaDoc       = fechaDoc,
-                    AprobGerencia  = aprobGer,
-                    FAprobGer      = fAprobGer
-                };
+                var sqlCc = $@"SELECT C_COSTO FROM {S}T_CCOSTO
+                               WHERE C_CODIGO = :cod AND ROWNUM = 1";
+                await using var cmdCc = new OracleCommand(sqlCc, conn) { BindByName = true };
+                cmdCc.Parameters.Add("cod", OracleDbType.Varchar2).Value = codCreador;
+                await using var rCc = (OracleDataReader)await cmdCc.ExecuteReaderAsync();
+                if (await rCc.ReadAsync())
+                    vCCosto = GetStr(rCc, "C_COSTO");
             }
 
-            generado = await BuildFirma(codGenerado, "GENERADO POR");
-            aprobado = await BuildFirma(codAprobado, "APROBADO POR");
+            // ── Paso 3: GENERADO POR — jefe/encargado de Logística del CC ──
+            // Lógica: busca al responsable de mayor jerarquía activo en el mismo CC,
+            // priorizando cargos con "LOGISTICA/LOGISTIC" en el nombre
+            if (!string.IsNullOrWhiteSpace(vCCosto))
+            {
+                var sqlJefe = $@"SELECT pr.C_CODIGO,
+                                        ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                                        || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                                        NVL(car.DESCRIPCION, '') AS CARGO
+                                 FROM (
+                                     SELECT tc_j.C_CODIGO
+                                     FROM   {S}T_CCOSTO    tc_j
+                                     JOIN   {S}RH_PERSONAL pr_j  ON pr_j.C_CODIGO = tc_j.C_CODIGO
+                                                                AND (pr_j.F_CESE IS NULL
+                                                                     OR pr_j.F_CESE >= TRUNC(SYSDATE))
+                                     JOIN   {S}T_CARGO     car_j ON car_j.C_CARGO = pr_j.C_CARGO
+                                     WHERE  tc_j.C_COSTO = :ccosto
+                                     ORDER BY
+                                         CASE
+                                             WHEN UPPER(car_j.DESCRIPCION) LIKE 'JEFE%'
+                                              AND UPPER(car_j.DESCRIPCION) LIKE '%LOGISTIC%' THEN 1
+                                             WHEN UPPER(car_j.DESCRIPCION) LIKE 'ENCARGADO%'
+                                              AND UPPER(car_j.DESCRIPCION) LIKE '%LOGISTIC%' THEN 2
+                                             WHEN UPPER(car_j.DESCRIPCION) LIKE '%LOGISTIC%' THEN 3
+                                             WHEN UPPER(car_j.DESCRIPCION) LIKE 'JEFE%'      THEN 4
+                                             ELSE 5
+                                         END,
+                                         NVL(car_j.NIVEL, 9999)
+                                 ) jefe_ranked
+                                 JOIN   {S}RH_PERSONAL pr  ON pr.C_CODIGO  = jefe_ranked.C_CODIGO
+                                 JOIN   {S}RH_PERSONAS ps  ON ps.C_CODIGO  = jefe_ranked.C_CODIGO
+                                 LEFT JOIN {S}T_CARGO  car ON car.C_CARGO  = pr.C_CARGO
+                                 WHERE ROWNUM = 1";
+                await using var cmdJefe = new OracleCommand(sqlJefe, conn) { BindByName = true };
+                cmdJefe.Parameters.Add("ccosto", OracleDbType.Varchar2).Value = vCCosto;
+                await using var rJefe = (OracleDataReader)await cmdJefe.ExecuteReaderAsync();
+                if (await rJefe.ReadAsync())
+                {
+                    generado = new FirmaOcDto
+                    {
+                        Codigo         = GetStr(rJefe, "C_CODIGO")        ?? "",
+                        NombreCompleto = GetStr(rJefe, "NOMBRE_COMPLETO") ?? "",
+                        Cargo          = GetStr(rJefe, "CARGO")           ?? "",
+                        RolEtiqueta    = "GENERADO POR",
+                        Firma          = null,
+                        FechaDoc       = fechaDoc,
+                        AprobGerencia  = aprobGer,
+                        FAprobGer      = fAprobGer
+                    };
+                }
+            }
 
-            // ── Paso 3: leer LONG RAW de firma desde RH_FIRMAS ──
+            // ── Paso 4: APROBADO POR — gerencia (solo si APROB_GERENCIA = 'S') ──
+            if (!string.IsNullOrWhiteSpace(codAprobado))
+            {
+                var sqlAprob = $@"SELECT ps.C_CODIGO,
+                                         ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                                         || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                                         NVL(tc.DESCRIPCION, '') AS CARGO
+                                  FROM {S}RH_PERSONAS ps
+                                  JOIN {S}RH_PERSONAL pr  ON pr.C_CODIGO = ps.C_CODIGO
+                                  LEFT JOIN {S}T_CARGO tc ON tc.C_CARGO  = pr.C_CARGO
+                                  WHERE ps.C_CODIGO = :cod AND ROWNUM = 1";
+                await using var cmdAprob = new OracleCommand(sqlAprob, conn) { BindByName = true };
+                cmdAprob.Parameters.Add("cod", OracleDbType.Varchar2).Value = codAprobado;
+                await using var rAprob = (OracleDataReader)await cmdAprob.ExecuteReaderAsync();
+                if (await rAprob.ReadAsync())
+                {
+                    aprobado = new FirmaOcDto
+                    {
+                        Codigo         = GetStr(rAprob, "C_CODIGO")        ?? codAprobado,
+                        NombreCompleto = GetStr(rAprob, "NOMBRE_COMPLETO") ?? "",
+                        Cargo          = GetStr(rAprob, "CARGO")           ?? "",
+                        RolEtiqueta    = "APROBADO POR",
+                        Firma          = null,
+                        FechaDoc       = fechaDoc,
+                        AprobGerencia  = aprobGer,
+                        FAprobGer      = fAprobGer
+                    };
+                }
+            }
+
+            // ── Paso 5: leer LONG RAW de firma desde RH_FIRMAS ──
             async Task CargarFirma(FirmaOcDto? dto)
             {
                 if (dto == null || string.IsNullOrEmpty(dto.Codigo)) return;

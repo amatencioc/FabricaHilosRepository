@@ -64,6 +64,28 @@ public class PlnSeguimiento
     public string IndReproceso { get; set; } = "N";
     public string Estado       { get; set; } = "A";
 
+    // ── Referencias a objetos del flujo ─────────────────────────────────────────
+    /// <summary>PARTIDA.NUMERO vinculada a este sublote (via PARTIDA.NROPROG = ITEMPED_DET.NROPROG).</summary>
+    public long NumPartida { get; set; }
+
+    // ── Máquinas asignadas / usadas ──────────────────────────────────────────
+    public string? CodMaqTt      { get; set; }   // PLN_SEGUIMIENTO.COD_MAQ_TT (trigger al PASO '06')
+    public string? MaqProgramada { get; set; }   // ITEMPED_DET.MAQUINA (máquina planificada)
+    public string? MaqPartida    { get; set; }   // PARTIDA.COD_MAQ (real; más confiable post-TT)
+    public string? MaqRealTt     { get; set; }   // TT_RPRODUC.COD_MAQ WHERE estado='1' (en curso ahora)
+
+    /// <summary>Máquina TT efectiva: trigger → partida → programada (cascada de confiabilidad).</summary>
+    public string? MaqTtEfectiva =>
+        !string.IsNullOrEmpty(CodMaqTt)   ? CodMaqTt   :
+        !string.IsNullOrEmpty(MaqPartida) ? MaqPartida :
+        MaqProgramada;
+
+    /// <summary>True cuando hay un baño activo en una máquina distinta a la efectiva (desviación de planta).</summary>
+    public bool HayConflictoMaquina =>
+        !string.IsNullOrEmpty(MaqRealTt) &&
+        !string.IsNullOrEmpty(MaqTtEfectiva) &&
+        !string.Equals(MaqRealTt, MaqTtEfectiva, StringComparison.OrdinalIgnoreCase);
+
     // Helpers
     public bool EstaRetrasado    => IndRetraso   == "S";
     public bool EsUrgente        => IndUrgente   == "S";

@@ -18,19 +18,22 @@ namespace FabricaHilos.Controllers.Produccion
         private readonly IParoService   _paroService;
         private readonly ILogger<RegistroPreparatoriaController> _logger;
         private readonly INavTokenService _navToken;
+        private readonly IMenuService _menuService;
 
         public RegistroPreparatoriaController(
             ApplicationDbContext context, 
             IRecetaService recetaService,
             IParoService   paroService,
             ILogger<RegistroPreparatoriaController> logger,
-            INavTokenService navToken)
+            INavTokenService navToken,
+            IMenuService menuService)
         {
             _context       = context;
             _recetaService = recetaService;
             _paroService   = paroService;
             _logger        = logger;
             _navToken      = navToken;
+            _menuService   = menuService;
         }
 
         private static readonly HashSet<string> _apiActions = new(StringComparer.OrdinalIgnoreCase)
@@ -90,7 +93,18 @@ namespace FabricaHilos.Controllers.Produccion
 
             // Obtener preparatorias desde Oracle filtradas por estado
             const int pageSize = 10;
-            var resultado = await _recetaService.ObtenerPreparatoriasAsync(buscar, maquina, tipoMaquina, estado, page, pageSize);
+            var accesoProduccion = _menuService.ObtenerAccesoModulo("Produccion");
+            var fecTurnoStr = accesoProduccion.ObtenerParametro("FecTurno");
+            // Formato: Ns (ej: 1s=7 días, 2s=14, 4s=28). Parseo dinámico.
+            int diasAtras = 0;
+            if (!string.IsNullOrEmpty(fecTurnoStr) &&
+                fecTurnoStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(fecTurnoStr[..^1], out int semanas) && semanas > 0)
+                diasAtras = semanas * 7;
+            // Con rango de fecha ampliado, mostrar todos los estados por defecto
+            if (diasAtras > 0 && estado.Count == 1 && estado[0] == "1")
+                estado = new List<string> { "1", "3", "9" };
+            var resultado = await _recetaService.ObtenerPreparatoriasAsync(buscar, maquina, tipoMaquina, estado, page, pageSize, diasAtras);
             var preparatorias = resultado.Items;
 
             // Cruzar con registros locales para obtener el Id de SQLite (para acciones de edición).
@@ -109,29 +123,55 @@ namespace FabricaHilos.Controllers.Produccion
                 var locales = await _context.OrdenesProduccion
                     .Where(o => (!string.IsNullOrEmpty(o.CodigoReceta) && recetas.Contains(o.CodigoReceta))
                              || (string.IsNullOrEmpty(o.CodigoReceta) && o.Lote != null && lotesSinReceta.Contains(o.Lote)))
-                    .Select(o => new { o.Id, o.CodigoReceta, o.Lote, o.FechaInicio })
                     .ToListAsync();
 
+                bool hayChanges = false;
                 foreach (var p in preparatorias)
                 {
                     var fechaStr = p.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss");
+                    OrdenProduccion? local;
 
                     if (!string.IsNullOrEmpty(p.Receta))
                     {
                         // Fila con receta: cruzar por CodigoReceta + FechaInicio
-                        p.LocalId = locales.FirstOrDefault(l =>
+                        local = locales.FirstOrDefault(l =>
                             l.CodigoReceta == p.Receta &&
-                            l.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr)?.Id;
+                            l.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
                     }
                     else
                     {
                         // Fila sin receta: cruzar por Lote + FechaInicio
-                        p.LocalId = locales.FirstOrDefault(l =>
+                        local = locales.FirstOrDefault(l =>
                             string.IsNullOrEmpty(l.CodigoReceta) &&
                             l.Lote == p.Lote &&
-                            l.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr)?.Id;
+                            l.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
+                    }
+
+                    if (local != null)
+                    {
+                        p.LocalId = local.Id;
+                        // Sincronizar SQLite con los datos frescos de Oracle
+                        var estadoOracle = p.Estado switch { "3" => EstadoOrden.Terminado, "9" => EstadoOrden.Anulado, _ => EstadoOrden.EnProceso };
+                        var mat = string.IsNullOrEmpty(p.Material) ? "-" : p.Material;
+                        if (local.DescripcionMaterial != mat || local.Estado != estadoOracle ||
+                            local.Cerrado != (p.Estado == "3") || local.EmpleadoId != p.CodigoOperario ||
+                            local.Turno != p.Turno || local.PasoManuar != p.PasoManual ||
+                            local.Titulo != p.Titulo || local.Maquina != p.CodigoMaquina)
+                        {
+                            local.DescripcionMaterial = mat;
+                            local.Estado              = estadoOracle;
+                            local.Cerrado             = p.Estado == "3";
+                            local.EmpleadoId          = string.IsNullOrEmpty(p.CodigoOperario) ? "-" : p.CodigoOperario;
+                            local.Turno               = string.IsNullOrEmpty(p.Turno) ? "-" : p.Turno;
+                            local.PasoManuar          = string.IsNullOrEmpty(p.PasoManual) ? "-" : p.PasoManual;
+                            local.Titulo              = string.IsNullOrEmpty(p.Titulo) ? "-" : p.Titulo;
+                            local.Maquina             = string.IsNullOrEmpty(p.CodigoMaquina) ? "-" : p.CodigoMaquina;
+                            hayChanges = true;
+                        }
                     }
                 }
+                if (hayChanges)
+                    await _context.SaveChangesAsync();
 
                 // Crear registro local para preparatorias de Oracle sin contraparte en SQLite
                 foreach (var p in preparatorias.Where(p => !p.LocalId.HasValue).ToList())
@@ -236,12 +276,14 @@ namespace FabricaHilos.Controllers.Produccion
             var maquinasUnicas = preparatorias
                 .Where(p => !string.IsNullOrEmpty(p.CodigoMaquina))
                 .GroupBy(p => p.CodigoMaquina)
-                .Select(g => new
+                .Select(g =>
                 {
-                    Codigo = g.Key,
-                    Descripcion = string.IsNullOrEmpty(g.First().DescripcionMaquina)
+                    dynamic obj = new System.Dynamic.ExpandoObject();
+                    obj.Codigo = g.Key;
+                    obj.Descripcion = string.IsNullOrEmpty(g.First().DescripcionMaquina)
                         ? g.Key
-                        : g.First().DescripcionMaquina
+                        : g.First().DescripcionMaquina;
+                    return obj;
                 })
                 .OrderBy(m => m.Descripcion)
                 .ToList();
@@ -394,7 +436,26 @@ namespace FabricaHilos.Controllers.Produccion
                 var oldTitulo       = orden.Titulo;
                 var oldFechaInicio  = orden.FechaInicio;
 
-                // Actualizar los campos editables, incluida la Fecha de Inicio.
+                // UPDATE en Oracle primero (H_RPRODUC). Solo si tiene éxito se actualiza SQLite.
+                _logger.LogInformation("Editando preparatoria {Id} en Oracle como usuario {User}", id, User.Identity?.Name);
+                var actualizadoEnOracle = await _recetaService.ActualizarPreparatoriaOracleAsync(
+                    oldReceta, oldLote, oldTpMaq, oldCodMaq, oldTitulo, oldFechaInicio,
+                    model.CodigoReceta, model.Lote, model.CodigoMaquina, model.Maquina, model.Titulo,
+                    model.EmpleadoId, model.Turno, model.PasoManuar, model.FechaInicio,
+                    model.ContadorInicial, model.HorasInactivas, User.Identity?.Name, model.Velocidad, model.Metraje);
+
+                if (!actualizadoEnOracle)
+                {
+                    _logger.LogWarning("Preparatoria {Id}: falló en Oracle, no se actualiza SQLite.", id);
+                    TempData["Error"] = "No se pudo actualizar la preparatoria en Oracle. No se guardaron cambios.";
+                    ViewBag.Empleados = await _recetaService.ObtenerEmpleadosAsync();
+                    ViewBag.TiposMaquinas = await _recetaService.ObtenerTiposMaquinasAsync();
+                    ViewBag.Titulos = await _recetaService.ObtenerTitulosAsync();
+                    ViewBag.NavToken = returnUrl;
+                    return View(model);
+                }
+
+                // Oracle exitoso → actualizar SQLite
                 orden.CodigoReceta        = model.CodigoReceta;
                 orden.Lote                = model.Lote;
                 orden.DescripcionMaterial = model.DescripcionMaterial;
@@ -404,27 +465,15 @@ namespace FabricaHilos.Controllers.Produccion
                 orden.EmpleadoId          = model.EmpleadoId;
                 orden.Turno               = model.Turno;
                 orden.PasoManuar          = model.PasoManuar;
-                orden.ContadorInicial      = model.ContadorInicial;
-                orden.HorasInactivas       = model.HorasInactivas;
+                orden.ContadorInicial     = model.ContadorInicial;
+                orden.HorasInactivas      = model.HorasInactivas;
                 orden.FechaInicio         = model.FechaInicio;
                 orden.Velocidad           = model.Velocidad;
                 orden.Metraje             = model.Metraje;
-
                 await _context.SaveChangesAsync();
 
-                // UPDATE en Oracle (H_RPRODUC). Se actualiza también FECHA_INI con la nueva fecha.
-                _logger.LogInformation("Editando preparatoria {Id} en Oracle como usuario {User}", id, User.Identity?.Name);
-                var actualizadoEnOracle = await _recetaService.ActualizarPreparatoriaOracleAsync(
-                    oldReceta, oldLote, oldTpMaq, oldCodMaq, oldTitulo, oldFechaInicio,
-                    orden.CodigoReceta, orden.Lote, orden.CodigoMaquina, orden.Maquina, orden.Titulo,
-                    orden.EmpleadoId, orden.Turno, orden.PasoManuar, orden.FechaInicio,
-                    orden.ContadorInicial, orden.HorasInactivas, User.Identity?.Name, orden.Velocidad, orden.Metraje);
-
+                _logger.LogInformation("Preparatoria {Id} actualizada en Oracle y SQLite.", id);
                 TempData["Success"] = "Preparatoria actualizada correctamente.";
-                if (actualizadoEnOracle)
-                    _logger.LogInformation("Preparatoria {Id} actualizada en Oracle y SQLite.", id);
-                else
-                    _logger.LogWarning("Preparatoria {Id} actualizada en SQLite pero falló en Oracle.", id);
 
                 return RedirectToAction(nameof(Index), new { t = returnUrl });
             }
@@ -455,12 +504,7 @@ namespace FabricaHilos.Controllers.Produccion
                     return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
-                // Actualizar estado local
-                orden.Estado = EstadoOrden.Anulado;
-                _context.OrdenesProduccion.Update(orden);
-                await _context.SaveChangesAsync();
-
-                // Actualizar ESTADO = '9' en Oracle (H_RPRODUC) usando todos los campos clave
+                // Oracle primero: Actualizar ESTADO = '9' en Oracle (H_RPRODUC)
                 var anulado = await _recetaService.AnularPreparatoriaOracleAsync(
                     orden.CodigoReceta,
                     orden.Lote,
@@ -468,6 +512,18 @@ namespace FabricaHilos.Controllers.Produccion
                     orden.Maquina,
                     orden.Titulo,
                     orden.FechaInicio);
+
+                if (!anulado)
+                {
+                    _logger.LogWarning("Preparatoria {CodigoReceta}: falló en Oracle, no se anula en SQLite.", orden.CodigoReceta);
+                    TempData["Error"] = "No se pudo anular la preparatoria en Oracle. No se guardaron cambios.";
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
+                }
+
+                // Oracle exitoso → actualizar estado local
+                orden.Estado = EstadoOrden.Anulado;
+                _context.OrdenesProduccion.Update(orden);
+                await _context.SaveChangesAsync();
 
                 // Si es BATAN, actualizar A_MDUSER y A_MDFECHA en el último rollo asociado
                 if (orden.CodigoMaquina == "B")
@@ -485,16 +541,8 @@ namespace FabricaHilos.Controllers.Produccion
                         User.Identity?.Name);
                 }
 
-                if (anulado)
-                {
-                    TempData["Success"] = $"Preparatoria {orden.CodigoReceta} anulada exitosamente.";
-                    _logger.LogInformation("Preparatoria {CodigoReceta} anulada en Oracle y SQLite.", orden.CodigoReceta);
-                }
-                else
-                {
-                    TempData["Warning"] = $"Preparatoria {orden.CodigoReceta} anulada localmente, pero no se pudo actualizar en Oracle.";
-                    _logger.LogWarning("Preparatoria {CodigoReceta} anulada en SQLite pero falló en Oracle.", orden.CodigoReceta);
-                }
+                TempData["Success"] = $"Preparatoria {orden.CodigoReceta} anulada exitosamente.";
+                _logger.LogInformation("Preparatoria {CodigoReceta} anulada en Oracle y SQLite.", orden.CodigoReceta);
             }
             catch (Exception ex)
             {
@@ -534,12 +582,7 @@ namespace FabricaHilos.Controllers.Produccion
                     return RedirectToAction(nameof(Index));
                 }
 
-                orden.Cerrado = true;
-                orden.Estado = EstadoOrden.Terminado;
-                _context.OrdenesProduccion.Update(orden);
-                await _context.SaveChangesAsync();
-
-                // Actualizar ESTADO = '3' en Oracle (H_RPRODUC)
+                // Oracle primero: Actualizar ESTADO = '3' en Oracle (H_RPRODUC)
                 var cerrado = await _recetaService.CerrarPreparatoriaOracleAsync(
                     orden.CodigoReceta,
                     orden.Lote,
@@ -548,16 +591,21 @@ namespace FabricaHilos.Controllers.Produccion
                     orden.Titulo,
                     orden.FechaInicio);
 
-                if (cerrado)
+                if (!cerrado)
                 {
-                    TempData["Success"] = $"Preparatoria {orden.CodigoReceta} cerrada exitosamente.";
-                    _logger.LogInformation("Preparatoria {CodigoReceta} cerrada en Oracle y SQLite.", orden.CodigoReceta);
+                    _logger.LogWarning("Preparatoria {CodigoReceta}: falló en Oracle, no se cierra en SQLite.", orden.CodigoReceta);
+                    TempData["Error"] = "No se pudo cerrar la preparatoria en Oracle. No se guardaron cambios.";
+                    return RedirectToAction(nameof(Index));
                 }
-                else
-                {
-                    TempData["Warning"] = $"Preparatoria {orden.CodigoReceta} cerrada localmente, pero no se pudo actualizar en Oracle.";
-                    _logger.LogWarning("Preparatoria {CodigoReceta} cerrada en SQLite pero falló en Oracle.", orden.CodigoReceta);
-                }
+
+                // Oracle exitoso → actualizar estado local
+                orden.Cerrado = true;
+                orden.Estado = EstadoOrden.Terminado;
+                _context.OrdenesProduccion.Update(orden);
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = $"Preparatoria {orden.CodigoReceta} cerrada exitosamente.";
+                _logger.LogInformation("Preparatoria {CodigoReceta} cerrada en Oracle y SQLite.", orden.CodigoReceta);
             }
             catch (Exception ex)
             {
@@ -625,18 +673,7 @@ namespace FabricaHilos.Controllers.Produccion
                 return View(orden);
             }
 
-            // Actualizar campos de detalle y cerrar localmente
-            orden.RolloTacho = rolloTacho;
-            orden.KgNeto    = kgNeto;
-            orden.ContadorFinal = contadorFinal;
-            orden.NroParada = nroParada;
-            orden.Cerrado   = true;
-            orden.Estado    = EstadoOrden.Terminado;
-
-            _context.OrdenesProduccion.Update(orden);
-            await _context.SaveChangesAsync();
-
-            // UPDATE Oracle + SP_CALCULAR_PROD_ESP_TEO
+            // Oracle primero: UPDATE + SP_CALCULAR_PROD_ESP_TEO
             var resultado = await _recetaService.GuardarYCerrarDetalleProduccionAsync(
                 orden.CodigoReceta, orden.Lote,
                 orden.CodigoMaquina, orden.Maquina,
@@ -646,10 +683,24 @@ namespace FabricaHilos.Controllers.Produccion
 
             if (!resultado.UpdateExitoso)
             {
-                TempData["Warning"] = "Detalle guardado localmente, pero no se pudo actualizar en Oracle.";
-                _logger.LogWarning("DetalleProduccion {Id}: guardado en SQLite pero falló en Oracle.", id);
+                TempData["Error"] = "No se pudo guardar el detalle en Oracle. No se guardaron cambios.";
+                _logger.LogWarning("DetalleProduccion {Id}: falló en Oracle, no se actualiza SQLite.", id);
+                ViewBag.NavToken = returnUrl;
+                return View(orden);
             }
-            else if (resultado.Codigo == "0")
+
+            // Oracle exitoso → actualizar campos de detalle y cerrar localmente
+            orden.RolloTacho    = rolloTacho;
+            orden.KgNeto        = kgNeto;
+            orden.ContadorFinal = contadorFinal;
+            orden.NroParada     = nroParada;
+            orden.Cerrado       = true;
+            orden.Estado        = EstadoOrden.Terminado;
+
+            _context.OrdenesProduccion.Update(orden);
+            await _context.SaveChangesAsync();
+
+            if (resultado.Codigo == "0")
             {
                 TempData["Success"] = "Detalle de producción guardado y preparatoria cerrada exitosamente.";
                 _logger.LogInformation("DetalleProduccion {Id}: guardado y cerrado en Oracle y SQLite.", id);

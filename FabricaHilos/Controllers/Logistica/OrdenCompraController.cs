@@ -199,10 +199,14 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.Dt         = dt;
         ViewBag.ReturnPage = page;
 
-        var accesoOcDetalle  = _menuService.ObtenerAccesoModulo("LogisticaOrdenCompra");
-        var accesoLogistica  = _menuService.ObtenerAccesoModulo("Logistica");
-        ViewBag.NoAprobarOC  = accesoOcDetalle.TieneModificador("noAprobarOC")
-                            || accesoLogistica.TieneModificador("noAprobarOC");
+        var accesoOcDetalle       = _menuService.ObtenerAccesoModulo("LogisticaOrdenCompra");
+        var accesoLogistica       = _menuService.ObtenerAccesoModulo("Logistica");
+        ViewBag.NoAprobarOC          = accesoOcDetalle.TieneModificador("noAprobarOC")
+                                    || accesoLogistica.TieneModificador("noAprobarOC");
+        ViewBag.MostrarAnularOC      = accesoOcDetalle.TieneModificador("AnularOC")
+                                    || accesoLogistica.TieneModificador("AnularOC");
+        ViewBag.MostrarEnviarGerenciaOC = accesoOcDetalle.TieneModificador("EnviarGerenciaOC")
+                                       || accesoLogistica.TieneModificador("EnviarGerenciaOC");
 
         EnsureNetworkShare(ObtenerCarpetaRaiz());
 
@@ -572,7 +576,12 @@ public class OrdenCompraController : OracleBaseController
         }
 
         // ── Llamada al servicio ───────────────────────────────────────────────────
-        var usuario = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+        var usuario   = HttpContext.Session.GetString("OracleUser")       ?? string.Empty;
+        var cCodigo   = HttpContext.Session.GetString("OracleUserCodigo") ?? string.Empty;
+
+        // P_C_CODIGO siempre debe ser el C_CODIGO del usuario logueado (no viene del cliente)
+        if (string.IsNullOrWhiteSpace(request.CCodigo))
+            request.CCodigo = cCodigo;
 
         try
         {
@@ -802,6 +811,19 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.FirmaGenerado = firmaGenerado;
         ViewBag.FirmaAprobado = firmaAprobado;
 
+        // Desglose por destino / centro de costo para Contabilidad
+        var destinos = await _service.ObtenerDestinosPorOcAsync(tipoDocto, serie, numPed);
+        // Resolver descripciones de destino usando el catálogo
+        var catalogoDestinos = await _service.ObtenerDestinosAsync();
+        var dictDestinos = catalogoDestinos.ToDictionary(
+            d => $"{d.TpDestino}|{d.Codigo}", d => d.Descripcion, StringComparer.OrdinalIgnoreCase);
+        foreach (var d in destinos)
+        {
+            var key = $"{d.TpDestino}|{d.Destino}";
+            d.DestinoDesc = dictDestinos.TryGetValue(key, out var desc) ? desc : d.Destino;
+        }
+        ViewBag.DestinosOc = destinos;
+
         return View("~/Views/Logistica/OrdenCompra/ImprimirContabilidad.cshtml", (orden, items));
     }
 
@@ -818,7 +840,7 @@ public class OrdenCompraController : OracleBaseController
             return Json(new { ok = false, error });
 
         TempData["Success"] = $"O/C N° {request.NumPed} enviada a aprobación de Gerencia.";
-        return Json(new { ok = true });
+        return Json(new { ok = true, nuevoEstado = "2" });
     }
 
     // ── APROBAR ORDEN DE COMPRA ────────────────────────────────────────────────
@@ -835,7 +857,7 @@ public class OrdenCompraController : OracleBaseController
             return Json(new { ok = false, error });
 
         TempData["Success"] = $"O/C N° {request.NumPed} aprobada correctamente.";
-        return Json(new { ok = true });
+        return Json(new { ok = true, nuevoEstado = "2", aprobGerencia = "S" });
     }
 
     // ── NO APROBAR ORDEN DE COMPRA ────────────────────────────────────────────
@@ -852,7 +874,7 @@ public class OrdenCompraController : OracleBaseController
             return Json(new { ok = false, error });
 
         TempData["Success"] = $"O/C N° {request.NumPed} marcada como No Aprobada.";
-        return Json(new { ok = true });
+        return Json(new { ok = true, nuevoEstado = "3", aprobGerencia = "N" });
     }
 
     // ── CERRAR ORDEN DE COMPRA ─────────────────────────────────────────────────
@@ -884,7 +906,7 @@ public class OrdenCompraController : OracleBaseController
             return Json(new { ok = false, error });
 
         TempData["Success"] = $"O/C N° {request.NumPed} anulada correctamente.";
-        return Json(new { ok = true });
+        return Json(new { ok = true, nuevoEstado = "9" });
     }
 
     // ── PREVIEW BORRADOR (Paso 2 → Imprimir.cshtml sin guardar) ──────────────

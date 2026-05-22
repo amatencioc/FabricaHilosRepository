@@ -18,19 +18,22 @@ namespace FabricaHilos.Controllers.Produccion
         private readonly IParoService   _paroService;
         private readonly ILogger<AutoconerController> _logger;
         private readonly INavTokenService _navToken;
+        private readonly IMenuService _menuService;
 
         public AutoconerController(
             ApplicationDbContext context,
             IRecetaService recetaService,
             IParoService   paroService,
             ILogger<AutoconerController> logger,
-            INavTokenService navToken)
+            INavTokenService navToken,
+            IMenuService menuService)
         {
             _context       = context;
             _recetaService = recetaService;
             _paroService   = paroService;
             _logger        = logger;
             _navToken      = navToken;
+            _menuService   = menuService;
         }
 
         private static readonly HashSet<string> _apiActions = new(StringComparer.OrdinalIgnoreCase)
@@ -80,6 +83,19 @@ namespace FabricaHilos.Controllers.Produccion
 
             const int pageSize = 10;
 
+            // Leer modificador FecTurno del token Produccion en ACCESO_WEB
+            var accesoProduccion = _menuService.ObtenerAccesoModulo("Produccion");
+            var fecTurnoStr = accesoProduccion.ObtenerParametro("FecTurno");
+            // Formato: Ns (ej: 1s=7 días, 2s=14, 4s=28). Parseo dinámico.
+            int diasAtras = 0;
+            if (!string.IsNullOrEmpty(fecTurnoStr) &&
+                fecTurnoStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(fecTurnoStr[..^1], out int semanas) && semanas > 0)
+                diasAtras = semanas * 7;
+            // Con rango de fecha ampliado, mostrar todos los estados por defecto
+            if (diasAtras > 0 && estado.Count == 1 && estado[0] == "3")
+                estado = new List<string> { "1", "3", "9" };
+
             // Obtener preparatorias Autoconer desde Oracle (tipoMaquina = "A")
             var resultado = await _recetaService.ObtenerPreparatoriasAsync(
                 filtroLote: buscar,
@@ -87,7 +103,8 @@ namespace FabricaHilos.Controllers.Produccion
                 filtroTipoMaquina: "A",
                 filtroEstados: estado,
                 page: page,
-                pageSize: pageSize);
+                pageSize: pageSize,
+                diasAtras: diasAtras);
 
             var preparatorias = resultado.Items;
 
@@ -105,85 +122,66 @@ namespace FabricaHilos.Controllers.Produccion
                 var locales = await _context.RegistrosAutoconer
                     .Where(r => (r.CodigoReceta != null && recetas.Contains(r.CodigoReceta))
                              || lotes.Contains(r.Lote))
-                    .Select(r => new { 
-                        r.Id, 
-                        r.CodigoReceta, 
-                        r.Lote, 
-                        r.Fecha, 
-                        r.DescripcionMaterial,
-                        r.Guia,
-                        r.Tramo1,
-                        r.Tramo2,
-                        r.Tramo3,
-                        r.Tramo4,
-                        r.Tramo5,
-                        r.Tramo6
-                    })
                     .ToListAsync();
 
+                bool hayChanges = false;
                 foreach (var p in preparatorias)
                 {
                     var fechaStr = p.FechaInicio.ToString("yyyy-MM-dd HH:mm:ss");
+                    RegistroAutoconer? local;
+
                     if (!string.IsNullOrEmpty(p.Receta))
                     {
-                        var local = locales.FirstOrDefault(l =>
+                        local = locales.FirstOrDefault(l =>
                             l.CodigoReceta == p.Receta &&
                             l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
-                        if (local != null)
-                        {
-                            p.LocalId = local.Id;
-                            // PRIORIDAD ORACLE: Solo usar material local si Oracle no tiene dato
-                            if ((string.IsNullOrEmpty(p.Material) || p.Material == "-") &&
-                                !string.IsNullOrEmpty(local.DescripcionMaterial) && 
-                                local.DescripcionMaterial != "-")
-                            {
-                                p.Material = local.DescripcionMaterial;
-                            }
-                            // PRIORIDAD ORACLE: Solo usar Guía local si Oracle no tiene dato
-                            if (string.IsNullOrEmpty(p.Guia) && !string.IsNullOrEmpty(local.Guia))
-                            {
-                                p.Guia = local.Guia;
-                            }
-                            // PRIORIDAD ORACLE: Solo usar Tramos locales si Oracle tiene 0
-                            if (p.Tramo1 == 0 && local.Tramo1 > 0) p.Tramo1 = local.Tramo1;
-                            if (p.Tramo2 == 0 && local.Tramo2 > 0) p.Tramo2 = local.Tramo2;
-                            if (p.Tramo3 == 0 && local.Tramo3 > 0) p.Tramo3 = local.Tramo3;
-                            if (p.Tramo4 == 0 && local.Tramo4 > 0) p.Tramo4 = local.Tramo4;
-                            if (p.Tramo5 == 0 && local.Tramo5 > 0) p.Tramo5 = local.Tramo5;
-                            if (p.Tramo6 == 0 && local.Tramo6 > 0) p.Tramo6 = local.Tramo6;
-                        }
                     }
                     else
                     {
-                        var local = locales.FirstOrDefault(l =>
+                        local = locales.FirstOrDefault(l =>
                             (l.CodigoReceta == null || l.CodigoReceta == string.Empty) &&
                             l.Lote == p.Lote &&
                             l.Fecha.ToString("yyyy-MM-dd HH:mm:ss") == fechaStr);
-                        if (local != null)
+                    }
+
+                    if (local != null)
+                    {
+                        p.LocalId = local.Id;
+
+                        // Prioridad Oracle para la vista: completar con local solo si Oracle no tiene dato
+                        if ((string.IsNullOrEmpty(p.Material) || p.Material == "-") &&
+                            !string.IsNullOrEmpty(local.DescripcionMaterial) && local.DescripcionMaterial != "-")
+                            p.Material = local.DescripcionMaterial;
+                        if (string.IsNullOrEmpty(p.Guia) && !string.IsNullOrEmpty(local.Guia))
+                            p.Guia = local.Guia;
+                        if (p.Tramo1 == 0 && local.Tramo1 > 0) p.Tramo1 = local.Tramo1;
+                        if (p.Tramo2 == 0 && local.Tramo2 > 0) p.Tramo2 = local.Tramo2;
+                        if (p.Tramo3 == 0 && local.Tramo3 > 0) p.Tramo3 = local.Tramo3;
+                        if (p.Tramo4 == 0 && local.Tramo4 > 0) p.Tramo4 = local.Tramo4;
+                        if (p.Tramo5 == 0 && local.Tramo5 > 0) p.Tramo5 = local.Tramo5;
+                        if (p.Tramo6 == 0 && local.Tramo6 > 0) p.Tramo6 = local.Tramo6;
+
+                        // Sincronizar SQLite con los datos frescos de Oracle
+                        var estadoOracle = p.Estado switch { "3" => EstadoOrden.Terminado, "9" => EstadoOrden.Anulado, _ => EstadoOrden.EnProceso };
+                        var mat = string.IsNullOrEmpty(p.Material) ? "-" : p.Material;
+                        if (local.Estado != estadoOracle || local.Cerrado != (p.Estado == "3") ||
+                            local.DescripcionMaterial != mat || local.CodigoOperador != p.CodigoOperario ||
+                            local.Turno != p.Turno || local.Titulo != p.Titulo ||
+                            local.NumeroAutoconer != p.CodigoMaquina)
                         {
-                            p.LocalId = local.Id;
-                            // PRIORIDAD ORACLE: Solo usar material local si Oracle no tiene dato
-                            if ((string.IsNullOrEmpty(p.Material) || p.Material == "-") &&
-                                !string.IsNullOrEmpty(local.DescripcionMaterial) && 
-                                local.DescripcionMaterial != "-")
-                            {
-                                p.Material = local.DescripcionMaterial;
-                            }
-                            // PRIORIDAD ORACLE: Solo usar Guía local si Oracle no tiene dato
-                            if (string.IsNullOrEmpty(p.Guia) && !string.IsNullOrEmpty(local.Guia))
-                            {
-                                p.Guia = local.Guia;
-                            }
-                            // PRIORIDAD ORACLE: Solo usar Tramos locales si Oracle tiene 0
-                            if (p.Tramo1 == 0 && local.Tramo1 > 0) p.Tramo1 = local.Tramo1;
-                            if (p.Tramo2 == 0 && local.Tramo2 > 0) p.Tramo2 = local.Tramo2;
-                            if (p.Tramo3 == 0 && local.Tramo3 > 0) p.Tramo3 = local.Tramo3;
-                            if (p.Tramo4 == 0 && local.Tramo4 > 0) p.Tramo4 = local.Tramo4;
-                            if (p.Tramo5 == 0 && local.Tramo5 > 0) p.Tramo5 = local.Tramo5;
-                            if (p.Tramo6 == 0 && local.Tramo6 > 0) p.Tramo6 = local.Tramo6;
+                            local.Estado              = estadoOracle;
+                            local.Cerrado             = p.Estado == "3";
+                            local.DescripcionMaterial = mat;
+                            local.CodigoOperador      = string.IsNullOrEmpty(p.CodigoOperario) ? "-" : p.CodigoOperario;
+                            local.Turno               = string.IsNullOrEmpty(p.Turno) ? "-" : p.Turno;
+                            local.Titulo              = string.IsNullOrEmpty(p.Titulo) ? "-" : p.Titulo;
+                            local.NumeroAutoconer     = string.IsNullOrEmpty(p.CodigoMaquina) ? "-" : p.CodigoMaquina;
+                            hayChanges = true;
                         }
                     }
                 }
+                if (hayChanges)
+                    await _context.SaveChangesAsync();
 
                 // Crear registro local para registros de Oracle sin contraparte en SQLite
                 foreach (var p in preparatorias.Where(p => !p.LocalId.HasValue).ToList())
@@ -651,10 +649,7 @@ namespace FabricaHilos.Controllers.Produccion
                     return RedirectToAction(nameof(Index), new { t = returnUrl });
                 }
 
-                registro.Estado = EstadoOrden.Anulado;
-                _context.RegistrosAutoconer.Update(registro);
-                await _context.SaveChangesAsync();
-
+                // Oracle primero: Actualizar ESTADO = '9' en Oracle (H_RPRODUC)
                 var anulado = await _recetaService.AnularPreparatoriaOracleAsync(
                     registro.CodigoReceta,
                     registro.Lote,
@@ -663,9 +658,20 @@ namespace FabricaHilos.Controllers.Produccion
                     registro.Titulo,
                     registro.Fecha);
 
-                TempData["Success"] = anulado
-                    ? "Registro Autoconer anulado exitosamente."
-                    : "Registro anulado localmente, pero no se pudo actualizar en Oracle.";
+                if (!anulado)
+                {
+                    _logger.LogWarning("Autoconer {Id}: falló en Oracle, no se anula en SQLite.", id);
+                    TempData["Error"] = "No se pudo anular el registro en Oracle. No se guardaron cambios.";
+                    return RedirectToAction(nameof(Index), new { t = returnUrl });
+                }
+
+                // Oracle exitoso → actualizar estado local
+                registro.Estado = EstadoOrden.Anulado;
+                _context.RegistrosAutoconer.Update(registro);
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = "Registro Autoconer anulado exitosamente.";
+                _logger.LogInformation("Autoconer {Id} anulado en Oracle y SQLite.", id);
             }
             catch (Exception ex)
             {

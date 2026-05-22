@@ -51,7 +51,7 @@
     // Calcular totales
     decimal totalSoles  = items.Where(i => (i.Moneda ?? "S") != "D").Sum(i => i.Cantidad * i.Precio);
     decimal totalDolar  = items.Where(i => (i.Moneda ?? "S") == "D").Sum(i => i.Cantidad * i.Precio);
-    decimal igvTasa     = (cab.Impsto ?? 0m) > 0 ? (cab.Impsto!.Value / 100m) : 0.18m;
+    decimal igvTasa     = (cab.Impsto ?? 0m) > 0 ? cab.Impsto!.Value : 0.18m;
     bool    afectaIgv   = (cab.AfectoIgv ?? "N") == "S";
     decimal igvSoles    = afectaIgv ? Math.Round(totalSoles * igvTasa, 2) : 0m;
     decimal totalFinal  = totalSoles + igvSoles;

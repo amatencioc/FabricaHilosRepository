@@ -187,7 +187,7 @@ namespace FabricaHilos.Services.Produccion
         Task<bool> InsertarPreparatoriaAutoconerAsync(RegistroAutoconer registro, string? adUser = null);
         Task<decimal> ObtenerPesoTituloAsync(string titulo);
         Task<int> ObtenerHusosMaquinaAsync(string tpMaq, string codMaq);
-        Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10);
+        Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10, int diasAtras = 0);
         Task<bool> TieneMaquinaEnProcesoAsync(string tpMaq, string codMaq);
         Task<bool> CerrarPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni, string? mdUser = null);
         Task<bool> AnularPreparatoriaOracleAsync(string? receta, string? lote, string? tpMaq, string? codMaq, string? titulo, DateTime fechaIni);
@@ -1232,9 +1232,11 @@ namespace FabricaHilos.Services.Produccion
             }
         }
 
-        public async Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10)
+        public async Task<PreparatoriaPagedResult> ObtenerPreparatoriasAsync(string? filtroLote = null, string? filtroMaquina = null, string? filtroTipoMaquina = null, List<string>? filtroEstados = null, int page = 1, int pageSize = 10, int diasAtras = 0)
         {
-            var connectionString = GetOracleConnectionString();
+            // Usar credenciales base de la app (no del usuario logueado) para evitar que
+            // el VPD/RLS de Oracle filtre las filas del propio usuario en listados de lectura.
+            var connectionString = GetBaseOracleConnectionString();
 
             if (string.IsNullOrEmpty(connectionString))
             {
@@ -1242,7 +1244,9 @@ namespace FabricaHilos.Services.Produccion
                 return new PreparatoriaPagedResult();
             }
 
-            _logger.LogInformation("Obteniendo preparatorias desde H_RPRODUC por FECHA_TURNO del día de hoy");
+            _logger.LogInformation(diasAtras > 0
+                ? "Obteniendo preparatorias desde H_RPRODUC últimos {Dias} días"
+                : "Obteniendo preparatorias desde H_RPRODUC por FECHA_TURNO del día de hoy", diasAtras);
 
             // Construir filtros dinámicos (compartidos entre COUNT y consulta de datos)
             var filterSuffix = string.Empty;
@@ -1254,8 +1258,9 @@ namespace FabricaHilos.Services.Produccion
                 filterSuffix += " AND R.COD_MAQ LIKE :filtroMaquina || '%'";
             if (filtroEstados != null && filtroEstados.Count > 0)
             {
-                var paramNames = string.Join(", ", filtroEstados.Select((_, i) => $":filtroEstado{i}"));
-                filterSuffix += $" AND R.ESTADO IN ({paramNames})";
+                // Estados son valores internos controlados ('1','3','9') — se embeben como literales.
+                var estadoLiterals = string.Join(", ", filtroEstados.Select(e => $"'{e}'"));
+                filterSuffix += $" AND R.ESTADO IN ({estadoLiterals})";
             }
 
             // Si ya se filtra por tipo específico, el filterSuffix lo restringe;
@@ -1265,7 +1270,14 @@ namespace FabricaHilos.Services.Produccion
                 : string.Empty;
 
             // ── CONTEO: query liviano, solo H_RPRODUC ────────────────────────────
-            var countQuery = $"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY')" + baseTpFilter + filterSuffix;
+            // FECHA_TURNO es string DD/MM/YYYY frecuentemente vacío; se usa FECHA_INI (DATE) para filtrar.
+            var fechaLimite = DateTime.Today.AddDays(-diasAtras).ToString("yyyyMMdd");
+            var fechaHoy    = DateTime.Today.ToString("yyyyMMdd");
+            var filtroFechaCount = diasAtras > 0
+                ? $"TRUNC(R.FECHA_INI) BETWEEN TO_DATE('{fechaLimite}','YYYYMMDD') AND TO_DATE('{fechaHoy}','YYYYMMDD')"
+                : "TRUNC(R.FECHA_INI) = TRUNC(SYSDATE)";
+            var countQuery = $"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE " + filtroFechaCount + baseTpFilter + filterSuffix;
+            _logger.LogInformation("COUNT SQL FULL: {Sql}", countQuery);
 
             // ── DATOS: paginación en dos fases ────────────────────────────────────
             // Fase 1: query ligero (sin subqueries correlacionadas).
@@ -1283,7 +1295,9 @@ namespace FabricaHilos.Services.Produccion
                 LEFT JOIN {S}V_MAQUINA  M ON M.COD_MAQ  = R.COD_MAQ  AND M.AREA = '01'
                 LEFT JOIN {S}H_TITULOS  T ON T.TITULO   = R.TITULO
                 LEFT JOIN {S}V_PERSONAL P ON P.C_CODIGO = R.C_CODIGO
-                     WHERE R.FECHA_TURNO = TO_CHAR(SYSDATE, 'DD/MM/YYYY')";
+                     WHERE " + (diasAtras > 0
+                         ? $"TRUNC(R.FECHA_INI) BETWEEN TO_DATE('{fechaLimite}','YYYYMMDD') AND TO_DATE('{fechaHoy}','YYYYMMDD')"
+                         : "TRUNC(R.FECHA_INI) = TRUNC(SYSDATE)");
                 innerLightQuery += baseTpFilter;
                 innerLightQuery += filterSuffix;
             innerLightQuery += " ORDER BY R.FECHA_INI DESC";
@@ -1352,7 +1366,60 @@ namespace FabricaHilos.Services.Produccion
                 await connection.OpenAsync();
                 _logger.LogDebug("Conexión establecida");
 
+                // Log del usuario Oracle activo para diagnóstico
+                try
+                {
+                    var session = _httpContextAccessor.HttpContext?.Session;
+                    _logger.LogInformation("SESSION → EmpresaConexion={Emp} | OracleUser={User}",
+                        session?.GetString("EmpresaConexion") ?? "(null)",
+                        session?.GetString("OracleUser")      ?? "(null)");
+                    using var whoCmd = new OracleCommand("SELECT USER FROM DUAL", connection);
+                    var oraUser = await whoCmd.ExecuteScalarAsync();
+                    _logger.LogInformation("ORACLE USER ACTIVO: {User}", oraUser?.ToString() ?? "(null)");
+
+                    // Diagnóstico en capas para aislar el filtro que devuelve 0
+                    using var d1 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC", connection);
+                    var r1 = await d1.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 1 - Total sin filtros: {C}", r1);
+
+                    using var d2 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE TO_DATE(R.FECHA_TURNO,'DD/MM/YYYY') >= TRUNC(SYSDATE) - 28", connection);
+                    var r2 = await d2.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 2 - Solo fecha 28d: {C}", r2);
+
+                    using var d3 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE TO_DATE(R.FECHA_TURNO,'DD/MM/YYYY') >= TRUNC(SYSDATE) - 28 AND R.TP_MAQ IN ('M','P','E','L','B')", connection);
+                    var r3 = await d3.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 3 - Fecha + TP_MAQ: {C}", r3);
+
+                    using var d4 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE TO_DATE(R.FECHA_TURNO,'DD/MM/YYYY') >= TRUNC(SYSDATE) - 28 AND R.TP_MAQ IN ('M','P','E','L','B') AND R.ESTADO IN ('3','9')", connection);
+                    var r4 = await d4.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 4 - Fecha + TP_MAQ + Estado(3,9): {C}", r4);
+
+                    using var d5 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE R.FECHA_TURNO >= TO_CHAR(SYSDATE - 28,'DD/MM/YYYY')", connection);
+                    var r5 = await d5.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 5 - Comparacion string fecha: {C}", r5);
+
+                    // DIAG 6: verificar el rango BETWEEN solo con FECHA_INI (sin TP_MAQ ni ESTADO)
+                    using var d6 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE TRUNC(R.FECHA_INI) BETWEEN TO_DATE('{fechaLimite}','YYYYMMDD') AND TO_DATE('{fechaHoy}','YYYYMMDD')", connection);
+                    var r6 = await d6.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 6 - BETWEEN FECHA_INI solo: {C}", r6);
+
+                    // DIAG 7: BETWEEN FECHA_INI + TP_MAQ (sin ESTADO)
+                    using var d7 = new OracleCommand($"SELECT COUNT(*) FROM {S}H_RPRODUC R WHERE TRUNC(R.FECHA_INI) BETWEEN TO_DATE('{fechaLimite}','YYYYMMDD') AND TO_DATE('{fechaHoy}','YYYYMMDD') AND R.TP_MAQ IN ('M','P','E','L','B','A')", connection);
+                    var r7 = await d7.ExecuteScalarAsync();
+                    _logger.LogInformation("DIAG 7 - BETWEEN FECHA_INI + TP_MAQ: {C}", r7);
+
+                    // DIAG 8: muestra un valor real de FECHA_TURNO para verificar el formato
+                    using var d8 = new OracleCommand($"SELECT R.FECHA_TURNO, R.TP_MAQ, R.ESTADO FROM {S}H_RPRODUC R WHERE ROWNUM = 1", connection);
+                    using var rd8 = await d8.ExecuteReaderAsync();
+                    if (await rd8.ReadAsync())
+                        _logger.LogInformation("DIAG 8 - Muestra FECHA_TURNO=[{FT}] TP_MAQ=[{TM}] ESTADO=[{ES}]", rd8[0], rd8[1], rd8[2]);
+                }
+                catch (Exception ex) { _logger.LogWarning("Diagnóstico Oracle falló: {Msg}", ex.Message); }
+
                 // 1. Total de registros
+                _logger.LogInformation("PARAMS COUNT → lote={Lote} | tipoMaq={TipoMaq} | maq={Maq} | estados=[{Estados}] | diasAtras={Dias}",
+                    filtroLote ?? "(null)", filtroTipoMaquina ?? "(null)", filtroMaquina ?? "(null)",
+                    filtroEstados != null ? string.Join(",", filtroEstados) : "(null)", diasAtras);
                 int totalCount = 0;
                 using (var countCmd = new OracleCommand(countQuery, connection))
                 {
@@ -1365,10 +1432,10 @@ namespace FabricaHilos.Services.Produccion
                         countCmd.Parameters.Add(new OracleParameter(":filtroMaquina", OracleDbType.Varchar2, filtroMaquina, ParameterDirection.Input));
                     if (filtroEstados != null && filtroEstados.Count > 0)
                     {
-                        for (int i = 0; i < filtroEstados.Count; i++)
-                            countCmd.Parameters.Add(new OracleParameter($":filtroEstado{i}", OracleDbType.Varchar2, filtroEstados[i], ParameterDirection.Input));
+                        // Estados ya embebidos como literales en filterSuffix — no requieren parámetros.
                     }
                     var countResult = await countCmd.ExecuteScalarAsync();
+                    _logger.LogInformation("COUNT RESULT → {CountResult}", countResult);
                     if (countResult != null && countResult != DBNull.Value)
                         totalCount = Convert.ToInt32(countResult);
                 }
@@ -1387,8 +1454,7 @@ namespace FabricaHilos.Services.Produccion
                         dataCmd.Parameters.Add(new OracleParameter(":filtroMaquina", OracleDbType.Varchar2, filtroMaquina, ParameterDirection.Input));
                     if (filtroEstados != null && filtroEstados.Count > 0)
                     {
-                        for (int i = 0; i < filtroEstados.Count; i++)
-                            dataCmd.Parameters.Add(new OracleParameter($":filtroEstado{i}", OracleDbType.Varchar2, filtroEstados[i], ParameterDirection.Input));
+                        // Estados ya embebidos como literales en filterSuffix — no requieren parámetros.
                     }
                     dataCmd.Parameters.Add(new OracleParameter(":pEndRow",   OracleDbType.Int32, endRow,   ParameterDirection.Input));
                     dataCmd.Parameters.Add(new OracleParameter(":pStartRow", OracleDbType.Int32, startRow, ParameterDirection.Input));

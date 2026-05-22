@@ -58,7 +58,10 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int oFchRealCalidad, int oFchRealAlmPt, int oFchRealDespacho,
         int oKgProducidos, int oKgEnTin, int oKgEnAlmPt, int oKgDespachados, int oKgPendientes,
         int oIndRetraso, int oDiasRetraso, int oIndUrgente, int oIndReproceso, int oEstado,
-        int oFchRealGaseado = -1)   // v2.1: opcional — solo '09B' PROCESO='24'
+        int oFchRealGaseado = -1,   // v2.1: opcional — solo '09B' PROCESO='24'
+        int oMaqTt = -1, int oMaqProgramada = -1, int oMaqPartida = -1,   // v2.2: campos máquina
+        int oMaqRealTt = -1,                                               // v2.3: TT_RPRODUC real-time
+        int oNumPartida = -1)                                              // v2.4: PARTIDA.NUMERO
         => new()
         {
             IdSeguim          = SafeVal<long>(r[oIdSeguim]),
@@ -110,6 +113,11 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             IndUrgente        = SafeStr(r[oIndUrgente]),
             IndReproceso      = SafeStr(r[oIndReproceso]),
             Estado            = SafeStr(r[oEstado]),
+            CodMaqTt          = oMaqTt         >= 0 ? SafeStr(r[oMaqTt])         : null,
+            MaqProgramada     = oMaqProgramada >= 0 ? SafeStr(r[oMaqProgramada]) : null,
+            MaqPartida        = oMaqPartida    >= 0 ? SafeStr(r[oMaqPartida])    : null,
+            MaqRealTt         = oMaqRealTt     >= 0 ? SafeStr(r[oMaqRealTt])     : null,
+            NumPartida        = oNumPartida    >= 0 ? SafeVal<long>(r[oNumPartida]) : 0,
         };
 
     private string EstadoItemSelect => $@"
@@ -143,12 +151,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         FROM   {S}V_PLN_ESTADO_ITEM v";
 
     public async Task<IEnumerable<PlnSeguimiento>> GetActivosAsync(
-        string? busquedaCliente = null, string? codPaso = null, string? numPed = null)
+        string? busquedaCliente = null, string? codPaso = null, string? numPed = null, bool incluyeCerrados = false)
     {
         // Usa V_PLN_ESTADO_ITEM (§8.2 PKG_PLN): ya incluye JOINs a CLIENTES,
         // ARTICUL y PLN_ESTADO_CODIGO. Filtro ESTADO='A' equivale a estado_seguim='A'.
         var sql = EstadoItemSelect
-            + " WHERE v.estado_seguim = 'A'"
+            + (incluyeCerrados ? " WHERE v.estado_seguim IN ('A','C')" : " WHERE v.estado_seguim = 'A'")
             + (!string.IsNullOrWhiteSpace(busquedaCliente)
                 ? " AND (UPPER(v.nom_cliente) LIKE UPPER('%'||:busquedaCliente||'%') OR UPPER(v.cod_cliente) LIKE UPPER('%'||:busquedaCliente||'%'))"
                 : "")
@@ -267,10 +275,27 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.KG_DESPACHADOS,    s.KG_PENDIENTES,
                    s.IND_RETRASO, s.DIAS_RETRASO,
                    s.IND_URGENTE, s.IND_REPROCESO,
-                   s.ESTADO
+                   s.ESTADO,
+                   s.COD_MAQ_TT,
+                   s.NUM_PARTIDA,
+                   id.MAQUINA        AS MAQ_PROGRAMADA,
+                   p.COD_MAQ         AS MAQ_PARTIDA,
+                   (SELECT tt.cod_maq
+                    FROM   {S}TT_RPRODUC tt
+                    JOIN   {S}PARTIDA_MAS pm ON pm.numero = tt.receta AND pm.tp_transac = 'IR'
+                    WHERE  pm.partida      = s.NUM_PARTIDA
+                      AND  tt.estado       IN ('0','1','2')
+                      AND  s.NUM_PARTIDA   IS NOT NULL
+                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT
             FROM   {S}PLN_SEGUIMIENTO s
             JOIN   {S}V_PLN_ESTADO_ITEM v
                 ON  v.ID_SEGUIM = s.ID_SEGUIM
+            LEFT JOIN {S}ITEMPED_DET id
+                ON  id.SERIE   = s.SERIE
+                AND id.NUM_PED = s.NUM_PED
+                AND id.NRO     = s.NRO
+                AND id.NUM_DET = s.NUM_DET
+            LEFT JOIN {S}PARTIDA p ON p.NROPROG = id.NROPROG AND id.NROPROG > 0
             WHERE  s.NUM_PED = :numPed AND s.SERIE = :serie
             ORDER  BY s.NRO, s.NUM_DET";
 
@@ -324,7 +349,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             oDiasRetraso = r.GetOrdinal("DIAS_RETRASO"),
             oIndUrgente = r.GetOrdinal("IND_URGENTE"),
             oIndReproceso = r.GetOrdinal("IND_REPROCESO"),
-            oEstado = r.GetOrdinal("ESTADO");
+            oEstado = r.GetOrdinal("ESTADO"),
+            oMaqTt = r.GetOrdinal("COD_MAQ_TT"),
+            oMaqProgramada = r.GetOrdinal("MAQ_PROGRAMADA"),
+            oMaqPartida = r.GetOrdinal("MAQ_PARTIDA"),
+            oMaqRealTt = r.GetOrdinal("MAQ_REAL_TT"),
+            oNumPartida = r.GetOrdinal("NUM_PARTIDA");
 
         do
         {
@@ -342,7 +372,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oFchRealCalidad, oFchRealAlmPt, oFchRealDespacho,
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
                 oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
-                oFchRealGaseado));
+                oFchRealGaseado, oMaqTt, oMaqProgramada, oMaqPartida, oMaqRealTt,
+                oNumPartida));
         } while (await r.ReadAsync());
 
         return list;
@@ -400,9 +431,26 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.KG_DESPACHADOS,    s.KG_PENDIENTES,
                    s.IND_RETRASO, s.DIAS_RETRASO,
                    s.IND_URGENTE, s.IND_REPROCESO,
-                   s.ESTADO
+                   s.ESTADO,
+                   s.COD_MAQ_TT,
+                   s.NUM_PARTIDA,
+                   id.MAQUINA        AS MAQ_PROGRAMADA,
+                   p.COD_MAQ         AS MAQ_PARTIDA,
+                   (SELECT tt.cod_maq
+                    FROM   {S}TT_RPRODUC tt
+                    JOIN   {S}PARTIDA_MAS pm ON pm.numero = tt.receta AND pm.tp_transac = 'IR'
+                    WHERE  pm.partida      = s.NUM_PARTIDA
+                      AND  tt.estado       IN ('0','1','2')
+                      AND  s.NUM_PARTIDA   IS NOT NULL
+                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT
             FROM   {S}PLN_SEGUIMIENTO s
             JOIN   {S}V_PLN_ESTADO_ITEM v ON v.ID_SEGUIM = s.ID_SEGUIM
+            LEFT JOIN {S}ITEMPED_DET id
+                ON  id.SERIE   = s.SERIE
+                AND id.NUM_PED = s.NUM_PED
+                AND id.NRO     = s.NRO
+                AND id.NUM_DET = s.NUM_DET
+            LEFT JOIN {S}PARTIDA p ON p.NROPROG = id.NROPROG AND id.NROPROG > 0
             WHERE  {whereClause}";
 
         await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -441,7 +489,10 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             r.GetOrdinal("IND_RETRASO"),   r.GetOrdinal("DIAS_RETRASO"),
             r.GetOrdinal("IND_URGENTE"),   r.GetOrdinal("IND_REPROCESO"),
             r.GetOrdinal("ESTADO"),
-            r.GetOrdinal("FCH_REAL_GASEADO"));
+            r.GetOrdinal("FCH_REAL_GASEADO"),
+            r.GetOrdinal("COD_MAQ_TT"), r.GetOrdinal("MAQ_PROGRAMADA"),
+            r.GetOrdinal("MAQ_PARTIDA"), r.GetOrdinal("MAQ_REAL_TT"),
+            r.GetOrdinal("NUM_PARTIDA"));
     }
 
     public async Task<IEnumerable<PlnEstadoCodigo>> GetEstadosAsync()
@@ -922,4 +973,564 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             return (SafeStr(r["DESCRIPCION"]), SafeStr(r["FIBRA"]));
         return ("", "");
     }
+
+    public async Task<(int BanosActivos, bool EsLibre, decimal PctCargaHoy, bool HayCargaHoy, int DiasAntiguo)> GetMaquinaStatusAsync(string codMaq)
+    {
+        var sqlBanos = $@"
+            SELECT NVL(SUM(CASE WHEN estado != '3' THEN 1 ELSE 0 END), 0) AS banos_activos
+            FROM   {S}TT_RPRODUC
+            WHERE  cod_maq   = :codMaq
+              AND  fecha_ini >= TRUNC(SYSDATE) - 7";
+
+        // Usa el día más reciente disponible en los últimos 30 días
+        // (el JOB_PLN_CARGA corre a las 23:30, por lo que durante el día solo hay datos de ayer)
+        var sqlCarga = $@"
+            SELECT NVL(c.PCT_UTILIZACION, 0)          AS pct_hoy,
+                   NVL(c.IND_SOBRECARGADA,'N')        AS ind_sob,
+                   TRUNC(SYSDATE) - TRUNC(c.FECHA)   AS dias_antiguo
+            FROM   {S}PLN_CARGA_DIARIA c
+            WHERE  c.COD_MAQ = :codMaq
+              AND  c.FECHA   = (SELECT MAX(c2.FECHA)
+                                FROM   {S}PLN_CARGA_DIARIA c2
+                                WHERE  c2.COD_MAQ = :codMaq
+                                  AND  c2.FECHA  <= TRUNC(SYSDATE)
+                                  AND  c2.FECHA  >= TRUNC(SYSDATE) - 30)";
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        // Query 1: baños activos en los últimos 7 días
+        int banosActivos;
+        await using (var cmd = new OracleCommand(sqlBanos, conn))
+        {
+            cmd.BindByName = true;
+            cmd.Parameters.Add("codMaq", codMaq);
+            await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+            banosActivos = await r.ReadAsync() ? SafeVal<int>(r["BANOS_ACTIVOS"]) : 0;
+        }
+
+        // Query 2: carga desde PLN_CARGA_DIARIA — día más reciente disponible (≤ 30 días)
+        decimal pctCargaHoy = 0;
+        bool hayCargaHoy = false;
+        int diasAntiguo = -1;
+        await using (var cmd2 = new OracleCommand(sqlCarga, conn))
+        {
+            cmd2.BindByName = true;
+            cmd2.Parameters.Add("codMaq", codMaq);
+            await using var r2 = (OracleDataReader)await cmd2.ExecuteReaderAsync();
+            if (await r2.ReadAsync() && r2["PCT_HOY"] != DBNull.Value)
+            {
+                pctCargaHoy  = SafeVal<decimal>(r2["PCT_HOY"]);
+                hayCargaHoy  = true;
+                diasAntiguo  = SafeVal<int>(r2["DIAS_ANTIGUO"]);
+            }
+        }
+
+        return (banosActivos, banosActivos == 0, pctCargaHoy, hayCargaHoy, diasAntiguo);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // Detalle completo de Tintorería para una Partida
+    // ────────────────────────────────────────────────────────────────────────────
+
+    public async Task<PlnDetalleTt> GetDetalleTtAsync(long numPartida)
+    {
+        var result = new PlnDetalleTt();
+        if (numPartida <= 0) return result;
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        // ── 1. NROPROG y FECHA de la partida ────────────────────────────────────
+        long nroprog = 0;
+        {
+            await using var cmd = new OracleCommand(
+                $"SELECT NROPROG, FECHA FROM {S}PARTIDA WHERE NUMERO = :num AND ROWNUM = 1", conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("num", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync())
+            {
+                if (r["NROPROG"] != DBNull.Value) nroprog = Convert.ToInt64(r["NROPROG"]);
+                if (r["FECHA"] != DBNull.Value)   result.FechaPartida = SafeVal<DateTime?>(r["FECHA"]);
+            }
+        }
+
+        // ── 2. Cálculo de recetas planificadas (ING_RECETAS_G vía PARTIDA_MAS) ──
+        {
+            var sql = $@"
+                SELECT ig.numero        AS GUIA,
+                       ig.proceso,
+                       ig.maquina       AS COD_MAQ_PLANIF,
+                       ig.peso_neto,
+                       ig.estado        AS ESTADO_RECETA,
+                       m.descripcion    AS NOMBRE_MAQ_PLANIF
+                FROM   {S}ing_recetas_g ig
+                JOIN   {S}partida_mas pm
+                    ON  pm.tp_transac = ig.tp_transac
+                    AND pm.serie      = ig.serie
+                    AND pm.numero     = ig.numero
+                LEFT JOIN {S}tt_maquina m ON m.cod_maq = ig.maquina
+                WHERE  pm.partida = :numPartida
+                ORDER  BY ig.numero";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var proceso = SafeStr(r["PROCESO"]);
+                result.CalculoRecetas.Add(new PlnCalculoReceta
+                {
+                    Guia            = SafeVal<long>(r["GUIA"]),
+                    Proceso         = proceso,
+                    DescProceso     = DescProceso(proceso),
+                    CodMaqPlanif    = SafeStr(r["COD_MAQ_PLANIF"]),
+                    NombreMaqPlanif = SafeStr(r["NOMBRE_MAQ_PLANIF"]),
+                    PesoNeto        = r["PESO_NETO"]     == DBNull.Value ? null : SafeVal<decimal?>(r["PESO_NETO"]),
+                    EstadoReceta    = SafeVal<int>(r["ESTADO_RECETA"]),
+                    DescEstReceta   = DescEstadoReceta(SafeVal<int>(r["ESTADO_RECETA"])),
+                });
+            }
+        }
+
+        // ── 3. Baños TT ejecutados (TT_RPRODUC TIPODOC='IR' vía PARTIDA_MAS) ───
+        {
+            var sql = $@"
+                SELECT tt.receta            AS GUIA,
+                       tt.proceso,
+                       tt.cod_maq,
+                       m.descripcion        AS NOMBRE_MAQ,
+                       tt.fecha_ini,
+                       tt.fecha_fin,
+                       ROUND((tt.fecha_fin - tt.fecha_ini) * 24, 2)  AS HORAS,
+                       tt.calificacion,
+                       tt.estado,
+                       ig.maquina           AS COD_MAQ_PLANIF,
+                       mpl.descripcion      AS NOMBRE_MAQ_PLANIF
+                FROM   {S}tt_rproduc tt
+                JOIN   {S}partida_mas pm
+                    ON  pm.numero    = tt.receta
+                    AND pm.tp_transac = 'IR'
+                JOIN   {S}ing_recetas_g ig ON ig.numero = tt.receta
+                LEFT JOIN {S}tt_maquina m   ON m.cod_maq  = tt.cod_maq
+                LEFT JOIN {S}tt_maquina mpl ON mpl.cod_maq = ig.maquina
+                WHERE  pm.partida = :numPartida
+                  AND  tt.tipodoc = 'IR'
+                ORDER  BY tt.fecha_ini";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var proceso = SafeStr(r["PROCESO"]);
+                var calif   = r["CALIFICACION"] == DBNull.Value ? null : SafeStr(r["CALIFICACION"]);
+                result.Banos.Add(new PlnBanoTt
+                {
+                    Guia            = SafeVal<long>(r["GUIA"]),
+                    Proceso         = proceso,
+                    DescProceso     = DescProceso(proceso),
+                    CodMaq          = SafeStr(r["COD_MAQ"]),
+                    NombreMaq       = SafeStr(r["NOMBRE_MAQ"]),
+                    FechaIni        = SafeVal<DateTime>(r["FECHA_INI"]),
+                    FechaFin        = r["FECHA_FIN"]  == DBNull.Value ? null : SafeVal<DateTime?>(r["FECHA_FIN"]),
+                    Horas           = r["HORAS"]       == DBNull.Value ? null : SafeVal<decimal?>(r["HORAS"]),
+                    Calificacion    = calif,
+                    DescCalif       = DescCalificacion(calif),
+                    Estado          = SafeStr(r["ESTADO"]),
+                    CodMaqPlanif    = SafeStr(r["COD_MAQ_PLANIF"]),
+                    NombreMaqPlanif = SafeStr(r["NOMBRE_MAQ_PLANIF"]),
+                });
+            }
+        }
+
+        // ── 4. Registro de secado (TT_RSECADO vía GUIA = PARTIDA.NUMERO) ─────────
+        // Devuelve TODOS los registros ordenados por FECHA_INI ASC (S01, S04, etc.)
+        {
+            var sql = $@"
+                SELECT rs.guia,
+                       rs.cod_maq,
+                       m.descripcion  AS NOMBRE_MAQ,
+                       rs.fecha_ini,
+                       rs.fecha_fin,
+                       rs.secado      AS MIN_SECADO,
+                       rs.resecado    AS MIN_RESECADO,
+                       rs.peso_neto,
+                       rs.estado
+                FROM   {S}tt_rsecado rs
+                LEFT JOIN {S}tt_maquina m ON m.cod_maq = rs.cod_maq
+                WHERE  rs.guia = :numPartida
+                ORDER  BY rs.fecha_ini ASC";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var estadoSec = SafeStr(r["ESTADO"]);
+                result.Secados.Add(new PlnSecadoTt
+                {
+                    GuiaPartida = SafeVal<long>(r["GUIA"]),
+                    CodMaq      = SafeStr(r["COD_MAQ"]),
+                    NombreMaq   = SafeStr(r["NOMBRE_MAQ"]),
+                    FechaIni    = SafeVal<DateTime>(r["FECHA_INI"]),
+                    FechaFin    = r["FECHA_FIN"]    == DBNull.Value ? null : SafeVal<DateTime?>(r["FECHA_FIN"]),
+                    PesoNeto    = r["PESO_NETO"]    == DBNull.Value ? null : SafeVal<decimal?>(r["PESO_NETO"]),
+                    MinSecado   = r["MIN_SECADO"]   == DBNull.Value ? null : SafeVal<decimal?>(r["MIN_SECADO"]),
+                    MinResecado = r["MIN_RESECADO"] == DBNull.Value ? null : SafeVal<decimal?>(r["MIN_RESECADO"]),
+                    Estado      = estadoSec,
+                    DescEstado  = DescEstadoSecado(estadoSec),
+                });
+            }
+        }
+
+        // ── 5. Control de Calidad TT (CTCALIDAD_D vía GUIA = PARTIDA.NUMERO) ───
+        {
+            var sql = $@"
+                SELECT cc.numero, cc.guia, cc.fecha,
+                       cc.est_evaluacion, cc.resultado,
+                       cc.merma_i, cc.merma_f,
+                       cc.observa, cc.tono, cc.sf, cc.si, cc.defecto
+                FROM   (SELECT cc2.numero, cc2.guia, cc2.fecha,
+                               cc2.est_evaluacion, cc2.resultado,
+                               cc2.merma_i, cc2.merma_f,
+                               cc2.observa, cc2.tono, cc2.sf, cc2.si, cc2.defecto
+                        FROM   {S}ctcalidad_d cc2
+                        WHERE  cc2.guia = :numPartida
+                        ORDER  BY cc2.fecha DESC) cc
+                WHERE  ROWNUM = 1";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync())
+            {
+                var estEval   = SafeStr(r["EST_EVALUACION"]);
+                var resultado = SafeStr(r["RESULTADO"]);
+                result.Calidad = new PlnCalidadTt
+                {
+                    Numero        = SafeVal<long>(r["NUMERO"]),
+                    GuiaPartida   = SafeVal<long>(r["GUIA"]),
+                    Fecha         = SafeVal<DateTime>(r["FECHA"]),
+                    EstEvaluacion = estEval,
+                    DescEstEval   = DescEstEvaluacion(estEval),
+                    Resultado     = resultado,
+                    DescResultado = DescResultadoCC(resultado),
+                    MermaInicio   = r["MERMA_I"]   == DBNull.Value ? null : SafeVal<decimal?>(r["MERMA_I"]),
+                    MermaFin      = r["MERMA_F"]   == DBNull.Value ? null : SafeVal<decimal?>(r["MERMA_F"]),
+                    Observacion   = r["OBSERVA"]   == DBNull.Value ? null : SafeStr(r["OBSERVA"]),
+                    Tono          = r["TONO"]      == DBNull.Value ? null : SafeStr(r["TONO"]),
+                    Solidez       = r["SF"]        == DBNull.Value ? null : SafeStr(r["SF"]),
+                    Igualdad      = r["SI"]        == DBNull.Value ? null : SafeStr(r["SI"]),
+                    Defecto       = r["DEFECTO"]   == DBNull.Value ? null : SafeStr(r["DEFECTO"]),
+                };
+            }
+        }
+
+        // ── 6. Validación de Receta de Laboratorio (L_VALIDA_RECETA vía NROPROG) ─
+        if (nroprog > 0)
+        {
+            var sql = $@"
+                SELECT lv.numero, lv.nroprog, lv.tipo, lv.c_laboratorista,
+                       lv.estado, lv.f_registro, lv.f_validacion
+                FROM   (SELECT lv2.numero, lv2.nroprog, lv2.tipo, lv2.c_laboratorista,
+                               lv2.estado,
+                               lv2.a_adfecha      AS f_registro,
+                               lv2.f_estado_tres  AS f_validacion
+                        FROM   {S}l_valida_receta lv2
+                        WHERE  lv2.nroprog = :nroprog
+                        ORDER  BY lv2.a_adfecha DESC) lv
+                WHERE  ROWNUM = 1";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("nroprog", nroprog);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync())
+            {
+                var tipo   = SafeVal<int>(r["TIPO"]);
+                var estado = SafeVal<int>(r["ESTADO"]);
+                result.ValidacionReceta = new PlnValidacionReceta
+                {
+                    Numero        = SafeVal<long>(r["NUMERO"]),
+                    Nroprog       = SafeVal<long>(r["NROPROG"]),
+                    Tipo          = tipo,
+                    DescTipo      = tipo == 2 ? "Reproceso" : "Normal",
+                    Laboratorista = SafeStr(r["C_LABORATORISTA"]),
+                    Estado        = estado,
+                    DescEstado    = DescEstadoLab(estado),
+                    FchRegistro   = SafeVal<DateTime>(r["F_REGISTRO"]),
+                    FchValidacion = r["F_VALIDACION"] == DBNull.Value ? null : SafeVal<DateTime?>(r["F_VALIDACION"]),
+                };
+            }
+        }
+
+        // ── 7. Programa Conera (H_PROGRAMACION vía GUIA = PARTIDA.NUMERO) ──────────
+        {
+            var sql = $@"
+                SELECT hp.numero, hp.fecha AS fecha_ini, hp.fecha_fin,
+                       hp.maq_proced AS cod_maq,
+                       NVL(m.descripcion, hp.maq_proced) AS nombre_maq,
+                       hp.estado
+                FROM   {S}h_programacion hp
+                LEFT JOIN {S}h_maquinas m ON m.cod_maq = hp.maq_proced
+                WHERE  hp.guia = :numPartida
+                ORDER  BY hp.fecha";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var est = SafeStr(r["ESTADO"]);
+                result.ProgramasConera.Add(new PlnProgramaConera
+                {
+                    Numero     = SafeVal<long>(r["NUMERO"]),
+                    FechaIni   = SafeVal<DateTime>(r["FECHA_INI"]),
+                    FechaFin   = r["FECHA_FIN"] == DBNull.Value ? null : SafeVal<DateTime?>(r["FECHA_FIN"]),
+                    CodMaq     = SafeStr(r["COD_MAQ"]),
+                    NombreMaq  = SafeStr(r["NOMBRE_MAQ"]),
+                    Estado     = est,
+                    DescEstado = est switch { "3" => "Completado", "1" => "En proceso", "0" => "Pendiente", _ => est },
+                });
+            }
+        }
+
+        // ── 8. Registro de Devanado (H_RPRODUC TP_MAQ='R' vía GUIA = PARTIDA.NUMERO) ─
+        {
+            var sql = $@"
+                SELECT hr.cod_maq,
+                       NVL(m.descripcion, hr.cod_maq) AS nombre_maq,
+                       hr.fecha_ini, hr.fecha_fin,
+                       hr.unidades, hr.peso_neto, hr.estado
+                FROM   {S}h_rproduc hr
+                LEFT JOIN {S}h_maquinas m ON m.cod_maq = hr.cod_maq
+                WHERE  hr.guia   = :numPartida
+                  AND  hr.tp_maq = 'R'
+                ORDER  BY hr.fecha_ini";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                result.Devanados.Add(new PlnDevanado
+                {
+                    CodMaq    = SafeStr(r["COD_MAQ"]),
+                    NombreMaq = SafeStr(r["NOMBRE_MAQ"]),
+                    FechaIni  = SafeVal<DateTime>(r["FECHA_INI"]),
+                    FechaFin  = r["FECHA_FIN"] == DBNull.Value ? null : SafeVal<DateTime?>(r["FECHA_FIN"]),
+                    Unidades  = r["UNIDADES"]  == DBNull.Value ? null : SafeVal<decimal?>(r["UNIDADES"]),
+                    PesoNeto  = r["PESO_NETO"] == DBNull.Value ? null : SafeVal<decimal?>(r["PESO_NETO"]),
+                    Estado    = SafeStr(r["ESTADO"]),
+                });
+            }
+        }
+
+        // ── 9. Revisado de Productos Acabados (REVISADO_G + REVISADO_D) ─────────────
+        {
+            // Cabeceras REVISADO_G
+            var sqlG = $@"
+                SELECT rg.numero, rg.guia, rg.maq_proced,
+                       rg.a_adfecha AS fch_registro, rg.fch_fin_revisa
+                FROM   {S}revisado_g rg
+                WHERE  rg.guia = :numPartida
+                ORDER  BY rg.numero";
+            await using var cmdG = new OracleCommand(sqlG, conn);
+            cmdG.BindByName = true;
+            cmdG.Parameters.Add("numPartida", numPartida);
+            await using var rG = await cmdG.ExecuteReaderAsync();
+            while (await rG.ReadAsync())
+            {
+                result.Revisados.Add(new PlnRevisado
+                {
+                    Numero       = SafeVal<long>(rG["NUMERO"]),
+                    Guia         = SafeVal<long>(rG["GUIA"]),
+                    MaqProced    = SafeStr(rG["MAQ_PROCED"]),
+                    FchRegistro  = SafeVal<DateTime>(rG["FCH_REGISTRO"]),
+                    FchFinRevisa = rG["FCH_FIN_REVISA"] == DBNull.Value ? null : SafeVal<DateTime?>(rG["FCH_FIN_REVISA"]),
+                });
+            }
+            // Detalles REVISADO_D — un solo query para todos los números
+            if (result.Revisados.Count > 0)
+            {
+                var numeros = string.Join(",", result.Revisados.Select(x => x.Numero));
+                var sqlD = $@"
+                    SELECT rd.numero, rd.item, rd.fecha,
+                           rd.c_codigo AS revisador, rd.turno,
+                           NVL(rd.aprobado,0)  AS aprobado,
+                           NVL(rd.rechazado,0) AS rechazado,
+                           NVL(rd.faltante,0)  AS faltante,
+                           NVL(rd.merma,0)     AS merma,
+                           rd.observacion
+                    FROM   {S}revisado_d rd
+                    WHERE  rd.numero IN ({numeros})
+                    ORDER  BY rd.numero, rd.item";
+                await using var cmdD = new OracleCommand(sqlD, conn);
+                await using var rD = await cmdD.ExecuteReaderAsync();
+                while (await rD.ReadAsync())
+                {
+                    var numRev = SafeVal<long>(rD["NUMERO"]);
+                    var rev    = result.Revisados.First(x => x.Numero == numRev);
+                    rev.Detalle.Add(new PlnRevisadoDet
+                    {
+                        Item        = SafeVal<int>(rD["ITEM"]),
+                        Fecha       = SafeVal<DateTime>(rD["FECHA"]),
+                        Revisador   = SafeStr(rD["REVISADOR"]),
+                        Turno       = SafeStr(rD["TURNO"]),
+                        Aprobado    = SafeVal<decimal>(rD["APROBADO"]),
+                        Rechazado   = SafeVal<decimal>(rD["RECHAZADO"]),
+                        Faltante    = SafeVal<decimal>(rD["FALTANTE"]),
+                        Merma       = SafeVal<decimal>(rD["MERMA"]),
+                        Observacion = rD["OBSERVACION"] == DBNull.Value ? null : SafeStr(rD["OBSERVACION"]),
+                    });
+                }
+            }
+        }
+
+        // ── 10. Pesaje Ingreso Almacén PT (LOTES TP='16' + KARDEX_D por COD_ART) ────
+        {
+            var sql = $@"
+                SELECT l.cod_alm, l.tp_transac, l.serie, l.numero,
+                       MIN(kd.fch_transac)    AS fecha,
+                       COUNT(l.lote)          AS lotes_etiq,
+                       ROUND(kd.cantidad, 3)  AS peso_pesado
+                FROM   {S}lotes l
+                JOIN   {S}kardex_d kd
+                    ON  kd.cod_alm   = l.cod_alm
+                    AND kd.tp_transac = l.tp_transac
+                    AND kd.serie     = l.serie
+                    AND kd.numero    = l.numero
+                    AND kd.cod_art   = l.cod_art
+                WHERE  l.partida    = :numPartida
+                  AND  l.tp_transac = '16'
+                GROUP  BY l.cod_alm, l.tp_transac, l.serie, l.numero, kd.cantidad
+                ORDER  BY MIN(kd.fch_transac)";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                result.PesajesAlmacen.Add(new PlnPesajeAlmacen
+                {
+                    CodAlm     = SafeStr(r["COD_ALM"]),
+                    TpTransac  = SafeStr(r["TP_TRANSAC"]),
+                    Serie      = SafeVal<int>(r["SERIE"]),
+                    Numero     = SafeVal<long>(r["NUMERO"]),
+                    Fecha      = SafeVal<DateTime>(r["FECHA"]),
+                    LotesEtiq  = SafeVal<int>(r["LOTES_ETIQ"]),
+                    PesoPesado = SafeVal<decimal>(r["PESO_PESADO"]),
+                });
+            }
+        }
+
+        // ── 11. Despachos Producto Terminado (LOTES S_TRANSAC='21'/'23' + KARDEX_G) ────
+        {
+            var sql = $@"
+                SELECT l.cod_alm, l.s_transac, l.serie, l.numero,
+                       MIN(l.fec_salida)      AS fecha,
+                       COUNT(l.lote)          AS lotes,
+                       SUM(l.cantidad)        AS unidades,
+                       ROUND(SUM(l.saldo), 2) AS peso_kg,
+                       kg.glosa
+                FROM   {S}lotes l
+                LEFT JOIN {S}kardex_g kg
+                    ON  kg.cod_alm   = l.cod_alm
+                    AND kg.tp_transac = l.s_transac
+                    AND kg.serie     = l.serie
+                    AND kg.numero    = l.numero
+                WHERE  l.partida    = :numPartida
+                  AND  l.s_transac IN ('21','23')
+                GROUP  BY l.cod_alm, l.s_transac, l.serie, l.numero, kg.glosa
+                ORDER  BY MIN(l.fec_salida)";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                result.Despachos.Add(new PlnDespachoProducto
+                {
+                    CodAlm    = SafeStr(r["COD_ALM"]),
+                    TpTransac = SafeStr(r["S_TRANSAC"]),
+                    Serie     = SafeVal<int>(r["SERIE"]),
+                    Numero    = SafeVal<long>(r["NUMERO"]),
+                    Fecha     = SafeVal<DateTime>(r["FECHA"]),
+                    Lotes     = SafeVal<int>(r["LOTES"]),
+                    Unidades  = SafeVal<decimal>(r["UNIDADES"]),
+                    PesoKg    = SafeVal<decimal>(r["PESO_KG"]),
+                    Glosa     = r["GLOSA"] == DBNull.Value ? null : SafeStr(r["GLOSA"]),
+                });
+            }
+        }
+
+        return result;
+    }
+
+    // ── Helpers de descripciones de dominio TT ──────────────────────────────────
+
+    private static string DescProceso(string? proceso) => proceso?.ToUpper() switch
+    {
+        "TEAC"   => "Teñido y Acabado",
+        "BQM"    => "Blanqueo Químico",
+        "BLAN"   => "Blanqueo",
+        "TINTURA"=> "Tintura",
+        "ACID"   => "Acidulado",
+        "FIJA"   => "Fijado",
+        _        => proceso ?? ""
+    };
+
+    private static string DescCalificacion(string? cal) => cal?.ToUpper() switch
+    {
+        "AP" => "Aprobado",
+        "RE" => "Rechazado",
+        "OB" => "Observado",
+        "OK" => "Correcto",
+        _    => string.IsNullOrEmpty(cal) ? "—" : cal
+    };
+
+    private static string DescEstEvaluacion(string? e) => e switch
+    {
+        "31" => "Pendiente",
+        "32" => "Evaluado",
+        "33" => "Observado",
+        _    => string.IsNullOrEmpty(e) ? "—" : e
+    };
+
+    private static string DescResultadoCC(string? r) => r switch
+    {
+        "01" => "Aprobado",
+        "02" => "Rechazado",
+        "03" => "Aprobado con observación",
+        _    => string.IsNullOrEmpty(r) ? "—" : r
+    };
+
+    private static string DescEstadoSecado(string? estado) => estado switch
+    {
+        "1" => "En proceso",
+        "2" => "Finalizado",
+        "3" => "Completado",
+        _   => string.IsNullOrEmpty(estado) ? "—" : estado
+    };
+
+    private static string DescEstadoLab(int estado) => estado switch
+    {
+        1 => "En proceso",
+        2 => "Observado",
+        3 => "Validado",
+        4 => "Rechazado",
+        _ => estado.ToString()
+    };
+
+    private static string DescEstadoReceta(int estado) => estado switch
+    {
+        1 => "Ingresada",
+        2 => "Aprobada",
+        3 => "En proceso",
+        4 => "Completada",
+        5 => "Procesada",
+        6 => "Finalizada",
+        _ => estado.ToString()
+    };
 }

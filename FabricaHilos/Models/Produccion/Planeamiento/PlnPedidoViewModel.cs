@@ -12,4 +12,11 @@ public class PlnPedidoViewModel
     public IEnumerable<PlnLogEvento>    Eventos  { get; set; } = [];
     public IEnumerable<PlnAlerta>       Alertas  { get; set; } = [];
     public IEnumerable<PlnEstadoCodigo> Pasos    { get; set; } = [];
+
+    /// <summary>
+    /// Detalle completo de Tintorería por partida.
+    /// Clave: PARTIDA.NUMERO (PlnSeguimiento.NumPartida).
+    /// Incluye baños ejecutados, secado, CC TT y validación de laboratorio.
+    /// </summary>
+    public Dictionary<long, PlnDetalleTt> DetalleTt { get; set; } = [];
 }

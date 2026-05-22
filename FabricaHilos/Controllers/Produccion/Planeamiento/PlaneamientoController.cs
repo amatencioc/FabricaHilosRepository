@@ -105,9 +105,9 @@ public class PlaneamientoController : OracleBaseController
     }
 
     // GET /Planeamiento/Dashboard
-    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed)
+    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false)
     {
-        var tItems   = _seguimiento.GetActivosAsync(busquedaCliente, codPaso, numPed);
+        var tItems   = _seguimiento.GetActivosAsync(busquedaCliente, codPaso, numPed, incluyeCerrados);
         var tEstados = _seguimiento.GetEstadosAsync();
         var tAlertas = _alerta.GetActivasAsync();
         await Task.WhenAll(tItems, tEstados, tAlertas);
@@ -119,6 +119,7 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.AlertasPorPedido = tAlertas.Result
             .GroupBy(a => $"{a.Serie}|{a.NumPed}")
             .ToDictionary(g => g.Key, g => g.Count());
+        ViewBag.IncluyeCerrados  = incluyeCerrados;
         return View(tItems.Result);
     }
 
@@ -131,14 +132,25 @@ public class PlaneamientoController : OracleBaseController
         var tPasos   = _seguimiento.GetEstadosAsync();
         await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
 
+        // Cargar detalle TT por cada sublote que tenga partida asignada.
+        // Se deduplica por NumPartida para no consultar dos veces la misma partida.
+        var items     = tItems.Result.ToList();
+        var detalleTt = new Dictionary<long, PlnDetalleTt>();
+        foreach (var item in items.Where(x => x.NumPartida > 0))
+        {
+            if (!detalleTt.ContainsKey(item.NumPartida))
+                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
+        }
+
         var vm = new PlnPedidoViewModel
         {
-            NumPed  = numPed,
-            Serie   = serie,
-            Items   = tItems.Result,
-            Eventos = tEventos.Result,
-            Alertas = tAlertas.Result,
-            Pasos   = tPasos.Result
+            NumPed    = numPed,
+            Serie     = serie,
+            Items     = items,
+            Eventos   = tEventos.Result,
+            Alertas   = tAlertas.Result,
+            Pasos     = tPasos.Result,
+            DetalleTt = detalleTt,
         };
         return View(vm);
     }
@@ -151,6 +163,16 @@ public class PlaneamientoController : OracleBaseController
             return Json(new { descripcion = "", fibra = "" });
         var (desc, fibra) = await _seguimiento.GetArticuloInfoAsync(codArt);
         return Json(new { descripcion = desc, fibra });
+    }
+
+    // GET /Planeamiento/GetMaquinaStatus?codMaq=R05  — JSON: { banosActivos, esLibre, pctCargaHoy, hayCargaHoy }
+    [HttpGet]
+    public async Task<IActionResult> GetMaquinaStatus(string codMaq)
+    {
+        if (string.IsNullOrWhiteSpace(codMaq))
+            return Json(new { banosActivos = 0, esLibre = true, pctCargaHoy = 0.0, hayCargaHoy = false, diasAntiguo = -1 });
+        var (banosActivos, esLibre, pctCargaHoy, hayCargaHoy, diasAntiguo) = await _seguimiento.GetMaquinaStatusAsync(codMaq);
+        return Json(new { banosActivos, esLibre, pctCargaHoy = (double)pctCargaHoy, hayCargaHoy, diasAntiguo });
     }
 
     // GET /Planeamiento/CargaMaquinas

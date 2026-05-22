@@ -3,10 +3,11 @@
 
 @{
     ViewData["Title"] = "Dashboard de Seguimiento";
-    var estados = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? [];
-    var filtroCliente = ViewBag.FiltroCliente as string ?? "";
-    var filtroPaso    = ViewBag.FiltroPaso    as string ?? "";
-    var filtroNumPed  = ViewBag.FiltroNumPed  as string ?? "";
+    var estados = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? Array.Empty<PlnEstadoCodigo>();
+    var filtroCliente    = ViewBag.FiltroCliente    as string ?? "";
+    var filtroPaso        = ViewBag.FiltroPaso        as string ?? "";
+    var filtroNumPed      = ViewBag.FiltroNumPed      as string ?? "";
+    var incluyeCerrados   = (bool)(ViewBag.IncluyeCerrados ?? false);
 
     var items = Model.ToList();
     var alertasPorPedido = ViewBag.AlertasPorPedido as Dictionary<string, int> ?? new Dictionary<string, int>();
@@ -141,6 +142,7 @@
     .ped-card.urg  { border-left: 4px solid var(--pln-danger); }
     .ped-card.ret  { border-left: 4px solid var(--pln-warning); }
     .ped-card.norm { border-left: 4px solid var(--pln-gray-200); }
+    .ped-card.cerr { border-left: 4px solid #a0aec0; opacity: .72; }
 
     .ped-head {
         display: flex; align-items: center; flex-wrap: nowrap; gap: .45rem;
@@ -159,8 +161,8 @@
         flex: 1 1 240px; min-width: 0;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    /* Columna 3 — kg + fecha (fijo) */
-    .ped-meta  { flex: 0 0 195px; display: flex; align-items: center; gap: .45rem; overflow: hidden; }
+    /* Columna 3 — kg + fechas (registro / aprobación / compromiso) */
+    .ped-meta  { flex: 0 0 265px; display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; overflow: hidden; }
     /* Columna 4 — etapa + badge "más" (justo antes de acciones) */
     .ped-etapa { flex: 0 0 215px; display: flex; align-items: center; gap: .3rem; overflow: hidden; }
     .ped-meta-num { font-size: .72rem; color: #718096; white-space: nowrap; }
@@ -361,21 +363,31 @@
                 <i class="bi bi-x-circle me-1"></i>Limpiar
             </a>
         </div>
+        <div class="col-12 mt-1">
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" name="incluyeCerrados" value="true"
+                       id="chkCerrados" @(incluyeCerrados ? "checked" : "")
+                       onchange="this.form.submit()" />
+                <label class="form-check-label small fw-semibold" for="chkCerrados">
+                    <i class="bi bi-archive me-1 text-secondary"></i>Mostrar pedidos cerrados (despachados)
+                </label>
+            </div>
+        </div>
     </form>
 </div>
 
 @* ── Pedidos activos (cards) ──────────────────────────── *@
-<div class="section-sep"><i class="bi bi-stack"></i> Pedidos activos</div>
+<div class="section-sep"><i class="bi bi-stack"></i> @(incluyeCerrados ? "Pedidos (activos + cerrados)" : "Pedidos activos")</div>
 @{
-    // Mapa CodPaso → OrdenPaso para determinar la etapa más crítica (regla §9: mínimo OrdenPaso).
+    // Mapa CodPaso → OrdenPaso para determinar la etapa más avanzada.
     var ordenPasoMap = estados.ToDictionary(e => e.CodPaso, e => e.OrdenPaso);
 
-    // El orden dentro de cada grupo respeta el ítem con mayor retraso primero.
+    // Los ítems de cada pedido se muestran ordenados por N° de ítem (asc).
     var pedidosGrupo = items
         .GroupBy(x => new { x.Serie, x.NumPed })
         .Select(g =>
         {
-            var lista       = g.OrderByDescending(x => x.DiasRetraso).ToList();
+            var lista       = g.OrderBy(x => x.Nro).ToList();
             var esUrgente   = lista.Any(x => x.EsUrgente);
             var retrasado   = lista.Any(x => x.EstaRetrasado);
             var maxRetraso  = lista.Max(x => x.DiasRetraso);
@@ -385,20 +397,25 @@
                                    .DefaultIfEmpty()
                                    .Min();
             var etapas      = lista.Select(x => x.CodPasoAct).Distinct().ToList();
-            // Etapa crítica = ítem con menor OrdenPaso (el más atrasado en el flujo, regla §9).
+            // Etapa representativa = ítem con mayor OrdenPaso (más avanzado en el flujo).
             // Ante igualdad de orden, se elige el de mayor DiasRetraso.
-            var peorItem    = lista
-                .OrderBy(x => ordenPasoMap.TryGetValue(x.CodPasoAct, out var op) ? op : 99)
+            var mayorItem    = lista
+                .OrderByDescending(x => ordenPasoMap.TryGetValue(x.CodPasoAct, out var op) ? op : 0)
                 .ThenByDescending(x => x.DiasRetraso)
                 .First();
-            var peorColor   = peorItem.ColorUi   ?? "#6c757d";
-            var peorNombre  = peorItem.NombrePaso ?? "";
-            var peorCodigo  = peorItem.CodPasoAct ?? "";
-            var cliente     = lista.First().NombreCliente;
-            var serie       = g.Key.Serie;
-            var numPed      = g.Key.NumPed;
+            var mayorColor     = mayorItem.ColorUi   ?? "#6c757d";
+            var mayorNombre    = mayorItem.NombrePaso ?? "";
+            var mayorCodigo    = mayorItem.CodPasoAct ?? "";
+            var cliente       = lista.First().NombreCliente;
+            var serie         = g.Key.Serie;
+            var numPed        = g.Key.NumPed;
+            var fchPedido     = lista.First().FchPedido;
+            var fchAprobacion = lista.Where(x => x.FchRealProgramado.HasValue)
+                                     .Select(x => x.FchRealProgramado)
+                                     .FirstOrDefault();
             return (serie, numPed, cliente, lista, esUrgente, retrasado, maxRetraso,
-                    kgTotal, fchMin, etapas, peorColor, peorNombre, peorCodigo);
+                    kgTotal, fchMin, etapas, mayorColor, mayorNombre, mayorCodigo,
+                    fchPedido, fchAprobacion);
         })
         .OrderByDescending(p => p.numPed)
         .ThenByDescending(p => p.esUrgente)
@@ -408,12 +425,12 @@
 }
 @if (!items.Any())
 {
-    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay ítems activos con los filtros seleccionados.</div>
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay ítems @(incluyeCerrados ? "con los filtros seleccionados" : "activos con los filtros seleccionados").</div>
 }
 else
 {
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <span class="text-muted small">@pedidosGrupo.Count pedidos · @items.Count ítems activos</span>
+        <span class="text-muted small">@pedidosGrupo.Count pedidos · @items.Count ítems @(incluyeCerrados ? "(incl. cerrados)" : "activos")</span>
         <div class="d-flex gap-2">
             <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm"
                     title="Expandir todos los pedidos para ver sus ítems">
@@ -429,7 +446,8 @@ else
     @foreach (var p in pedidosGrupo)
     {
         var collapseId = $"items-{p.serie}-{p.numPed}";
-        var cardCls    = p.esUrgente ? "urg" : p.retrasado ? "ret" : "norm";
+        var esCerrado  = p.lista.All(x => x.EstaCerrado);
+        var cardCls    = esCerrado ? "cerr" : p.esUrgente ? "urg" : p.retrasado ? "ret" : "norm";
         var keyAlerta  = $"{p.serie}|{p.numPed}";
         var cntAlerta  = alertasPorPedido.TryGetValue(keyAlerta, out var ca) ? ca : 0;
         <div class="ped-card @cardCls">
@@ -447,6 +465,10 @@ else
                     {
                         <span class="badge bg-danger ms-1" title="Pedido urgente"><i class="bi bi-lightning-charge-fill"></i></span>
                     }
+                    @if (esCerrado)
+                    {
+                        <span class="badge bg-success ms-1" style="font-size:.6rem;" title="Todos los ítems despachados y cerrados"><i class="bi bi-check2-all me-1"></i>Cerrado</span>
+                    }
                     @if (cntAlerta > 0)
                     {
                         <span class="badge bg-warning text-dark ms-1"
@@ -458,14 +480,23 @@ else
 
                 <span class="ped-cliente" title="@p.cliente">@p.cliente</span>
 
-                @* Columna 3 — métricas (kg + fecha, ancho fijo .ped-meta) *@
+                @* Columna 3 — métricas (kg + fechas) *@
                 <span class="ped-meta">
                     <span class="ped-meta-num" title="Suma de kg pendientes">
                         <i class="bi bi-box2 me-1 text-secondary"></i>@p.kgTotal.ToString("N0") kg
                     </span>
+                    <span class="ped-meta-num" title="Fecha de registro del pedido">
+                        <i class="bi bi-calendar-event me-1 text-secondary"></i>Reg. @p.fchPedido.ToString("dd/MM/yy")
+                    </span>
+                    @if (p.fchAprobacion.HasValue)
+                    {
+                        <span class="ped-meta-num" title="Fecha de aprobación / planificación">
+                            <i class="bi bi-calendar-check me-1" style="color:#48bb78;"></i>Apr. @p.fchAprobacion.Value.ToString("dd/MM/yy")
+                        </span>
+                    }
                     @if (p.fchMin != default)
                     {
-                        <span class="ped-meta-num" title="Fecha compromiso más próxima">
+                        <span class="ped-meta-num" title="Fecha compromiso de entrega más próxima">
                             <i class="bi bi-calendar3 me-1 text-secondary"></i>
                             <span class="@(p.retrasado ? "text-danger fw-bold" : "")">@p.fchMin.ToString("dd/MM/yy")</span>
                         </span>
@@ -481,10 +512,10 @@ else
                 }
                 <span class="badge bg-secondary" title="@p.lista.Count ítems activos">@p.lista.Count</span>
 
-                @* Etapa crítica — justo antes de los botones de acción *@
+                @* Etapa más avanzada — justo antes de los botones de acción *@
                 <span class="ped-etapa">
-                    <span class="paso-badge text-white" style="background-color:@p.peorColor;font-size:.7rem;">
-                        @p.peorCodigo — @p.peorNombre
+                    <span class="paso-badge text-white" style="background-color:@p.mayorColor;font-size:.7rem;">
+                        @p.mayorCodigo — @p.mayorNombre
                     </span>
                     @if (p.etapas.Count > 1)
                     {
@@ -517,6 +548,7 @@ else
                     <thead>
                         <tr>
                             <th class="item-indent" style="width:28px;"></th>
+                            <th style="width:38px;text-align:center;">Ítem</th>
                             <th>Artículo</th>
                             <th>Proceso</th>
                             <th>Título / Color</th>
@@ -545,6 +577,9 @@ else
                                     {
                                         <i class="bi bi-dot text-muted"></i>
                                     }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-dark" style="font-size:.65rem;border-radius:2px;">@s.Nro</span>
                                 </td>
                                 <td class="text-truncate" style="max-width:120px;" title="@s.CodArt">@s.CodArt</td>
                                 <td>

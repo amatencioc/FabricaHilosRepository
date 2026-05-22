@@ -178,6 +178,7 @@ builder.Services.AddHttpClient<DocumentExtractorClient>(client =>
 
 // Agregar MVC con vistas y registrar ubicación de vistas anidadas bajo Produccion
 builder.Services.AddControllersWithViews()
+    .AddRazorRuntimeCompilation()   // ← recarga .cshtml sin reiniciar en Development
     .AddRazorOptions(options =>
     {
         // Permite que Views/Produccion/{Controller}/{Action}.cshtml sea encontrado automáticamente

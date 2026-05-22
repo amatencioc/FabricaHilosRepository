@@ -75,6 +75,22 @@ public class ItemOrdDto
     public DateTime? FAprobado     { get; set; }
 }
 
+// ── Detalle por destino (para Imprimir Contabilidad desagregado) ──────────
+
+public class ItemOrdDestinoDto
+{
+    public long      NumReq        { get; set; }
+    public int       OrdenReq      { get; set; }
+    public string?   CodArt        { get; set; }
+    public string?   TpDestino     { get; set; }
+    public string?   Destino       { get; set; }
+    public string?   DestinoDesc   { get; set; }
+    public string?   CodSolicita   { get; set; }
+    public decimal   Cantidad      { get; set; }
+    public decimal   Precio        { get; set; }
+    public decimal   Importe       { get; set; }
+}
+
 // ── Registro Nueva Orden de Compra ─────────────────────────────────────────
 
 public class RequisicionPendienteDto

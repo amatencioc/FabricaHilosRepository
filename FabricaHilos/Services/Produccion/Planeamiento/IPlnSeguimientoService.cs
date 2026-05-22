@@ -4,7 +4,7 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public interface IPlnSeguimientoService
 {
-    Task<IEnumerable<PlnSeguimiento>>    GetActivosAsync(string? busquedaCliente = null, string? codPaso = null, string? numPed = null);
+    Task<IEnumerable<PlnSeguimiento>>    GetActivosAsync(string? busquedaCliente = null, string? codPaso = null, string? numPed = null, bool incluyeCerrados = false);
     Task<IEnumerable<PlnSeguimiento>>    GetPorPedidoAsync(long numPed, int serie);
 
     /// <summary>Lee un único ítem por clave sustituta ID_SEGUIM. Devuelve null si no existe.</summary>
@@ -63,4 +63,15 @@ public interface IPlnSeguimientoService
 
     /// <summary>Obtiene descripción y material (FIBRA) de un artículo por COD_ART.</summary>
     Task<(string Descripcion, string Fibra)> GetArticuloInfoAsync(string codArt);
+
+    /// <summary>
+    /// Carga el detalle completo de Tintorería para una partida dada.
+    /// Incluye: cálculo de recetas planificadas (ING_RECETAS_G), baños ejecutados
+    /// (TT_RPRODUC), secado (TT_RSECADO), CC TT (CTCALIDAD_D) y validación de
+    /// laboratorio (L_VALIDA_RECETA). Devuelve un objeto vacío si la partida no existe.
+    /// </summary>
+    Task<PlnDetalleTt> GetDetalleTtAsync(long numPartida);
+
+    /// <summary>Estado de actividad de una máquina TT: baños activos en curso + carga desde PLN_CARGA_DIARIA (día más reciente disponible, máx 30 días atrás).</summary>
+    Task<(int BanosActivos, bool EsLibre, decimal PctCargaHoy, bool HayCargaHoy, int DiasAntiguo)> GetMaquinaStatusAsync(string codMaq);
 }
