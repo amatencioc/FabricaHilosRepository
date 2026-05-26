@@ -1,290 +1,895 @@
-@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnCargaDiaria>
+@using FabricaHilos.Models.Produccion.Planeamiento
 
 @{
     ViewData["Title"] = "Carga de Máquinas";
-    var items = Model.ToList();
 
-    // BUG FIX: usar EstadoCarga (derivado de PctCarga en Oracle, §8.5 PKG_PLN) en lugar de
-    // recalcular umbrales con PctUtilizacion — los dos campos pueden diverger.
-    var sobrecargadas  = items.Count(x => x.EstadoCarga == "SOBRECARGADA");
-    var cargaAlta      = items.Count(x => x.EstadoCarga == "CARGA_ALTA");
-    var disponibles    = items.Count(x => x.EstadoCarga == "DISPONIBLE");
-    var total          = items.Count;
+    var ttMaquinas   = (ViewBag.EstadoTintoreria  as List<PlnEstadoMaquinaTT>)    ?? new List<PlnEstadoMaquinaTT>();
+    var secMaquinas  = (ViewBag.EstadoSecado       as List<PlnEstadoMaquinaTT>)    ?? new List<PlnEstadoMaquinaTT>();
+    var otraMaquinas = (ViewBag.EstadoOtras        as List<PlnEstadoMaquinaTT>)    ?? new List<PlnEstadoMaquinaTT>();
+    var hilMaquinas  = (ViewBag.EstadoHilanderia   as List<PlnResumenHilanderia>)  ?? new List<PlnResumenHilanderia>();
+    var compromisos  = (ViewBag.Compromisos        as List<PlnMaquinaCompromiso>)  ?? new List<PlnMaquinaCompromiso>();
 
-    // BUG FIX: agrupar por Area (derivada de TpMaq); estaba ignorada en la vista anterior.
-    var grupos = items
-        .GroupBy(x => string.IsNullOrEmpty(x.Area) ? "Otras" : x.Area)
-        .OrderBy(g => g.Key);
-
-    // Datos para el Heatmap ApexCharts (30 días × máquinas).
-    // Fuente: GetCargaMaquinasAsync() ya devuelve la ventana completa desde V_PLN_CARGA_MAQUINAS.
-    var allDates = items.Select(x => x.Fecha.Date).Distinct().OrderBy(d => d).ToList();
-    var byMaq    = items.GroupBy(x => x.CodMaq).OrderBy(g => g.Key).ToList();
-    var heatSeriesJson = System.Text.Json.JsonSerializer.Serialize(
-        byMaq.Select(g => new {
-            name = g.Key,
-            data = allDates.Select(d => {
-                var e = g.FirstOrDefault(x => x.Fecha.Date == d);
-                return new { x = d.ToString("dd/MM"), y = (int)Math.Round(e?.PctCarga ?? 0) };
-            }).ToList()
-        }).ToList()
-    );
-    var showHeatmap = allDates.Count > 1 && byMaq.Count > 0;
-    var heatFechaRango = allDates.Count > 1
-        ? $"{allDates.First():dd/MM} – {allDates.Last():dd/MM/yy}"
-        : allDates.Count == 1 ? allDates[0].ToString("dd/MM/yy") : "—";
+    int ttActivas    = ttMaquinas.Count(m => m.EsActiva);
+    int ttLibres     = ttMaquinas.Count(m => !m.EsActiva);
+    int ttRetrasadas = ttMaquinas.Count(m => m.EsActiva && m.EstaRetrasado);
+    int secActivas   = secMaquinas.Count(m => m.EsActiva);
+    int hilActivas   = hilMaquinas.Count(m => m.EsActiva);
+    int plnRetrasos  = compromisos.Count(c => c.EstaRetrasado);
 }
 
 @section Styles {
-<link rel="stylesheet" href="~/css/planeamiento.css" />
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
-    /* CargaMaquinas: estilos exclusivos de la vista */
-    .maq-card { border-radius: .75rem; border: none; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
-    .maq-gauge { height: 10px; border-radius: 5px; }
-    .leyenda-item { display: flex; align-items: center; font-size: .78rem; }
-    .tbl-carga { font-size: .82rem; }
-    .tbl-carga thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
+    .cm-kpi            { border-radius:.6rem; border:none; box-shadow:var(--pln-shadow-sm); background:#fff; }
+    .cm-kpi-val        { font-size:1.8rem; font-weight:800; line-height:1; }
+    .cm-kpi-lbl        { font-size:.72rem; color:var(--pln-gray-500); margin-top:.2rem; }
+    /* pln-tabs y pln-tab-panel vienen de planeamiento.css */
+    .tt-maq-card       { border-radius:6px; border:1px solid #e2e8f0; box-shadow:var(--pln-shadow-sm); background:#fff;
+                         transition:box-shadow .15s,transform .15s; overflow:hidden; }
+    .tt-maq-card:hover { box-shadow:var(--pln-shadow-md); transform:translateY(-1px); }
+    .tt-maq-card .tt-head  { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem .4rem; }
+    .tt-maq-card .tt-cod   { font-size:.95rem; font-weight:800; color:var(--pln-navy); }
+    .tt-maq-card .tt-nom   { font-size:.7rem; color:var(--pln-gray-500); }
+    .tt-maq-card .tt-body  { padding:.4rem .75rem .6rem; font-size:.78rem; }
+    .tt-maq-card .tt-row   { display:flex; gap:.35rem; align-items:baseline; margin-bottom:.18rem; }
+    .tt-maq-card .tt-lbl   { color:var(--pln-gray-500); min-width:4rem; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; }
+    .tt-maq-card .tt-libre-msg { padding:.5rem .75rem .6rem; color:var(--pln-gray-500); font-size:.78rem; font-style:italic; }
+    .tt-maq-card.tt-libre  { opacity:.7; }
+    .tt-maq-card.tt-retrasada { background:#fff8f8; }
+    .cm-filter-bar     { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .cm-filter-bar .btn-group .btn { font-size:.78rem; }
+    .cm-filter-bar input { max-width:220px; }
+    .tt-hidden         { display:none !important; }
+    .tbl-hil           { font-size:.8rem; }
+    .tbl-hil thead th  { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;
+                         color:var(--pln-gray-500); font-weight:700;
+                         background:var(--pln-gray-50); border-bottom:2px solid var(--pln-border); }
+    .tbl-hil tbody td  { vertical-align:middle; border-color:var(--pln-border); }
+    .tbl-hil .maq-name { font-weight:700; color:var(--pln-navy); font-size:.82rem; }
+    .tbl-hil .proceso-tag { font-size:.65rem; color:var(--pln-gray-600); background:var(--pln-gray-100); padding:.1rem .4rem; border-radius:8px; }
+    .maq-comp-card     { border-radius:6px; border:1px solid #e2e8f0; box-shadow:var(--pln-shadow-sm);
+                         background:#fff; transition:box-shadow .15s; overflow:hidden; }
+    .maq-comp-card:hover { box-shadow:var(--pln-shadow-md); }
+    .maq-comp-card .maq-head { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem .4rem; border-bottom:1px solid #e9ecef; }
+    .maq-comp-card .maq-cod  { font-size:.9rem; font-weight:800; color:var(--pln-navy); }
+    .maq-comp-card .maq-nom  { font-size:.72rem; color:var(--pln-gray-500); }
+    .maq-comp-card .maq-area-tag { margin-left:auto; font-size:.6rem; font-weight:700; padding:.15rem .55rem; border-radius:10px; letter-spacing:.04em; }
+    .maq-badges        { padding:.3rem .75rem; display:flex; gap:.35rem; flex-wrap:wrap; border-bottom:1px solid #f1f5f9; }
+    .tbl-compromisos   { font-size:.77rem; margin-bottom:0; }
+    .tbl-compromisos thead th { font-size:.67rem; text-transform:uppercase; letter-spacing:.04em;
+                                color:var(--pln-gray-500); font-weight:700; padding:.25rem .5rem; background:var(--pln-gray-50); }
+    .tbl-compromisos tbody td { padding:.28rem .5rem; vertical-align:middle; }
+    .cm-ver-mas        { font-size:.75rem; color:var(--pln-blue-link); cursor:pointer; text-decoration:none; }
+    .cm-ver-mas:hover  { text-decoration:underline; }
+    .cm-maq-col.cm-hidden { display:none !important; }
+    .grupo-legend      { display:inline-flex; align-items:center; gap:.3rem; font-size:.73rem; }
+    .grupo-dot         { width:8px; height:8px; border-radius:50%; display:inline-block; }
 </style>
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
     <li class="breadcrumb-item active">Carga de Máquinas</li>
 }
 
-<div class="d-flex align-items-center justify-content-between mb-2">
-    <h4 class="mb-0"><i class="bi bi-gear-wide-connected me-2 text-primary"></i>Carga de Máquinas</h4>
-    <div class="d-flex gap-2 align-items-center">
-        <span class="text-muted small">@DateTime.Now.ToString("dd/MM/yyyy")</span>
-        <a asp-action="PendientesDespacho" class="btn btn-outline-success btn-sm">
-            <i class="bi bi-truck me-1"></i>Pendientes despacho
+<div class="container-fluid py-3">
+
+<div class="pln-page-hdr mb-3">
+    <i class="bi bi-gear-wide-connected pln-page-hdr-icon"></i>
+    <div class="pln-page-hdr-body">
+        <div class="pln-page-hdr-title">Carga de Máquinas</div>
+        <div class="pln-page-hdr-sub">Estado en tiempo real · Tintorería, Secado, Hilandería y Compromisos PLN</div>
+    </div>
+    <div class="pln-page-hdr-actions">
+        <a asp-action="CargaMaquinas" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
         </a>
-        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalRefreshCarga">
-            <i class="bi bi-arrow-clockwise me-1"></i>Refrescar carga
+        <a asp-action="Dashboard" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Seguimiento
+        </a>
+    </div>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val text-success">@ttActivas</div>
+            <div class="cm-kpi-lbl"><i class="bi bi-play-circle-fill text-success me-1"></i>TT activas</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val text-secondary">@ttLibres</div>
+            <div class="cm-kpi-lbl"><i class="bi bi-circle me-1"></i>TT libres</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val @(ttRetrasadas > 0 ? "text-danger" : "text-secondary")">@ttRetrasadas</div>
+            <div class="cm-kpi-lbl">
+                <i class="bi bi-exclamation-triangle@(ttRetrasadas > 0 ? "-fill text-danger" : " text-secondary") me-1"></i>
+                TT retrasadas
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val @(secActivas > 0 ? "text-info" : "text-secondary")">@secActivas</div>
+            <div class="cm-kpi-lbl"><i class="bi bi-wind @(secActivas > 0 ? "text-info" : "text-secondary") me-1"></i>Secadoras activas</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val text-primary">@hilActivas</div>
+            <div class="cm-kpi-lbl"><i class="bi bi-cpu-fill text-primary me-1"></i>Hil. activas hoy</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val @(plnRetrasos > 0 ? "text-danger" : "text-secondary")">@plnRetrasos</div>
+            <div class="cm-kpi-lbl">
+                <i class="bi bi-clock-history @(plnRetrasos > 0 ? "text-danger" : "text-secondary") me-1"></i>
+                Compromisos retrasados
+            </div>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs pln-tabs" id="cmTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="tab-tt-btn" data-bs-toggle="tab" data-bs-target="#tab-tt"
+                type="button" role="tab" aria-controls="tab-tt" aria-selected="true">
+            <i class="bi bi-droplet-fill me-1" style="color:#6f42c1;"></i>Tintorería
+            <span class="badge bg-secondary ms-1" style="font-size:.63rem;">@ttMaquinas.Count máq.</span>
+            @if (ttActivas > 0)
+            {
+                <span class="badge bg-success ms-1" style="font-size:.63rem;">@ttActivas activas</span>
+            }
         </button>
-    </div>
-</div>
-<p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Indica cuánta capacidad tiene cada máquina disponible hoy. 🟢 Disponible: tiene margen para asignar más trabajo. 🟡 Carga alta: próxima a su límite. 🔴 Sobrecargada: supera el 100% de ocupación. Use “Refrescar carga” para recalcular con los datos del día.</p>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="tab-sec-btn" data-bs-toggle="tab" data-bs-target="#tab-sec"
+                type="button" role="tab" aria-controls="tab-sec" aria-selected="false">
+            <i class="bi bi-wind me-1" style="color:#20c997;"></i>Secado
+            <span class="badge bg-secondary ms-1" style="font-size:.63rem;">@secMaquinas.Count máq.</span>
+            @if (secActivas > 0)
+            {
+                <span class="badge bg-success ms-1" style="font-size:.63rem;">@secActivas activas</span>
+            }
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="tab-otras-btn" data-bs-toggle="tab" data-bs-target="#tab-otras"
+                type="button" role="tab" aria-controls="tab-otras" aria-selected="false">
+            <i class="bi bi-tools me-1" style="color:#fd7e14;"></i>Otras
+            <span class="badge bg-secondary ms-1" style="font-size:.63rem;">@otraMaquinas.Count máq.</span>
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="tab-hil-btn" data-bs-toggle="tab" data-bs-target="#tab-hil"
+                type="button" role="tab" aria-controls="tab-hil" aria-selected="false">
+            <i class="bi bi-gear-wide me-1" style="color:#0d6efd;"></i>Hilandería
+            <span class="badge bg-secondary ms-1" style="font-size:.63rem;">@hilMaquinas.Count máq.</span>
+            @if (hilActivas > 0)
+            {
+                <span class="badge bg-success ms-1" style="font-size:.63rem;">@hilActivas activas</span>
+            }
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="tab-pln-btn" data-bs-toggle="tab" data-bs-target="#tab-pln"
+                type="button" role="tab" aria-controls="tab-pln" aria-selected="false">
+            <i class="bi bi-clipboard-check me-1" style="color:#198754;"></i>Compromisos PLN
+            <span class="badge bg-secondary ms-1" style="font-size:.63rem;">
+                @(compromisos.Select(x => x.CodMaq).Distinct().Count()) máq.
+            </span>
+        </button>
+    </li>
+</ul>
 
-<!-- Modal: Refrescar carga diaria -->
-<div class="modal fade" id="modalRefreshCarga" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="RefreshCargaDiaria" method="post">
-                @Html.AntiForgeryToken()
-                <div class="modal-header">
-                    <h6 class="modal-title"><i class="bi bi-arrow-clockwise me-2 text-primary"></i>Refrescar carga diaria</h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="small mb-3">Ejecuta <code>PKG_PLN.SP_PLN_CARGA_DIARIA_REFRESH</code> para recalcular <code>PLN_CARGA_DIARIA</code> en el rango indicado.</p>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold small">Fecha inicio</label>
-                            <input type="date" name="fchIni" class="form-control form-control-sm"
-                                   value="@DateTime.Today.ToString("yyyy-MM-dd")" />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold small">Fecha fin</label>
-                            <input type="date" name="fchFin" class="form-control form-control-sm"
-                                   value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
-                        </div>
-                    </div>
-                    <div class="alert alert-warning small py-1 mt-2 mb-0">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        El job automático <code>JOB_PLN_CARGA</code> lo ejecuta a las 23:30. Use esto solo para actualización manual urgente.
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Ejecutar refresco
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+<div class="tab-content">
 
-<!-- Resumen KPIs — BUG FIX: basados en EstadoCarga (Oracle PctCarga), no PctUtilizacion -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card maq-card text-center p-3">
-            <div class="fs-2 fw-bold text-primary">@total</div>
-            <div class="text-muted small">🏭 Máquinas</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card maq-card text-center p-3">
-            <div class="fs-2 fw-bold text-danger">@sobrecargadas</div>
-            <div class="text-muted small">🔴 Sobrecargadas (&gt;95%)</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card maq-card text-center p-3">
-            <div class="fs-2 fw-bold text-warning">@cargaAlta</div>
-            <div class="text-muted small">🟠 Carga alta (80–95%)</div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card maq-card text-center p-3">
-            <div class="fs-2 fw-bold text-success">@disponibles</div>
-            <div class="text-muted small">🟢 Disponibles (&lt;50%)</div>
-        </div>
-    </div>
-</div>
+@*═══════════════════════════════════════════════════════════════════ TAB: TINTORERÍA *@
+<div class="tab-pane fade show active pln-tab-panel" id="tab-tt" role="tabpanel" aria-labelledby="tab-tt-btn">
 
-<!-- BUG FIX: leyenda con umbrales reales de Oracle (PctCarga, no PctUtilizacion) -->
-<div class="d-flex gap-4 mb-3 flex-wrap">
-    <div class="leyenda-item"><span class="semaforo-dot" style="background:#198754;"></span>Disponible (&lt;50%)</div>
-    <div class="leyenda-item"><span class="semaforo-dot" style="background:#ffc107;"></span>Carga media (50–80%)</div>
-    <div class="leyenda-item"><span class="semaforo-dot" style="background:#fd7e14;"></span>Carga alta (80–95%)</div>
-    <div class="leyenda-item"><span class="semaforo-dot" style="background:#dc3545;"></span>Sobrecargada (&gt;95%)</div>
-</div>
-
-@* ── Heatmap ApexCharts: ocupación 30 días ─────────────────── *@
-@if (showHeatmap)
-{
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white py-2" style="font-size:.84rem;">
-            <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>
-            <strong>Ocupación por máquina — próximos 30 días</strong>
-            <small class="text-muted ms-2">@heatFechaRango</small>
-        </div>
-        <div class="card-body pb-1 px-2">
-            <div id="chartCargaHeatmap"></div>
-        </div>
-        <div class="card-footer text-muted py-1" style="font-size:.72rem;">
-            Intensidad = % carga Oracle (PctCarga). Fuente: <code>V_PLN_CARGA_MAQUINAS</code>.
-            Celdas grises = sin datos (máquina sin pedidos asignados ese día).
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="grupo-legend"><span class="grupo-dot bg-primary"></span><strong>Thies</strong> (R01–R19)</div>
+        <div class="grupo-legend"><span class="grupo-dot bg-success"></span><strong>HANK</strong> (M01–M08)</div>
+        <div class="grupo-legend"><span class="grupo-dot bg-warning"></span><strong>Mad.Rodete</strong> (MR1–MR2)</div>
+        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+            <div class="grupo-legend"><span class="grupo-dot" style="background:#198754;"></span>ACTIVA</div>
+            <div class="grupo-legend"><span class="grupo-dot bg-secondary"></span>LIBRE</div>
+            <div class="grupo-legend"><span class="grupo-dot" style="background:#e53e3e;"></span>RETRASADA</div>
         </div>
     </div>
-}
 
-@if (!items.Any())
-{
-    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No hay datos de carga para hoy.</div>
-}
-else
-{
-    <!-- BUG FIX: agrupar por Area (Hilandería / Tintorería), antes se mostraba todo plano -->
-    @foreach (var grupo in grupos)
+    <div class="cm-filter-bar mb-3">
+        <div class="btn-group btn-group-sm" role="group">
+            <input type="radio" class="btn-check" name="ttGrp" id="ttAll"   value="all"        autocomplete="off" checked>
+            <label class="btn btn-outline-secondary" for="ttAll">Todas</label>
+            <input type="radio" class="btn-check" name="ttGrp" id="ttThies" value="Thies"      autocomplete="off">
+            <label class="btn btn-outline-primary"   for="ttThies">Thies (R)</label>
+            <input type="radio" class="btn-check" name="ttGrp" id="ttHank"  value="HANK"       autocomplete="off">
+            <label class="btn btn-outline-success"   for="ttHank">HANK (M)</label>
+            <input type="radio" class="btn-check" name="ttGrp" id="ttMR"    value="Mad.Rodete" autocomplete="off">
+            <label class="btn btn-outline-warning"   for="ttMR">Mad.Rod.</label>
+        </div>
+        <div class="btn-group btn-group-sm" role="group">
+            <input type="radio" class="btn-check" name="ttEst" id="ttEstAll"    value="all"    autocomplete="off" checked>
+            <label class="btn btn-outline-secondary" for="ttEstAll">Todas</label>
+            <input type="radio" class="btn-check" name="ttEst" id="ttEstActiva" value="ACTIVA" autocomplete="off">
+            <label class="btn btn-outline-success"   for="ttEstActiva">Activas</label>
+            <input type="radio" class="btn-check" name="ttEst" id="ttEstLibre"  value="LIBRE"  autocomplete="off">
+            <label class="btn btn-outline-secondary" for="ttEstLibre">Libres</label>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:200px;">
+            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input id="ttSearch" type="text" class="form-control border-start-0 ps-0" placeholder="Buscar máquina…" autocomplete="off" />
+        </div>
+        <small class="text-muted ms-auto"><span id="ttVisibleCount">@ttMaquinas.Count</span> / @ttMaquinas.Count máquinas</small>
+    </div>
+
+    @if (ttMaquinas.Any())
     {
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-white fw-semibold py-2">
-                <i class="bi bi-diagram-3 me-1"></i>@grupo.Key
-                <span class="badge bg-secondary ms-2">@grupo.Count() máquina(s)</span>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-sm table-hover mb-0 align-middle tbl-carga">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Máquina</th>
-                            <th style="min-width:180px;">Carga (PctCarga)</th>
-                            <th class="text-end">Kg asignados</th>
-                            <th class="text-end">Kg capacidad</th>
-                            <th class="text-end">Diferencia Kg</th>
-                            <th class="text-end">Pedidos</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var m in grupo.OrderByDescending(x => x.PctCarga))
-                        {
-                            // BUG FIX: usar PctCarga (campo Oracle) para la barra y el porcentaje mostrado.
-                            // PctUtilizacion se conserva como dato auxiliar en el tooltip.
-                            var pct   = Math.Min(m.PctCarga, 100);
-                            var color = m.ColorSemaforo;
-                            var estadoBadge = m.EstadoCarga switch {
-                                "SOBRECARGADA" => ("bg-danger",       "⚠ Sobrecargada"),
-                                "CARGA_ALTA"   => ("bg-warning text-dark", "Carga alta"),
-                                "CARGA_MEDIA"  => ("bg-info text-dark",    "Carga media"),
-                                _              => ("bg-success",      "Disponible"),
-                            };
-                            var difKg    = m.DiferenciaKg;
-                            var difClass = difKg > 0 ? "text-danger fw-bold" : difKg < 0 ? "text-success" : "text-muted";
-                            <tr class="@(m.EstadoCarga == "SOBRECARGADA" ? "table-danger" : m.EstadoCarga == "CARGA_ALTA" ? "table-warning" : "")">
-                                <td class="fw-semibold">@m.CodMaq</td>
-                                <td>
-                                    <div class="progress maq-gauge mb-1">
-                                        <div class="progress-bar" style="width:@pct%;background-color:@color;"
-                                             title="PctUtilizacion: @m.PctUtilizacion.ToString("N1")%"></div>
+        string[] grupoOrden = { "Thies", "HANK", "Mad.Rodete", "Otro" };
+        var ttPorGrupo = ttMaquinas
+            .GroupBy(m => m.Grupo)
+            .OrderBy(g => { var idx = Array.IndexOf(grupoOrden, g.Key); return idx < 0 ? 99 : idx; })
+            .ToList();
+
+        foreach (var grp in ttPorGrupo)
+        {
+            var grpColor = grp.Key switch
+            {
+                "Thies"      => "#0d6efd",
+                "HANK"       => "#198754",
+                "Mad.Rodete" => "#fd7e14",
+                _            => "#6c757d"
+            };
+            int grpActivas = grp.Count(m => m.EsActiva);
+            int grpLibres  = grp.Count(m => !m.EsActiva);
+            <div class="mb-4">
+                <div class="d-flex align-items-center gap-2 mb-2" style="border-left:3px solid @grpColor; padding-left:.6rem;">
+                    <span class="fw-bold" style="color:@grpColor; font-size:.9rem;">@grp.Key</span>
+                    <span class="badge bg-light text-dark border ms-1" style="font-size:.65rem;">@grp.Count() máq.</span>
+                    @if (grpActivas > 0)
+                    { <span class="badge bg-success" style="font-size:.62rem;">@grpActivas activas</span> }
+                    <span class="badge bg-secondary" style="font-size:.62rem;">@grpLibres libres</span>
+                </div>
+                <div class="row g-2">
+                    @foreach (var maq in grp.OrderBy(m => m.CodMaq))
+                    {
+                        <div class="col-12 col-sm-6 col-lg-4 col-xl-3 tt-col"
+                             data-grupo="@maq.Grupo" data-estado="@maq.EstadoMaq"
+                             data-maq="@maq.CodMaq.ToUpper()">
+                            <div class="tt-maq-card @(maq.EsActiva ? (maq.EstaRetrasado ? "tt-retrasada" : "") : "tt-libre") h-100"
+                                 style="border-left:3px solid @maq.ColorBorde;">
+                                <div class="tt-head">
+                                    <i class="bi bi-circle-fill" style="color:@maq.ColorBorde; font-size:.55rem;"></i>
+                                    <span class="tt-cod">@maq.CodMaq</span>
+                                    <span class="tt-nom">@maq.NombreMaqDisplay</span>
+                                    <span class="ms-auto badge @maq.BadgeClase" style="font-size:.62rem;">
+                                        @(maq.EsActiva ? (maq.EstaRetrasado ? "RETRASADA" : "ACTIVA") : "LIBRE")
+                                    </span>
+                                </div>
+                                @if (maq.EsActiva)
+                                {
+                                    <div class="tt-body">
+                                        <div class="tt-row">
+                                            <span class="tt-lbl">Proceso</span>
+                                            <span class="badge" style="background:@(maq.TipDoc=="IR" ? "#6f42c120" : "#0d6efd20"); color:@(maq.TipDoc=="IR" ? "#6f42c1" : "#0d6efd"); border:1px solid @(maq.TipDoc=="IR" ? "#6f42c1" : "#0d6efd"); font-size:.62rem; font-weight:700;">
+                                                @maq.NombreProceso
+                                            </span>
+                                            <span class="badge bg-light text-dark border ms-1" style="font-size:.58rem;">@maq.TipDoc</span>
+                                        </div>
+                                        @if (maq.TienePedido)
+                                        {
+                                            <div class="tt-row">
+                                                <span class="tt-lbl">Pedido</span>
+                                                <a asp-action="Pedido" asp-route-numPed="@maq.NumPed" asp-route-serie="@maq.Serie"
+                                                   class="fw-semibold text-decoration-none" style="color:var(--pln-blue-link);">
+                                                    @maq.NumPed/@maq.Nro
+                                                </a>
+                                                @if (maq.EsUrgente)
+                                                { <i class="bi bi-lightning-charge-fill text-warning ms-1" title="Urgente"></i> }
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(maq.NombrePaso))
+                                        {
+                                            <div class="tt-row">
+                                                <span class="tt-lbl">Paso PLN</span>
+                                                <span class="badge" style="background:@maq.ColorUi; font-size:.6rem;">@maq.NombrePaso</span>
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(maq.NombreCliente))
+                                        {
+                                            <div class="tt-row">
+                                                <span class="tt-lbl">Cliente</span>
+                                                <span class="text-truncate" style="max-width:140px; font-size:.75rem;" title="@maq.NombreCliente">@maq.NombreCliente</span>
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(maq.Titulo))
+                                        {
+                                            <div class="tt-row">
+                                                <span class="tt-lbl">Título</span>
+                                                <span class="fw-semibold">@maq.Titulo</span>
+                                                @if (!string.IsNullOrEmpty(maq.CodArt))
+                                                { <span class="text-muted ms-1" style="font-size:.65rem;" title="@maq.CodArt">@(maq.CodArt.Length > 14 ? maq.CodArt[..14]+"…" : maq.CodArt)</span> }
+                                            </div>
+                                        }
+                                        @if (maq.FchEntregaComp.HasValue)
+                                        {
+                                            <div class="tt-row">
+                                                <span class="tt-lbl">Entrega</span>
+                                                <span class="@(maq.EstaRetrasado ? "text-danger fw-bold" : "")">
+                                                    @maq.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                                </span>
+                                                @if (maq.DiasRetraso > 0)
+                                                { <span class="badge bg-danger ms-1" style="font-size:.58rem;">+@maq.DiasRetraso d</span> }
+                                            </div>
+                                        }
+                                        @if (maq.Kg > 0)
+                                        {
+                                            <div class="tt-row mt-1">
+                                                <span class="tt-lbl">Kg proc.</span>
+                                                <span class="fw-semibold">@maq.Kg.ToString("N1") kg</span>
+                                            </div>
+                                        }
                                     </div>
-                                    <small class="fw-semibold" style="color:@color;">@m.PctCarga.ToString("N1")%</small>
-                                </td>
-                                <td class="text-end">@m.KgAsignados.ToString("N0")</td>
-                                <td class="text-end text-muted">@m.KgCapacidad.ToString("N0")</td>
-                                <td class="text-end @difClass">
-                                    @(difKg > 0 ? "+" : "")@difKg.ToString("N0")
-                                </td>
-                                <td class="text-end">
-                                    <span class="badge bg-light text-dark border">@m.NroPedidos</span>
-                                </td>
-                                <td>
-                                    <span class="badge @estadoBadge.Item1">@estadoBadge.Item2</span>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                                }
+                                else
+                                {
+                                    <div class="tt-libre-msg"><i class="bi bi-check-circle me-1"></i>Disponible</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
             </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-light border text-muted small py-2">
+            <i class="bi bi-info-circle me-1"></i>No se encontraron máquinas de tintorería en el catálogo (TT_RPRODUC).
         </div>
     }
-}
+</div>@*/ tab-tt *@
+
+@*═══════════════════════════════════════════════════════════════════ TAB: SECADO *@
+<div class="tab-pane fade pln-tab-panel" id="tab-sec" role="tabpanel" aria-labelledby="tab-sec-btn">
+
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="grupo-legend"><span class="grupo-dot" style="background:#20c997;"></span><strong>Secadoras</strong> (S01–S04)</div>
+        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+            <div class="grupo-legend"><span class="grupo-dot" style="background:#198754;"></span>ACTIVA</div>
+            <div class="grupo-legend"><span class="grupo-dot bg-secondary"></span>LIBRE</div>
+            <div class="grupo-legend"><span class="grupo-dot" style="background:#e53e3e;"></span>RETRASADA</div>
+        </div>
+    </div>
+
+    @if (secMaquinas.Any())
+    {
+        <div class="row g-2">
+            @foreach (var maq in secMaquinas.OrderBy(m => m.CodMaq))
+            {
+                <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+                    <div class="tt-maq-card @(maq.EsActiva ? (maq.EstaRetrasado ? "tt-retrasada" : "") : "tt-libre") h-100"
+                         style="border-left:3px solid @maq.ColorBorde;">
+                        <div class="tt-head">
+                            <i class="bi bi-wind" style="color:@maq.ColorBorde; font-size:.75rem;"></i>
+                            <span class="tt-cod">@maq.CodMaq</span>
+                            <span class="tt-nom">@maq.NombreMaqDisplay</span>
+                            <span class="ms-auto badge @maq.BadgeClase" style="font-size:.62rem;">
+                                @(maq.EsActiva ? (maq.EstaRetrasado ? "RETRASADA" : "ACTIVA") : "LIBRE")
+                            </span>
+                        </div>
+                        @if (maq.EsActiva)
+                        {
+                            <div class="tt-body">
+                                <div class="tt-row">
+                                    <span class="tt-lbl">Proceso</span>
+                                    <span class="badge" style="background:#20c99720; color:#20c997; border:1px solid #20c997; font-size:.62rem; font-weight:700;">
+                                        @maq.NombreProceso
+                                    </span>
+                                </div>
+                                @if (maq.TienePedido)
+                                {
+                                    <div class="tt-row">
+                                        <span class="tt-lbl">Pedido</span>
+                                        <a asp-action="Pedido" asp-route-numPed="@maq.NumPed" asp-route-serie="@maq.Serie"
+                                           class="fw-semibold text-decoration-none" style="color:var(--pln-blue-link);">
+                                            @maq.NumPed/@maq.Nro
+                                        </a>
+                                        @if (maq.EsUrgente)
+                                        { <i class="bi bi-lightning-charge-fill text-warning ms-1" title="Urgente"></i> }
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(maq.NombrePaso))
+                                {
+                                    <div class="tt-row">
+                                        <span class="tt-lbl">Paso PLN</span>
+                                        <span class="badge" style="background:@maq.ColorUi; font-size:.6rem;">@maq.NombrePaso</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(maq.NombreCliente))
+                                {
+                                    <div class="tt-row">
+                                        <span class="tt-lbl">Cliente</span>
+                                        <span class="text-truncate" style="max-width:140px; font-size:.75rem;" title="@maq.NombreCliente">@maq.NombreCliente</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(maq.Titulo))
+                                {
+                                    <div class="tt-row">
+                                        <span class="tt-lbl">Título</span>
+                                        <span class="fw-semibold">@maq.Titulo</span>
+                                        @if (!string.IsNullOrEmpty(maq.CodArt))
+                                        { <span class="text-muted ms-1" style="font-size:.65rem;" title="@maq.CodArt">@(maq.CodArt.Length > 14 ? maq.CodArt[..14]+"…" : maq.CodArt)</span> }
+                                    </div>
+                                }
+                                @if (maq.FchEntregaComp.HasValue)
+                                {
+                                    <div class="tt-row">
+                                        <span class="tt-lbl">Entrega</span>
+                                        <span class="@(maq.EstaRetrasado ? "text-danger fw-bold" : "")">
+                                            @maq.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                        </span>
+                                        @if (maq.DiasRetraso > 0)
+                                        { <span class="badge bg-danger ms-1" style="font-size:.58rem;">+@maq.DiasRetraso d</span> }
+                                    </div>
+                                }
+                                @if (maq.Kg > 0)
+                                {
+                                    <div class="tt-row mt-1">
+                                        <span class="tt-lbl">Kg</span>
+                                        <span class="fw-semibold">@maq.Kg.ToString("N1") kg</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="tt-libre-msg"><i class="bi bi-check-circle me-1"></i>Disponible</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-light border text-muted small py-2">
+            <i class="bi bi-info-circle me-1"></i>No se encontraron secadoras en el catálogo (T_MAQUINAS TIPO_MAQ='S').
+        </div>
+    }
+</div>@*/ tab-sec *@
+
+@*═══════════════════════════════════════════════════════════════════ TAB: OTRAS MÁQUINAS *@
+<div class="tab-pane fade pln-tab-panel" id="tab-otras" role="tabpanel" aria-labelledby="tab-otras-btn">
+
+    <p class="text-muted small mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        Máquinas de soporte del área de Tintoría. No tienen tabla de actividad propia; siempre aparecen disponibles.
+    </p>
+
+    @{
+        var gruposOtras = otraMaquinas
+            .GroupBy(m => m.Grupo)
+            .OrderBy(g => g.Key);
+        var grupoIcono = new Dictionary<string, (string icon, string color)>
+        {
+            ["Centrífuga"]  = ("bi-arrow-clockwise", "#0d6efd"),
+            ["Mad.Rodete"]   = ("bi-stars",            "#6f42c1"),
+            ["Prensadora"]   = ("bi-arrows-collapse",  "#fd7e14"),
+            ["Caldero"]      = ("bi-thermometer-half", "#dc3545"),
+            ["Otro"]         = ("bi-gear",              "#6c757d"),
+        };
+    }
+
+    @if (otraMaquinas.Any())
+    {
+        @foreach (var grupo in gruposOtras)
+        {
+            var (icon, color) = grupoIcono.TryGetValue(grupo.Key, out var ic) ? ic : ("bi-gear", "#6c757d");
+            <h6 class="mb-2 mt-3" style="color:@color; font-size:.85rem; font-weight:700; letter-spacing:.03em;">
+                <i class="bi @icon me-1"></i>@grupo.Key
+            </h6>
+            <div class="row g-2 mb-2">
+                @foreach (var maq in grupo.OrderBy(m => m.CodMaq))
+                {
+                    <div class="col-12 col-sm-6 col-md-4 col-lg-3 col-xl-2">
+                        <div class="tt-maq-card tt-libre h-100"
+                             style="border-left:3px solid @color;">
+                            <div class="tt-head">
+                                <i class="bi @icon" style="color:@color; font-size:.75rem;"></i>
+                                <span class="tt-cod">@maq.CodMaq</span>
+                                <span class="ms-auto badge bg-secondary" style="font-size:.62rem;">LIBRE</span>
+                            </div>
+                            <div class="tt-body">
+                                <div class="tt-row">
+                                    <span class="text-muted" style="font-size:.78rem;">@maq.NombreMaqDisplay</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-light border text-muted small py-2">
+            <i class="bi bi-info-circle me-1"></i>No se encontraron máquinas de soporte activas en el catálogo.
+        </div>
+    }
+</div>@*/ tab-otras *@
+
+@*═══════════════════════════════════════════════════════════════════ TAB: HILANDERÍA *@
+<div class="tab-pane fade pln-tab-panel" id="tab-hil" role="tabpanel" aria-labelledby="tab-hil-btn">
+
+    @if (hilMaquinas.Any())
+    {
+        var hilPorTipo = hilMaquinas
+            .GroupBy(m => m.TpMaq)
+            .OrderBy(g => g.Any(m => m.EsActiva) ? 0 : 1)
+            .ThenBy(g => g.Key)
+            .ToList();
+
+        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+            <span class="text-muted small">Actividad últimas 24h ·</span>
+            @foreach (var tipo in hilPorTipo.Take(6))
+            {
+                <span class="badge bg-light text-dark border" style="font-size:.63rem;">
+                    @tipo.First().DescripcionTipo (@tipo.Count())
+                </span>
+            }
+        </div>
+
+        foreach (var tipoGrp in hilPorTipo)
+        {
+            var primera  = tipoGrp.First();
+            var tipoId   = "hil_" + tipoGrp.Key;
+            int tipoAct  = tipoGrp.Count(m => m.EsActiva);
+            <div class="mb-3">
+                <button class="pln-area-hdr" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#@tipoId"
+                        aria-expanded="false" aria-controls="@tipoId">
+                    <i class="bi bi-cpu me-1" style="color:@primera.ColorTipo;"></i>
+                    @primera.DescripcionTipo
+                    <span class="area-badge ms-1">@tipoGrp.Count() máq.</span>
+                    @if (tipoAct > 0)
+                    { <span class="badge bg-success ms-1" style="font-size:.62rem;">@tipoAct activas</span> }
+                    <span class="pln-area-chevron"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse" id="@tipoId"
+                     style="border:1px solid #e2e8f0; border-top:none; border-radius:0 0 6px 6px; overflow:hidden;">
+                    <div class="table-responsive">
+                        <table class="table table-hover tbl-hil mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Máquina</th><th>Lote</th><th>Título</th><th>Proceso</th>
+                                    <th>Estado</th><th class="text-end">Husos</th>
+                                    <th class="text-end">Velocidad</th><th class="text-end">Kg</th><th>Última actividad</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in tipoGrp.OrderBy(x => x.CodMaq))
+                                {
+                                    <tr class="@(m.EsActiva ? "table-success bg-opacity-25" : "")">
+                                        <td><span class="maq-name">@m.CodMaq</span></td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(m.Lote))
+                                            { <span class="badge bg-light text-dark border" style="font-size:.7rem;">@m.Lote</span> }
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(m.Titulo))
+                                            { <span class="fw-semibold">@m.Titulo</span> }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(m.Proceso))
+                                            { <span class="proceso-tag">@m.NombreProceso</span> }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                        <td>
+                                            <span class="badge @m.BadgeClase" style="font-size:.65rem;">
+                                                @(m.EsActiva ? "EN PROCESO" : "COMPLETADO")
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            @(m.HusosMax > 0 ? m.HusosMax.ToString() : "—")
+                                        </td>
+                                        <td class="text-end">
+                                            @if (m.Velocidad > 0)
+                                            { <text>@m.Velocidad.ToString("N0") <small class="text-muted">rpm</small></text> }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                        <td class="text-end">
+                                            @(m.KgTotal > 0 ? m.KgTotal.ToString("N1") : "—")
+                                        </td>
+                                        <td>
+                                            @if (m.UltimaFechaIni.HasValue)
+                                            {
+                                                var diff = (DateTime.Now - m.UltimaFechaIni.Value).TotalHours;
+                                                <span class="@(m.EsActiva ? "text-success fw-semibold" : "text-muted")"
+                                                      title="@m.UltimaFechaIni.Value.ToString("dd/MM/yyyy HH:mm")">
+                                                    @if (diff < 1)      { <text><i class="bi bi-dot text-success"></i>Hace @((int)(diff*60)) min</text> }
+                                                    else if (diff < 24) { <text>Hace @((int)diff)h</text> }
+                                                    else                { <text>@m.UltimaFechaIni.Value.ToString("dd/MM HH:mm")</text> }
+                                                </span>
+                                            }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-light border text-muted small py-2">
+            <i class="bi bi-info-circle me-1"></i>No hay actividad de hilandería en las últimas 24h (H_RPRODUC vacío para el período).
+        </div>
+    }
+</div>@*/ tab-hil *@
+
+@*═══════════════════════════════════════════════════════════════════ TAB: COMPROMISOS PLN *@
+<div class="tab-pane fade pln-tab-panel" id="tab-pln" role="tabpanel" aria-labelledby="tab-pln-btn">
+
+    @{
+        string[] ordenAreas = { "Tintorería", "Secado", "Devanado", "Hilandería", "Otros" };
+        var comprPorArea = compromisos
+            .GroupBy(x => x.CodMaq)
+            .Select(g =>
+            {
+                var best = g.Any(x => x.EstadoMaq == "EN_PROCESO")   ? 0 :
+                           g.Any(x => x.EstadoMaq == "COMPROMETIDA") ? 1 : 2;
+                return (Maq: g.Key, Area: g.First().Area, Best: best, Items: g.ToList(), Primero: g.First());
+            })
+            .GroupBy(x => string.IsNullOrWhiteSpace(x.Area) ? "Otros" : x.Area)
+            .OrderBy(g => { var idx = Array.IndexOf(ordenAreas, g.Key); return idx < 0 ? 99 : idx; })
+            .ToList();
+        int totalMaqCom    = compromisos.Select(x => x.CodMaq).Distinct().Count();
+        int totalEnProceso = compromisos.Count(x => x.EstadoMaq == "EN_PROCESO");
+        int totalComprom   = compromisos.Count(x => x.EstadoMaq == "COMPROMETIDA");
+    }
+
+    @if (comprPorArea.Any())
+    {
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div class="d-flex align-items-center gap-1">
+                <i class="bi bi-diagram-3 text-primary me-1"></i>
+                <span class="fw-bold" style="font-size:.9rem;">Compromisos PLN_SEGUIMIENTO</span>
+                <span class="badge bg-light text-dark border ms-1" style="font-size:.7rem;">@totalMaqCom máqs.</span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                @if (totalEnProceso > 0)
+                { <span class="badge bg-success" style="font-size:.7rem;"><i class="bi bi-play-circle-fill me-1"></i>@totalEnProceso en proceso</span> }
+                @if (totalComprom > 0)
+                { <span class="badge bg-warning text-dark" style="font-size:.7rem;"><i class="bi bi-clock-history me-1"></i>@totalComprom comprometidas</span> }
+            </div>
+        </div>
+
+        <div class="cm-filter-bar mb-3">
+            <div class="input-group input-group-sm" style="max-width:260px;">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input id="cmFiltro" type="text" class="form-control border-start-0 ps-0"
+                       placeholder="Buscar máquina o pedido…" autocomplete="off" />
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="cmExpandAll(true)">
+                <i class="bi bi-arrows-expand me-1"></i>Expandir
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="cmExpandAll(false)">
+                <i class="bi bi-arrows-collapse me-1"></i>Colapsar
+            </button>
+        </div>
+
+        @foreach (var areaGrp in comprPorArea)
+        {
+            var areaId  = "area_" + System.Text.RegularExpressions.Regex.Replace(areaGrp.Key, @"[^a-zA-Z0-9]", "_");
+            var areaMaqs = areaGrp.OrderBy(x => x.Best).ThenBy(x => x.Maq).ToList();
+            int areaEnProc = areaGrp.Sum(x => x.Items.Count(i => i.EstadoMaq == "EN_PROCESO"));
+            int areaCom    = areaGrp.Sum(x => x.Items.Count(i => i.EstadoMaq == "COMPROMETIDA"));
+
+            <div class="mb-3" data-area-section="@areaGrp.Key">
+                <button class="pln-area-hdr" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#@areaId"
+                        aria-expanded="true" aria-controls="@areaId">
+                    <i class="bi bi-grid-1x2 me-1"></i>@areaGrp.Key
+                    <span class="area-badge ms-1">@areaMaqs.Count máq.</span>
+                    @if (areaEnProc > 0)
+                    { <span class="badge bg-success ms-1" style="font-size:.62rem;">@areaEnProc en proceso</span> }
+                    @if (areaCom > 0)
+                    { <span class="badge bg-warning text-dark ms-1" style="font-size:.62rem;">@areaCom comprometidas</span> }
+                    <span class="pln-area-chevron"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse show" id="@areaId"
+                     style="border:1px solid #e2e8f0; border-top:none; border-radius:0 0 6px 6px; padding:.75rem; background:#f8fafc;">
+                    <div class="row g-2" id="@(areaId)_cards">
+                        @foreach (var maqData in areaMaqs)
+                        {
+                            var enProc = maqData.Items.Where(x => x.EstadoMaq == "EN_PROCESO").ToList();
+                            var compr  = maqData.Items.Where(x => x.EstadoMaq == "COMPROMETIDA").ToList();
+                            var asign  = maqData.Items.Where(x => x.EstadoMaq == "ASIGNADA").ToList();
+                            var prim   = maqData.Primero;
+                            var bColor = enProc.Any() ? "#198754" : compr.Any() ? "#fd7e14" : "#6c757d";
+                            var colId  = "cm_" + maqData.Maq.Replace(" ","_");
+                            var vis3   = maqData.Items.Take(3).ToList();
+                            var resto  = maqData.Items.Skip(3).ToList();
+
+                            <div class="col-12 col-md-6 col-xl-4 cm-maq-col"
+                                 data-maq="@maqData.Maq.ToUpper()"
+                                 data-pedidos="@string.Join(" ", maqData.Items.Select(x => x.NumPed.ToString()).Distinct())">
+                                <div class="maq-comp-card h-100" style="border-left:3px solid @bColor;">
+                                    <div class="maq-head">
+                                        <i class="bi bi-gear-fill" style="color:@bColor; font-size:.85rem;"></i>
+                                        <span class="maq-cod">@maqData.Maq</span>
+                                        <span class="maq-nom">@prim.NombreMaqDisplay</span>
+                                        <span class="maq-area-tag" style="background:@(bColor)20; color:@bColor; border:1px solid @bColor;">
+                                            @maqData.Area
+                                        </span>
+                                    </div>
+                                    <div class="maq-badges">
+                                        @if (enProc.Any())
+                                        { <span class="badge bg-success" style="font-size:.65rem;">@enProc.Count EN PROCESO</span> }
+                                        @if (compr.Any())
+                                        { <span class="badge bg-warning text-dark" style="font-size:.65rem;">@compr.Count COMPROMETIDA@(compr.Count!=1?"S":"")</span> }
+                                        @if (asign.Any())
+                                        { <span class="badge bg-secondary" style="font-size:.65rem;">@asign.Count ASIGNADA@(asign.Count!=1?"S":"")</span> }
+                                    </div>
+                                    <div class="px-2 pb-2 pt-1">
+                                        <table class="table tbl-compromisos">
+                                            <thead><tr><th>Pedido</th><th>Paso</th><th>Estado</th><th>Entrega</th></tr></thead>
+                                            <tbody>
+                                                @foreach (var c in vis3)
+                                                {
+                                                    <tr class="@(c.EstaRetrasado ? "table-danger" : "")">
+                                                        <td>
+                                                            @if (c.SinSeguimiento)
+                                                            {
+                                                                <span class="text-muted fst-italic small">Sin PLN</span>
+                                                                <span class="badge bg-secondary ms-1" style="font-size:.55rem;">@c.Fuente</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <a asp-action="Pedido" asp-route-numPed="@c.NumPed" asp-route-serie="@c.Serie"
+                                                                   class="text-decoration-none fw-semibold">@c.NumPed/@c.Nro</a>
+                                                            }
+                                                        </td>
+                                                        <td><span class="badge" style="background:@c.ColorUi; font-size:.6rem;">@c.NombrePaso</span></td>
+                                                        <td><span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span></td>
+                                                        <td>
+                                                            @if (c.FchEntregaComp.HasValue)
+                                                            {
+                                                                <span class="@(c.EstaRetrasado ? "text-danger fw-bold" : "")">
+                                                                    @c.FchEntregaComp.Value.ToString("dd/MM")
+                                                                    @if (c.DiasRetraso > 0)
+                                                                    { <small class="text-danger ms-1">+@c.DiasRetraso d</small> }
+                                                                </span>
+                                                            }
+                                                            else { <span class="text-muted">—</span> }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                                @if (resto.Any())
+                                                {
+                                                    <tr class="collapse" id="@colId">
+                                                        <td colspan="4" class="p-0">
+                                                            <table class="table tbl-compromisos mb-0">
+                                                                <tbody>
+                                                                    @foreach (var c in resto)
+                                                                    {
+                                                                        <tr class="@(c.EstaRetrasado ? "table-danger" : "")">
+                                                                            <td>
+                                                                                @if (c.SinSeguimiento)
+                                                                                { <span class="text-muted fst-italic small">Sin PLN</span> }
+                                                                                else
+                                                                                { <a asp-action="Pedido" asp-route-numPed="@c.NumPed" asp-route-serie="@c.Serie" class="text-decoration-none fw-semibold">@c.NumPed/@c.Nro</a> }
+                                                                            </td>
+                                                                            <td><span class="badge" style="background:@c.ColorUi; font-size:.6rem;">@c.NombrePaso</span></td>
+                                                                            <td><span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span></td>
+                                                                            <td>
+                                                                                @if (c.FchEntregaComp.HasValue)
+                                                                                { <span class="@(c.EstaRetrasado ? "text-danger fw-bold" : "")">@c.FchEntregaComp.Value.ToString("dd/MM")</span> }
+                                                                                else { <span class="text-muted">—</span> }
+                                                                            </td>
+                                                                        </tr>
+                                                                    }
+                                                                </tbody>
+                                                            </table>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                        @if (resto.Any())
+                                        {
+                                            <a class="cm-ver-mas" data-bs-toggle="collapse" href="#@colId">
+                                                <i class="bi bi-chevron-down me-1"></i>Ver @resto.Count más…
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-light border text-muted small py-2">
+            <i class="bi bi-info-circle me-1"></i>No hay compromisos de máquinas en PLN_SEGUIMIENTO.
+            Los compromisos se registran automáticamente cuando los pedidos avanzan a Secado (PASO 08) y Devanado (PASO 10).
+        </div>
+    }
+</div>@*/ tab-pln *@
+
+</div>@*/ tab-content *@
+
+</div>@*/ container-fluid *@
 
 @section Scripts {
-@if (showHeatmap)
-{
-<script src="https://cdn.jsdelivr.net/npm/apexcharts@3/dist/apexcharts.min.js"></script>
 <script>
+// ── Filtros Tab Tintorería ────────────────────────────────────────────────────
 (function () {
-    var series = @Html.Raw(heatSeriesJson);
-    // Altura dinámica: mínimo 250px, 22px por máquina
-    var chartH = Math.max(250, series.length * 22);
-
-    var options = {
-        chart: {
-            type:        'heatmap',
-            height:      chartH,
-            toolbar:     { show: false },
-            animations:  { enabled: false },
-            fontFamily:  'inherit'
-        },
-        series: series,
-        dataLabels: { enabled: false },
-        plotOptions: {
-            heatmap: {
-                shadeIntensity: 0.6,
-                radius:         2,
-                useFillColorAsStroke: false,
-                colorScale: {
-                    ranges: [
-                        { from: 0,   to: 0,   color: '#e2e8f0', name: 'Sin datos'          },
-                        { from: 1,   to: 50,  color: '#198754', name: 'Disponible (<50%)'  },
-                        { from: 51,  to: 80,  color: '#ffc107', name: 'Carga media (50-80%)' },
-                        { from: 81,  to: 95,  color: '#fd7e14', name: 'Carga alta (80-95%)' },
-                        { from: 96,  to: 300, color: '#dc3545', name: 'Sobrecargada (>95%)' }
-                    ]
-                }
-            }
-        },
-        xaxis: {
-            type:   'category',
-            labels: { style: { fontSize: '10px' }, rotate: -45, rotateAlways: true }
-        },
-        yaxis: {
-            labels: { style: { fontSize: '10px', fontWeight: '600' } }
-        },
-        tooltip: {
-            y: { formatter: function (val) { return val === 0 ? 'Sin datos' : val + '% carga'; } }
-        },
-        legend: { show: true, position: 'top', fontSize: '11px', horizontalAlign: 'left' },
-        stroke: { width: 1, colors: ['#fff'] }
-    };
-
-    new ApexCharts(document.querySelector('#chartCargaHeatmap'), options).render();
+    var grpFilter = '', estFilter = '', searchQ = '';
+    function apply() {
+        var cols = document.querySelectorAll('.tt-col');
+        var vis = 0;
+        cols.forEach(function (col) {
+            var g = (col.dataset.grupo  || '').toUpperCase();
+            var e = (col.dataset.estado || '').toUpperCase();
+            var m = (col.dataset.maq    || '').toUpperCase();
+            var ok = (!grpFilter || g === grpFilter.toUpperCase())
+                  && (!estFilter || e === estFilter.toUpperCase())
+                  && (!searchQ   || m.includes(searchQ.toUpperCase()));
+            col.classList.toggle('tt-hidden', !ok);
+            if (ok) vis++;
+        });
+        var c = document.getElementById('ttVisibleCount');
+        if (c) c.textContent = vis;
+    }
+    document.querySelectorAll('input[name="ttGrp"]').forEach(function (r) {
+        r.addEventListener('change', function () { grpFilter = this.value === 'all' ? '' : this.value; apply(); });
+    });
+    document.querySelectorAll('input[name="ttEst"]').forEach(function (r) {
+        r.addEventListener('change', function () { estFilter = this.value === 'all' ? '' : this.value; apply(); });
+    });
+    var s = document.getElementById('ttSearch');
+    if (s) s.addEventListener('input', function () { searchQ = this.value.trim(); apply(); });
 })();
-</script>
+
+// ── Filtro Tab Compromisos PLN ───────────────────────────────────────────────
+(function () {
+    var input = document.getElementById('cmFiltro');
+    if (!input) return;
+    input.addEventListener('input', function () {
+        var q = this.value.trim().toUpperCase();
+        document.querySelectorAll('.cm-maq-col').forEach(function (col) {
+            var ok = !q || (col.dataset.maq || '').toUpperCase().includes(q)
+                       || (col.dataset.pedidos || '').toUpperCase().includes(q);
+            col.classList.toggle('cm-hidden', !ok);
+        });
+    });
+})();
+
+// ── Expandir/colapsar Compromisos PLN ────────────────────────────────────────
+function cmExpandAll(open) {
+    document.querySelectorAll('[data-area-section]').forEach(function (sec) {
+        var btn = sec.querySelector('.pln-area-hdr');
+        var id  = btn && btn.getAttribute('data-bs-target');
+        var el  = id && document.querySelector(id);
+        if (!el) return;
+        var col = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+        if (open) col.show(); else col.hide();
+    });
 }
+</script>
 }

@@ -77,7 +77,6 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
     <li class="breadcrumb-item"><a asp-action="Pedido" asp-route-numPed="@numPed" asp-route-serie="@serie">Pedido @serie-@numPed</a></li>
     <li class="breadcrumb-item active">Trazabilidad</li>
 }
@@ -221,7 +220,8 @@ else
                                                 <tr><td>Prog. TT</td><td class="td-real">@(t.FchProgTin?.ToString("dd/MM/yy") ?? "—")</td></tr>
                                                 <tr><td>TT Fin</td><td class="td-real">@(t.FchRealTinFin?.ToString("dd/MM/yy") ?? "—")</td></tr>
                                                 <tr><td>Secado</td><td class="td-real">@(t.FchRealSecado?.ToString("dd/MM/yy") ?? "—")</td></tr>
-                                                <tr><td>Calidad</td><td class="td-real">@(t.FchRealCalidad?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>CC Tinto (P.09)</td><td class="td-real">@(t.FchRealCcTinto?.ToString("dd/MM/yy") ?? "—")</td></tr>
+                                                <tr><td>Revisado (P.11)</td><td class="td-real">@(t.FchRealCalidad?.ToString("dd/MM/yy") ?? "—")</td></tr>
                                                 <tr><td>Almacén PT</td><td class="td-real">@(t.FchRealAlmPt?.ToString("dd/MM/yy") ?? "—")</td></tr>
                                                 <tr><td>Despacho</td>
                                                     <td class="td-real @(t.DiasDesvioCliente.HasValue && t.DiasDesvioCliente.Value > 0 ? "late" : "")">
@@ -315,7 +315,7 @@ else
                             var (rEspTT, eEspTT) = Dias(t.FchRealPartida,            t.FchRealTinIni,             t.FchEstPartida,         t.FchEstTinIni);
                             var (rTin,   eTin  ) = Dias(t.FchRealTinIni,             t.FchRealTinFin,             t.FchEstTinIni,          t.FchEstTinFin);
                             var (rSec,   eSec  ) = Dias(t.FchRealTinFin,             t.FchRealSecado,             t.FchEstTinFin,          t.FchEstSecado);
-                            var (rCal,   eCal  ) = Dias(t.FchRealSecado,             t.FchRealCalidad,            t.FchEstSecado,          t.FchEstCalidad);
+                            var (rCal,   eCal  ) = Dias(t.FchRealSecado,             t.FchRealCcTinto,            t.FchEstSecado,          t.FchEstCalidad);
                             var (rTotal, eTotal) = Dias(D(t.FchPedido),              t.FchRealDespacho,           D(t.FchPedido),          t.FchEstDespacho);
                             var (rDesv,  eDesv ) = Dias(D(t.FchCompromisoCliente),   t.FchRealDespacho,           D(t.FchCompromisoCliente), t.FchEstDespacho);
                             var desv    = rDesv ?? eDesv;
@@ -335,7 +335,7 @@ else
                                 ? $"Real · Fin TT: {FD(t.FchRealTinFin)} → Fin secado: {FD(t.FchRealSecado)}"
                                 : $"Est.  · Fin TT: {FD(t.FchEstTinFin)} → Fin secado: {FD(t.FchEstSecado)}";
                             var ttCal   = rCal.HasValue
-                                ? $"Real · Fin secado: {FD(t.FchRealSecado)} → CC aprobado: {FD(t.FchRealCalidad)}"
+                                ? $"Real · Fin secado: {FD(t.FchRealSecado)} → CC aprobado: {FD(t.FchRealCcTinto)}"
                                 : $"Est.  · Fin secado: {FD(t.FchEstSecado)} → CC aprobado: {FD(t.FchEstCalidad)}";
                             var ttTotal = rTotal.HasValue
                                 ? $"Real · Pedido: {FD(t.FchPedido)} → Despacho: {FD(t.FchRealDespacho)}"
@@ -432,7 +432,7 @@ else
                 Dif(t.FchRealPartida,    t.FchRealTinIni),
                 Dif(t.FchRealTinIni,     t.FchRealTinFin),
                 Dif(t.FchRealTinFin,     t.FchRealSecado),
-                Dif(t.FchRealSecado,     t.FchRealCalidad),
+                Dif(t.FchRealSecado,     t.FchRealCcTinto),       // Calidad = Secado→CC Tinto (PASO 09), igual que Pedido/Gantt
                 Dif(t.FchRealAlmPt,      t.FchRealDespacho),
             };
 

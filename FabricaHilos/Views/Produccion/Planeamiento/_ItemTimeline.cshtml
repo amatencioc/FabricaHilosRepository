@@ -1,0 +1,178 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
+@using FabricaHilos.Models.Produccion.Planeamiento
+
+@{
+    var item  = Model.Items.First();
+    var pasos = Model.Pasos.OrderBy(p => p.OrdenPaso).ToList();
+
+    // Mapa paso -> fecha real
+    var fechaReal = new Dictionary<string, DateTime?> {
+        ["01"]  = item.FchPedido,
+        ["02"]  = item.FchRealProgramado,
+        ["03"]  = item.FchRealProduccion,
+        ["04"]  = item.FchRealPartida,
+        ["06"]  = item.FchRealTinIni,
+        ["07"]  = item.FchRealTinFin,
+        ["08"]  = item.FchRealSecado,
+        ["09"]  = item.FchRealCcTinto,
+        ["09B"] = item.FchRealGaseado,
+        ["10"]  = item.FchRealDevanado,
+        ["11"]  = item.FchRealCalidad,
+        ["12"]  = item.FchRealAlmPt,
+        ["13"]  = item.FchRealAlmPt,
+        ["14"]  = item.FchRealDespacho,
+    };
+
+    // Mapa paso -> fecha estimada
+    var fechaEst = new Dictionary<string, DateTime?> {
+        ["02"]  = item.FchEstHilanderia,
+        ["04"]  = item.FchEstPartida,
+        ["06"]  = item.FchEstTinIni,
+        ["07"]  = item.FchEstTinFin,
+        ["08"]  = item.FchEstSecado,
+        ["11"]  = item.FchEstCalidad,
+        ["14"]  = item.FchEstDespacho,
+    };
+
+    int ordenActual = pasos.FirstOrDefault(p => p.CodPaso == item.CodPasoAct)?.OrdenPaso ?? 0;
+}
+
+<div class="px-1">
+    <!-- Encabezado del ítem -->
+    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+        <span class="badge bg-dark" style="font-size:.75rem; border-radius:3px;">Ítem #@item.Nro</span>
+        <strong class="text-primary" style="font-size:.9rem;">@item.CodArt</strong>
+        @if (!string.IsNullOrEmpty(item.Titulo))
+        {
+            <span class="text-muted" style="font-size:.8rem;">@item.Titulo</span>
+        }
+        @if (!string.IsNullOrEmpty(item.Color))
+        {
+            <span class="badge bg-secondary" style="font-size:.7rem;">@item.Color</span>
+        }
+        <span class="ms-auto paso-badge text-white px-2 py-1 rounded"
+              style="background:@item.ColorUi; font-size:.72rem;">
+            @item.CodPasoAct — @item.NombrePaso
+        </span>
+    </div>
+
+    <!-- Línea de tiempo vertical -->
+    <div class="timeline-item-list" style="position:relative; padding-left:2rem;">
+        <!-- Línea vertical -->
+        <div style="position:absolute; left:.62rem; top:0; bottom:0; width:2px; background:#dee2e6;"></div>
+
+        @{ bool _nowDivShown = false; }
+        @foreach (var paso in pasos.Where(p => p.CodPaso != "9R"))
+        {
+            int ordenPaso = paso.OrdenPaso;
+            bool esPasado = ordenPaso < ordenActual;
+            bool esActual = paso.CodPaso == item.CodPasoAct;
+            bool esFuturo = ordenPaso > ordenActual;
+
+            fechaReal.TryGetValue(paso.CodPaso, out var fReal);
+            fechaEst.TryGetValue(paso.CodPaso, out var fEst);
+
+            string dotColor = esActual ? paso.ColorUi : esPasado ? "#198754" : "#dee2e6";
+            string dotBorder = esActual ? "3px solid " + paso.ColorUi : esPasado ? "3px solid #198754" : "3px solid #adb5bd";
+            string textClass = esActual ? "fw-bold" : esPasado ? "" : "text-muted";
+
+            var _renderNow = !_nowDivShown && !esPasado && ordenActual > 0;
+            if (_renderNow) _nowDivShown = true;
+            @if (_renderNow)
+            {
+                <div class="tl-now-divider"><span>Ahora</span></div>
+            }
+
+            <div class="d-flex align-items-start gap-2 @(esActual ? "mb-3" : esPasado ? "mb-2" : "mb-1")" style="position:relative; min-height:1.8rem;">
+                <!-- Dot -->
+                <div style="position:absolute; left:-1.6rem; top:.25rem;
+                            width:1rem; height:1rem; border-radius:50%;
+                            background:@dotColor; border:@dotBorder;
+                            box-shadow:@(esActual ? "0 0 0 3px " + paso.ColorUi + "33" : "none");
+                            flex-shrink:0;">
+                </div>
+                <!-- Contenido -->
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (esActual)
+                        {
+                            <i class="bi bi-play-circle-fill flex-shrink-0" style="color:@paso.ColorUi;font-size:.8rem;"></i>
+                        }
+                        else if (esPasado)
+                        {
+                            <i class="bi bi-check-circle-fill flex-shrink-0 text-success" style="font-size:.8rem;"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-circle flex-shrink-0 text-muted" style="font-size:.8rem;"></i>
+                        }
+                        <span class="tl-step-cod-tag">@paso.CodPaso</span>
+                        <span class="@textClass" style="font-size:.8rem;">@paso.NombrePaso</span>
+                        @if (fReal.HasValue)
+                        {
+                            <span class="badge bg-success" style="font-size:.62rem;">@fReal.Value.ToString("dd/MM/yy")</span>
+                        }
+                        else if (fEst.HasValue && !esPasado)
+                        {
+                            <span class="badge bg-light text-secondary border" style="font-size:.62rem;">est. @fEst.Value.ToString("dd/MM/yy")</span>
+                        }
+                    </div>
+                    @* ── Actores: quien registró y aprobó (bajo PASO 01) ── *@
+                    @if (paso.CodPaso == "01" && (!string.IsNullOrEmpty(item.NombreRegistro) || !string.IsNullOrEmpty(item.NombreAprobacion)))
+                    {
+                        <div class="tl-actor">
+                            @if (!string.IsNullOrEmpty(item.NombreRegistro))
+                            {
+                                <span class="tl-actor-pill"><i class="bi bi-person-check"></i><strong>Registró</strong> @item.NombreRegistro</span>
+                            }
+                            @if (!string.IsNullOrEmpty(item.NombreAprobacion))
+                            {
+                                <span class="tl-actor-pill">
+                                    <i class="bi bi-patch-check"></i><strong>Aprobó</strong> @item.NombreAprobacion
+                                    @if (item.FchAprobacion.HasValue)
+                                    {
+                                        <span class="ap-fch">@item.FchAprobacion.Value.ToString("dd/MM/yy")</span>
+                                    }
+                                </span>
+                            }
+                        </div>
+                    }
+                    @* ── Actor: quien planificó (bajo PASO 02) ── *@
+                    @if (paso.CodPaso == "02" && !string.IsNullOrEmpty(item.NombrePlanif))
+                    {
+                        <div class="tl-actor">
+                            <span class="tl-actor-pill">
+                                <i class="bi bi-calendar2-check"></i><strong>Planificó</strong> @item.NombrePlanif
+                                @if (item.FchPlanif.HasValue)
+                                {
+                                    <span class="ap-fch">@item.FchPlanif.Value.ToString("dd/MM/yy")</span>
+                                }
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- KGs / Estado rápido -->
+    <div class="row g-2 mt-2 pt-2 border-top">
+        <div class="col-6">
+            <div class="text-muted" style="font-size:.68rem;">Kg pendientes</div>
+            <div class="fw-bold text-primary">@item.KgPendientes.ToString("N0")</div>
+        </div>
+        @if (item.FchEntregaComp.HasValue)
+        {
+            <div class="col-6">
+                <div class="text-muted" style="font-size:.68rem;">Fecha entrega</div>
+                <div class="fw-bold @(item.EstaRetrasado ? "text-danger" : "")">
+                    @item.FchEntregaComp.Value.ToString("dd/MM/yyyy")
+                    @if (item.DiasRetraso > 0)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.6rem;">+@item.DiasRetraso d</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>

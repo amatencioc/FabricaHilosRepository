@@ -1,0 +1,1556 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
+@using FabricaHilos.Models.Produccion.Planeamiento
+
+@{
+    ViewData["Title"] = $"Pedido {Model.Serie}-{Model.NumPed} — Vista Timeline";
+    var primerItem = Model.Items.FirstOrDefault();
+    var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
+    var detCodArt  = Model.Items
+        .DistinctBy(x => x.Nro)
+        .ToDictionary(x => x.Nro, x => x.CodArt);
+
+    Func<string?, string> maqNombre = cod => {
+        if (string.IsNullOrEmpty(cod)) return "";
+        int ii = 0;
+        while (ii < cod.Length && char.IsLetter(cod[ii])) ii++;
+        var pref = cod[..ii].ToUpper();
+        var numS = cod[ii..];
+        var tipo  = pref switch { "R" => "Rodete", "M" => "Madejas", "MR" => "Mad.Rodete", _ => pref };
+        var marca = pref switch { "R" => "THIES",  "M" => "HANK",    _ => "" };
+        if (string.IsNullOrEmpty(numS)) return tipo + (marca != "" ? $" · {marca}" : "");
+        var num = int.TryParse(numS, out var nn) ? nn.ToString() : numS;
+        return marca != "" ? $"{tipo} Nº{num} · {marca}" : $"{tipo} Nº{num}";
+    };
+
+    // Pasos ordenados para el carril
+    var pasosOrdenados = Model.Pasos
+        .Where(p => p.CodPaso != "09B")
+        .OrderBy(p => p.OrdenPaso)
+        .ToList();
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   PEDIDO 2 — Línea de Tiempo Vertical con Carril de Estado
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Cabecera del pedido ─────────────────────────────────────────────── */
+.p2-header {
+    background: linear-gradient(135deg, #1a365d 0%, #2a4a7f 60%, #2c5282 100%);
+    color: #fff;
+    padding: 1rem 1.25rem .85rem;
+    border-radius: 4px;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 3px 12px rgba(26,54,93,.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+.p2-header-title { font-size: 1.25rem; font-weight: 800; letter-spacing: .03em; }
+.p2-header-sub   { font-size: .78rem; opacity: .8; margin-top: .15rem; }
+.p2-header-chips { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.p2-chip {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 20px;
+    padding: .2rem .7rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+}
+.p2-chip.danger  { background: rgba(229,62,62,.35);  border-color: rgba(229,62,62,.6); }
+.p2-chip.warning { background: rgba(237,137,54,.35); border-color: rgba(237,137,54,.6); }
+.p2-chip.success { background: rgba(72,187,120,.35); border-color: rgba(72,187,120,.6); }
+
+/* ── Alertas compactas ───────────────────────────────────────────────── */
+.p2-alerta-bar {
+    border-left: 4px solid;
+    padding: .45rem .9rem;
+    font-size: .8rem;
+    margin-bottom: .4rem;
+    border-radius: 0 4px 4px 0;
+    display: flex;
+    gap: .75rem;
+    align-items: flex-start;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+/* ── Layout principal: carril lateral + sublotes ─────────────────────── */
+.p2-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 0;
+    border: 2px solid #cbd5e0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f7fafc;
+}
+@@media (max-width: 900px) { .p2-layout { grid-template-columns: 1fr; } .p2-rail { display: flex; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 2px solid #cbd5e0; } }
+
+/* ── Carril de etapas (izquierda) ────────────────────────────────────── */
+.p2-rail {
+    background: linear-gradient(180deg, #1a365d 0%, #2a4a7f 100%);
+    border-right: 2px solid #2d3748;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+}
+.p2-rail-title {
+    background: rgba(0,0,0,.25);
+    color: rgba(255,255,255,.65);
+    font-size: .6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    padding: .45rem .75rem;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.p2-etapa {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .42rem .75rem;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    cursor: default;
+    transition: background .12s;
+    position: relative;
+}
+.p2-etapa:hover { background: rgba(255,255,255,.07); }
+.p2-etapa-dot {
+    width: 10px;
+    min-width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1px solid rgba(255,255,255,.2);
+    box-shadow: 0 0 0 2px rgba(255,255,255,.06);
+}
+.p2-etapa-info { flex: 1; min-width: 0; }
+.p2-etapa-cod {
+    font-size: .6rem;
+    color: rgba(255,255,255,.45);
+    font-weight: 700;
+    letter-spacing: .06em;
+    line-height: 1;
+}
+.p2-etapa-nom {
+    font-size: .72rem;
+    color: rgba(255,255,255,.9);
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Área de sublotes (derecha) ──────────────────────────────────────── */
+.p2-sublotes { overflow-x: auto; }
+
+/* ── Tarjeta de sublote ──────────────────────────────────────────────── */
+.p2-card {
+    background: #fff;
+    border-bottom: 2px solid #e2e8f0;
+    transition: box-shadow .15s;
+}
+.p2-card:last-child { border-bottom: none; }
+.p2-card:hover { box-shadow: inset 3px 0 0 #3b6ea5; }
+.p2-card.urgente { border-left: 4px solid #e53e3e; }
+.p2-card.retraso { border-left: 4px solid #fd7e14; }
+
+/* ── Cabecera del sublote ────────────────────────────────────────────── */
+.p2-card-head {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .9rem .4rem;
+    background: linear-gradient(90deg, #f0f4f8 0%, #fff 100%);
+    border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+.p2-card-num {
+    font-size: .65rem;
+    font-weight: 800;
+    background: #2d3748;
+    color: #fff;
+    padding: .1rem .4rem;
+    border-radius: 2px;
+    letter-spacing: .04em;
+}
+.p2-card-art { font-size: .85rem; font-weight: 700; color: #1a365d; }
+.p2-card-meta { font-size: .73rem; color: #4a5568; }
+.p2-card-paso {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+/* ── Línea de tiempo vertical dentro del sublote ─────────────────────── */
+.p2-tl {
+    padding: .55rem 1rem .65rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+}
+/* línea vertical continua */
+.p2-tl::before {
+    content: '';
+    position: absolute;
+    left: 1.74rem;
+    top: 1rem;
+    bottom: 1rem;
+    width: 2px;
+    background: linear-gradient(180deg, #cbd5e0 0%, #e2e8f0 100%);
+    border-radius: 1px;
+}
+
+.p2-tl-row {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: .4rem;
+    align-items: start;
+    padding: .28rem 0;
+    position: relative;
+    border-radius: 3px;
+    transition: background .1s;
+}
+.p2-tl-row:hover { background: #f0f4f8; padding-left: .3rem; padding-right: .3rem; }
+.p2-tl-row.completado { }
+.p2-tl-row.activo     { background: #ebf8ff; padding-left: .3rem; padding-right: .3rem; border-radius: 4px; }
+.p2-tl-row.pendiente  { opacity: .55; }
+
+/* nodo del paso */
+.p2-tl-node {
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 2px solid #cbd5e0;
+    background: #fff;
+    z-index: 1;
+    position: relative;
+    margin-top: .18rem;
+    justify-self: center;
+}
+.p2-tl-row.completado .p2-tl-node {
+    background: #2f855a;
+    border-color: #2f855a;
+}
+.p2-tl-row.activo .p2-tl-node {
+    border-color: currentColor;
+    box-shadow: 0 0 0 3px rgba(0,0,0,.12);
+    animation: p2-pulse 1.8s infinite;
+}
+.p2-tl-row.pendiente .p2-tl-node { background: #edf2f7; border-color: #cbd5e0; }
+@@keyframes p2-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(0,0,0,.10); }
+    50%       { box-shadow: 0 0 0 6px rgba(0,0,0,.06); }
+}
+
+/* check dentro del nodo */
+.p2-tl-check {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    color: #fff; font-size: .55rem; font-weight: 900; line-height: 1;
+}
+
+/* contenido de la fila */
+.p2-tl-body { min-width: 0; }
+.p2-tl-label {
+    font-size: .73rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+}
+.p2-tl-row.completado .p2-tl-label { color: #276749; }
+.p2-tl-row.activo     .p2-tl-label { color: #1a365d; font-weight: 800; }
+.p2-tl-row.pendiente  .p2-tl-label { color: #a0aec0; }
+
+.p2-tl-dates { display: flex; flex-direction: column; gap: .02rem; margin-top: .12rem; }
+.p2-tl-fest  { font-size: .62rem; color: #718096; }
+.p2-tl-freal { font-size: .62rem; color: #276749; font-weight: 700; }
+.p2-tl-freal.retraso { color: #c53030; }
+
+/* ── Grupos por CodArt ───────────────────────────────────────────────── */
+.p2-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem 1rem;
+    background: linear-gradient(90deg, #2d3748 0%, #3a4a5c 100%);
+    color: #e2e8f0;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    text-align: left;
+    border-bottom: 2px solid #1a202c;
+    transition: background .12s;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.p2-group-toggle:hover { background: linear-gradient(90deg, #3a4a5c 0%, #4a5568 100%); color: #fff; }
+.p2-group-toggle .p2-g-ico { margin-left: auto; transition: transform .2s; font-size: .65rem; color: #a0aec0; }
+.p2-group-toggle[aria-expanded="true"] .p2-g-ico { transform: rotate(180deg); }
+.p2-group-art {
+    font-size: .9rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: .05em;
+}
+.p2-group-chips { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; }
+.p2-progress-wrap {
+    padding: .25rem .9rem .5rem;
+    border-top: 1px solid #f0f4f8;
+}
+.p2-progress-track {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: .2rem;
+}
+.p2-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .4s ease;
+}
+.p2-progress-lbl {
+    font-size: .62rem;
+    color: #718096;
+    display: flex;
+    justify-content: space-between;
+    margin-top: .15rem;
+}
+
+/* ── Badge de estado activo en el carril ─────────────────────────────── */
+.p2-etapa.tiene-activo::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 60%;
+    background: #f6e05e;
+    border-radius: 2px 0 0 2px;
+}
+
+/* ── Sección de detalle colapsable ───────────────────────────────────── */
+.p2-detail-toggle {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .28rem .9rem;
+    font-size: .7rem;
+    font-weight: 700;
+    color: #4a5568;
+    cursor: pointer;
+    background: #f7fafc;
+    border: none;
+    width: 100%;
+    text-align: left;
+    border-top: 1px solid #e2e8f0;
+    letter-spacing: .02em;
+}
+.p2-detail-toggle:hover { background: #edf2f7; color: #2d3748; }
+.p2-detail-toggle .p2-toggle-ico { margin-left: auto; transition: transform .2s; font-size: .65rem; }
+.p2-detail-toggle[aria-expanded="true"] .p2-toggle-ico { transform: rotate(180deg); }
+.p2-maq-toggle { outline: none !important; box-shadow: none !important; }
+.p2-maq-toggle:hover { color: #5a2d9a !important; }
+.p2-maq-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); transition: transform .2s; }
+.p2-detail-body {
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    padding: .6rem .9rem .75rem;
+}
+
+/* ── Tabla de eventos compacta ───────────────────────────────────────── */
+.p2-ev-table { font-size: .72rem; width: 100%; }
+.p2-ev-table th { font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; color: #718096; font-weight: 700; padding: .18rem .5rem; background: #f0f4f8; border-bottom: 1px solid #e2e8f0; }
+.p2-ev-table td { padding: .22rem .5rem; border-bottom: 1px solid #f0f4f8; vertical-align: top; color: #4a5568; }
+.p2-ev-table tr:last-child td { border-bottom: none; }
+
+/* ── Número de sublote en el carril lateral ──────────────────────────── */
+.p2-rail-sublotes-header {
+    padding: .35rem .75rem;
+    font-size: .62rem;
+    color: rgba(255,255,255,.4);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    background: rgba(0,0,0,.18);
+    border-bottom: 1px solid rgba(255,255,255,.1);
+}
+
+/* ── Separador de sección ────────────────────────────────────────────── */
+.p2-section-sep {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #4a5568;
+    border-bottom: 2px solid #cbd5e0;
+    padding-bottom: .3rem;
+    margin: 1.1rem 0 .7rem;
+}
+</style>
+}
+
+@* ── Cabecera del pedido ─────────────────────────────────────────────── *@
+<div class="d-flex align-items-center justify-content-between mb-1">
+    <h5 class="mb-0 fw-bold">
+        <i class="bi bi-clipboard2-pulse me-2 text-primary"></i>
+        Línea de Tiempo — Pedido <strong>@Model.Serie-@Model.NumPed</strong>
+    </h5>
+    <div class="d-flex gap-2 flex-wrap">
+        <a asp-action="Pedido" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+           class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-clipboard2-data me-1"></i>Vista clásica
+        </a>
+        <a asp-action="PedidoGantt" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+           class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+        </a>
+        <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+<p class="text-muted mb-3" style="font-size:.7rem;border-bottom:1px solid #e9ecef;padding-bottom:.5rem;">
+    Vista timeline vertical por sublote: estado de cada etapa del proceso con fechas estimadas vs. reales.
+</p>
+
+@if (primerItem != null)
+{
+    <div class="pln-info-strip mb-3">
+        <div class="d-flex align-items-stretch flex-wrap">
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Cliente</div>
+                <div class="pln-strip-val">@primerItem.NombreCliente</div>
+                <div class="pln-strip-sub">@primerItem.CodCliente</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Fecha pedido</div>
+                <div class="pln-strip-val">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Entrega comprometida</div>
+                <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
+                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                    @if (primerItem.EstaRetrasado)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
+                    }
+                </div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Sublotes</div>
+                <div class="pln-strip-val">@Model.Items.Count()</div>
+                <div class="pln-strip-sub">@Model.Items.Sum(x => x.CantidadOrig).ToString("N0") kg en total</div>
+            </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Días para entrega</div>
+                @{
+                    var fchComp2 = Model.Items.Select(x => x.FchEntregaComp).Where(f => f.HasValue).Min();
+                    var diasRest2 = fchComp2.HasValue ? (fchComp2.Value - DateTime.Today).Days : (int?)null;
+                }
+                @if (diasRest2.HasValue)
+                {
+                    var colorDias2 = diasRest2.Value < 0 ? "#fc8181" : diasRest2.Value <= 5 ? "#f6ad55" : "#e2e8f0";
+                    <div class="pln-strip-val" style="color:@colorDias2;">
+                        @(diasRest2.Value < 0 ? $"{Math.Abs(diasRest2.Value)}d vencido" : $"{diasRest2.Value}d restantes")
+                    </div>
+                    <div class="pln-strip-sub">@fchComp2!.Value.ToString("dd/MM/yyyy")</div>
+                }
+                else
+                {
+                    <div class="pln-strip-val">—</div>
+                }
+            </div>
+            @if (Model.Items.Any(x => x.EsUrgente))
+            {
+                <div class="pln-strip-cell" style="background:rgba(229,62,62,.15);">
+                    <div class="pln-strip-lbl" style="color:#fc8181;">Estado</div>
+                    <div class="pln-strip-val"><span class="badge bg-danger">⚡ URGENTE</span></div>
+                </div>
+            }
+            else if (Model.Items.Any(x => x.EstaRetrasado))
+            {
+                <div class="pln-strip-cell" style="background:rgba(253,126,20,.12);">
+                    <div class="pln-strip-lbl" style="color:#f6ad55;">Estado</div>
+                    <div class="pln-strip-val" style="font-size:.82rem;color:#fed7aa;">⚠ Con retraso</div>
+                </div>
+            }
+        </div>
+        @* ── Fila de actores (Registró / Aprobó / Planificó) ── *@
+        @{
+            var actorItem2 = Model.Items.FirstOrDefault(x =>
+                !string.IsNullOrEmpty(x.NombreRegistro) ||
+                !string.IsNullOrEmpty(x.NombreAprobacion) ||
+                !string.IsNullOrEmpty(x.NombrePlanif));
+        }
+        @if (actorItem2 != null)
+        {
+            <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.72rem; color:#6c757d; background:rgba(255,255,255,.04);">
+                @if (!string.IsNullOrEmpty(actorItem2.NombreRegistro))
+                {
+                    <span><i class="bi bi-person me-1"></i><strong>Registró:</strong> @actorItem2.NombreRegistro</span>
+                }
+                @if (!string.IsNullOrEmpty(actorItem2.NombreAprobacion))
+                {
+                    <span><i class="bi bi-patch-check me-1"></i><strong>Aprobó:</strong> @actorItem2.NombreAprobacion
+                        @if (actorItem2.FchAprobacion.HasValue)
+                        {
+                            <span class="opacity-75 ms-1">(@actorItem2.FchAprobacion.Value.ToString("dd/MM/yy"))</span>
+                        }
+                    </span>
+                }
+                @if (!string.IsNullOrEmpty(actorItem2.NombrePlanif))
+                {
+                    <span><i class="bi bi-calendar2-check me-1"></i><strong>Planificó:</strong> @actorItem2.NombrePlanif
+                        @if (actorItem2.FchPlanif.HasValue)
+                        {
+                            <span class="opacity-75 ms-1">(@actorItem2.FchPlanif.Value.ToString("dd/MM/yy"))</span>
+                        }
+                    </span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@* ── Alertas activas ─────────────────────────────────────────────────── *@
+@if (Model.Alertas.Any())
+{
+    <div class="mb-3">
+        @foreach (var a in Model.Alertas)
+        {
+            var borderColor = a.NivelColor switch { "danger" => "#e53e3e", "warning" => "#dd6b20", _ => "#3182ce" };
+            <div class="p2-alerta-bar" style="border-left-color:@borderColor;">
+                <i class="bi bi-bell-fill mt-1 text-@a.NivelColor flex-shrink-0"></i>
+                <div>
+                    <strong style="font-size:.78rem;">@a.TipoTexto</strong>
+                    @if (a.Nro.HasValue)
+                    {
+                        var detLabel = detCodArt.TryGetValue(a.Nro.Value, out var ca) ? ca : $"Det.{a.Nro}";
+                        <span class="badge bg-light text-dark border ms-1" style="font-size:.65rem;">@detLabel</span>
+                    }
+                    <span class="ms-1 text-muted">— @a.Titulo</span>
+                    @if (a.DiasRetraso.HasValue && a.DiasRetraso > 0)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.63rem;">+@a.DiasRetraso d</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@* ── Layout principal: carril + sublotes ────────────────────────────── *@
+<div class="p2-layout">
+
+    @* ── CARRIL IZQUIERDO: etapas del proceso ──────────────────────────── *@
+    <div class="p2-rail">
+        <div class="p2-rail-title">Etapas del proceso</div>
+        @{
+            // Calcular qué etapas tienen al menos un sublote activo, para marcar en el carril
+            var codosActivos = Model.Items.Select(x => x.CodPasoAct).ToHashSet();
+        }
+        @foreach (var paso in pasosOrdenados)
+        {
+            var tieneActivo = codosActivos.Contains(paso.CodPaso);
+            <div class="p2-etapa @(tieneActivo ? "tiene-activo" : "")">
+                <div class="p2-etapa-dot" style="background:@paso.ColorUi;"></div>
+                <div class="p2-etapa-info">
+                    <div class="p2-etapa-cod">@paso.CodPaso</div>
+                    <div class="p2-etapa-nom">@paso.NombrePaso</div>
+                </div>
+                @if (tieneActivo)
+                {
+                    <span title="Hay sublotes en esta etapa" style="font-size:.55rem;color:#f6e05e;">●</span>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── ÁREA DE SUBLOTES agrupados por CodArt ────────────────────────── *@
+    <div class="p2-sublotes">
+        @{
+            int p2Idx = 0;
+            int grpIdx = 0;
+            var grupos = Model.Items
+                .OrderBy(x => x.Nro).ThenBy(x => x.NumDet)
+                .GroupBy(x => x.CodArt)
+                .ToList();
+        }
+        @foreach (var grp in grupos)
+        {
+            grpIdx++;
+            var grpId      = $"p2-grp-{grpIdx}";
+            var grpItems   = grp.ToList();
+            var grpKgs     = grpItems.Sum(x => x.CantidadOrig);
+            var grpPasoAct = grpItems.GroupBy(x => x.CodPasoAct)
+                                     .OrderByDescending(g => g.Count())
+                                     .Select(g => g.First())
+                                     .FirstOrDefault();
+            var grpNro     = grpItems.First().Nro;
+            var grpUrgente = grpItems.Any(x => x.EsUrgente);
+            var grpRep     = grpItems.Any(x => x.EstaEnReproceso);
+            var grpPctAvg  = grpItems.Count > 0 ? (int)grpItems.Average(x => x.PctAvance) : 0;
+
+            @* ── Cabecera del grupo (toggle CodArt) ─────────────────────── *@
+            <button class="p2-group-toggle" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#@grpId"
+                    aria-expanded="false">
+                <i class="bi bi-box2 me-1" style="color:#63b3ed;"></i>
+                <span style="font-size:.68rem;color:#a0aec0;font-weight:700;letter-spacing:.04em;">Ítem @grpNro</span>
+                <span class="p2-group-art">@grp.Key</span>
+                <div class="p2-group-chips ms-2">
+                    <span class="p2-chip" style="font-size:.65rem;">@grpItems.Count sublote@(grpItems.Count != 1 ? "s" : "")</span>
+                    <span class="p2-chip" style="font-size:.65rem;">@grpKgs.ToString("N0") kg</span>
+                    @if (grpPasoAct != null)
+                    {
+                        <span class="badge text-white" style="background:@grpPasoAct.ColorUi;font-size:.65rem;border-radius:2px;padding:.18rem .45rem;">
+                            @grpPasoAct.CodPasoAct — @grpPasoAct.NombrePaso
+                        </span>
+                    }
+                    @if (grpUrgente) { <span class="p2-chip danger" style="font-size:.63rem;"><i class="bi bi-lightning-charge-fill me-1"></i>URGENTE</span> }
+                    @if (grpRep)     { <span class="p2-chip danger" style="font-size:.63rem;">Reproceso</span> }
+                </div>
+                @* barra de progreso promedio en la cabecera *@
+                <div style="flex:1;margin-left:1rem;max-width:120px;">
+                    <div style="height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;">
+                        <div style="height:100%;width:@grpPctAvg%;background:#63b3ed;border-radius:2px;"></div>
+                    </div>
+                    <div style="font-size:.6rem;color:#a0aec0;text-align:right;margin-top:.1rem;">@grpPctAvg%</div>
+                </div>
+                <i class="bi bi-chevron-down p2-g-ico"></i>
+            </button>
+
+            @* ── Sublotes del grupo ──────────────────────────────────────── *@
+            <div class="collapse" id="@grpId">
+                @foreach (var s in grpItems)
+                {
+                    p2Idx++;
+                    var urgClase    = s.EsUrgente ? "urgente" : s.EstaRetrasado ? "retraso" : "";
+                    var ordenActSub = pasoMap.ContainsKey(s.CodPasoAct) ? pasoMap[s.CodPasoAct].OrdenPaso : 0;
+                    var eventosSub  = Model.Eventos.Where(e => e.IdSeguim == s.IdSeguim).OrderByDescending(e => e.FchEvento).Take(5).ToList();
+                    var detailId    = $"p2-detail-{p2Idx}";
+
+                    PlnDetalleTt? _dtFb = null;
+                    if (s.NumPartida > 0) Model.DetalleTt.TryGetValue(s.NumPartida, out _dtFb);
+
+                    var _labFchReg = _dtFb?.ValidacionReceta?.FchRegistro;
+                    var _fch02 = s.FchRealProgramado;
+                    if (_fch02.HasValue && _labFchReg.HasValue && _fch02.Value.Date > _labFchReg.Value.Date)
+                        _fch02 = _labFchReg;
+                    var _fch03 = _dtFb?.FechaPartida ?? s.FchRealProduccion;
+                    DateTime? _fch10 = _dtFb?.Revisados.Count > 0
+                        ? _dtFb!.Revisados.Min(r => (DateTime?)r.FchRegistro) : s.FchRealDevanado;
+                    DateTime? _fch11 = (_dtFb?.Revisados.Count > 0 && _dtFb!.Revisados[0].Detalle.Count > 0)
+                        ? (DateTime?)_dtFb.Revisados[0].Detalle[0].Fecha : s.FchRealCalidad;
+
+                    var maqEfectiva   = s.MaqTtEfectiva;
+                    var maqSrc        = !string.IsNullOrEmpty(s.CodMaqTt) || !string.IsNullOrEmpty(s.MaqPartida) ? "real" : "prog";
+                    var maqStepsTT2   = new HashSet<string> { "06", "07", "08", "09", "09B", "9R" };
+                    var _tinIniEfect2 = _dtFb?.InicioTt ?? s.FchRealTinIni;
+
+                    <div class="p2-card @urgClase">
+
+                        @* Cabecera del sublote *@
+                        <div class="p2-card-head">
+                            <span class="p2-card-num">@s.Nro</span>
+                            <span class="p2-card-meta text-muted">Det. @s.NumDet</span>
+                            @if (!string.IsNullOrEmpty(s.Color))
+                            {
+                                <span class="p2-card-meta">/ @s.Color</span>
+                            }
+                            <span class="p2-card-meta text-muted">@s.CantidadOrig.ToString("N0") kg</span>
+                            @if (s.EstaEnReproceso)
+                            {
+                                <span class="badge bg-danger" style="font-size:.63rem;border-radius:2px;">Rep.@s.NroCiclo</span>
+                            }
+                            <div class="p2-card-paso">
+                                <span class="badge text-white" style="background:@s.ColorUi;font-size:.7rem;border-radius:2px;padding:.25rem .55rem;">
+                                    @s.CodPasoAct — @s.NombrePaso
+                                </span>
+                                @if (s.FchEntregaComp.HasValue)
+                                {
+                                    var diasRest = (s.FchEntregaComp.Value - DateTime.Today).Days;
+                                    var dColor = diasRest < 0 ? "#e53e3e" : diasRest <= 5 ? "#dd6b20" : "#718096";
+                                    <span style="font-size:.65rem;color:@dColor;font-weight:700;">
+                                        @(diasRest < 0 ? $"+{Math.Abs(diasRest)}d" : $"{diasRest}d")
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        @* Barra de progreso *@
+                        <div class="p2-progress-wrap">
+                            <div class="p2-progress-lbl">
+                                <span>Avance del sublote</span>
+                                <span style="color:@s.ColorUi;font-weight:700;">@s.PctAvance%</span>
+                            </div>
+                            <div class="p2-progress-track">
+                                <div class="p2-progress-fill" style="width:@s.PctAvance%;background:@s.ColorUi;"></div>
+                            </div>
+                        </div>
+
+                        @* Línea de tiempo — grid multi-columna *@
+                        <div class="p2-tl">
+                            @foreach (var ec in Model.Pasos.OrderBy(p => p.OrdenPaso))
+                            {
+                                var esActivo   = s.CodPasoAct == ec.CodPaso;
+                                var completado = ec.OrdenPaso < ordenActSub;
+                                bool omitir    = (ec.CodPaso == "09B" && s.Proceso != "24" && !esActivo && s.FchRealGaseado == null)
+                                              || (ec.CodPaso == "9R"  && s.FchRealCcRechazo == null && !esActivo);
+                                if (omitir) continue;
+
+                                var clase  = esActivo ? "activo" : completado ? "completado" : "pendiente";
+                                var nodeBg = completado ? "#2f855a" : esActivo ? ec.ColorUi : "#edf2f7";
+                                var nodeBd = completado ? "#2f855a" : esActivo ? ec.ColorUi : "#cbd5e0";
+
+                                // Máquina por paso (mismo cálculo que Pedido.cshtml)
+                                var maqStep2 = maqEfectiva;
+                                if (ec.CodPaso == "08" && Model.DetalleTt.TryGetValue(s.NumPartida, out var _dts082)
+                                    && !string.IsNullOrEmpty(_dts082?.Secado?.CodMaq))
+                                    maqStep2 = _dts082!.Secado!.CodMaq;
+                                var esPendienteTT2  = !esActivo && !completado && !s.EstaCerrado;
+                                bool mostrarMaq2    = maqStepsTT2.Contains(ec.CodPaso) && !string.IsNullOrEmpty(maqStep2)
+                                                      && !(ec.CodPaso == "09B" && s.Proceso != "24")
+                                                      && !(ec.CodPaso == "9R"  && s.FchRealCcRechazo == null)
+                                                      && (esActivo || completado || ec.CodPaso == "06");
+                                var ttMaqTerminada2 = (ec.CodPaso == "09" && esActivo && (s.FchRealSecado.HasValue || s.FchRealTinFin.HasValue))
+                                                   || (ec.CodPaso == "08" && esActivo && s.FchRealSecado.HasValue);
+                                var loteCerrado2    = s.EstaCerrado || completado || ttMaqTerminada2;
+                                var hayConflicto2   = !loteCerrado2 && !esPendienteTT2 && s.HayConflictoMaquina;
+
+                                string? fEst = ec.CodPaso switch {
+                                    "01" => s.FchPedido.ToString("dd/MM/yy"),
+                                    "02" => s.FchRealProgramado?.ToString("dd/MM/yy"),
+                                    "03" => s.FchEstHilanderia?.ToString("dd/MM/yy"),
+                                    "04" => s.FchEstPartida?.ToString("dd/MM/yy"),
+                                    "05" => s.FchEstPartida?.ToString("dd/MM/yy"),
+                                    "06" => s.FchEstTinIni?.ToString("dd/MM/yy"),
+                                    "07" => s.FchEstTinFin?.ToString("dd/MM/yy"),
+                                    "08" => s.FchEstSecado?.ToString("dd/MM/yy"),
+                                    "09" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                    "10" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                    "11" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                    "12" => s.FchEstCalidad?.ToString("dd/MM/yy"),
+                                    "13" => s.FchEstDespacho?.ToString("dd/MM/yy"),
+                                    "14" => s.FchEstDespacho?.ToString("dd/MM/yy"),
+                                    _    => null
+                                };
+                                string? fReal = ec.CodPaso switch {
+                                    "01"  => s.FchPedido.ToString("dd/MM/yy"),
+                                    "02"  => _fch02?.ToString("dd/MM/yy"),
+                                    "03"  => _dtFb?.ValidacionReceta?.FchValidacion?.ToString("dd/MM/yy") ?? s.FchRealProduccion?.ToString("dd/MM/yy"),
+                                    "04"  => _fch03?.ToString("dd/MM/yy"),
+                                    "05"  => s.FchRealPartida?.ToString("dd/MM/yy"),
+                                    "06"  => (_dtFb?.InicioTt ?? s.FchRealTinIni)?.ToString("dd/MM/yy"),
+                                    "07"  => (_dtFb?.FinTt ?? s.FchRealTinFin)?.ToString("dd/MM/yy"),
+                                    "08"  => (_dtFb?.Secado?.FechaFin ?? s.FchRealSecado)?.ToString("dd/MM/yy"),
+                                    "09"  => (_dtFb?.Calidad != null ? (DateTime?)_dtFb.Calidad.Fecha : s.FchRealCcTinto)?.ToString("dd/MM/yy"),
+                                    "09B" => s.FchRealGaseado?.ToString("dd/MM/yy"),
+                                    "9R"  => s.FchRealCcRechazo?.ToString("dd/MM/yy"),
+                                    "10"  => _fch10?.ToString("dd/MM/yy"),
+                                    "11"  => _fch11?.ToString("dd/MM/yy"),
+                                    "12"  => s.FchRealAlmPt?.ToString("dd/MM/yy"),
+                                    "13"  => s.FchRealAlmPt?.ToString("dd/MM/yy"),
+                                    "14"  => s.FchRealDespacho?.ToString("dd/MM/yy"),
+                                    _     => null
+                                };
+
+                                bool hayRetraso = fReal != null && fEst != null
+                                    && DateTime.TryParse(fReal.Replace("/", "-").Split(' ')[0], out var dR)
+                                    && DateTime.TryParse(fEst.Replace("/", "-").Split(' ')[0], out var dE)
+                                    && dR.Date > dE.Date;
+
+                                <div class="p2-tl-row @clase" style="@(esActivo ? $"border-color:{ec.ColorUi};" : "")">
+                                    <div class="p2-tl-node" style="background:@nodeBg;border-color:@nodeBd;">
+                                        @if (completado) { <span class="p2-tl-check">✓</span> }
+                                    </div>
+                                    <div class="p2-tl-body">
+                                        <div class="p2-tl-label" style="@(esActivo ? $"color:{ec.ColorUi};" : "")">
+                                            <span class="badge me-1" style="background:@nodeBg;color:#fff;font-size:.56rem;border-radius:2px;padding:.06rem .28rem;">@ec.CodPaso</span>@ec.NombrePaso
+                                            @if (esActivo) { <span class="badge ms-1" style="background:@ec.ColorUi;font-size:.56rem;color:#fff;border-radius:2px;">●</span> }
+                                        </div>
+                                        @if (!mostrarMaq2)
+                                        {
+                                            <div class="p2-tl-dates">
+                                                @if (fReal != null)
+                                                {
+                                                    <span class="p2-tl-freal @(hayRetraso ? "retraso" : "")">
+                                                        <i class="bi bi-check2"></i> @fReal
+                                                        @if (hayRetraso) { <i class="bi bi-exclamation-triangle-fill ms-1"></i> }
+                                                    </span>
+                                                }
+                                                else if (fEst != null)
+                                                {
+                                                    <span class="p2-tl-fest"><i class="bi bi-calendar2"></i> @fEst</span>
+                                                }
+                                            </div>
+                                        }
+                                        @if (mostrarMaq2)
+                                        {
+                                            // fechas fuera del maq-box (encima)
+                                            if (fReal != null || fEst != null)
+                                            {
+                                                <div class="p2-tl-dates">
+                                                    @if (fReal != null) { <span class="p2-tl-freal @(hayRetraso ? "retraso" : "")"><i class="bi bi-check2"></i> @fReal@(hayRetraso ? " ⚠" : "")</span> }
+                                                    else if (fEst != null) { <span class="p2-tl-fest"><i class="bi bi-calendar2"></i> @fEst</span> }
+                                                </div>
+                                            }
+                                            var maqColId2   = $"p2-maq-{p2Idx}-{ec.CodPaso}";
+                                            var maqLabel2   = esPendienteTT2         ? "Máquina planificada para TT"
+                                                            : loteCerrado2             ? "Máquina utilizada en este lote"
+                                                            : maqSrc == "real"         ? "Máquina asignada a este lote"
+                                                                                       : "Máquina planificada";
+                                            var maqBadge2   = ttMaqTerminada2                         ? "TT completado ✓"
+                                                            : loteCerrado2                            ? "Lote procesado ✓"
+                                                            : esPendienteTT2 && maqSrc == "real"      ? "Confirmada para TT"
+                                                            : esPendienteTT2                          ? "Pendiente de confirmar"
+                                                            : hayConflicto2                           ? "Asignada · no en uso ahora"
+                                                            : maqSrc == "real"                        ? "Asignación confirmada"
+                                                                                                      : "Pendiente de confirmar";
+                                            var maqBadgeCss2 = loteCerrado2      ? "maq-src-done"
+                                                             : hayConflicto2     ? "maq-src-conflicto"
+                                                             : maqSrc == "real"  ? "maq-src-real"
+                                                                                 : "maq-src-prog";
+                                            var maqBoxCss2   = loteCerrado2      ? "maq-cerrado"
+                                                             : maqSrc == "real"  ? "maq-real"
+                                                                                 : "maq-prog";
+                                            var _crCnt2   = _dtFb?.CalculoRecetas.Count ?? 0;
+                                            var _bnDone2  = _dtFb?.Banos.Count(b => b.FechaFin.HasValue) ?? 0;
+                                            var _bnTotal2 = Math.Max(_crCnt2, _dtFb?.Banos.Count ?? 0);
+                                            <button class="btn btn-link p2-maq-toggle" type="button"
+                                                    data-bs-toggle="collapse" data-bs-target="#@maqColId2"
+                                                    aria-expanded="false"
+                                                    style="font-size:.64rem;color:#6f42c1;padding:.15rem 0;text-decoration:none;display:flex;align-items:center;gap:.3rem;">
+                                                <i class="bi bi-gear-fill" style="font-size:.6rem;"></i>
+                                                <span>@maqLabel2</span>
+                                                <i class="bi bi-chevron-down" style="font-size:.55rem;transition:transform .2s;" id="ico-@maqColId2"></i>
+                                            </button>
+                                            <div class="collapse" id="@maqColId2">
+                                            <div class="maq-box @maqBoxCss2" data-maq="@maqStep2"
+                                                 data-cerrado="@(loteCerrado2 || hayConflicto2 || esPendienteTT2 ? "true" : "false")"
+                                                 data-propio="@(_dtFb != null && _dtFb.Banos.Any(b => b.CodMaq == maqStep2 && !b.FechaFin.HasValue) ? "true" : "false")">
+                                                <div class="maq-header-row">
+                                                    <i class="bi bi-gear-fill" style="font-size:.6rem;color:#718096;"></i>
+                                                    <span class="maq-header-lbl">@maqLabel2</span>
+                                                    <span class="maq-src-badge @maqBadgeCss2">@maqBadge2</span>
+                                                </div>
+                                                <div class="maq-id-row">
+                                                    <span class="maq-cod">@maqStep2</span>
+                                                    <span class="maq-nombre">@maqNombre(maqStep2)</span>
+                                                </div>
+                                                @if (_dtFb != null && _bnTotal2 > 0 && maqStepsTT2.Contains(ec.CodPaso) && ec.CodPaso != "08")
+                                                {
+                                                    var _pctBanos2 = _bnTotal2 > 0 ? (int)Math.Round(_bnDone2 * 100.0 / _bnTotal2) : 0;
+                                                    var _banosCss2 = _bnDone2 == _bnTotal2 ? "maq-banos-completo" : _bnDone2 > 0 ? "maq-banos-parcial" : "maq-banos-pendiente";
+                                                    <div class="maq-banos-row @_banosCss2">
+                                                        <i class="bi bi-layers-fill" style="font-size:.6rem;opacity:.65;"></i>
+                                                        <span>@_bnDone2 de @_bnTotal2 baño@(_bnTotal2 != 1 ? "s" : "") completado@(_bnDone2 != 1 ? "s" : "")</span>
+                                                        @if (_bnDone2 > 0 && _bnDone2 < _bnTotal2)
+                                                        {
+                                                            <span class="badge ms-1" style="background:#d97706;color:#fff;font-size:.57rem;">@(_bnTotal2 - _bnDone2) pendiente@((_bnTotal2 - _bnDone2) != 1 ? "s" : "")</span>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (ec.CodPaso == "08" && _dtFb != null)
+                                                {
+                                                    var _nSecMaq2 = _dtFb.Secados.Count(x => x.CodMaq == maqStep2);
+                                                    if (_nSecMaq2 > 1)
+                                                    {
+                                                        <div class="maq-banos-row maq-banos-completo">
+                                                            <i class="bi bi-arrow-repeat" style="font-size:.6rem;opacity:.65;"></i>
+                                                            <span>Secado en @_nSecMaq2 sesiones en esta máquina</span>
+                                                        </div>
+                                                    }
+                                                }
+                                                @if (loteCerrado2)
+                                                {
+                                                    var _secFin2   = _dtFb?.Secado?.FechaFin ?? s.FchRealSecado;
+                                                    var fechaProc2 = ttMaqTerminada2 && _secFin2.HasValue
+                                                        ? _secFin2!.Value.ToString("dd/MM/yy")
+                                                        : fReal ?? fEst;
+                                                    var procLabel2  = ttMaqTerminada2 ? "Tenido/Secado el" : "Procesado el";
+                                                    var esEst2 = !ttMaqTerminada2 && fReal == null && fEst != null;
+                                                    if (fechaProc2 != null)
+                                                    {
+                                                        <div class="maq-proc-row">
+                                                            @if (!esEst2)
+                                                            {
+                                                                <i class="bi bi-check-circle-fill text-success" style="font-size:.65rem;"></i>
+                                                                <span class="maq-proc-date">@procLabel2 @fechaProc2</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-calendar2-check" style="font-size:.65rem;color:#9ca3af;"></i>
+                                                                <span class="maq-proc-date" style="color:#9ca3af;font-style:italic;">Est. @fechaProc2</span>
+                                                            }
+                                                        </div>
+                                                    }
+                                                }
+                                                @if (!loteCerrado2)
+                                                {
+                                                    var tieneEnProceso2 = _dtFb != null && _dtFb.Banos.Any(b => b.CodMaq == maqStep2 && !b.FechaFin.HasValue);
+                                                    var sepLabel2 = esPendienteTT2 || !tieneEnProceso2
+                                                        ? "Estado actual de la máquina asignada"
+                                                        : "Actividad actual en esta máquina";
+                                                    <div class="maq-sep-label"><i class="bi bi-activity" style="font-size:.55rem;"></i>@sepLabel2</div>
+                                                    <div class="maq-status-row">
+                                                        <span class="maq-live loading"><span class="dot-live"></span><span class="live-txt">consultando…</span></span>
+                                                        <span class="maq-carga-lbl">Carga:</span>
+                                                        <div class="maq-carga-bar"><div class="maq-carga-fill"></div></div>
+                                                        <span class="maq-carga-pct">consultando…</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                            @if (hayConflicto2)
+                                            {
+                                                <div class="maq-box maq-real-tt" data-maq="@s.MaqRealTt" data-cerrado="false">
+                                                    <div class="maq-header-row">
+                                                        <i class="bi bi-activity" style="font-size:.6rem;color:#e65c00;"></i>
+                                                        <span class="maq-header-lbl">Máquina real en TT ahora</span>
+                                                        <span class="maq-src-badge maq-src-real-tt">En proceso · TT</span>
+                                                    </div>
+                                                    <div class="maq-id-row">
+                                                        <span class="maq-cod">@s.MaqRealTt</span>
+                                                        <span class="maq-nombre">@maqNombre(s.MaqRealTt)</span>
+                                                    </div>
+                                                    <div class="maq-status-row">
+                                                        <span class="maq-live loading"><span class="dot-live"></span><span class="live-txt">consultando…</span></span>
+                                                        <span class="maq-carga-lbl">Carga:</span>
+                                                        <div class="maq-carga-bar"><div class="maq-carga-fill"></div></div>
+                                                        <span class="maq-carga-pct">consultando…</span>
+                                                    </div>
+                                                </div>
+                                            }
+                                            @if (esPendienteTT2 && _dtFb != null && _dtFb.CalculoRecetas.Count > 1)
+                                            {
+                                                @foreach (var xCr2 in _dtFb.CalculoRecetas
+                                                    .Where(r => !string.IsNullOrEmpty(r.CodMaqPlanif) && r.CodMaqPlanif != maqStep2)
+                                                    .GroupBy(r => r.CodMaqPlanif))
+                                                {
+                                                    var xMaqP2  = xCr2.Key!;
+                                                    var xDescP2 = xCr2.OrderBy(r => r.Proceso).First().DescProceso;
+                                                    var xKgP2   = xCr2.Sum(r => r.PesoNeto);
+                                                    <div class="maq-box maq-prog mt-1" data-maq="@xMaqP2" data-cerrado="true">
+                                                        <div class="maq-header-row">
+                                                            <i class="bi bi-gear" style="font-size:.6rem;color:#718096;"></i>
+                                                            <span class="maq-header-lbl">Otra máquina planificada para TT</span>
+                                                            <span class="maq-src-badge maq-src-prog">Planificada</span>
+                                                        </div>
+                                                        <div class="maq-id-row">
+                                                            <span class="maq-cod">@xMaqP2</span>
+                                                            <span class="maq-nombre">@maqNombre(xMaqP2)</span>
+                                                        </div>
+                                                        <div class="maq-proc-row">
+                                                            <i class="bi bi-layers" style="font-size:.65rem;color:#718096;"></i>
+                                                            <span class="maq-proc-date" style="color:#718096;">@xDescP2 · @string.Format("{0:N2}", xKgP2) kg planif.</span>
+                                                        </div>
+                                                        <div class="maq-status-row">
+                                                            <span class="maq-live loading"><span class="dot-live"></span><span class="live-txt">consultando…</span></span>
+                                                            <span class="maq-carga-lbl">Carga:</span>
+                                                            <div class="maq-carga-bar"><div class="maq-carga-fill"></div></div>
+                                                            <span class="maq-carga-pct">consultando…</span>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            }
+                                            @if (!loteCerrado2 && _dtFb != null && ec.CodPaso != "08"
+                                                 && _dtFb.Banos.Any(b => b.FechaFin.HasValue && !string.IsNullOrEmpty(b.CodMaq) && b.CodMaq != maqStep2))
+                                            {
+                                                @foreach (var xBg2 in _dtFb.Banos
+                                                    .Where(b => b.FechaFin.HasValue && !string.IsNullOrEmpty(b.CodMaq) && b.CodMaq != maqStep2)
+                                                    .GroupBy(b => b.CodMaq))
+                                                {
+                                                    var xMaq2  = xBg2.Key!;
+                                                    var xFin2  = xBg2.OrderByDescending(b => b.FechaFin).First().FechaFin!.Value;
+                                                    var xDesc2 = xBg2.OrderBy(b => b.FechaIni).First().DescProceso;
+                                                    <div class="maq-box maq-cerrado mt-1">
+                                                        <div class="maq-header-row">
+                                                            <i class="bi bi-check2-circle" style="font-size:.6rem;color:#2f855a;"></i>
+                                                            <span class="maq-header-lbl">Baño completado en otra máquina</span>
+                                                            <span class="maq-src-badge maq-src-done">Completado ✓</span>
+                                                        </div>
+                                                        <div class="maq-id-row">
+                                                            <span class="maq-cod">@xMaq2</span>
+                                                            <span class="maq-nombre">@maqNombre(xMaq2)</span>
+                                                        </div>
+                                                        <div class="maq-proc-row">
+                                                            <i class="bi bi-check-circle-fill text-success" style="font-size:.65rem;"></i>
+                                                            <span class="maq-proc-date">@xDesc2 · @xFin2.ToString("dd/MM/yy HH:mm")</span>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            }
+                                            @if (loteCerrado2 && _dtFb != null)
+                                            {
+                                                if (maqStepsTT2.Contains(ec.CodPaso) && ec.CodPaso != "08" && _dtFb.Banos.Count > 0)
+                                                {
+                                                    @foreach (var xBg2b in _dtFb.Banos
+                                                        .Where(b => !string.IsNullOrEmpty(b.CodMaq) && b.CodMaq != maqStep2)
+                                                        .GroupBy(b => b.CodMaq))
+                                                    {
+                                                        var xMaq2b  = xBg2b.Key!;
+                                                        var xFin2b  = xBg2b.Where(b => b.FechaFin.HasValue).OrderByDescending(b => b.FechaFin).Select(b => b.FechaFin).FirstOrDefault();
+                                                        var xIni2b  = xBg2b.OrderBy(b => b.FechaIni).First().FechaIni;
+                                                        var xProc2b = ec.CodPaso == "06" ? (DateTime?)xIni2b : xFin2b;
+                                                        <div class="maq-box maq-cerrado mt-1">
+                                                            <div class="maq-header-row">
+                                                                <i class="bi bi-gear-fill" style="font-size:.6rem;color:#718096;"></i>
+                                                                <span class="maq-header-lbl">Máquina utilizada en este lote</span>
+                                                                <span class="maq-src-badge maq-src-done">Lote procesado ✓</span>
+                                                            </div>
+                                                            <div class="maq-id-row">
+                                                                <span class="maq-cod">@xMaq2b</span>
+                                                                <span class="maq-nombre">@maqNombre(xMaq2b)</span>
+                                                            </div>
+                                                            @if (xProc2b.HasValue)
+                                                            {
+                                                                <div class="maq-proc-row">
+                                                                    <i class="bi bi-check-circle-fill text-success" style="font-size:.65rem;"></i>
+                                                                    <span class="maq-proc-date">Procesado el @xProc2b.Value.ToString("dd/MM/yy")</span>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    }
+                                                }
+                                                if (ec.CodPaso == "08" && _dtFb.Secados.Count > 1)
+                                                {
+                                                    @foreach (var xSec2 in _dtFb.Secados.SkipLast(1).Where(x => x.CodMaq != maqStep2))
+                                                    {
+                                                        <div class="maq-box maq-cerrado mt-1">
+                                                            <div class="maq-header-row">
+                                                                <i class="bi bi-gear-fill" style="font-size:.6rem;color:#718096;"></i>
+                                                                <span class="maq-header-lbl">Secadora utilizada en este lote</span>
+                                                                <span class="maq-src-badge maq-src-done">Lote procesado ✓</span>
+                                                            </div>
+                                                            <div class="maq-id-row">
+                                                                <span class="maq-cod">@xSec2.CodMaq</span>
+                                                                <span class="maq-nombre">@maqNombre(xSec2.CodMaq)</span>
+                                                            </div>
+                                                            @if (xSec2.FechaFin.HasValue)
+                                                            {
+                                                                <div class="maq-proc-row">
+                                                                    <i class="bi bi-check-circle-fill text-success" style="font-size:.65rem;"></i>
+                                                                    <span class="maq-proc-date">Procesado el @xSec2.FechaFin.Value.ToString("dd/MM/yy")</span>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    }
+                                                }
+                                            }
+                                            @if (ec.CodPaso == "9R" && _dtFb?.RectificacionesReceta.Count > 0)
+                                            {
+                                                var _r2 = _dtFb!.RectificacionActiva ?? _dtFb!.RectificacionAprobada;
+                                                if (_r2 != null)
+                                                {
+                                                    <div class="d-flex align-items-center gap-1 mt-1" style="font-size:.68rem;padding-left:2px;">
+                                                        <i class="bi bi-flask" style="color:#dc3545;opacity:.8;"></i>
+                                                        <span class="text-secondary">Rectificación:</span>
+                                                        <span class="badge bg-@_r2.EstadoBadge" style="font-size:.58rem;">@_r2.EstadoLabel</span>
+                                                        @if (_r2.FchAprobado.HasValue)
+                                                        {
+                                                            <span class="p2-tl-freal tt-mono">@_r2.FchAprobado.Value.ToString("dd/MM/yy")</span>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                            </div>@* /collapse maq *@
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @* ── Detalle de producción TT (colapsable) ──────────── *@
+                        @{
+                            var ttSecId2 = $"p2-tt-{p2Idx}";
+                            var hasTtData2 = _dtFb != null && (
+                                _dtFb.TieneBanos || _dtFb.TieneCalculoRecetas ||
+                                _dtFb.Secados.Count > 0 || _dtFb.Calidad != null ||
+                                _dtFb.ValidacionReceta != null || _dtFb.RectificacionesReceta.Count > 0);
+                        }
+                        @if (s.NumPartida > 0 && hasTtData2 && _dtFb != null)
+                        {
+                            <button class="p2-detail-toggle" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#@ttSecId2"
+                                    aria-expanded="false">
+                                <i class="bi bi-gear-fill me-1" style="color:#6f42c1;"></i>Detalle de producción
+                                @if (_dtFb.TieneBanos)
+                                {
+                                    <span class="badge ms-1" style="background:#6f42c1;font-size:.58rem;">@_dtFb.Banos.Count baño@(_dtFb.Banos.Count != 1 ? "s" : "")</span>
+                                }
+                                <i class="bi bi-chevron-down p2-toggle-ico"></i>
+                            </button>
+                            <div class="collapse" id="@ttSecId2">
+                                <div class="p2-detail-body" style="padding:.5rem .5rem .6rem;">
+                                  <div class="accordion accordion-flush" id="acc-p2tt-@(p2Idx)">
+
+                                  @* ── Validación de Laboratorio ──────────────────── *@
+                                  @if (_dtFb.ValidacionReceta != null)
+                                  {
+                                    var vr = _dtFb.ValidacionReceta;
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-lab" aria-expanded="false">
+                                          <i class="bi bi-flask me-2"></i>Validación de Laboratorio
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-lab" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="d-flex flex-wrap gap-3 align-items-start p-2" style="background:#f8f6ff;border-radius:6px;border:1px solid #e0d8f5;">
+                                            <div><span class="tt-lbl">N° Registro</span><span class="tt-val">@vr.Numero</span></div>
+                                            <div><span class="tt-lbl">Tipo</span><span class="tt-val">@vr.DescTipo</span></div>
+                                            <div><span class="tt-lbl">Laboratorista</span><span class="tt-val fw-semibold">@(string.IsNullOrEmpty(vr.Laboratorista) ? "—" : vr.Laboratorista)</span></div>
+                                            <div><span class="tt-lbl">F. Registro</span><span class="tt-val">@vr.FchRegistro.ToString("dd/MM/yy HH:mm")</span></div>
+                                            <div><span class="tt-lbl">F. Validación</span><span class="tt-val">@(vr.FchValidacion?.ToString("dd/MM/yy HH:mm") ?? "—")</span></div>
+                                            <div>
+                                              <span class="tt-lbl">Estado</span>
+                                              <span class="badge bg-@vr.EstadoBadge" style="font-size:.65rem;">@vr.DescEstado</span>
+                                              @if (vr.DiasValidacion.HasValue)
+                                              {
+                                                <span class="text-muted ms-1" style="font-size:.68rem;">(@vr.DiasValidacion.Value d.)</span>
+                                              }
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Cálculo de Recetas planificadas ────────────── *@
+                                  @if (_dtFb.TieneCalculoRecetas)
+                                  {
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-rec" aria-expanded="false">
+                                          <i class="bi bi-calculator me-2"></i>Cálculo de Recetas (planificado)
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-rec" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="table-responsive">
+                                            <table class="table table-sm tt-table mb-0">
+                                              <thead><tr>
+                                                <th>Guía</th><th>Proceso</th><th>Máq. planif.</th><th style="text-align:right">Peso neto (kg)</th><th>Estado receta</th>
+                                              </tr></thead>
+                                              <tbody>
+                                              @foreach (var cr in _dtFb.CalculoRecetas)
+                                              {
+                                                <tr>
+                                                  <td class="tt-mono">@cr.Guia</td>
+                                                  <td><span class="badge bg-secondary" style="font-size:.65rem;">@cr.Proceso</span> @cr.DescProceso</td>
+                                                  <td>
+                                                    @if (!string.IsNullOrEmpty(cr.CodMaqPlanif))
+                                                    {
+                                                      <span class="maq-cod-inline">@cr.CodMaqPlanif</span>
+                                                      <span class="text-muted ms-1">@cr.NombreMaqPlanif</span>
+                                                    }
+                                                    else { <text>—</text> }
+                                                  </td>
+                                                  <td style="text-align:right">@(cr.PesoNeto.HasValue ? cr.PesoNeto.Value.ToString("N2") : "—")</td>
+                                                  <td><span class="text-muted">@cr.DescEstReceta</span></td>
+                                                </tr>
+                                              }
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Registro de Producción TT (baños) ─────────── *@
+                                  @if (_dtFb.TieneBanos)
+                                  {
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-ban" aria-expanded="false">
+                                          <i class="bi bi-thermometer-half me-2"></i>Registro de Producción — Tintorería
+                                          <span class="badge ms-2" style="background:#6f42c1;font-size:.6rem;">@_dtFb.Banos.Count baños</span>
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-ban" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="table-responsive">
+                                            <table class="table table-sm tt-table mb-0">
+                                              <thead><tr>
+                                                <th>Guía</th><th>Proceso</th><th>Máquina real</th><th>Máq. planif.</th><th>F/Hora inicio</th><th>F/Hora fin</th><th style="text-align:right">Horas</th><th>Calificación</th>
+                                              </tr></thead>
+                                              <tbody>
+                                              @foreach (var bn in _dtFb.Banos)
+                                              {
+                                                var bRowCss2 = bn.HayCambioMaquina ? "table-warning" : "";
+                                                <tr class="@bRowCss2">
+                                                  <td class="tt-mono">@bn.Guia</td>
+                                                  <td><span class="badge bg-secondary" style="font-size:.65rem;">@bn.Proceso</span> @bn.DescProceso</td>
+                                                  <td>
+                                                    <span class="maq-cod-inline @(bn.HayCambioMaquina ? "text-danger fw-bold" : "")">@bn.CodMaq</span>
+                                                    <span class="text-muted ms-1">@bn.NombreMaq</span>
+                                                    @if (bn.HayCambioMaquina)
+                                                    {
+                                                      <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Máquina diferente a la planificada"></i>
+                                                    }
+                                                  </td>
+                                                  <td>
+                                                    @if (!string.IsNullOrEmpty(bn.CodMaqPlanif))
+                                                    {
+                                                      <span class="maq-cod-inline text-secondary">@bn.CodMaqPlanif</span>
+                                                      <span class="text-muted ms-1" style="font-size:.72rem;">@bn.NombreMaqPlanif</span>
+                                                    }
+                                                    else { <text>—</text> }
+                                                  </td>
+                                                  <td class="tt-mono">@bn.FechaIni.ToString("dd/MM/yy HH:mm")</td>
+                                                  <td class="tt-mono">@(bn.FechaFin?.ToString("dd/MM/yy HH:mm") ?? "—")</td>
+                                                  <td style="text-align:right" class="tt-mono">@(string.IsNullOrEmpty(bn.HorasFormateado) ? "—" : bn.HorasFormateado)</td>
+                                                  <td>
+                                                    @if (!string.IsNullOrEmpty(bn.Calificacion))
+                                                    {
+                                                      <span class="badge" style="background:#6f42c1;font-size:.63rem;">@bn.DescCalif</span>
+                                                    }
+                                                    else { <span class="text-muted">—</span> }
+                                                  </td>
+                                                </tr>
+                                              }
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                          @if (_dtFb.HayCambioMaquina)
+                                          {
+                                            <div class="text-warning small mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Se ejecutó en una máquina diferente a la planificada.</div>
+                                          }
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Registro de Secado ─────────────────────────── *@
+                                  @if (_dtFb.Secados.Count > 0)
+                                  {
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-sec" aria-expanded="false">
+                                          <i class="bi bi-wind me-2"></i>Registro de Secado
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-sec" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          @foreach (var sec in _dtFb.Secados)
+                                          {
+                                            <div class="d-flex flex-wrap gap-3 align-items-start p-2 mb-1" style="background:#f0fdf4;border-radius:6px;border:1px solid #c6f6d5;">
+                                              <div>
+                                                <span class="tt-lbl">Máquina</span>
+                                                <span class="maq-cod-inline">@sec.CodMaq</span>
+                                                <span class="text-muted ms-1">@sec.NombreMaq</span>
+                                              </div>
+                                              <div><span class="tt-lbl">Inicio</span><span class="tt-val tt-mono">@sec.FechaIni.ToString("dd/MM/yy HH:mm")</span></div>
+                                              <div><span class="tt-lbl">Fin</span><span class="tt-val tt-mono">@(sec.FechaFin?.ToString("dd/MM/yy HH:mm") ?? "—")</span></div>
+                                              <div><span class="tt-lbl">Duración</span><span class="tt-val">@(sec.DuracionHoras.HasValue ? $"{sec.DuracionHoras.Value:N1} h" : "—")</span></div>
+                                              <div><span class="tt-lbl">Min. secado</span><span class="tt-val">@(sec.MinSecado.HasValue ? $"{sec.MinSecado.Value:N0} min" : "—")</span></div>
+                                              @if (sec.MinResecado.HasValue && sec.MinResecado.Value > 0)
+                                              {
+                                                <div><span class="tt-lbl">Min. re-secado</span><span class="tt-val text-warning">@sec.MinResecado.Value.ToString("N0") min</span></div>
+                                              }
+                                              <div><span class="tt-lbl">Peso neto</span><span class="tt-val fw-semibold">@(sec.PesoNeto.HasValue ? $"{sec.PesoNeto.Value:N2} kg" : "—")</span></div>
+                                              <div><span class="tt-lbl">Estado</span><span class="text-muted">@sec.DescEstado</span></div>
+                                            </div>
+                                          }
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Control de Calidad TT ─────────────────────── *@
+                                  @if (_dtFb.Calidad != null)
+                                  {
+                                    var cc = _dtFb.Calidad;
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-cc" aria-expanded="false">
+                                          <i class="bi bi-patch-check me-2"></i>Control de Calidad — Tintorería
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-cc" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="p-2" style="background:#fff8f0;border-radius:6px;border:1px solid #fed7aa;">
+                                            <div class="d-flex flex-wrap gap-3 align-items-start mb-2">
+                                              <div><span class="tt-lbl">Fecha</span><span class="tt-val tt-mono">@cc.Fecha.ToString("dd/MM/yy HH:mm")</span></div>
+                                              <div>
+                                                <span class="tt-lbl">Evaluación</span>
+                                                <span class="badge bg-secondary" style="font-size:.65rem;">@cc.EstEvaluacion</span>
+                                                <span class="ms-1 text-muted">@cc.DescEstEval</span>
+                                              </div>
+                                              <div>
+                                                <span class="tt-lbl">Resultado</span>
+                                                <span class="badge bg-@cc.ResultadoBadge" style="font-size:.65rem;">@cc.DescResultado</span>
+                                              </div>
+                                              <div><span class="tt-lbl">Merma entrada</span><span class="tt-val">@(cc.MermaInicio.HasValue ? $"{cc.MermaInicio.Value:N2} kg" : "—")</span></div>
+                                              <div><span class="tt-lbl">Merma salida</span><span class="tt-val">@(cc.MermaFin.HasValue ? $"{cc.MermaFin.Value:N2} kg" : "—")</span></div>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(cc.Tono) || !string.IsNullOrEmpty(cc.Solidez) || !string.IsNullOrEmpty(cc.Igualdad) || !string.IsNullOrEmpty(cc.Defecto))
+                                            {
+                                              <div class="d-flex flex-wrap gap-3">
+                                                @if (!string.IsNullOrEmpty(cc.Tono))    { <div><span class="tt-lbl">Tono</span><span class="tt-val">@cc.Tono</span></div> }
+                                                @if (!string.IsNullOrEmpty(cc.Solidez)) { <div><span class="tt-lbl">Solidez (SF)</span><span class="tt-val">@cc.Solidez</span></div> }
+                                                @if (!string.IsNullOrEmpty(cc.Igualdad)){ <div><span class="tt-lbl">Igualdad (SI)</span><span class="tt-val">@cc.Igualdad</span></div> }
+                                                @if (!string.IsNullOrEmpty(cc.Defecto)) { <div><span class="tt-lbl text-danger">Defecto</span><span class="tt-val text-danger fw-semibold">@cc.Defecto</span></div> }
+                                              </div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(cc.Observacion))
+                                            {
+                                              <div class="mt-2 text-muted" style="font-size:.75rem;"><i class="bi bi-chat-left-text me-1"></i>@cc.Observacion</div>
+                                            }
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── C.TT Rechazado / Reproceso ────────────────── *@
+                                  @if (s.FchRealCcRechazo.HasValue || (_dtFb.Calidad != null && _dtFb.Calidad.ResultadoBadge == "danger"))
+                                  {
+                                    <div class="accordion-item tt-acc-item" style="border-left:3px solid #dc3545;">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-rechazo" aria-expanded="false">
+                                          <i class="bi bi-x-circle-fill me-2" style="color:#dc3545;"></i>C.TT Rechazado / Reproceso
+                                          @if (s.FchRealCcRechazo.HasValue)
+                                          {
+                                            <span class="badge bg-danger ms-2" style="font-size:.62rem;">@s.FchRealCcRechazo.Value.ToString("dd/MM/yy")</span>
+                                          }
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-rechazo" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="p-2" style="background:#fff5f5;border-radius:6px;border:1px solid #fed7d7;">
+                                            <div class="d-flex flex-wrap gap-3 align-items-start">
+                                              @if (s.FchRealCcRechazo.HasValue)
+                                              {
+                                                <div><span class="tt-lbl">Fecha rechazo</span><span class="tt-val tt-mono text-danger fw-semibold">@s.FchRealCcRechazo.Value.ToString("dd/MM/yy")</span></div>
+                                              }
+                                              @if (_dtFb.Calidad != null)
+                                              {
+                                                <div>
+                                                  <span class="tt-lbl">Resultado CC</span>
+                                                  <span class="badge bg-@_dtFb.Calidad.ResultadoBadge" style="font-size:.65rem;">@_dtFb.Calidad.DescResultado</span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(_dtFb.Calidad.Defecto))
+                                                {
+                                                  <div><span class="tt-lbl text-danger">Defecto</span><span class="tt-val text-danger fw-semibold">@_dtFb.Calidad.Defecto</span></div>
+                                                }
+                                                @if (!string.IsNullOrEmpty(_dtFb.Calidad.Observacion))
+                                                {
+                                                  <div class="w-100"><span class="tt-lbl">Observación</span><span class="tt-val text-muted">@_dtFb.Calidad.Observacion</span></div>
+                                                }
+                                              }
+                                              @if (_dtFb.RectificacionesReceta.Count > 0)
+                                              {
+                                                <div class="w-100 mt-1">
+                                                  <span class="tt-lbl">Rectificaciones de receta</span>
+                                                  <span class="badge bg-warning text-dark ms-1" style="font-size:.62rem;">@_dtFb.RectificacionesReceta.Count</span>
+                                                </div>
+                                              }
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Rectificado de Receta ──────────────────────── *@
+                                  @if (_dtFb.RectificacionesReceta.Count > 0)
+                                  {
+                                    var _rectAcc2 = _dtFb.RectificacionActiva;
+                                    var _rectApr2 = _dtFb.RectificacionAprobada;
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button @(_dtFb.TieneRectificacionActiva ? "" : "collapsed") tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-p2tt-@(p2Idx)-rect"
+                                                aria-expanded="@(_dtFb.TieneRectificacionActiva ? "true" : "false")">
+                                          <i class="bi bi-flask me-2" style="color:#dc3545;"></i>Rectificado de Receta
+                                          @if (_rectAcc2 != null) { <span class="badge bg-@_rectAcc2.EstadoBadge ms-2" style="font-size:.62rem;">@_rectAcc2.EstadoLabel</span> }
+                                          else if (_rectApr2 != null) { <span class="badge bg-success ms-2" style="font-size:.62rem;">Aprobada</span> }
+                                        </button>
+                                      </h2>
+                                      <div id="acc-p2tt-@(p2Idx)-rect" class="accordion-collapse @(_dtFb.TieneRectificacionActiva ? "show" : "collapse")">
+                                        <div class="accordion-body p-2">
+                                          @foreach (var rect in _dtFb.RectificacionesReceta)
+                                          {
+                                            var _rBg2 = rect.EstadoBadge switch { "warning"=>"#fffbeb","info"=>"#eff6ff","success"=>"#f0fff4",_=>"#f9fafb" };
+                                            var _rBd2 = rect.EstadoBadge switch { "warning"=>"#fcd34d","info"=>"#93c5fd","success"=>"#6ee7b7",_=>"#e5e7eb" };
+                                            <div class="p-2 mb-1" style="background:@_rBg2;border-radius:6px;border:1px solid @_rBd2;">
+                                              <div class="d-flex flex-wrap gap-3 align-items-start mb-1">
+                                                <div><span class="tt-lbl">Fecha</span><span class="tt-val tt-mono">@rect.FchRegistro.ToString("dd/MM/yyyy")</span></div>
+                                                <div><span class="tt-lbl">Área</span><span class="tt-val">@(rect.Area ?? "—")</span></div>
+                                                <div>
+                                                  <span class="tt-lbl">Estado</span>
+                                                  <span class="badge bg-@rect.EstadoBadge" style="font-size:.65rem;">@rect.EstadoLabel</span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(rect.DefectoOrig))  { <div><span class="tt-lbl text-danger">Defecto</span><span class="tt-val text-danger fw-semibold">@rect.DefectoOrig</span></div> }
+                                                @if (!string.IsNullOrEmpty(rect.Supervisor))    { <div><span class="tt-lbl">Supervisor</span><span class="tt-val">@rect.Supervisor</span></div> }
+                                                @if (!string.IsNullOrEmpty(rect.Laboratorista)) { <div><span class="tt-lbl">Laboratorista</span><span class="tt-val">@rect.Laboratorista</span></div> }
+                                              </div>
+                                              @if (!string.IsNullOrEmpty(rect.Observacion))
+                                              {
+                                                <div class="mb-1 text-muted" style="font-size:.73rem;"><i class="bi bi-chat-left-text me-1"></i>@rect.Observacion</div>
+                                              }
+                                              @if (rect.FchEnProceso.HasValue || rect.FchRectificado.HasValue || rect.FchAprobado.HasValue)
+                                              {
+                                                <div class="d-flex flex-wrap gap-3" style="font-size:.72rem;">
+                                                  @if (rect.FchEnProceso.HasValue)  { <div><span class="tt-lbl">En Proceso</span><span class="tt-val tt-mono">@rect.FchEnProceso.Value.ToString("dd/MM/yyyy")</span></div> }
+                                                  @if (rect.FchRectificado.HasValue){ <div><span class="tt-lbl">Rectificado</span><span class="tt-val tt-mono">@rect.FchRectificado.Value.ToString("dd/MM/yyyy")</span></div> }
+                                                  @if (rect.FchAprobado.HasValue)   { <div><span class="tt-lbl">Aprobado</span><span class="tt-val tt-mono">@rect.FchAprobado.Value.ToString("dd/MM/yyyy")</span></div> }
+                                                </div>
+                                              }
+                                            </div>
+                                          }
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  </div>@* accordion *@
+                                </div>@* p2-detail-body *@
+                            </div>@* collapse *@
+                        }
+
+                        @* Botón para expandir historial de eventos *@
+                        @if (eventosSub.Any())
+                        {
+                            <button class="p2-detail-toggle" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#@detailId"
+                                    aria-expanded="false">
+                                <i class="bi bi-journal-text me-1"></i>Últimos eventos
+                                <span class="badge bg-secondary ms-1" style="font-size:.58rem;">@eventosSub.Count</span>
+                                <i class="bi bi-chevron-down p2-toggle-ico"></i>
+                            </button>
+                            <div class="collapse" id="@detailId">
+                                <div class="p2-detail-body">
+                                    <table class="p2-ev-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Tipo</th>
+                                                <th>Descripción</th>
+                                                <th>Usuario</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var ev in eventosSub)
+                                            {
+                                                <tr>
+                                                    <td style="white-space:nowrap;">@ev.FchEvento.ToString("dd/MM/yy HH:mm")</td>
+                                                    <td><span class="badge bg-secondary" style="font-size:.58rem;">@ev.TipoEvento</span></td>
+                                                    <td>@(ev.NombrePaso ?? ev.Observacion ?? ev.TipoEventoDesc)</td>
+                                                    <td class="text-muted">@ev.Usuario</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                    <div class="mt-2">
+                                        <a asp-action="HistorialEventos"
+                                           asp-route-numPed="@Model.NumPed"
+                                           asp-route-serie="@Model.Serie"
+                                           asp-route-idSeguim="@s.IdSeguim"
+                                           class="btn btn-outline-secondary btn-sm" style="font-size:.68rem;">
+                                            <i class="bi bi-journal-bookmark me-1"></i>Ver historial completo
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Estado en tiempo real de máquinas TT
+    (async function () {
+        const maqs = [...new Set([...document.querySelectorAll('[data-maq]')].map(el => el.dataset.maq).filter(Boolean))];
+        for (const cod of maqs) {
+            try {
+                const res = await fetch(`/Planeamiento/GetMaquinaStatus?codMaq=${encodeURIComponent(cod)}`);
+                if (!res.ok) continue;
+                const info = await res.json();
+                document.querySelectorAll(`[data-maq="${CSS.escape(cod)}"]`).forEach(el => {
+                    if (!el.classList.contains('maq-box')) return;
+                    const liveDiv   = el.querySelector('.maq-live');
+                    const txt       = el.querySelector('.live-txt');
+                    const cargaFill = el.querySelector('.maq-carga-fill');
+                    const cargaPct  = el.querySelector('.maq-carga-pct');
+                    const cerrado   = el.dataset.cerrado === 'true';
+                    if (!liveDiv) return;
+                    liveDiv.classList.remove('loading');
+                    if (info.esLibre) {
+                        liveDiv.classList.add('libre');
+                        if (txt) txt.textContent = 'Disponible — sin actividad ahora';
+                    } else {
+                        liveDiv.classList.add('ocupada');
+                        const n      = info.banosActivos;
+                        const propio = el.dataset.propio === 'true';
+                        if (txt) txt.textContent = (cerrado || !propio)
+                            ? `En uso por otro lote · ${n} baño${n !== 1 ? 's' : ''} activo${n !== 1 ? 's' : ''}`
+                            : `Ocupada · ${n} baño${n !== 1 ? 's' : ''} en proceso`;
+                    }
+                    if (cargaPct) {
+                        if (info.hayCargaHoy) {
+                            const pct  = Math.min(100, Math.max(0, info.pctCargaHoy));
+                            const dias = info.diasAntiguo;
+                            const lbl  = el.querySelector('.maq-carga-lbl');
+                            if (lbl) lbl.textContent = dias === 0 ? 'Hoy:' : dias === 1 ? 'Ayer:' : `Hace ${dias}d:`;
+                            if (cargaFill) {
+                                cargaFill.style.width = pct + '%';
+                                cargaFill.classList.toggle('alta',         pct >= 60 && pct < 90);
+                                cargaFill.classList.toggle('sobrecargada', pct >= 90);
+                            }
+                            cargaPct.textContent = pct.toFixed(0) + '%';
+                        } else if (info.banosActivos > 0) {
+                            const n        = info.banosActivos;
+                            const estimado = Math.min(100, n * 40);
+                            const lbl = el.querySelector('.maq-carga-lbl');
+                            if (lbl) lbl.textContent = 'En uso:';
+                            if (cargaFill) {
+                                cargaFill.style.width = estimado + '%';
+                                cargaFill.classList.toggle('alta',         estimado >= 60 && estimado < 90);
+                                cargaFill.classList.toggle('sobrecargada', estimado >= 90);
+                            }
+                            cargaPct.textContent = `~${estimado}%`;
+                        } else {
+                            cargaPct.textContent = 'Sin actividad';
+                        }
+                    }
+                });
+            } catch { /* silencioso */ }
+        }
+    })();
+</script>
+}

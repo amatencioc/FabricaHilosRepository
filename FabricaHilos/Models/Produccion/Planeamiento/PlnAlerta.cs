@@ -24,8 +24,19 @@ public class PlnAlerta
     public string?  CodPasoAct    { get; set; }
     public string?  ColorUiPaso   { get; set; }
 
-    // BUG FIX: V_PLN_ALERTAS_ACTIVAS.horas_sin_resolver (en realidad son días decimales; se convierte a horas al leer)
+    // BUG FIX: V_PLN_ALERTAS_ACTIVAS.horas_sin_resolver (la vista devuelve ROUND(*24,2) = horas reales)
     public double?  HorasSinResolver { get; set; }
+
+    // Campos enriquecidos v2.3 — JOIN con PLN_SEGUIMIENTO + PLN_ESTADO_CODIGO en la vista
+    public string?  TituloArt      { get; set; }
+    public string?  Proceso        { get; set; }  // '01'=Cardado '20'=Peinado '24'=P.Gaseado
+    public string?  NombrePaso     { get; set; }  // nombre del paso actual
+    public DateTime? FchEntregaComp { get; set; } // fecha compromiso con cliente
+    public int?     DiasRetrasoEnt { get; set; }  // TRUNC(SYSDATE)-TRUNC(FCH_ENTREGA_COMP)
+    public decimal? CantidadOrig   { get; set; }  // kg pedidos original
+    public decimal? KgPendientes   { get; set; }  // kg aún sin despachar
+    public int?     NroCiclo       { get; set; }  // 1=normal, 2+=reproceso
+    public string?  IndUrgente     { get; set; }  // 'S' si urgente
 
     // Campos de resolución (solo presentes en historial: ESTADO='R'/'I')
     public DateTime? FchResolucion  { get; set; }
@@ -61,4 +72,18 @@ public class PlnAlerta
         "QCF"  => "CC rechazado",
         _      => TipAlerta
     };
+
+    public string ProcesoTexto => Proceso switch
+    {
+        "01" => "Cardado",
+        "20" => "Peinado",
+        "24" => "P.Gaseado",
+        _    => Proceso ?? ""
+    };
+
+    /// Porcentaje de KG pendientes sobre el total pedido (0-100), o null si no hay datos.
+    public double? KgPorcentajePendiente =>
+        CantidadOrig > 0 && KgPendientes.HasValue
+            ? Math.Round((double)KgPendientes.Value / (double)CantidadOrig.Value * 100, 1)
+            : (double?)null;
 }

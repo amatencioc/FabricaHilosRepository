@@ -283,14 +283,43 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
 
     public async Task<IEnumerable<PlnPendienteDespacho>> GetPendientesDespachoAsync()
     {
-        // V_PLN_PENDIENTES_DESP (§8.6 PKG_PLN): ítems en paso '12'/'13' con kg_pendientes > 0.
-        // Ordenados: urgentes primero, luego prioridad, luego fch_entrega_comp.
+        // SQL directo (bypass vista) para incluir campos enriquecidos:
+        // serie, num_det, color_ui, cod_maq_devan, proceso, kg_producidos, dias_en_paso.
         var sql = $@"
-            SELECT num_ped, nro, cod_cliente, nom_cliente, cod_art, desc_art,
-                   color, titulo, kg_pendientes, stock_disponible, kg_a_despachar,
-                   fch_entrega_comp, dias_vencido, dias_retraso, ind_urgente,
-                   cod_paso_act, nombre_paso, prioridad_pedido
-            FROM   {S}V_PLN_PENDIENTES_DESP";
+            SELECT s.serie, s.num_ped, s.nro, s.num_det,
+                   s.cod_cliente, cl.nombre            AS nom_cliente,
+                   s.cod_art,     ar.descripcion       AS desc_art,
+                   s.color, s.titulo, s.proceso,
+                   s.kg_pendientes, s.kg_producidos,
+                   NVL(al.stock, 0)                                          AS stock_disponible,
+                   LEAST(s.kg_pendientes, NVL(al.stock, 0))                  AS kg_a_despachar,
+                   s.fch_entrega_comp, s.fch_est_despacho,
+                   TRUNC(SYSDATE) - s.fch_entrega_comp                       AS dias_vencido,
+                   s.dias_retraso, s.ind_urgente, s.ind_retraso,
+                   s.cod_paso_act, ec.nombre_paso, ec.color_ui,
+                   s.cod_maq_secado, s.cod_maq_devan,
+                   p.prioridad                                                AS prioridad_pedido,
+                   NVL((SELECT TRUNC(SYSDATE) - TRUNC(MIN(ev.fch_evento))
+                        FROM   {S}pln_log_eventos ev
+                        WHERE  ev.num_ped  = s.num_ped
+                          AND  ev.serie    = s.serie
+                          AND  ev.nro      = s.nro
+                          AND  ev.cod_paso = s.cod_paso_act), 0)             AS dias_en_paso
+            FROM   {S}pln_seguimiento s
+            JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
+            LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
+            LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
+            JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
+            LEFT JOIN (SELECT cod_art, SUM(NVL(stock, 0)) AS stock
+                       FROM   {S}almacen
+                       WHERE  cod_alm IN ('03','07','22','30')
+                       GROUP BY cod_art)                al ON al.cod_art = s.cod_art
+            WHERE  s.cod_paso_act IN ('12','13')
+              AND  s.kg_pendientes > 0
+              AND  s.estado = 'A'
+            ORDER BY CASE WHEN s.ind_urgente='S' THEN 0 ELSE 1 END,
+                     p.prioridad DESC NULLS LAST,
+                     s.fch_entrega_comp NULLS LAST";
 
         var list = new List<PlnPendienteDespacho>();
         await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -301,24 +330,111 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
         {
             list.Add(new PlnPendienteDespacho
             {
+                Serie           = SafeVal<int>(r["serie"]),
                 NumPed          = SafeVal<long>(r["num_ped"]),
                 Nro             = SafeVal<int>(r["nro"]),
+                NumDet          = SafeVal<int>(r["num_det"]),
                 CodCliente      = SafeStr(r["cod_cliente"]),
                 NomCliente      = SafeStr(r["nom_cliente"]),
                 CodArt          = SafeStr(r["cod_art"]),
                 DescArt         = SafeStr(r["desc_art"]),
                 Color           = SafeStr(r["color"]),
                 Titulo          = SafeStr(r["titulo"]),
+                Proceso         = SafeStr(r["proceso"]),
                 KgPendientes    = SafeVal<decimal>(r["kg_pendientes"]),
+                KgProducidos    = SafeVal<decimal>(r["kg_producidos"]),
                 StockDisponible = SafeVal<decimal>(r["stock_disponible"]),
                 KgADespachar    = SafeVal<decimal>(r["kg_a_despachar"]),
-                FchEntregaComp  = r["fch_entrega_comp"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_entrega_comp"]),
+                FchEntregaComp  = r["fch_entrega_comp"]  == DBNull.Value ? null : Convert.ToDateTime(r["fch_entrega_comp"]),
+                FchEstDespacho  = r["fch_est_despacho"]  == DBNull.Value ? null : Convert.ToDateTime(r["fch_est_despacho"]),
                 DiasVencido     = SafeVal<int>(r["dias_vencido"]),
                 DiasRetraso     = SafeVal<int>(r["dias_retraso"]),
                 IndUrgente      = SafeStr(r["ind_urgente"]),
+                IndRetraso      = SafeStr(r["ind_retraso"]),
                 CodPasoAct      = SafeStr(r["cod_paso_act"]),
                 NombrePaso      = SafeStr(r["nombre_paso"]),
+                ColorUi         = SafeStr(r["color_ui"]),
+                CodMaqSecado    = SafeStr(r["cod_maq_secado"]),
+                CodMaqDevan     = SafeStr(r["cod_maq_devan"]),
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
+                DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
+            });
+        }
+        return list;
+    }
+
+    public async Task<IEnumerable<PlnPendienteDespacho>> GetProximosDespachoAsync()
+    {
+        // Ítems en pasos '08'-'11': próximos a llegar a Almacén PT.
+        // Ordenados por FCH_ENTREGA_COMP ascendente (más urgentes primero).
+        var sql = $@"
+            SELECT s.serie, s.num_ped, s.nro, s.num_det,
+                   s.cod_cliente, cl.nombre            AS nom_cliente,
+                   s.cod_art,     ar.descripcion       AS desc_art,
+                   s.color, s.titulo, s.proceso,
+                   s.kg_pendientes, s.kg_producidos,
+                   0                                                          AS stock_disponible,
+                   0                                                          AS kg_a_despachar,
+                   s.fch_entrega_comp, s.fch_est_despacho,
+                   TRUNC(SYSDATE) - s.fch_entrega_comp                        AS dias_vencido,
+                   s.dias_retraso, s.ind_urgente, s.ind_retraso,
+                   s.cod_paso_act, ec.nombre_paso, ec.color_ui,
+                   s.cod_maq_secado, s.cod_maq_devan,
+                   p.prioridad                                                 AS prioridad_pedido,
+                   NVL((SELECT TRUNC(SYSDATE) - TRUNC(MIN(ev.fch_evento))
+                        FROM   {S}pln_log_eventos ev
+                        WHERE  ev.num_ped  = s.num_ped
+                          AND  ev.serie    = s.serie
+                          AND  ev.nro      = s.nro
+                          AND  ev.cod_paso = s.cod_paso_act), 0)              AS dias_en_paso
+            FROM   {S}pln_seguimiento s
+            JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
+            LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
+            LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
+            JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
+            WHERE  s.estado = 'A'
+              AND  s.cod_paso_act IN ('08','09','09B','9R','10','11')
+            ORDER BY CASE WHEN s.ind_urgente='S' THEN 0 ELSE 1 END,
+                     s.fch_entrega_comp NULLS LAST,
+                     ec.orden_paso";
+
+        var list = new List<PlnPendienteDespacho>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        await using var r   = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnPendienteDespacho
+            {
+                Serie           = SafeVal<int>(r["serie"]),
+                NumPed          = SafeVal<long>(r["num_ped"]),
+                Nro             = SafeVal<int>(r["nro"]),
+                NumDet          = SafeVal<int>(r["num_det"]),
+                CodCliente      = SafeStr(r["cod_cliente"]),
+                NomCliente      = SafeStr(r["nom_cliente"]),
+                CodArt          = SafeStr(r["cod_art"]),
+                DescArt         = SafeStr(r["desc_art"]),
+                Color           = SafeStr(r["color"]),
+                Titulo          = SafeStr(r["titulo"]),
+                Proceso         = SafeStr(r["proceso"]),
+                KgPendientes    = SafeVal<decimal>(r["kg_pendientes"]),
+                KgProducidos    = SafeVal<decimal>(r["kg_producidos"]),
+                StockDisponible = 0,
+                KgADespachar    = 0,
+                FchEntregaComp  = r["fch_entrega_comp"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_entrega_comp"]),
+                FchEstDespacho  = r["fch_est_despacho"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_est_despacho"]),
+                DiasVencido     = SafeVal<int>(r["dias_vencido"]),
+                DiasRetraso     = SafeVal<int>(r["dias_retraso"]),
+                IndUrgente      = SafeStr(r["ind_urgente"]),
+                IndRetraso      = SafeStr(r["ind_retraso"]),
+                CodPasoAct      = SafeStr(r["cod_paso_act"]),
+                NombrePaso      = SafeStr(r["nombre_paso"]),
+                ColorUi         = SafeStr(r["color_ui"]),
+                CodMaqSecado    = SafeStr(r["cod_maq_secado"]),
+                CodMaqDevan     = SafeStr(r["cod_maq_devan"]),
+                PrioridadPedido = SafeStr(r["prioridad_pedido"]),
+                DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
             });
         }
         return list;
@@ -371,5 +487,555 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
         cmd.Parameters.Add(new OracleParameter("fchIni", OracleDbType.Date) { Value = fchIni });
         cmd.Parameters.Add(new OracleParameter("fchFin", OracleDbType.Date) { Value = fchFin });
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Compromisos de máquinas activos.
+    /// Combina cuatro fuentes:
+    ///   1. PLN_SEGUIMIENTO.COD_MAQ_SECADO  → compromisos de secadoras (S01, S04)
+    ///   2. PLN_SEGUIMIENTO.COD_MAQ_DEVAN   → compromisos de devanadoras/retorcedoras
+    ///   3. TT_RSECADO activo               → procesos reales sin PLN tracking
+    ///   4. TT_RPRODUC (TT baths) activo    → tintorería en proceso sin PLN tracking
+    /// Las fuentes 3 y 4 solo muestran ítems NO presentes en PLN_SEGUIMIENTO.
+    /// </summary>
+    public async Task<IEnumerable<PlnMaquinaCompromiso>> GetMaquinasCompromisoAsync()
+    {
+        var sql = $@"
+            -- Fuente 1: Compromisos SECADO desde PLN_SEGUIMIENTO
+            SELECT 'Secado'    AS area,
+                   s.cod_maq_secado AS cod_maq,
+                   s.num_ped, s.nro, s.num_det, s.serie,
+                   s.cod_paso_act,
+                   ec.nombre_paso,
+                   ec.color_ui,
+                   s.fch_entrega_comp,
+                   s.kg_en_tin  AS kg,
+                   s.ind_retraso,
+                   s.dias_retraso,
+                   CASE
+                     WHEN s.cod_paso_act = '08'           THEN 'EN_PROCESO'
+                     WHEN s.cod_paso_act IN ('06','07','9R') THEN 'COMPROMETIDA'
+                     ELSE 'ASIGNADA'
+                   END AS estado_maq,
+                   'PLN' AS fuente
+            FROM   {S}pln_seguimiento s
+            JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
+            WHERE  s.estado          = 'A'
+              AND  s.cod_maq_secado IS NOT NULL
+              AND  s.cod_paso_act NOT IN ('09','09B','10','11','12','13','14')  -- excluir items ya pasados por secado
+            UNION ALL
+            -- Fuente 2: Compromisos DEVANADO desde PLN_SEGUIMIENTO
+            SELECT 'Devanado'  AS area,
+                   s.cod_maq_devan  AS cod_maq,
+                   s.num_ped, s.nro, s.num_det, s.serie,
+                   s.cod_paso_act,
+                   ec.nombre_paso,
+                   ec.color_ui,
+                   s.fch_entrega_comp,
+                   s.kg_producidos  AS kg,
+                   s.ind_retraso,
+                   s.dias_retraso,
+                   CASE
+                     WHEN s.cod_paso_act = '10'               THEN 'EN_PROCESO'
+                     WHEN s.cod_paso_act IN ('08','09','09B','9R') THEN 'COMPROMETIDA'
+                     ELSE 'ASIGNADA'
+                   END AS estado_maq,
+                   'PLN' AS fuente
+            FROM   {S}pln_seguimiento s
+            JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
+            WHERE  s.estado          = 'A'
+              AND  s.cod_maq_devan  IS NOT NULL
+              AND  s.cod_paso_act NOT IN ('11','12','13','14')  -- excluir items ya pasados por devanado
+            UNION ALL
+            -- Fuente 3: SECADO físico activo (TT_RSECADO), solo ítems SIN PLN tracking
+            SELECT 'Secado'    AS area,
+                   t.cod_maq,
+                   NVL(id.num_ped, 0),
+                   NVL(id.nro,     0),
+                   NVL(id.num_det, 0),
+                   NVL(id.serie,   0),
+                   '08'               AS cod_paso_act,
+                   'Secado'           AS nombre_paso,
+                   '#20c997'          AS color_ui,
+                   CAST(NULL AS DATE) AS fch_entrega_comp,
+                   NVL(t.peso_neto, 0),
+                   'N'                AS ind_retraso,
+                   0                  AS dias_retraso,
+                   'EN_PROCESO'       AS estado_maq,
+                   'TT_RSECADO'       AS fuente
+            FROM   {S}tt_rsecado t
+            JOIN   {S}partida p ON p.numero = t.guia
+            LEFT JOIN {S}itemped_det id ON id.nroprog = p.nroprog
+            WHERE  t.estado IN ('1','2')
+              AND  NOT EXISTS (
+                       SELECT 1 FROM {S}pln_seguimiento ps
+                       WHERE  ps.num_ped       = id.num_ped
+                         AND  ps.nro           = id.nro
+                         AND  ps.num_det       = id.num_det
+                         AND  ps.serie         = id.serie
+                         AND  ps.estado        = 'A'
+                         AND  ps.cod_maq_secado = t.cod_maq)
+            UNION ALL
+            -- Fuente 4: TINTORERÍA física activa (TT_RPRODUC TIPODOC='PA'), solo ítems SIN PLN tracking
+            SELECT 'Tintorería' AS area,
+                   tt.cod_maq,
+                   NVL(id.num_ped, 0),
+                   NVL(id.nro,     0),
+                   NVL(id.num_det, 0),
+                   NVL(id.serie,   0),
+                   '06'               AS cod_paso_act,
+                   'En Tintorería'    AS nombre_paso,
+                   '#6f42c1'          AS color_ui,
+                   CAST(NULL AS DATE) AS fch_entrega_comp,
+                   NVL(p.peso_neto, 0),
+                   'N'                AS ind_retraso,
+                   0                  AS dias_retraso,
+                   'EN_PROCESO'       AS estado_maq,
+                   'TT_RPRODUC'       AS fuente
+            FROM   {S}tt_rproduc tt
+            LEFT JOIN {S}partida p ON p.numero = tt.receta
+            LEFT JOIN {S}itemped_det id ON id.nroprog = p.nroprog
+            WHERE  tt.tipodoc = 'PA'
+              AND  tt.estado  IN ('1','2')
+              AND  NOT EXISTS (
+                       SELECT 1 FROM {S}pln_seguimiento ps
+                       WHERE  ps.num_ped = id.num_ped
+                         AND  ps.nro     = id.nro
+                         AND  ps.num_det = id.num_det
+                         AND  ps.serie   = id.serie
+                         AND  ps.estado  = 'A')
+            ORDER BY 1, 2, 13 DESC, 10";   /* area, cod_maq, estado_maq(EN_PROCESO primero), fch_entrega_comp */
+
+        var list = new List<PlnMaquinaCompromiso>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd  = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        await using var r    = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnMaquinaCompromiso
+            {
+                Area           = SafeStr(r["area"]),
+                CodMaq         = SafeStr(r["cod_maq"]),
+                NumPed         = r.IsDBNull(r.GetOrdinal("num_ped"))   ? 0 : Convert.ToInt64(r["num_ped"]),
+                Nro            = r.IsDBNull(r.GetOrdinal("nro"))       ? 0 : Convert.ToInt32(r["nro"]),
+                NumDet         = r.IsDBNull(r.GetOrdinal("num_det"))   ? 0 : Convert.ToInt32(r["num_det"]),
+                Serie          = r.IsDBNull(r.GetOrdinal("serie"))     ? 0 : Convert.ToInt32(r["serie"]),
+                CodPasoAct     = SafeStr(r["cod_paso_act"]),
+                NombrePaso     = SafeStr(r["nombre_paso"]),
+                ColorUi        = SafeStr(r["color_ui"]),
+                FchEntregaComp = r.IsDBNull(r.GetOrdinal("fch_entrega_comp")) ? null : (DateTime?)Convert.ToDateTime(r["fch_entrega_comp"]),
+                Kg             = r.IsDBNull(r.GetOrdinal("kg"))        ? 0m  : Convert.ToDecimal(r["kg"]),
+                IndRetraso     = SafeStr(r["ind_retraso"]),
+                DiasRetraso    = r.IsDBNull(r.GetOrdinal("dias_retraso")) ? 0 : Convert.ToInt32(r["dias_retraso"]),
+                EstadoMaq      = SafeStr(r["estado_maq"]),
+                Fuente         = SafeStr(r["fuente"]),
+            });
+        }
+        return list;
+    }
+
+    // ── §NEW: Estado de máquinas Tintorería ─────────────────────────────────
+    /// <summary>
+    /// Estado en tiempo real de todas las máquinas TT (Thies R/Hank M/MR).
+    /// Fuente: TT_RPRODUC catálogo. ACTIVA=proceso activo(estado 1/2), LIBRE=sin proceso activo.
+    /// Navegación: IR → ING_RECETAS_G → PARTIDA_MAS → PARTIDA; PA → PARTIDA directo.
+    /// </summary>
+    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasTintoreriaAsync()
+    {
+        var sql = $@"
+            SELECT estado_maq, cod_maq, tipodoc, proceso,
+                   num_ped, serie, nro, num_det,
+                   nombre_cliente, cod_art, titulo,
+                   cod_paso_act, nombre_paso, color_ui,
+                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg
+            FROM (
+                -- Activas via IR: TT_RPRODUC → ING_RECETAS_G → PARTIDA_MAS → PARTIDA → ITEMPED_DET
+                SELECT 'ACTIVA'                                     AS estado_maq,
+                       tt.cod_maq,
+                       tt.tipodoc,
+                       tt.proceso,
+                       CASE WHEN id.num_ped IS NOT NULL THEN id.num_ped
+                            WHEN p.nro_pedido > 1000      THEN p.nro_pedido
+                            ELSE 0 END                              AS num_ped,
+                       CASE WHEN id.serie IS NOT NULL    THEN id.serie
+                            WHEN p.nro_pedido > 1000      THEN p.serie
+                            ELSE 0 END                              AS serie,
+                       NVL(id.nro,     0)                           AS nro,
+                       NVL(id.num_det, 0)                           AS num_det,
+                       NVL(cl.nombre, CASE WHEN p.nro_pedido > 1000 THEN cl_p.nombre END) AS nombre_cliente,
+                       NVL(it.cod_art, p.cod_art)                   AS cod_art,
+                       NVL(it.titulo,  p.titulo)                    AS titulo,
+                       NVL(s.cod_paso_act,  '06')                   AS cod_paso_act,
+                       NVL(ec.nombre_paso, 'En Tintorería')         AS nombre_paso,
+                       NVL(ec.color_ui,    '#6f42c1')               AS color_ui,
+                       s.fch_entrega_comp,
+                       NVL(s.dias_retraso, 0)                       AS dias_retraso,
+                       NVL(s.ind_retraso,  'N')                     AS ind_retraso,
+                       NVL(s.ind_urgente,  'N')                     AS ind_urgente,
+                       NVL(s.kg_en_tin, 0)                          AS kg
+                FROM   {S}TT_RPRODUC tt
+                JOIN   {S}ING_RECETAS_G ig ON ig.numero  = tt.receta
+                JOIN   {S}PARTIDA_MAS   pm ON pm.numero  = ig.r_numero
+                LEFT   JOIN {S}PARTIDA p   ON p.numero    = pm.partida
+                LEFT   JOIN {S}ITEMPED_DET id ON id.nroprog = p.nroprog AND id.serie = p.serie
+                LEFT   JOIN {S}ITEMPED it  ON it.serie    = id.serie
+                                          AND it.num_ped  = id.num_ped
+                                          AND it.nro      = id.nro
+                LEFT   JOIN {S}CLIENTES cl   ON cl.cod_cliente  = it.cod_cliente
+                LEFT   JOIN {S}CLIENTES cl_p ON cl_p.cod_cliente = p.cod_cliente
+                LEFT   JOIN {S}PLN_SEGUIMIENTO s ON s.serie   = id.serie
+                                                AND s.num_ped = id.num_ped
+                                                AND s.nro     = id.nro
+                                                AND s.num_det = id.num_det
+                                                AND s.estado  = 'A'
+                LEFT   JOIN {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
+                WHERE  tt.tipodoc = 'IR'
+                  AND  tt.estado IN ('1','2')
+                UNION ALL
+                -- Activas via PA: TT_RPRODUC → PARTIDA directo
+                SELECT 'ACTIVA'                                     AS estado_maq,
+                       tt.cod_maq,
+                       tt.tipodoc,
+                       tt.proceso,
+                       CASE WHEN id.num_ped IS NOT NULL THEN id.num_ped
+                            WHEN p.nro_pedido > 1000      THEN p.nro_pedido
+                            ELSE 0 END                              AS num_ped,
+                       CASE WHEN id.serie IS NOT NULL    THEN id.serie
+                            WHEN p.nro_pedido > 1000      THEN p.serie
+                            ELSE 0 END                              AS serie,
+                       NVL(id.nro,     0)                           AS nro,
+                       NVL(id.num_det, 0)                           AS num_det,
+                       NVL(cl.nombre, CASE WHEN p.nro_pedido > 1000 THEN cl_p.nombre END) AS nombre_cliente,
+                       NVL(it.cod_art, p.cod_art)                   AS cod_art,
+                       NVL(it.titulo,  p.titulo)                    AS titulo,
+                       NVL(s.cod_paso_act,  '06')                   AS cod_paso_act,
+                       NVL(ec.nombre_paso, 'En Tintorería')         AS nombre_paso,
+                       NVL(ec.color_ui,    '#6f42c1')               AS color_ui,
+                       s.fch_entrega_comp,
+                       NVL(s.dias_retraso, 0)                       AS dias_retraso,
+                       NVL(s.ind_retraso,  'N')                     AS ind_retraso,
+                       NVL(s.ind_urgente,  'N')                     AS ind_urgente,
+                       NVL(s.kg_en_tin, 0)                          AS kg
+                FROM   {S}TT_RPRODUC tt
+                LEFT   JOIN {S}PARTIDA p   ON p.numero = tt.receta
+                LEFT   JOIN {S}ITEMPED_DET id ON id.nroprog = p.nroprog AND id.serie = p.serie
+                LEFT   JOIN {S}ITEMPED it  ON it.serie    = id.serie
+                                          AND it.num_ped  = id.num_ped
+                                          AND it.nro      = id.nro
+                LEFT   JOIN {S}CLIENTES cl   ON cl.cod_cliente  = it.cod_cliente
+                LEFT   JOIN {S}CLIENTES cl_p ON cl_p.cod_cliente = p.cod_cliente
+                LEFT   JOIN {S}PLN_SEGUIMIENTO s ON s.serie   = id.serie
+                                                AND s.num_ped = id.num_ped
+                                                AND s.nro     = id.nro
+                                                AND s.num_det = id.num_det
+                                                AND s.estado  = 'A'
+                LEFT   JOIN {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
+                WHERE  tt.tipodoc = 'PA'
+                  AND  tt.estado IN ('1','2')
+                UNION ALL
+                -- Libres: TODAS las máquinas activas del catálogo T_MAQUINAS (tipo T=Tintorería, M=Mercerizadora) sin proceso activo
+                SELECT 'LIBRE'                                      AS estado_maq,
+                       maq.cod_maq,
+                       '-'                                          AS tipodoc,
+                       '-'                                          AS proceso,
+                       0                                            AS num_ped,
+                       0                                            AS serie,
+                       0                                            AS nro,
+                       0                                            AS num_det,
+                       CAST(NULL AS VARCHAR2(100))                  AS nombre_cliente,
+                       CAST(NULL AS VARCHAR2(25))                   AS cod_art,
+                       CAST(NULL AS VARCHAR2(10))                   AS titulo,
+                       ''                                           AS cod_paso_act,
+                       ''                                           AS nombre_paso,
+                       '#6c757d'                                    AS color_ui,
+                       CAST(NULL AS DATE)                           AS fch_entrega_comp,
+                       0                                            AS dias_retraso,
+                       'N'                                          AS ind_retraso,
+                       'N'                                          AS ind_urgente,
+                       0                                            AS kg
+                FROM   {S}TT_MAQUINA maq
+                WHERE  maq.TIPO_MAQ IN ('T', 'M')
+                  AND  maq.ESTADO   = '0'
+                  AND  NOT EXISTS (
+                           SELECT 1 FROM {S}TT_RPRODUC act
+                           WHERE  act.cod_maq  = maq.cod_maq
+                             AND  act.tipodoc IN ('PA','IR')
+                             AND  act.estado  IN ('1','2'))
+            )
+            ORDER BY estado_maq ASC, cod_maq ASC";  /* ACTIVA < LIBRE alfabético */
+
+        var list = new List<PlnEstadoMaquinaTT>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnEstadoMaquinaTT
+            {
+                EstadoMaq      = SafeStr(r["estado_maq"]),
+                CodMaq         = SafeStr(r["cod_maq"]),
+                TipDoc         = SafeStr(r["tipodoc"]),
+                Proceso        = SafeStr(r["proceso"]),
+                NumPed         = r.IsDBNull(r.GetOrdinal("num_ped"))         ? 0  : Convert.ToInt64(r["num_ped"]),
+                Nro            = r.IsDBNull(r.GetOrdinal("nro"))             ? 0  : Convert.ToInt32(r["nro"]),
+                NumDet         = r.IsDBNull(r.GetOrdinal("num_det"))         ? 0  : Convert.ToInt32(r["num_det"]),
+                Serie          = r.IsDBNull(r.GetOrdinal("serie"))           ? 0  : Convert.ToInt32(r["serie"]),
+                NombreCliente  = r.IsDBNull(r.GetOrdinal("nombre_cliente"))  ? null : SafeStr(r["nombre_cliente"]),
+                CodArt         = r.IsDBNull(r.GetOrdinal("cod_art"))         ? null : SafeStr(r["cod_art"]),
+                Titulo         = r.IsDBNull(r.GetOrdinal("titulo"))          ? null : SafeStr(r["titulo"]),
+                CodPasoAct     = SafeStr(r["cod_paso_act"]),
+                NombrePaso     = SafeStr(r["nombre_paso"]),
+                ColorUi        = SafeStr(r["color_ui"]),
+                FchEntregaComp = r.IsDBNull(r.GetOrdinal("fch_entrega_comp")) ? null : (DateTime?)Convert.ToDateTime(r["fch_entrega_comp"]),
+                DiasRetraso    = r.IsDBNull(r.GetOrdinal("dias_retraso"))     ? 0   : Convert.ToInt32(r["dias_retraso"]),
+                IndRetraso     = SafeStr(r["ind_retraso"]),
+                IndUrgente     = SafeStr(r["ind_urgente"]),
+                Kg             = r.IsDBNull(r.GetOrdinal("kg"))               ? 0m  : Convert.ToDecimal(r["kg"]),
+            });
+        }
+        return list;
+    }
+
+    // ── §NEW: Resumen de máquinas Hilandería ─────────────────────────────────
+    /// <summary>
+    /// Actividad de máquinas de hilandería (H_RPRODUC) últimas 24h, agrupada por tipo+máquina.
+    /// Incluye lote, título, proceso, kg, husos, velocidad y estado activo/completado.
+    /// </summary>
+    public async Task<IEnumerable<PlnResumenHilanderia>> GetResumenHilanderiaAsync()
+    {
+        var sql = $@"
+            SELECT h.tp_maq,
+                   h.cod_maq,
+                   MAX(h.lote)       AS lote,
+                   MAX(h.titulo)     AS titulo,
+                   MAX(h.proceso)    AS proceso,
+                   MAX(h.estado)     AS estado_max,
+                   SUM(h.peso_neto)  AS kg_total,
+                   MAX(h.husos_act)  AS husos_max,
+                   MAX(h.velocidad)  AS velocidad,
+                   MAX(h.fecha_ini)  AS ultima_fecha_ini,
+                   COUNT(*)          AS registros
+            FROM   {S}H_RPRODUC h
+            WHERE  h.fecha_ini >= TRUNC(SYSDATE) - 1
+            GROUP BY h.tp_maq, h.cod_maq
+            ORDER BY CASE MAX(h.estado) WHEN '1' THEN 0 WHEN '2' THEN 0 ELSE 1 END,
+                     h.tp_maq, h.cod_maq";
+
+        var list = new List<PlnResumenHilanderia>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnResumenHilanderia
+            {
+                TpMaq          = SafeStr(r["tp_maq"]),
+                CodMaq         = SafeStr(r["cod_maq"]),
+                Lote           = SafeStr(r["lote"]),
+                Titulo         = SafeStr(r["titulo"]),
+                Proceso        = SafeStr(r["proceso"]),
+                EstadoMax      = SafeStr(r["estado_max"]),
+                KgTotal        = r.IsDBNull(r.GetOrdinal("kg_total"))        ? 0m  : Convert.ToDecimal(r["kg_total"]),
+                HusosMax       = r.IsDBNull(r.GetOrdinal("husos_max"))       ? 0   : Convert.ToInt32(r["husos_max"]),
+                Velocidad      = r.IsDBNull(r.GetOrdinal("velocidad"))       ? 0.0 : Convert.ToDouble(r["velocidad"]),
+                UltimaFechaIni = r.IsDBNull(r.GetOrdinal("ultima_fecha_ini")) ? null : (DateTime?)Convert.ToDateTime(r["ultima_fecha_ini"]),
+                Registros      = r.IsDBNull(r.GetOrdinal("registros"))       ? 0   : Convert.ToInt32(r["registros"]),
+            });
+        }
+        return list;
+    }
+
+    // ── §NEW: Estado de máquinas Secado ─────────────────────────────────
+    /// <summary>
+    /// Estado en tiempo real de TODAS las máquinas de secado (S01–S04).
+    /// Catálogo: T_MAQUINAS TIPO_MAQ='S' (activas, ESTADO='0').
+    /// Actividad: TT_RSECADO estado IN ('1','2').
+    /// Para máquinas con múltiples lotes activos se toma el más reciente (ROW_NUMBER).
+    /// Navegación: TT_RSECADO.GUIA → PARTIDA.NUMERO → PARTIDA.NROPROG → ITEMPED_DET → PLN_SEGUIMIENTO.
+    /// </summary>
+    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasSecadoAsync()
+    {
+        var sql = $@"
+            SELECT estado_maq, cod_maq, tipodoc, proceso,
+                   num_ped, serie, nro, num_det,
+                   nombre_cliente, cod_art, titulo,
+                   cod_paso_act, nombre_paso, color_ui,
+                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg
+            FROM (
+                -- Activas (una fila por máquina: el lote más reciente, ROW_NUMBER)
+                SELECT q.*, ROW_NUMBER() OVER (PARTITION BY q.cod_maq ORDER BY q.fch_ini_sec DESC) AS rn
+                FROM (
+                    SELECT 'ACTIVA'                                     AS estado_maq,
+                           t.cod_maq,
+                           NVL(t.tipodoc, 'SE')                         AS tipodoc,
+                           CASE WHEN NVL(t.resecado, 0) = 1 THEN 'RE' ELSE 'SE' END AS proceso,
+                           CASE WHEN id.num_ped IS NOT NULL THEN id.num_ped
+                                WHEN p.nro_pedido > 1000      THEN p.nro_pedido
+                                ELSE 0 END                              AS num_ped,
+                           CASE WHEN id.serie IS NOT NULL    THEN id.serie
+                                WHEN p.nro_pedido > 1000      THEN p.serie
+                                ELSE 0 END                              AS serie,
+                           NVL(id.nro,     0)                           AS nro,
+                           NVL(id.num_det, 0)                           AS num_det,
+                           NVL(cl.nombre, cl_p.nombre)                  AS nombre_cliente,
+                           NVL(it.cod_art, p.cod_art)                   AS cod_art,
+                           NVL(it.titulo,  p.titulo)                    AS titulo,
+                           NVL(s.cod_paso_act,  '08')                   AS cod_paso_act,
+                           NVL(ec.nombre_paso, 'Secado')                AS nombre_paso,
+                           NVL(ec.color_ui,    '#20c997')               AS color_ui,
+                           s.fch_entrega_comp,
+                           NVL(s.dias_retraso, 0)                       AS dias_retraso,
+                           NVL(s.ind_retraso,  'N')                     AS ind_retraso,
+                           NVL(s.ind_urgente,  'N')                     AS ind_urgente,
+                           NVL(t.peso_neto, 0)                          AS kg,
+                           t.fecha_ini                                  AS fch_ini_sec
+                    FROM   {S}TT_RSECADO t
+                    LEFT   JOIN {S}PARTIDA p       ON p.numero   = t.guia
+                    LEFT   JOIN {S}ITEMPED_DET id  ON id.nroprog = p.nroprog AND id.serie = p.serie
+                    LEFT   JOIN {S}ITEMPED it      ON it.serie   = id.serie
+                                                  AND it.num_ped = id.num_ped
+                                                  AND it.nro     = id.nro
+                    LEFT   JOIN {S}CLIENTES cl     ON cl.cod_cliente  = it.cod_cliente
+                    LEFT   JOIN {S}CLIENTES cl_p   ON cl_p.cod_cliente = p.cod_cliente
+                    LEFT   JOIN {S}PLN_SEGUIMIENTO s
+                                                   ON s.serie   = id.serie
+                                                  AND s.num_ped = id.num_ped
+                                                  AND s.nro     = id.nro
+                                                  AND s.num_det = id.num_det
+                                                  AND s.estado  = 'A'
+                    LEFT   JOIN {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
+                    WHERE  t.estado IN ('1','2')
+                ) q
+            )
+            WHERE rn = 1
+            UNION ALL
+            -- Libres: T_MAQUINAS tipo S sin proceso activo en TT_RSECADO
+            SELECT 'LIBRE'                                      AS estado_maq,
+                   maq.cod_maq,
+                   '-'                                          AS tipodoc,
+                   '-'                                          AS proceso,
+                   0                                            AS num_ped,
+                   0                                            AS serie,
+                   0                                            AS nro,
+                   0                                            AS num_det,
+                   CAST(NULL AS VARCHAR2(100))                  AS nombre_cliente,
+                   CAST(NULL AS VARCHAR2(25))                   AS cod_art,
+                   CAST(NULL AS VARCHAR2(10))                   AS titulo,
+                   ''                                           AS cod_paso_act,
+                   ''                                           AS nombre_paso,
+                   '#6c757d'                                    AS color_ui,
+                   CAST(NULL AS DATE)                           AS fch_entrega_comp,
+                   0                                            AS dias_retraso,
+                   'N'                                          AS ind_retraso,
+                   'N'                                          AS ind_urgente,
+                   0                                            AS kg
+            FROM   {S}TT_MAQUINA maq
+            WHERE  maq.TIPO_MAQ = 'S'
+              AND  maq.ESTADO   = '0'
+              AND  NOT EXISTS (SELECT 1 FROM {S}TT_RSECADO t
+                               WHERE  t.cod_maq = maq.cod_maq
+                                 AND  t.estado IN ('1','2'))
+            ORDER BY estado_maq ASC, cod_maq ASC";
+
+        var list = new List<PlnEstadoMaquinaTT>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnEstadoMaquinaTT
+            {
+                EstadoMaq      = SafeStr(r["estado_maq"]),
+                CodMaq         = SafeStr(r["cod_maq"]),
+                TipDoc         = SafeStr(r["tipodoc"]),
+                Proceso        = SafeStr(r["proceso"]),
+                NumPed         = r.IsDBNull(r.GetOrdinal("num_ped"))         ? 0  : Convert.ToInt64(r["num_ped"]),
+                Nro            = r.IsDBNull(r.GetOrdinal("nro"))             ? 0  : Convert.ToInt32(r["nro"]),
+                NumDet         = r.IsDBNull(r.GetOrdinal("num_det"))         ? 0  : Convert.ToInt32(r["num_det"]),
+                Serie          = r.IsDBNull(r.GetOrdinal("serie"))           ? 0  : Convert.ToInt32(r["serie"]),
+                NombreCliente  = r.IsDBNull(r.GetOrdinal("nombre_cliente"))  ? null : SafeStr(r["nombre_cliente"]),
+                CodArt         = r.IsDBNull(r.GetOrdinal("cod_art"))         ? null : SafeStr(r["cod_art"]),
+                Titulo         = r.IsDBNull(r.GetOrdinal("titulo"))          ? null : SafeStr(r["titulo"]),
+                CodPasoAct     = SafeStr(r["cod_paso_act"]),
+                NombrePaso     = SafeStr(r["nombre_paso"]),
+                ColorUi        = SafeStr(r["color_ui"]),
+                FchEntregaComp = r.IsDBNull(r.GetOrdinal("fch_entrega_comp")) ? null : (DateTime?)Convert.ToDateTime(r["fch_entrega_comp"]),
+                DiasRetraso    = r.IsDBNull(r.GetOrdinal("dias_retraso"))     ? 0   : Convert.ToInt32(r["dias_retraso"]),
+                IndRetraso     = SafeStr(r["ind_retraso"]),
+                IndUrgente     = SafeStr(r["ind_urgente"]),
+                Kg             = r.IsDBNull(r.GetOrdinal("kg"))               ? 0m  : Convert.ToDecimal(r["kg"]),
+            });
+        }
+        return list;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  OTRAS MÁQUINAS TT-SOPORTE (Centrífugas, Mercerizadora, Prensadora, Calderos)
+    // ──────────────────────────────────────────────────────────────────────────
+    public async Task<IEnumerable<PlnEstadoMaquinaTT>> GetEstadoMaquinasOtrasAsync()
+    {
+        var sql = $@"
+            SELECT 'LIBRE'                               AS estado_maq,
+                   maq.cod_maq,
+                   maq.descripcion,
+                   maq.tipo_maq                          AS proceso,
+                   '-'                                   AS tipodoc,
+                   0                                     AS num_ped,
+                   0                                     AS serie,
+                   0                                     AS nro,
+                   0                                     AS num_det,
+                   CAST(NULL AS VARCHAR2(100))            AS nombre_cliente,
+                   CAST(NULL AS VARCHAR2(25))             AS cod_art,
+                   CAST(NULL AS VARCHAR2(10))             AS titulo,
+                   ''                                    AS cod_paso_act,
+                   ''                                    AS nombre_paso,
+                   '#6c757d'                             AS color_ui,
+                   CAST(NULL AS DATE)                    AS fch_entrega_comp,
+                   0                                     AS dias_retraso,
+                   'N'                                   AS ind_retraso,
+                   'N'                                   AS ind_urgente,
+                   0                                     AS kg
+            FROM   {S}TT_MAQUINA maq
+            WHERE  maq.TIPO_MAQ IN ('C','M','P','Q')
+              AND  maq.ESTADO   = '0'
+            ORDER  BY maq.tipo_maq, maq.cod_maq";
+
+        var list = new List<PlnEstadoMaquinaTT>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd  = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        await using var r    = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnEstadoMaquinaTT
+            {
+                EstadoMaq     = "LIBRE",
+                CodMaq        = SafeStr(r["cod_maq"]),
+                Descripcion   = r.IsDBNull(r.GetOrdinal("descripcion")) ? null : SafeStr(r["descripcion"]),
+                TipDoc        = "-",
+                Proceso       = SafeStr(r["proceso"]),
+                NumPed        = 0,
+                Serie         = 0,
+                Nro           = 0,
+                NumDet        = 0,
+                CodPasoAct    = "",
+                NombrePaso    = "",
+                ColorUi       = "#6c757d",
+                DiasRetraso   = 0,
+                IndRetraso    = "N",
+                IndUrgente    = "N",
+                Kg            = 0m,
+            });
+        }
+        return list;
     }
 }

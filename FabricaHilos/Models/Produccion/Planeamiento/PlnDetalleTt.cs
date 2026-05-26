@@ -71,6 +71,21 @@ public class PlnDetalleTt
 
     /// <summary>True cuando al menos un baño se ejecutó en una máquina diferente a la planificada.</summary>
     public bool HayCambioMaquina => Banos.Any(b => b.HayCambioMaquina);
+
+    /// <summary>
+    /// Rectificaciones de receta (L_RECTIFICA_RECETA) ordenadas DESC por NUMERO.
+    /// Se generan cuando CC rechaza el lote (RESULTADO='30') y lab debe reformular la receta.
+    /// </summary>
+    public IList<PlnRectificacionReceta> RectificacionesReceta { get; set; } = [];
+
+    /// <summary>True si hay alguna rectificación en estado Pendiente (1) o En Proceso (3).</summary>
+    public bool TieneRectificacionActiva => RectificacionesReceta.Any(r => r.EstaActiva);
+
+    /// <summary>Primera rectificación activa (Pendiente o En Proceso), si existe.</summary>
+    public PlnRectificacionReceta? RectificacionActiva   => RectificacionesReceta.FirstOrDefault(r => r.EstaActiva);
+
+    /// <summary>Primera rectificación aprobada, si existe.</summary>
+    public PlnRectificacionReceta? RectificacionAprobada => RectificacionesReceta.FirstOrDefault(r => r.EstaAprobada);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

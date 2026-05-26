@@ -5,6 +5,19 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 public interface IPlnSeguimientoService
 {
     Task<IEnumerable<PlnSeguimiento>>    GetActivosAsync(string? busquedaCliente = null, string? codPaso = null, string? numPed = null, bool incluyeCerrados = false);
+
+    /// <summary>
+    /// Devuelve una página de ítems de PLN_SEGUIMIENTO (10 pedidos por página).
+    /// Totales globales (para KPIs y paginación) se calculan en la misma llamada
+    /// con una sub-query COUNT para evitar dos round-trips.
+    /// </summary>
+    Task<PlnSeguimientoPagina> GetActivosPaginadoAsync(
+        string? busquedaCliente = null,
+        string? codPaso         = null,
+        string? numPed          = null,
+        bool    incluyeCerrados = false,
+        int     pagina          = 1,
+        int     tamPagina       = 10);
     Task<IEnumerable<PlnSeguimiento>>    GetPorPedidoAsync(long numPed, int serie);
 
     /// <summary>Lee un único ítem por clave sustituta ID_SEGUIM. Devuelve null si no existe.</summary>

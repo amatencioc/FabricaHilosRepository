@@ -89,9 +89,9 @@ namespace FabricaHilos.Controllers.Produccion
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
                     {
-                        Nombre = "Dashboard",
-                        Descripcion = "Vista general de pedidos activos",
-                        Icono = "bi-speedometer2",
+                        Nombre = "Seguimiento de Pedidos",
+                        Descripcion = "Tablero en tiempo real de todos los pedidos activos por etapa de producción.",
+                        Icono = "bi-kanban",
                         Controller = "Planeamiento",
                         Action = "Dashboard"
                     });
@@ -114,24 +114,26 @@ namespace FabricaHilos.Controllers.Produccion
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
                     {
                         Nombre = "Alertas",
-                        Descripcion = "Alertas activas por pedido e ítem",
-                        Icono = "bi-bell",
+                        Descripcion = "Bandeja de alertas activas: retrasos, reprocesos y sobrecargas.",
+                        Icono = "bi-bell-fill",
                         Controller = "Planeamiento",
                         Action = "Alertas"
                     });
                 }
 
-                if (menus.PlaneamientoKPIs)
+                if (menus.PlaneamientoPendientesDespacho)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
                     {
-                        Nombre = "KPIs",
-                        Descripcion = "Indicadores de cumplimiento y desempeño",
-                        Icono = "bi-graph-up-arrow",
+                        Nombre = "Pendientes de Despacho",
+                        Descripcion = "Ítems listos en almacén PT pendientes de ser despachados al cliente.",
+                        Icono = "bi-truck",
                         Controller = "Planeamiento",
-                        Action = "KPIs"
+                        Action = "PendientesDespacho"
                     });
                 }
+
+
 
                 modulos.Add(planeamientoModulo);
             }

@@ -11,17 +11,37 @@
         .ToDictionary(x => x.Nro, x => x.CodArt);
 
     // Rango de fechas del eje X
+    // Incluye tanto los campos directos de PlnSeguimiento como las fechas
+    // derivadas de DetalleTt (misma fuente que Pedido.cshtml) para que las
+    // barras del Gantt nunca queden fuera del eje visible.
     var todasFechas = Model.Items
-        .SelectMany(s => new DateTime?[]
+        .SelectMany(s =>
         {
-            s.FchPedido,
-            s.FchEntregaComp,
-            s.FchEstHilanderia, s.FchEstPartida, s.FchEstTinIni,
-            s.FchEstTinFin, s.FchEstSecado, s.FchEstCalidad, s.FchEstDespacho,
-            s.FchRealProgramado, s.FchRealProduccion, s.FchRealPartida,
-            s.FchRealTinIni, s.FchRealTinFin, s.FchRealSecado,
-            s.FchRealCcTinto, s.FchRealDevanado, s.FchRealCalidad,
-            s.FchRealAlmPt, s.FchRealDespacho
+            PlnDetalleTt? _dt = null;
+            if (s.NumPartida > 0) Model.DetalleTt.TryGetValue(s.NumPartida, out _dt);
+            return new DateTime?[]
+            {
+                s.FchPedido,
+                s.FchEntregaComp,
+                s.FchEstHilanderia, s.FchEstPartida, s.FchEstTinIni,
+                s.FchEstTinFin, s.FchEstSecado, s.FchEstCalidad, s.FchEstDespacho,
+                s.FchRealProgramado, s.FchRealProduccion, s.FchRealPartida,
+                s.FchRealTinIni, s.FchRealTinFin, s.FchRealSecado,
+                s.FchRealCcTinto, s.FchRealDevanado, s.FchRealCalidad,
+                s.FchRealAlmPt, s.FchRealDespacho,
+                // Fechas reales desde DetalleTt (pueden diferir de los campos directos)
+                _dt?.FechaPartida,
+                _dt?.InicioTt,
+                _dt?.FinTt,
+                _dt?.Secado?.FechaFin,
+                _dt?.Calidad != null ? (DateTime?)_dt.Calidad.Fecha : null,
+                _dt?.ValidacionReceta?.FchValidacion,
+                _dt?.ValidacionReceta?.FchRegistro,    // fuente de _ri02 (paso 02 ajuste lab)
+                _dt?.Revisados.Count > 0 ? (DateTime?)_dt.Revisados.Min(r => r.FchRegistro) : null,
+                _dt?.Revisados.Count > 0 && _dt.Revisados[0].Detalle.Count > 0
+                    ? (DateTime?)_dt.Revisados[0].Detalle[0].Fecha : null,
+                s.FchRealCcRechazo,                    // fuente del paso 9R (CC Rechazo)
+            };
         })
         .Where(d => d.HasValue)
         .Select(d => d!.Value)
@@ -42,16 +62,23 @@
         return Math.Max(0.8, (fin.Value - ini.Value).TotalDays / totalDias * 100);
     };
 
-    // Pasos que usan fechas aproximadas (no tienen campo propio en el modelo)
-    // Se muestra con icono de advertencia en la fila del Gantt
-    // NOTA: '03'=Laboratorio (v2.1 PLN_ESTADO_CODIGO: ord 3), '04'=Hilandería, '05'=Lote Disponible
-    var pasosAproximados = new HashSet<string> { "03", "07", "11", "12" };
+    // Pasos que muestran pin de fecha orientativa en el Gantt.
+    // Un paso es "aproximado" cuando su fecha se deriva como proxy de otro hito,
+    // no de un timestamp propio. La evaluación debe ser dinámica por sublote
+    // (igual que Pedido.cshtml), pero aquí se usa un conjunto de candidatos;
+    // el render final verifica si el dato real existe antes de mostrar el pin.
+    // "05" Lote Disp.: siempre proxy (usa FCH_REAL_PARTIDA del paso anterior)
+    // "07" Teñido Comp.: solo proxy cuando FinTt == null
+    // "11" Revisado: solo proxy cuando no hay REVISADO_D
+    // "12" Almacén PT: solo proxy cuando FCH_REAL_ALM_PT == null
+    // NOTA: "03" ya NO está: ahora usa L_VALIDA_RECETA.FCH_VALIDACION (dato real)
+    var pasosAproximados = new HashSet<string> { "05", "07", "11", "12" };
     var descripcionAprox = new Dictionary<string, string>
     {
-        ["03"] = "Hito estimado: el laboratorio aprueba la receta justo antes de entrar a Tintorería. Se muestra en la fecha de inicio de producción.",
-        ["07"] = "Hito estimado: todos los baños del lote están aprobados. Se muestra en la fecha de fin de TT.",
-        ["11"] = "Hito estimado: revisión final de calidad. Se muestra en la fecha de aprobación CC.",
-        ["12"] = "Hito estimado: ingreso físico al almacén PT. Se muestra en la fecha real de Almacén PT.",
+        ["05"] = "Fecha proxy: fin de H_RPRODUC (lote disponible para TT). No tiene timestamp propio.",
+        ["07"] = "Hito orientativo si no hay baños TT registrados (FinTt null). Cuando hay baños reales usa el mayor FECHA_FIN.",
+        ["11"] = "Hito orientativo si no hay REVISADO_D registrado. Cuando existe usa la primera REVISADO_D.FECHA.",
+        ["12"] = "Hito orientativo si no hay ingreso físico a almacén PT (FCH_REAL_ALM_PT null).",
     };
 
     // EffEst: si FCH_EST_* quedó desfasada (ej. backfill con SYSDATE) pero el
@@ -59,54 +86,99 @@
     Func<DateTime?, DateTime?, DateTime?> EffEst = (est, real) =>
         (est == null || (real.HasValue && est.Value.Date > real.Value.Date)) ? real : est;
 
-    Func<PlnSeguimiento, List<(string Cod, string Nom, string Color,
-         DateTime? EI, DateTime? EF, DateTime? RI, DateTime? RF)>> etapasDe = s =>
-        new List<(string, string, string, DateTime?, DateTime?, DateTime?, DateTime?)>
+    Func<PlnSeguimiento, PlnDetalleTt?, List<(string Cod, string Nom, string Color,
+         DateTime? EI, DateTime? EF, DateTime? RI, DateTime? RF)>> etapasDe = (s, dtFb) =>
+    {
+        // ── Fechas reales con fuente unificada (misma lógica que Pedido.cshtml) ──────
+        // PASO '03' — Laboratorio: FchValidacion de L_VALIDA_RECETA; fallback: FCH_REAL_PRODUCCION
+        var _rLab      = dtFb?.ValidacionReceta?.FchValidacion ?? s.FchRealProduccion;
+        // PASO '04' — En Hilandería: PARTIDA.FECHA; fallback: FCH_REAL_PRODUCCION
+        var _rHilan    = dtFb?.FechaPartida ?? s.FchRealProduccion;
+        // PASO '05'/'06' inicio TT: menor FECHA_INI de baños (InicioTt); fallback: FCH_REAL_TIN_INI
+        var _rTinIni   = dtFb?.InicioTt ?? s.FchRealTinIni;
+        // PASO '06'/'07'/'08' fin TT: mayor FECHA_FIN de baños (FinTt); fallback: FCH_REAL_TIN_FIN
+        var _rTinFin   = dtFb?.FinTt ?? s.FchRealTinFin;
+        // PASO '08'/'09' inicio CC: fin de secado (TT_RSECADO); fallback: FCH_REAL_SECADO
+        var _rSecado   = dtFb?.Secado?.FechaFin ?? s.FchRealSecado;
+        // PASO '09' fin CC: CTCALIDAD_D.FECHA; fallback: FCH_REAL_CC_TINTO — idéntico a Pedido.cshtml paso "09" fReal.
+        // NOTA: FCH_REAL_CALIDAD no se usa aquí (es un campo distinto, Pedido tampoco lo usa para este paso).
+        var _rCcTinto  = (dtFb?.Calidad != null ? (DateTime?)dtFb.Calidad.Fecha : null)
+                         ?? s.FchRealCcTinto;
+        // PASO '09B' (Gaseado) — sin cambio, FCH_REAL_GASEADO es fuente directa
+        // PASO '10' — Devanado: primer REVISADO_G.A_ADFECHA; fallback: FCH_REAL_DEVANADO
+        var _rDevanado = (dtFb?.Revisados.Count > 0
+                             ? (DateTime?)dtFb.Revisados.Min(r => r.FchRegistro)
+                             : null)
+                         ?? s.FchRealDevanado;
+        // PASO '11' — Revisado: primera REVISADO_D.FECHA con aprobado > 0; fallback: FCH_REAL_CALIDAD
+        var _rRevisado = (dtFb?.Revisados.Count > 0 && dtFb.Revisados[0].Detalle.Count > 0
+                             ? (DateTime?)dtFb.Revisados[0].Detalle[0].Fecha
+                             : null)
+                         ?? s.FchRealCalidad;
+
+        // _ri02: min(FchRealProgramado, ValidacionReceta.FchRegistro) — misma lógica que Pedido.cshtml.
+        // Si el lab ya tenía registrada la receta antes de la emisión del NROPROG, ese es el inicio real.
+        var _labFchReg02 = dtFb?.ValidacionReceta?.FchRegistro;
+        var _ri02 = s.FchRealProgramado;
+        if (_ri02.HasValue && _labFchReg02.HasValue && _ri02.Value.Date > _labFchReg02.Value.Date)
+            _ri02 = _labFchReg02;
+
+        return new List<(string, string, string, DateTime?, DateTime?, DateTime?, DateTime?)>
         {
-            ("01", "Pedido",        "#5a6570", s.FchPedido,                                        s.FchRealProgramado ?? EffEst(s.FchEstHilanderia, s.FchRealProduccion),
+            ("01", "Pedido",        "#5a6570", s.FchPedido,                                        s.FchRealProgramado ?? EffEst(s.FchEstHilanderia, _rHilan),
                                                s.FchPedido,                                       s.FchRealProgramado),
-            ("02", "Programado",    "#2563eb", s.FchRealProgramado,                               EffEst(s.FchEstHilanderia, s.FchRealProduccion),
-                                               s.FchRealProgramado,                               s.FchRealProduccion),
-            // Paso 03 — Laboratorio: ORDEN 3 en PLN_ESTADO_CODIGO v2.1 (COD_PASO='03').
-            // No tiene FCH_REAL_* propio; usa FCH_REAL_PRODUCCION (= PARTIDA.FECHA) como
-            // proxy del hito: lab debería estar aprobado al arrancar la producción.
-            ("03", "Laboratorio",   "#7c3aed", EffEst(s.FchEstHilanderia, s.FchRealProduccion), EffEst(s.FchEstHilanderia, s.FchRealProduccion),
-                                               s.FchRealProduccion,                               s.FchRealProduccion),
-            // Paso 04 — En Hilandería: ORDEN 4. FCH_REAL_PRODUCCION = PARTIDA.FECHA.
-            ("04", "Hilandería",    "#0891b2", EffEst(s.FchEstHilanderia, s.FchRealProduccion), EffEst(s.FchEstPartida, s.FchRealPartida),
-                                               s.FchRealProduccion,                               s.FchRealPartida),
-            // Paso 05 — Lote Disponible: ORDEN 5. FCH_REAL_PARTIDA = H_RPRODUC o PARTIDA.FECHA fallback.
-            ("05", "Lote Disp.",    "#0e7490", EffEst(s.FchEstPartida, s.FchRealPartida),       EffEst(s.FchEstTinIni, s.FchRealTinFin),
-                                               s.FchRealPartida,                                  s.FchRealTinIni),
-            ("06", "Tintorería",    "#7e22ce", EffEst(s.FchEstTinIni,  s.FchRealTinFin),        EffEst(s.FchEstTinFin, s.FchRealTinFin),
-                                               s.FchRealTinIni,                                   s.FchRealTinFin),
-            // Paso 07 — Teñido Completo: hito = fin TT
-            ("07", "Teñido Comp.",  "#be185d", EffEst(s.FchEstTinFin, s.FchRealTinFin),         EffEst(s.FchEstTinFin, s.FchRealTinFin),
-                                               s.FchRealTinFin,                                   s.FchRealTinFin),
-            ("08", "Secado",        "#059669", EffEst(s.FchEstTinFin, s.FchRealTinFin),         EffEst(s.FchEstSecado, s.FchRealSecado),
-                                               s.FchRealTinFin,                                   s.FchRealSecado),
-            ("09", "C.Calidad",     "#dc2626", EffEst(s.FchEstSecado, s.FchRealSecado),          EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad),
-                                               s.FchRealSecado,                                   s.FchRealCcTinto ?? s.FchRealCalidad),
-            // Paso 09B — Gaseado: solo PROCESO='24' (PEINADO GASEADO). Hito entre CC TT y Devanado.
-            // Si no aplica (PROCESO != '24') la barra tendrá ancho cero (EI==EF) y se oculta en CSS.
-            ("09B","Gaseado",       "#d4a800", s.Proceso == "24" ? EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad) : null,
-                                               s.Proceso == "24" ? EffEst(s.FchEstCalidad, s.FchRealCcTinto ?? s.FchRealCalidad) : null,
+            // Paso 02 — Programado: RI = _ri02 (ajustado al lab si es anterior a FchRealProgramado).
+            ("02", "Programado",    "#2563eb", s.FchRealProgramado,                               EffEst(s.FchEstHilanderia, _rHilan),
+                                               _ri02,                                              _rHilan),
+            // Paso 03 — Laboratorio: hito = aprobación de receta en L_VALIDA_RECETA.
+            // Fallback: FCH_REAL_PRODUCCION (PARTIDA.FECHA) como proxy si no hay validación lab.
+            ("03", "Laboratorio",   "#7c3aed", EffEst(s.FchEstHilanderia, _rLab),               EffEst(s.FchEstHilanderia, _rLab),
+                                               _rLab,                                              _rLab),
+            // Paso 04 — En Hilandería: inicio = PARTIDA.FECHA (DetalleTt.FechaPartida).
+            ("04", "Hilandería",    "#0891b2", EffEst(s.FchEstHilanderia, _rHilan),             EffEst(s.FchEstPartida, s.FchRealPartida),
+                                               _rHilan,                                            s.FchRealPartida),
+            // Paso 05 — Lote Disponible: fin = inicio TT real (InicioTt).
+            ("05", "Lote Disp.",    "#0e7490", EffEst(s.FchEstPartida, s.FchRealPartida),       EffEst(s.FchEstTinIni, _rTinIni),
+                                               s.FchRealPartida,                                  _rTinIni),
+            // Paso 06 — Tintorería: InicioTt → FinTt (baños reales TT_RPRODUC).
+            ("06", "Tintorería",    "#7e22ce", EffEst(s.FchEstTinIni, _rTinIni),                EffEst(s.FchEstTinFin, _rTinFin),
+                                               _rTinIni,                                           _rTinFin),
+            // Paso 07 — Teñido Completo: hito = FinTt (mayor FECHA_FIN de baños).
+            ("07", "Teñido Comp.",  "#be185d", EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstTinFin, _rTinFin),
+                                               _rTinFin,                                           _rTinFin),
+            // Paso 08 — Secado: inicio = FinTt, fin = TT_RSECADO.FechaFin.
+            ("08", "Secado",        "#059669", EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstSecado, _rSecado),
+                                               _rTinFin,                                           _rSecado),
+            // Paso 09 — C.Calidad: inicio = fin secado, fin = CTCALIDAD_D.Fecha.
+            ("09", "C.Calidad",     "#dc2626", EffEst(s.FchEstSecado, _rSecado),               EffEst(s.FchEstCalidad, _rCcTinto),
+                                               _rSecado,                                           _rCcTinto),
+            // Paso 09B — Gaseado: solo PROCESO='24' (PEINADO GASEADO). FCH_REAL_GASEADO es fuente directa.
+            ("09B","Gaseado",       "#d4a800", s.Proceso == "24" ? EffEst(s.FchEstCalidad, _rCcTinto) : null,
+                                               s.Proceso == "24" ? EffEst(s.FchEstCalidad, _rCcTinto) : null,
                                                s.Proceso == "24" ? s.FchRealGaseado : null,
                                                s.Proceso == "24" ? s.FchRealGaseado : null),
-            ("10", "Devanado",      "#d97706", EffEst(s.FchEstCalidad, s.FchRealDevanado),       EffEst(s.FchEstDespacho, s.FchRealAlmPt),
-                                               s.FchRealDevanado,                                 s.FchRealAlmPt),
-            // Paso 11 — Revisado: hito entre devanado y almacén PT
-            ("11", "Revisado",      "#1d4ed8", EffEst(s.FchEstCalidad, s.FchRealCalidad),        EffEst(s.FchEstCalidad, s.FchRealCalidad),
-                                               s.FchRealCalidad,                                  s.FchRealCalidad),
-            // Paso 12 — Almacén PT: hito post-QC
-            ("12", "Almacén PT",    "#047857", EffEst(s.FchEstCalidad, s.FchRealAlmPt),          EffEst(s.FchEstCalidad, s.FchRealAlmPt),
+            // Paso 9R — CC Rechazo/Reproceso: solo cuando FCH_REAL_CC_RECHAZO tiene valor.
+            // Condicional igual que Pedido.cshtml (si no aplica, RI/RF null → barra ancho cero, se oculta en CSS).
+            ("9R", "CC Rechazo",    "#b91c1c", s.FchRealCcRechazo.HasValue ? EffEst(s.FchEstCalidad, s.FchRealCcRechazo) : null,
+                                               s.FchRealCcRechazo.HasValue ? EffEst(s.FchEstCalidad, s.FchRealCcRechazo) : null,
+                                               s.FchRealCcRechazo,
+                                               s.FchRealCcRechazo),
+            // Paso 10 — Devanado: inicio = primer REVISADO_G.A_ADFECHA, fin = AlmPT.
+            ("10", "Devanado",      "#d97706", EffEst(s.FchEstCalidad, _rDevanado),            EffEst(s.FchEstDespacho, s.FchRealAlmPt),
+                                               _rDevanado,                                         s.FchRealAlmPt),
+            // Paso 11 — Revisado: hito = primera REVISADO_D.FECHA (detalle aprobado).
+            ("11", "Revisado",      "#1d4ed8", EffEst(s.FchEstCalidad, _rRevisado),            EffEst(s.FchEstCalidad, _rRevisado),
+                                               _rRevisado,                                         _rRevisado),
+            // Paso 12 — Almacén PT: hito = FCH_REAL_ALM_PT (fuente directa, sin cambio).
+            ("12", "Almacén PT",    "#047857", EffEst(s.FchEstCalidad, s.FchRealAlmPt),        EffEst(s.FchEstCalidad, s.FchRealAlmPt),
                                                s.FchRealAlmPt,                                    s.FchRealAlmPt),
-            // Paso 13 — Listo Despacho: entre AlmPT y fecha compromiso
-            ("13", "Listo Despacho","#10b981", EffEst(s.FchEstDespacho, s.FchRealAlmPt),        s.FchEntregaComp,
+            // Paso 13 — Listo Despacho: entre AlmPT y fecha compromiso.
+            ("13", "Listo Despacho","#10b981", EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
                                                s.FchRealAlmPt,                                    s.FchRealDespacho),
-            ("14", "Despacho",      "#065f46", EffEst(s.FchEstDespacho, s.FchRealAlmPt),        s.FchEntregaComp,
+            ("14", "Despacho",      "#065f46", EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
                                                s.FchRealAlmPt,                                    s.FchRealDespacho),
         };
+    };
 }
 
 @section Styles {
@@ -396,12 +468,29 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
-    <li class="breadcrumb-item"><a asp-action="Dashboard">Dashboard</a></li>
+    <li class="breadcrumb-item"><a asp-action="Dashboard">Seguimiento de Pedidos</a></li>
     <li class="breadcrumb-item active">Gantt @Model.Serie-@Model.NumPed</li>
 }
 
-<!-- ── Strip industrial: info + botones ────────────────── -->
+<!-- ── Cabecera de página ────────────────────────────────── -->
+<div class="pln-page-hdr mb-2">
+    <i class="bi bi-bar-chart-steps pln-page-hdr-icon"></i>
+    <div class="pln-page-hdr-body">
+        <div class="pln-page-hdr-title">Diagrama Gantt <strong>@Model.Serie-@Model.NumPed</strong></div>
+        <div class="pln-page-hdr-sub">Cronograma de etapas &nbsp;·&nbsp; Estado planificado vs. real</div>
+    </div>
+    <div class="pln-page-hdr-actions">
+        <a asp-action="Pedido" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
+           class="btn btn-outline-light btn-sm">
+            <i class="bi bi-clipboard2-data me-1"></i>Detalle
+        </a>
+        <a asp-action="Dashboard" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<!-- ── Strip industrial: info ───────────────────────────── -->
 <div class="pln-info-strip mb-3">
     <div class="d-flex align-items-stretch flex-wrap">
         <div class="pln-strip-cell" style="min-width:180px;">
@@ -444,66 +533,58 @@
                 </div>
             }
         }
-        <div class="pln-strip-actions">
-            <a asp-action="Pedido" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
-               class="btn btn-sm btn-primary fw-semibold" style="font-size:.75rem;">
-                <i class="bi bi-clipboard2-data me-1"></i>Detalle
-            </a>
-            <a asp-action="Trazabilidad" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
-               class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.75rem;">
-                <i class="bi bi-diagram-3 me-1"></i>Trazabilidad
-            </a>
-            <a asp-action="Dashboard"
-               class="btn btn-sm btn-outline-secondary fw-semibold" style="font-size:.75rem;">
-                <i class="bi bi-arrow-left me-1"></i>Volver
-            </a>
-        </div>
     </div>
+    @* ── Fila de actores (Registró / Aprobó / Planificó) ── *@
+    @{
+        var actorItemG = Model.Items.FirstOrDefault(x =>
+            !string.IsNullOrEmpty(x.NombreRegistro) ||
+            !string.IsNullOrEmpty(x.NombreAprobacion) ||
+            !string.IsNullOrEmpty(x.NombrePlanif));
+    }
+    @if (actorItemG != null)
+    {
+        <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.72rem; color:#6c757d; background:rgba(255,255,255,.04);">
+            @if (!string.IsNullOrEmpty(actorItemG.NombreRegistro))
+            {
+                <span><i class="bi bi-person me-1"></i><strong>Registró:</strong> @actorItemG.NombreRegistro</span>
+            }
+            @if (!string.IsNullOrEmpty(actorItemG.NombreAprobacion))
+            {
+                <span><i class="bi bi-patch-check me-1"></i><strong>Aprobó:</strong> @actorItemG.NombreAprobacion
+                    @if (actorItemG.FchAprobacion.HasValue)
+                    {
+                        <span class="opacity-75 ms-1">(@actorItemG.FchAprobacion.Value.ToString("dd/MM/yy"))</span>
+                    }
+                </span>
+            }
+            @if (!string.IsNullOrEmpty(actorItemG.NombrePlanif))
+            {
+                <span><i class="bi bi-calendar2-check me-1"></i><strong>Planificó:</strong> @actorItemG.NombrePlanif
+                    @if (actorItemG.FchPlanif.HasValue)
+                    {
+                        <span class="opacity-75 ms-1">(@actorItemG.FchPlanif.Value.ToString("dd/MM/yy"))</span>
+                    }
+                </span>
+            }
+        </div>
+    }
 </div>
 
-@* Aviso compacto: cronograma pendiente (condicional) *@
-@if (Model.Items.Any(x => !x.FchEstHilanderia.HasValue))
+@* Aviso errores de auto-planificación (solo si SP_PLN_CALCULA_FECHAS falló para algún ítem) *@
+@if (ViewBag.ErroresPlanif is List<string> errPlanif && errPlanif.Any())
 {
-    <div class="pln-aviso-strip mb-2 d-flex gap-2 align-items-center">
-        <i class="bi bi-hourglass-split flex-shrink-0"></i>
-        <span><strong>Cronograma pendiente:</strong> Uno o más sublotes no tienen fechas estimadas. Use el botón <strong>PLANIFICAR</strong> en el sublote correspondiente para calcularlas.</span>
+    <div class="pln-aviso-strip mb-2 d-flex gap-2 align-items-start">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+        <div>
+            <strong>No se pudo calcular el cronograma para algunos ítems:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var err in errPlanif) { <li>@err</li> }
+            </ul>
+        </div>
     </div>
 }
 
-<!-- Alertas -->
-@if (Model.Alertas.Any())
-{
-    <div class="mb-3">
-        @foreach (var a in Model.Alertas)
-        {
-            <div class="alert alert-@a.NivelColor py-2 d-flex align-items-center gap-2 mb-1" style="font-size:.82rem;">
-                <i class="bi bi-bell-fill"></i>
-                <div>
-                    <strong>@a.TipoTexto</strong>
-                    @if (a.Nro.HasValue)
-                    {
-                        var detLabel = detCodArt.TryGetValue(a.Nro.Value, out var ca) ? ca : $"Det.{a.Nro}";
-                        <span class="badge bg-light text-dark border ms-1">@detLabel</span>
-                    }
-                    — @a.Titulo
-                    @if (a.FchLimite.HasValue)
-                    {
-                        <span class="ms-2 small">Límite: @a.FchLimite.Value.ToString("dd/MM/yyyy")</span>
-                    }
-                    @if (a.DiasRetraso.HasValue && a.DiasRetraso > 0)
-                    {
-                        <span class="badge bg-danger ms-1">+@a.DiasRetraso d</span>
-                    }
-                    @if (a.HorasSinResolver.HasValue)
-                    {
-                        var h = (int)a.HorasSinResolver.Value;
-                        <span class="ms-2 small text-muted"><i class="bi bi-clock me-1"></i>@(h >= 24 ? $"{h/24}d {h%24}h" : $"{h}h") sin resolver</span>
-                    }
-                </div>
-            </div>
-        }
-    </div>
-}
+
 
 @* Panel colapsable único: notas de lectura + leyenda *@
 <div class="mb-3">
@@ -537,21 +618,14 @@
                         ("#10b981", "13", "13 — Listo para Despacho",   "El lote está disponible y pendiente de despacho.",               false),
                         ("#065f46", "14", "14 — Despachado/Cerrado",              "El lote ha sido despachado total o parcialmente al cliente.",     false),
                     };
-                    var pasoActivo = primerItem?.CodPasoAct ?? "";
-                }
-                @foreach (var (color, cod, nombre, desc, esAprox) in leyendaEtapas)
-                {
-                    var esActivo = pasoActivo.StartsWith(cod);
-                    <div class="col-sm-6 col-lg-4 d-flex align-items-start gap-2"
-                         style="@(esActivo ? $"background:linear-gradient(135deg,{color}28,{color}12);border:2px solid {color};border-radius:2px;padding:6px;box-shadow:inset 0 1px 2px rgba(0,0,0,.05);" : "")">
-                        <span style="display:inline-block;width:26px;min-width:26px;height:14px;background:@color;border-radius:1px;margin-top:4px;border:1px solid rgba(0,0,0,.2);box-shadow:0 2px 4px rgba(0,0,0,.18);@(esActivo ? $"box-shadow:0 0 0 2px #fff,0 0 0 4px {color},0 3px 6px rgba(0,0,0,.25);" : "")"></span>
-                        <div>
-                            <span class="fw-bold" style="font-size:.82rem;">@nombre</span>
-                            @if (esActivo)
-                            {
-                                <span class="badge ms-1 text-white" style="background:@color;font-size:.68rem;font-weight:800;border:1px solid rgba(0,0,0,.2);text-shadow:1px 1px 1px rgba(0,0,0,.2);">⬤ ACTIVO</span>
-                            }
-                            @if (esAprox)
+                    }
+                    @foreach (var (color, cod, nombre, desc, esAprox) in leyendaEtapas)
+                    {
+                        <div class="col-sm-6 col-lg-4 d-flex align-items-start gap-2">
+                            <span style="display:inline-block;width:26px;min-width:26px;height:14px;background:@color;border-radius:1px;margin-top:4px;border:1px solid rgba(0,0,0,.2);box-shadow:0 2px 4px rgba(0,0,0,.18);"></span>
+                            <div>
+                                <span class="fw-bold" style="font-size:.82rem;">@nombre</span>
+                                @if (esAprox)
                             {
                                 <span class="badge bg-warning text-dark ms-1 border border-dark" style="font-size:.64rem;font-weight:700;" title="Fecha aproximada: este paso no tiene una duración programada, por lo que se ubica en la posición más cercana disponible."><i class="bi bi-pin-angle-fill me-1"></i>ORIENTATIVO</span>
                             }
@@ -600,7 +674,7 @@
                 <!-- Separador de sublote -->
                 <div class="sublote-sep"
                      data-bs-toggle="collapse" data-bs-target="#seg-@(s.IdSeguim)"
-                     aria-expanded="true" aria-controls="seg-@(s.IdSeguim)"
+                     aria-expanded="false" aria-controls="seg-@(s.IdSeguim)"
                      data-codartt="@s.CodArt">
                     <div class="sublote-sep-label">
                         <div style="display:flex;align-items:center;gap:.45rem;">
@@ -640,38 +714,16 @@
                                 <i class="bi bi-calendar-event me-1"></i><span style="font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;margin-right:.35rem;">Entrega:</span>@s.FchEntregaComp.Value.ToString("dd/MM/yyyy")
                             </span>
                         }
-                    @if (!s.FchEstHilanderia.HasValue)
-                    {
-                        // Botón Planificar: solo aparece cuando el ítem está en paso '01' y
-                        // no tiene fechas estimadas calculadas todavía. Al pulsarlo se ejecuta
-                        // SP_PLN_CALCULA_FECHAS(motivo='PLA'), que:
-                        //   1. Calcula FCH_EST_HILANDERIA, FCH_EST_PARTIDA, FCH_EST_TIN_INI,
-                        //      FCH_EST_TIN_FIN, FCH_EST_SECADO, FCH_EST_CALIDAD, FCH_EST_DESPACHO
-                        //      a partir de los tiempos estándar por proceso y la carga de máquinas.
-                        //   2. Inserta un registro en PLN_FECHAS_ESTIMADAS con motivo='PLA'
-                        //      para mantener trazabilidad del primer cálculo.
-                        //   3. Después de que se ejecute, el Gantt se recargará mostrando
-                        //      barras grises (estimadas) en todas las etapas.
-                        // NOTA: esto NO avanza el ítem al paso '02'; ese avance lo hace
-                        // Planeamiento al emitir el NROPROG desde el sistema de pedidos.
-                        <form asp-action="PlanificarItem" method="post" class="m-0">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="serie"   value="@s.Serie"  />
-                            <input type="hidden" name="numPed"  value="@s.NumPed" />
-                            <input type="hidden" name="nro"     value="@s.Nro"    />
-                            <input type="hidden" name="numDet"  value="@s.NumDet" />
-                            <button type="submit" class="btn btn-sm fw-bold" 
-                                    style="background:#047857;color:#fff;border:2px solid #065f46;font-size:.72rem;letter-spacing:.04em;"
-                                    title="Calcular fechas estimadas para este ítem ejecutando SP_PLN_CALCULA_FECHAS (motivo='PLA'). Permite ver el cronograma estimado en el Gantt antes de que Planeamiento emita el NROPROG (paso 02).">
-                                <i class="bi bi-calendar-check me-1"></i>PLANIFICAR
-                            </button>
-                        </form>
-                    }
+
                     </div>
                 </div>
 
-                <div class="sublote-rows collapse show" id="seg-@(s.IdSeguim)">
-                @foreach (var e in etapasDe(s))
+                <div class="sublote-rows collapse" id="seg-@(s.IdSeguim)">
+                @{
+                    PlnDetalleTt? _ganttDtFb = null;
+                    if (s.NumPartida > 0) Model.DetalleTt.TryGetValue(s.NumPartida, out _ganttDtFb);
+                }
+                @foreach (var e in etapasDe(s, _ganttDtFb))
                 {
                     var tieneEst  = e.EI.HasValue && e.EF.HasValue;
                     var tieneReal = e.RI.HasValue;
@@ -697,7 +749,12 @@
                     var rW       = pctWidth(e.RI, e.RF).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                     var hoyL     = pctLeft(hoy).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
-                    var esAproxFila = pasosAproximados.Contains(e.Cod);
+                    // Pin orientativo: igual que Pedido.cshtml — dinámico por paso y por datos disponibles
+                    var esAproxFila =
+                        e.Cod == "05" ||   // siempre proxy
+                        (e.Cod == "07" && _ganttDtFb?.FinTt == null && !s.FchRealTinFin.HasValue) ||
+                        (e.Cod == "11" && (_ganttDtFb == null || _ganttDtFb.Revisados.Count == 0 || _ganttDtFb.Revisados[0].Detalle.Count == 0)) ||
+                        (e.Cod == "12" && !s.FchRealAlmPt.HasValue);
                     var ttAprox = esAproxFila && descripcionAprox.TryGetValue(e.Cod, out var da) ? da : "";
                     var ttEst  = tieneEst
                         ? $"{e.Nom} (Est): {e.EI!.Value:dd/MM/yy} → {e.EF!.Value:dd/MM/yy}" +
@@ -841,6 +898,10 @@
             } catch { /* silencioso */ }
         }
     })();
+
+
 </script>
 }
+
+
 

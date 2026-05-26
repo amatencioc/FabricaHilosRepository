@@ -1,87 +1,27 @@
-﻿@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnSeguimiento>
+﻿@model IReadOnlyList<FabricaHilos.Models.Produccion.Planeamiento.PlnSeguimiento>
 @using FabricaHilos.Models.Produccion.Planeamiento
 
 @{
     ViewData["Title"] = "Dashboard de Seguimiento";
-    var estados = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? Array.Empty<PlnEstadoCodigo>();
-    var filtroCliente    = ViewBag.FiltroCliente    as string ?? "";
-    var filtroPaso        = ViewBag.FiltroPaso        as string ?? "";
-    var filtroNumPed      = ViewBag.FiltroNumPed      as string ?? "";
-    var incluyeCerrados   = (bool)(ViewBag.IncluyeCerrados ?? false);
+    var estados          = ViewBag.Estados as IEnumerable<PlnEstadoCodigo> ?? Array.Empty<PlnEstadoCodigo>();
+    var filtroCliente    = ViewBag.FiltroCliente  as string ?? "";
+    var filtroPaso       = ViewBag.FiltroPaso      as string ?? "";
+    var filtroNumPed     = ViewBag.FiltroNumPed    as string ?? "";
+    var incluyeCerrados  = (bool)(ViewBag.IncluyeCerrados ?? false);
+    var paginaActual     = (int)(ViewBag.Pagina       ?? 1);
+    var totalPaginas     = (int)(ViewBag.TotalPaginas  ?? 1);
+    var totalPedidos     = (int)(ViewBag.TotalPedidos  ?? 0);
 
-    var items = Model.ToList();
-    var alertasPorPedido = ViewBag.AlertasPorPedido as Dictionary<string, int> ?? new Dictionary<string, int>();
-    var totalPedidos      = items.Select(x => new { x.Serie, x.NumPed }).Distinct().Count();
-    var totalActivos      = items.Count;
-    var totalRetrasados   = items.Count(x => x.EstaRetrasado);
-    var totalUrgentes     = items.Count(x => x.EsUrgente);
-    var totalReprocesos   = items.Count(x => x.EstaEnReproceso);
-    var totalSinPlanificar  = items.Count(x => x.CodPasoAct == "01");
+    // KPIs globales (sobre el conjunto completo filtrado, no solo la página)
+    var totalActivos        = (int)(ViewBag.TotalItems      ?? 0);
+    var totalRetrasados     = (int)(ViewBag.TotalRetrasados  ?? 0);
+    var totalUrgentes       = (int)(ViewBag.TotalUrgentes    ?? 0);
+    var totalReprocesos     = (int)(ViewBag.TotalReprocesos  ?? 0);
+    var totalSinPlanificar  = (int)(ViewBag.TotalSinPlanif   ?? 0);
     var totalPlanificados   = totalActivos - totalSinPlanificar;
 
-    // ── Swimlane ApexCharts: pedidos activos agrupados por área ──────────────
-    var swAreaOrder = new[] { "VENTAS", "PLANEAMIENTO", "LABORATORIO", "HILANDERÍA",
-                               "TINTORERÍA", "ACABADOS", "DEVANADO", "CALIDAD", "ALMACÉN PT", "DESPACHO" };
-    Func<string, string> swArea = codPaso => codPaso switch {
-        "01"                          => "VENTAS",
-        "02"                          => "PLANEAMIENTO",
-        "03"                          => "LABORATORIO",      // v2.1: L_VALIDA_RECETA
-        "04" or "05"                  => "HILANDERÍA",       // v2.1: PARTIDA / H_RPRODUC
-        "06" or "07" or "08" or "09" or "9R" => "TINTORERÍA",
-        "09B"                         => "ACABADOS",
-        "10"                          => "DEVANADO",
-        "11"                          => "CALIDAD",
-        "12" or "13"                  => "ALMACÉN PT",
-        "14"                          => "DESPACHO",
-        _                             => "OTROS"
-    };
-    Func<DateTime, string> swFmt = d => d.Date.ToString("yyyy-MM-dd");
-    var swByArea = swAreaOrder.ToDictionary(a => a, _ => new System.Collections.Generic.List<object>());
-
-    foreach (var item in items.Where(x => x.Estado == "A"))
-    {
-        var area = swArea(item.CodPasoAct);
-        if (!swByArea.ContainsKey(area)) continue;
-        // Fecha inicio y fin estimados para la etapa actual (v2.1)
-        DateTime? ini = item.CodPasoAct switch {
-            "01" or "02"                          => (DateTime?)item.FchPedido,
-            "03"                                  => (DateTime?)(item.FchRealProgramado ?? item.FchPedido),
-            "04"                                  => item.FchEstHilanderia,
-            "05"                                  => item.FchEstPartida,
-            "06" or "07" or "08" or "09" or "9R" => item.FchEstTinIni,
-            "09B" or "10"                         => item.FchEstTinFin,
-            "11"                                  => item.FchEstSecado,
-            "12" or "13" or "14"                  => item.FchEstCalidad,
-            _                                     => (DateTime?)item.FchPedido
-        };
-        DateTime? fin = item.CodPasoAct switch {
-            "01" or "02"                          => item.FchEstHilanderia ?? item.FchEntregaComp,
-            "03"                                  => item.FchEstHilanderia,
-            "04"                                  => item.FchEstPartida,
-            "05"                                  => item.FchEstTinIni,
-            "06" or "07" or "08" or "09" or "9R" => item.FchEstTinFin,
-            "09B" or "10"                         => item.FchEstSecado,
-            "11"                                  => item.FchEstCalidad,
-            "12" or "13" or "14"                  => item.FchEstDespacho ?? item.FchEntregaComp,
-            _                                     => item.FchEntregaComp
-        };
-        if (!ini.HasValue) ini = item.FchPedido;
-        if (!fin.HasValue) fin = ini.Value.AddDays(7);
-        if (fin.Value <= ini.Value) fin = ini.Value.AddDays(1);
-
-        var label = $"{item.Serie}-{item.NumPed}/{item.Nro} {item.CodArt}";
-        var color = item.EstaRetrasado ? "#dc3545" : item.EsUrgente ? "#fd7e14" : "#0d6efd";
-        swByArea[area].Add(new { x = label, y = new[] { swFmt(ini.Value), swFmt(fin.Value) }, fillColor = color });
-    }
-
-    var swSeries = swAreaOrder
-        .Where(a => swByArea[a].Count > 0)
-        .Select(a => (object)new { name = a, data = swByArea[a] })
-        .ToList();
-    var swSeriesJson  = System.Text.Json.JsonSerializer.Serialize(swSeries);
-    var showSwimlane  = swSeries.Count > 0;
-    // Altura dinámica: 40px por swim lane (área), mínimo 200px
-    var swChartHeight = Math.Max(200, swSeries.Count * 40);
+    var alertasPorPedido = ViewBag.AlertasPorPedido as Dictionary<string, int> ?? new Dictionary<string, int>();
+    var items = Model;
 }
 
 @section Styles {
@@ -185,8 +125,7 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
-    <li class="breadcrumb-item active">Dashboard</li>
+    <li class="breadcrumb-item active">Seguimiento de Pedidos</li>
 }
 
 @{
@@ -320,7 +259,8 @@
 
 @* Filtros — siempre visibles, compactos *@
 <div class="dash-filter">
-    <form method="get" class="row g-2 align-items-end">
+    <form method="get" id="frmFiltros" class="row g-2 align-items-end">
+        <input type="hidden" name="pagina" value="1" />
         <div class="col-md-4">
             <label class="form-label fw-semibold mb-1 small">
                 <i class="bi bi-person me-1 text-secondary"></i>Cliente (nombre o RUC)
@@ -397,8 +337,6 @@
                                    .DefaultIfEmpty()
                                    .Min();
             var etapas      = lista.Select(x => x.CodPasoAct).Distinct().ToList();
-            // Etapa representativa = ítem con mayor OrdenPaso (más avanzado en el flujo).
-            // Ante igualdad de orden, se elige el de mayor DiasRetraso.
             var mayorItem    = lista
                 .OrderByDescending(x => ordenPasoMap.TryGetValue(x.CodPasoAct, out var op) ? op : 0)
                 .ThenByDescending(x => x.DiasRetraso)
@@ -408,12 +346,12 @@
             var mayorCodigo    = mayorItem.CodPasoAct ?? "";
             var cliente       = lista.First().NombreCliente;
             var serie         = g.Key.Serie;
-            var numPed        = g.Key.NumPed;
+            var numPedG       = g.Key.NumPed;
             var fchPedido     = lista.First().FchPedido;
             var fchAprobacion = lista.Where(x => x.FchRealProgramado.HasValue)
                                      .Select(x => x.FchRealProgramado)
                                      .FirstOrDefault();
-            return (serie, numPed, cliente, lista, esUrgente, retrasado, maxRetraso,
+            return (serie, numPed: numPedG, cliente, lista, esUrgente, retrasado, maxRetraso,
                     kgTotal, fchMin, etapas, mayorColor, mayorNombre, mayorCodigo,
                     fchPedido, fchAprobacion);
         })
@@ -430,7 +368,10 @@
 else
 {
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <span class="text-muted small">@pedidosGrupo.Count pedidos · @items.Count ítems @(incluyeCerrados ? "(incl. cerrados)" : "activos")</span>
+        <span class="text-muted small">
+            @totalPedidos pedidos en total · página @paginaActual de @totalPaginas
+            · @totalActivos ítems @(incluyeCerrados ? "(incl. cerrados)" : "activos")
+        </span>
         <div class="d-flex gap-2">
             <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm"
                     title="Expandir todos los pedidos para ver sus ítems">
@@ -535,10 +476,6 @@ else
                        class="btn btn-outline-success btn-accion" title="Gantt del pedido">
                         <i class="bi bi-bar-chart-steps"></i>
                     </a>
-                    <a asp-action="Trazabilidad" asp-route-numPed="@p.numPed" asp-route-serie="@p.serie"
-                       class="btn btn-outline-info btn-accion" title="Trazabilidad del pedido">
-                        <i class="bi bi-signpost-split"></i>
-                    </a>
                 </div>
             </div>
 
@@ -557,6 +494,7 @@ else
                             <th class="text-end">Kg pend.</th>
                             <th>F. entrega</th>
                             <th>Retraso</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -641,6 +579,22 @@ else
                                         </span>
                                     }
                                 </td>
+                                <td style="white-space:nowrap;">
+                                    <button type="button"
+                                            class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                            style="font-size:.65rem;"
+                                            title="Línea de Tiempo — @s.CodArt"
+                                            onclick="abrirModalItem('timeline',@p.numPed,@p.serie,@s.Nro,@s.NumDet,'@s.CodArt')">
+                                        <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
+                                            style="font-size:.65rem;"
+                                            title="Gantt — @s.CodArt"
+                                            onclick="abrirModalItem('gantt',@p.numPed,@p.serie,@s.Nro,@s.NumDet,'@s.CodArt')">
+                                        <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+                                    </button>
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -648,10 +602,115 @@ else
             </div>
         </div>
     }
+
+    @* ── Paginación ─────────────────────────────────────────────────────── *@
+    @if (totalPaginas > 1)
+    {
+        @* Helper: URL de una página conservando todos los filtros activos *@
+        Func<int, string> urlPagina = pg =>
+        {
+            var qs = new System.Text.StringBuilder("?pagina=").Append(pg);
+            if (!string.IsNullOrEmpty(filtroCliente))  qs.Append("&busquedaCliente=").Append(Uri.EscapeDataString(filtroCliente));
+            if (!string.IsNullOrEmpty(filtroPaso))     qs.Append("&codPaso=").Append(Uri.EscapeDataString(filtroPaso));
+            if (!string.IsNullOrEmpty(filtroNumPed))   qs.Append("&numPed=").Append(Uri.EscapeDataString(filtroNumPed));
+            if (incluyeCerrados)                       qs.Append("&incluyeCerrados=true");
+            return "/Planeamiento/Dashboard" + qs.ToString();
+        };
+
+        const int maxBotones = 7;  // botones numéricos visibles a cada lado del actual
+        int pIni = Math.Max(1, paginaActual - maxBotones / 2);
+        int pFin = Math.Min(totalPaginas, pIni + maxBotones - 1);
+        if (pFin - pIni < maxBotones - 1) pIni = Math.Max(1, pFin - maxBotones + 1);
+
+        <nav class="mt-3" aria-label="Paginación de pedidos">
+            <ul class="pagination pagination-sm justify-content-center flex-wrap mb-1">
+                <li class="page-item @(paginaActual == 1 ? "disabled" : "")">
+                    <a class="page-link" href="@urlPagina(1)" title="Primera página">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </a>
+                </li>
+                <li class="page-item @(paginaActual == 1 ? "disabled" : "")">
+                    <a class="page-link" href="@urlPagina(paginaActual - 1)" title="Página anterior">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                @if (pIni > 1)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+                @for (int pg = pIni; pg <= pFin; pg++)
+                {
+                    <li class="page-item @(pg == paginaActual ? "active" : "")">
+                        <a class="page-link" href="@urlPagina(pg)">@pg</a>
+                    </li>
+                }
+                @if (pFin < totalPaginas)
+                {
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                }
+                <li class="page-item @(paginaActual == totalPaginas ? "disabled" : "")">
+                    <a class="page-link" href="@urlPagina(paginaActual + 1)" title="Página siguiente">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                <li class="page-item @(paginaActual == totalPaginas ? "disabled" : "")">
+                    <a class="page-link" href="@urlPagina(totalPaginas)" title="Última página">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </a>
+                </li>
+            </ul>
+            <p class="text-center text-muted mb-0" style="font-size:.72rem;">
+                Mostrando pedidos @((paginaActual - 1) * 10 + 1)–@(Math.Min(paginaActual * 10, totalPedidos)) de @totalPedidos
+            </p>
+        </nav>
+    }
 }
+
+<!-- Modal L. Tiempo / Gantt por ítem -->
+<div class="modal fade" id="modalItemVista" tabindex="-1" aria-labelledby="modalItemVistaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalItemVistaLabel">
+                    <i class="bi bi-clipboard2-pulse me-2 text-primary" id="modalItemIcon"></i>
+                    <span id="modalItemTitulo">Cargando…</span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2" id="modalItemBody">
+                <div class="text-center py-4 text-muted">
+                    <div class="spinner-border spinner-border-sm me-2"></div>Cargando…
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
 <script>
+    // ── Modal L.Tiempo / Gantt por ítem ─────────────────────────────────────
+    function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
+        const modal   = new bootstrap.Modal(document.getElementById('modalItemVista'));
+        const body    = document.getElementById('modalItemBody');
+        const titulo  = document.getElementById('modalItemTitulo');
+        const icon    = document.getElementById('modalItemIcon');
+
+        const isTimeline = tipo === 'timeline';
+        titulo.textContent = (isTimeline ? 'Línea de Tiempo' : 'Gantt') + ' — ' + codArt + ' (Ítem ' + nro + ')';
+        icon.className = isTimeline
+            ? 'bi bi-clipboard2-pulse me-2 text-secondary'
+            : 'bi bi-bar-chart-steps me-2 text-success';
+
+        body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div>';
+        modal.show();
+
+        const action = isTimeline ? 'ItemTimeline' : 'ItemGantt';
+        fetch(`/Planeamiento/${action}?numPed=${numPed}&serie=${serie}&nro=${nro}&numDet=${numDet}`)
+            .then(r => r.ok ? r.text() : Promise.reject(r.status))
+            .then(html => { body.innerHTML = html; })
+            .catch(() => { body.innerHTML = '<div class="alert alert-danger m-2">No se pudo cargar la información del ítem.</div>'; });
+    }
+
     // Esta función se llama desde el onclick de cada <tr class="pedido-header">.
     // Solo expande/colapsa si el click NO fue en un enlace (<a>) o botón (<button>).
     // Esto permite que los enlaces dentro de la fila naveguen normalmente sin expandir.

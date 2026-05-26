@@ -32,7 +32,7 @@ namespace Aquarius.Auth
         // DECODIFICAR: hash almacenado → texto plano
         // Retorna null si el hash es inválido o está corrupto.
         // -------------------------------------------------------
-        public static string Decode(string stored)
+        public static string? Decode(string stored)
         {
             if (string.IsNullOrEmpty(stored) || stored.Length < 9 || stored.Length % 3 != 0)
                 return null;
@@ -77,7 +77,7 @@ namespace Aquarius.Auth
         public static bool Verify(string plaintext, string stored)
         {
             if (plaintext == null) return false;
-            string decoded = Decode(stored);
+            string? decoded = Decode(stored);
             return decoded != null && decoded == plaintext;
         }
 

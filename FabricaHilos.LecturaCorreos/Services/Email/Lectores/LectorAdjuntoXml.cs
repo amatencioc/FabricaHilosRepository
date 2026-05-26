@@ -12,7 +12,8 @@ public class LectorAdjuntoXml : ILectorAdjuntoXml
         MimePart parte, string asunto, string remitente, DateTime fecha, CancellationToken ct)
     {
         using var ms = new MemoryStream();
-        await parte.Content.DecodeToAsync(ms, ct);
+        if (parte.Content != null)
+            await parte.Content.DecodeToAsync(ms, ct);
 
         if (ms.Length > MaxXmlBytes)
             throw new InvalidOperationException(

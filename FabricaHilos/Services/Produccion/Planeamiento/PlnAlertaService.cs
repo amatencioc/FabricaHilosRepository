@@ -27,15 +27,17 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
 
     public async Task<IEnumerable<PlnAlerta>> GetActivasAsync()
     {
-        // V_PLN_ALERTAS_ACTIVAS (§8.4): filtra ESTADO='A', ordena C→A→M→B, incluye nom_cliente
-        // BUG FIX: horas_sin_resolver (SYSDATE-fch_alerta) devuelve días decimales; se convierte a horas
+        // V_PLN_ALERTAS_ACTIVAS (§8.4 v2.3): filtra ESTADO='A', ordena C→A→M→B.
+        // Enriquecida con JOIN PLN_SEGUIMIENTO+PLN_ESTADO_CODIGO para evitar subqueries en la app.
+        // BUG FIX: leer horas_sin_resolver por ordinal con GetDouble() para evitar OverflowException
+        // (ROUND((SYSDATE-DATE)*24, 2) devuelve NUMBER de alta precisión que C# decimal no tolera).
         var sql = $@"
-            SELECT a.id_alerta, a.tip_alerta, a.nivel, a.titulo, a.detalle,
+            SELECT a.id_alerta, a.serie, a.tip_alerta, a.nivel, a.titulo, a.detalle,
                    a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro,
-                   a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado,
-                   a.horas_sin_resolver,
-                   (SELECT MIN(s.cod_art) FROM {S}PLN_SEGUIMIENTO s
-                    WHERE s.num_ped = a.num_ped AND s.nro = a.nro) AS cod_art
+                   a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado, a.horas_sin_resolver,
+                   a.cod_art, a.titulo_art, a.proceso, a.cod_paso_act, a.nombre_paso, a.color_ui,
+                   a.fch_entrega_comp, a.dias_retraso_ent, a.cantidad_orig, a.kg_pendientes,
+                   a.nro_ciclo, a.ind_urgente
             FROM   {S}V_PLN_ALERTAS_ACTIVAS a";
 
         var list = new List<PlnAlerta>();
@@ -52,21 +54,33 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
             list.Add(new PlnAlerta
             {
                 IdAlerta         = SafeVal<long>(r["id_alerta"]),
+                Serie            = r["serie"]          == DBNull.Value ? null : SafeVal<int?>(r["serie"]),
                 TipAlerta        = SafeStr(r["tip_alerta"]),
                 Nivel            = SafeStr(r["nivel"]),
                 Titulo           = SafeStr(r["titulo"]),
                 Detalle          = SafeStr(r["detalle"]),
                 FchAlerta        = SafeVal<DateTime>(r["fch_alerta"]),
                 FchLimite        = SafeDate(r["fch_limite"]),
-                DiasRetraso      = r["dias_retraso"] == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso"]),
+                DiasRetraso      = r["dias_retraso"]   == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso"]),
                 CodMaq           = SafeStr(r["cod_maq"]),
                 Estado           = SafeStr(r["estado"]),
-                NumPed           = r["num_ped"] == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
-                Nro              = r["nro"] == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
+                NumPed           = r["num_ped"]        == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
+                Nro              = r["nro"]            == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
                 CodCliente       = SafeStr(r["cod_cliente"]),
                 NombreCliente    = SafeStr(r["nom_cliente"]),
-                CodArt           = r["cod_art"] == DBNull.Value ? null : SafeStr(r["cod_art"]),
-                HorasSinResolver = horasSinResolver,  // vista ya devuelve horas (ROUND(*24,2))
+                CodArt           = r["cod_art"]        == DBNull.Value ? null : SafeStr(r["cod_art"]),
+                TituloArt        = r["titulo_art"]     == DBNull.Value ? null : SafeStr(r["titulo_art"]),
+                Proceso          = SafeStr(r["proceso"]),
+                CodPasoAct       = SafeStr(r["cod_paso_act"]),
+                NombrePaso       = SafeStr(r["nombre_paso"]),
+                ColorUiPaso      = SafeStr(r["color_ui"]),
+                FchEntregaComp   = SafeDate(r["fch_entrega_comp"]),
+                DiasRetrasoEnt   = r["dias_retraso_ent"] == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso_ent"]),
+                CantidadOrig     = r["cantidad_orig"]  == DBNull.Value ? null : SafeVal<decimal?>(r["cantidad_orig"]),
+                KgPendientes     = r["kg_pendientes"]  == DBNull.Value ? null : SafeVal<decimal?>(r["kg_pendientes"]),
+                NroCiclo         = r["nro_ciclo"]      == DBNull.Value ? null : SafeVal<int?>(r["nro_ciclo"]),
+                IndUrgente       = SafeStr(r["ind_urgente"]),
+                HorasSinResolver = horasSinResolver,
             });
         }
         return list;

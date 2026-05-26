@@ -49,12 +49,14 @@
     var numDoc = $"{cab.NumReq:D6}";
 
     // Calcular totales
-    decimal totalSoles  = items.Where(i => (i.Moneda ?? "S") != "D").Sum(i => i.Cantidad * i.Precio);
-    decimal totalDolar  = items.Where(i => (i.Moneda ?? "S") == "D").Sum(i => i.Cantidad * i.Precio);
-    decimal igvTasa     = (cab.Impsto ?? 0m) > 0 ? cab.Impsto!.Value : 0.18m;
-    bool    afectaIgv   = (cab.AfectoIgv ?? "N") == "S";
-    decimal igvSoles    = afectaIgv ? Math.Round(totalSoles * igvTasa, 2) : 0m;
-    decimal totalFinal  = totalSoles + igvSoles;
+    decimal totalSoles      = items.Where(i => (i.Moneda ?? "S") != "D").Sum(i => i.Cantidad * i.Precio);
+    decimal totalDolar      = items.Where(i => (i.Moneda ?? "S") == "D").Sum(i => i.Cantidad * i.Precio);
+    decimal igvTasa         = (cab.Impsto ?? 0m) > 0 ? cab.Impsto!.Value : 0.18m;
+    bool    afectaIgv       = (cab.AfectoIgv ?? "N") == "S";
+    decimal igvSoles        = afectaIgv ? Math.Round(totalSoles * igvTasa, 2) : 0m;
+    decimal igvDolar        = afectaIgv ? Math.Round(totalDolar  * igvTasa, 2) : 0m;
+    decimal totalFinal      = totalSoles + igvSoles;
+    decimal totalFinalDolar = totalDolar  + igvDolar;
 
     var firmaHecho    = ViewBag.FirmaHecho    as FabricaHilos.Models.Logistica.FirmaOcDto;
     var firmaAprobado = ViewBag.FirmaAprobado as FabricaHilos.Models.Logistica.FirmaOcDto;
@@ -530,26 +532,15 @@
                         <td class="t-val">S/. @totalSoles.ToString("N2")</td>
                         <td class="t-val" style="padding-left:8px;">US$ @totalDolar.ToString("N2")</td>
                     </tr>
-                    @if (afectaIgv)
-                    {
-                        <tr>
-                            <td class="t-lbl">IGV:</td>
-                            <td class="t-val">S/. @igvSoles.ToString("N2")</td>
-                            <td class="t-val" style="padding-left:8px;">—</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        <tr>
-                            <td class="t-lbl">IGV:</td>
-                            <td class="t-val">S/. 0.00</td>
-                            <td class="t-val" style="padding-left:8px;">—</td>
-                        </tr>
-                    }
+                    <tr>
+                        <td class="t-lbl">IGV:</td>
+                        <td class="t-val">S/. @igvSoles.ToString("N2")</td>
+                        <td class="t-val" style="padding-left:8px;">@(igvDolar > 0 ? $"US$ {igvDolar:N2}" : "—")</td>
+                    </tr>
                     <tr class="grand-total">
                         <td class="t-lbl">P.TOTAL:</td>
                         <td class="t-val">S/. @totalFinal.ToString("N2")</td>
-                        <td class="t-val" style="padding-left:8px;">US$ @totalDolar.ToString("N2")</td>
+                        <td class="t-val" style="padding-left:8px;">US$ @totalFinalDolar.ToString("N2")</td>
                     </tr>
                 </table>
             </div>

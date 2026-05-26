@@ -5,9 +5,11 @@
     ViewData["Title"] = $"Pedido {Model.Serie}-{Model.NumPed}";
     var primerItem = Model.Items.FirstOrDefault();
     var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
-    var detCodArt  = Model.Items
-        .DistinctBy(x => x.Nro)
-        .ToDictionary(x => x.Nro, x => x.CodArt);
+    // Ítem activo por Nro = el de mayor NroCiclo (evita contar ciclos de reproceso como sublotes distintos)
+    var itemsActivos = Model.Items
+        .GroupBy(x => x.Nro)
+        .Select(g => g.OrderByDescending(x => x.NroCiclo).First())
+        .ToList();
 
     // ── Timeline ApexCharts: estimado vs. real (primer sublote) ──────────
     var tlEstData  = new System.Collections.Generic.List<object>();
@@ -72,152 +74,11 @@
 
 @section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
-<style>
-    /* ─── Strip info-pedido: ver planeamiento.css §5 ────── */
-
-    /* ─── Cards de sublotes ─────────────────────────────────── */
-    .sublote-card { background: #fff; border: 2px solid #e2e8f0; margin-bottom: .5rem; border-left: 4px solid #cbd5e0; transition: border-left-color .15s, box-shadow .15s; }
-    .sublote-card:hover { border-left-color: #4a5568; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    .sublote-card.urgente { border-left-color: #e53e3e; }
-    .sublote-card.retraso { border-left-color: #fd7e14; }
-    .sublote-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .45rem .9rem; background: linear-gradient(to right, #f7fafc 0%, #fff 100%); border-bottom: 1px solid #e2e8f0; }
-    .sublote-art { font-size: .82rem; font-weight: 700; color: #2d3748; }
-    .sublote-meta { font-size: .78rem; color: #4a5568; }
-    .kg-pend { color: #e53e3e; font-weight: 700; }
-    .sublote-body { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; padding: .5rem .9rem; }
-    .sublote-avance { display: flex; align-items: center; gap: .5rem; min-width: 130px; }
-    .avance-pct { font-size: .7rem; font-weight: 600; }
-    .sublote-fecha { display: flex; flex-direction: column; line-height: 1.2; }
-    .sublote-fecha .slbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; color: #718096; font-weight: 700; }
-    .sublote-fecha .sval { font-size: .82rem; font-weight: 700; color: #2d3748; }
-    /* ─── Panel flujo por sublote ────────────────────────────── */
-    .sublote-panel { border-top: 2px solid #e2e8f0; background: #f0f4f8; }
-    .sublote-panel-toggle { display: flex; align-items: center; gap: .4rem; padding: .32rem .9rem; font-size: .71rem; font-weight: 700; color: #4a5568; cursor: pointer; user-select: none; background: none; border: none; width: 100%; text-align: left; letter-spacing: .02em; }
-    .sublote-panel-toggle:hover { background: #e2e8f0; color: #2d3748; }
-    .sublote-panel-toggle[aria-expanded="true"] { background: #e2e8f0; color: #2d3748; }
-    .sublote-panel-toggle .toggle-ico { transition: transform .2s; font-size: .65rem; margin-left: auto; }
-    .sublote-panel-toggle[aria-expanded="true"] .toggle-ico { transform: rotate(180deg); }
-    .sublote-panel-body { padding: .6rem .75rem .7rem; background: #fff; border-top: 1px solid #e2e8f0; }
-    /* mini-tabs por sublote */
-    .sub-tabs { border-bottom: 2px solid #8ea8c3; margin-bottom: 0; display: flex; gap: 2px; background: #cfdce9; padding: .3rem .5rem 0; }
-    .sub-tabs .nav-link { border-radius: 4px 4px 0 0; font-size: .73rem; font-weight: 600; color: #4a5568; border: 1px solid transparent; border-bottom: none; padding: .28rem .75rem; }
-    .sub-tabs .nav-link:hover { background: #dce9f5; color: #2d3748; }
-    .sub-tabs .nav-link.active { color: #1a365d; background: #eef4fc; border-color: #8ea8c3; border-bottom-color: #eef4fc; border-top: 2px solid #3b6ea5; font-weight: 800; }
-    .sub-tab-panel { border: 1px solid #8ea8c3; border-top: none; background: #eef4fc; min-height: 60px; }
-
-    /* ─── Tabs industriales ─────────────────────────────────── */
-    .pln-tabs { border-bottom: 2px solid #8ea8c3; margin-bottom: 0; }
-    .pln-tabs .nav-link { border-radius: 4px 4px 0 0; font-size: .8rem; font-weight: 600; color: #4a5568; border: 2px solid transparent; border-bottom: none; padding: .5rem 1rem; margin-right: 2px; }
-    .pln-tabs .nav-link:hover { background: #dce9f5; color: #2d3748; }
-    .pln-tabs .nav-link.active { color: #1a365d; background: #eef4fc; border-color: #8ea8c3; border-bottom-color: #eef4fc; border-top: 2px solid #3b6ea5; font-weight: 800; }
-    .pln-tab-panel { border: 2px solid #8ea8c3; border-top: none; background: #eef4fc; }
-
-    /* ─── Timeline compacto en cuadrícula 2 columnas ──────── */
-    .tl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-    @@media (max-width: 768px) { .tl-grid { grid-template-columns: 1fr; } }
-    .tl-step { display: flex; align-items: flex-start; gap: .55rem; padding: .38rem .75rem; border-bottom: 1px solid #f0f2f5; transition: background .12s; }
-    .tl-step:hover { background: #f7fafc; }
-    .tl-step.pendiente { opacity: .5; }
-    .tl-dot { width: 9px; height: 9px; border-radius: 1px; flex-shrink: 0; margin-top: .38rem; border: 1px solid rgba(0,0,0,.15); }
-    .tl-cod { flex-shrink: 0; }
-    .tl-nombre { font-size: .8rem; flex: 1; line-height: 1.3; }
-    .tl-nombre.completado { color: #2f855a; }
-    .tl-nombre.activo { color: #2d3748; font-weight: 700; }
-    .tl-nombre.pendiente { color: #a0aec0; }
-    .tl-fechas { font-size: .65rem; color: #718096; display: flex; flex-direction: column; gap: .08rem; flex-shrink: 0; text-align: right; }
-    .tl-fech-real { color: #2f855a; font-weight: 700; }
-
-    /* ─── Panel de máquina TT (en pasos de Tintorería) ──────────────── */
-    .maq-box { margin-top:.4rem; padding:.45rem .7rem; background:#f7fafc;
-        border:1px solid #e2e8f0; border-left:4px solid #cbd5e0; border-radius:0 3px 3px 0;
-        display:flex; flex-direction:column; gap:.3rem; width:100%; box-sizing:border-box; }
-    .maq-box.maq-real    { border-left-color:#059669; background:#f0fdf4; }
-    .maq-box.maq-prog    { border-left-color:#0891b2; background:#f0f9ff; }
-    .maq-box.maq-cerrado { border-left-color:#9ca3af; background:#f9fafb; }
-    .maq-box.maq-real-tt { border-left-color:#e65c00; background:#fff7ed; }
-    /* fila 1: encabezado contextual */
-    .maq-header-row { display:flex; align-items:center; gap:.4rem; }
-    .maq-header-lbl { font-size:.63rem; font-weight:700; text-transform:uppercase;
-        letter-spacing:.04em; color:#6b7280; flex:1; }
-    .maq-src-badge { font-size:.6rem; font-weight:700; border-radius:2px; padding:.06rem .38rem; flex-shrink:0; }
-    .maq-src-badge.maq-src-real    { background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; }
-    .maq-src-badge.maq-src-prog    { background:#e0f2fe; color:#0c4a6e; border:1px solid #7dd3fc; }
-    .maq-src-badge.maq-src-done    { background:#f3f4f6; color:#374151; border:1px solid #9ca3af; }
-    .maq-src-badge.maq-src-conflicto { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
-    .maq-src-badge.maq-src-real-tt   { background:#fff0e6; color:#9a3412; border:1px solid #fb923c; }
-    /* fila 2: código + nombre de la máquina */
-    .maq-id-row { display:flex; align-items:baseline; gap:.5rem; }
-    .maq-box .maq-cod    { font-weight:800; font-size:.88rem; color:#111827; }
-    .maq-box .maq-nombre { font-size:.76rem; color:#374151; }
-    /* separador visual (solo lotes cerrados) */
-    .maq-sep-label { font-size:.61rem; color:#9ca3af; font-style:italic;
-        border-top:1px dashed #e5e7eb; padding-top:.25rem; margin-top:.02rem;
-        display:flex; align-items:center; gap:.3rem; }
-    /* fila 3: estado en tiempo real + barra de carga (inline) */
-    .maq-status-row { display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
-    .maq-box .maq-live { font-size:.7rem; display:inline-flex; align-items:center;
-        gap:.28rem; padding:.1rem .38rem; border-radius:3px; background:rgba(0,0,0,.04); flex-shrink:0; }
-    .maq-box .dot-live  { width:8px; height:8px; border-radius:50%; background:#d1d5db; flex-shrink:0; }
-    .maq-box .maq-live.libre   .dot-live { background:#059669; }
-    .maq-box .maq-live.ocupada .dot-live { background:#d97706; }
-    .maq-box .live-txt { color:#6b7280; }
-    .maq-box .maq-live.libre   .live-txt { color:#059669; font-weight:700; }
-    .maq-box .maq-live.ocupada .live-txt { color:#92400e; font-weight:600; }
-    .maq-proc-row  { display:flex; align-items:center; gap:.25rem; margin:.2rem 0 .05rem; }
-    .maq-proc-date { font-size:.65rem; color:#059669; font-weight:600; }
-    /* Pill de progreso de baños */
-    .maq-banos-row  { display:flex; align-items:center; gap:.3rem; font-size:.62rem; color:#6b7280;
-                      margin:.2rem 0 .15rem; padding:.15rem .4rem; background:#f1f5f9;
-                      border-radius:3px; border-left:2px solid #cbd5e0; }
-    .maq-banos-row.maq-banos-completo { color:#059669; border-color:#6ee7b7; background:#f0fdf4; }
-    .maq-banos-row.maq-banos-parcial  { color:#92400e; border-color:#fbbf24; background:#fffbeb; }
-    .maq-banos-row.maq-banos-pendiente{ color:#6b7280; border-color:#d1d5db; }
-    .maq-carga-lbl  { font-size:.62rem; color:#9ca3af; white-space:nowrap; flex-shrink:0; }
-    .maq-carga-bar  { flex:1; min-width:40px; background:#e5e7eb; border-radius:2px; height:5px; }
-    .maq-carga-fill { height:5px; border-radius:2px; background:#3b82f6; width:0%; transition:width .5s ease; }
-    .maq-carga-fill.alta        { background:#f59e0b; }
-    .maq-carga-fill.sobrecargada{ background:#ef4444; }
-    .maq-carga-pct  { font-size:.62rem; color:#6b7280; white-space:nowrap; min-width:48px; text-align:right; }
-
-    /* ─── Detalle de producción — secciones ─────────────────── */
-    .tt-section-title { font-size:.73rem; font-weight:800; text-transform:uppercase;
-        letter-spacing:.05em; color:var(--pln-gray-700); border-bottom:2px solid var(--pln-gray-300);
-        padding-bottom:.2rem; margin-bottom:.5rem; display:flex; align-items:center; gap:.35rem; }
-    .tt-lbl  { font-size:.65rem; font-weight:700; text-transform:uppercase;
-        letter-spacing:.04em; color:var(--pln-gray-500); display:block; line-height:1.2; }
-    .tt-val  { font-size:.8rem; color:var(--pln-dark-deep); display:block; line-height:1.3; }
-    .tt-mono { font-family: 'Courier New', monospace; font-size:.77rem; }
-    .maq-cod-inline { font-weight:800; font-size:.82rem; color:var(--pln-gray-700);
-        background:var(--pln-gray-100); border:1px solid var(--pln-gray-300); border-radius:2px;
-        padding:.05rem .35rem; letter-spacing:.02em; }
-    .tt-table { font-size:.78rem; }
-    .tt-table thead th { font-size:.65rem; font-weight:700; text-transform:uppercase;
-        letter-spacing:.04em; color:var(--pln-gray-600); background:var(--pln-gray-50);
-        border-bottom:2px solid var(--pln-gray-200); padding:.35rem .6rem; }
-    .tt-table td { vertical-align:middle; padding:.3rem .6rem; }
-    .tt-table tbody tr:hover { background:var(--pln-gray-100); }
-
-    /* ─── Acordeón Detalle de producción ──────────────────────── */
-    .tt-acc-item { border: none; border-bottom: 1px solid var(--pln-gray-200); }
-    .tt-acc-item:last-child { border-bottom: none; }
-    .tt-acc-btn { font-size: .73rem; font-weight: 800; text-transform: uppercase;
-        letter-spacing: .05em; color: var(--pln-light-text);
-        background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
-        padding: .4rem .75rem; border-radius: 0; border-bottom: 2px solid var(--pln-dark-deep); }
-    .tt-acc-btn:not(.collapsed) { color: var(--pln-light-text);
-        background: linear-gradient(135deg, var(--pln-dark-deep) 0%, var(--pln-dark-bg) 100%);
-        box-shadow: none; }
-    .tt-acc-btn:focus { box-shadow: none; outline: none; }
-    .tt-acc-btn::after { filter: brightness(0) invert(1); }
-    .tt-acc-btn .bi { color: var(--pln-accent-blue); }
-    .accordion-flush .tt-acc-item .accordion-body { padding: .5rem .75rem; }
-</style>
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="Index">Planeamiento</a></li>
-    <li class="breadcrumb-item"><a asp-action="Dashboard">Dashboard</a></li>
+    <li class="breadcrumb-item"><a asp-action="Dashboard">Seguimiento de Pedidos</a></li>
     <li class="breadcrumb-item active">Pedido @Model.Serie-@Model.NumPed</li>
 }
 
@@ -343,55 +204,23 @@
     </div>
 </div>
 
-@* ── Encabezado de página ──────────────────────────────────── *@
-<div class="d-flex align-items-center justify-content-between mb-1">
-    <h5 class="mb-0 fw-bold">
-        <i class="bi bi-clipboard2-data me-2 text-primary"></i>
-        Detalle del Pedido <strong>@Model.Serie-@Model.NumPed</strong>
-    </h5>
-    <div class="d-flex gap-2 flex-wrap">
-        <a asp-action="Trazabilidad" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
-           class="btn btn-outline-info btn-sm">
-            <i class="bi bi-diagram-3 me-1"></i>Trazabilidad
-        </a>
-        <a asp-action="PedidoGantt" asp-route-numPed="@Model.NumPed" asp-route-serie="@Model.Serie"
-           class="btn btn-outline-primary btn-sm">
+@* ── Encabezado de página ────────────────────────────── *@
+<div class="pln-page-hdr mb-2">
+    <i class="bi bi-clipboard2-data pln-page-hdr-icon"></i>
+    <div class="pln-page-hdr-body">
+        <div class="pln-page-hdr-title">Detalle del Pedido <strong>@Model.Serie-@Model.NumPed</strong></div>
+        <div class="pln-page-hdr-sub">Estado de cada sublote, fechas planificadas vs. reales &nbsp;·&nbsp; Use <strong>Trazabilidad</strong> o <strong>Gantt</strong> para la línea de tiempo</div>
+    </div>
+    <div class="pln-page-hdr-actions">
+        <a asp-action="PedidoGantt"
+           class="btn btn-outline-light btn-sm">
             <i class="bi bi-bar-chart-steps me-1"></i>Gantt
         </a>
-        @*
-        <div class="dropdown">
-            <button class="btn btn-outline-warning btn-sm dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="bi bi-gear me-1"></i>Acciones
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li>
-                    <button class="dropdown-item small" data-bs-toggle="modal" data-bs-target="#modalReprogramar">
-                        <i class="bi bi-calendar-event me-2 text-warning"></i>Reprogramar despacho
-                    </button>
-                </li>
-                <li>
-                    <button class="dropdown-item small" data-bs-toggle="modal" data-bs-target="#modalRecalcular">
-                        <i class="bi bi-calculator me-2 text-info"></i>Recalcular fechas
-                    </button>
-                </li>
-                <li><hr class="dropdown-divider"></li>
-                <li>
-                    <button class="dropdown-item small text-danger" data-bs-toggle="modal" data-bs-target="#modalCerrar">
-                        <i class="bi bi-x-circle me-2"></i>Cerrar ítem
-                    </button>
-                </li>
-            </ul>
-        </div>
-        *@
-        <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+        <a asp-action="Dashboard" class="btn btn-outline-light btn-sm">
             <i class="bi bi-arrow-left me-1"></i>Volver
         </a>
     </div>
 </div>
-<p class="text-muted mb-3" style="font-size:.7rem;border-bottom:1px solid #e9ecef;padding-bottom:.5rem;">
-    Vista detallada del pedido: estado de cada sublote, fechas planificadas vs. reales y acciones disponibles.
-    Use <strong>Trazabilidad</strong> para el paso a paso y <strong>Gantt</strong> para la línea de tiempo.
-</p>
 
 @* ── ZONA A: Strip industrial de información del pedido ─────── *@
 @if (primerItem != null)
@@ -407,10 +236,21 @@
                 <div class="pln-strip-lbl">Fecha pedido</div>
                 <div class="pln-strip-val">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
             </div>
+            @if (primerItem.FchPlanif.HasValue)
+            {
+                <div class="pln-strip-cell">
+                    <div class="pln-strip-lbl">Fecha planificación</div>
+                    <div class="pln-strip-val">@primerItem.FchPlanif.Value.ToString("dd/MM/yyyy")</div>
+                </div>
+            }
+            @* Entrega Compromiso: FchEntregaComp si existe, sino FchEntregaOri *@
+            @{
+                var fchCompromiso = primerItem.FchEntregaComp ?? primerItem.FchEntregaOri;
+            }
             <div class="pln-strip-cell">
-                <div class="pln-strip-lbl">Entrega comprometida</div>
+                <div class="pln-strip-lbl">Entrega Compromiso</div>
                 <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
-                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                    @(fchCompromiso?.ToString("dd/MM/yyyy") ?? "—")
                     @if (primerItem.EstaRetrasado)
                     {
                         <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
@@ -419,8 +259,8 @@
             </div>
             <div class="pln-strip-cell">
                 <div class="pln-strip-lbl">Sublotes</div>
-                <div class="pln-strip-val">@Model.Items.Count()</div>
-                <div class="pln-strip-sub">@Model.Items.Sum(x => x.CantidadOrig).ToString("N0") kg en total</div>
+                <div class="pln-strip-val">@itemsActivos.Count</div>
+                <div class="pln-strip-sub">@itemsActivos.Sum(x => x.CantidadOrig).ToString("N0") kg en total</div>
             </div>
             <div class="pln-strip-cell">
                 <div class="pln-strip-lbl">Días para entrega</div>
@@ -456,38 +296,62 @@
                 </div>
             }
         </div>
+        @* ── Fila de actores (Registró / Aprobó / Planificó) ── *@
+        @{
+            var actorItem = Model.Items.FirstOrDefault(x =>
+                !string.IsNullOrEmpty(x.NombreRegistro) ||
+                !string.IsNullOrEmpty(x.NombreAprobacion) ||
+                !string.IsNullOrEmpty(x.NombrePlanif));
+        }
+        @if (actorItem != null)
+        {
+            <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.72rem; color:#a0aec0; background:rgba(255,255,255,.07);">
+                @if (!string.IsNullOrEmpty(actorItem.NombreRegistro))
+                {
+                    <span><i class="bi bi-person me-1"></i><strong>Registró:</strong> @actorItem.NombreRegistro</span>
+                }
+                @if (!string.IsNullOrEmpty(actorItem.NombreAprobacion))
+                {
+                    <span><i class="bi bi-patch-check me-1"></i><strong>Aprobó:</strong> @actorItem.NombreAprobacion
+                        @if (actorItem.FchAprobacion.HasValue)
+                        {
+                            <span class="opacity-75 ms-1">(@actorItem.FchAprobacion.Value.ToString("dd/MM/yy"))</span>
+                        }
+                    </span>
+                }
+                @if (!string.IsNullOrEmpty(actorItem.NombrePlanif))
+                {
+                    <span><i class="bi bi-calendar2-check me-1"></i><strong>Planificó:</strong> @actorItem.NombrePlanif
+                        @if (actorItem.FchPlanif.HasValue)
+                        {
+                            <span class="opacity-75 ms-1">(@actorItem.FchPlanif.Value.ToString("dd/MM/yy"))</span>
+                        }
+                    </span>
+                }
+            </div>
+        }
+
     </div>
 }
 
-@* ── SEGMENTO 2: Alertas activas ──────────────────────────── *@
+@* ── SEGMENTO 2: Alertas activas — solo aviso resumen + modal *@
 @if (Model.Alertas.Any())
 {
-    <div class="section-sep"><i class="bi bi-bell-fill"></i> Alertas activas <span class="badge bg-danger ms-1">@Model.Alertas.Count()</span></div>
-    <div class="mb-3">
-        @foreach (var a in Model.Alertas)
-        {
-            <div class="alert alert-@a.NivelColor d-flex align-items-start gap-2 py-2 mb-2">
-                <i class="bi bi-bell-fill mt-1 flex-shrink-0"></i>
-                <div style="font-size:.82rem;">
-                    <strong>@a.TipoTexto</strong>
-                    @if (a.Nro.HasValue)
-                    {
-                        var detLabel = detCodArt.TryGetValue(a.Nro.Value, out var ca) ? ca : $"Det.{a.Nro}";
-                        <span class="badge bg-light text-dark border ms-1" style="font-size:.68rem;">@detLabel</span>
-                    }
-                    — @a.Titulo
-                    @if (a.FchLimite.HasValue)
-                    {
-                        <span class="ms-2" style="font-size:.75rem;">Límite: @a.FchLimite.Value.ToString("dd/MM/yyyy")</span>
-                    }
-                    @if (a.HorasSinResolver.HasValue)
-                    {
-                        var h = (int)a.HorasSinResolver.Value;
-                        <span class="ms-2 text-muted" style="font-size:.72rem;"><i class="bi bi-clock me-1"></i>@(h >= 24 ? $"{h/24}d {h%24}h" : $"{h}h") sin resolver</span>
-                    }
-                </div>
-            </div>
-        }
+    var cntCrit = Model.Alertas.Count(a => a.Nivel == "C");
+    var bannerColor = cntCrit > 0 ? "danger" : "warning";
+    <div class="alert alert-@bannerColor d-flex align-items-center justify-content-between gap-2 py-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-bell-fill flex-shrink-0"></i>
+            <span style="font-size:.85rem;">
+                <strong>Alertas por revisar:</strong>
+                <span class="badge bg-@bannerColor border border-light ms-1">@Model.Alertas.Count()</span>
+                — hay sublotes con alertas activas en este pedido.
+            </span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-@bannerColor text-nowrap"
+                onclick="abrirModalAlertas(null)">
+            <i class="bi bi-eye me-1"></i>Ver alertas
+        </button>
     </div>
 }
 
@@ -496,7 +360,6 @@
 <div class="mb-3">
     @{
         int subIdx = 0;
-        var pasosOrientativos = new HashSet<string> { "05", "07", "11", "12" };
     }
     @foreach (var s in Model.Items.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
     {
@@ -510,7 +373,9 @@
 
         <div class="sublote-card @urgClase" data-codartt="@s.CodArt">
             <div class="sublote-head">
-                <span class="badge bg-dark" style="font-size:.65rem;letter-spacing:.04em;border-radius:1px;">@s.Nro</span>
+                <span class="badge bg-dark" style="font-size:.65rem;letter-spacing:.04em;border-radius:1px;">
+                    @s.Nro@(s.NroCiclo > 1 ? $"·C{s.NroCiclo}" : "")
+                </span>
                 <span class="sublote-art">@s.CodArt</span>
                 <span class="art-desc-info text-muted" style="font-size:.72rem;"></span>
                 <span class="sublote-meta">
@@ -525,6 +390,18 @@
                 @if (s.EstaEnReproceso)
                 {
                     <span class="badge bg-danger ms-1" style="font-size:.65rem;border-radius:1px;">Rep.@s.NroCiclo</span>
+                }
+                @{
+                    var alertasSub = Model.Alertas.Where(a => a.Nro == s.Nro).ToList();
+                }
+                @if (alertasSub.Any())
+                {
+                    var peorNivelSub = alertasSub.Any(a => a.Nivel == "C") ? "danger" : alertasSub.Any(a => a.Nivel == "A") ? "warning" : "info";
+                    <button type="button" class="badge bg-@peorNivelSub ms-1 border-0" style="font-size:.65rem;border-radius:2px;cursor:pointer;"
+                            title="@alertasSub.Count alerta(s) activa(s)"
+                            onclick="abrirModalAlertas(@s.Nro)">
+                        <i class="bi bi-bell-fill me-1"></i>@alertasSub.Count alerta@(alertasSub.Count == 1 ? "" : "s")
+                    </button>
                 }
             </div>
             <div class="sublote-body">
@@ -578,7 +455,7 @@
                             </li>
                             @{
                                 var tabTtId   = $"tab-tt-{subIdx}";
-                                var hayttData = s.NumPartida > 0 && Model.DetalleTt.TryGetValue(s.NumPartida, out var detTtBut) && (detTtBut.TieneBanos || detTtBut.Calidad != null);
+                                    var hayttData = s.NumPartida > 0 && Model.DetalleTt.TryGetValue(s.NumPartida, out var detTtBut) && (detTtBut.TieneBanos || detTtBut.Calidad != null || detTtBut.RectificacionesReceta.Count > 0);
                             }
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab"
@@ -615,8 +492,8 @@
                                     // FUENTE ÚNICA: DetalleTt (mismas tablas legacy que la pestaña Tintorería)
                                     // FUENTE ÚNICA: DetalleTt (mismas tablas legacy que la pestaña Tintorería).
                                     // PLN_SEGUIMIENTO.FCH_REAL_* solo como respaldo cuando no hay DetalleTt.
-                                    // PASO '03' (Lab):           usa FchValidacion de L_VALIDA_RECETA.F_ESTADO_TRES
-                                    // PASO '04' (En Hilandería): usa PARTIDA.FECHA (FechaPartida)
+                                    // v3.0: PASO '03' (En Hilandería): usa FechaPartida (PARTIDA.FECHA)
+                                    // v3.0: PASO '04' (Laboratorio):   usa FchValidacion de L_VALIDA_RECETA.F_ESTADO_TRES
                                     // PASO '05' (Lote Disp.):   usa s.FchRealPartida (FCH_REAL_PARTIDA, set por PASO '05')
                                     // PASO '10': usa REVISADO_G.A_ADFECHA (FchRegistro)
                                     // PASO '11': usa REVISADO_D.FECHA (primer detalle con aprobado>0)
@@ -625,8 +502,8 @@
                                     var _fch02 = s.FchRealProgramado;
                                     if (_fch02.HasValue && _labFchReg.HasValue && _fch02.Value.Date > _labFchReg.Value.Date)
                                         _fch02 = _labFchReg;
-                                    // PASO '04' (En Hilandería): PARTIDA.FECHA = cuando se insertó el lote en hilandería
-                                    // SP_PLN_AVANZA_PASO guarda FCH_REAL_PRODUCCION en PASO '04', así que ambas fuentes coinciden.
+                                    // v3.0 PASO '03' (En Hilandería): PARTIDA.FECHA = cuando se insertó el lote en hilandería
+                                    // SP_PLN_AVANZA_PASO guarda FCH_REAL_PRODUCCION en PASO '03', así que ambas fuentes coinciden.
                                     var _fch03 = _dtFb?.FechaPartida ?? s.FchRealProduccion;
                                     // _fch04 reservado; PASO '05' usa s.FchRealPartida directamente en el switch fReal.
                                     DateTime? _fch04 = _dtFb?.Devanados.Count > 0
@@ -654,7 +531,11 @@
 
                                         var clase       = esActivo ? "activo" : completado ? "completado" : "pendiente";
                                         var colorPaso   = completado ? "#2f855a" : esActivo ? ec.ColorUi : "#ced4da";
-                                        var esOrient    = pasosOrientativos.Contains(ec.CodPaso);
+                                        var esOrient =
+                                            ec.CodPaso == "05" ||   // Lote Disp.: siempre proxy (no tiene timestamp propio)
+                                            (ec.CodPaso == "07" && _dtFb?.FinTt == null && !s.FchRealTinFin.HasValue) ||  // Teñido Comp.: solo si no hay FinTt real
+                                            (ec.CodPaso == "11" && (_dtFb == null || _dtFb.Revisados.Count == 0 || _dtFb.Revisados[0].Detalle.Count == 0)) ||  // Revisado: solo sin REVISADO_D
+                                            (ec.CodPaso == "12" && !s.FchRealAlmPt.HasValue);  // AlmPT: solo sin fecha real
                                         // Para '08' (Secado): usar máquina real de la secadora (TT_RSECADO.COD_MAQ), no la máquina TT
                                         var maqStep = maqEfectiva;
                                         if (ec.CodPaso == "08" && Model.DetalleTt.TryGetValue(s.NumPartida, out var _dts08)
@@ -688,9 +569,9 @@
                                         string? fReal = ec.CodPaso switch {
                                             "01" => s.FchPedido.ToString("dd/MM/yy"),
                                             "02" => _fch02?.ToString("dd/MM/yy"),
-                                            "03" => _dtFb?.ValidacionReceta?.FchValidacion?.ToString("dd/MM/yy")  // Lab: L_VALIDA_RECETA.F_ESTADO_TRES
-                                                    ?? s.FchRealProduccion?.ToString("dd/MM/yy"),              // fallback: FCH_REAL_PRODUCCION
-                                            "04" => _fch03?.ToString("dd/MM/yy"),                              // En Hilandería: PARTIDA.FECHA
+                                            "03" => _fch03?.ToString("dd/MM/yy"),                                    // v3.0 En Hilandería: PARTIDA.FECHA
+                                            "04" => _dtFb?.ValidacionReceta?.FchValidacion?.ToString("dd/MM/yy")    // v3.0 Laboratorio: L_VALIDA_RECETA.F_ESTADO_TRES
+                                                    ?? s.FchRealPartida?.ToString("dd/MM/yy"),                       // fallback: FCH_REAL_PARTIDA (set por migración)
                                             "05" => s.FchRealPartida?.ToString("dd/MM/yy"),                   // Lote Disponible: H_RPRODUC date
                                             "06" => (_dtFb?.InicioTt ?? s.FchRealTinIni)?.ToString("dd/MM/yy"),
                                             "07" => (_dtFb?.FinTt ?? s.FchRealTinFin)?.ToString("dd/MM/yy"),
@@ -706,7 +587,7 @@
                                             _    => null
                                         };
 
-                                        <div class="tl-step @clase">
+                                        <div class="tl-step @clase" style="@(esActivo ? $"border-left-color:{colorPaso};" : null)">
                                             <div class="tl-dot" style="background:@colorPaso;"></div>
                                             <div class="tl-cod">
                                                 <span class="badge" style="background:@colorPaso;color:#fff;font-size:.63rem;min-width:24px;text-align:center;border-radius:1px;">@ec.CodPaso</span>
@@ -719,9 +600,24 @@
                                                 }
                                                 @if (ec.CodPaso == "03")
                                                 {
-                                                    <i class="bi bi-info-circle ms-1 text-secondary"
-                                                       style="font-size:.7rem;cursor:help;"
-                                                       title="El laboratorio valida la receta de tintorería antes de que el lote físico se cree en hilandería. Por eso su fecha es anterior a 'En Hilandería'."></i>
+                                                    @* v3.0: PASO '03' = En Hilandería — lote físico creado antes de la aprobación de Lab *@
+                                                }
+                                                @* v2.3: flujo dual — indica cuál llegó primero entre Lab (PASO 04) e Hilandería (PASO 03) *@
+                                                @if (ec.CodPaso == "04" && s.IndFlujo == "H")
+                                                {
+                                                    <span class="badge bg-light border text-secondary ms-1"
+                                                          style="font-size:.58rem;"
+                                                          title="Lote físico creado en Hilandería ANTES de que Lab aprobara la receta (flujo especial, ~3% de ítems)">
+                                                        <i class="bi bi-shuffle"></i> Lote creado primero
+                                                    </span>
+                                                }
+                                                @if (ec.CodPaso == "04" && s.IndFlujo == "L")
+                                                {
+                                                    <span class="badge bg-light border text-secondary ms-1"
+                                                          style="font-size:.58rem;"
+                                                          title="Lab aprobó la receta ANTES de que se creara el lote formal en Hilandería (flujo normal, ~81% de ítems)">
+                                                        <i class="bi bi-check2-circle"></i> Lab aprobó primero
+                                                    </span>
                                                 }
                                                 @if (esActivo)
                                                 {
@@ -986,11 +882,68 @@
                                                     }
                                                 }
                                             </div>
-                                            @if ((fEst != null || fReal != null) && !mostrarMaq)
+                                            @{
+                                                bool _tieneActor =
+                                                    (ec.CodPaso == "01" && (!string.IsNullOrEmpty(s.NombreRegistro) || !string.IsNullOrEmpty(s.NombreAprobacion)))
+                                                 || (ec.CodPaso == "02" && !string.IsNullOrEmpty(s.NombrePlanif));
+                                            }
+                                            @if ((fEst != null || fReal != null) && !mostrarMaq && !_tieneActor)
                                             {
                                                 <div class="tl-fechas">
                                                     @if (fEst != null) { <span><i class="bi bi-calendar2 me-1"></i>@fEst</span> }
                                                     @if (fReal != null) { <span class="tl-fech-real"><i class="bi bi-check2 me-1"></i>@fReal</span> }
+                                                </div>
+                                            }
+                                            @if (ec.CodPaso == "9R" && _dtFb?.RectificacionesReceta.Count > 0)
+                                            {
+                                                var _r = _dtFb!.RectificacionActiva ?? _dtFb!.RectificacionAprobada;
+                                                if (_r != null)
+                                                {
+                                                    <div class="d-flex align-items-center gap-1 mt-1" style="font-size:.68rem;padding-left:2px;">
+                                                        <i class="bi bi-flask" style="color:#dc3545;opacity:.8;"></i>
+                                                        <span class="text-secondary">Rectificación:</span>
+                                                        <span class="badge bg-@_r.EstadoBadge" style="font-size:.58rem;">@_r.EstadoLabel</span>
+                                                        @if (_r.FchAprobado.HasValue)
+                                                        {
+                                                            <span class="tl-fech-real tt-mono">@_r.FchAprobado.Value.ToString("dd/MM/yy")</span>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                            @* ── Actores: quien registró y aprobó el pedido (PASO 01) ── *@
+                                            @if (ec.CodPaso == "01" && (!string.IsNullOrEmpty(s.NombreRegistro) || !string.IsNullOrEmpty(s.NombreAprobacion)))
+                                            {
+                                                <div class="tl-actor">
+                                                    @if (!string.IsNullOrEmpty(s.NombreRegistro))
+                                                    {
+                                                        <span class="tl-actor-pill">
+                                                            <i class="bi bi-person"></i><strong>Registró:</strong> @s.NombreRegistro
+                                                            <span class="ap-fch">(@s.FchPedido.ToString("dd/MM/yy"))</span>
+                                                        </span>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(s.NombreAprobacion))
+                                                    {
+                                                        <span class="tl-actor-pill">
+                                                            <i class="bi bi-patch-check"></i><strong>Aprobó:</strong> @s.NombreAprobacion
+                                                            @if (s.FchAprobacion.HasValue)
+                                                            {
+                                                                <span class="ap-fch">(@s.FchAprobacion.Value.ToString("dd/MM/yy"))</span>
+                                                            }
+                                                        </span>
+                                                    }
+                                                </div>
+                                            }
+                                            @* ── Actor: quien planificó (PASO 02) ── *@
+                                            @if (ec.CodPaso == "02" && !string.IsNullOrEmpty(s.NombrePlanif))
+                                            {
+                                                <div class="tl-actor">
+                                                    <span class="tl-actor-pill">
+                                                        <i class="bi bi-calendar2-check"></i><strong>Planificó:</strong> @s.NombrePlanif
+                                                        @if (_fch02.HasValue)
+                                                        {
+                                                            <span class="ap-fch">(@_fch02.Value.ToString("dd/MM/yy"))</span>
+                                                        }
+                                                    </span>
                                                 </div>
                                             }
                                         </div>
@@ -1004,7 +957,7 @@
                                 Model.DetalleTt.TryGetValue(s.NumPartida, out var detTt);
                             }
                             <div class="tab-pane fade" id="@tabTtPaneId" role="tabpanel">
-                              @if (s.NumPartida <= 0 || detTt == null || (!detTt.TieneBanos && !detTt.TieneCalculoRecetas && detTt.Secado == null && detTt.Calidad == null && detTt.ValidacionReceta == null))
+                              @if (s.NumPartida <= 0 || detTt == null || (!detTt.TieneBanos && !detTt.TieneCalculoRecetas && detTt.Secado == null && detTt.Calidad == null && detTt.ValidacionReceta == null && detTt.RectificacionesReceta.Count == 0))
                               {
                                 <div class="p-3 text-muted small">
                                     <i class="bi bi-info-circle me-1"></i>
@@ -1016,6 +969,11 @@
                                 <div class="p-2" style="font-size:.8rem;">
                                   <div class="accordion accordion-flush" id="acc-tt-@(subIdx)">
 
+                                  @* ── GRUPO: Planificación — Proceso ──────────────────────── *@
+                                  @if (detTt!.ValidacionReceta != null || detTt.TieneCalculoRecetas)
+                                  {
+                                    <div class="tt-grupo-sep"><span>Planificación — Proceso</span></div>
+                                  }
                                   @* ── Validación de Laboratorio ─────────────────────────────── *@
                                   @if (detTt!.ValidacionReceta != null)
                                   {
@@ -1025,12 +983,14 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-lab"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(vr.FchValidacion.HasValue ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-flask me-2"></i>Validación de Laboratorio
+                                          <span class="tt-acc-preview">@vr.DescEstado@(vr.FchValidacion.HasValue ? $" · {vr.FchValidacion.Value.ToString("dd/MM/yy")}" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-lab" class="accordion-collapse collapse">
                                         <div class="accordion-body p-2">
-                                          <div class="d-flex flex-wrap gap-3 align-items-start p-2" style="background:#f8f6ff;border-radius:6px;border:1px solid #e0d8f5;">
+                                          <div class="tt-data-grid" style="background:#f8f6ff;border:1px solid #e0d8f5;">
                                             <div><span class="tt-lbl">N° Registro</span><span class="tt-val">@vr.Numero</span></div>
                                             <div><span class="tt-lbl">Tipo</span><span class="tt-val">@vr.DescTipo</span></div>
                                             <div><span class="tt-lbl">Laboratorista</span><span class="tt-val fw-semibold">@(string.IsNullOrEmpty(vr.Laboratorista) ? "—" : vr.Laboratorista)</span></div>
@@ -1058,7 +1018,9 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-rec"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot tt-sdot-plan"></span>
                                           <i class="bi bi-calculator me-2"></i>Cálculo de Recetas (planificado)
+                                          <span class="tt-acc-preview">@detTt.CalculoRecetas.Count receta@(detTt.CalculoRecetas.Count != 1 ? "s" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-rec" class="accordion-collapse collapse">
@@ -1094,6 +1056,11 @@
                                     </div>
                                   }
 
+                                  @* ── GRUPO: Tintorería — Producción ─────────────────────── *@
+                                  @if (detTt!.TieneBanos || detTt.Secados.Count > 0 || detTt.Calidad != null || s.FchRealCcRechazo.HasValue || detTt.RectificacionesReceta.Count > 0)
+                                  {
+                                    <div class="tt-grupo-sep"><span>Tintorería — Producción</span></div>
+                                  }
                                   @* ── Registro de Producción TT (baños) ─────────────────────── *@
                                   @if (detTt!.TieneBanos)
                                   {
@@ -1102,8 +1069,10 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-ban"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(detTt.Banos.Count(b => b.FechaFin.HasValue) == detTt.Banos.Count ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-thermometer-half me-2"></i>Registro de Producción — Tintorería
-                                          <span class="badge ms-2" style="background:#6f42c1;font-size:.6rem;">@detTt.Banos.Count baños</span>
+                                          <span class="badge ms-2" style="background:#6f42c1;font-size:.6rem;">@detTt.Banos.Count baño@(detTt.Banos.Count != 1 ? "s" : "")</span>
+                                          <span class="tt-acc-preview">@detTt.Banos.Count(b => b.FechaFin.HasValue)/@detTt.Banos.Count completado@(detTt.Banos.Count != 1 ? "s" : "")@(!string.IsNullOrEmpty(detTt.Banos.FirstOrDefault()?.CodMaq) ? $" · {detTt.Banos[0].CodMaq}" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-ban" class="accordion-collapse collapse">
@@ -1168,14 +1137,16 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-sec"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(detTt.Secados.All(x => x.FechaFin.HasValue) ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-wind me-2"></i>Registro de Secado
+                                          <span class="tt-acc-preview">@detTt.Secados.Count sesión@(detTt.Secados.Count != 1 ? "es" : "")@(detTt.Secados.Any(x => x.PesoNeto.HasValue) ? $" · {detTt.Secados.Where(x => x.PesoNeto.HasValue).Sum(x => x.PesoNeto!.Value):N0} kg" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-sec" class="accordion-collapse collapse">
                                         <div class="accordion-body p-2">
                                           @foreach (var sec in detTt.Secados)
                                           {
-                                            <div class="d-flex flex-wrap gap-3 align-items-start p-2 mb-1" style="background:#f0fdf4;border-radius:6px;border:1px solid #c6f6d5;">
+                                            <div class="tt-data-grid mb-1" style="background:#f0fdf4;border:1px solid #c6f6d5;">
                                               <div><span class="tt-lbl">Máquina</span>
                                                 <span class="maq-cod-inline">@sec.CodMaq</span>
                                                 <span class="text-muted ms-1">@sec.NombreMaq</span>
@@ -1206,7 +1177,9 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-cc"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(cc.ResultadoBadge == "success" ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-patch-check me-2"></i>Control de Calidad — Tintorería
+                                          <span class="tt-acc-preview">@cc.DescResultado · @cc.Fecha.ToString("dd/MM/yy")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-cc" class="accordion-collapse collapse">
@@ -1257,6 +1230,141 @@
                                     </div>
                                   }
 
+                                  @* ── C.TT Rechazado / Reproceso ────────────────────────────── *@
+                                  @if (s.FchRealCcRechazo.HasValue || (detTt!.Calidad != null && detTt.Calidad.DescResultado != null && detTt.Calidad.ResultadoBadge == "danger"))
+                                  {
+                                    <div class="accordion-item tt-acc-item" style="border-left:3px solid #dc3545;">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-rechazo"
+                                                aria-expanded="false">
+                                          <i class="bi bi-x-circle-fill me-2" style="color:#dc3545;"></i>C.TT Rechazado / Reproceso
+                                          @if (s.FchRealCcRechazo.HasValue)
+                                          {
+                                            <span class="badge bg-danger ms-2" style="font-size:.62rem;">@s.FchRealCcRechazo.Value.ToString("dd/MM/yy")</span>
+                                          }
+                                        </button>
+                                      </h2>
+                                      <div id="acc-tt-@(subIdx)-rechazo" class="accordion-collapse collapse">
+                                        <div class="accordion-body p-2">
+                                          <div class="p-2" style="background:#fff5f5;border-radius:6px;border:1px solid #fed7d7;">
+                                            <div class="d-flex flex-wrap gap-3 align-items-start">
+                                              @if (s.FchRealCcRechazo.HasValue)
+                                              {
+                                                <div><span class="tt-lbl">Fecha rechazo</span><span class="tt-val tt-mono text-danger fw-semibold">@s.FchRealCcRechazo.Value.ToString("dd/MM/yy")</span></div>
+                                              }
+                                              @if (detTt!.Calidad != null)
+                                              {
+                                                <div>
+                                                  <span class="tt-lbl">Resultado CC</span>
+                                                  <span class="badge bg-@detTt.Calidad.ResultadoBadge" style="font-size:.65rem;">@detTt.Calidad.DescResultado</span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(detTt.Calidad.Defecto))
+                                                {
+                                                  <div><span class="tt-lbl text-danger">Defecto</span><span class="tt-val text-danger fw-semibold">@detTt.Calidad.Defecto</span></div>
+                                                }
+                                                @if (!string.IsNullOrEmpty(detTt.Calidad.Observacion))
+                                                {
+                                                  <div class="w-100"><span class="tt-lbl">Observación</span><span class="tt-val text-muted">@detTt.Calidad.Observacion</span></div>
+                                                }
+                                              }
+                                              @if (detTt!.RectificacionesReceta.Count > 0)
+                                              {
+                                                <div class="w-100 mt-1">
+                                                  <span class="tt-lbl">Rectificaciones de receta</span>
+                                                  <span class="badge bg-warning text-dark ms-1" style="font-size:.62rem;">@detTt.RectificacionesReceta.Count</span>
+                                                  <span class="text-muted ms-1" style="font-size:.73rem;">(ver sección «Rectificado de Receta»)</span>
+                                                </div>
+                                              }
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── Rectificado de Receta ──────────────────────────────────── *@
+                                  @if (detTt!.RectificacionesReceta.Count > 0)
+                                  {
+                                    var _rectAcc = detTt!.RectificacionActiva;
+                                    var _rectApr = detTt!.RectificacionAprobada;
+                                    var _rectAny = _rectAcc ?? _rectApr;
+                                    <div class="accordion-item tt-acc-item">
+                                      <h2 class="accordion-header">
+                                        <button class="accordion-button @(detTt.TieneRectificacionActiva ? "" : "collapsed") tt-acc-btn" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-rect"
+                                                aria-expanded="@(detTt.TieneRectificacionActiva ? "true" : "false")">
+                                          <i class="bi bi-flask me-2" style="color:#dc3545;"></i>Rectificado de Receta
+                                          @if (_rectAcc != null)
+                                          {
+                                            <span class="badge bg-@_rectAcc.EstadoBadge ms-2" style="font-size:.62rem;">@_rectAcc.EstadoLabel</span>
+                                          }
+                                          else if (_rectApr != null)
+                                          {
+                                            <span class="badge bg-success ms-2" style="font-size:.62rem;">Aprobada</span>
+                                          }
+                                        </button>
+                                      </h2>
+                                      <div id="acc-tt-@(subIdx)-rect" class="accordion-collapse @(detTt.TieneRectificacionActiva ? "show" : "collapse")">
+                                        <div class="accordion-body p-2">
+                                          @foreach (var rect in detTt!.RectificacionesReceta)
+                                          {
+                                            var _rBg  = rect.EstadoBadge switch { "warning" => "#fffbeb", "info" => "#eff6ff", "success" => "#f0fff4", _ => "#f9fafb" };
+                                            var _rBd  = rect.EstadoBadge switch { "warning" => "#fcd34d", "info" => "#93c5fd", "success" => "#6ee7b7", _ => "#e5e7eb" };
+                                            <div class="p-2 mb-1" style="background:@_rBg;border-radius:6px;border:1px solid @_rBd;">
+                                              <div class="d-flex flex-wrap gap-3 align-items-start mb-1">
+                                                <div><span class="tt-lbl">Fecha</span><span class="tt-val tt-mono">@rect.FchRegistro.ToString("dd/MM/yyyy")</span></div>
+                                                <div><span class="tt-lbl">Área</span><span class="tt-val">@(rect.Area ?? "—")</span></div>
+                                                <div>
+                                                  <span class="tt-lbl">Estado</span>
+                                                  <span class="badge bg-@rect.EstadoBadge" style="font-size:.65rem;">@rect.EstadoLabel</span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(rect.DefectoOrig))
+                                                {
+                                                  <div><span class="tt-lbl text-danger">Defecto</span><span class="tt-val text-danger fw-semibold">@rect.DefectoOrig</span></div>
+                                                }
+                                                @if (!string.IsNullOrEmpty(rect.Supervisor))
+                                                {
+                                                  <div><span class="tt-lbl">Supervisor</span><span class="tt-val">@rect.Supervisor</span></div>
+                                                }
+                                                @if (!string.IsNullOrEmpty(rect.Laboratorista))
+                                                {
+                                                  <div><span class="tt-lbl">Laboratorista</span><span class="tt-val">@rect.Laboratorista</span></div>
+                                                }
+                                              </div>
+                                              @if (!string.IsNullOrEmpty(rect.Observacion))
+                                              {
+                                                <div class="mb-1 text-muted" style="font-size:.73rem;"><i class="bi bi-chat-left-text me-1"></i>@rect.Observacion</div>
+                                              }
+                                              @if (rect.FchEnProceso.HasValue || rect.FchRectificado.HasValue || rect.FchAprobado.HasValue)
+                                              {
+                                                <div class="d-flex flex-wrap gap-3" style="font-size:.72rem;">
+                                                  @if (rect.FchEnProceso.HasValue)
+                                                  {
+                                                    <div><span class="tt-lbl">En Proceso</span><span class="tt-val tt-mono">@rect.FchEnProceso.Value.ToString("dd/MM/yyyy")</span></div>
+                                                  }
+                                                  @if (rect.FchRectificado.HasValue)
+                                                  {
+                                                    <div><span class="tt-lbl">Rectificado</span><span class="tt-val tt-mono">@rect.FchRectificado.Value.ToString("dd/MM/yyyy")</span></div>
+                                                  }
+                                                  @if (rect.FchAprobado.HasValue)
+                                                  {
+                                                    <div><span class="tt-lbl">Aprobado</span><span class="tt-val tt-mono">@rect.FchAprobado.Value.ToString("dd/MM/yyyy")</span></div>
+                                                  }
+                                                </div>
+                                              }
+                                            </div>
+                                          }
+                                        </div>
+                                      </div>
+                                    </div>
+                                  }
+
+                                  @* ── GRUPO: Acabados &amp; Despacho ──────────────────────── *@
+                                  @if (detTt!.ProgramasConera.Count > 0 || detTt.Devanados.Count > 0 || detTt.Revisados.Count > 0 || detTt.PesajesAlmacen.Count > 0 || detTt.Despachos.Count > 0)
+                                  {
+                                    <div class="tt-grupo-sep"><span>Acabados &amp; Despacho</span></div>
+                                  }
                                   @* ── Programa Conera ─────────────────────────────────────────── *@
                                   @if (detTt!.ProgramasConera.Count > 0)
                                   {
@@ -1265,15 +1373,17 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-con"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(detTt.ProgramasConera.All(x => x.Estado == "3") ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-circle-half me-2"></i>Programa Conera
+                                          <span class="tt-acc-preview">@detTt.ProgramasConera.Count programa@(detTt.ProgramasConera.Count != 1 ? "s" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-con" class="accordion-collapse collapse">
                                         <div class="accordion-body p-2">
                                           @foreach (var pc in detTt.ProgramasConera)
                                           {
-                                            <div class="p-2 mb-1" style="background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;">
-                                              <div class="d-flex flex-wrap gap-3 align-items-center">
+                                            <div class="p-0 mb-1" style="background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;">
+                                              <div class="tt-data-grid">
                                                 <div><span class="tt-lbl">F/Inicio en máq.</span><span class="tt-val tt-mono">@pc.FechaIni.ToString("dd/MM/yy HH:mm")</span></div>
                                                 <div><span class="tt-lbl">F/Salida</span><span class="tt-val tt-mono">@(pc.FechaFin?.ToString("dd/MM/yy HH:mm") ?? "—")</span></div>
                                                 <div>
@@ -1301,7 +1411,9 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-dev"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(detTt.Devanados.All(x => x.FechaFin.HasValue) ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-arrow-repeat me-2"></i>Registro de Devanado
+                                          <span class="tt-acc-preview">@detTt.Devanados.Count registro@(detTt.Devanados.Count != 1 ? "s" : "")@(detTt.Devanados.Any(x => x.PesoNeto.HasValue) ? $" · {detTt.Devanados.Where(x => x.PesoNeto.HasValue).Sum(x => x.PesoNeto!.Value):N0} kg" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-dev" class="accordion-collapse collapse">
@@ -1360,7 +1472,9 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-rev"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot @(detTt.Revisados.All(x => x.FchFinRevisa.HasValue) ? "tt-sdot-ok" : "tt-sdot-run")"></span>
                                           <i class="bi bi-clipboard2-check me-2"></i>Revisado de Productos Acabados
+                                          <span class="tt-acc-preview">@detTt.Revisados.Count revisado@(detTt.Revisados.Count != 1 ? "s" : "")</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-rev" class="accordion-collapse collapse">
@@ -1430,15 +1544,17 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-alm"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot tt-sdot-ok"></span>
                                           <i class="bi bi-box-seam me-2"></i>Pesaje Ingreso Almacén PT
+                                          <span class="tt-acc-preview">@detTt.PesajesAlmacen.Count ingreso@(detTt.PesajesAlmacen.Count != 1 ? "s" : "") · @detTt.PesajesAlmacen.Sum(x => x.PesoPesado).ToString("N0") kg</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-alm" class="accordion-collapse collapse">
                                         <div class="accordion-body p-2">
                                           @foreach (var pj in detTt.PesajesAlmacen)
                                           {
-                                            <div class="p-2 mb-1" style="background:#f5f3ff;border-radius:6px;border:1px solid #ddd6fe;">
-                                              <div class="d-flex flex-wrap gap-3 align-items-center">
+                                            <div class="p-0 mb-1" style="background:#f5f3ff;border-radius:6px;border:1px solid #ddd6fe;">
+                                              <div class="tt-data-grid">
                                                 <div><span class="tt-lbl">Fecha</span><span class="tt-val tt-mono">@pj.Fecha.ToString("dd/MM/yy")</span></div>
                                                 <div><span class="tt-lbl">Guía Kardex</span><span class="tt-val tt-mono">@pj.Serie-@pj.Numero</span></div>
                                                 <div><span class="tt-lbl">Etiquetado</span><span class="tt-val">@pj.LotesEtiq <span class="text-muted small">lotes</span></span></div>
@@ -1459,7 +1575,9 @@
                                         <button class="accordion-button collapsed tt-acc-btn" type="button"
                                                 data-bs-toggle="collapse" data-bs-target="#acc-tt-@(subIdx)-des"
                                                 aria-expanded="false">
+                                          <span class="tt-sdot tt-sdot-ok"></span>
                                           <i class="bi bi-truck me-2"></i>Despachos Prod. Terminado / Servicio
+                                          <span class="tt-acc-preview">@detTt.Despachos.Count despacho@(detTt.Despachos.Count != 1 ? "s" : "") · @detTt.Despachos.Sum(x => x.PesoKg).ToString("N0") kg</span>
                                         </button>
                                       </h2>
                                       <div id="acc-tt-@(subIdx)-des" class="accordion-collapse collapse">
@@ -1555,6 +1673,178 @@
     }
 </div>
 @section Scripts {
+@* ── Datos de alertas serializados para el modal JS *@
+@{
+    var alertasJson = System.Text.Json.JsonSerializer.Serialize(Model.Alertas.Select(a => new {
+        nro           = a.Nro,
+        nivel         = a.Nivel,
+        nivelTxt      = a.NivelTexto,
+        nivelCol      = a.NivelColor,
+        tipAlerta     = a.TipAlerta,
+        tipo          = a.TipoTexto,
+        titulo        = a.Titulo,
+        detalle       = a.Detalle,
+        nombrePaso    = a.NombrePaso,
+        colorPaso     = a.ColorUiPaso,
+        tituloArt     = a.TituloArt,
+        procesoTxt    = a.ProcesoTexto,
+        fchComp       = a.FchEntregaComp.HasValue ? a.FchEntregaComp.Value.ToString("dd/MM/yy") : (string?)null,
+        diasComp      = a.FchEntregaComp.HasValue ? (int)(a.FchEntregaComp.Value - DateTime.Today).TotalDays : (int?)null,
+        kgPend        = a.KgPendientes.HasValue ? (double?)Math.Round((double)a.KgPendientes.Value, 1) : null,
+        cantOrig      = a.CantidadOrig.HasValue ? (double?)Math.Round((double)a.CantidadOrig.Value, 0) : null,
+        kgPct         = (a.KgPendientes.HasValue && a.CantidadOrig.HasValue && a.CantidadOrig > 0)
+                            ? (double?)Math.Round((double)(a.KgPendientes / a.CantidadOrig * 100), 0) : null,
+        diasRetraso   = a.DiasRetraso,
+        nroCiclo      = a.NroCiclo,
+        urgente       = a.IndUrgente == "S",
+        horas         = a.HorasSinResolver.HasValue ? (int)a.HorasSinResolver.Value : (int?)null
+    }));
+}
+<div class="modal fade" id="modalAlertasPedido" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2" style="background:linear-gradient(135deg,#2d3748,#4a5568);color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-bell-fill me-2 text-danger"></i><span id="modalAlertasTitulo">Alertas</span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-2" id="modalAlertasBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    /* ── Modal alertas: subtabla ─────────────────────────────── */
+    #modalAlertasBody .mal-tbl { width:100%; border-collapse:collapse; font-size:.8rem; }
+    #modalAlertasBody .mal-tbl thead th {
+        font-size:.67rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+        color:#718096; background:#e2e7f0; padding:.28rem .5rem;
+        border-bottom:2px solid #cdd4e0;
+    }
+    #modalAlertasBody .mal-tbl td { padding:.3rem .5rem; vertical-align:middle; }
+    #modalAlertasBody .mal-tbl tbody tr.tip-RET1 { background:#fff5f5; }
+    #modalAlertasBody .mal-tbl tbody tr.tip-RET2 { background:#fffbeb; }
+    #modalAlertasBody .mal-tbl tbody tr.tip-SMP  { background:#fffbeb; }
+    #modalAlertasBody .mal-tbl tbody tr.tip-STN  { background:#eff6ff; }
+    #modalAlertasBody .mal-tbl tbody tr.tip-QCF  { background:#fff5f5; }
+    #modalAlertasBody .mal-tbl tbody tr:hover td { filter:brightness(.96); }
+    #modalAlertasBody .mal-kg-bar { height:5px; border-radius:3px; background:#e2e8f0; overflow:hidden; min-width:50px; }
+    #modalAlertasBody .mal-kg-fill { height:100%; border-radius:3px; }
+    #modalAlertasBody .mal-paso-dot { width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0; }
+</style>
+<script>
+    const _alertasData = @Html.Raw(alertasJson);
+
+    function abrirModalAlertas(nro) {
+        const lista = nro === null ? _alertasData : _alertasData.filter(a => a.nro === nro);
+        const titulo = nro === null ? 'Alertas del pedido' : `Alertas — Ítem ${nro}`;
+        document.getElementById('modalAlertasTitulo').textContent = titulo;
+
+        let html = '';
+        if (!lista.length) {
+            html = '<div class="text-muted p-3 text-center"><i class="bi bi-check-circle text-success me-2"></i>No hay alertas para este ítem.</div>';
+        } else {
+            html += `<table class="mal-tbl">
+                <thead><tr>
+                    <th style="width:22px;"></th>
+                    <th style="width:32px;">Ítem</th>
+                    <th>Tipo · Paso</th>
+                    <th>Artículo</th>
+                    <th>Vencimiento</th>
+                    <th>KG pendientes</th>
+                    <th>Detalle</th>
+                    <th style="width:80px;">Sin resolver</th>
+                </tr></thead><tbody>`;
+
+            lista.forEach(a => {
+                // nivel icon
+                const nivelIcon = a.nivel === 'C'
+                    ? '<i class="bi bi-exclamation-octagon-fill text-danger"></i>'
+                    : a.nivel === 'A'
+                        ? '<i class="bi bi-exclamation-triangle-fill text-warning"></i>'
+                        : '<i class="bi bi-info-circle-fill text-info"></i>';
+
+                // tipo icon
+                const tipIconMap = {
+                    'RET1': 'bi-alarm-fill text-danger',
+                    'RET2': 'bi-clock-history text-warning',
+                    'SMP' : 'bi-calendar-x-fill text-warning',
+                    'STN' : 'bi-arrow-right-square-fill text-primary',
+                    'QCF' : 'bi-x-circle-fill text-danger'
+                };
+                const tipIcon = `<i class="bi ${tipIconMap[a.tipAlerta] ?? 'bi-bell-fill text-secondary'} me-1"></i>`;
+
+                // tipo + paso
+                let tipoCel = `<div>${tipIcon}<strong>${a.tipo}</strong>`;
+                if (a.diasRetraso > 0) tipoCel += ` <span class="badge bg-danger" style="font-size:.6rem;">+${a.diasRetraso} d</span>`;
+                if (a.urgente) tipoCel += ` <i class="bi bi-fire text-warning ms-1" title="Urgente"></i>`;
+                tipoCel += '</div>';
+                if (a.nombrePaso) {
+                    const dot = a.colorPaso ? `<span class="mal-paso-dot me-1" style="background:${a.colorPaso};"></span>` : '';
+                    tipoCel += `<div class="d-flex align-items-center mt-1" style="font-size:.7rem;color:#718096;">${dot}${a.nombrePaso}`;
+                    if ((a.nroCiclo ?? 1) > 1) tipoCel += ` <span class="badge bg-danger ms-1" style="font-size:.58rem;">Ciclo ${a.nroCiclo}</span>`;
+                    tipoCel += '</div>';
+                }
+
+                // artículo
+                let artCel = '';
+                if (a.nro) artCel += `<div class="fw-semibold" style="font-size:.78rem;">Ítem ${a.nro}</div>`;
+                if (a.tituloArt) artCel += `<span class="badge bg-light text-dark border" style="font-size:.65rem;">Nm ${a.tituloArt}</span> `;
+                if (a.procesoTxt) artCel += `<span style="font-size:.7rem;color:#718096;">${a.procesoTxt}</span>`;
+
+                // vencimiento
+                let vencCel = '—';
+                if (a.fchComp !== null) {
+                    const d = a.diasComp;
+                    const cls = d < 0 ? 'text-danger fw-bold' : d <= 3 ? 'text-warning fw-semibold' : '';
+                    const badge = d < 0
+                        ? `<span class="badge bg-danger" style="font-size:.6rem;">Vencido ${Math.abs(d)} d</span>`
+                        : d === 0
+                            ? `<span class="badge bg-warning text-dark" style="font-size:.6rem;">Hoy</span>`
+                            : `<span style="font-size:.7rem;color:#718096;">en ${d} d</span>`;
+                    vencCel = `<div class="${cls}" style="font-size:.78rem;">${a.fchComp}</div><div>${badge}</div>`;
+                }
+
+                // KG
+                let kgCel = '—';
+                if (a.kgPend !== null && a.cantOrig > 0) {
+                    const pct  = a.kgPct ?? 0;
+                    const col  = pct > 80 ? '#dc3545' : pct > 40 ? '#ffc107' : '#198754';
+                    kgCel = `<div><span class="fw-semibold">${a.kgPend.toFixed(1)}</span> <small class="text-muted">/ ${a.cantOrig.toFixed(0)} kg</small></div>`
+                          + `<div class="mal-kg-bar mt-1"><div class="mal-kg-fill" style="width:${pct}%;background:${col};"></div></div>`;
+                }
+
+                // detalle
+                const detalleStr = (a.detalle?.length ? a.detalle : a.titulo) ?? '';
+                const detalleCel = `<span class="text-muted" title="${detalleStr}" style="font-size:.75rem;display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalleStr}</span>`;
+
+                // tiempo sin resolver
+                let sinResCel = '—';
+                if (a.horas !== null) {
+                    const d2 = Math.floor(a.horas / 24), hr = a.horas % 24;
+                    const cls2 = a.horas >= 48 ? 'text-danger fw-bold' : a.horas >= 24 ? 'text-warning fw-semibold' : 'text-muted';
+                    sinResCel = `<span class="${cls2}" title="${a.horas}h sin resolver">${d2 > 0 ? d2 + '<small>d</small> ' + hr + '<small>h</small>' : a.horas + '<small>h</small>'}</span>`;
+                }
+
+                html += `<tr class="tip-${a.tipAlerta}">
+                    <td>${nivelIcon}</td>
+                    <td class="text-center">${a.nro ? `<span class="badge bg-dark" style="font-size:.62rem;">${a.nro}</span>` : ''}</td>
+                    <td>${tipoCel}</td>
+                    <td>${artCel || '—'}</td>
+                    <td>${vencCel}</td>
+                    <td>${kgCel}</td>
+                    <td>${detalleCel}</td>
+                    <td>${sinResCel}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+        }
+        document.getElementById('modalAlertasBody').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('modalAlertasPedido')).show();
+    }
+</script>
 <script>
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el =>
         new bootstrap.Tooltip(el, { placement: 'top' }));

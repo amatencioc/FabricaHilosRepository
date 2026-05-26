@@ -30,8 +30,14 @@ public class PlaneamientoController : OracleBaseController
         _param       = param;
     }
 
-    // GET /Planeamiento
+    // GET /Planeamiento  — redirige directamente al Dashboard (Index es redundante)
     public IActionResult Index()
+    {
+        return RedirectToAction(nameof(Dashboard));
+    }
+
+    // GET /Planeamiento/IndexCards  — listado de tarjetas (mantenido por compatibilidad)
+    public IActionResult IndexCards()
     {
         var menus = _menuService.GetMenusActuales();
         var modulos = new List<SgcModuloDto>();
@@ -105,22 +111,33 @@ public class PlaneamientoController : OracleBaseController
     }
 
     // GET /Planeamiento/Dashboard
-    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false)
+    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false, int pagina = 1)
     {
-        var tItems   = _seguimiento.GetActivosAsync(busquedaCliente, codPaso, numPed, incluyeCerrados);
+        var tPagina  = _seguimiento.GetActivosPaginadoAsync(busquedaCliente, codPaso, numPed, incluyeCerrados, pagina);
         var tEstados = _seguimiento.GetEstadosAsync();
         var tAlertas = _alerta.GetActivasAsync();
-        await Task.WhenAll(tItems, tEstados, tAlertas);
+        await Task.WhenAll(tPagina, tEstados, tAlertas);
+
+        var resultado = tPagina.Result;
         ViewBag.Estados          = tEstados.Result;
         ViewBag.FiltroCliente    = busquedaCliente;
         ViewBag.FiltroPaso       = codPaso;
         ViewBag.FiltroNumPed     = numPed;
-        // Diccionario Serie|NumPed -> cantidad de alertas activas, para mostrar badge en fila de pedido
+        ViewBag.IncluyeCerrados  = incluyeCerrados;
         ViewBag.AlertasPorPedido = tAlertas.Result
             .GroupBy(a => $"{a.Serie}|{a.NumPed}")
             .ToDictionary(g => g.Key, g => g.Count());
-        ViewBag.IncluyeCerrados  = incluyeCerrados;
-        return View(tItems.Result);
+        // Metadatos de paginación
+        ViewBag.Pagina         = resultado.Pagina;
+        ViewBag.TotalPaginas   = resultado.TotalPaginas;
+        ViewBag.TotalPedidos   = resultado.TotalPedidos;
+        // Totales globales para KPIs
+        ViewBag.TotalItems       = resultado.TotalItems;
+        ViewBag.TotalRetrasados  = resultado.TotalRetrasados;
+        ViewBag.TotalUrgentes    = resultado.TotalUrgentes;
+        ViewBag.TotalReprocesos  = resultado.TotalReprocesos;
+        ViewBag.TotalSinPlanif   = resultado.TotalSinPlanif;
+        return View(resultado.Items);
     }
 
     // GET /Planeamiento/Pedido?numPed=&serie=
@@ -134,6 +151,36 @@ public class PlaneamientoController : OracleBaseController
 
         // Cargar detalle TT por cada sublote que tenga partida asignada.
         // Se deduplica por NumPartida para no consultar dos veces la misma partida.
+        var items     = tItems.Result.ToList();
+        var detalleTt = new Dictionary<long, PlnDetalleTt>();
+        foreach (var item in items.Where(x => x.NumPartida > 0))
+        {
+            if (!detalleTt.ContainsKey(item.NumPartida))
+                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
+        }
+
+        var vm = new PlnPedidoViewModel
+        {
+            NumPed    = numPed,
+            Serie     = serie,
+            Items     = items,
+            Eventos   = tEventos.Result,
+            Alertas   = tAlertas.Result,
+            Pasos     = tPasos.Result,
+            DetalleTt = detalleTt,
+        };
+        return View(vm);
+    }
+
+    // GET /Planeamiento/Pedido2?numPed=&serie=
+    public async Task<IActionResult> Pedido2(long numPed, int serie)
+    {
+        var tItems   = _seguimiento.GetPorPedidoAsync(numPed, serie);
+        var tEventos = _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
+        var tAlertas = _seguimiento.GetAlertasPorPedidoAsync(numPed, serie);
+        var tPasos   = _seguimiento.GetEstadosAsync();
+        await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
+
         var items     = tItems.Result.ToList();
         var detalleTt = new Dictionary<long, PlnDetalleTt>();
         foreach (var item in items.Where(x => x.NumPartida > 0))
@@ -178,8 +225,19 @@ public class PlaneamientoController : OracleBaseController
     // GET /Planeamiento/CargaMaquinas
     public async Task<IActionResult> CargaMaquinas()
     {
-        var carga = await _kpi.GetCargaMaquinasAsync();
-        return View(carga);
+        var tCompromisos = _kpi.GetMaquinasCompromisoAsync();
+        var tTt          = _kpi.GetEstadoMaquinasTintoreriaAsync();
+        var tSec         = _kpi.GetEstadoMaquinasSecadoAsync();
+        var tOtras       = _kpi.GetEstadoMaquinasOtrasAsync();
+        var tHil         = _kpi.GetResumenHilanderiaAsync();
+        await Task.WhenAll(tCompromisos, tTt, tSec, tOtras, tHil);
+
+        ViewBag.Compromisos       = tCompromisos.Result.ToList();
+        ViewBag.EstadoTintoreria  = tTt.Result.ToList();
+        ViewBag.EstadoSecado      = tSec.Result.ToList();
+        ViewBag.EstadoOtras       = tOtras.Result.ToList();
+        ViewBag.EstadoHilanderia  = tHil.Result.ToList();
+        return View();
     }
 
     // GET /Planeamiento/Alertas
@@ -220,22 +278,104 @@ public class PlaneamientoController : OracleBaseController
     // GET /Planeamiento/PedidoGantt?numPed=&serie=
     public async Task<IActionResult> PedidoGantt(long numPed, int serie)
     {
-        var tItems   = _seguimiento.GetPorPedidoAsync(numPed, serie);
         var tEventos = _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
         var tAlertas = _seguimiento.GetAlertasPorPedidoAsync(numPed, serie);
         var tPasos   = _seguimiento.GetEstadosAsync();
-        await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
+        var items    = (await _seguimiento.GetPorPedidoAsync(numPed, serie)).ToList();
+        await Task.WhenAll(tEventos, tAlertas, tPasos);
+
+        // Auto-planificación silenciosa: calcula FCH_EST_* para cualquier ítem
+        // en paso '01' que todavía no tenga fechas estimadas, sin requerir acción del usuario.
+        var sinPlanificar = items
+            .Where(x => x.CodPasoAct == "01" && !x.FchEstHilanderia.HasValue)
+            .ToList();
+
+        var erroresPlanif = new List<string>();
+        if (sinPlanificar.Any())
+        {
+            foreach (var it in sinPlanificar)
+            {
+                try
+                {
+                    await _seguimiento.CalcularFechasAsync(it.Serie, it.NumPed, it.Nro, it.NumDet, "PLA");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // SP_PLN_CALCULA_FECHAS puede fallar si faltan parámetros de proceso.
+                    // Se registra el error por ítem y se continúa con los demás.
+                    erroresPlanif.Add($"Ítem {it.Nro}: {ex.Message}");
+                }
+            }
+            // Recargar ítems para que la vista reciba las fechas ya calculadas.
+            items = (await _seguimiento.GetPorPedidoAsync(numPed, serie)).ToList();
+        }
+
+        if (erroresPlanif.Any())
+            ViewBag.ErroresPlanif = erroresPlanif;
+
+        // Cargar DetalleTt por sublotes con partida asignada (igual que Pedido/Pedido2).
+        var detalleTt = new Dictionary<long, PlnDetalleTt>();
+        foreach (var item in items.Where(x => x.NumPartida > 0))
+        {
+            if (!detalleTt.ContainsKey(item.NumPartida))
+                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
+        }
+
+        var vm = new PlnPedidoViewModel
+        {
+            NumPed    = numPed,
+            Serie     = serie,
+            Items     = items,
+            Eventos   = tEventos.Result,
+            Alertas   = tAlertas.Result,
+            Pasos     = tPasos.Result,
+            DetalleTt = detalleTt,
+        };
+        return View(vm);
+    }
+
+    // GET /Planeamiento/ItemTimeline?numPed=&serie=&nro=&numDet= — PartialView para modal
+    [HttpGet]
+    public async Task<IActionResult> ItemTimeline(long numPed, int serie, int nro, int numDet)
+    {
+        var tItem  = _seguimiento.GetByItemAsync(serie, numPed, nro, numDet);
+        var tPasos = _seguimiento.GetEstadosAsync();
+        var tEvt   = _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
+        await Task.WhenAll(tItem, tPasos, tEvt);
+
+        var item = tItem.Result;
+        if (item == null) return NotFound();
 
         var vm = new PlnPedidoViewModel
         {
             NumPed  = numPed,
             Serie   = serie,
-            Items   = tItems.Result,
-            Eventos = tEventos.Result,
-            Alertas = tAlertas.Result,
+            Items   = [item],
+            Eventos = tEvt.Result.Where(e => e.Nro == nro).ToList(),
             Pasos   = tPasos.Result
         };
-        return View(vm);
+        return PartialView("_ItemTimeline", vm);
+    }
+
+    // GET /Planeamiento/ItemGantt?numPed=&serie=&nro=&numDet= — PartialView para modal
+    [HttpGet]
+    public async Task<IActionResult> ItemGantt(long numPed, int serie, int nro, int numDet)
+    {
+        var tItem  = _seguimiento.GetByItemAsync(serie, numPed, nro, numDet);
+        var tPasos = _seguimiento.GetEstadosAsync();
+        await Task.WhenAll(tItem, tPasos);
+
+        var item = tItem.Result;
+        if (item == null) return NotFound();
+
+        var vm = new PlnPedidoViewModel
+        {
+            NumPed  = numPed,
+            Serie   = serie,
+            Items   = [item],
+            Pasos   = tPasos.Result
+        };
+        return PartialView("_ItemGantt", vm);
     }
 
     // GET /Planeamiento/KPIs
@@ -440,8 +580,11 @@ public class PlaneamientoController : OracleBaseController
     // GET /Planeamiento/PendientesDespacho
     public async Task<IActionResult> PendientesDespacho()
     {
-        var pendientes = await _kpi.GetPendientesDespachoAsync();
-        return View(pendientes);
+        var pendientesTask = _kpi.GetPendientesDespachoAsync();
+        var proximosTask   = _kpi.GetProximosDespachoAsync();
+        await Task.WhenAll(pendientesTask, proximosTask);
+        ViewBag.Proximos = proximosTask.Result.ToList();
+        return View(pendientesTask.Result);
     }
 
     // GET /Planeamiento/Parametros

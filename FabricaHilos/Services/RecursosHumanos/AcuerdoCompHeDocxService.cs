@@ -209,7 +209,7 @@ public class AcuerdoCompHeDocxService
         var allRows  = tbl.SelectNodes("w:tr", nm)!;
         var dataRows = new List<XmlNode>();
         for (int i = 2; i < allRows.Count; i++)
-            dataRows.Add(allRows[i]);
+            dataRows.Add(allRows[i]!);
 
         if (dataRows.Count == 0)
             throw new InvalidOperationException("La plantilla no tiene filas de datos en la tabla.");
@@ -270,29 +270,30 @@ public class AcuerdoCompHeDocxService
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
-    private static void SetCellText(XmlDocument doc, XmlNamespaceManager nm, XmlNode cell, string text)
+    private static void SetCellText(XmlDocument doc, XmlNamespaceManager nm, XmlNode? cell, string text)
     {
+        if (cell == null) return;
         var runs = cell.SelectNodes(".//w:r", nm)!;
 
         // Eliminar runs adicionales (dejar solo el primero)
         for (int i = 1; i < runs.Count; i++)
-            runs[i].ParentNode!.RemoveChild(runs[i]);
+            runs[i]!.ParentNode!.RemoveChild(runs[i]!);
 
         if (runs.Count > 0)
         {
-            var tNodes = runs[0].SelectNodes("w:t", nm)!;
+            var tNodes = runs[0]!.SelectNodes("w:t", nm)!;
             for (int i = 1; i < tNodes.Count; i++)
-                tNodes[i].ParentNode!.RemoveChild(tNodes[i]);
+                tNodes[i]!.ParentNode!.RemoveChild(tNodes[i]!);
 
             XmlNode tNode;
             if (tNodes.Count > 0)
             {
-                tNode = tNodes[0];
+                tNode = tNodes[0]!;
             }
             else
             {
                 tNode = doc.CreateElement("w", "t", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
-                runs[0].AppendChild(tNode);
+                runs[0]!.AppendChild(tNode);
             }
 
             tNode.InnerText = text;

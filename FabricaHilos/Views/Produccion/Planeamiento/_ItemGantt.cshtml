@@ -1,0 +1,187 @@
+@model FabricaHilos.Models.Produccion.Planeamiento.PlnPedidoViewModel
+@using FabricaHilos.Models.Produccion.Planeamiento
+
+@{
+    var item  = Model.Items.First();
+    var pasos = Model.Pasos.OrderBy(p => p.OrdenPaso)
+                           .Where(p => p.CodPaso != "9R")
+                           .ToList();
+
+    // Definición de filas: (CodPaso, Label, Color, FechaReal, FechaEstimada)
+    var filas = new List<(string Cod, string Label, string Color, DateTime? Real, DateTime? Est)>
+    {
+        ("01", "Pedido",     "#6c757d", item.FchPedido,          null),
+        ("02", "Planif.",    "#0d6efd", item.FchRealProgramado,  item.FchEstHilanderia),
+        ("03", "Hilandería", "#8e44ad", item.FchRealProduccion,  item.FchEstPartida),
+        ("04", "Lab.",       "#e67e22", item.FchRealPartida,     null),
+        ("06", "Tint. Ini",  "#e74c3c", item.FchRealTinIni,      item.FchEstTinIni),
+        ("07", "Tint. Fin",  "#c0392b", item.FchRealTinFin,      item.FchEstTinFin),
+        ("08", "Secado",     "#16a085", item.FchRealSecado,      item.FchEstSecado),
+        ("09", "Calidad",    "#27ae60", item.FchRealCcTinto,     null),
+        ("10", "Devanado",   "#f39c12", item.FchRealDevanado,    null),
+        ("11", "CC Calidad", "#2980b9", item.FchRealCalidad,     item.FchEstCalidad),
+        ("12", "Alm. PT",    "#1abc9c", item.FchRealAlmPt,       null),
+        ("14", "Despacho",   "#34495e", item.FchRealDespacho,    item.FchEstDespacho),
+    };
+
+    int ordenActual = pasos.FirstOrDefault(p => p.CodPaso == item.CodPasoAct)?.OrdenPaso ?? 0;
+
+    // Rango de fechas para escalar posiciones
+    var allFechas = filas
+        .SelectMany(f => new[] { f.Real, f.Est })
+        .Where(d => d.HasValue)
+        .Select(d => d!.Value.Date)
+        .ToList();
+    if (item.FchEntregaComp.HasValue) allFechas.Add(item.FchEntregaComp.Value.Date);
+    allFechas.Add(DateTime.Today);
+
+    var fechaMin = allFechas.Any() ? allFechas.Min().AddDays(-1) : DateTime.Today.AddDays(-7);
+    var fechaMax = allFechas.Any() ? allFechas.Max().AddDays(1)  : DateTime.Today.AddDays(7);
+    double rangoDias = Math.Max((fechaMax - fechaMin).TotalDays, 1);
+
+    string Pct(DateTime? d) => d.HasValue
+        ? Math.Clamp((d.Value.Date - fechaMin).TotalDays / rangoDias * 100, 0, 100)
+              .ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+        : "-1";
+
+    double pctHoyNum = Math.Clamp((DateTime.Today - fechaMin).TotalDays / rangoDias * 100, 0, 100);
+    string pctHoy = pctHoyNum.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
+    const int ROW_H = 26; // px por fila
+    int totalAlto = filas.Count * ROW_H;
+    const int LBL_W = 110; // px de etiqueta
+}
+
+<div class="px-1">
+    <!-- Encabezado del ítem -->
+    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+        <span class="badge bg-dark" style="font-size:.75rem; border-radius:3px;">Ítem #@item.Nro</span>
+        <strong class="text-primary" style="font-size:.9rem;">@item.CodArt</strong>
+        @if (!string.IsNullOrEmpty(item.Titulo))
+        {
+            <span class="text-muted" style="font-size:.8rem;">@item.Titulo</span>
+        }
+        <span class="ms-auto paso-badge text-white px-2 py-1 rounded"
+              style="background:@item.ColorUi; font-size:.72rem;">
+            @item.CodPasoAct — @item.NombrePaso
+        </span>
+    </div>
+
+    <!-- Eje de fechas -->
+    <div class="d-flex justify-content-between text-muted mb-1"
+         style="font-size:.62rem; padding-left:@(LBL_W + 4)px;">
+        <span>@fechaMin.AddDays(1).ToString("dd/MM")</span>
+        <span>@fechaMax.AddDays(-1).ToString("dd/MM/yy")</span>
+    </div>
+
+    <!-- Área del Gantt (etiquetas + barras con línea "Hoy" superpuesta) -->
+    <div style="position:relative;">
+
+        <!-- Filas -->
+        @for (int i = 0; i < filas.Count; i++)
+        {
+            var f = filas[i];
+            bool esPasado = pasos.Any(p => p.CodPaso == f.Cod && p.OrdenPaso < ordenActual);
+            bool esActual = f.Cod == item.CodPasoAct;
+
+            string labelColor = esActual ? f.Color : esPasado ? "#198754" : "#adb5bd";
+            string labelWeight = esActual ? "700" : "400";
+            string pctR = Pct(f.Real);
+            string pctE = Pct(f.Est);
+
+            @if (i == 4 || i == 8)
+            {
+                <div class="gnt-phase-sep" style="padding-left:@(LBL_W + 4)px;">
+                    <span>@(i == 4 ? "Tintorería" : "Acabados & Despacho")</span>
+                </div>
+            }
+            <div class="d-flex align-items-center" style="height:@(ROW_H)px; border-radius:4px; background:@(esActual ? f.Color + "18" : "transparent");">
+                <!-- Etiqueta -->
+                <div style="width:@(LBL_W)px; min-width:@(LBL_W)px; font-size:.63rem;
+                            display:flex; align-items:center; justify-content:flex-end;
+                            padding-right:.4rem;
+                            color:@labelColor; font-weight:@labelWeight;
+                            white-space:nowrap; overflow:hidden;"
+                     title="@f.Cod — @f.Label">
+                    <span class="gnt-lbl-cod">@f.Cod</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis;">@f.Label</span>
+                </div>
+                <!-- Barra -->
+                <div class="flex-grow-1" style="position:relative; height:14px; background:#f1f5f9; border-radius:3px;">
+                    @if (pctR != "-1")
+                    {
+                        <div style="position:absolute; left:@(pctR)%;
+                                    top:50%; transform:translate(-50%,-50%);
+                                    width:@(esActual ? 12 : 10)px; height:@(esActual ? 12 : 10)px; border-radius:2px;
+                                    background:@(esPasado ? "#198754" : f.Color);
+                                    box-shadow:@(esActual ? "0 0 0 3px " + f.Color + "44" : "none");
+                                    z-index:2;"
+                             title="Real: @f.Real!.Value.ToString("dd/MM/yy")">
+                        </div>
+                    }
+                    @if (pctE != "-1" && pctE != pctR)
+                    {
+                        <div style="position:absolute; left:@(pctE)%;
+                                    top:50%; transform:translate(-50%,-50%);
+                                    width:0; height:0;
+                                    border-left:5px solid transparent;
+                                    border-right:5px solid transparent;
+                                    border-bottom:9px solid @f.Color;
+                                    opacity:.55; z-index:2;"
+                             title="Est.: @f.Est!.Value.ToString("dd/MM/yy")">
+                        </div>
+                    }
+                </div>
+                <!-- Fecha -->
+                <div style="width:46px; min-width:46px; font-size:.6rem; padding-left:.3rem;
+                            color:#adb5bd; white-space:nowrap;">
+                    @if (f.Real.HasValue)
+                    {
+                        <span style="color:#198754;">@f.Real.Value.ToString("dd/MM")</span>
+                    }
+                    else if (f.Est.HasValue)
+                    {
+                        <span>@f.Est.Value.ToString("dd/MM")</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Línea vertical "Hoy" — sobre todas las filas -->
+        <div style="position:absolute;
+                    top:0; bottom:0;
+                    left:calc(@(LBL_W)px + (100% - @(LBL_W)px - 46px) * @(pctHoy) / 100);
+                    width:1px; background:#dc3545; opacity:.45; pointer-events:none; z-index:1;"
+             title="Hoy: @DateTime.Today.ToString("dd/MM/yyyy")">
+            <span style="position:absolute; top:0; left:2px; font-size:.5rem; font-weight:700;
+                         color:#dc3545; opacity:1; background:rgba(255,255,255,.85);
+                         padding:0 2px; border-radius:2px; white-space:nowrap; line-height:1.5;">hoy</span>
+        </div>
+    </div>
+
+    <!-- Leyenda -->
+    <div class="d-flex flex-wrap gap-3 mt-2 pt-2 border-top" style="font-size:.63rem; color:#6c757d;">
+        <span class="d-flex align-items-center gap-1">
+            <span style="display:inline-block;width:10px;height:10px;background:#198754;border-radius:2px;"></span>
+            Real completado
+        </span>
+        <span class="d-flex align-items-center gap-1">
+            <span style="display:inline-block;width:0;height:0;
+                         border-left:5px solid transparent;border-right:5px solid transparent;
+                         border-bottom:9px solid #6c757d;opacity:.55;"></span>
+            Estimado
+        </span>
+        <span class="d-flex align-items-center gap-1">
+            <span style="display:inline-block;width:1px;height:12px;background:#dc3545;opacity:.5;"></span>
+            Hoy
+        </span>
+        @if (item.FchEntregaComp.HasValue)
+        {
+            <span class="ms-auto d-flex align-items-center gap-1 @(item.EstaRetrasado ? "text-danger fw-bold" : "text-secondary")">
+                <i class="bi bi-flag-fill"></i>
+                Entrega: @item.FchEntregaComp.Value.ToString("dd/MM/yyyy")
+                @if (item.DiasRetraso > 0) { <span class="badge bg-danger ms-1" style="font-size:.58rem;">+@item.DiasRetraso d</span> }
+            </span>
+        }
+    </div>
+</div>

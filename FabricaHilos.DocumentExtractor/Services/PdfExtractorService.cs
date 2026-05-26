@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.RegularExpressions;
 using FabricaHilos.DocumentExtractor.Models;
@@ -62,6 +63,9 @@ public class PdfExtractorService : IDocumentExtractorService
                  File.Exists(Path.Combine(p, "eng.traineddata"))));
     }
 
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     public Task<DocumentoExtraido> ExtraerAsync(Stream archivo, string tipoMime, string nombreArchivo)
     {
         var resultado = new DocumentoExtraido
@@ -89,6 +93,9 @@ public class PdfExtractorService : IDocumentExtractorService
         return Task.FromResult(resultado);
     }
 
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     private static string ExtraerTexto(Stream archivo, string tipoMime, out bool usedOcr)
     {
         usedOcr = false;
@@ -122,6 +129,9 @@ public class PdfExtractorService : IDocumentExtractorService
         return string.Empty;
     }
 
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     private static string ExtraerTextoOcrDesdePdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();
@@ -209,6 +219,9 @@ public class PdfExtractorService : IDocumentExtractorService
         return encoded.ToArray();
     }
 
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     public Task<(string texto, string fuente)> ExtraerTextoRawAsync(Stream archivo, string tipoMime)
     {
         using var ms = new MemoryStream();

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 
 namespace FabricaHilos.Middleware
 {
@@ -11,7 +12,6 @@ namespace FabricaHilos.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<NetworkAccessMiddleware> _logger;
-        private readonly IConfiguration _configuration;
 
         // Rutas que SÍ son accesibles desde internet (módulos Seguridad y Producción)
         private static readonly string[] _rutasPermitidas = new[]
@@ -32,6 +32,9 @@ namespace FabricaHilos.Middleware
             "/_framework/",
         };
 
+        // Subnets pre-parseadas como (networkUint, maskUint) para comparación de enteros
+        private readonly (uint Network, uint Mask)[] _subnets;
+
         public NetworkAccessMiddleware(
             RequestDelegate next,
             ILogger<NetworkAccessMiddleware> logger,
@@ -39,27 +42,35 @@ namespace FabricaHilos.Middleware
         {
             _next = next;
             _logger = logger;
-            _configuration = configuration;
+
+            var subnetsConfig = configuration
+                .GetSection("RedInterna:Subnets")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            _subnets = subnetsConfig
+                .Select(ParsearSubnet)
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .ToArray();
         }
 
         public async Task InvokeAsync(HttpContext context)
         {
             var remoteIp = context.Connection.RemoteIpAddress;
-            var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+            var path = context.Request.Path.Value ?? "";
 
-            // 1. Siempre permitir archivos estáticos
-            if (_rutasEstaticasPermitidas.Any(p => path.StartsWith(p)))
+            // 1. Siempre permitir archivos estáticos (comparación OrdinalIgnoreCase sin allocations)
+            foreach (var prefijo in _rutasEstaticasPermitidas)
             {
-                await _next(context);
-                return;
+                if (path.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase))
+                {
+                    await _next(context);
+                    return;
+                }
             }
 
-            // 2. Obtener las redes internas configuradas en appsettings.json
-            var redesInternas = _configuration
-                .GetSection("RedInterna:Subnets")
-                .Get<string[]>() ?? Array.Empty<string>();
-
-            bool esRedInterna = EsIpInterna(remoteIp, redesInternas);
+            // 2. Verificar si es red interna usando subnets pre-parseadas
+            bool esRedInterna = EsIpInterna(remoteIp, _subnets);
 
             if (esRedInterna)
             {
@@ -69,8 +80,16 @@ namespace FabricaHilos.Middleware
             }
 
             // 3. Fuera de la red interna → solo rutas de Seguridad y Producción permitidas
-            bool rutaPermitida = _rutasPermitidas.Any(r =>
-                path == r || path.StartsWith(r + "/"));
+            bool rutaPermitida = false;
+            foreach (var ruta in _rutasPermitidas)
+            {
+                if (path.Equals(ruta, StringComparison.OrdinalIgnoreCase) ||
+                    path.StartsWith(ruta + "/", StringComparison.OrdinalIgnoreCase))
+                {
+                    rutaPermitida = true;
+                    break;
+                }
+            }
 
             if (rutaPermitida)
             {
@@ -91,61 +110,63 @@ namespace FabricaHilos.Middleware
             await context.Response.WriteAsync(Pagina403Html());
         }
 
-        private static bool EsIpInterna(IPAddress? remoteIp, string[] subnets)
+        private static bool EsIpInterna(IPAddress? remoteIp, (uint Network, uint Mask)[] subnets)
         {
             if (remoteIp == null) return false;
 
             // Siempre permitir loopback (localhost / desarrollo)
             if (IPAddress.IsLoopback(remoteIp)) return true;
 
-            // Si viene como IPv4 mapeado en IPv6 (::ffff:10.x.x.x), extraer IPv4
+
             if (remoteIp.IsIPv4MappedToIPv6)
                 remoteIp = remoteIp.MapToIPv4();
 
-            foreach (var subnet in subnets)
+            // Solo soportamos IPv4 para subnets internas
+            if (remoteIp.AddressFamily != AddressFamily.InterNetwork)
+                return false;
+
+            uint ipInt = IpAUint(remoteIp);
+            foreach (var (network, mask) in subnets)
             {
-                if (EstaEnSubnet(remoteIp, subnet))
+                if ((ipInt & mask) == network)
                     return true;
             }
 
             return false;
         }
 
-        private static bool EstaEnSubnet(IPAddress ip, string subnet)
+        /// <summary>
+        /// Parsea "10.0.7.0/24" a (networkUint, maskUint). Retorna null si es inválido.
+        /// Se llama una sola vez en el constructor.
+        /// </summary>
+        private static (uint Network, uint Mask)? ParsearSubnet(string subnet)
         {
             try
             {
-                // Formato esperado: "10.0.7.0/24"
                 var partes = subnet.Split('/');
-                if (partes.Length != 2) return false;
+                if (partes.Length != 2) return null;
 
-                var redBase = IPAddress.Parse(partes[0]);
-                int prefixLen = int.Parse(partes[1]);
+                if (!IPAddress.TryParse(partes[0], out var redBase) ||
+                    redBase.AddressFamily != AddressFamily.InterNetwork)
+                    return null;
 
-                var ipBytes = ip.GetAddressBytes();
-                var redBytes = redBase.GetAddressBytes();
+                if (!int.TryParse(partes[1], out int prefixLen) || prefixLen < 0 || prefixLen > 32)
+                    return null;
 
-                if (ipBytes.Length != redBytes.Length) return false;
-
-                int bytesCompletos = prefixLen / 8;
-                int bitsSobrantes = prefixLen % 8;
-
-                for (int i = 0; i < bytesCompletos; i++)
-                    if (ipBytes[i] != redBytes[i]) return false;
-
-                if (bitsSobrantes > 0)
-                {
-                    int mascara = 0xFF << (8 - bitsSobrantes);
-                    if ((ipBytes[bytesCompletos] & mascara) != (redBytes[bytesCompletos] & mascara))
-                        return false;
-                }
-
-                return true;
+                uint mask = prefixLen == 0 ? 0u : ~((1u << (32 - prefixLen)) - 1);
+                uint network = IpAUint(redBase) & mask;
+                return (network, mask);
             }
             catch
             {
-                return false;
+                return null;
             }
+        }
+
+        private static uint IpAUint(IPAddress ip)
+        {
+            var bytes = ip.GetAddressBytes();
+            return ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
         }
 
         private static string Pagina403Html() => """

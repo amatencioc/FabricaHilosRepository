@@ -35,6 +35,23 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         return (T)Convert.ChangeType(val, underlying);
     }
 
+    // Oracle NUMBER puede desbordarse al convertirlo a decimal .NET con GetValue().
+    // Este helper usa GetOracleDecimal para evitar el OverflowException y devuelve double?.
+    private static double? SafeOracleDouble(Oracle.ManagedDataAccess.Client.OracleDataReader r, int ordinal)
+    {
+        if (r.IsDBNull(ordinal)) return null;
+        try
+        {
+            var od = r.GetOracleDecimal(ordinal);
+            od = Oracle.ManagedDataAccess.Types.OracleDecimal.SetPrecision(od, 15);
+            return (double)od;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // ── V_PLN_ESTADO_ITEM — vista autorizada por PKG_PLN §8.2 ──────────────────
     // Reemplaza el SQL ad-hoc SeguimientoSelect. Alias clave:
     //   kg_pedido → CantidadOrig  |  nom_cliente → NombreCliente
@@ -61,7 +78,14 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int oFchRealGaseado = -1,   // v2.1: opcional — solo '09B' PROCESO='24'
         int oMaqTt = -1, int oMaqProgramada = -1, int oMaqPartida = -1,   // v2.2: campos máquina
         int oMaqRealTt = -1,                                               // v2.3: TT_RPRODUC real-time
-        int oNumPartida = -1)                                              // v2.4: PARTIDA.NUMERO
+        int oNumPartida = -1,                                              // v2.4: PARTIDA.NUMERO
+        int oMaqSecado = -1, int oMaqDevan = -1,                          // v2.5: secado/devanado
+        int oFchRegEntrega2 = -1, int oFchEntregaOri2 = -1,                 // v2.3: fechas compromiso por artículo
+        int oFchAprobacion = -1, int oFchPlanif = -1,                      // v2.6: fechas actor
+        int oUsrRegistro = -1, int oNombreRegistro = -1,                   // v2.6: quien registró
+        int oUsrAprobacion = -1, int oNombreAprobacion = -1,               // v2.6: quien aprobó
+        int oUsrPlanif = -1, int oNombrePlanif = -1,                       // v2.6: planificador
+        int oIndFlujo = -1)                                                    // v2.3: flujo dual Lab/Hilandería
         => new()
         {
             IdSeguim          = SafeVal<long>(r[oIdSeguim]),
@@ -114,10 +138,23 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             IndReproceso      = SafeStr(r[oIndReproceso]),
             Estado            = SafeStr(r[oEstado]),
             CodMaqTt          = oMaqTt         >= 0 ? SafeStr(r[oMaqTt])         : null,
+            CodMaqSecado      = oMaqSecado     >= 0 ? SafeStr(r[oMaqSecado])     : null,
+            CodMaqDevan       = oMaqDevan      >= 0 ? SafeStr(r[oMaqDevan])      : null,
             MaqProgramada     = oMaqProgramada >= 0 ? SafeStr(r[oMaqProgramada]) : null,
             MaqPartida        = oMaqPartida    >= 0 ? SafeStr(r[oMaqPartida])    : null,
             MaqRealTt         = oMaqRealTt     >= 0 ? SafeStr(r[oMaqRealTt])     : null,
             NumPartida        = oNumPartida    >= 0 ? SafeVal<long>(r[oNumPartida]) : 0,
+            FchRegEntrega     = oFchRegEntrega2   >= 0 ? SafeDate(r[oFchRegEntrega2])   : null,
+            FchEntregaOri     = oFchEntregaOri2   >= 0 ? SafeDate(r[oFchEntregaOri2])   : null,
+            FchAprobacion     = oFchAprobacion    >= 0 ? SafeDate(r[oFchAprobacion])    : null,
+            FchPlanif         = oFchPlanif        >= 0 ? SafeDate(r[oFchPlanif])        : null,
+            UsrRegistro       = oUsrRegistro      >= 0 ? SafeStr(r[oUsrRegistro])       : null,
+            NombreRegistro    = oNombreRegistro   >= 0 ? SafeStr(r[oNombreRegistro])    : null,
+            UsrAprobacion     = oUsrAprobacion    >= 0 ? SafeStr(r[oUsrAprobacion])     : null,
+            NombreAprobacion  = oNombreAprobacion >= 0 ? SafeStr(r[oNombreAprobacion])  : null,
+            UsrPlanif         = oUsrPlanif        >= 0 ? SafeStr(r[oUsrPlanif])         : null,
+            NombrePlanif      = oNombrePlanif     >= 0 ? SafeStr(r[oNombrePlanif])      : null,
+            IndFlujo          = oIndFlujo         >= 0 ? SafeStr(r[oIndFlujo])          : "L",
         };
 
     private string EstadoItemSelect => $@"
@@ -240,12 +277,220 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         return list;
     }
 
+    public async Task<PlnSeguimientoPagina> GetActivosPaginadoAsync(
+        string? busquedaCliente = null,
+        string? codPaso         = null,
+        string? numPed          = null,
+        bool    incluyeCerrados = false,
+        int     pagina          = 1,
+        int     tamPagina       = 10)
+    {
+        if (pagina < 1) pagina = 1;
+        if (tamPagina < 1) tamPagina = 10;
+
+        // ── Cláusula WHERE compartida ─────────────────────────────────────────
+        var whereClause =
+              (incluyeCerrados ? " WHERE v.estado_seguim IN ('A','C')" : " WHERE v.estado_seguim = 'A'")
+            + (!string.IsNullOrWhiteSpace(busquedaCliente)
+                ? " AND (UPPER(v.nom_cliente) LIKE UPPER('%'||:busquedaCliente||'%') OR UPPER(v.cod_cliente) LIKE UPPER('%'||:busquedaCliente||'%'))"
+                : "")
+            + (!string.IsNullOrWhiteSpace(codPaso) ? " AND v.cod_paso_act = :codPaso" : "")
+            + (!string.IsNullOrWhiteSpace(numPed)  ? " AND v.num_ped = :numPed"  : "");
+
+        // ── 1. Totales globales (KPIs + total pedidos para paginación) ─────────
+        // Se cuenta a nivel de ítem para los KPIs y a nivel de pedido para la paginación.
+        var sqlCount = $@"
+            SELECT
+                COUNT(*)                                          AS total_items,
+                SUM(CASE WHEN v.ind_retraso  = 'S' THEN 1 ELSE 0 END) AS total_retraso,
+                SUM(CASE WHEN v.ind_urgente  = 'S' THEN 1 ELSE 0 END) AS total_urgente,
+                SUM(CASE WHEN v.ind_reproceso= 'S' THEN 1 ELSE 0 END) AS total_reproceso,
+                SUM(CASE WHEN v.cod_paso_act = '01' THEN 1 ELSE 0 END) AS total_sin_planif,
+                COUNT(DISTINCT v.serie || '|' || v.num_ped)      AS total_pedidos
+            FROM {S}V_PLN_ESTADO_ITEM v
+            {whereClause}";
+
+        int totalItems = 0, totalRetraso = 0, totalUrgente = 0,
+            totalReproceso = 0, totalSinPlanif = 0, totalPedidos = 0;
+
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+
+        await using (var cmdCount = new OracleCommand(sqlCount, conn))
+        {
+            cmdCount.BindByName = true;
+            if (!string.IsNullOrWhiteSpace(busquedaCliente)) cmdCount.Parameters.Add("busquedaCliente", busquedaCliente);
+            if (!string.IsNullOrWhiteSpace(codPaso))         cmdCount.Parameters.Add("codPaso", codPaso);
+            if (!string.IsNullOrWhiteSpace(numPed))          cmdCount.Parameters.Add("numPed", numPed);
+
+            await using var rc = (OracleDataReader)await cmdCount.ExecuteReaderAsync();
+            if (await rc.ReadAsync())
+            {
+                totalItems      = rc.IsDBNull(0) ? 0 : Convert.ToInt32(rc[0]);
+                totalRetraso    = rc.IsDBNull(1) ? 0 : Convert.ToInt32(rc[1]);
+                totalUrgente    = rc.IsDBNull(2) ? 0 : Convert.ToInt32(rc[2]);
+                totalReproceso  = rc.IsDBNull(3) ? 0 : Convert.ToInt32(rc[3]);
+                totalSinPlanif  = rc.IsDBNull(4) ? 0 : Convert.ToInt32(rc[4]);
+                totalPedidos    = rc.IsDBNull(5) ? 0 : Convert.ToInt32(rc[5]);
+            }
+        }
+
+        // ── 2. Pedidos de la página (ROWNUM sobre lista ordenada de pedidos) ──
+        // Oracle 10g no soporta OFFSET/FETCH; se usa la técnica clásica de doble ROWNUM.
+        // Primero se obtiene la lista ordenada de pares (SERIE, NUM_PED) con rownum,
+        // luego se hace JOIN con los ítems de esos pedidos.
+        int filaDesde = (pagina - 1) * tamPagina + 1;
+        int filaHasta = pagina * tamPagina;
+
+        var sqlPage = $@"
+            SELECT t.*
+            FROM (
+                SELECT t2.*, ROWNUM AS rn
+                FROM (
+                    SELECT DISTINCT v.serie, v.num_ped
+                    FROM   {S}V_PLN_ESTADO_ITEM v
+                    {whereClause}
+                    ORDER BY v.serie DESC, v.num_ped DESC
+                ) t2
+                WHERE ROWNUM <= :filaHasta
+            ) t
+            WHERE t.rn >= :filaDesde";
+
+        var pedidosPagina = new List<(int Serie, long NumPed)>();
+        await using (var cmdPed = new OracleCommand(sqlPage, conn))
+        {
+            cmdPed.BindByName = true;
+            if (!string.IsNullOrWhiteSpace(busquedaCliente)) cmdPed.Parameters.Add("busquedaCliente", busquedaCliente);
+            if (!string.IsNullOrWhiteSpace(codPaso))         cmdPed.Parameters.Add("codPaso", codPaso);
+            if (!string.IsNullOrWhiteSpace(numPed))          cmdPed.Parameters.Add("numPed", numPed);
+            cmdPed.Parameters.Add("filaHasta", filaHasta);
+            cmdPed.Parameters.Add("filaDesde", filaDesde);
+
+            await using var rp = (OracleDataReader)await cmdPed.ExecuteReaderAsync();
+            while (await rp.ReadAsync())
+                pedidosPagina.Add((Convert.ToInt32(rp["SERIE"]), Convert.ToInt64(rp["NUM_PED"])));
+        }
+
+        if (pedidosPagina.Count == 0)
+        {
+            return new PlnSeguimientoPagina
+            {
+                Items          = [],
+                TotalItems     = totalItems,
+                TotalRetrasados= totalRetraso,
+                TotalUrgentes  = totalUrgente,
+                TotalReprocesos= totalReproceso,
+                TotalSinPlanif = totalSinPlanif,
+                TotalPedidos   = totalPedidos,
+                Pagina         = pagina,
+                TamPagina      = tamPagina,
+            };
+        }
+
+        // ── 3. Ítems de los pedidos de la página ──────────────────────────────
+        // Se construye IN (...) con los pares SERIE+NUM_PED de la página.
+        var inPairs = string.Join(" OR ", pedidosPagina.Select((p, i) =>
+            $"(v.serie = :pSerie{i} AND v.num_ped = :pNumPed{i})"));
+
+        var sqlItems = EstadoItemSelect
+            + (incluyeCerrados ? " WHERE v.estado_seguim IN ('A','C')" : " WHERE v.estado_seguim = 'A'")
+            + $" AND ({inPairs})"
+            + " ORDER BY v.ind_urgente DESC, v.dias_retraso DESC, v.num_ped DESC, v.nro";
+
+        var list = new List<PlnSeguimiento>();
+        await using (var cmdItems = new OracleCommand(sqlItems, conn))
+        {
+            cmdItems.BindByName = true;
+            for (int i = 0; i < pedidosPagina.Count; i++)
+            {
+                cmdItems.Parameters.Add($"pSerie{i}",  pedidosPagina[i].Serie);
+                cmdItems.Parameters.Add($"pNumPed{i}", pedidosPagina[i].NumPed);
+            }
+
+            await using var r = (OracleDataReader)await cmdItems.ExecuteReaderAsync();
+            if (await r.ReadAsync())
+            {
+            int oIdSeguim = r.GetOrdinal("ID_SEGUIM"), oSerie = r.GetOrdinal("SERIE"),
+                oNumPed2 = r.GetOrdinal("NUM_PED"), oNro = r.GetOrdinal("NRO"),
+                oNumDet = r.GetOrdinal("NUM_DET"), oCodCliente2 = r.GetOrdinal("COD_CLIENTE"),
+                oNombreCliente = r.GetOrdinal("NOMBRE_CLIENTE"), oCodArt = r.GetOrdinal("COD_ART"),
+                oColor = r.GetOrdinal("COLOR"), oTitulo = r.GetOrdinal("TITULO"),
+                oProceso = r.GetOrdinal("PROCESO"), oCantidadOrig = r.GetOrdinal("CANTIDAD_ORIG"),
+                oSoloDespacho = r.GetOrdinal("SOLO_DESPACHO"), oCodPasoAct = r.GetOrdinal("COD_PASO_ACT"),
+                oNombrePaso = r.GetOrdinal("NOMBRE_PASO"), oColorUi = r.GetOrdinal("COLOR_UI"),
+                oNroCiclo = r.GetOrdinal("NRO_CICLO"), oFchPedido = r.GetOrdinal("FCH_PEDIDO"),
+                oFchEntregaComp = r.GetOrdinal("FCH_ENTREGA_COMP"),
+                oFchEstHilanderia = r.GetOrdinal("FCH_EST_HILANDERIA"),
+                oFchEstPartida = r.GetOrdinal("FCH_EST_PARTIDA"),
+                oFchEstTinIni = r.GetOrdinal("FCH_EST_TIN_INI"),
+                oFchEstTinFin = r.GetOrdinal("FCH_EST_TIN_FIN"),
+                oFchEstSecado = r.GetOrdinal("FCH_EST_SECADO"),
+                oFchEstCalidad = r.GetOrdinal("FCH_EST_CALIDAD"),
+                oFchEstDespacho = r.GetOrdinal("FCH_EST_DESPACHO"),
+                oFchRealProgramado = r.GetOrdinal("FCH_REAL_PROGRAMADO"),
+                oFchRealProduccion = r.GetOrdinal("FCH_REAL_PRODUCCION"),
+                oFchRealPartida = r.GetOrdinal("FCH_REAL_PARTIDA"),
+                oFchRealTinIni = r.GetOrdinal("FCH_REAL_TIN_INI"),
+                oFchRealTinFin = r.GetOrdinal("FCH_REAL_TIN_FIN"),
+                oFchRealSecado = r.GetOrdinal("FCH_REAL_SECADO"),
+                oFchRealCcTinto = r.GetOrdinal("FCH_REAL_CC_TINTO"),
+                oFchRealCcRechazo = r.GetOrdinal("FCH_REAL_CC_RECHAZO"),
+                oFchRealDevanado = r.GetOrdinal("FCH_REAL_DEVANADO"),
+                oFchRealCalidad = r.GetOrdinal("FCH_REAL_CALIDAD"),
+                oFchRealAlmPt = r.GetOrdinal("FCH_REAL_ALM_PT"),
+                oFchRealDespacho = r.GetOrdinal("FCH_REAL_DESPACHO"),
+                oKgProducidos = r.GetOrdinal("KG_PRODUCIDOS"),
+                oKgEnTin = r.GetOrdinal("KG_EN_TIN"),
+                oKgEnAlmPt = r.GetOrdinal("KG_EN_ALM_PT"),
+                oKgDespachados = r.GetOrdinal("KG_DESPACHADOS"),
+                oKgPendientes = r.GetOrdinal("KG_PENDIENTES"),
+                oIndRetraso = r.GetOrdinal("IND_RETRASO"),
+                oDiasRetraso = r.GetOrdinal("DIAS_RETRASO"),
+                oIndUrgente = r.GetOrdinal("IND_URGENTE"),
+                oIndReproceso = r.GetOrdinal("IND_REPROCESO"),
+                oEstado = r.GetOrdinal("ESTADO");
+
+            do
+            {
+                list.Add(MapSeguimientoOrd(r,
+                    oIdSeguim, oSerie, oNumPed2, oNro, oNumDet,
+                    oCodCliente2, oNombreCliente, oCodArt, oColor, oTitulo,
+                    oProceso, oCantidadOrig, oSoloDespacho,
+                    oCodPasoAct, oNombrePaso, oColorUi, oNroCiclo,
+                    oFchPedido, oFchEntregaComp,
+                    oFchEstHilanderia, oFchEstPartida, oFchEstTinIni, oFchEstTinFin,
+                    oFchEstSecado, oFchEstCalidad, oFchEstDespacho,
+                    oFchRealProgramado, oFchRealProduccion, oFchRealPartida,
+                    oFchRealTinIni, oFchRealTinFin, oFchRealSecado,
+                    oFchRealCcTinto, oFchRealCcRechazo, oFchRealDevanado,
+                    oFchRealCalidad, oFchRealAlmPt, oFchRealDespacho,
+                    oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
+                    oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado));
+            } while (await r.ReadAsync());
+            } // end if (await r.ReadAsync())
+        }
+
+        return new PlnSeguimientoPagina
+        {
+            Items          = list,
+            TotalItems     = totalItems,
+            TotalRetrasados= totalRetraso,
+            TotalUrgentes  = totalUrgente,
+            TotalReprocesos= totalReproceso,
+            TotalSinPlanif = totalSinPlanif,
+            TotalPedidos   = totalPedidos,
+            Pagina         = pagina,
+            TamPagina      = tamPagina,
+        };
+    }
+
+
     public async Task<IEnumerable<PlnSeguimiento>> GetPorPedidoAsync(long numPed, int serie)
     {
         // V_PLN_TRAZABILIDAD (§8.3): todas las fechas estimadas y reales.
         // JOIN a V_PLN_ESTADO_ITEM (§8.2) para KGs, nombre_paso, color_ui, semáforo, etc.
         // JOIN a PLN_SEGUIMIENTO directamente para campos no expuestos por la trazabilidad
-        // (FCH_EST_*, FCH_REAL_CC_*, SOLO_DESPACHO, IND_REPROCESO, NRO_CICLO, IND_URGENTE).
+        // (FCH_EST_*, FCH_REAL_CC_*, SOLO_DESPACHO, IND_REPROCESO, NRO_CICLO, IND_URGENTE, IND_FLUJO).
         var sql = $@"
             SELECT s.ID_SEGUIM,
                    s.SERIE, s.NUM_PED, s.NRO, s.NUM_DET,
@@ -260,6 +505,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.NRO_CICLO,
                    s.FCH_PEDIDO,
                    s.FCH_ENTREGA_COMP,
+                   s.FCH_REG_ENTREGA, s.FCH_ENTREGA_ORI,
                    s.FCH_EST_HILANDERIA, s.FCH_EST_PARTIDA,
                    s.FCH_EST_TIN_INI,   s.FCH_EST_TIN_FIN,
                    s.FCH_EST_SECADO,    s.FCH_EST_CALIDAD, s.FCH_EST_DESPACHO,
@@ -275,8 +521,11 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.KG_DESPACHADOS,    s.KG_PENDIENTES,
                    s.IND_RETRASO, s.DIAS_RETRASO,
                    s.IND_URGENTE, s.IND_REPROCESO,
+                   s.IND_FLUJO,
                    s.ESTADO,
                    s.COD_MAQ_TT,
+                   s.COD_MAQ_SECADO,
+                   s.COD_MAQ_DEVAN,
                    s.NUM_PARTIDA,
                    id.MAQUINA        AS MAQ_PROGRAMADA,
                    p.COD_MAQ         AS MAQ_PARTIDA,
@@ -286,16 +535,39 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                     WHERE  pm.partida      = s.NUM_PARTIDA
                       AND  tt.estado       IN ('0','1','2')
                       AND  s.NUM_PARTIDA   IS NOT NULL
-                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT
+                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT,
+                   s.FCH_APROBACION, s.FCH_PLANIF, s.USR_PLANIF,
+                   pe2.A_ADUSER      AS USR_REGISTRO,
+                   cu_reg.C_NOMBRE   AS NOMBRE_REGISTRO,
+                   pe2.A_USAPROB     AS USR_APROBACION,
+                   cu_apr.C_NOMBRE   AS NOMBRE_APROBACION,
+                   cu_pln.C_NOMBRE   AS NOMBRE_PLANIF
             FROM   {S}PLN_SEGUIMIENTO s
             JOIN   {S}V_PLN_ESTADO_ITEM v
                 ON  v.ID_SEGUIM = s.ID_SEGUIM
-            LEFT JOIN {S}ITEMPED_DET id
-                ON  id.SERIE   = s.SERIE
+            -- Subquery garantiza 1 fila por item: toma el NROPROG más reciente
+            -- (cuando reproceso asigna un nuevo programa, ITEMPED_DET queda con 2 filas
+            --  para la misma PK lógica — esta agrupación evita la duplicación en el resultado)
+            LEFT JOIN (
+                SELECT serie, num_ped, nro, num_det,
+                       MAX(nroprog) AS nroprog,
+                       MAX(maquina) KEEP (DENSE_RANK LAST ORDER BY nroprog) AS maquina
+                FROM   {S}ITEMPED_DET
+                WHERE  nroprog > 0
+                GROUP  BY serie, num_ped, nro, num_det
+            ) id ON id.SERIE   = s.SERIE
                 AND id.NUM_PED = s.NUM_PED
                 AND id.NRO     = s.NRO
                 AND id.NUM_DET = s.NUM_DET
-            LEFT JOIN {S}PARTIDA p ON p.NROPROG = id.NROPROG AND id.NROPROG > 0
+            -- JOIN por PK directa evita duplicados cuando NROPROG tiene N partidas (sublotes)
+            LEFT JOIN {S}PARTIDA p ON p.NUMERO = s.NUM_PARTIDA
+            -- v2.6: actores del ciclo de vida (registro, aprobación, planificación)
+            -- Inline views en CS_USER: evita multiplicación cuando el mismo C_USER
+            -- tiene más de 1 fila (p.ej. usuarios migrados o con doble empresa).
+            LEFT JOIN {S}PEDIDO pe2 ON pe2.SERIE = s.SERIE AND pe2.NUM_PED = s.NUM_PED
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_reg ON cu_reg.C_USER = pe2.A_ADUSER
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_apr ON cu_apr.C_USER = pe2.A_USAPROB
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_pln ON cu_pln.C_USER = s.USR_PLANIF
             WHERE  s.NUM_PED = :numPed AND s.SERIE = :serie
             ORDER  BY s.NRO, s.NUM_DET";
 
@@ -349,12 +621,25 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             oDiasRetraso = r.GetOrdinal("DIAS_RETRASO"),
             oIndUrgente = r.GetOrdinal("IND_URGENTE"),
             oIndReproceso = r.GetOrdinal("IND_REPROCESO"),
+            oIndFlujo     = r.GetOrdinal("IND_FLUJO"),
             oEstado = r.GetOrdinal("ESTADO"),
             oMaqTt = r.GetOrdinal("COD_MAQ_TT"),
+            oMaqSecado = r.GetOrdinal("COD_MAQ_SECADO"),
+            oMaqDevan = r.GetOrdinal("COD_MAQ_DEVAN"),
             oMaqProgramada = r.GetOrdinal("MAQ_PROGRAMADA"),
             oMaqPartida = r.GetOrdinal("MAQ_PARTIDA"),
             oMaqRealTt = r.GetOrdinal("MAQ_REAL_TT"),
-            oNumPartida = r.GetOrdinal("NUM_PARTIDA");
+            oNumPartida = r.GetOrdinal("NUM_PARTIDA"),
+            oFchAprobacion    = r.GetOrdinal("FCH_APROBACION"),
+            oFchPlanif        = r.GetOrdinal("FCH_PLANIF"),
+            oFchRegEntrega    = r.GetOrdinal("FCH_REG_ENTREGA"),
+            oFchEntregaOri    = r.GetOrdinal("FCH_ENTREGA_ORI"),
+            oUsrRegistro      = r.GetOrdinal("USR_REGISTRO"),
+            oNombreRegistro   = r.GetOrdinal("NOMBRE_REGISTRO"),
+            oUsrAprobacion    = r.GetOrdinal("USR_APROBACION"),
+            oNombreAprobacion = r.GetOrdinal("NOMBRE_APROBACION"),
+            oUsrPlanif        = r.GetOrdinal("USR_PLANIF"),
+            oNombrePlanif     = r.GetOrdinal("NOMBRE_PLANIF");
 
         do
         {
@@ -373,7 +658,13 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
                 oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
                 oFchRealGaseado, oMaqTt, oMaqProgramada, oMaqPartida, oMaqRealTt,
-                oNumPartida));
+                oNumPartida, oMaqSecado, oMaqDevan,
+                oFchRegEntrega2: oFchRegEntrega, oFchEntregaOri2: oFchEntregaOri,
+                oFchAprobacion: oFchAprobacion, oFchPlanif: oFchPlanif,
+                oUsrRegistro: oUsrRegistro, oNombreRegistro: oNombreRegistro,
+                oUsrAprobacion: oUsrAprobacion, oNombreAprobacion: oNombreAprobacion,
+                oUsrPlanif: oUsrPlanif, oNombrePlanif: oNombrePlanif,
+                oIndFlujo: oIndFlujo));
         } while (await r.ReadAsync());
 
         return list;
@@ -431,8 +722,11 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.KG_DESPACHADOS,    s.KG_PENDIENTES,
                    s.IND_RETRASO, s.DIAS_RETRASO,
                    s.IND_URGENTE, s.IND_REPROCESO,
+                   s.IND_FLUJO,
                    s.ESTADO,
                    s.COD_MAQ_TT,
+                   s.COD_MAQ_SECADO,
+                   s.COD_MAQ_DEVAN,
                    s.NUM_PARTIDA,
                    id.MAQUINA        AS MAQ_PROGRAMADA,
                    p.COD_MAQ         AS MAQ_PARTIDA,
@@ -442,7 +736,14 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                     WHERE  pm.partida      = s.NUM_PARTIDA
                       AND  tt.estado       IN ('0','1','2')
                       AND  s.NUM_PARTIDA   IS NOT NULL
-                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT
+                      AND  ROWNUM          = 1)  AS MAQ_REAL_TT,
+                   s.FCH_APROBACION, s.FCH_PLANIF, s.USR_PLANIF,
+                   s.FCH_REG_ENTREGA, s.FCH_ENTREGA_ORI,
+                   pe2.A_ADUSER      AS USR_REGISTRO,
+                   cu_reg.C_NOMBRE   AS NOMBRE_REGISTRO,
+                   pe2.A_USAPROB     AS USR_APROBACION,
+                   cu_apr.C_NOMBRE   AS NOMBRE_APROBACION,
+                   cu_pln.C_NOMBRE   AS NOMBRE_PLANIF
             FROM   {S}PLN_SEGUIMIENTO s
             JOIN   {S}V_PLN_ESTADO_ITEM v ON v.ID_SEGUIM = s.ID_SEGUIM
             LEFT JOIN {S}ITEMPED_DET id
@@ -451,6 +752,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 AND id.NRO     = s.NRO
                 AND id.NUM_DET = s.NUM_DET
             LEFT JOIN {S}PARTIDA p ON p.NROPROG = id.NROPROG AND id.NROPROG > 0
+            -- v2.6: actores del ciclo de vida
+            -- Inline views en CS_USER: evita duplicados si C_USER no es único.
+            LEFT JOIN {S}PEDIDO pe2 ON pe2.SERIE = s.SERIE AND pe2.NUM_PED = s.NUM_PED
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_reg ON cu_reg.C_USER = pe2.A_ADUSER
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_apr ON cu_apr.C_USER = pe2.A_USAPROB
+            LEFT JOIN (SELECT C_USER, MAX(C_NOMBRE) AS C_NOMBRE FROM {S}CS_USER GROUP BY C_USER) cu_pln ON cu_pln.C_USER = s.USR_PLANIF
             WHERE  {whereClause}";
 
         await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -492,7 +799,19 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             r.GetOrdinal("FCH_REAL_GASEADO"),
             r.GetOrdinal("COD_MAQ_TT"), r.GetOrdinal("MAQ_PROGRAMADA"),
             r.GetOrdinal("MAQ_PARTIDA"), r.GetOrdinal("MAQ_REAL_TT"),
-            r.GetOrdinal("NUM_PARTIDA"));
+            r.GetOrdinal("NUM_PARTIDA"),
+            r.GetOrdinal("COD_MAQ_SECADO"), r.GetOrdinal("COD_MAQ_DEVAN"),
+            oFchRegEntrega2: r.GetOrdinal("FCH_REG_ENTREGA"),
+            oFchEntregaOri2: r.GetOrdinal("FCH_ENTREGA_ORI"),
+            oFchAprobacion: r.GetOrdinal("FCH_APROBACION"),
+            oFchPlanif: r.GetOrdinal("FCH_PLANIF"),
+            oUsrRegistro:  r.GetOrdinal("USR_REGISTRO"),
+            oNombreRegistro: r.GetOrdinal("NOMBRE_REGISTRO"),
+            oUsrAprobacion: r.GetOrdinal("USR_APROBACION"),
+            oNombreAprobacion: r.GetOrdinal("NOMBRE_APROBACION"),
+            oUsrPlanif:    r.GetOrdinal("USR_PLANIF"),
+            oNombrePlanif: r.GetOrdinal("NOMBRE_PLANIF"),
+            oIndFlujo: r.GetOrdinal("IND_FLUJO"));
     }
 
     public async Task<IEnumerable<PlnEstadoCodigo>> GetEstadosAsync()
@@ -657,24 +976,20 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         return (list, total);
     }
 
-    public async Task<IEnumerable<PlnAlerta>> GetAlertasPorPedidoAsync(long numPed, int serie)    {
-        // V_PLN_ALERTAS_ACTIVAS (§8.4 PKG_PLN): ya incluye nom_cliente y horas_sin_resolver.
-        // JOIN a PLN_SEGUIMIENTO para filtrar por num_ped/serie y obtener cod_paso_act/color_ui.
+    public async Task<IEnumerable<PlnAlerta>> GetAlertasPorPedidoAsync(long numPed, int serie)
+    {
+        // V_PLN_ALERTAS_ACTIVAS (§8.4 v2.3): mismos campos enriquecidos que GetActivasAsync,
+        // filtrado por num_ped y serie para mostrar en el modal de Pedido con igual detalle.
         var sql = $@"
-            SELECT a.id_alerta, a.id_alerta AS ID_SEGUIM_NULL,
-                   a.tip_alerta, a.nivel, a.titulo, a.detalle,
+            SELECT a.id_alerta, a.serie, a.tip_alerta, a.nivel, a.titulo, a.detalle,
                    a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro,
-                   a.cod_cliente, a.nom_cliente AS NOMBRE_CLIENTE,
-                   a.cod_maq, a.estado,
-                   a.horas_sin_resolver * 24 AS horas_sin_resolver,
-                   s.serie,
-                   s.cod_paso_act,
-                   ec.color_ui AS color_ui_paso
+                   a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado, a.horas_sin_resolver,
+                   a.cod_art, a.titulo_art, a.proceso, a.cod_paso_act, a.nombre_paso, a.color_ui,
+                   a.fch_entrega_comp, a.dias_retraso_ent, a.cantidad_orig, a.kg_pendientes,
+                   a.nro_ciclo, a.ind_urgente
             FROM   {S}V_PLN_ALERTAS_ACTIVAS a
-            JOIN   {S}PLN_SEGUIMIENTO s
-                ON  s.num_ped = a.num_ped AND s.nro = a.nro AND s.serie = :serie
-            LEFT   JOIN {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
             WHERE  a.num_ped = :numPed
+              AND  a.serie   = :serie
             ORDER  BY DECODE(a.nivel,'C',1,'A',2,'M',3,'B',4), a.fch_limite";
 
         var list = new List<PlnAlerta>();
@@ -685,29 +1000,40 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         cmd.Parameters.Add("numPed", numPed);
         cmd.Parameters.Add("serie", serie);
         await using var r = await cmd.ExecuteReaderAsync();
+        int oHoras = r.GetOrdinal("horas_sin_resolver");
         while (await r.ReadAsync())
         {
+            double? horasSinResolver = r.IsDBNull(oHoras) ? null : (double?)r.GetDouble(oHoras);
             list.Add(new PlnAlerta
             {
-                IdAlerta      = SafeVal<long>(r["id_alerta"]),
-                TipAlerta     = SafeStr(r["tip_alerta"]),
-                Nivel         = SafeStr(r["nivel"]),
-                Titulo        = SafeStr(r["titulo"]),
-                Detalle       = SafeStr(r["detalle"]),
-                FchAlerta     = SafeVal<DateTime>(r["fch_alerta"]),
-                FchLimite     = SafeDate(r["fch_limite"]),
-                DiasRetraso   = r["dias_retraso"] == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso"]),
-                CodMaq        = SafeStr(r["cod_maq"]),
-                Estado        = SafeStr(r["estado"]),
-                NumPed        = r["num_ped"] == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
-                Nro           = r["nro"] == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
-                Serie         = r["serie"] == DBNull.Value ? null : SafeVal<int?>(r["serie"]),
-                CodCliente    = SafeStr(r["cod_cliente"]),
-                NombreCliente = SafeStr(r["NOMBRE_CLIENTE"]),
-                CodPasoAct    = SafeStr(r["cod_paso_act"]),
-                ColorUiPaso   = SafeStr(r["color_ui_paso"]),
-                HorasSinResolver = r["horas_sin_resolver"] == DBNull.Value
-                    ? null : SafeVal<double?>(r["horas_sin_resolver"]),
+                IdAlerta         = SafeVal<long>(r["id_alerta"]),
+                Serie            = r["serie"]            == DBNull.Value ? null : SafeVal<int?>(r["serie"]),
+                TipAlerta        = SafeStr(r["tip_alerta"]),
+                Nivel            = SafeStr(r["nivel"]),
+                Titulo           = SafeStr(r["titulo"]),
+                Detalle          = SafeStr(r["detalle"]),
+                FchAlerta        = SafeVal<DateTime>(r["fch_alerta"]),
+                FchLimite        = SafeDate(r["fch_limite"]),
+                DiasRetraso      = r["dias_retraso"]     == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso"]),
+                CodMaq           = SafeStr(r["cod_maq"]),
+                Estado           = SafeStr(r["estado"]),
+                NumPed           = r["num_ped"]          == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
+                Nro              = r["nro"]              == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
+                CodCliente       = SafeStr(r["cod_cliente"]),
+                NombreCliente    = SafeStr(r["nom_cliente"]),
+                CodArt           = r["cod_art"]          == DBNull.Value ? null : SafeStr(r["cod_art"]),
+                TituloArt        = r["titulo_art"]       == DBNull.Value ? null : SafeStr(r["titulo_art"]),
+                Proceso          = SafeStr(r["proceso"]),
+                CodPasoAct       = SafeStr(r["cod_paso_act"]),
+                NombrePaso       = SafeStr(r["nombre_paso"]),
+                ColorUiPaso      = SafeStr(r["color_ui"]),
+                FchEntregaComp   = SafeDate(r["fch_entrega_comp"]),
+                DiasRetrasoEnt   = r["dias_retraso_ent"] == DBNull.Value ? null : SafeVal<int?>(r["dias_retraso_ent"]),
+                CantidadOrig     = r["cantidad_orig"]    == DBNull.Value ? null : SafeVal<decimal?>(r["cantidad_orig"]),
+                KgPendientes     = r["kg_pendientes"]    == DBNull.Value ? null : SafeVal<decimal?>(r["kg_pendientes"]),
+                NroCiclo         = r["nro_ciclo"]        == DBNull.Value ? null : SafeVal<int?>(r["nro_ciclo"]),
+                IndUrgente       = SafeStr(r["ind_urgente"]),
+                HorasSinResolver = horasSinResolver,
             });
         }
         return list;
@@ -720,7 +1046,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             SELECT t.num_ped, t.nro, t.num_det,
                    t.cod_cliente, t.cod_art,
                    t.color, t.titulo,
-                   t.fch_pedido, t.fch_aprob_pedido,
+                   t.fch_pedido,
+                   COALESCE(t.fch_aprobacion, t.fch_aprob_pedido_raw) AS fch_aprob_pedido,
                    t.fch_planeada, t.fch_entrega_plan,
                    t.fch_est_cono1, t.fch_est_tenido,
                    t.fch_est_hilanderia, t.fch_est_partida,
@@ -729,13 +1056,17 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    t.fch_real_programado, t.fch_real_produccion,
                    t.fch_real_partida, t.fch_real_tin_ini,
                    t.fch_prog_tin, t.fch_real_tin_fin,
-                   t.fch_real_secado, t.fch_real_calidad,
+                   t.fch_real_secado, t.fch_real_cc_tinto, t.fch_real_calidad,
                    t.fch_real_alm_pt, t.fch_real_despacho,
                    t.fch_compromiso_cliente,
                    t.dias_pedido_a_partida, t.dias_en_tintoreria,
                    t.dias_partida_a_almpt,  t.dias_almpt_a_despacho,
                    t.dias_total_ciclo,      t.dias_desvio_cliente,
-                   t.cod_paso_act, t.dias_retraso, t.nro_ciclo
+                   t.cod_paso_act, t.dias_retraso, t.nro_ciclo,
+                   t.fch_planif,
+                   t.usr_registro,   t.nombre_registro,
+                   t.usr_aprobacion, t.nombre_aprobacion,
+                   t.usr_planif,     t.nombre_planif
             FROM   {S}V_PLN_TRAZABILIDAD t
             WHERE  t.num_ped = :numPed
             ORDER  BY t.nro, t.num_det";
@@ -779,19 +1110,27 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 FchProgTin            = SafeDate(r["fch_prog_tin"]),
                 FchRealTinFin         = SafeDate(r["fch_real_tin_fin"]),
                 FchRealSecado         = SafeDate(r["fch_real_secado"]),
+                FchRealCcTinto        = SafeDate(r["fch_real_cc_tinto"]),
                 FchRealCalidad        = SafeDate(r["fch_real_calidad"]),
                 FchRealAlmPt          = SafeDate(r["fch_real_alm_pt"]),
                 FchRealDespacho       = SafeDate(r["fch_real_despacho"]),
                 FchCompromisoCliente  = SafeDate(r["fch_compromiso_cliente"]),
-                DiasPedidoAPartida    = r["dias_pedido_a_partida"]  == DBNull.Value ? null : SafeVal<double?>(r["dias_pedido_a_partida"]),
-                DiasEnTintoreria      = r["dias_en_tintoreria"]     == DBNull.Value ? null : SafeVal<double?>(r["dias_en_tintoreria"]),
-                DiasPartidaAAlmPt     = r["dias_partida_a_almpt"]   == DBNull.Value ? null : SafeVal<double?>(r["dias_partida_a_almpt"]),
-                DiasAlmPtADespacho    = r["dias_almpt_a_despacho"]  == DBNull.Value ? null : SafeVal<double?>(r["dias_almpt_a_despacho"]),
-                DiasTotalCiclo        = r["dias_total_ciclo"]        == DBNull.Value ? null : SafeVal<double?>(r["dias_total_ciclo"]),
-                DiasDesvioCliente     = r["dias_desvio_cliente"]     == DBNull.Value ? null : SafeVal<double?>(r["dias_desvio_cliente"]),
+                DiasPedidoAPartida    = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_pedido_a_partida")),
+                DiasEnTintoreria      = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_en_tintoreria")),
+                DiasPartidaAAlmPt     = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_partida_a_almpt")),
+                DiasAlmPtADespacho    = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_almpt_a_despacho")),
+                DiasTotalCiclo        = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_total_ciclo")),
+                DiasDesvioCliente     = SafeOracleDouble((Oracle.ManagedDataAccess.Client.OracleDataReader)r, r.GetOrdinal("dias_desvio_cliente")),
                 CodPasoAct            = SafeStr(r["cod_paso_act"]),
                 DiasRetraso           = SafeVal<int>(r["dias_retraso"]),
                 NroCiclo              = SafeVal<int>(r["nro_ciclo"]),
+                FchPlanif             = SafeDate(r["fch_planif"]),
+                UsrRegistro           = SafeStr(r["usr_registro"]),
+                NombreRegistro        = SafeStr(r["nombre_registro"]),
+                UsrAprobacion         = SafeStr(r["usr_aprobacion"]),
+                NombreAprobacion      = SafeStr(r["nombre_aprobacion"]),
+                UsrPlanif             = SafeStr(r["usr_planif"]),
+                NombrePlanif          = SafeStr(r["nombre_planif"]),
             });
         }
         return list;
@@ -1296,7 +1635,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             }
         }
 
-        // ── 8. Registro de Devanado (H_RPRODUC TP_MAQ='R' vía GUIA = PARTIDA.NUMERO) ─
+        // ── 8. Registro de Devanado (H_RPRODUC TP_MAQ<>'G' vía GUIA = PARTIDA.NUMERO) ─
+        //    TP_MAQ='G' = Gaseadora (PASO '09B'). Todo lo demás es Devanado/Autoconer.
         {
             var sql = $@"
                 SELECT hr.cod_maq,
@@ -1306,7 +1646,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 FROM   {S}h_rproduc hr
                 LEFT JOIN {S}h_maquinas m ON m.cod_maq = hr.cod_maq
                 WHERE  hr.guia   = :numPartida
-                  AND  hr.tp_maq = 'R'
+                  AND  hr.tp_maq <> 'G'
                 ORDER  BY hr.fecha_ini";
             await using var cmd = new OracleCommand(sql, conn);
             cmd.BindByName = true;
@@ -1461,6 +1801,59 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                     Unidades  = SafeVal<decimal>(r["UNIDADES"]),
                     PesoKg    = SafeVal<decimal>(r["PESO_KG"]),
                     Glosa     = r["GLOSA"] == DBNull.Value ? null : SafeStr(r["GLOSA"]),
+                });
+            }
+        }
+
+        // ── 12. Rectificaciones de receta (L_RECTIFICA_RECETA vía GUIA=PARTIDA.NUMERO) ──
+        {
+            var sql = $@"
+                SELECT r.numero,
+                       r.fecha                AS fch_registro,
+                       r.area, r.situacion, r.estado,
+                       hl.abreviado           AS laboratorista,
+                       hs.abreviado           AS supervisor,
+                       r.proceso, r.cod_causa, r.defecto_orig, r.observacion,
+                       r.marca_enproc,
+                       r.f_enproceso          AS fch_en_proceso,
+                       r.marca_rectif,
+                       r.f_rectificado        AS fch_rectificado,
+                       r.marca_aprob,
+                       r.f_aprobado           AS fch_aprobado
+                FROM   {S}l_rectifica_receta r
+                LEFT   JOIN {S}h_tprod hl ON hl.tabla = '09' AND hl.codigo = r.c_laboratorista
+                LEFT   JOIN {S}h_tprod hs ON hs.tabla = '09' AND hs.codigo = r.supervisor
+                WHERE  r.guia  = :numPartida
+                  AND  r.estado <> '9'
+                ORDER  BY r.numero DESC";
+            await using var cmd = new OracleCommand(sql, conn);
+            cmd.BindByName = true;
+            cmd.Parameters.Add("numPartida", numPartida);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var lab = SafeStr(r["LABORATORISTA"]);
+                var sup = SafeStr(r["SUPERVISOR"]);
+                var obs = SafeStr(r["OBSERVACION"]);
+                result.RectificacionesReceta.Add(new PlnRectificacionReceta
+                {
+                    Numero         = SafeVal<long>(r["NUMERO"]),
+                    FchRegistro    = SafeVal<DateTime>(r["FCH_REGISTRO"]),
+                    Area           = SafeStr(r["AREA"]),
+                    Situacion      = SafeStr(r["SITUACION"]),
+                    Estado         = SafeStr(r["ESTADO"]),
+                    Laboratorista  = string.IsNullOrEmpty(lab) ? null : lab,
+                    Supervisor     = string.IsNullOrEmpty(sup) ? null : sup,
+                    Proceso        = SafeStr(r["PROCESO"]),
+                    DefectoOrig    = SafeStr(r["DEFECTO_ORIG"]),
+                    CodCausa       = SafeStr(r["COD_CAUSA"]),
+                    Observacion    = string.IsNullOrEmpty(obs) ? null : obs,
+                    MarcaEnproc    = SafeStr(r["MARCA_ENPROC"]),
+                    FchEnProceso   = SafeDate(r["FCH_EN_PROCESO"]),
+                    MarcaRectif    = SafeStr(r["MARCA_RECTIF"]),
+                    FchRectificado = SafeDate(r["FCH_RECTIFICADO"]),
+                    MarcaAprob     = SafeStr(r["MARCA_APROB"]),
+                    FchAprobado    = SafeDate(r["FCH_APROBADO"]),
                 });
             }
         }

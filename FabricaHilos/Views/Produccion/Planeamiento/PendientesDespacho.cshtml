@@ -1,28 +1,80 @@
 @section Styles {
-<link rel="stylesheet" href="~/css/planeamiento.css" />
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
-@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnPendienteDespacho>
+@using FabricaHilos.Models.Produccion.Planeamiento
+@model IEnumerable<PlnPendienteDespacho>
 @{
     ViewData["Title"] = "Pendientes de Despacho";
-    var lista = Model.ToList();
+    var lista    = Model.ToList();
+    var proximos = (ViewBag.Proximos as List<PlnPendienteDespacho>) ?? new List<PlnPendienteDespacho>();
+
+    var nVencidos  = lista.Count(x => x.EstaVencido);
+    var nUrgentes  = lista.Count(x => x.EsUrgente);
+    var kgTotal    = lista.Sum(x => x.KgPendientes);
+    var kgDesp     = lista.Sum(x => x.KgADespachar);
+    var stockCubre = lista.All(x => x.StockDisponible >= x.KgPendientes);
+
+    // helper local: clase de fila según urgencia/retraso
+    string RowCss(PlnPendienteDespacho p) =>
+        p.EsUrgente     ? "table-danger"  :
+        p.EstaVencido   ? "table-warning" :
+        p.DiasVencido >= -2 ? "table-info table-info-soft" : "";
 }
 
 <div class="container-fluid py-3">
-    <div class="d-flex justify-content-between align-items-center mb-2">
+
+    @* ── Encabezado ─────────────────────────────────────────────────── *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="mb-0"><i class="bi bi-truck me-2 text-primary"></i>Pendientes de Despacho</h4>
+            <small class="text-muted">Ítems en Almacén PT listos para despachar · @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</small>
         </div>
-        <div class="d-flex gap-2">
-            <span class="badge bg-danger fs-6">@lista.Count(x => x.EsUrgente) urgentes</span>
-            <span class="badge bg-secondary fs-6">@lista.Count total</span>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            @if (nUrgentes > 0)
+            {
+                <span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle me-1"></i>@nUrgentes urgente@(nUrgentes != 1 ? "s" : "")</span>
+            }
+            @if (nVencidos > 0)
+            {
+                <span class="badge bg-warning text-dark fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
+            }
+            <span class="badge bg-secondary fs-6">@lista.Count ítem@(lista.Count != 1 ? "s" : "")</span>
             <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i>Dashboard
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
             </a>
         </div>
     </div>
-    <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>Ítems ya en almacén de Producto Terminado que están listos para ser despachados al cliente. Los marcados en amarillo son urgentes o tienen la fecha de entrega próxima a vencer.</p>
 
+    @* ── KPI Cards ───────────────────────────────────────────────────── *@
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-primary text-center py-2">
+                <div class="fw-bold fs-4 text-primary">@lista.Count</div>
+                <small class="text-muted">Ítems pendientes</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
+                <small class="text-muted">Total kg pedidos</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4 @(stockCubre ? "text-success" : "text-warning")">@kgDesp.ToString("N0") kg</div>
+                <small class="text-muted">Kg listos a despachar</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card @(proximos.Any(p => p.EstaVencido || p.DiasVencido >= -3) ? "border-warning" : "border-0 bg-light") text-center py-2">
+                <div class="fw-bold fs-4 @(proximos.Any(p => p.EstaVencido) ? "text-warning" : "")">@proximos.Count</div>
+                <small class="text-muted">Próximos a llegar</small>
+            </div>
+        </div>
+    </div>
+
+    @* ── Tabla: Listos para despachar (PASO 12 / 13) ────────────────── *@
     @if (!lista.Any())
     {
         <div class="alert alert-success">
@@ -31,8 +83,15 @@
     }
     else
     {
-        <div class="card shadow-sm">
-            <div class="card-body p-0">
+        <div class="mb-4">
+            <button class="pln-area-hdr" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#collapseListos"
+                    aria-expanded="true">
+                <i class="bi bi-box-seam me-2"></i>En Almacén PT — Listos para despachar
+                <span class="badge bg-light text-dark border ms-2" style="font-size:.65rem;">PASO 12 / 13</span>
+                <span class="pln-area-chevron"><i class="bi bi-chevron-down"></i></span>
+            </button>
+            <div id="collapseListos" class="collapse show" style="border:1px solid var(--pln-steel); border-top:none; border-radius:0 0 4px 4px; background:#fff;">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
                         <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
@@ -40,20 +99,160 @@
                                 <th>Pedido</th>
                                 <th>Ítem</th>
                                 <th>Cliente</th>
-                                <th>Artículo</th>
+                                <th>Artículo / Color</th>
+                                <th class="text-center">Proceso</th>
                                 <th class="text-center">Kg Pend.</th>
-                                <th class="text-center">Stock Disp.</th>
-                                <th class="text-center">Kg a Desp.</th>
+                                <th class="text-center">Stock PT</th>
+                                <th class="text-center fw-bold">Kg a Desp.</th>
                                 <th class="text-center">F. Entrega</th>
-                                <th class="text-center">Días Venc.</th>
+                                <th class="text-center">Estado</th>
                                 <th class="text-center">Paso</th>
-                                <th class="text-center">Prioridad</th>
+                                <th class="text-center" title="Días en almacén PT sin despachar">Días PT</th>
+                                <th class="text-center" title="Máquina Devanado">Devan.</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var item in lista)
                             {
-                                <tr class="@(item.EsUrgente ? "table-warning" : "")">
+                                <tr class="@RowCss(item)">
+                                    <td>
+                                        <a asp-action="Pedido"
+                                           asp-route-numPed="@item.NumPed"
+                                           asp-route-serie="@item.Serie"
+                                           class="fw-bold text-decoration-none"
+                                           title="Ver trazabilidad del pedido @item.NumPed">
+                                            @item.NumPed
+                                        </a>
+                                        @if (!string.IsNullOrEmpty(item.PrioridadPedido))
+                                        {
+                                            <br /><small class="badge bg-info text-dark" style="font-size:.65rem;">Prio @item.PrioridadPedido</small>
+                                        }
+                                    </td>
+                                    <td class="text-center text-muted">@item.Nro</td>
+                                    <td>
+                                        @if (item.EsUrgente)
+                                        {
+                                            <i class="bi bi-exclamation-triangle-fill text-danger me-1" title="Urgente"></i>
+                                        }
+                                        <span title="@item.CodCliente" style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@item.NomCliente</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold" style="font-size:.78rem;">@item.DescArt</div>
+                                        <small class="text-muted">
+                                            @if (!string.IsNullOrEmpty(item.Color)) { @item.Color <text>&nbsp;</text> }
+                                            @item.Titulo
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        <small class="badge bg-light text-dark border">@item.NombreProceso</small>
+                                    </td>
+                                    <td class="text-end">@item.KgPendientes.ToString("N2")</td>
+                                    <td class="text-end @(item.StockDisponible < item.KgPendientes ? "text-warning fw-bold" : "text-success")">
+                                        @item.StockDisponible.ToString("N2")
+                                        @if (item.StockDisponible < item.KgPendientes)
+                                        {
+                                            <i class="bi bi-exclamation-circle ms-1" title="Stock insuficiente"></i>
+                                        }
+                                    </td>
+                                    <td class="text-end fw-bold text-primary">@item.KgADespachar.ToString("N2")</td>
+                                    <td class="text-center">
+                                        @if (item.FchEntregaComp.HasValue)
+                                        {
+                                            <span class="text-@item.SemaforoCss fw-semibold" title="@item.SemaforoTexto">
+                                                @item.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                            </span>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.DiasVencido > 0)
+                                        {
+                                            <span class="badge bg-@item.SemaforoCss" title="@item.SemaforoTexto">+@item.DiasVencido d</span>
+                                        }
+                                        else if (item.DiasVencido == 0)
+                                        {
+                                            <span class="badge bg-secondary">Hoy</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success" title="@(-item.DiasVencido) días restantes">@(-item.DiasVencido) d</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge" style="background-color:@item.ColorUi;font-size:.7rem;" title="@item.CodPasoAct">
+                                            @item.NombrePaso
+                                        </span>
+                                    </td>
+                                    <td class="text-center @(item.DiasEnPaso >= 3 ? "text-warning fw-bold" : "text-muted")">
+                                        @item.DiasEnPaso d
+                                    </td>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(item.CodMaqDevan))
+                                        {
+                                            <small class="text-muted" title="Devanado en @item.CodMaqDevan">
+                                                <i class="bi bi-gear me-1"></i>@item.CodMaqDevan
+                                            </small>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
+                            <tr>
+                                <td colspan="5" class="text-end text-muted">Totales:</td>
+                                <td class="text-end">@lista.Sum(x => x.KgPendientes).ToString("N2")</td>
+                                <td class="text-end">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
+                                <td class="text-end text-primary">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
+                                <td colspan="5"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Panel: Próximos a llegar (PASO 08–11) ─────────────────────── *@
+    @if (proximos.Any())
+    {
+        var proxVencidos = proximos.Count(x => x.EstaVencido);
+        <div class="card shadow-sm">
+            <button class="pln-area-hdr" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#collapseProximos"
+                    aria-expanded="true">
+                <i class="bi bi-hourglass-split me-2"></i>
+                Próximos a llegar a Almacén PT
+                @if (proxVencidos > 0)
+                {
+                    <span class="badge bg-danger ms-2">@proxVencidos con fecha vencida</span>
+                }
+                <span class="badge bg-light text-dark border ms-2" style="font-size:.65rem;">PASO 08–11 &nbsp;·&nbsp; @proximos.Count ítem@(proximos.Count != 1 ? "s" : "") &nbsp;·&nbsp; @proximos.Sum(x => x.KgPendientes).ToString("N0") kg</span>
+                <span class="pln-area-chevron"><i class="bi bi-chevron-down"></i></span>
+            </button>
+            <div id="collapseProximos" class="collapse show">
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.81rem;">
+                        <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+                            <tr>
+                                <th>Pedido</th>
+                                <th>Ítem</th>
+                                <th>Cliente</th>
+                                <th>Artículo / Color</th>
+                                <th class="text-center">Paso actual</th>
+                                <th class="text-center">Kg Pend.</th>
+                                <th class="text-center">F. Entrega</th>
+                                <th class="text-center">Tiempo</th>
+                                <th class="text-center">ETA Despacho</th>
+                                <th class="text-center" title="Días en paso actual">Días paso</th>
+                                <th class="text-center">Secado</th>
+                                <th class="text-center">Devan.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in proximos)
+                            {
+                                <tr class="@RowCss(item)">
                                     <td>
                                         <a asp-action="Pedido"
                                            asp-route-numPed="@item.NumPed"
@@ -62,67 +261,86 @@
                                             @item.NumPed
                                         </a>
                                     </td>
-                                    <td class="text-center">@item.Nro</td>
+                                    <td class="text-center text-muted">@item.Nro</td>
                                     <td>
                                         @if (item.EsUrgente)
                                         {
-                                            <i class="bi bi-exclamation-triangle-fill text-danger me-1"
-                                               title="Urgente"></i>
+                                            <i class="bi bi-exclamation-triangle-fill text-danger me-1" title="Urgente"></i>
                                         }
-                                        <span title="@item.CodCliente">@item.NomCliente</span>
+                                        <span title="@item.CodCliente" style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@item.NomCliente</span>
                                     </td>
                                     <td>
-                                        <div class="fw-semibold">@item.CodArt</div>
-                                        <small class="text-muted">@item.Color &mdash; @item.Titulo</small>
+                                        <div style="font-size:.78rem;" class="fw-semibold">@item.DescArt</div>
+                                        <small class="text-muted">
+                                            @if (!string.IsNullOrEmpty(item.Color)) { @item.Color <text>&nbsp;</text> }
+                                            @item.Titulo &mdash; @item.NombreProceso
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge" style="background-color:@item.ColorUi;font-size:.7rem;">@item.NombrePaso</span>
                                     </td>
                                     <td class="text-end">@item.KgPendientes.ToString("N2")</td>
-                                    <td class="text-end">@item.StockDisponible.ToString("N2")</td>
-                                    <td class="text-end fw-bold">@item.KgADespachar.ToString("N2")</td>
                                     <td class="text-center">
                                         @if (item.FchEntregaComp.HasValue)
                                         {
-                                            <span class="text-@item.SemaforoCss">
-                                                @item.FchEntregaComp.Value.ToString("dd/MM/yyyy")
+                                            <span class="text-@item.SemaforoCss fw-semibold" title="@item.SemaforoTexto">
+                                                @item.FchEntregaComp.Value.ToString("dd/MM/yy")
                                             </span>
                                         }
-                                        else
-                                        {
-                                            <span class="text-muted">—</span>
-                                        }
+                                        else { <span class="text-muted">—</span> }
                                     </td>
                                     <td class="text-center">
                                         @if (item.DiasVencido > 0)
                                         {
-                                            <span class="badge bg-@item.SemaforoCss">+@item.DiasVencido d</span>
+                                            <span class="badge bg-@item.SemaforoCss">+@item.DiasVencido d vencido</span>
                                         }
-                                        else if (item.DiasVencido < 0)
-                                        {
-                                            <span class="badge bg-success">@item.DiasVencido d</span>
-                                        }
-                                        else
+                                        else if (item.DiasVencido == 0)
                                         {
                                             <span class="badge bg-secondary">Hoy</span>
                                         }
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-primary">@item.NombrePaso</span>
-                                    </td>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(item.PrioridadPedido))
+                                        else
                                         {
-                                            <span class="badge bg-info text-dark">@item.PrioridadPedido</span>
+                                            <span class="badge bg-@item.SemaforoCss">@(-item.DiasVencido) d restantes</span>
                                         }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.FchEstDespacho.HasValue)
+                                        {
+                                            <span class="text-muted" style="font-size:.78rem;">@item.FchEstDespacho.Value.ToString("dd/MM/yy")</span>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                    <td class="text-center @(item.DiasEnPaso >= 2 ? "text-warning" : "text-muted")">@item.DiasEnPaso d</td>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(item.CodMaqSecado))
+                                        {
+                                            <small class="text-muted" title="Secado en @item.CodMaqSecado">
+                                                <i class="bi bi-thermometer me-1"></i>@item.CodMaqSecado
+                                            </small>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (!string.IsNullOrEmpty(item.CodMaqDevan))
+                                        {
+                                            <small class="text-muted" title="Devanado en @item.CodMaqDevan">
+                                                <i class="bi bi-gear me-1"></i>@item.CodMaqDevan
+                                            </small>
+                                        }
+                                        else { <span class="text-muted">—</span> }
                                     </td>
                                 </tr>
                             }
                         </tbody>
                     </table>
                 </div>
-            </div>
-            <div class="card-footer text-muted small">
-                Total kg pendientes: <strong>@lista.Sum(x => x.KgPendientes).ToString("N2")</strong> &nbsp;|&nbsp;
-                Total kg a despachar: <strong>@lista.Sum(x => x.KgADespachar).ToString("N2")</strong>
+                <div class="card-footer text-muted small">
+                    Total kg en tránsito: <strong>@proximos.Sum(x => x.KgPendientes).ToString("N2")</strong>
+                    &nbsp;&mdash;&nbsp;
+                    Ítems retrasados en tránsito: <strong class="@(proximos.Count(x=>x.EstaVencido)>0?"text-danger":"")">@proximos.Count(x => x.EstaVencido)</strong>
+                </div>
             </div>
         </div>
     }
+
 </div>

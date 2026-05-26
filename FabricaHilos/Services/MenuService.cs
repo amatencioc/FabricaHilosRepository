@@ -276,6 +276,7 @@ public class MenuService : IMenuService
 
             // ?? Planeamiento ???????????????????????????????????????????????????
             Planeamiento = TieneAlguno(
+                "Produccion",
                 "Planeamiento",
                 "PlaneamientoDashboard",
                 "PlaneamientoPedido",
@@ -285,22 +286,22 @@ public class MenuService : IMenuService
                 "PlaneamientoPendientesDespacho"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
-                && TieneAlguno("Planeamiento", "PlaneamientoDashboard"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoDashboard"),
 
             PlaneamientoPedido = global.PlaneamientoPedido
-                && TieneAlguno("Planeamiento", "PlaneamientoPedido"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPedido"),
 
             PlaneamientoCargaMaquinas = global.PlaneamientoCargaMaquinas
-                && TieneAlguno("Planeamiento", "PlaneamientoCargaMaquinas"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoCargaMaquinas"),
 
             PlaneamientoAlertas = global.PlaneamientoAlertas
-                && TieneAlguno("Planeamiento", "PlaneamientoAlertas"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoAlertas"),
 
             PlaneamientoKPIs = global.PlaneamientoKPIs
-                && TieneAlguno("Planeamiento", "PlaneamientoKPIs"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoKPIs"),
 
             PlaneamientoPendientesDespacho = global.PlaneamientoPendientesDespacho
-                && TieneAlguno("Planeamiento", "PlaneamientoPendientesDespacho"),
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendientesDespacho"),
 
             // ?? Sub-m
             // Sub-padre SistemasIndicadores visible si tiene también cualquier hijo suyo

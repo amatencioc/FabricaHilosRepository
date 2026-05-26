@@ -41,6 +41,9 @@ public class PlnTrazabilidad
     public DateTime? FchProgTin          { get; set; }   // TT_PROGPART.FENTREGA
     public DateTime? FchRealTinFin       { get; set; }
     public DateTime? FchRealSecado       { get; set; }
+    /// <summary>PASO 09 — CC Tintorería aprobado (CTCALIDAD_D.FECHA / FCH_REAL_CC_TINTO). Mismo campo que Pedido/Gantt usan para la etapa Calidad.</summary>
+    public DateTime? FchRealCcTinto      { get; set; }
+    /// <summary>PASO 11 — Revisado final (REVISADO_D.FECHA / FCH_REAL_CALIDAD).</summary>
     public DateTime? FchRealCalidad      { get; set; }
     public DateTime? FchRealAlmPt        { get; set; }
     public DateTime? FchRealDespacho     { get; set; }
@@ -94,4 +97,20 @@ public class PlnTrazabilidad
         > 0    => "info",
         _      => "success"
     };
+
+    // ── Actores del ciclo de vida (v2.6) ────────────────────────────────────────
+    /// <summary>ITEMPED_DET.FHC_PROG — fecha en que el planificador asignó el NROPROG.</summary>
+    public DateTime? FchPlanif        { get; set; }
+    /// <summary>PEDIDO.A_ADUSER — login de quien registró el pedido.</summary>
+    public string?   UsrRegistro      { get; set; }
+    /// <summary>CS_USER.C_NOMBRE para PEDIDO.A_ADUSER.</summary>
+    public string?   NombreRegistro   { get; set; }
+    /// <summary>PEDIDO.A_USAPROB — login de quien aprobó el pedido.</summary>
+    public string?   UsrAprobacion    { get; set; }
+    /// <summary>CS_USER.C_NOMBRE para PEDIDO.A_USAPROB.</summary>
+    public string?   NombreAprobacion { get; set; }
+    /// <summary>PLN_SEGUIMIENTO.USR_PLANIF — login del planificador.</summary>
+    public string?   UsrPlanif        { get; set; }
+    /// <summary>CS_USER.C_NOMBRE para PLN_SEGUIMIENTO.USR_PLANIF.</summary>
+    public string?   NombrePlanif     { get; set; }
 }
