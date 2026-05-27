@@ -6,6 +6,10 @@
 
     var primerItem = Model.Items.FirstOrDefault();
     var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
+    // Nombre y color dinámicos desde PLN_ESTADO_CODIGO (fallback al valor hardcoded si el paso no existe).
+    // CRÍTICO: '05'=Laboratorio, '03'=En Hilan., '04'=Lote Disp. — NO intercambiar los códigos.
+    Func<string, string, string> Nm = (cod, fb) => pasoMap.TryGetValue(cod, out var ecN) ? ecN.NombrePaso : fb;
+    Func<string, string, string> Cl = (cod, fb) => pasoMap.TryGetValue(cod, out var ecC) ? ecC.ColorUi   : fb;
     var detCodArt  = Model.Items
         .DistinctBy(x => x.Nro)
         .ToDictionary(x => x.Nro, x => x.CodArt);
@@ -140,42 +144,41 @@
             // Paso 05 — Lote Disponible: fin = inicio TT real (InicioTt).
             ("05", "Lote Disp.",    "#0e7490", EffEst(s.FchEstPartida, s.FchRealPartida),       EffEst(s.FchEstTinIni, _rTinIni),
                                                s.FchRealPartida,                                  _rTinIni),
-            // Paso 06 — Tintorería: InicioTt → FinTt (baños reales TT_RPRODUC).
-            ("06", "Tintorería",    "#7e22ce", EffEst(s.FchEstTinIni, _rTinIni),                EffEst(s.FchEstTinFin, _rTinFin),
+            // Paso 06 — En Tintorería: InicioTt → FinTt (baños reales TT_RPRODUC).
+            ("06", Nm("06","Tintorería"),         Cl("06","#6f42c1"), EffEst(s.FchEstTinIni, _rTinIni),                EffEst(s.FchEstTinFin, _rTinFin),
                                                _rTinIni,                                           _rTinFin),
             // Paso 07 — Teñido Completo: hito = FinTt (mayor FECHA_FIN de baños).
-            ("07", "Teñido Comp.",  "#be185d", EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstTinFin, _rTinFin),
+            ("07", Nm("07","Teñido Comp."),        Cl("07","#d63384"), EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstTinFin, _rTinFin),
                                                _rTinFin,                                           _rTinFin),
-            // Paso 08 — Secado: inicio = FinTt, fin = TT_RSECADO.FechaFin.
-            ("08", "Secado",        "#059669", EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstSecado, _rSecado),
+            // Paso 08 — Secado.
+            ("08", Nm("08","Secado"),              Cl("08","#20c997"), EffEst(s.FchEstTinFin, _rTinFin),               EffEst(s.FchEstSecado, _rSecado),
                                                _rTinFin,                                           _rSecado),
-            // Paso 09 — C.Calidad: inicio = fin secado, fin = CTCALIDAD_D.Fecha.
-            ("09", "C.Calidad",     "#dc2626", EffEst(s.FchEstSecado, _rSecado),               EffEst(s.FchEstCalidad, _rCcTinto),
+            // Paso 09 — CC TT Aprobado: inicio = fin secado, fin = CTCALIDAD_D.Fecha.
+            ("09", Nm("09","C.Calidad"),           Cl("09","#fd7e14"), EffEst(s.FchEstSecado, _rSecado),               EffEst(s.FchEstCalidad, _rCcTinto),
                                                _rSecado,                                           _rCcTinto),
             // Paso 09B — Gaseado: solo PROCESO='24' (PEINADO GASEADO). FCH_REAL_GASEADO es fuente directa.
-            ("09B","Gaseado",       "#d4a800", s.Proceso == "24" ? EffEst(s.FchEstCalidad, _rCcTinto) : null,
+            ("09B",Nm("09B","Gaseado"),            Cl("09B","#ffd700"), s.Proceso == "24" ? EffEst(s.FchEstCalidad, _rCcTinto) : null,
                                                s.Proceso == "24" ? EffEst(s.FchEstCalidad, _rCcTinto) : null,
                                                s.Proceso == "24" ? s.FchRealGaseado : null,
                                                s.Proceso == "24" ? s.FchRealGaseado : null),
-            // Paso 9R — CC Rechazo/Reproceso: solo cuando FCH_REAL_CC_RECHAZO tiene valor.
-            // Condicional igual que Pedido.cshtml (si no aplica, RI/RF null → barra ancho cero, se oculta en CSS).
-            ("9R", "CC Rechazo",    "#b91c1c", s.FchRealCcRechazo.HasValue ? EffEst(s.FchEstCalidad, s.FchRealCcRechazo) : null,
+            // Paso 9R — Reproceso (CC rechazado): solo cuando FCH_REAL_CC_RECHAZO tiene valor.
+            ("9R", Nm("9R","CC Rechazo"),         Cl("9R","#dc3545"), s.FchRealCcRechazo.HasValue ? EffEst(s.FchEstCalidad, s.FchRealCcRechazo) : null,
                                                s.FchRealCcRechazo.HasValue ? EffEst(s.FchEstCalidad, s.FchRealCcRechazo) : null,
                                                s.FchRealCcRechazo,
                                                s.FchRealCcRechazo),
             // Paso 10 — Devanado: inicio = primer REVISADO_G.A_ADFECHA, fin = AlmPT.
-            ("10", "Devanado",      "#d97706", EffEst(s.FchEstCalidad, _rDevanado),            EffEst(s.FchEstDespacho, s.FchRealAlmPt),
+            ("10", Nm("10","Devanado"),            Cl("10","#ffc107"), EffEst(s.FchEstCalidad, _rDevanado),            EffEst(s.FchEstDespacho, s.FchRealAlmPt),
                                                _rDevanado,                                         s.FchRealAlmPt),
             // Paso 11 — Revisado: hito = primera REVISADO_D.FECHA (detalle aprobado).
-            ("11", "Revisado",      "#1d4ed8", EffEst(s.FchEstCalidad, _rRevisado),            EffEst(s.FchEstCalidad, _rRevisado),
+            ("11", Nm("11","Revisado"),            Cl("11","#0d6efd"), EffEst(s.FchEstCalidad, _rRevisado),            EffEst(s.FchEstCalidad, _rRevisado),
                                                _rRevisado,                                         _rRevisado),
-            // Paso 12 — Almacén PT: hito = FCH_REAL_ALM_PT (fuente directa, sin cambio).
-            ("12", "Almacén PT",    "#047857", EffEst(s.FchEstCalidad, s.FchRealAlmPt),        EffEst(s.FchEstCalidad, s.FchRealAlmPt),
+            // Paso 12 — Ingresado Almacén PT.
+            ("12", Nm("12","Almacén PT"),          Cl("12","#198754"), EffEst(s.FchEstCalidad, s.FchRealAlmPt),        EffEst(s.FchEstCalidad, s.FchRealAlmPt),
                                                s.FchRealAlmPt,                                    s.FchRealAlmPt),
-            // Paso 13 — Listo Despacho: entre AlmPT y fecha compromiso.
-            ("13", "Listo Despacho","#10b981", EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
+            // Paso 13 — Listo para Despacho: entre AlmPT y fecha compromiso.
+            ("13", Nm("13","Listo Despacho"),      Cl("13","#20c997"), EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
                                                s.FchRealAlmPt,                                    s.FchRealDespacho),
-            ("14", "Despacho",      "#065f46", EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
+            ("14", Nm("14","Despacho"),            Cl("14","#198754"), EffEst(s.FchEstDespacho, s.FchRealAlmPt),      s.FchEntregaComp,
                                                s.FchRealAlmPt,                                    s.FchRealDespacho),
         };
     };

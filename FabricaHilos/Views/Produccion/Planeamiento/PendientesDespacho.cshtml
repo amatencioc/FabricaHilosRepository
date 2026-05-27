@@ -109,6 +109,7 @@
                                 <th class="text-center">Paso</th>
                                 <th class="text-center" title="Días en almacén PT sin despachar">Días PT</th>
                                 <th class="text-center" title="Máquina Devanado">Devan.</th>
+                                <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -195,6 +196,22 @@
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
+                                    <td style="white-space:nowrap;">
+                                        <button type="button"
+                                                class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('timeline',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
+                                                title="Línea de Tiempo — @item.CodArt">
+                                            <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('gantt',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
+                                                title="Gantt — @item.CodArt">
+                                            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+                                        </button>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -204,7 +221,7 @@
                                 <td class="text-end">@lista.Sum(x => x.KgPendientes).ToString("N2")</td>
                                 <td class="text-end">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
                                 <td class="text-end text-primary">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
-                                <td colspan="5"></td>
+                                <td colspan="6"></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -247,6 +264,7 @@
                                 <th class="text-center" title="Días en paso actual">Días paso</th>
                                 <th class="text-center">Secado</th>
                                 <th class="text-center">Devan.</th>
+                                <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -329,6 +347,22 @@
                                         }
                                         else { <span class="text-muted">—</span> }
                                     </td>
+                                    <td style="white-space:nowrap;">
+                                        <button type="button"
+                                                class="btn btn-outline-secondary btn-sm py-0 px-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('timeline',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
+                                                title="Línea de Tiempo — @item.CodArt">
+                                            <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('gantt',@item.NumPed,@item.Serie,@item.Nro,@item.NumDet,'@item.CodArt')"
+                                                title="Gantt — @item.CodArt">
+                                            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+                                        </button>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -343,4 +377,46 @@
         </div>
     }
 
+@* ─── Modal L.Tiempo / Gantt por ítem ────────────────────────────────────── *@
+<div class="modal fade" id="modalItemVista" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i id="modalItemIcon" class="bi bi-clipboard2-pulse me-2 text-secondary"></i>
+                    <span id="modalItemTitulo">Línea de Tiempo</span>
+                </h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="modalItemBody" style="min-height:300px;">
+                <div class="text-center py-4 text-muted">Seleccione un ítem para cargar.</div>
+            </div>
+        </div>
+    </div>
 </div>
+
+</div>
+
+@section Scripts {
+<script>
+// ── Modal L.Tiempo / Gantt por ítem ──────────────────────────────────────────
+function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
+    const modal   = new bootstrap.Modal(document.getElementById('modalItemVista'));
+    const body    = document.getElementById('modalItemBody');
+    const titulo  = document.getElementById('modalItemTitulo');
+    const icon    = document.getElementById('modalItemIcon');
+    const isTimeline = tipo === 'timeline';
+    titulo.textContent = (isTimeline ? 'Línea de Tiempo' : 'Gantt') + ' — ' + codArt + ' (Ítem ' + nro + ')';
+    icon.className = isTimeline
+        ? 'bi bi-clipboard2-pulse me-2 text-secondary'
+        : 'bi bi-bar-chart-steps me-2 text-success';
+    body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div>';
+    modal.show();
+    const action = isTimeline ? 'ItemTimeline' : 'ItemGantt';
+    fetch(`/Planeamiento/${action}?numPed=${numPed}&serie=${serie}&nro=${nro}&numDet=${numDet}`)
+        .then(r => r.ok ? r.text() : Promise.reject(r.status))
+        .then(html => { body.innerHTML = html; })
+        .catch(() => { body.innerHTML = '<div class="alert alert-danger m-2">No se pudo cargar la información del ítem.</div>'; });
+}
+</script>
+}

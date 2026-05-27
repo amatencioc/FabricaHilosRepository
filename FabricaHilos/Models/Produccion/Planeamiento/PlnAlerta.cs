@@ -18,6 +18,7 @@ public class PlnAlerta
     public long?    NumPed        { get; set; }
     public int?     Serie         { get; set; }
     public int?     Nro           { get; set; }  // BUG FIX: V_PLN_ALERTAS_ACTIVAS.nro no se mapeaba
+    public int?     NumDet        { get; set; }  // sublote (0 = único); desde V_PLN_ALERTAS_ACTIVAS.num_det (v2.4)
     public string?  CodArt        { get; set; }
     public string?  CodCliente    { get; set; }
     public string?  NombreCliente { get; set; }

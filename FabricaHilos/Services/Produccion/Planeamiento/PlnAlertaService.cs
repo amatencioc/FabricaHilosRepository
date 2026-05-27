@@ -33,7 +33,7 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
         // (ROUND((SYSDATE-DATE)*24, 2) devuelve NUMBER de alta precisión que C# decimal no tolera).
         var sql = $@"
             SELECT a.id_alerta, a.serie, a.tip_alerta, a.nivel, a.titulo, a.detalle,
-                   a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro,
+                   a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro, a.num_det,
                    a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado, a.horas_sin_resolver,
                    a.cod_art, a.titulo_art, a.proceso, a.cod_paso_act, a.nombre_paso, a.color_ui,
                    a.fch_entrega_comp, a.dias_retraso_ent, a.cantidad_orig, a.kg_pendientes,
@@ -66,6 +66,7 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 Estado           = SafeStr(r["estado"]),
                 NumPed           = r["num_ped"]        == DBNull.Value ? null : SafeVal<long?>(r["num_ped"]),
                 Nro              = r["nro"]            == DBNull.Value ? null : SafeVal<int?>(r["nro"]),
+                NumDet           = r["num_det"]        == DBNull.Value ? null : SafeVal<int?>(r["num_det"]),
                 CodCliente       = SafeStr(r["cod_cliente"]),
                 NombreCliente    = SafeStr(r["nom_cliente"]),
                 CodArt           = r["cod_art"]        == DBNull.Value ? null : SafeStr(r["cod_art"]),

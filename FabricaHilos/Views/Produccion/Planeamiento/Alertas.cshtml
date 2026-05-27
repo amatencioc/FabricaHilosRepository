@@ -453,9 +453,10 @@ else
                                     <div>
                                         <i class="bi @tipIcon me-1"></i>
                                         <span class="fw-semibold">@a.TipoTexto</span>
-                                        @if ((a.DiasRetraso ?? 0) > 0)
+                                        @{ var _retrasoVivo = Math.Max(0, a.DiasRetrasoEnt ?? a.DiasRetraso ?? 0); }
+                                        @if (_retrasoVivo > 0)
                                         {
-                                            <span class="badge bg-danger ms-1">+@a.DiasRetraso&nbsp;d</span>
+                                            <span class="badge @(_retrasoVivo >= 7 ? "bg-danger" : _retrasoVivo >= 3 ? "bg-warning text-dark" : "bg-secondary") ms-1">+@_retrasoVivo&nbsp;d</span>
                                         }
                                         @if (a.IndUrgente == "S")
                                         {
@@ -544,6 +545,23 @@ else
                                             title="Ignorar alerta">
                                         <i class="bi bi-bell-slash me-1"></i>Ignorar
                                     </button>
+                                    @if (a.NumPed.HasValue && a.Serie.HasValue && a.Nro.HasValue)
+                                    {
+                                        <button type="button"
+                                                class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('timeline',@a.NumPed,@a.Serie,@a.Nro,@(a.NumDet ?? 0),'@(a.TituloArt ?? a.CodArt ?? "")')"
+                                                title="L\u00ednea de Tiempo">
+                                            <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
+                                                style="font-size:.65rem;"
+                                                onclick="abrirModalItem('gantt',@a.NumPed,@a.Serie,@a.Nro,@(a.NumDet ?? 0),'@(a.TituloArt ?? a.CodArt ?? "")')"
+                                                title="Gantt">
+                                            <i class="bi bi-bar-chart-steps me-1"></i>Gantt
+                                        </button>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -552,6 +570,24 @@ else
             </div>
         </div>
     }
+
+@* ─── Modal L.Tiempo / Gantt por ítem ────────────────────────────────────── *@
+<div class="modal fade" id="modalItemVista" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">
+                    <i id="modalItemIcon" class="bi bi-clipboard2-pulse me-2 text-secondary"></i>
+                    <span id="modalItemTitulo">Línea de Tiempo</span>
+                </h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="modalItemBody" style="min-height:300px;">
+                <div class="text-center py-4 text-muted">Seleccione un ítem para cargar.</div>
+            </div>
+        </div>
+    </div>
+</div>
 
     <div class="section-sep mt-3"><i class="bi bi-info-circle"></i> Leyenda de tipos</div>
     <p class="text-muted small mb-0" style="font-size:.75rem;">
@@ -647,6 +683,26 @@ function confirmarAccion(url, idAlerta, accion, descripcion) {
     document.getElementById('formConfirm').appendChild(h);
 
     new bootstrap.Modal(document.getElementById('modalConfirm')).show();
+}
+
+// ── Modal L.Tiempo / Gantt por ítem ──────────────────────────────────────────────
+function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
+    const modal   = new bootstrap.Modal(document.getElementById('modalItemVista'));
+    const body    = document.getElementById('modalItemBody');
+    const titulo  = document.getElementById('modalItemTitulo');
+    const icon    = document.getElementById('modalItemIcon');
+    const isTimeline = tipo === 'timeline';
+    titulo.textContent = (isTimeline ? 'L\u00ednea de Tiempo' : 'Gantt') + ' \u2014 ' + codArt + ' (\u00cdtem ' + nro + ')';
+    icon.className = isTimeline
+        ? 'bi bi-clipboard2-pulse me-2 text-secondary'
+        : 'bi bi-bar-chart-steps me-2 text-success';
+    body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div>';
+    modal.show();
+    const action = isTimeline ? 'ItemTimeline' : 'ItemGantt';
+    fetch(`/Planeamiento/${action}?numPed=${numPed}&serie=${serie}&nro=${nro}&numDet=${numDet}`)
+        .then(r => r.ok ? r.text() : Promise.reject(r.status))
+        .then(html => { body.innerHTML = html; })
+        .catch(() => { body.innerHTML = '<div class="alert alert-danger m-2">No se pudo cargar la informaci\u00f3n del \u00edtem.</div>'; });
 }
 
 // Activar modales TempData al cargar
