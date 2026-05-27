@@ -351,9 +351,10 @@
             var fchAprobacion = lista.Where(x => x.FchRealProgramado.HasValue)
                                      .Select(x => x.FchRealProgramado)
                                      .FirstOrDefault();
+            var nroCount      = lista.Select(x => x.Nro).Distinct().Count();
             return (serie, numPed: numPedG, cliente, lista, esUrgente, retrasado, maxRetraso,
                     kgTotal, fchMin, etapas, mayorColor, mayorNombre, mayorCodigo,
-                    fchPedido, fchAprobacion);
+                    fchPedido, fchAprobacion, nroCount);
         })
         .OrderByDescending(p => p.numPed)
         .ThenByDescending(p => p.esUrgente)
@@ -451,7 +452,7 @@ else
                         +@p.maxRetraso d
                     </span>
                 }
-                <span class="badge bg-secondary" title="@p.lista.Count ítems activos">@p.lista.Count</span>
+                <span class="badge bg-secondary" title="@p.nroCount ítem(s) · @p.lista.Count sub-lote(s)">@p.nroCount</span>
 
                 @* Etapa más avanzada — justo antes de los botones de acción *@
                 <span class="ped-etapa">
@@ -498,16 +499,56 @@ else
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var s in p.lista)
+                        @{
+                            // Agrupar sub-lotes (NUM_DET) por ítem (NRO) — mostrar una fila por NRO
+                            // con el paso más atrasado (menor ORDEN_PASO) y KG/fechas agregados.
+                            var nroGrupos = p.lista
+                                .GroupBy(x => x.Nro)
+                                .Select(g2 =>
+                                {
+                                    var ordered = g2
+                                        .OrderBy(x => ordenPasoMap.TryGetValue(x.CodPasoAct, out var op) ? op : 99)
+                                        .ToList();
+                                    var peor = ordered.First(); // sublot más atrasado
+                                    var fchEnt = g2.Where(x => x.FchEntregaComp.HasValue)
+                                                   .Select(x => x.FchEntregaComp!.Value)
+                                                   .DefaultIfEmpty()
+                                                   .Min();
+                                    var allClosed = g2.All(x => x.EstaCerrado);
+                                    return (
+                                        Nro:           g2.Key,
+                                        Peor:          peor,
+                                        NumSublots:    ordered.Count,
+                                        KgPendientes:  g2.Sum(x => x.KgPendientes),
+                                        FchEntrega:    fchEnt == default ? (DateTime?)null : fchEnt,
+                                        DiasRetraso:   g2.Max(x => x.DiasRetraso),
+                                        EsUrgente:     g2.Any(x => x.EsUrgente),
+                                        EstaRetrasado: g2.Any(x => x.EstaRetrasado),
+                                        AllClosed:     allClosed
+                                    );
+                                })
+                                // Activos primero (por NRO), cerrados al final
+                                .OrderBy(x => x.AllClosed ? 1 : 0)
+                                .ThenBy(x => x.Nro)
+                                .ToList();
+                        }
+                        @foreach (var grp in nroGrupos)
                         {
-                            var subClass = s.EsUrgente ? "table-danger" : s.EstaRetrasado ? "table-warning" : "";
-                            <tr class="@subClass">
+                            var s        = grp.Peor;
+                            var subClass = grp.AllClosed
+                                ? "text-muted"
+                                : grp.EsUrgente ? "table-danger" : grp.EstaRetrasado ? "table-warning" : "";
+                            <tr class="@subClass" style="@(grp.AllClosed ? "opacity:.65;" : "")">
                                 <td class="item-indent">
-                                    @if (s.EsUrgente)
+                                    @if (grp.AllClosed)
+                                    {
+                                        <i class="bi bi-check2-circle text-success" title="Despachado/Cerrado"></i>
+                                    }
+                                    else if (grp.EsUrgente)
                                     {
                                         <i class="bi bi-lightning-charge-fill text-danger" title="Urgente"></i>
                                     }
-                                    else if (s.EstaRetrasado)
+                                    else if (grp.EstaRetrasado)
                                     {
                                         <i class="bi bi-clock-history text-warning" title="Con retraso"></i>
                                     }
@@ -517,7 +558,7 @@ else
                                     }
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-dark" style="font-size:.65rem;border-radius:2px;">@s.Nro</span>
+                                    <span class="badge @(grp.AllClosed ? "bg-success" : "bg-dark")" style="font-size:.65rem;border-radius:2px;">@grp.Nro</span>
                                 </td>
                                 <td class="text-truncate" style="max-width:120px;" title="@s.CodArt">@s.CodArt</td>
                                 <td>
@@ -554,6 +595,13 @@ else
                                     {
                                         <i class="bi bi-hourglass-split ms-1 text-muted" style="font-size:.7rem;" title="Sin planificar — sin fechas estimadas"></i>
                                     }
+                                    @if (grp.NumSublots > 1)
+                                    {
+                                        <span class="badge bg-light text-muted border ms-1" style="font-size:.62rem;"
+                                              title="@grp.NumSublots sub-lotes de producción. Etapa muestra el sub-lote más atrasado.">
+                                            @grp.NumSublots sub-lotes
+                                        </span>
+                                    }
                                 </td>
                                 <td style="min-width:90px;">
                                     <div class="progress progress-thin mt-1">
@@ -562,20 +610,20 @@ else
                                     </div>
                                     <span class="text-muted" style="font-size:.7rem;">@s.PctAvance%</span>
                                 </td>
-                                <td class="text-end fw-semibold">@s.KgPendientes.ToString("N0")</td>
+                                <td class="text-end fw-semibold">@grp.KgPendientes.ToString("N0")</td>
                                 <td>
-                                    @if (s.FchEntregaComp.HasValue)
+                                    @if (grp.FchEntrega.HasValue)
                                     {
-                                        <span class="@(s.EstaRetrasado ? "text-danger fw-bold" : "")">
-                                            @s.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                        <span class="@(grp.EstaRetrasado ? "text-danger fw-bold" : "")">
+                                            @grp.FchEntrega.Value.ToString("dd/MM/yy")
                                         </span>
                                     }
                                 </td>
                                 <td>
-                                    @if (s.DiasRetraso > 0)
+                                    @if (grp.DiasRetraso > 0)
                                     {
-                                        <span class="badge @(s.DiasRetraso >= 7 ? "bg-danger" : s.DiasRetraso >= 3 ? "bg-warning text-dark" : "bg-secondary")">
-                                            +@s.DiasRetraso d
+                                        <span class="badge @(grp.DiasRetraso >= 7 ? "bg-danger" : grp.DiasRetraso >= 3 ? "bg-warning text-dark" : "bg-secondary")">
+                                            +@grp.DiasRetraso d
                                         </span>
                                     }
                                 </td>
@@ -583,15 +631,15 @@ else
                                     <button type="button"
                                             class="btn btn-outline-secondary btn-sm py-0 px-1"
                                             style="font-size:.65rem;"
-                                            title="Línea de Tiempo — @s.CodArt"
-                                            onclick="abrirModalItem('timeline',@p.numPed,@p.serie,@s.Nro,@s.NumDet,'@s.CodArt')">
+                                            title="Línea de Tiempo — @s.CodArt@(grp.NumSublots > 1 ? " (sub-lote más atrasado)" : "")"
+                                            onclick="abrirModalItem('timeline',@p.numPed,@p.serie,@grp.Nro,@s.NumDet,'@s.CodArt')">
                                         <i class="bi bi-clipboard2-pulse me-1"></i>L. Tiempo
                                     </button>
                                     <button type="button"
                                             class="btn btn-outline-success btn-sm py-0 px-1 ms-1"
                                             style="font-size:.65rem;"
-                                            title="Gantt — @s.CodArt"
-                                            onclick="abrirModalItem('gantt',@p.numPed,@p.serie,@s.Nro,@s.NumDet,'@s.CodArt')">
+                                            title="Gantt — @s.CodArt@(grp.NumSublots > 1 ? " (sub-lote más atrasado)" : "")"
+                                            onclick="abrirModalItem('gantt',@p.numPed,@p.serie,@grp.Nro,@s.NumDet,'@s.CodArt')">
                                         <i class="bi bi-bar-chart-steps me-1"></i>Gantt
                                     </button>
                                 </td>
@@ -668,18 +716,15 @@ else
 
 <!-- Modal L. Tiempo / Gantt por ítem -->
 <div class="modal fade" id="modalItemVista" tabindex="-1" aria-labelledby="modalItemVistaLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title" id="modalItemVistaLabel">
-                    <i class="bi bi-clipboard2-pulse me-2 text-primary" id="modalItemIcon"></i>
-                    <span id="modalItemTitulo">Cargando…</span>
-                </h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body py-2" id="modalItemBody">
-                <div class="text-center py-4 text-muted">
-                    <div class="spinner-border spinner-border-sm me-2"></div>Cargando…
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" style="max-width:680px;">
+        <div class="modal-content" style="border:2px solid var(--pln-navy);border-radius:4px;box-shadow:var(--pln-shadow-lg);overflow:hidden;position:relative;">
+            <button type="button" class="btn-close btn-close-white position-absolute"
+                    data-bs-dismiss="modal" aria-label="Cerrar"
+                    style="top:.5rem;right:.55rem;z-index:10;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));"></button>
+            <div class="modal-body p-0" id="modalItemBody" style="background:var(--pln-gray-50);">
+                <div class="d-flex align-items-center justify-content-center py-5 text-muted gap-2">
+                    <div class="spinner-border spinner-border-sm" style="color:var(--pln-blue-link);"></div>
+                    <span style="font-size:.8rem;">Cargando…</span>
                 </div>
             </div>
         </div>
@@ -690,18 +735,12 @@ else
 <script>
     // ── Modal L.Tiempo / Gantt por ítem ─────────────────────────────────────
     function abrirModalItem(tipo, numPed, serie, nro, numDet, codArt) {
-        const modal   = new bootstrap.Modal(document.getElementById('modalItemVista'));
-        const body    = document.getElementById('modalItemBody');
-        const titulo  = document.getElementById('modalItemTitulo');
-        const icon    = document.getElementById('modalItemIcon');
+        const modal = new bootstrap.Modal(document.getElementById('modalItemVista'));
+        const body  = document.getElementById('modalItemBody');
 
         const isTimeline = tipo === 'timeline';
-        titulo.textContent = (isTimeline ? 'Línea de Tiempo' : 'Gantt') + ' — ' + codArt + ' (Ítem ' + nro + ')';
-        icon.className = isTimeline
-            ? 'bi bi-clipboard2-pulse me-2 text-secondary'
-            : 'bi bi-bar-chart-steps me-2 text-success';
 
-        body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Cargando…</div>';
+        body.innerHTML = '<div class="d-flex align-items-center justify-content-center py-5 text-muted gap-2"><div class="spinner-border spinner-border-sm" style="color:var(--pln-blue-link);"></div><span style="font-size:.8rem;">Cargando…</span></div>';
         modal.show();
 
         const action = isTimeline ? 'ItemTimeline' : 'ItemGantt';

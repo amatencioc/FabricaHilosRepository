@@ -640,6 +640,9 @@ public class RequisicionController : OracleBaseController
 
         ViewBag.NavToken = t;
 
+        ViewBag.IsoCodigoRequerimiento       = _config["FormatosIso:RequerimientoCompraServicio:Codigo"] ?? "F - 15";
+        ViewBag.IsoFechaActualizacionRequerimiento = _config["FormatosIso:RequerimientoCompraServicio:FechaActualizacion"] ?? "";
+
         return View("~/Views/Logistica/Requerimiento/Imprimir.cshtml", (cabecera, items));
     }
 

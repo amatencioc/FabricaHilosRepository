@@ -35,144 +35,178 @@
     };
 
     int ordenActual = pasos.FirstOrDefault(p => p.CodPaso == item.CodPasoAct)?.OrdenPaso ?? 0;
+    var fchCompromiso = item.FchEntregaComp ?? item.FchEntregaOri;
+    var diasRest = fchCompromiso.HasValue ? (fchCompromiso.Value - DateTime.Today).Days : (int?)null;
 }
 
-<div class="px-1">
-    <!-- Encabezado del ítem -->
-    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-        <span class="badge bg-dark" style="font-size:.75rem; border-radius:3px;">Ítem #@item.Nro</span>
-        <strong class="text-primary" style="font-size:.9rem;">@item.CodArt</strong>
-        @if (!string.IsNullOrEmpty(item.Titulo))
-        {
-            <span class="text-muted" style="font-size:.8rem;">@item.Titulo</span>
-        }
-        @if (!string.IsNullOrEmpty(item.Color))
-        {
-            <span class="badge bg-secondary" style="font-size:.7rem;">@item.Color</span>
-        }
-        <span class="ms-auto paso-badge text-white px-2 py-1 rounded"
-              style="background:@item.ColorUi; font-size:.72rem;">
-            @item.CodPasoAct — @item.NombrePaso
-        </span>
-    </div>
-
-    <!-- Línea de tiempo vertical -->
-    <div class="timeline-item-list" style="position:relative; padding-left:2rem;">
-        <!-- Línea vertical -->
-        <div style="position:absolute; left:.62rem; top:0; bottom:0; width:2px; background:#dee2e6;"></div>
-
-        @{ bool _nowDivShown = false; }
-        @foreach (var paso in pasos.Where(p => p.CodPaso != "9R"))
-        {
-            int ordenPaso = paso.OrdenPaso;
-            bool esPasado = ordenPaso < ordenActual;
-            bool esActual = paso.CodPaso == item.CodPasoAct;
-            bool esFuturo = ordenPaso > ordenActual;
-
-            fechaReal.TryGetValue(paso.CodPaso, out var fReal);
-            fechaEst.TryGetValue(paso.CodPaso, out var fEst);
-
-            string dotColor = esActual ? paso.ColorUi : esPasado ? "#198754" : "#dee2e6";
-            string dotBorder = esActual ? "3px solid " + paso.ColorUi : esPasado ? "3px solid #198754" : "3px solid #adb5bd";
-            string textClass = esActual ? "fw-bold" : esPasado ? "" : "text-muted";
-
-            var _renderNow = !_nowDivShown && !esPasado && ordenActual > 0;
-            if (_renderNow) _nowDivShown = true;
-            @if (_renderNow)
-            {
-                <div class="tl-now-divider"><span>Ahora</span></div>
-            }
-
-            <div class="d-flex align-items-start gap-2 @(esActual ? "mb-3" : esPasado ? "mb-2" : "mb-1")" style="position:relative; min-height:1.8rem;">
-                <!-- Dot -->
-                <div style="position:absolute; left:-1.6rem; top:.25rem;
-                            width:1rem; height:1rem; border-radius:50%;
-                            background:@dotColor; border:@dotBorder;
-                            box-shadow:@(esActual ? "0 0 0 3px " + paso.ColorUi + "33" : "none");
-                            flex-shrink:0;">
-                </div>
-                <!-- Contenido -->
-                <div class="flex-grow-1">
-                    <div class="d-flex align-items-center gap-2">
-                        @if (esActual)
-                        {
-                            <i class="bi bi-play-circle-fill flex-shrink-0" style="color:@paso.ColorUi;font-size:.8rem;"></i>
-                        }
-                        else if (esPasado)
-                        {
-                            <i class="bi bi-check-circle-fill flex-shrink-0 text-success" style="font-size:.8rem;"></i>
-                        }
-                        else
-                        {
-                            <i class="bi bi-circle flex-shrink-0 text-muted" style="font-size:.8rem;"></i>
-                        }
-                        <span class="tl-step-cod-tag">@paso.CodPaso</span>
-                        <span class="@textClass" style="font-size:.8rem;">@paso.NombrePaso</span>
-                        @if (fReal.HasValue)
-                        {
-                            <span class="badge bg-success" style="font-size:.62rem;">@fReal.Value.ToString("dd/MM/yy")</span>
-                        }
-                        else if (fEst.HasValue && !esPasado)
-                        {
-                            <span class="badge bg-light text-secondary border" style="font-size:.62rem;">est. @fEst.Value.ToString("dd/MM/yy")</span>
-                        }
-                    </div>
-                    @* ── Actores: quien registró y aprobó (bajo PASO 01) ── *@
-                    @if (paso.CodPaso == "01" && (!string.IsNullOrEmpty(item.NombreRegistro) || !string.IsNullOrEmpty(item.NombreAprobacion)))
-                    {
-                        <div class="tl-actor">
-                            @if (!string.IsNullOrEmpty(item.NombreRegistro))
-                            {
-                                <span class="tl-actor-pill"><i class="bi bi-person-check"></i><strong>Registró</strong> @item.NombreRegistro</span>
-                            }
-                            @if (!string.IsNullOrEmpty(item.NombreAprobacion))
-                            {
-                                <span class="tl-actor-pill">
-                                    <i class="bi bi-patch-check"></i><strong>Aprobó</strong> @item.NombreAprobacion
-                                    @if (item.FchAprobacion.HasValue)
-                                    {
-                                        <span class="ap-fch">@item.FchAprobacion.Value.ToString("dd/MM/yy")</span>
-                                    }
-                                </span>
-                            }
-                        </div>
-                    }
-                    @* ── Actor: quien planificó (bajo PASO 02) ── *@
-                    @if (paso.CodPaso == "02" && !string.IsNullOrEmpty(item.NombrePlanif))
-                    {
-                        <div class="tl-actor">
-                            <span class="tl-actor-pill">
-                                <i class="bi bi-calendar2-check"></i><strong>Planificó</strong> @item.NombrePlanif
-                                @if (item.FchPlanif.HasValue)
-                                {
-                                    <span class="ap-fch">@item.FchPlanif.Value.ToString("dd/MM/yy")</span>
-                                }
-                            </span>
-                        </div>
-                    }
-                </div>
+@* ── Cabecera del ítem (estilo pln-info-strip) ── *@
+<div class="pln-info-strip mb-0" style="border-radius:0;border-left:none;border-right:none;">
+    <div class="d-flex align-items-stretch flex-wrap">
+        <div class="pln-strip-cell" style="min-width:160px;">
+            <div class="pln-strip-lbl">Ítem</div>
+            <div class="pln-strip-val d-flex align-items-center gap-2">
+                <span class="badge bg-dark" style="font-size:.72rem;border-radius:2px;font-weight:800;">
+                    #@item.Nro
+                </span>
+                <span style="color:var(--pln-accent-blue);font-weight:700;font-size:.88rem;">@item.CodArt</span>
+                @if (!string.IsNullOrEmpty(item.Titulo))
+                {
+                    <span style="font-size:.72rem;color:var(--pln-light-muted);">@item.Titulo</span>
+                }
             </div>
-        }
-    </div>
-
-    <!-- KGs / Estado rápido -->
-    <div class="row g-2 mt-2 pt-2 border-top">
-        <div class="col-6">
-            <div class="text-muted" style="font-size:.68rem;">Kg pendientes</div>
-            <div class="fw-bold text-primary">@item.KgPendientes.ToString("N0")</div>
+            @if (!string.IsNullOrEmpty(item.Color))
+            {
+                <div class="pln-strip-sub">@item.Color</div>
+            }
         </div>
-        @if (item.FchEntregaComp.HasValue)
+        <div class="pln-strip-cell">
+            <div class="pln-strip-lbl">Etapa actual</div>
+            <div class="mt-1">
+                <span class="paso-badge text-white" style="background-color:@item.ColorUi;">
+                    @item.CodPasoAct — @item.NombrePaso
+                </span>
+            </div>
+        </div>
+        @if (fchCompromiso.HasValue)
         {
-            <div class="col-6">
-                <div class="text-muted" style="font-size:.68rem;">Fecha entrega</div>
-                <div class="fw-bold @(item.EstaRetrasado ? "text-danger" : "")">
-                    @item.FchEntregaComp.Value.ToString("dd/MM/yyyy")
-                    @if (item.DiasRetraso > 0)
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Entrega compromiso</div>
+                <div class="pln-strip-val @(item.EstaRetrasado ? "text-warning" : "")">
+                    @fchCompromiso.Value.ToString("dd/MM/yyyy")
+                    @if (item.EstaRetrasado)
                     {
                         <span class="badge bg-danger ms-1" style="font-size:.6rem;">+@item.DiasRetraso d</span>
                     }
                 </div>
+                @if (diasRest.HasValue)
+                {
+                    var colorDias = diasRest.Value < 0 ? "#fc8181" : diasRest.Value <= 5 ? "#f6ad55" : "var(--pln-light-muted)";
+                    <div class="pln-strip-sub" style="color:@colorDias;">
+                        @(diasRest.Value < 0 ? $"{Math.Abs(diasRest.Value)}d vencido" : $"{diasRest.Value}d restantes")
+                    </div>
+                }
             </div>
         }
+        <div class="pln-strip-cell">
+            <div class="pln-strip-lbl">Kg pendientes</div>
+            <div class="pln-strip-val" style="color:var(--pln-accent-blue);">@item.KgPendientes.ToString("N0")</div>
+        </div>
     </div>
+    @* ── Actores ── *@
+    @{
+        bool tieneActores = !string.IsNullOrEmpty(item.NombreRegistro) ||
+                            !string.IsNullOrEmpty(item.NombreAprobacion) ||
+                            !string.IsNullOrEmpty(item.NombrePlanif);
+    }
+    @if (tieneActores)
+    {
+        <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.7rem;color:var(--pln-light-muted);background:rgba(255,255,255,.06);">
+            @if (!string.IsNullOrEmpty(item.NombreRegistro))
+            {
+                <span><i class="bi bi-person me-1"></i><strong>Registró:</strong> @item.NombreRegistro</span>
+            }
+            @if (!string.IsNullOrEmpty(item.NombreAprobacion))
+            {
+                <span>
+                    <i class="bi bi-patch-check me-1"></i><strong>Aprobó:</strong> @item.NombreAprobacion
+                    @if (item.FchAprobacion.HasValue)
+                    {
+                        <span class="opacity-75 ms-1">(@item.FchAprobacion.Value.ToString("dd/MM/yy"))</span>
+                    }
+                </span>
+            }
+            @if (!string.IsNullOrEmpty(item.NombrePlanif))
+            {
+                <span>
+                    <i class="bi bi-calendar2-check me-1"></i><strong>Planificó:</strong> @item.NombrePlanif
+                    @if (item.FchPlanif.HasValue)
+                    {
+                        <span class="opacity-75 ms-1">(@item.FchPlanif.Value.ToString("dd/MM/yy"))</span>
+                    }
+                </span>
+            }
+        </div>
+    }
+</div>
+
+@* ── Línea de tiempo (lista vertical con clases tl-step) ── *@
+<div class="px-0 py-0" style="background:#fff;">
+    @{ bool _nowDivShown = false; }
+    @foreach (var paso in pasos.Where(p => p.CodPaso != "9R"))
+    {
+        int ordenPaso  = paso.OrdenPaso;
+        bool esPasado  = ordenPaso < ordenActual;
+        bool esActual  = paso.CodPaso == item.CodPasoAct;
+
+        fechaReal.TryGetValue(paso.CodPaso, out var fReal);
+        fechaEst.TryGetValue(paso.CodPaso, out var fEst);
+
+        if (!_nowDivShown && esActual && ordenActual > 0)
+        {
+            _nowDivShown = true;
+            <div class="tl-now-divider mx-3 my-1"><span>Ahora</span></div>
+        }
+
+        string stepCls   = esActual ? "activo" : esPasado ? "completado" : "pendiente";
+        string dotBg     = esActual ? paso.ColorUi : esPasado ? "var(--pln-success-dk)" : "var(--pln-gray-300)";
+        string nombreCls = esActual ? "tl-nombre activo" : esPasado ? "tl-nombre completado" : "tl-nombre pendiente";
+
+        <div class="tl-step @stepCls">
+            <div class="tl-dot" style="background:@dotBg;@(esActual ? $"box-shadow:0 0 0 3px {paso.ColorUi}33;" : "")"></div>
+            <div class="tl-cod">
+                @if (esPasado)
+                {
+                    <i class="bi bi-check-circle-fill text-success" style="font-size:.78rem;"></i>
+                }
+                else if (esActual)
+                {
+                    <i class="bi bi-play-circle-fill" style="font-size:.78rem;color:@paso.ColorUi;"></i>
+                }
+                else
+                {
+                    <span class="tl-step-cod-tag">@paso.CodPaso</span>
+                }
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                    <span class="@nombreCls">@paso.NombrePaso</span>
+                </div>
+                @if (paso.CodPaso == "01" && (!string.IsNullOrEmpty(item.NombreRegistro) || !string.IsNullOrEmpty(item.NombreAprobacion)))
+                {
+                    <div class="tl-actor">
+                        @if (!string.IsNullOrEmpty(item.NombreRegistro))
+                        {
+                            <span class="tl-actor-pill"><i class="bi bi-person-check"></i><strong>Registró</strong> @item.NombreRegistro</span>
+                        }
+                        @if (!string.IsNullOrEmpty(item.NombreAprobacion))
+                        {
+                            <span class="tl-actor-pill">
+                                <i class="bi bi-patch-check"></i><strong>Aprobó</strong> @item.NombreAprobacion
+                                @if (item.FchAprobacion.HasValue) { <span class="ap-fch">@item.FchAprobacion.Value.ToString("dd/MM/yy")</span> }
+                            </span>
+                        }
+                    </div>
+                }
+                @if (paso.CodPaso == "02" && !string.IsNullOrEmpty(item.NombrePlanif))
+                {
+                    <div class="tl-actor">
+                        <span class="tl-actor-pill">
+                            <i class="bi bi-calendar2-check"></i><strong>Planificó</strong> @item.NombrePlanif
+                            @if (item.FchPlanif.HasValue) { <span class="ap-fch">@item.FchPlanif.Value.ToString("dd/MM/yy")</span> }
+                        </span>
+                    </div>
+                }
+            </div>
+            <div class="tl-fechas">
+                @if (fReal.HasValue)
+                {
+                    <span class="tl-fech-real"><i class="bi bi-check2 me-1"></i>@fReal.Value.ToString("dd/MM/yy")</span>
+                }
+                else if (fEst.HasValue && !esPasado)
+                {
+                    <span style="color:var(--pln-gray-500);">est. @fEst.Value.ToString("dd/MM/yy")</span>
+                }
+            </div>
+        </div>
+    }
 </div>

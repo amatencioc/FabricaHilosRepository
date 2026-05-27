@@ -4,6 +4,7 @@
                         ?? new List<FabricaHilos.Models.Logistica.RequisicionPendienteDto>();
     var proveedores   = ViewBag.Proveedores   as Dictionary<string, string> ?? new Dictionary<string, string>();
     var condPag       = ViewBag.CondPag       as Dictionary<string, string> ?? new Dictionary<string, string>();
+    var proveedoresCondPag = ViewBag.ProveedoresCondPag as Dictionary<string, string> ?? new Dictionary<string, string>();
     var opcEntrega    = ViewBag.OpcEntrega    as List<FabricaHilos.Models.Logistica.OpcEntregaDto>
                         ?? new List<FabricaHilos.Models.Logistica.OpcEntregaDto>();
     var centrosCosto  = ViewBag.CentrosCosto  as Dictionary<string, string> ?? new Dictionary<string, string>();
@@ -907,7 +908,11 @@
     }
 
     var datosProveedores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        proveedores.Select(kv => new { val = kv.Key, txt = kv.Value + " (" + kv.Key + ")" })
+        proveedores.Select(kv => new {
+            val    = kv.Key,
+            txt    = kv.Value + " (" + kv.Key + ")",
+            conpag = proveedoresCondPag.TryGetValue(kv.Key, out var cp) ? cp : null
+        })
     ));
     var datosCondPag = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
         condPag.Select(kv => new { val = kv.Key, txt = kv.Value + " (" + kv.Key + ")" })
@@ -915,6 +920,22 @@
 
     selector('buscarProveedor','selProveedor','listaProveedor', datosProveedores);
     selector('buscarCondPag',  'selCondPag',  'listaCondPag',   datosCondPag);
+
+    // ── Auto-rellenar condición de pago al seleccionar proveedor ───────────────
+    (function() {
+        var lista = document.getElementById('listaProveedor');
+        lista.addEventListener('mousedown', function(e) {
+            var li = e.target.closest('li');
+            if (!li) return;
+            var txt = li.textContent.trim();
+            var entrada = datosProveedores.find(function(d) { return d.txt === txt; });
+            if (!entrada || !entrada.conpag) return;
+            var cp = datosCondPag.find(function(d) { return d.val === entrada.conpag; });
+            if (!cp) return;
+            document.getElementById('buscarCondPag').value = cp.txt;
+            document.getElementById('selCondPag').value   = cp.val;
+        });
+    })();
 
     // ── Selector C.Costo: carga única al inicio, luego búsqueda local ────────
     fetch('/Logistica/OrdenCompra/BuscarDestinos?tipo=U')

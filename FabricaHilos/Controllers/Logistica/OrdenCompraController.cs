@@ -440,8 +440,9 @@ public class OrdenCompraController : OracleBaseController
         var requisiciones = (await _service.ObtenerRequisicionesPendientesAsync())
                             .OrderByDescending(r => r.NumReq)
                             .ToList();
-        var proveedores   = await _service.ObtenerTodosProveedoresAsync();
-        var condPag       = await _service.ObtenerTodasCondPagAsync();
+        var proveedores      = await _service.ObtenerTodosProveedoresAsync();
+        var condPag          = await _service.ObtenerTodasCondPagAsync();
+        var proveedoresConPag = await _service.ObtenerCondPagPorProveedorAsync();
         var opcEntrega    = await _service.ObtenerOpcEntregaAsync();
         var igvList       = await _service.ObtenerIgvAsync();
         var centrosCosto  = await _service.ObtenerDescripcionesCentroCostosAsync(
@@ -450,6 +451,7 @@ public class OrdenCompraController : OracleBaseController
         ViewBag.NavToken    = t;
         ViewBag.Requisiciones = requisiciones;
         ViewBag.Proveedores   = proveedores;
+        ViewBag.ProveedoresCondPag = proveedoresConPag;
         ViewBag.CondPag       = condPag;
         ViewBag.OpcEntrega    = opcEntrega;   // List<OpcEntregaDto>
         ViewBag.IgvList       = igvList;      // List<IgvDto>

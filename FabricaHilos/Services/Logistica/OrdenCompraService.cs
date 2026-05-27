@@ -41,6 +41,7 @@ public interface IOrdenCompraService
     Task<List<RequisicionPendienteDto>> ObtenerRequisicionesPendientesAsync();
     Task<List<ItemReqPendienteDto>> ObtenerItemsReqPendientesAsync(string tipDoc, int serie, long numReq);
     Task<Dictionary<string, string>> ObtenerTodosProveedoresAsync(string? buscar = null);
+    Task<Dictionary<string, string>> ObtenerCondPagPorProveedorAsync();
     Task<Dictionary<string, string>> ObtenerTodasCondPagAsync();
     Task<List<OpcEntregaDto>> ObtenerOpcEntregaAsync();
     Task<List<DestinoDto>> ObtenerDestinosAsync(string? tipo = null, string? buscar = null);
@@ -1052,6 +1053,34 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al obtener lista de proveedores");
+        }
+        return result;
+    }
+
+    // ── ObtenerCondPagPorProveedor ──────────────────────────────────────────────
+
+    public async Task<Dictionary<string, string>> ObtenerCondPagPorProveedorAsync()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            string sql = $"SELECT COD_PROVEED, CONPAG FROM {S}PROVEED WHERE ESTADO = '0' AND CONPAG IS NOT NULL";
+            await using var cmd = new OracleCommand(sql, conn);
+            await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
+                ?? throw new InvalidOperationException("OracleDataReader expected");
+            while (await reader.ReadAsync())
+            {
+                var cod    = GetStr(reader, "COD_PROVEED") ?? "";
+                var conpag = GetStr(reader, "CONPAG")      ?? "";
+                if (!string.IsNullOrEmpty(cod) && !string.IsNullOrEmpty(conpag))
+                    result[cod] = conpag;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener condición de pago por proveedor");
         }
         return result;
     }

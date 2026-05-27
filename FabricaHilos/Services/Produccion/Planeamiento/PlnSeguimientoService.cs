@@ -392,8 +392,10 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         var inPairs = string.Join(" OR ", pedidosPagina.Select((p, i) =>
             $"(v.serie = :pSerie{i} AND v.num_ped = :pNumPed{i})"));
 
+        // Siempre recuperar todos los sub-lotes del pedido (A+C) para mostrar la imagen completa
+        // en el sub-table del Dashboard. La selección de PEDIDOS en la página sí filtra por 'A'.
         var sqlItems = EstadoItemSelect
-            + (incluyeCerrados ? " WHERE v.estado_seguim IN ('A','C')" : " WHERE v.estado_seguim = 'A'")
+            + " WHERE v.estado_seguim IN ('A','C')"
             + $" AND ({inPairs})"
             + " ORDER BY v.ind_urgente DESC, v.dias_retraso DESC, v.num_ped DESC, v.nro";
 

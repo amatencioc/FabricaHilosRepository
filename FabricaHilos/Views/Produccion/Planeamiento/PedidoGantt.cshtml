@@ -494,6 +494,12 @@
 </div>
 
 <!-- ── Strip industrial: info ───────────────────────────── -->
+@{
+    var itemsActivosG = Model.Items
+        .GroupBy(x => x.Nro)
+        .Select(g => g.OrderByDescending(x => x.NroCiclo).ThenBy(x => x.PctAvance).First())
+        .ToList();
+}
 <div class="pln-info-strip mb-3">
     <div class="d-flex align-items-stretch flex-wrap">
         <div class="pln-strip-cell" style="min-width:180px;">
@@ -502,6 +508,7 @@
             @if (primerItem != null)
             {
                 <div class="pln-strip-sub">@primerItem.NombreCliente</div>
+                <div class="pln-strip-sub">@primerItem.CodCliente</div>
             }
         </div>
         @if (primerItem != null)
@@ -510,10 +517,18 @@
                 <div class="pln-strip-lbl">Fecha pedido</div>
                 <div class="pln-strip-val">@primerItem.FchPedido.ToString("dd/MM/yyyy")</div>
             </div>
+            @if (primerItem.FchPlanif.HasValue)
+            {
+                <div class="pln-strip-cell">
+                    <div class="pln-strip-lbl">Entrega comprometida</div>
+                    <div class="pln-strip-val">@primerItem.FchPlanif.Value.ToString("dd/MM/yyyy")</div>
+                </div>
+            }
+            var fchCompromisog = primerItem.FchEntregaComp ?? primerItem.FchEntregaOri;
             <div class="pln-strip-cell">
                 <div class="pln-strip-lbl">Entrega comprometida</div>
                 <div class="pln-strip-val @(primerItem.EstaRetrasado ? "text-warning" : "")">
-                    @(primerItem.FchEntregaComp?.ToString("dd/MM/yyyy") ?? "—")
+                    @(fchCompromisog?.ToString("dd/MM/yyyy") ?? "—")
                     @if (primerItem.EstaRetrasado)
                     {
                         <span class="badge bg-danger ms-1" style="font-size:.68rem;">+@primerItem.DiasRetraso d</span>
@@ -528,11 +543,40 @@
                     </span>
                 </div>
             </div>
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Sublotes</div>
+                <div class="pln-strip-val">@itemsActivosG.Count</div>
+                <div class="pln-strip-sub">@itemsActivosG.Sum(x => x.CantidadOrig).ToString("N0") kg en total</div>
+            </div>
+            var fchCompG  = Model.Items.Select(x => x.FchEntregaComp).Where(f => f.HasValue).Min();
+            var diasRestG = fchCompG.HasValue ? (fchCompG.Value - DateTime.Today).Days : (int?)null;
+            <div class="pln-strip-cell">
+                <div class="pln-strip-lbl">Días para entrega</div>
+                @if (diasRestG.HasValue)
+                {
+                    var colorDiasG = diasRestG.Value < 0 ? "#fc8181" : diasRestG.Value <= 5 ? "#f6ad55" : "#e2e8f0";
+                    <div class="pln-strip-val" style="color:@colorDiasG;">
+                        @(diasRestG.Value < 0 ? $"{Math.Abs(diasRestG.Value)}d vencido" : $"{diasRestG.Value}d restantes")
+                    </div>
+                    <div class="pln-strip-sub">@fchCompG!.Value.ToString("dd/MM/yyyy")</div>
+                }
+                else
+                {
+                    <div class="pln-strip-val">—</div>
+                }
+            </div>
             @if (Model.Items.Any(x => x.EsUrgente))
             {
-                <div class="pln-strip-cell">
-                    <div class="pln-strip-lbl">Estado</div>
+                <div class="pln-strip-cell" style="background:rgba(229,62,62,.15);">
+                    <div class="pln-strip-lbl" style="color:#fc8181;">Estado</div>
                     <div class="pln-strip-val"><span class="badge bg-danger">⚡ URGENTE</span></div>
+                </div>
+            }
+            else if (Model.Items.Any(x => x.EstaRetrasado))
+            {
+                <div class="pln-strip-cell" style="background:rgba(253,126,20,.12);">
+                    <div class="pln-strip-lbl" style="color:#f6ad55;">Estado</div>
+                    <div class="pln-strip-val" style="font-size:.82rem;color:#fed7aa;">⚠ Con retraso</div>
                 </div>
             }
         }
@@ -546,7 +590,7 @@
     }
     @if (actorItemG != null)
     {
-        <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.72rem; color:#6c757d; background:rgba(255,255,255,.04);">
+        <div class="d-flex gap-3 flex-wrap px-2 py-1 border-top" style="font-size:.72rem; color:#a0aec0; background:rgba(255,255,255,.07);">
             @if (!string.IsNullOrEmpty(actorItemG.NombreRegistro))
             {
                 <span><i class="bi bi-person me-1"></i><strong>Registró:</strong> @actorItemG.NombreRegistro</span>

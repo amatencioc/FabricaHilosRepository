@@ -5,10 +5,13 @@
     ViewData["Title"] = $"Pedido {Model.Serie}-{Model.NumPed}";
     var primerItem = Model.Items.FirstOrDefault();
     var pasoMap    = Model.Pasos.ToDictionary(p => p.CodPaso);
-    // Ítem activo por Nro = el de mayor NroCiclo (evita contar ciclos de reproceso como sublotes distintos)
+    // Un ítem por NRO: mayor NroCiclo (reprocesos) y, en empate, peor avance (el que más atención necesita)
     var itemsActivos = Model.Items
         .GroupBy(x => x.Nro)
-        .Select(g => g.OrderByDescending(x => x.NroCiclo).First())
+        .Select(g => g
+            .OrderByDescending(x => x.NroCiclo)
+            .ThenBy(x => x.PctAvance)          // peor estado primero cuando mismo ciclo
+            .First())
         .ToList();
 
     // ── Timeline ApexCharts: estimado vs. real (primer sublote) ──────────
@@ -363,7 +366,7 @@
     @{
         int subIdx = 0;
     }
-    @foreach (var s in Model.Items.OrderBy(x => x.Nro).ThenBy(x => x.NumDet))
+    @foreach (var s in itemsActivos.OrderBy(x => x.Nro))
     {
         subIdx++;
         var urgClase     = s.EsUrgente ? "urgente" : s.EstaRetrasado ? "retraso" : "";

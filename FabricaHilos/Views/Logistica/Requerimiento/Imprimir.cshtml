@@ -58,6 +58,9 @@
     decimal totalFinal      = totalSoles + igvSoles;
     decimal totalFinalDolar = totalDolar  + igvDolar;
 
+    var isoCodigoReq  = ViewBag.IsoCodigoRequerimiento              as string ?? "F - 15";
+    var isoFechaReq   = ViewBag.IsoFechaActualizacionRequerimiento    as string ?? "";
+
     var firmaHecho    = ViewBag.FirmaHecho    as FabricaHilos.Models.Logistica.FirmaOcDto;
     var firmaAprobado = ViewBag.FirmaAprobado as FabricaHilos.Models.Logistica.FirmaOcDto;
     var firmaRecibido = ViewBag.FirmaRecibido as FabricaHilos.Models.Logistica.FirmaOcDto;
@@ -177,6 +180,29 @@
             border-radius: 20px;
             text-transform: uppercase;
             letter-spacing: .05em;
+        }
+        .header-right .iso-box {
+            align-self: stretch;
+            background: #fff;
+            color: #1a1a2e;
+            border: 1px solid #a8c4b8;
+            border-radius: 2px;
+            text-align: center;
+            padding: 3px 8px;
+            margin-bottom: 4px;
+            line-height: 1.5;
+        }
+        .header-right .iso-box .iso-code {
+            display: block;
+            font-size: 8.5pt;
+            font-weight: 700;
+            text-decoration: underline;
+            color: #1a1a2e;
+        }
+        .header-right .iso-box .iso-fecha {
+            display: block;
+            font-size: 7.5pt;
+            color: #333;
         }
         .section-grid {
             display: flex;
@@ -391,6 +417,13 @@
             </div>
         </div>
         <div class="header-right">
+            <div class="iso-box">
+                <span class="iso-code">@isoCodigoReq</span>
+                @if (!string.IsNullOrWhiteSpace(isoFechaReq))
+                {
+                    <span class="iso-fecha">Actualizado al: @isoFechaReq</span>
+                }
+            </div>
             <span class="doc-type">REQUERIMIENTO DE COMPRA Y/O SERVICIO</span>
             <span class="doc-num">@numDoc</span>
             <span class="doc-estado" style="background-color:@estadoColor;">@estadoTexto</span>
