@@ -169,10 +169,10 @@ builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
 
-var sireOptions = builder.Configuration.GetSection("Sire").Get<SireOptions>();
+var sireOptions = builder.Configuration.GetSection("Sire").Get<SireOptions>() ?? new SireOptions();
 builder.Services.Configure<SireOptions>(builder.Configuration.GetSection("Sire"));
 
-if (sireOptions?.UseMock == true)
+if (sireOptions.UseMock)
 {
     builder.Services.AddSingleton<ISireAuthService, SireAuthServiceMock>();
     builder.Services.AddSingleton<ISireVentasService, SireVentasServiceMock>();
