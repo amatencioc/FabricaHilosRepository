@@ -15,6 +15,8 @@
     <li class="breadcrumb-item active">Parámetros</li>
 }
 
+@await Html.PartialAsync("_PlnNavBar")
+
 @if (!string.IsNullOrEmpty(okMsg))
 {
     <div class="alert alert-success alert-dismissible fade show" role="alert">

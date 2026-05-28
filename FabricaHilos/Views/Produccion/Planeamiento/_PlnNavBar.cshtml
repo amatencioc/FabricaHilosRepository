@@ -1,0 +1,78 @@
+@using FabricaHilos.Services
+@inject IMenuService MenuService
+@{
+    var menus    = MenuService.GetMenusActuales();
+    var ctrl     = ViewContext.RouteData.Values["controller"]?.ToString();
+    var act      = ViewContext.RouteData.Values["action"]?.ToString();
+
+    // Indica si la vista actual es alguna del sub-módulo Alertas (Alertas + HistorialAlertas)
+    bool esAlertas         = ctrl == "Planeamiento" && (act == "Alertas" || act == "HistorialAlertas");
+    bool esDashboard       = ctrl == "Planeamiento" && act == "Dashboard";
+    bool esCargaMaquinas   = ctrl == "Planeamiento" && act == "CargaMaquinas";
+    bool esPendDespacho    = ctrl == "Planeamiento" && act == "PendientesDespacho";
+    bool esProximosVencer  = ctrl == "Planeamiento" && act == "ProximosVencer";
+    bool esHistEventos     = false;
+}
+<nav class="pln-navbar mb-3">
+    <ul class="pln-navbar-list">
+        @if (menus.PlaneamientoDashboard)
+        {
+            <li class="pln-navbar-item @(esDashboard ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="Dashboard" class="pln-navbar-link">
+                    <i class="bi bi-kanban-fill"></i>
+                    <span>Seguimiento</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoProximosVencer)
+        {
+            <li class="pln-navbar-item @(esProximosVencer ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="pln-navbar-link">
+                    <i class="bi bi-calendar-event-fill"></i>
+                    <span>Próx. a Vencer</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoCargaMaquinas)
+        {
+            <li class="pln-navbar-item @(esCargaMaquinas ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="pln-navbar-link">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span>Carga Máquinas</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoPendientesDespacho)
+        {
+            <li class="pln-navbar-item @(esPendDespacho ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesDespacho" class="pln-navbar-link">
+                    <i class="bi bi-truck"></i>
+                    <span>Pend. Despacho</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoAlertas)
+        {
+            <li class="pln-navbar-item @(esAlertas ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="Alertas" class="pln-navbar-link">
+                    <i class="bi bi-bell-fill"></i>
+                    <span>Alertas</span>
+                </a>
+            </li>
+        }
+        <li class="pln-navbar-item disabled" title="Módulo en desarrollo">
+            <span class="pln-navbar-link" style="opacity:.5;cursor:not-allowed;">
+                <i class="bi bi-clock-history"></i>
+                <span>Historial</span>
+                <span class="badge bg-secondary ms-1" style="font-size:.58rem;vertical-align:middle;">Dev</span>
+            </span>
+        </li>
+        <li class="pln-navbar-item disabled" title="Módulo en desarrollo">
+            <span class="pln-navbar-link" style="opacity:.5;cursor:not-allowed;">
+                <i class="bi bi-sliders"></i>
+                <span>Parámetros</span>
+                <span class="badge bg-secondary ms-1" style="font-size:.58rem;vertical-align:middle;">Dev</span>
+            </span>
+        </li>
+    </ul>
+</nav>

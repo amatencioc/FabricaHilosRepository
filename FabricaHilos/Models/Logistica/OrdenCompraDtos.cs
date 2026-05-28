@@ -309,3 +309,26 @@ public class MergedItemOrdDto
             .OrderBy(x => x.CodArt)
             .ToList();
 }
+
+/// <summary>
+/// Resultado de comparación OC vs. ingresos de almacén (KARDEX) por ítem.
+/// </summary>
+public class IngresoAlmacenItemDto
+{
+    public int       Orden          { get; set; }       // Orden del ítem en la OC
+    public long?     NumReq         { get; set; }       // Requerimiento de origen
+    public int?      OrdenReq       { get; set; }       // Ítem del requerimiento
+    public string?   CodArt         { get; set; }
+    public string?   Descripcion    { get; set; }
+    public decimal   QtyOc          { get; set; }       // Cantidad pedida en OC
+    public decimal   PrecioUnit     { get; set; }
+    public decimal   ImporteOc      { get; set; }
+    public decimal   QtyIngresada   { get; set; }       // Suma de kardex
+    public decimal   QtyPendiente   { get; set; }       // QtyOc - QtyIngresada
+    public decimal   PctIngresado   { get; set; }       // %
+    public int       CantIngresos   { get; set; }       // N° kardex distintos
+    public string?   UltFchIngreso  { get; set; }       // DD/MM/YYYY
+    public string?   Operario       { get; set; }
+    public string?   Comprobante    { get; set; }       // TipDoc-Serie-Numero
+    public string    Estado         { get; set; } = "PENDIENTE";  // COMPLETO / PARCIAL / PENDIENTE
+}

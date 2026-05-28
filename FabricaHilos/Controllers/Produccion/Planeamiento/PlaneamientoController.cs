@@ -97,17 +97,6 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "Alertas"
             });
 
-        if (menus.PlaneamientoKPIs)
-            modulos.Add(new SgcModuloDto
-            {
-                Nombre      = "KPIs",
-                Descripcion = "Indicadores de gestión: OTIF, ciclo de producción, tasa de reproceso.",
-                Icono       = "bi-graph-up-arrow",
-                ColorClase  = "text-success",
-                Controller  = "Planeamiento",
-                Action      = "KPIs"
-            });
-
         modulos.Add(new SgcModuloDto
         {
             Nombre      = "Parámetros",
@@ -442,16 +431,6 @@ public class PlaneamientoController : OracleBaseController
             Pasos   = tPasos.Result
         };
         return PartialView("_ItemGantt", vm);
-    }
-
-    // GET /Planeamiento/KPIs
-    public async Task<IActionResult> KPIs()
-    {
-        var tResumen = _kpi.GetResumenAsync();
-        var tProd    = _kpi.GetKpiProduccionAsync();
-        await Task.WhenAll(tResumen, tProd);
-        ViewBag.KpiProduccion = tProd.Result;
-        return View(tResumen.Result);
     }
 
     // GET /Planeamiento/Trazabilidad?numPed=&serie=

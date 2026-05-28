@@ -90,9 +90,10 @@
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="IndexCards">Planeamiento</a></li>
     <li class="breadcrumb-item active">Próximos a Vencer</li>
 }
+
+@await Html.PartialAsync("_PlnNavBar")
 
 <div class="container-fluid py-3">
 

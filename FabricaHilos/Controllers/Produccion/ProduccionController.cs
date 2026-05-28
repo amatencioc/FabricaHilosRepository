@@ -150,6 +150,21 @@ namespace FabricaHilos.Controllers.Produccion
                 modulos.Add(planeamientoModulo);
             }
 
+            // Parámetros PLN — visible siempre pero deshabilitado (acceso solo por ruta directa)
+            if (menus.Planeamiento)
+            {
+                var plnParams = modulos.FirstOrDefault(m => m.Controller == "Planeamiento");
+                plnParams?.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre        = "Parámetros",
+                    Descripcion   = "Configuración de umbrales, horas de turno y buffers del módulo PLN_.",
+                    Icono         = "bi-sliders",
+                    Controller    = "Planeamiento",
+                    Action        = "Parametros",
+                    Deshabilitado = true
+                });
+            }
+
             return View(modulos);
         }
     }

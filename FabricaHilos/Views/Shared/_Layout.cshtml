@@ -135,20 +135,12 @@
                                     </a>
                                 </li>
                                 }
-                                @if (menus.PlaneamientoKPIs)
-                                {
-                                <li>
-                                    <a asp-controller="Planeamiento" asp-action="KPIs" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "KPIs" ? "active" : "")">
-                                        <i class="bi bi-graph-up-arrow"></i> KPIs
-                                    </a>
+                                            </ul>
+                                        </li>
+                                        }
+                                    </ul>
                                 </li>
                                 }
-                            </ul>
-                        </li>
-                        }
-                    </ul>
-                </li>
-                }
                 @if (menus.Sgc)
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>

@@ -87,7 +87,7 @@ public class MenuOptions
     public bool PlaneamientoCargaMaquinas { get; set; } = true;
     public bool PlaneamientoAlertas            { get; set; } = true;
     public bool PlaneamientoProximosVencer      { get; set; } = true;
-    public bool PlaneamientoKPIs                { get; set; } = true;
+    public bool PlaneamientoKPIs                { get; set; } = false;
     public bool PlaneamientoPendientesDespacho   { get; set; } = true;
 
     /// <summary>

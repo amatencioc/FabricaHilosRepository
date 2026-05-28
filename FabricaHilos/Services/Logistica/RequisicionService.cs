@@ -120,8 +120,6 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
               "   OR UPPER(CENTRO_COSTO) LIKE '%' || UPPER(:buscar) || '%')"
             : string.Empty;
 
-        bool esFiltroEspecial = hasEstado && (estado == "6" || estado == "9");
-
         bool aplicarBuscar = hasBuscar;
         bool aplicarFechas = !hasBuscar;
         // Cuando hay búsqueda de texto libre no se aplican filtros de estado ni de fechas
@@ -131,9 +129,19 @@ public class RequisicionService : OracleServiceBase, IRequisicionService
         string fechaFinFilter = (aplicarFechas && hasFechaFin) ? " AND TRUNC(FECHA) <= TRUNC(:fechaFin)" : string.Empty;
         string estadoFilter   = aplicarEstado ? " AND ESTADO = :estado" : string.Empty;
 
-        // Por defecto (sin búsqueda libre ni filtro de estado) excluir cerrado(6) y anulado(9)
-        // Si hay búsqueda de texto libre se muestran todos los estados
-        string baseEstadoFilter = (hasBuscar || esFiltroEspecial) ? string.Empty : " AND ESTADO NOT IN ('6','9')";
+        // Por defecto (sin búsqueda libre ni filtro de estado):
+        //   - Excluir cerrado(6) y anulado(9) siempre.
+        //   - Excluir emitido(0) SALVO que el RESPONSABLE sea RAMIREZ JUAPE IRMA DE LA.
+        // Si hay búsqueda de texto libre se muestran todos los estados.
+        bool esFiltroExcluido = hasEstado && (estado == "6" || estado == "9");
+        string baseEstadoFilter = (hasBuscar || esFiltroExcluido)
+            ? string.Empty
+            : $" AND ESTADO NOT IN ('6','9')" +
+              $" AND (ESTADO != '0' OR RESPONSABLE IN (" +
+              $"   SELECT C_CODIGO FROM {S}V_PERSONAL" +
+              $"   WHERE SITUACION = '1'" +
+              $"   AND UPPER(NOMBRE_CORTO) LIKE '%RAMIREZ%' AND UPPER(NOMBRE_CORTO) LIKE '%IRMA%'" +
+              $" ))";
 
         string whereClause = $"WHERE 1=1{baseEstadoFilter}{buscarFilter}{fechaIniFilter}{fechaFinFilter}{estadoFilter}";
 

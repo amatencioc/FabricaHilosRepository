@@ -361,6 +361,112 @@
     </div>
 </div>
 
+@{
+    var ingresosAlmacen = ViewBag.IngresosAlmacen as List<FabricaHilos.Models.Logistica.IngresoAlmacenItemDto>
+                          ?? new List<FabricaHilos.Models.Logistica.IngresoAlmacenItemDto>();
+    var totalIngresado  = ingresosAlmacen.Sum(x => x.QtyIngresada);
+    var totalOc         = ingresosAlmacen.Sum(x => x.QtyOc);
+    var pctGlobal       = totalOc > 0 ? Math.Round(totalIngresado / totalOc * 100, 1) : 0m;
+}
+
+<!-- ═══════════════════════════════════════════════ INGRESOS DE ALMACÉN ══ -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-2 fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-box-arrow-in-down me-1"></i>Ingresos de Almacén</span>
+        @if (ingresosAlmacen.Any())
+        {
+            <span class="badge bg-secondary ms-2">@ingresosAlmacen.Count ítem(s)</span>
+        }
+    </div>
+    <div class="card-body p-0">
+        @if (!ingresosAlmacen.Any())
+        {
+            <p class="text-muted text-center py-3 mb-0"><i class="bi bi-inbox me-1"></i>Sin ingresos registrados aún.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover table-corporate mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center">#</th>
+                            <th>REQ</th>
+                            <th>Cód. Art.</th>
+                            <th>Descripción</th>
+                            <th class="text-end">Cant. OC</th>
+                            <th class="text-end">Ingresado</th>
+                            <th class="text-end">Pendiente</th>
+                            <th class="text-end">% Ing.</th>
+                            <th class="text-center">Ingresos</th>
+                            <th>Últ. Ingreso</th>
+                            <th>Comprobante</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ing in ingresosAlmacen)
+                        {
+                            var badgeClass = ing.Estado switch
+                            {
+                                "COMPLETO"  => "bg-success",
+                                "PARCIAL"   => "bg-warning text-dark",
+                                _           => "bg-danger"
+                            };
+                            var barWidth  = Math.Min((double)ing.PctIngresado, 100);
+                            var barColor  = ing.PctIngresado >= 100 ? "bg-success"
+                                          : ing.PctIngresado > 0   ? "bg-warning"
+                                          : "bg-danger";
+                            <tr>
+                                <td class="text-center">@ing.Orden</td>
+                                <td>
+                                    @if (ing.NumReq.HasValue)
+                                    {
+                                        <span class="text-nowrap">@ing.NumReq@(ing.OrdenReq.HasValue ? $"·{ing.OrdenReq}" : "")</span>
+                                    }
+                                    else { <span class="text-muted">—</span> }
+                                </td>
+                                <td><code class="small">@ing.CodArt</code></td>
+                                <td>@ing.Descripcion</td>
+                                <td class="text-end">@ing.QtyOc.ToString("N2")</td>
+                                <td class="text-end fw-semibold">@ing.QtyIngresada.ToString("N2")</td>
+                                <td class="text-end @(ing.QtyPendiente > 0 ? "text-danger" : "text-success")">
+                                    @ing.QtyPendiente.ToString("N2")
+                                </td>
+                                <td class="text-end" style="min-width:110px">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <div class="progress flex-grow-1" style="height:6px">
+                                            <div class="progress-bar @barColor" style="width:@barWidth.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                                        </div>
+                                        <small class="text-nowrap">@ing.PctIngresado.ToString("0.0")%</small>
+                                    </div>
+                                </td>
+                                <td class="text-center">@ing.CantIngresos</td>
+                                <td class="text-nowrap">@(ing.UltFchIngreso ?? "—")</td>
+                                <td class="text-nowrap small">@(ing.Comprobante ?? "—")</td>
+                                <td class="text-center">
+                                    <span class="badge @badgeClass">@ing.Estado</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-semibold">
+                        <tr>
+                            <td colspan="4" class="text-end">Total:</td>
+                            <td class="text-end">@totalOc.ToString("N2")</td>
+                            <td class="text-end">@totalIngresado.ToString("N2")</td>
+                            <td class="text-end @(totalOc - totalIngresado > 0 ? "text-danger" : "text-success")">
+                                @((totalOc - totalIngresado).ToString("N2"))
+                            </td>
+                            <td class="text-end"><small>@pctGlobal.ToString("0.0")%</small></td>
+                            <td colspan="4"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
 <!-- Auditoría -->
 <div class="mt-3 text-muted small d-flex gap-4 flex-wrap">
     @if (!string.IsNullOrEmpty(oc.AAduser))

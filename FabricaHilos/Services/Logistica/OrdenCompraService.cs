@@ -67,6 +67,11 @@ public interface IOrdenCompraService
     Task<bool> PropagateGruposReqToItemOrdAsync(long numPed);
 
     Task<(FirmaOcDto? Generado, FirmaOcDto? Aprobado)> ObtenerFirmasOcAsync(string tipoDocto, int serie, long numPed);
+
+    /// <summary>
+    /// Compara cada ítem de la O/C contra los ingresos de almacén (KARDEX) relacionados.
+    /// </summary>
+    Task<List<IngresoAlmacenItemDto>> ObtenerIngresosAlmacenAsync(string tipoDocto, int serie, long numPed);
 }
 
 public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
@@ -654,9 +659,13 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         // a esta O/C que aún no tienen ID_GRUPO en ITEMORD
         var sqlSelect = $@"SELECT I.COD_ART, I.ORDEN, IR.ID_GRUPO, IR.F_APROBADO
                            FROM {S}ITEMORD I
-                           JOIN {S}DESP_ITEMREQ D ON D.NRO_DOC_REF = TO_CHAR(:numPed)
-                               AND D.COD_ART = I.COD_ART AND D.ORDEN = I.ORDEN
-                           JOIN {S}ITEMREQ IR ON IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN
+                           JOIN (SELECT COD_ART, NUMREQ, ORDEN AS ORDEN_REQ
+                                 FROM (SELECT COD_ART, NUMREQ, ORDEN,
+                                              ROW_NUMBER() OVER (PARTITION BY COD_ART ORDER BY NUMREQ ASC, ORDEN ASC) RN
+                                       FROM {S}DESP_ITEMREQ
+                                       WHERE NRO_DOC_REF = TO_CHAR(:numPed))
+                                 WHERE RN = 1) D ON D.COD_ART = I.COD_ART
+                           JOIN {S}ITEMREQ IR ON IR.NUMREQ = D.NUMREQ AND IR.ORDEN = D.ORDEN_REQ
                            WHERE I.NUM_PED = :numPed
                              AND I.ID_GRUPO IS NULL
                              AND IR.ID_GRUPO IS NOT NULL";
@@ -1805,5 +1814,97 @@ END;";
             _logger.LogWarning(ex, "No se pudo convertir TIFF a PNG (longitud={Len})", tiffBytes.Length);
             return tiffBytes;
         }
+    }
+
+    // ── INGRESOS DE ALMACÉN ───────────────────────────────────────────────
+
+    public async Task<List<IngresoAlmacenItemDto>> ObtenerIngresosAlmacenAsync(
+        string tipoDocto, int serie, long numPed)
+    {
+        var result = new List<IngresoAlmacenItemDto>();
+        string sql = $@"
+            SELECT io.orden                                                        AS ORDEN,
+                   di.numreq                                                       AS NUM_REQ,
+                   di.orden                                                        AS ORDEN_REQ,
+                   io.cod_art                                                      AS COD_ART,
+                   NVL(ar.descripcion, '—')                                       AS DESCRIPCION,
+                   io.cantidad                                                     AS QTY_OC,
+                   io.precio                                                       AS PRECIO_UNIT,
+                   io.imp_vvta                                                     AS IMPORTE_OC,
+                   NVL(SUM(kd.cantidad), 0)                                       AS QTY_INGRESADA,
+                   io.cantidad - NVL(SUM(kd.cantidad), 0)                         AS QTY_PENDIENTE,
+                   ROUND(NVL(SUM(kd.cantidad),0) / NULLIF(io.cantidad,0) * 100,1) AS PCT_INGRESADO,
+                   COUNT(DISTINCT kg.numero)                                       AS CANT_INGRESOS,
+                   MAX(TO_CHAR(kg.fch_transac,'DD/MM/YYYY'))                      AS ULT_FCH_INGRESO,
+                   MAX(kg.a_aduser)                                                AS OPERARIO,
+                   MAX(kg.tip_doc_ref||'-'||kg.ser_doc_ref||'-'||kg.nro_doc_ref)  AS COMPROBANTE,
+                   CASE
+                     WHEN io.saldo = 0 AND NVL(SUM(kd.cantidad),0) >= io.cantidad THEN 'COMPLETO'
+                     WHEN NVL(SUM(kd.cantidad),0) = 0                              THEN 'PENDIENTE'
+                     ELSE 'PARCIAL'
+                   END AS ESTADO
+            FROM   {S}ITEMORD io
+            LEFT JOIN {S}ARTICUL ar       ON ar.cod_art    = io.cod_art
+            LEFT JOIN (SELECT tip_doc_ref, ser_doc_ref, nro_doc_ref, orden_ref, numreq, orden
+                       FROM (SELECT tip_doc_ref, ser_doc_ref, nro_doc_ref, orden_ref, numreq, orden,
+                                    ROW_NUMBER() OVER (PARTITION BY nro_doc_ref, orden_ref
+                                                       ORDER BY numreq ASC, orden ASC) rn
+                             FROM {S}DESP_ITEMREQ
+                             WHERE nro_doc_ref = TO_CHAR(:numPed))
+                       WHERE rn = 1) di   ON di.tip_doc_ref = io.tipo_docto
+                                         AND di.ser_doc_ref = TO_CHAR(io.serie)
+                                         AND di.nro_doc_ref = TO_CHAR(io.num_ped)
+                                         AND di.orden_ref   = io.orden
+            LEFT JOIN {S}KARDEX_G kg      ON kg.num_ocompra = io.num_ped AND kg.tp_transac = '11'
+            LEFT JOIN {S}KARDEX_D kd      ON kd.cod_alm    = kg.cod_alm
+                                         AND kd.tp_transac  = kg.tp_transac
+                                         AND kd.serie       = kg.serie
+                                         AND kd.numero      = kg.numero
+                                         AND kd.cod_art     = io.cod_art
+            WHERE  io.tipo_docto = :tipoDocto
+              AND  io.serie      = :serie
+              AND  io.num_ped    = :numPed
+            GROUP BY io.orden, di.numreq, di.orden, io.cod_art, ar.descripcion,
+                     io.cantidad, io.saldo, io.precio, io.imp_vvta
+            ORDER BY io.orden";
+
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+            await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
+            cmd.Parameters.Add("tipoDocto", OracleDbType.Varchar2).Value  = tipoDocto;
+            cmd.Parameters.Add("serie",     OracleDbType.Int32).Value     = serie;
+            cmd.Parameters.Add("numPed",    OracleDbType.Decimal).Value   = numPed;
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var r = (OracleDataReader)reader;
+                result.Add(new IngresoAlmacenItemDto
+                {
+                    Orden         = GetInt(r,  "ORDEN"),
+                    NumReq        = r["NUM_REQ"]  == DBNull.Value ? null : Convert.ToInt64(r["NUM_REQ"]),
+                    OrdenReq      = r["ORDEN_REQ"]== DBNull.Value ? null : Convert.ToInt32(r["ORDEN_REQ"]),
+                    CodArt        = GetStr(r,  "COD_ART"),
+                    Descripcion   = GetStr(r,  "DESCRIPCION"),
+                    QtyOc         = GetDec(r,  "QTY_OC"),
+                    PrecioUnit    = GetDec(r,  "PRECIO_UNIT"),
+                    ImporteOc     = GetDec(r,  "IMPORTE_OC"),
+                    QtyIngresada  = GetDec(r,  "QTY_INGRESADA"),
+                    QtyPendiente  = GetDec(r,  "QTY_PENDIENTE"),
+                    PctIngresado  = GetDec(r,  "PCT_INGRESADO"),
+                    CantIngresos  = GetInt(r,  "CANT_INGRESOS"),
+                    UltFchIngreso = GetStr(r,  "ULT_FCH_INGRESO"),
+                    Operario      = GetStr(r,  "OPERARIO"),
+                    Comprobante   = GetStr(r,  "COMPROBANTE"),
+                    Estado        = GetStr(r,  "ESTADO") ?? "PENDIENTE",
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ObtenerIngresosAlmacenAsync — OC tipo={T} serie={S} num={N}", tipoDocto, serie, numPed);
+        }
+        return result;
     }
 }

@@ -61,13 +61,25 @@
                             <div class="d-grid gap-2 mt-3">
                                 @foreach (var submodulo in modulo.SubModulos)
                                 {
-                                    <a asp-controller="@submodulo.Controller" asp-action="@submodulo.Action" 
-                                       class="btn btn-outline-secondary btn-sm text-start">
-                                        <i class="bi @submodulo.Icono me-2"></i>
-                                        <strong>@submodulo.Nombre</strong>
-                                        <br />
-                                        <small class="text-muted">@submodulo.Descripcion</small>
-                                    </a>
+                                    if (submodulo.Deshabilitado)
+                                    {
+                                        <span class="btn btn-outline-secondary btn-sm text-start disabled opacity-50" aria-disabled="true">
+                                            <i class="bi @submodulo.Icono me-2 text-muted"></i>
+                                            <strong>@submodulo.Nombre</strong>
+                                            <br />
+                                            <small class="text-muted">@submodulo.Descripcion</small>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <a asp-controller="@submodulo.Controller" asp-action="@submodulo.Action"
+                                           class="btn btn-outline-secondary btn-sm text-start">
+                                            <i class="bi @submodulo.Icono me-2"></i>
+                                            <strong>@submodulo.Nombre</strong>
+                                            <br />
+                                            <small class="text-muted">@submodulo.Descripcion</small>
+                                        </a>
+                                    }
                                 }
                             </div>
                         }

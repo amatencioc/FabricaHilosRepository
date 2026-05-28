@@ -175,13 +175,17 @@ public class OrdenCompraController : OracleBaseController
         var tArticulos      = _service.ObtenerDescripcionesArticulosAsync(codigosArt);
         var tNombres        = Task.WhenAll(usuariosAuditoria.Select(u => _service.ObtenerNombreEmpleadoAsync(u)));
         var tProvDetalle    = _service.ObtenerDetalleProveedorAsync(orden.CodProveed ?? "");
-        var tPropagate      = _service.PropagateGruposReqToItemOrdAsync(numPed);
-        var tGruposReq      = _service.ObtenerGruposDeRequisicionesVinculadasAsync(numPed);
 
-        await Task.WhenAll(tProveedores, tCentrosCosto, tCondPag, tArticulos, tNombres, tProvDetalle, tPropagate, tGruposReq);
+        // Propagar primero; después de que termine consultar los grupos pendientes del requerimiento,
+        // para evitar que ObtenerGruposDeRequisicionesVinculadasAsync los devuelva como "no propagados"
+        // cuando en realidad acaban de ser escritos en ITEMORD (lo que causaba duplicados en los archivos).
+        var propagated = await _service.PropagateGruposReqToItemOrdAsync(numPed);
+        var tGruposReq = _service.ObtenerGruposDeRequisicionesVinculadasAsync(numPed);
+
+        await Task.WhenAll(tProveedores, tCentrosCosto, tCondPag, tArticulos, tNombres, tProvDetalle, tGruposReq);
 
         // Si la propagación añadió grupos nuevos, recargar ítems
-        if (tPropagate.Result)
+        if (propagated)
             items = await _service.ObtenerItemsAsync(tipoDocto, serie, numPed);
 
         var nombresUsuarios = usuariosAuditoria
@@ -219,6 +223,8 @@ public class OrdenCompraController : OracleBaseController
 
         ViewBag.ArchivosExistentes = archivosOc.Concat(archivosReq)
             .OrderByDescending(a => a.IdGrupo).ThenByDescending(a => a.FechaCarga).ToList();
+
+        ViewBag.IngresosAlmacen = await _service.ObtenerIngresosAlmacenAsync(tipoDocto, serie, numPed);
 
         return View("~/Views/Logistica/OrdenCompra/Detalle.cshtml", (orden, items));
     }

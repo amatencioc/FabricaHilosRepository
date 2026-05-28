@@ -19,5 +19,6 @@ namespace FabricaHilos.Models.Sgc
         public string Icono { get; set; } = string.Empty;
         public string Controller { get; set; } = string.Empty;
         public string Action { get; set; } = string.Empty;
+        public bool Deshabilitado { get; set; } = false;
     }
 }
