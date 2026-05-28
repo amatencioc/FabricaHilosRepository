@@ -475,6 +475,43 @@
                     </li>
                 }
 
+                @if (menus.Contabilidad)
+                {
+                    <!-- CONTABILIDAD -->
+                    <li class="sidebar-section">CONTABILIDAD</li>
+                    <li>
+                        <a asp-controller="Contabilidad" asp-action="Index"
+                           class="sidebar-link @(ctrl == "Contabilidad" || ctrl == "Sire" ? "active" : "")">
+                            <i class="bi bi-calculator-fill"></i> Contabilidad
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.ContabilidadSire)
+                            {
+                            <li>
+                                <a asp-controller="Sire" asp-action="Index"
+                                   class="sidebar-link sidebar-sublink @(ctrl == "Sire" ? "active" : "")">
+                                    <i class="bi bi-journal-text"></i> SIRE
+                                </a>
+                                <ul class="list-unstyled ps-3">
+                                    <li>
+                                        <a asp-controller="Sire" asp-action="Ventas"
+                                           class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Ventas" ? "active" : "")">
+                                            <i class="bi bi-receipt-cutoff"></i> RVIE (Ventas)
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a asp-controller="Sire" asp-action="Compras"
+                                           class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Compras" ? "active" : "")">
+                                            <i class="bi bi-cart-check"></i> RCE (Compras)
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
+
                 @if (menus.Sistemas)
                 {
                     <!-- SISTEMAS -->

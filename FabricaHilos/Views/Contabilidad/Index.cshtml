@@ -1,0 +1,59 @@
+@model List<FabricaHilos.Models.Sgc.SgcModuloDto>
+@{
+    ViewData["Title"] = "Contabilidad";
+}
+
+@section Styles {
+<style>
+    .modulo-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .modulo-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Contabilidad</li>
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-calculator-fill fs-4 text-purple"></i>
+    <h4 class="mb-0 fw-bold">Módulo Contabilidad</h4>
+</div>
+
+@if (Model.Any())
+{
+    <div class="row g-4">
+        @foreach (var modulo in Model)
+        {
+            <div class="col-md-6 col-xl-4">
+                <a asp-controller="@modulo.Controller" asp-action="@modulo.Action" class="text-decoration-none">
+                    <div class="card modulo-card h-100" style="border-left: 5px solid #6F42C1 !important;">
+                        <div class="card-body d-flex align-items-center gap-4 py-4 px-4">
+                            <div class="rounded p-3 d-flex align-items-center justify-content-center"
+                                 style="background: rgba(111,66,193,0.10); min-width: 60px; min-height: 60px;">
+                                <i class="bi @modulo.Icono fs-1 @modulo.ColorClase"></i>
+                            </div>
+                            <div>
+                                <div class="fw-bold fs-5 text-dark">@modulo.Nombre</div>
+                                <small class="text-muted">@modulo.Descripcion</small>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        No hay módulos disponibles. Contacte al administrador.
+    </div>
+}

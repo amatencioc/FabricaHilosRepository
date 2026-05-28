@@ -2,7 +2,9 @@
   <Project Path="FabricaHilos.DocumentExtractor/FabricaHilos.DocumentExtractor.csproj" />
   <Project Path="FabricaHilos.LecturaCorreos/FabricaHilos.LecturaCorreos.csproj" />
   <Project Path="FabricaHilos.Notificaciones/FabricaHilos.Notificaciones.csproj" />
-  <Project Path="FabricaHilos.Sire/FabricaHilos.Sire.csproj" />
+  <Project Path="FabricaHilos.Sire/FabricaHilos.Sire.csproj">
+    <Build Solution="Release|*" Project="false" />
+  </Project>
   <Project Path="FabricaHilos/FabricaHilos.csproj" />
   <Project Path="LaColonial/LaColonial.csproj" />
 </Solution>

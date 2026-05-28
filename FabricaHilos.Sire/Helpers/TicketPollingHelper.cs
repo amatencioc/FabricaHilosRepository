@@ -1,5 +1,6 @@
 using FabricaHilos.Sire.Models;
 using FabricaHilos.Sire.Options;
+using Microsoft.Extensions.Options;
 
 namespace FabricaHilos.Sire.Helpers;
 
@@ -7,9 +8,9 @@ public sealed class TicketPollingHelper
 {
     private readonly SireOptions _options;
 
-    public TicketPollingHelper(SireOptions options)
+    public TicketPollingHelper(IOptions<SireOptions> options)
     {
-        _options = options;
+        _options = options.Value;
     }
 
     public async Task<TicketEstado> EsperarEstadoFinalAsync(

@@ -67,6 +67,10 @@ public class MenuOptions
     public bool CcNivelMorosidad         { get; set; } = true;
     public bool CcNivelTiempo            { get; set; } = true;
 
+    // ── Menús: Contabilidad ──────────────────────────────────────────────
+    public bool Contabilidad      { get; set; } = false;
+    public bool ContabilidadSire  { get; set; } = true;
+
     // ── Menús: Sistemas ──────────────────────────────────────────────────
     public bool Sistemas                                    { get; set; } = false;
     public bool SistemasIndicadores                         { get; set; } = true;
@@ -135,6 +139,9 @@ public class MenuOptions
         CreditosCobranza = true,
         CcNivelMorosidad = true,
         CcNivelTiempo    = true,
+
+        Contabilidad     = true,
+        ContabilidadSire = true,
 
         Planeamiento              = true,
         PlaneamientoDashboard     = true,

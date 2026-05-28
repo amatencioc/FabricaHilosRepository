@@ -167,6 +167,10 @@ public class MenuService : IMenuService
                 "CcNivelMorosidad",
                 "CcNivelTiempo"),
 
+            Contabilidad = TieneAlguno(
+                "Contabilidad",
+                "ContabilidadSire"),
+
             Sistemas = TieneAlguno(
                 "Sistemas",
                 "SistemasIndicadores",
@@ -276,7 +280,11 @@ public class MenuService : IMenuService
             CcNivelTiempo = global.CcNivelTiempo
                 && TieneAlguno("CreditosCobranza", "CcNivelTiempo"),
 
-            // ?? Planeamiento ???????????????????????????????????????????????????
+            // ?? Sub-módulos: Contabilidad ??????????????????????????????????????????
+            ContabilidadSire = global.ContabilidadSire
+                && TieneAlguno("Contabilidad", "ContabilidadSire"),
+
+            // ?? Planeamiento
             Planeamiento = TieneAlguno(
                 "Produccion",
                 "Planeamiento",
@@ -346,6 +354,7 @@ public class MenuService : IMenuService
         if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);
         if (menus.Logistica)    return ("Logistica",        "Index", null, null);
         if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
+        if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
         if (menus.Planeamiento)  return ("Planeamiento",     "Index", null, null);
         if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
         // Sin módulos asignados o AccesoWeb vacío: redirigir a login para evitar

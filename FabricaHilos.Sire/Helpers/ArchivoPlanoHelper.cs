@@ -23,20 +23,41 @@ public static class ArchivoPlanoHelper
         var sb = new StringBuilder();
         foreach (var r in registros)
         {
-            var campos = new[]
-            {
-                r.PeriodoTributario, r.Cuo, r.CorrelativoAsiento, r.FechaEmision, r.FechaVencimientoPago,
-                r.TipoComprobante, r.SerieComprobante, r.AnioDuaDsi, r.NumeroComprobante, r.NumeroFinalComprobante,
-                r.TipoDocIdentidadCliente, r.NumeroDocIdentidadCliente, r.RazonSocialCliente,
-                DecimalStr(r.BaseImponibleGravada), DecimalStr(r.BaseImponibleGravadaTasaDiferenciada), DecimalStr(r.IgvTasaDiferenciada),
-                DecimalStr(r.BaseImponibleIsc), DecimalStr(r.Isc), DecimalStr(r.BaseImponibleIvap), DecimalStr(r.Ivap),
-                DecimalStr(r.OperacionesExoneradas), DecimalStr(r.OperacionesInafectas), DecimalStr(r.Igv), DecimalStr(r.Icbper),
-                DecimalStr(r.OtrosTributosCargos), DecimalStr(r.ImporteTotal), DecimalStr(r.TipoCambio),
-                r.FechaEmisionDocModificado, r.TipoDocModificado, r.SerieDocModificado, r.NumeroDocModificado,
-                r.CodigoErrorTipo1, r.IndicadorComprobanteCancelado, r.Estado
-            };
-
-            sb.AppendJoin('|', campos).AppendLine();
+            sb.Append(r.PeriodoTributario).Append('|')
+              .Append(r.Cuo).Append('|')
+              .Append(r.CorrelativoAsiento).Append('|')
+              .Append(r.FechaEmision).Append('|')
+              .Append(r.FechaVencimientoPago).Append('|')
+              .Append(r.TipoComprobante).Append('|')
+              .Append(r.SerieComprobante).Append('|')
+              .Append(r.AnioDuaDsi).Append('|')
+              .Append(r.NumeroComprobante).Append('|')
+              .Append(r.NumeroFinalComprobante).Append('|')
+              .Append(r.TipoDocIdentidadCliente).Append('|')
+              .Append(r.NumeroDocIdentidadCliente).Append('|')
+              .Append(r.RazonSocialCliente).Append('|')
+              .Append(DecimalStr(r.BaseImponibleGravada)).Append('|')
+              .Append(DecimalStr(r.BaseImponibleGravadaTasaDiferenciada)).Append('|')
+              .Append(DecimalStr(r.IgvTasaDiferenciada)).Append('|')
+              .Append(DecimalStr(r.BaseImponibleIsc)).Append('|')
+              .Append(DecimalStr(r.Isc)).Append('|')
+              .Append(DecimalStr(r.BaseImponibleIvap)).Append('|')
+              .Append(DecimalStr(r.Ivap)).Append('|')
+              .Append(DecimalStr(r.OperacionesExoneradas)).Append('|')
+              .Append(DecimalStr(r.OperacionesInafectas)).Append('|')
+              .Append(DecimalStr(r.Igv)).Append('|')
+              .Append(DecimalStr(r.Icbper)).Append('|')
+              .Append(DecimalStr(r.OtrosTributosCargos)).Append('|')
+              .Append(DecimalStr(r.ImporteTotal)).Append('|')
+              .Append(DecimalStr(r.TipoCambio)).Append('|')
+              .Append(r.FechaEmisionDocModificado).Append('|')
+              .Append(r.TipoDocModificado).Append('|')
+              .Append(r.SerieDocModificado).Append('|')
+              .Append(r.NumeroDocModificado).Append('|')
+              .Append(r.CodigoErrorTipo1).Append('|')
+              .Append(r.IndicadorComprobanteCancelado).Append('|')
+              .Append(r.Estado)
+              .AppendLine();
         }
 
         return sb.ToString();
@@ -47,23 +68,42 @@ public static class ArchivoPlanoHelper
         var sb = new StringBuilder();
         foreach (var r in registros)
         {
-            var campos = new[]
-            {
-                r.PeriodoTributario, r.Cuo, r.CorrelativoAsiento, r.FechaEmision, r.FechaVencimientoPago,
-                r.TipoComprobante, r.SerieComprobante, r.AnioDuaDsi, r.NumeroComprobante, r.TipoDocIdentidadProveedor,
-                r.NumeroDocIdentidadProveedor, r.RazonSocialProveedor,
-                DecimalStr(r.BaseImponibleGravadaDestinoGravadas), DecimalStr(r.IgvDestinoGravadas),
-                DecimalStr(r.BaseImponibleGravadaDestinoMixtas), DecimalStr(r.IgvDestinoMixtas),
-                DecimalStr(r.BaseImponibleGravadaDestinoNoGravadas), DecimalStr(r.IgvDestinoNoGravadas),
-                DecimalStr(r.ValorAdquisicionesNoGravadas), DecimalStr(r.Isc), DecimalStr(r.Icbper),
-                DecimalStr(r.OtrosTributosCargos), DecimalStr(r.ImporteTotal), DecimalStr(r.TipoCambio),
-                r.FechaEmisionDocModificado, r.TipoDocModificado, r.SerieDocModificado,
-                r.CodigoDependenciaAduanera, r.NumeroDocModificado, r.NumeroConstanciaDetraccion,
-                r.IndicadorSujetoRetencion, r.ClasificacionBienesServicios, r.IdentificacionContrato,
-                r.CodigoErrorTipo1, r.Estado
-            };
-
-            sb.AppendJoin('|', campos).AppendLine();
+            sb.Append(r.PeriodoTributario).Append('|')
+              .Append(r.Cuo).Append('|')
+              .Append(r.CorrelativoAsiento).Append('|')
+              .Append(r.FechaEmision).Append('|')
+              .Append(r.FechaVencimientoPago).Append('|')
+              .Append(r.TipoComprobante).Append('|')
+              .Append(r.SerieComprobante).Append('|')
+              .Append(r.AnioDuaDsi).Append('|')
+              .Append(r.NumeroComprobante).Append('|')
+              .Append(r.TipoDocIdentidadProveedor).Append('|')
+              .Append(r.NumeroDocIdentidadProveedor).Append('|')
+              .Append(r.RazonSocialProveedor).Append('|')
+              .Append(DecimalStr(r.BaseImponibleGravadaDestinoGravadas)).Append('|')
+              .Append(DecimalStr(r.IgvDestinoGravadas)).Append('|')
+              .Append(DecimalStr(r.BaseImponibleGravadaDestinoMixtas)).Append('|')
+              .Append(DecimalStr(r.IgvDestinoMixtas)).Append('|')
+              .Append(DecimalStr(r.BaseImponibleGravadaDestinoNoGravadas)).Append('|')
+              .Append(DecimalStr(r.IgvDestinoNoGravadas)).Append('|')
+              .Append(DecimalStr(r.ValorAdquisicionesNoGravadas)).Append('|')
+              .Append(DecimalStr(r.Isc)).Append('|')
+              .Append(DecimalStr(r.Icbper)).Append('|')
+              .Append(DecimalStr(r.OtrosTributosCargos)).Append('|')
+              .Append(DecimalStr(r.ImporteTotal)).Append('|')
+              .Append(DecimalStr(r.TipoCambio)).Append('|')
+              .Append(r.FechaEmisionDocModificado).Append('|')
+              .Append(r.TipoDocModificado).Append('|')
+              .Append(r.SerieDocModificado).Append('|')
+              .Append(r.CodigoDependenciaAduanera).Append('|')
+              .Append(r.NumeroDocModificado).Append('|')
+              .Append(r.NumeroConstanciaDetraccion).Append('|')
+              .Append(r.IndicadorSujetoRetencion).Append('|')
+              .Append(r.ClasificacionBienesServicios).Append('|')
+              .Append(r.IdentificacionContrato).Append('|')
+              .Append(r.CodigoErrorTipo1).Append('|')
+              .Append(r.Estado)
+              .AppendLine();
         }
 
         return sb.ToString();
