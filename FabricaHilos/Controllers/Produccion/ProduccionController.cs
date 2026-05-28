@@ -97,6 +97,18 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
+                if (menus.PlaneamientoProximosVencer)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Próximos a Vencer",
+                        Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima.",
+                        Icono = "bi-calendar-event-fill",
+                        Controller = "Planeamiento",
+                        Action = "ProximosVencer"
+                    });
+                }
+
                 if (menus.PlaneamientoCargaMaquinas)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
@@ -109,18 +121,6 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
-                if (menus.PlaneamientoAlertas)
-                {
-                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
-                    {
-                        Nombre = "Alertas",
-                        Descripcion = "Bandeja de alertas activas: retrasos, reprocesos y sobrecargas.",
-                        Icono = "bi-bell-fill",
-                        Controller = "Planeamiento",
-                        Action = "Alertas"
-                    });
-                }
-
                 if (menus.PlaneamientoPendientesDespacho)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
@@ -130,6 +130,18 @@ namespace FabricaHilos.Controllers.Produccion
                         Icono = "bi-truck",
                         Controller = "Planeamiento",
                         Action = "PendientesDespacho"
+                    });
+                }
+
+                if (menus.PlaneamientoAlertas)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Alertas",
+                        Descripcion = "Bandeja de alertas activas: retrasos, reprocesos y sobrecargas.",
+                        Icono = "bi-bell-fill",
+                        Controller = "Planeamiento",
+                        Action = "Alertas"
                     });
                 }
 

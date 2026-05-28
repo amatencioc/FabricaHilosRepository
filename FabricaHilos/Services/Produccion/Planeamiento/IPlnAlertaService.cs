@@ -20,4 +20,11 @@ public interface IPlnAlertaService
     /// Normalmente ejecutado cada hora por JOB_PLN_ALERTAS.
     /// </summary>
     Task GenerarAlertasAsync();
+
+    /// <summary>
+    /// Ítems activos cuya fecha de entrega comprometida cae en [fchIni - diasAtras, fchFin].
+    /// diasAtras > 0 incluye ítems ya vencidos pero aún activos.
+    /// </summary>
+    Task<IEnumerable<PlnProximoVencer>> GetProximosVencerAsync(
+        DateTime fchIni, DateTime fchFin, int diasAtras = 0);
 }

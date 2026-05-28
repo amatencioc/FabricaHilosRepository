@@ -1,0 +1,374 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnProximoVencer>
+
+@{
+    ViewData["Title"] = "Próximos a Vencer";
+
+    var pvItems    = Model.ToList();
+    var pvFchIni   = (string?)ViewBag.PvFchIni   ?? DateTime.Today.ToString("dd/MM/yyyy");
+    var pvFchFin   = (string?)ViewBag.PvFchFin   ?? DateTime.Today.AddDays(30).ToString("dd/MM/yyyy");
+    var pvDiasAtr  = (int)(ViewBag.PvDiasAtras   ?? 0);
+    var pvIniHtml  = DateTime.ParseExact(pvFchIni, "dd/MM/yyyy", null).ToString("yyyy-MM-dd");
+    var pvFinHtml  = DateTime.ParseExact(pvFchFin, "dd/MM/yyyy", null).ToString("yyyy-MM-dd");
+    var pvVencidos = pvItems.Count(x => x.DiasHastaVencer < 0);
+    var pvCrit     = pvItems.Count(x => x.DiasHastaVencer is >= 0 and <= 3);
+    var pvAlerta   = pvItems.Count(x => x.DiasHastaVencer is >= 4 and <= 7);
+    var pvOk       = pvItems.Count(x => x.DiasHastaVencer > 7);
+    var pvDesde    = DateTime.ParseExact(pvFchIni, "dd/MM/yyyy", null).AddDays(-pvDiasAtr);
+    var pvHasta    = DateTime.ParseExact(pvFchFin, "dd/MM/yyyy", null);
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+<style>
+    /* ── Dot de paso ─────────────────────────────────────────────────── */
+    .paso-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .urgente-flame { color: var(--pln-warning); }
+
+    /* ── Panel de filtros ────────────────────────────────────────────── */
+    .pv-label {
+        display: block; font-size: .72rem; font-weight: 600;
+        color: #4a5568; margin-bottom: .22rem; white-space: nowrap;
+        letter-spacing: .01em;
+    }
+    .pv-input  { min-width: 128px; font-size: .78rem; border-radius: .3rem; }
+    .pv-input:focus { border-color: #63b3ed; box-shadow: 0 0 0 .15rem rgba(66,153,225,.2); }
+    .pv-preset { font-size: .69rem; padding: .18rem .5rem; color: #718096; border-color: #cbd5e0; }
+    .pv-preset.pv-preset-active,
+    .pv-preset:hover {
+        background: #667eea !important; color: #fff !important; border-color: #667eea !important;
+    }
+
+    /* ── Strip ámbar ──────────────────────────────────────────────────── */
+    .pv-strip-header {
+        background: linear-gradient(135deg, #78350f 0%, #9a3412 100%);
+        color: #fef9f0;
+        border-radius: .5rem .5rem 0 0;
+        padding: .55rem 1rem;
+        display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
+        border-bottom: 3px solid #431407;
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    }
+    .pv-strip-title { font-size: .82rem; font-weight: 800; letter-spacing: .08em;
+        text-transform: uppercase; color: #fef9f0; white-space: nowrap; margin-right: .25rem; }
+    .pv-strip-sep   { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+    .dash-kpi {
+        display: inline-flex; align-items: center; gap: .25rem;
+        background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+        border-radius: 999px; padding: .18rem .6rem;
+        font-size: .7rem; white-space: nowrap; color: #fef9f0;
+    }
+    .dash-kpi-val  { font-weight: 700; font-size: .82rem; }
+    .pv-strip-ts   { margin-left: auto; font-size: .68rem; color: rgba(254,249,240,.7); white-space: nowrap; }
+
+    /* ── Panel filtros debajo del strip ─────────────────────────────── */
+    .dash-filter {
+        background: #f8fafc;
+        border: 1px solid var(--pln-gray-200, #e2e8f0);
+        border-top: none;
+        border-radius: 0 0 .45rem .45rem;
+        padding: .55rem .9rem;
+        margin-bottom: .85rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    }
+
+    /* ── Tabla ────────────────────────────────────────────────────────── */
+    #pvTable thead th {
+        font-size: .68rem; font-weight: 700; color: #4a5568;
+        text-transform: uppercase; letter-spacing: .04em;
+        border-bottom: 2px solid #cdd4e0; padding: .28rem .45rem;
+        background: #e2e7f0;
+    }
+    #pvTable tbody td     { font-size: .77rem; vertical-align: middle; padding: .27rem .45rem; }
+    #pvTable tbody tr     { background: #f8fafc; }
+    #pvTable tbody tr:hover td                  { background: #edf2f7 !important; }
+    #pvTable tbody tr.table-danger              { background: #fff5f5 !important; }
+    #pvTable tbody tr.table-danger:hover td     { background: #ffe4e4 !important; }
+    #pvTable tbody tr.table-warning             { background: #fffbeb !important; }
+    #pvTable tbody tr.table-warning:hover td    { background: #fef3c7 !important; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Planeamiento" asp-action="IndexCards">Planeamiento</a></li>
+    <li class="breadcrumb-item active">Próximos a Vencer</li>
+}
+
+<div class="container-fluid py-3">
+
+    @* ─── Strip ámbar ──────────────────────────────────────────────────── *@
+    <div class="pv-strip-header mb-0">
+        <i class="bi bi-calendar-event-fill" style="color:#fcd34d;font-size:.95rem;flex-shrink:0;"></i>
+        <span class="pv-strip-title">Próximos a Vencer</span>
+        <span class="pv-strip-sep"></span>
+
+        <span class="dash-kpi" title="Total ítems con FCH_ENTREGA_COMP en el rango">
+            <i class="bi bi-list-check" style="color:#93c5fd;"></i>
+            <span class="dash-kpi-val">@pvItems.Count</span>
+            <span style="opacity:.75">ítems</span>
+        </span>
+        @if (pvVencidos > 0)
+        {
+            <span class="dash-kpi" title="FCH_ENTREGA_COMP &lt; hoy — ya vencidos">
+                <i class="bi bi-exclamation-octagon-fill" style="color:#fca5a5;"></i>
+                <span class="dash-kpi-val" style="color:#fca5a5;">@pvVencidos</span>
+                <span style="opacity:.75">vencidos</span>
+            </span>
+        }
+        @if (pvCrit > 0)
+        {
+            <span class="dash-kpi" title="Vencen en ≤3 días">
+                <i class="bi bi-alarm-fill" style="color:#fcd34d;"></i>
+                <span class="dash-kpi-val" style="color:#fcd34d;">@pvCrit</span>
+                <span style="opacity:.75">≤3 d</span>
+            </span>
+        }
+        @if (pvAlerta > 0)
+        {
+            <span class="dash-kpi" title="Vencen en 4–7 días">
+                <i class="bi bi-clock-history" style="color:#fde68a;"></i>
+                <span class="dash-kpi-val" style="color:#fde68a;">@pvAlerta</span>
+                <span style="opacity:.75">4–7 d</span>
+            </span>
+        }
+        @if (pvOk > 0)
+        {
+            <span class="dash-kpi" title="Vencen en más de 7 días">
+                <i class="bi bi-check-circle" style="color:#6ee7b7;"></i>
+                <span class="dash-kpi-val" style="color:#6ee7b7;">@pvOk</span>
+                <span style="opacity:.75">&gt;7 d</span>
+            </span>
+        }
+
+        <span class="pv-strip-ts">
+            <i class="bi bi-funnel me-1"></i>FCH_ENTREGA_COMP entre
+            <b>@pvDesde.ToString("dd/MM/yy")</b> y <b>@pvHasta.ToString("dd/MM/yy")</b>
+        </span>
+    </div>
+
+    @* ─── Panel de filtros ──────────────────────────────────────────────── *@
+    <div class="dash-filter">
+        <form method="get" asp-action="ProximosVencer" id="pvForm">
+            <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="pv-label" for="pvFchIni">
+                        <i class="bi bi-calendar-event me-1 text-secondary"></i>Fecha inicio
+                    </label>
+                    <input type="date" class="form-control form-control-sm pv-input"
+                           name="fchIni" id="pvFchIni" value="@pvIniHtml" />
+                </div>
+                <div class="col-auto">
+                    <label class="pv-label" for="pvFchFin">
+                        <i class="bi bi-calendar-check me-1 text-secondary"></i>Fecha fin
+                    </label>
+                    <input type="date" class="form-control form-control-sm pv-input"
+                           name="fchFin" id="pvFchFin" value="@pvFinHtml" />
+                </div>
+                <div class="col-auto">
+                    <label class="pv-label" for="pvDiasAtras"
+                           title="Extiende el límite inferior: incluye ítems vencidos N días antes de la fecha inicio">
+                        <i class="bi bi-arrow-counterclockwise me-1 text-secondary"></i>Días atrás
+                        <i class="bi bi-question-circle text-muted ms-1" style="font-size:.62rem;"></i>
+                    </label>
+                    <input type="number" class="form-control form-control-sm pv-input"
+                           name="diasAtras" id="pvDiasAtras"
+                           value="@pvDiasAtr" min="0" max="365" style="width:80px;" />
+                </div>
+                <div class="col-auto">
+                    <label class="pv-label">
+                        <i class="bi bi-lightning-charge me-1 text-secondary"></i>Presets
+                    </label>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Presets de rango">
+                        <button type="button" class="btn btn-outline-secondary pv-preset" data-days="7">7 d</button>
+                        <button type="button" class="btn btn-outline-secondary pv-preset" data-days="15">15 d</button>
+                        <button type="button" class="btn btn-outline-secondary pv-preset" data-days="30">30 d</button>
+                        <button type="button" class="btn btn-outline-secondary pv-preset" data-days="60">60 d</button>
+                    </div>
+                </div>
+                <div class="col-auto d-flex gap-1 ms-lg-2">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-search me-1"></i>Buscar
+                    </button>
+                    <a asp-action="ProximosVencer" class="btn btn-sm btn-outline-secondary"
+                       title="Restablecer filtros por defecto">
+                        <i class="bi bi-x-lg me-1"></i>Limpiar
+                    </a>
+                </div>
+                <input type="hidden" name="preset" id="pvPresetHidden" value="" />
+            </div>
+        </form>
+    </div>
+
+    @* ─── Tabla de resultados ──────────────────────────────────────────── *@
+    @if (!pvItems.Any())
+    {
+        <div class="alert alert-light border d-flex align-items-center gap-2 py-2 small mb-3">
+            <i class="bi bi-calendar-check fs-5 text-muted"></i>
+            <span>No se encontraron ítems activos con FCH_ENTREGA_COMP en el rango seleccionado.</span>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0" id="pvTable">
+                <thead>
+                    <tr>
+                        <th style="width:8px;"></th>
+                        <th class="text-nowrap">Pedido / Ítem</th>
+                        <th>Cliente</th>
+                        <th>Artículo</th>
+                        <th>Proceso</th>
+                        <th class="text-nowrap">Etapa actual</th>
+                        <th class="text-nowrap">F.Compromiso</th>
+                        <th class="text-nowrap text-center">Días</th>
+                        <th class="text-nowrap text-end">KG Pend.</th>
+                        <th class="text-nowrap text-end">% Pend.</th>
+                        <th class="text-nowrap text-center">Ciclo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var pv in pvItems)
+                    {
+                        var rowClass = pv.DiasHastaVencer < 0  ? "table-danger"
+                                     : pv.DiasHastaVencer <= 3 ? "table-warning"
+                                     : "";
+                        <tr class="@rowClass">
+                            <td class="px-1">
+                                <i class="bi @pv.SemaforoIcon @pv.SemaforoClass" style="font-size:.82rem;"></i>
+                            </td>
+                            <td class="text-nowrap">
+                                <a asp-controller="Planeamiento" asp-action="Pedido"
+                                   asp-route-serie="@pv.Serie" asp-route-numPed="@pv.NumPed"
+                                   class="fw-semibold text-decoration-none"
+                                   style="color:var(--pln-blue-link);">
+                                    @pv.NumPed<span class="text-muted">/</span>@pv.Nro
+                                </a>
+                                @if (pv.EsUrgente)
+                                {
+                                    <i class="bi bi-fire urgente-flame ms-1" title="Urgente"></i>
+                                }
+                            </td>
+                            <td class="text-nowrap"
+                                style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"
+                                title="@pv.NombreCliente">
+                                @(pv.NombreCliente ?? pv.CodCliente)
+                            </td>
+                            <td>
+                                <span class="fw-semibold">@pv.CodArt</span>
+                                @if (!string.IsNullOrEmpty(pv.Titulo))
+                                {
+                                    <span class="text-muted">· @pv.Titulo</span>
+                                }
+                                @if (!string.IsNullOrEmpty(pv.Color))
+                                {
+                                    <span class="badge ms-1"
+                                          style="background:#e2e7f0;color:#4a5568;font-size:.63rem;">@pv.Color</span>
+                                }
+                            </td>
+                            <td class="text-nowrap text-muted">@pv.ProcesoTexto</td>
+                            <td class="text-nowrap">
+                                <span class="paso-dot me-1"
+                                      style="background:@(pv.ColorUiPaso ?? "#6c757d");"></span>
+                                @pv.NombrePaso
+                                @if (pv.EstaEnReproceso)
+                                {
+                                    <span class="badge bg-danger ms-1" style="font-size:.6rem;">REPR</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">
+                                @(pv.FchEntregaComp.HasValue ? pv.FchEntregaComp.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td class="text-center @pv.SemaforoClass text-nowrap fw-semibold">
+                                @if (pv.DiasHastaVencer < 0)
+                                {
+                                    <span title="Vencido hace @(-pv.DiasHastaVencer) días">
+                                        @pv.DiasHastaVencer d
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span title="Faltan @pv.DiasHastaVencer días">
+                                        +@pv.DiasHastaVencer d
+                                    </span>
+                                }
+                            </td>
+                            <td class="text-end">@pv.KgPendientes.ToString("N1")</td>
+                            <td class="text-end">
+                                @if (pv.KgPorcentajePendiente.HasValue)
+                                {
+                                    <span>@pv.KgPorcentajePendiente.Value.ToString("0.#")%</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (pv.NroCiclo > 1)
+                                {
+                                    <span class="badge bg-warning text-dark"
+                                          title="@(pv.NroCiclo - 1) reproceso(s)">
+                                        @pv.NroCiclo
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">1</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* ─── Leyenda ─────────────────────────────────────────────────────── *@
+    <div class="mt-3 d-flex flex-wrap gap-3 small text-muted" style="font-size:.73rem;">
+        <span><i class="bi bi-exclamation-octagon-fill text-danger me-1"></i>Ya vencido</span>
+        <span><i class="bi bi-alarm-fill text-danger me-1"></i>Vence en ≤3 días</span>
+        <span><i class="bi bi-clock-history text-warning me-1"></i>Vence en 4–7 días</span>
+        <span><i class="bi bi-calendar-check text-success me-1"></i>Vence en &gt;7 días</span>
+        <span><i class="bi bi-fire me-1" style="color:var(--pln-warning,#ffc107);"></i>Urgente</span>
+        <span><span class="badge bg-danger" style="font-size:.6rem;">REPR</span> En reproceso</span>
+    </div>
+
+</div>@* /container-fluid *@
+
+@section Scripts {
+<script>
+// ── Helpers de fecha local (sin desfase UTC) ─────────────────────────────────
+const fmtLocal = d => {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+};
+
+// ── Presets de rango ─────────────────────────────────────────────────────────
+document.querySelectorAll('.pv-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const days  = parseInt(btn.dataset.days, 10);
+        const today = new Date();
+        const fin   = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days);
+        document.getElementById('pvFchIni').value       = fmtLocal(today);
+        document.getElementById('pvFchFin').value       = fmtLocal(fin);
+        document.getElementById('pvPresetHidden').value = days;
+        document.querySelectorAll('.pv-preset').forEach(b => b.classList.remove('pv-preset-active'));
+        btn.classList.add('pv-preset-active');
+    });
+});
+
+// ── Al escribir en Días atrás: limpiar preset activo ─────────────────────────
+document.getElementById('pvDiasAtras').addEventListener('input', () => {
+    document.querySelectorAll('.pv-preset').forEach(b => b.classList.remove('pv-preset-active'));
+    document.getElementById('pvPresetHidden').value = '';
+});
+
+// ── Al cargar: re-marcar preset activo desde URL y sincronizar hidden field ───
+window.addEventListener('DOMContentLoaded', () => {
+    const qs     = new URLSearchParams(location.search);
+    const preset = qs.get('preset');
+    if (preset) {
+        const btn = document.querySelector(`.pv-preset[data-days="${preset}"]`);
+        if (btn) btn.classList.add('pv-preset-active');
+        // Sincronizar el hidden field para que el próximo Buscar mantenga el preset
+        document.getElementById('pvPresetHidden').value = preset;
+    }
+});
+</script>
+}

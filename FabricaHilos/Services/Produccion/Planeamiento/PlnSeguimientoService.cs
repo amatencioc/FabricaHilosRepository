@@ -79,6 +79,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int oMaqTt = -1, int oMaqProgramada = -1, int oMaqPartida = -1,   // v2.2: campos máquina
         int oMaqRealTt = -1,                                               // v2.3: TT_RPRODUC real-time
         int oNumPartida = -1,                                              // v2.4: PARTIDA.NUMERO
+        int oNumPartidaAnt = -1,                                          // v2.7: ciclo anterior (reproceso)
         int oMaqSecado = -1, int oMaqDevan = -1,                          // v2.5: secado/devanado
         int oFchRegEntrega2 = -1, int oFchEntregaOri2 = -1,                 // v2.3: fechas compromiso por artículo
         int oFchAprobacion = -1, int oFchPlanif = -1,                      // v2.6: fechas actor
@@ -144,6 +145,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             MaqPartida        = oMaqPartida    >= 0 ? SafeStr(r[oMaqPartida])    : null,
             MaqRealTt         = oMaqRealTt     >= 0 ? SafeStr(r[oMaqRealTt])     : null,
             NumPartida        = oNumPartida    >= 0 ? SafeVal<long>(r[oNumPartida]) : 0,
+            NumPartidaAnt     = oNumPartidaAnt >= 0 ? SafeVal<long>(r[oNumPartidaAnt]) : 0,
             FchRegEntrega     = oFchRegEntrega2   >= 0 ? SafeDate(r[oFchRegEntrega2])   : null,
             FchEntregaOri     = oFchEntregaOri2   >= 0 ? SafeDate(r[oFchEntregaOri2])   : null,
             FchAprobacion     = oFchAprobacion    >= 0 ? SafeDate(r[oFchAprobacion])    : null,
@@ -529,6 +531,14 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.COD_MAQ_SECADO,
                    s.COD_MAQ_DEVAN,
                    s.NUM_PARTIDA,
+                   (SELECT MAX(p_ant.NUMERO)
+                    FROM   {S}ITEMPED_DET id_ant
+                    JOIN   {S}PARTIDA p_ant ON p_ant.NROPROG = id_ant.NROPROG
+                                           AND p_ant.ESTADO   = '8'
+                    WHERE  id_ant.SERIE   = s.SERIE
+                      AND  id_ant.NUM_PED = s.NUM_PED
+                      AND  id_ant.NRO     = s.NRO
+                      AND  id_ant.NUM_DET = s.NUM_DET)  AS NUM_PARTIDA_ANT,
                    id.MAQUINA        AS MAQ_PROGRAMADA,
                    p.COD_MAQ         AS MAQ_PARTIDA,
                    (SELECT tt.cod_maq
@@ -632,6 +642,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             oMaqPartida = r.GetOrdinal("MAQ_PARTIDA"),
             oMaqRealTt = r.GetOrdinal("MAQ_REAL_TT"),
             oNumPartida = r.GetOrdinal("NUM_PARTIDA"),
+            oNumPartidaAnt = r.GetOrdinal("NUM_PARTIDA_ANT"),
             oFchAprobacion    = r.GetOrdinal("FCH_APROBACION"),
             oFchPlanif        = r.GetOrdinal("FCH_PLANIF"),
             oFchRegEntrega    = r.GetOrdinal("FCH_REG_ENTREGA"),
@@ -660,7 +671,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
                 oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado,
                 oFchRealGaseado, oMaqTt, oMaqProgramada, oMaqPartida, oMaqRealTt,
-                oNumPartida, oMaqSecado, oMaqDevan,
+                oNumPartida, oNumPartidaAnt, oMaqSecado, oMaqDevan,
                 oFchRegEntrega2: oFchRegEntrega, oFchEntregaOri2: oFchEntregaOri,
                 oFchAprobacion: oFchAprobacion, oFchPlanif: oFchPlanif,
                 oUsrRegistro: oUsrRegistro, oNombreRegistro: oNombreRegistro,
@@ -730,6 +741,14 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    s.COD_MAQ_SECADO,
                    s.COD_MAQ_DEVAN,
                    s.NUM_PARTIDA,
+                   (SELECT MAX(p_ant.NUMERO)
+                    FROM   {S}ITEMPED_DET id_ant
+                    JOIN   {S}PARTIDA p_ant ON p_ant.NROPROG = id_ant.NROPROG
+                                           AND p_ant.ESTADO   = '8'
+                    WHERE  id_ant.SERIE   = s.SERIE
+                      AND  id_ant.NUM_PED = s.NUM_PED
+                      AND  id_ant.NRO     = s.NRO
+                      AND  id_ant.NUM_DET = s.NUM_DET)  AS NUM_PARTIDA_ANT,
                    id.MAQUINA        AS MAQ_PROGRAMADA,
                    p.COD_MAQ         AS MAQ_PARTIDA,
                    (SELECT tt.cod_maq
@@ -748,12 +767,20 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    cu_pln.C_NOMBRE   AS NOMBRE_PLANIF
             FROM   {S}PLN_SEGUIMIENTO s
             JOIN   {S}V_PLN_ESTADO_ITEM v ON v.ID_SEGUIM = s.ID_SEGUIM
-            LEFT JOIN {S}ITEMPED_DET id
-                ON  id.SERIE   = s.SERIE
+            -- Subquery garantiza 1 fila por item: toma el NROPROG más reciente
+            -- (reproceso puede generar una segunda fila en ITEMPED_DET para la misma PK lógica)
+            LEFT JOIN (
+                SELECT serie, num_ped, nro, num_det,
+                       MAX(nroprog) AS nroprog,
+                       MAX(maquina) KEEP (DENSE_RANK LAST ORDER BY nroprog) AS maquina
+                FROM   {S}ITEMPED_DET
+                WHERE  nroprog > 0
+                GROUP  BY serie, num_ped, nro, num_det
+            ) id ON id.SERIE   = s.SERIE
                 AND id.NUM_PED = s.NUM_PED
                 AND id.NRO     = s.NRO
                 AND id.NUM_DET = s.NUM_DET
-            LEFT JOIN {S}PARTIDA p ON p.NROPROG = id.NROPROG AND id.NROPROG > 0
+            LEFT JOIN {S}PARTIDA p ON p.NUMERO = s.NUM_PARTIDA
             -- v2.6: actores del ciclo de vida
             -- Inline views en CS_USER: evita duplicados si C_USER no es único.
             LEFT JOIN {S}PEDIDO pe2 ON pe2.SERIE = s.SERIE AND pe2.NUM_PED = s.NUM_PED
@@ -802,6 +829,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             r.GetOrdinal("COD_MAQ_TT"), r.GetOrdinal("MAQ_PROGRAMADA"),
             r.GetOrdinal("MAQ_PARTIDA"), r.GetOrdinal("MAQ_REAL_TT"),
             r.GetOrdinal("NUM_PARTIDA"),
+            r.GetOrdinal("NUM_PARTIDA_ANT"),
             r.GetOrdinal("COD_MAQ_SECADO"), r.GetOrdinal("COD_MAQ_DEVAN"),
             oFchRegEntrega2: r.GetOrdinal("FCH_REG_ENTREGA"),
             oFchEntregaOri2: r.GetOrdinal("FCH_ENTREGA_ORI"),
@@ -1071,6 +1099,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                    t.usr_planif,     t.nombre_planif
             FROM   {S}V_PLN_TRAZABILIDAD t
             WHERE  t.num_ped = :numPed
+              AND  t.serie   = :serie
             ORDER  BY t.nro, t.num_det";
 
         var list = new List<PlnTrazabilidad>();

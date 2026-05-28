@@ -178,4 +178,79 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
         await using var cmd = new OracleCommand(sql, conn);
         await cmd.ExecuteNonQueryAsync();
     }
+
+    public async Task<IEnumerable<PlnProximoVencer>> GetProximosVencerAsync(
+        DateTime fchIni, DateTime fchFin, int diasAtras = 0)
+    {
+        // Ítems activos cuya FCH_ENTREGA_COMP cae en [fchIni - diasAtras, fchFin].
+        // diasAtras permite incluir ítems ya vencidos pero aún sin cerrar.
+        // Una fila por ítem de pedido (NUM_PED/NRO), agrupando todos sus sub-lotes (NUM_DET).
+        // Muestra la etapa más rezagada (mínimo orden_paso) y suma los KGs.
+        var sql = $@"
+            SELECT s.serie, s.num_ped, s.nro,
+                   s.cod_cliente,
+                   MAX(NVL(cl.nombre, s.cod_cliente)) AS nombre_cliente,
+                   s.cod_art, s.color, s.titulo, s.proceso,
+                   MIN(s.cod_paso_act) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS cod_paso_act,
+                   MIN(ec.nombre_paso) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS nombre_paso,
+                   MIN(ec.color_ui) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS color_ui,
+                   MIN(s.fch_pedido) AS fch_pedido,
+                   MIN(s.fch_entrega_comp) AS fch_entrega_comp,
+                   TRUNC(MIN(s.fch_entrega_comp)) - TRUNC(SYSDATE) AS dias_hasta_vencer,
+                   MAX(s.dias_retraso) AS dias_retraso,
+                   MAX(s.ind_retraso) AS ind_retraso,
+                   MAX(s.ind_urgente) AS ind_urgente,
+                   MAX(s.ind_reproceso) AS ind_reproceso,
+                   SUM(s.cantidad_orig) AS cantidad_orig,
+                   SUM(s.kg_pendientes) AS kg_pendientes,
+                   MAX(s.nro_ciclo) AS nro_ciclo
+            FROM   {S}PLN_SEGUIMIENTO s
+            JOIN   {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
+            LEFT JOIN {S}CLIENTES cl ON cl.cod_cliente = s.cod_cliente
+            WHERE  s.estado = 'A'
+              AND  s.fch_entrega_comp BETWEEN
+                       TRUNC(:fchIni) - :diasAtras AND TRUNC(:fchFin)
+            GROUP BY s.serie, s.num_ped, s.nro,
+                     s.cod_cliente, s.cod_art, s.color, s.titulo, s.proceso
+            ORDER BY MIN(s.fch_entrega_comp), MAX(s.ind_urgente) DESC, s.num_ped";
+
+        var list = new List<PlnProximoVencer>();
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = new OracleCommand(sql, conn);
+        cmd.BindByName = true;
+        cmd.Parameters.Add("fchIni",    fchIni);
+        cmd.Parameters.Add("diasAtras", diasAtras);
+        cmd.Parameters.Add("fchFin",    fchFin);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            list.Add(new PlnProximoVencer
+            {
+                Serie            = SafeVal<int>(r["serie"]),
+                NumPed           = SafeVal<long>(r["num_ped"]),
+                Nro              = SafeVal<int>(r["nro"]),
+                CodCliente       = SafeStr(r["cod_cliente"]),
+                NombreCliente    = SafeStr(r["nombre_cliente"]),
+                CodArt           = SafeStr(r["cod_art"]),
+                Color            = SafeStr(r["color"]),
+                Titulo           = SafeStr(r["titulo"]),
+                Proceso          = SafeStr(r["proceso"]),
+                CodPasoAct       = SafeStr(r["cod_paso_act"]),
+                NombrePaso       = SafeStr(r["nombre_paso"]),
+                ColorUiPaso      = SafeStr(r["color_ui"]),
+                FchPedido        = SafeVal<DateTime>(r["fch_pedido"]),
+                FchEntregaComp   = SafeDate(r["fch_entrega_comp"]),
+                DiasHastaVencer  = SafeVal<int>(r["dias_hasta_vencer"]),
+                DiasRetraso      = SafeVal<int>(r["dias_retraso"]),
+                IndRetraso       = SafeStr(r["ind_retraso"]),
+                IndUrgente       = SafeStr(r["ind_urgente"]),
+                IndReproceso     = SafeStr(r["ind_reproceso"]),
+                CantidadOrig     = SafeVal<decimal>(r["cantidad_orig"]),
+                KgPendientes     = SafeVal<decimal>(r["kg_pendientes"]),
+                NroCiclo         = SafeVal<int>(r["nro_ciclo"]),
+            });
+        }
+        return list;
+    }
 }

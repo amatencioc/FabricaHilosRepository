@@ -512,8 +512,7 @@ else
                                     else { <span class="text-muted">—</span> }
                                 </td>
                                 <td>
-                                    <span class="text-muted" title="@a.Detalle"
-                                          style="font-size:.75rem;display:block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    <span class="text-muted" style="font-size:.75rem;">
                                         @(a.Detalle?.Length > 0 ? a.Detalle : a.Titulo)
                                     </span>
                                 </td>
@@ -599,6 +598,18 @@ else
         <a asp-action="HistorialAlertas" class="text-decoration-none" style="color:var(--pln-blue-link);">Ver historial →</a>
     </p>
 }
+
+@* ─── Acceso rápido a Próximos a Vencer ──────────────────────────────────── *@
+<div class="alert alert-warning d-flex align-items-center gap-3 py-2 mt-3 mb-0 border" style="border-radius:.4rem;">
+    <i class="bi bi-calendar-event-fill fs-5 text-warning flex-shrink-0"></i>
+    <div class="flex-grow-1 small">
+        <strong>Próximos a Vencer</strong> — Consulta los ítems activos cuya fecha de entrega comprometida se aproxima.
+    </div>
+    <a asp-controller="Planeamiento" asp-action="ProximosVencer"
+       class="btn btn-sm btn-warning text-dark fw-semibold text-nowrap">
+        <i class="bi bi-arrow-right-circle me-1"></i>Ver Próximos a Vencer
+    </a>
+</div>
 
 </div>@* /container-fluid *@
 

@@ -456,11 +456,16 @@
                                 <button class="nav-link active" data-bs-toggle="tab"
                                         data-bs-target="#@tabFlujoId" type="button" role="tab">
                                     <i class="bi bi-calendar2-range me-1"></i>Línea de tiempo
+                                    @if (s.NroCiclo > 1)
+                                    {
+                                        <span class="badge bg-danger ms-1" style="font-size:.6rem;" title="Reproceso ciclo @s.NroCiclo"><i class="bi bi-arrow-repeat"></i> C@s.NroCiclo</span>
+                                    }
                                 </button>
                             </li>
                             @{
                                 var tabTtId   = $"tab-tt-{subIdx}";
                                     var hayttData = s.NumPartida > 0 && Model.DetalleTt.TryGetValue(s.NumPartida, out var detTtBut) && (detTtBut.TieneBanos || detTtBut.Calidad != null || detTtBut.RectificacionesReceta.Count > 0);
+                                    var hayReprocData = s.NumPartidaAnt > 0 && Model.DetalleTtAnterior.TryGetValue(s.NumPartidaAnt, out var detAntBut) && (detAntBut.TieneBanos || detAntBut.Calidad != null);
                             }
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab"
@@ -469,6 +474,10 @@
                                     @if (hayttData)
                                     {
                                         <span class="badge ms-1" style="background:#6f42c1;font-size:.6rem;">@(Model.DetalleTt[s.NumPartida].Banos.Count) baños</span>
+                                    }
+                                    @if (hayReprocData)
+                                    {
+                                        <span class="badge bg-danger ms-1" style="font-size:.6rem;" title="Ciclo rechazado disponible"><i class="bi bi-arrow-repeat"></i></span>
                                     }
                                 </button>
                             </li>
@@ -487,6 +496,25 @@
 
                             @* Tab Flujo *@
                             <div class="tab-pane fade show active" id="@tabFlujoId" role="tabpanel">
+                                @if (s.NroCiclo > 1)
+                                {
+                                    <div class="alert alert-danger d-flex align-items-start gap-2 mx-2 mt-2 mb-1 py-2 px-3" style="font-size:.8rem;">
+                                        <i class="bi bi-arrow-repeat fs-5 flex-shrink-0 mt-1"></i>
+                                        <div>
+                                            <strong>REPROCESO — Ciclo @s.NroCiclo</strong>
+                                            @if (s.FchRealCcRechazo.HasValue)
+                                            {
+                                                <span> · CC rechazado el <strong>@s.FchRealCcRechazo.Value.ToString("dd/MM/yyyy")</strong></span>
+                                            }
+                                            @if (s.NumPartidaAnt > 0)
+                                            {
+                                                <span> · Partida anterior: <strong>@s.NumPartidaAnt</strong></span>
+                                            }
+                                            <br/>
+                                            <span class="text-danger-emphasis">Las fechas estimadas del ciclo actual se recalcularon desde el inicio de hilandería. El paso <strong>9R</strong> indica el momento del rechazo.</span>
+                                        </div>
+                                    </div>
+                                }
                                 @{
                                     var maqEfectiva = s.MaqTtEfectiva;
                                     var maqSrc = !string.IsNullOrEmpty(s.CodMaqTt) || !string.IsNullOrEmpty(s.MaqPartida) ? "real" : "prog";
@@ -546,6 +574,14 @@
                                         if (ec.CodPaso == "08" && Model.DetalleTt.TryGetValue(s.NumPartida, out var _dts08)
                                             && !string.IsNullOrEmpty(_dts08?.Secado?.CodMaq))
                                             maqStep = _dts08!.Secado!.CodMaq;
+                                        // Para pasos TT '06','07','09','09B','9R': si hay baños reales ejecutados
+                                        // (TT_RPRODUC), usar la primera máquina REAL en lugar de la planificada
+                                        // almacenada en PARTIDA.COD_MAQ o PLN_SEGUIMIENTO.COD_MAQ_TT.
+                                        // Así solo se muestran las máquinas que realmente procesaron el lote.
+                                        else if (maqStepsTT.Contains(ec.CodPaso) && ec.CodPaso != "08"
+                                            && _dtFb != null && _dtFb.TieneBanos
+                                            && !string.IsNullOrEmpty(_dtFb.MaquinaRealTt))
+                                            maqStep = _dtFb.MaquinaRealTt!;
                                         bool mostrarMaq = maqStepsTT.Contains(ec.CodPaso) && !string.IsNullOrEmpty(maqStep)
                                                           && !(ec.CodPaso == "09B" && s.Proceso != "24")
                                                           && !(ec.CodPaso == "9R"  && s.FchRealCcRechazo == null)
@@ -627,6 +663,19 @@
                                                 @if (esActivo)
                                                 {
                                                     <span class="badge ms-1" style="background:@colorPaso;font-size:.6rem;color:#fff;border-radius:1px;">● Activo</span>
+                                                }
+                                                @if (esActivo && ec.CodPaso == "08" && _dtFb?.Secado?.FechaFin != null)
+                                                {
+                                                    @* Secado físico completado (TT_RSECADO.FECHA_FIN) pero PLN aún no avanzó
+                                                       porque espera la inserción en CTCALIDAD_D para llegar a PASO '09'. *@
+                                                    <div class="d-flex align-items-center flex-wrap gap-1 mt-1" style="font-size:.62rem;line-height:1.3;padding-left:2px;">
+                                                        <i class="bi bi-check-circle-fill text-success" style="font-size:.6rem;"></i>
+                                                        <span class="text-secondary">Secado completado</span>
+                                                        <span class="fw-semibold text-secondary">el @_dtFb!.Secado!.FechaFin!.Value.ToString("dd/MM/yy")</span>
+                                                        <span class="badge" style="background:#e8f4fd;color:#0d6efd;border:1px solid #b3d9f7;font-size:.56rem;font-weight:500;">
+                                                            Esperando CC TT
+                                                        </span>
+                                                    </div>
                                                 }
                                                 @if (esOrient)
                                                 {
@@ -962,12 +1011,33 @@
                                 Model.DetalleTt.TryGetValue(s.NumPartida, out var detTt);
                             }
                             <div class="tab-pane fade" id="@tabTtPaneId" role="tabpanel">
+                              @{
+                                  Model.DetalleTtAnterior.TryGetValue(s.NumPartidaAnt, out var detTtAnt);
+                                  bool hayDatosCicloAnt = s.NumPartidaAnt > 0 && detTtAnt != null
+                                      && (detTtAnt.TieneBanos || detTtAnt.TieneCalculoRecetas
+                                          || detTtAnt.Secado != null || detTtAnt.Calidad != null
+                                          || detTtAnt.ValidacionReceta != null
+                                          || detTtAnt.RectificacionesReceta.Count > 0);
+                              }
                               @if (s.NumPartida <= 0 || detTt == null || (!detTt.TieneBanos && !detTt.TieneCalculoRecetas && detTt.Secado == null && detTt.Calidad == null && detTt.ValidacionReceta == null && detTt.RectificacionesReceta.Count == 0))
                               {
                                 <div class="p-3 text-muted small">
                                     <i class="bi bi-info-circle me-1"></i>
                                     @(s.NumPartida <= 0 ? "Sin partida de tintorería asignada a este sublote." : "Sin datos de tintorería registrados para esta partida.")
                                 </div>
+                                @if (hayDatosCicloAnt)
+                                {
+                                    <div class="alert alert-warning mx-2 mb-2 py-2 px-3" style="font-size:.8rem;">
+                                        <i class="bi bi-arrow-repeat me-1"></i>
+                                        <strong>REPROCESO — Ciclo @(s.NroCiclo - 1) rechazado:</strong>
+                                        Partida <strong>@s.NumPartidaAnt</strong>
+                                        @if (s.FchRealCcRechazo.HasValue)
+                                        {
+                                            <span>· CC rechazado el <strong>@s.FchRealCcRechazo.Value.ToString("dd/MM/yyyy")</strong></span>
+                                        }
+                                        <br/><span class="text-muted">Los datos de producción del ciclo anterior están disponibles abajo.</span>
+                                    </div>
+                                }
                               }
                               else
                               {
@@ -1622,6 +1692,84 @@
                                   }
 
                                   </div>@* /accordion *@
+                                </div>
+                              }
+                              @* ── Ciclo anterior (reproceso) ───────────────────────────────────────── *@
+                              @if (hayDatosCicloAnt && detTtAnt != null)
+                              {
+                                <div class="mt-2 mx-1 border border-danger rounded p-2" style="font-size:.8rem;background:#fff8f8;">
+                                  <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="badge bg-danger" style="font-size:.7rem;"><i class="bi bi-x-circle me-1"></i>CICLO @(s.NroCiclo - 1) RECHAZADO — Partida @s.NumPartidaAnt</span>
+                                    @if (s.FchRealCcRechazo.HasValue)
+                                    {
+                                        <span class="text-muted" style="font-size:.72rem;">CC rechazado el @s.FchRealCcRechazo.Value.ToString("dd/MM/yyyy")</span>
+                                    }
+                                  </div>
+                                  <div class="accordion accordion-flush" id="acc-tt-ant-@(subIdx)">
+
+                                  @if (detTtAnt.TieneBanos)
+                                  {
+                                    <div class="tt-grupo-sep"><span>Baños de Tintorería — Ciclo Rechazado</span></div>
+                                    @foreach (var bano in detTtAnt.Banos)
+                                    {
+                                      var bIdx2 = detTtAnt.Banos.IndexOf(bano);
+                                      <div class="accordion-item tt-acc-item">
+                                        <h2 class="accordion-header">
+                                          <button class="accordion-button collapsed tt-acc-btn" type="button"
+                                                  data-bs-toggle="collapse" data-bs-target="#acc-tt-ant-@(subIdx)-b@(bIdx2)"
+                                                  aria-expanded="false">
+                                            <span class="tt-sdot @(bano.FechaFin.HasValue ? "tt-sdot-ok" : "tt-sdot-run")"></span>
+                                            <i class="bi bi-droplet-fill me-2" style="color:#6f42c1;"></i>Baño @(bIdx2 + 1)
+                                            @if (!string.IsNullOrEmpty(bano.CodMaq)) { <span class="badge bg-secondary ms-2" style="font-size:.62rem;">@bano.CodMaq</span> }
+                                            <span class="tt-acc-preview">@(bano.FechaFin.HasValue ? "Terminado" : "En proceso") · @bano.FechaIni.ToString("dd/MM/yy")</span>
+                                          </button>
+                                        </h2>
+                                        <div id="acc-tt-ant-@(subIdx)-b@(bIdx2)" class="accordion-collapse collapse">
+                                          <div class="accordion-body p-2">
+                                            <div class="tt-data-grid">
+                                              <div><span class="tt-lbl">N° Receta</span><span class="tt-val">@bano.Guia</span></div>
+                                              <div><span class="tt-lbl">Proceso</span><span class="tt-val">@bano.DescProceso</span></div>
+                                              <div><span class="tt-lbl">Máquina</span><span class="tt-val">@(string.IsNullOrEmpty(bano.CodMaq) ? "—" : bano.CodMaq)</span></div>
+                                              <div><span class="tt-lbl">Inicio</span><span class="tt-val">@bano.FechaIni.ToString("dd/MM/yy HH:mm")</span></div>
+                                              <div><span class="tt-lbl">Fin</span><span class="tt-val">@(bano.FechaFin?.ToString("dd/MM/yy HH:mm") ?? "—")</span></div>
+                                              <div><span class="tt-lbl">Estado</span><span class="badge bg-@(bano.FechaFin.HasValue ? "success" : "warning text-dark")" style="font-size:.62rem;">@(bano.FechaFin.HasValue ? "Terminado" : "En proceso")</span></div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    }
+                                  }
+
+                                  @if (detTtAnt.Secado != null)
+                                  {
+                                    var sec2 = detTtAnt.Secado;
+                                    <div class="tt-grupo-sep"><span>Secado — Ciclo Rechazado</span></div>
+                                    <div class="tt-data-grid mt-1 mb-2">
+                                      <div><span class="tt-lbl">Máquina</span><span class="tt-val">@(string.IsNullOrEmpty(sec2.CodMaq) ? "—" : sec2.CodMaq)</span></div>
+                                      <div><span class="tt-lbl">Inicio</span><span class="tt-val">@sec2.FechaIni.ToString("dd/MM/yy HH:mm")</span></div>
+                                      <div><span class="tt-lbl">Fin</span><span class="tt-val">@(sec2.FechaFin?.ToString("dd/MM/yy HH:mm") ?? "—")</span></div>
+                                      <div><span class="tt-lbl">Estado</span><span class="tt-val">@sec2.DescEstado</span></div>
+                                    </div>
+                                  }
+
+                                  @if (detTtAnt.Calidad != null)
+                                  {
+                                    var cc2 = detTtAnt.Calidad;
+                                    <div class="tt-grupo-sep"><span>Control de Calidad TT — Ciclo Rechazado</span></div>
+                                    <div class="tt-data-grid mt-1 mb-2">
+                                      <div><span class="tt-lbl">N° CC</span><span class="tt-val">@cc2.Numero</span></div>
+                                      <div><span class="tt-lbl">Resultado</span>
+                                        <span class="badge bg-danger" style="font-size:.62rem;">@cc2.DescResultado</span>
+                                      </div>
+                                      <div><span class="tt-lbl">Fecha</span><span class="tt-val">@cc2.Fecha.ToString("dd/MM/yy")</span></div>
+                                      @if (!string.IsNullOrEmpty(cc2.Observacion))
+                                      {
+                                        <div style="grid-column:1/-1;"><span class="tt-lbl">Obs.</span><span class="tt-val">@cc2.Observacion</span></div>
+                                      }
+                                    </div>
+                                  }
+
+                                  </div>@* /accordion ant *@
                                 </div>
                               }
                             </div>@* /tab-tt *@

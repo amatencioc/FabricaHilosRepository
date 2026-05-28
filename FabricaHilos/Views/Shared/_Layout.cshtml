@@ -127,6 +127,14 @@
                                     </a>
                                 </li>
                                 }
+                                @if (menus.PlaneamientoProximosVencer)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "ProximosVencer" ? "active" : "")">
+                                        <i class="bi bi-calendar-event-fill"></i> Próximos a Vencer
+                                    </a>
+                                </li>
+                                }
                                 @if (menus.PlaneamientoKPIs)
                                 {
                                 <li>

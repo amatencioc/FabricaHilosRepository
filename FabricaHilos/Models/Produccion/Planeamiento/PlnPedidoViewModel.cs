@@ -19,4 +19,10 @@ public class PlnPedidoViewModel
     /// Incluye baños ejecutados, secado, CC TT y validación de laboratorio.
     /// </summary>
     public Dictionary<long, PlnDetalleTt> DetalleTt { get; set; } = [];
+
+    /// <summary>
+    /// Detalle de Tintorería del ciclo anterior (partida rechazada).
+    /// Clave: PARTIDA.NUMERO (PlnSeguimiento.NumPartidaAnt). Poblado solo cuando NRO_CICLO > 1.
+    /// </summary>
+    public Dictionary<long, PlnDetalleTt> DetalleTtAnterior { get; set; } = [];
 }

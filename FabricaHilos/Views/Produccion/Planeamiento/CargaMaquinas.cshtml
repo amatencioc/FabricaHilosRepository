@@ -762,7 +762,15 @@
                                                             }
                                                         </td>
                                                         <td><span class="badge" style="background:@c.ColorUi; font-size:.6rem;">@c.NombrePaso</span></td>
-                                                        <td><span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span></td>
+                                                        <td>
+                                                            <span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span>
+                                                            @if (c.Nota != null)
+                                                            {
+                                                                <div class="text-muted" style="font-size:.58rem;line-height:1.2;margin-top:2px;">
+                                                                    <i class="bi bi-info-circle me-1"></i>@c.Nota
+                                                                </div>
+                                                            }
+                                                        </td>
                                                         <td>
                                                             @if (c.FchEntregaComp.HasValue)
                                                             {
@@ -792,7 +800,15 @@
                                                                                 { <a asp-action="Pedido" asp-route-numPed="@c.NumPed" asp-route-serie="@c.Serie" class="text-decoration-none fw-semibold">@c.NumPed/@c.Nro</a> }
                                                                             </td>
                                                                             <td><span class="badge" style="background:@c.ColorUi; font-size:.6rem;">@c.NombrePaso</span></td>
-                                                                            <td><span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span></td>
+                                                                            <td>
+                                                                                <span class="badge @c.BadgeEstado" style="font-size:.6rem;">@c.EstadoMaq</span>
+                                                                                @if (c.Nota != null)
+                                                                                {
+                                                                                    <div class="text-muted" style="font-size:.58rem;line-height:1.2;margin-top:2px;">
+                                                                                        <i class="bi bi-info-circle me-1"></i>@c.Nota
+                                                                                    </div>
+                                                                                }
+                                                                            </td>
                                                                             <td>
                                                                                 @if (c.FchEntregaComp.HasValue)
                                                                                 { <span class="@(c.EstaRetrasado ? "text-danger fw-bold" : "")">@c.FchEntregaComp.Value.ToString("dd/MM")</span> }

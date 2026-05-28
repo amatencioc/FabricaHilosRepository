@@ -74,6 +74,8 @@ public class PlnSeguimiento
     // ── Referencias a objetos del flujo ─────────────────────────────────────────
     /// <summary>PARTIDA.NUMERO vinculada a este sublote (via PARTIDA.NROPROG = ITEMPED_DET.NROPROG).</summary>
     public long NumPartida { get; set; }
+    /// <summary>PARTIDA.NUMERO del ciclo anterior (rechazado). Poblado solo cuando NRO_CICLO > 1.</summary>
+    public long NumPartidaAnt { get; set; }
 
     // ── Máquinas asignadas / usadas ──────────────────────────────────────────
     public string? CodMaqTt      { get; set; }   // PLN_SEGUIMIENTO.COD_MAQ_TT (trigger al PASO '06')

@@ -108,7 +108,6 @@
                                 <th class="text-center">Estado</th>
                                 <th class="text-center">Paso</th>
                                 <th class="text-center" title="Días en almacén PT sin despachar">Días PT</th>
-                                <th class="text-center" title="Máquina Devanado">Devan.</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -187,15 +186,6 @@
                                     <td class="text-center @(item.DiasEnPaso >= 3 ? "text-warning fw-bold" : "text-muted")">
                                         @item.DiasEnPaso d
                                     </td>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(item.CodMaqDevan))
-                                        {
-                                            <small class="text-muted" title="Devanado en @item.CodMaqDevan">
-                                                <i class="bi bi-gear me-1"></i>@item.CodMaqDevan
-                                            </small>
-                                        }
-                                        else { <span class="text-muted">—</span> }
-                                    </td>
                                     <td style="white-space:nowrap;">
                                         <button type="button"
                                                 class="btn btn-outline-secondary btn-sm py-0 px-1"
@@ -260,10 +250,6 @@
                                 <th class="text-center">Kg Pend.</th>
                                 <th class="text-center">F. Entrega</th>
                                 <th class="text-center">Tiempo</th>
-                                <th class="text-center">ETA Despacho</th>
-                                <th class="text-center" title="Días en paso actual">Días paso</th>
-                                <th class="text-center">Secado</th>
-                                <th class="text-center">Devan.</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
@@ -320,32 +306,6 @@
                                         {
                                             <span class="badge bg-@item.SemaforoCss">@(-item.DiasVencido) d restantes</span>
                                         }
-                                    </td>
-                                    <td class="text-center">
-                                        @if (item.FchEstDespacho.HasValue)
-                                        {
-                                            <span class="text-muted" style="font-size:.78rem;">@item.FchEstDespacho.Value.ToString("dd/MM/yy")</span>
-                                        }
-                                        else { <span class="text-muted">—</span> }
-                                    </td>
-                                    <td class="text-center @(item.DiasEnPaso >= 2 ? "text-warning" : "text-muted")">@item.DiasEnPaso d</td>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(item.CodMaqSecado))
-                                        {
-                                            <small class="text-muted" title="Secado en @item.CodMaqSecado">
-                                                <i class="bi bi-thermometer me-1"></i>@item.CodMaqSecado
-                                            </small>
-                                        }
-                                        else { <span class="text-muted">—</span> }
-                                    </td>
-                                    <td class="text-center">
-                                        @if (!string.IsNullOrEmpty(item.CodMaqDevan))
-                                        {
-                                            <small class="text-muted" title="Devanado en @item.CodMaqDevan">
-                                                <i class="bi bi-gear me-1"></i>@item.CodMaqDevan
-                                            </small>
-                                        }
-                                        else { <span class="text-muted">—</span> }
                                     </td>
                                     <td style="white-space:nowrap;">
                                         <button type="button"

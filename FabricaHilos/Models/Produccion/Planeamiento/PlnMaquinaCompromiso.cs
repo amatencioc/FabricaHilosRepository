@@ -21,9 +21,19 @@ public class PlnMaquinaCompromiso
     public string   IndRetraso     { get; set; } = "N";
     public int      DiasRetraso    { get; set; }
     /// <summary>EN_PROCESO = usando la máquina ahora | COMPROMETIDA = llegará pronto | ASIGNADA = ya la usó pero aún activo</summary>
-    public string   EstadoMaq      { get; set; } = "";
+    public string    EstadoMaq      { get; set; } = "";
+    /// <summary>Fecha en que el proceso físico finalizó (ej. TT_RSECADO.FECHA_FIN).
+    /// Cuando está poblado en PASO '08' indica que el secado físico terminó pero PLN aún no avanzó
+    /// (espera inserción en CTCALIDAD_D para pasar a PASO '09').</summary>
+    public DateTime? FechaFinFisico { get; set; }
     /// <summary>Fuente del dato: PLN (PLN_SEGUIMIENTO), TT_RSECADO, TT_RPRODUC</summary>
-    public string   Fuente         { get; set; } = "";
+    public string    Fuente         { get; set; } = "";
+
+    /// <summary>Nota contextual cuando el estado físico y el paso PLN divergen.
+    /// Solo aplica en PASO '08': secado completado físicamente pero PLN espera CC TT.</summary>
+    public string? Nota => (Area == "Secado" && CodPasoAct == "08" && FechaFinFisico.HasValue)
+        ? $"Sec. completado el {FechaFinFisico.Value:dd/MM/yy} · Esp. CC TT"
+        : null;
 
     // ── Helpers ────────────────────────────────────────────────────────────────
     public bool EstaRetrasado  => IndRetraso == "S";

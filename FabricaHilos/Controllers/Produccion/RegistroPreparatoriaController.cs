@@ -101,9 +101,7 @@ namespace FabricaHilos.Controllers.Produccion
                 fecTurnoStr.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
                 int.TryParse(fecTurnoStr[..^1], out int semanas) && semanas > 0)
                 diasAtras = semanas * 7;
-            // Con rango de fecha ampliado, mostrar todos los estados por defecto
-            if (diasAtras > 0 && estado.Count == 1 && estado[0] == "1")
-                estado = new List<string> { "1", "3", "9" };
+            // Nota: no se sobreescribe el filtro de estado; se respeta la selección del usuario.
             var resultado = await _recetaService.ObtenerPreparatoriasAsync(buscar, maquina, tipoMaquina, estado, page, pageSize, diasAtras);
             var preparatorias = resultado.Items;
 
@@ -324,19 +322,19 @@ namespace FabricaHilos.Controllers.Produccion
                 {
                 try
                 {
-                    // Validar que la máquina no tenga una preparatoria en proceso
-                    if (!string.IsNullOrEmpty(model.CodigoMaquina) && !string.IsNullOrEmpty(model.Maquina))
-                    {
-                        var enProceso = await _recetaService.TieneMaquinaEnProcesoAsync(model.CodigoMaquina, model.Maquina);
-                        if (enProceso)
-                        {
-                            ModelState.AddModelError(string.Empty, "La máquina seleccionada ya tiene una preparatoria en proceso. No se puede registrar otra hasta que la anterior sea cerrada o anulada.");
-                            ViewBag.Empleados = await _recetaService.ObtenerEmpleadosAsync();
-                            ViewBag.TiposMaquinas = await _recetaService.ObtenerTiposMaquinasAsync();
-                            ViewBag.Titulos = await _recetaService.ObtenerTitulosAsync();
-                            return View(model);
-                        }
-                    }
+                    //// Validar que la máquina no tenga una preparatoria en proceso
+                    //if (!string.IsNullOrEmpty(model.CodigoMaquina) && !string.IsNullOrEmpty(model.Maquina))
+                    //{
+                    //    var enProceso = await _recetaService.TieneMaquinaEnProcesoAsync(model.CodigoMaquina, model.Maquina);
+                    //    if (enProceso)
+                    //    {
+                    //        ModelState.AddModelError(string.Empty, "La máquina seleccionada ya tiene una preparatoria en proceso. No se puede registrar otra hasta que la anterior sea cerrada o anulada.");
+                    //        ViewBag.Empleados = await _recetaService.ObtenerEmpleadosAsync();
+                    //        ViewBag.TiposMaquinas = await _recetaService.ObtenerTiposMaquinasAsync();
+                    //        ViewBag.Titulos = await _recetaService.ObtenerTitulosAsync();
+                    //        return View(model);
+                    //    }
+                    //}
 
                     // Establecer valores por defecto
                     model.Estado = EstadoOrden.EnProceso;

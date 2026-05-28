@@ -103,8 +103,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 {
                     "01"             => "Ventas",
                     "02"             => "Planeamiento",
-                    "03"             => "Laboratorio",       // v2.1: L_VALIDA_RECETA
-                    "04" or "05"     => "Hilandería",         // v2.1: PARTIDA / H_RPRODUC
+                    "03" or "04"     => "Hilandería",        // '03'=En Hilandería, '04'=Lote Disponible
+                    "05"             => "Laboratorio",       // '05'=Laboratorio (L_VALIDA_RECETA)
                     "06" or "07" or "08" or "9R" => "Tintorería",
                     "09"             => "Calidad",
                     "09B"            => "Acabados",
@@ -297,7 +297,6 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    TRUNC(SYSDATE) - s.fch_entrega_comp                       AS dias_vencido,
                    s.dias_retraso, s.ind_urgente, s.ind_retraso,
                    s.cod_paso_act, ec.nombre_paso, ec.color_ui,
-                   s.cod_maq_secado, s.cod_maq_devan,
                    p.prioridad                                                AS prioridad_pedido,
                    NVL((SELECT TRUNC(SYSDATE) - TRUNC(MIN(ev.fch_evento))
                         FROM   {S}pln_log_eventos ev
@@ -354,8 +353,6 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 CodPasoAct      = SafeStr(r["cod_paso_act"]),
                 NombrePaso      = SafeStr(r["nombre_paso"]),
                 ColorUi         = SafeStr(r["color_ui"]),
-                CodMaqSecado    = SafeStr(r["cod_maq_secado"]),
-                CodMaqDevan     = SafeStr(r["cod_maq_devan"]),
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
                 DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
             });
@@ -375,18 +372,11 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    s.kg_pendientes, s.kg_producidos,
                    0                                                          AS stock_disponible,
                    0                                                          AS kg_a_despachar,
-                   s.fch_entrega_comp, s.fch_est_despacho,
+                   s.fch_entrega_comp,
                    TRUNC(SYSDATE) - s.fch_entrega_comp                        AS dias_vencido,
                    s.dias_retraso, s.ind_urgente, s.ind_retraso,
                    s.cod_paso_act, ec.nombre_paso, ec.color_ui,
-                   s.cod_maq_secado, s.cod_maq_devan,
-                   p.prioridad                                                 AS prioridad_pedido,
-                   NVL((SELECT TRUNC(SYSDATE) - TRUNC(MIN(ev.fch_evento))
-                        FROM   {S}pln_log_eventos ev
-                        WHERE  ev.num_ped  = s.num_ped
-                          AND  ev.serie    = s.serie
-                          AND  ev.nro      = s.nro
-                          AND  ev.cod_paso = s.cod_paso_act), 0)              AS dias_en_paso
+                   p.prioridad                                                 AS prioridad_pedido
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
             LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
@@ -423,7 +413,6 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 StockDisponible = 0,
                 KgADespachar    = 0,
                 FchEntregaComp  = r["fch_entrega_comp"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_entrega_comp"]),
-                FchEstDespacho  = r["fch_est_despacho"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_est_despacho"]),
                 DiasVencido     = SafeVal<int>(r["dias_vencido"]),
                 DiasRetraso     = SafeVal<int>(r["dias_retraso"]),
                 IndUrgente      = SafeStr(r["ind_urgente"]),
@@ -431,10 +420,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 CodPasoAct      = SafeStr(r["cod_paso_act"]),
                 NombrePaso      = SafeStr(r["nombre_paso"]),
                 ColorUi         = SafeStr(r["color_ui"]),
-                CodMaqSecado    = SafeStr(r["cod_maq_secado"]),
-                CodMaqDevan     = SafeStr(r["cod_maq_devan"]),
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
-                DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
             });
         }
         return list;
@@ -502,6 +488,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
     {
         var sql = $@"
             -- Fuente 1: Compromisos SECADO desde PLN_SEGUIMIENTO
+            -- Fuente 1: Compromisos SECADO desde PLN_SEGUIMIENTO
             SELECT 'Secado'    AS area,
                    s.cod_maq_secado AS cod_maq,
                    s.num_ped, s.nro, s.num_det, s.serie,
@@ -513,13 +500,24 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    s.ind_retraso,
                    s.dias_retraso,
                    CASE
-                     WHEN s.cod_paso_act = '08'           THEN 'EN_PROCESO'
-                     WHEN s.cod_paso_act IN ('06','07','9R') THEN 'COMPROMETIDA'
+                     -- Secado físico terminado (TT_RSECADO.FECHA_FIN existe) → COMPROMETIDA
+                     -- aunque PLN sigue en PASO '08'. Coherente con Línea de Tiempo.
+                     WHEN s.cod_paso_act = '08' AND trs_fin.fecha_fin IS NOT NULL THEN 'COMPROMETIDA'
+                     WHEN s.cod_paso_act = '08'                                   THEN 'EN_PROCESO'
+                     WHEN s.cod_paso_act IN ('06','07','9R')                      THEN 'COMPROMETIDA'
                      ELSE 'ASIGNADA'
                    END AS estado_maq,
+                   trs_fin.fecha_fin AS fecha_fin_fisico,
                    'PLN' AS fuente
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
+            -- Detecta si el secado físico ya terminó en TT_RSECADO
+            LEFT JOIN (SELECT guia, cod_maq, MAX(fecha_fin) AS fecha_fin
+                       FROM   {S}tt_rsecado
+                       WHERE  fecha_fin IS NOT NULL
+                       GROUP BY guia, cod_maq) trs_fin
+                   ON  trs_fin.guia    = s.num_partida
+                   AND trs_fin.cod_maq = s.cod_maq_secado
             WHERE  s.estado          = 'A'
               AND  s.cod_maq_secado IS NOT NULL
               AND  s.cod_paso_act NOT IN ('09','09B','10','11','12','13','14')  -- excluir items ya pasados por secado
@@ -540,6 +538,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                      WHEN s.cod_paso_act IN ('08','09','09B','9R') THEN 'COMPROMETIDA'
                      ELSE 'ASIGNADA'
                    END AS estado_maq,
+                   CAST(NULL AS DATE) AS fecha_fin_fisico,
                    'PLN' AS fuente
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
@@ -562,6 +561,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    'N'                AS ind_retraso,
                    0                  AS dias_retraso,
                    'EN_PROCESO'       AS estado_maq,
+                   t.fecha_fin        AS fecha_fin_fisico,
                    'TT_RSECADO'       AS fuente
             FROM   {S}tt_rsecado t
             JOIN   {S}partida p ON p.numero = t.guia
@@ -591,6 +591,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    'N'                AS ind_retraso,
                    0                  AS dias_retraso,
                    'EN_PROCESO'       AS estado_maq,
+                   CAST(NULL AS DATE) AS fecha_fin_fisico,
                    'TT_RPRODUC'       AS fuente
             FROM   {S}tt_rproduc tt
             LEFT JOIN {S}partida p ON p.numero = tt.receta
@@ -630,6 +631,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 IndRetraso     = SafeStr(r["ind_retraso"]),
                 DiasRetraso    = r.IsDBNull(r.GetOrdinal("dias_retraso")) ? 0 : Convert.ToInt32(r["dias_retraso"]),
                 EstadoMaq      = SafeStr(r["estado_maq"]),
+                FechaFinFisico = r.IsDBNull(r.GetOrdinal("fecha_fin_fisico")) ? null : (DateTime?)Convert.ToDateTime(r["fecha_fin_fisico"]),
                 Fuente         = SafeStr(r["fuente"]),
             });
         }

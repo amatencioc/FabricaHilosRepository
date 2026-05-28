@@ -45,12 +45,23 @@ public class PlaneamientoController : OracleBaseController
         if (menus.PlaneamientoDashboard)
             modulos.Add(new SgcModuloDto
             {
-                Nombre      = "Dashboard de Seguimiento",
+                Nombre      = "Seguimiento de Pedidos",
                 Descripcion = "Tablero en tiempo real de todos los pedidos activos por etapa de producción.",
                 Icono       = "bi-kanban",
                 ColorClase  = "text-primary",
                 Controller  = "Planeamiento",
                 Action      = "Dashboard"
+            });
+
+        if (menus.PlaneamientoProximosVencer)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Próximos a Vencer",
+                Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima. Identifica pedidos en riesgo antes de que venzan.",
+                Icono       = "bi-calendar-event-fill",
+                ColorClase  = "text-warning",
+                Controller  = "Planeamiento",
+                Action      = "ProximosVencer"
             });
 
         if (menus.PlaneamientoCargaMaquinas)
@@ -62,6 +73,17 @@ public class PlaneamientoController : OracleBaseController
                 ColorClase  = "text-warning",
                 Controller  = "Planeamiento",
                 Action      = "CargaMaquinas"
+            });
+
+        if (menus.PlaneamientoPendientesDespacho)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Pendientes de Despacho",
+                Descripcion = "Ítems listos en almacén PT pendientes de ser despachados al cliente.",
+                Icono       = "bi-truck",
+                ColorClase  = "text-info",
+                Controller  = "Planeamiento",
+                Action      = "PendientesDespacho"
             });
 
         if (menus.PlaneamientoAlertas)
@@ -84,17 +106,6 @@ public class PlaneamientoController : OracleBaseController
                 ColorClase  = "text-success",
                 Controller  = "Planeamiento",
                 Action      = "KPIs"
-            });
-
-        if (menus.PlaneamientoPendientesDespacho)
-            modulos.Add(new SgcModuloDto
-            {
-                Nombre      = "Pendientes de Despacho",
-                Descripcion = "Ítems listos en almacén PT pendientes de ser despachados al cliente.",
-                Icono       = "bi-truck",
-                ColorClase  = "text-info",
-                Controller  = "Planeamiento",
-                Action      = "PendientesDespacho"
             });
 
         modulos.Add(new SgcModuloDto
@@ -150,24 +161,28 @@ public class PlaneamientoController : OracleBaseController
         await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
 
         // Cargar detalle TT por cada sublote que tenga partida asignada.
-        // Se deduplica por NumPartida para no consultar dos veces la misma partida.
-        var items     = tItems.Result.ToList();
-        var detalleTt = new Dictionary<long, PlnDetalleTt>();
-        foreach (var item in items.Where(x => x.NumPartida > 0))
-        {
-            if (!detalleTt.ContainsKey(item.NumPartida))
-                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
-        }
+        // Paralelizar todas las partidas únicas (actual + anterior) en una sola ronda de Tasks.
+        var items         = tItems.Result.ToList();
+        var partidas      = items.Where(x => x.NumPartida    > 0).Select(x => x.NumPartida).Distinct();
+        var partidasAnt   = items.Where(x => x.NumPartidaAnt > 0).Select(x => x.NumPartidaAnt).Distinct();
+        var tareasTt      = partidas.Union(partidasAnt).Distinct()
+                               .ToDictionary(p => p, p => _seguimiento.GetDetalleTtAsync(p));
+        await Task.WhenAll(tareasTt.Values);
+        var detalleTt    = partidas.Where(p    => tareasTt.ContainsKey(p))
+                               .ToDictionary(p => p, p => tareasTt[p].Result);
+        var detalleTtAnt = partidasAnt.Where(p => tareasTt.ContainsKey(p))
+                               .ToDictionary(p => p, p => tareasTt[p].Result);
 
         var vm = new PlnPedidoViewModel
         {
-            NumPed    = numPed,
-            Serie     = serie,
-            Items     = items,
-            Eventos   = tEventos.Result,
-            Alertas   = tAlertas.Result,
-            Pasos     = tPasos.Result,
-            DetalleTt = detalleTt,
+            NumPed            = numPed,
+            Serie             = serie,
+            Items             = items,
+            Eventos           = tEventos.Result,
+            Alertas           = tAlertas.Result,
+            Pasos             = tPasos.Result,
+            DetalleTt         = detalleTt,
+            DetalleTtAnterior = detalleTtAnt,
         };
         return View(vm);
     }
@@ -181,23 +196,27 @@ public class PlaneamientoController : OracleBaseController
         var tPasos   = _seguimiento.GetEstadosAsync();
         await Task.WhenAll(tItems, tEventos, tAlertas, tPasos);
 
-        var items     = tItems.Result.ToList();
-        var detalleTt = new Dictionary<long, PlnDetalleTt>();
-        foreach (var item in items.Where(x => x.NumPartida > 0))
-        {
-            if (!detalleTt.ContainsKey(item.NumPartida))
-                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
-        }
+        var items         = tItems.Result.ToList();
+        var partidas      = items.Where(x => x.NumPartida    > 0).Select(x => x.NumPartida).Distinct();
+        var partidasAnt   = items.Where(x => x.NumPartidaAnt > 0).Select(x => x.NumPartidaAnt).Distinct();
+        var tareasTt      = partidas.Union(partidasAnt).Distinct()
+                               .ToDictionary(p => p, p => _seguimiento.GetDetalleTtAsync(p));
+        await Task.WhenAll(tareasTt.Values);
+        var detalleTt    = partidas.Where(p    => tareasTt.ContainsKey(p))
+                               .ToDictionary(p => p, p => tareasTt[p].Result);
+        var detalleTtAnt = partidasAnt.Where(p => tareasTt.ContainsKey(p))
+                               .ToDictionary(p => p, p => tareasTt[p].Result);
 
         var vm = new PlnPedidoViewModel
         {
-            NumPed    = numPed,
-            Serie     = serie,
-            Items     = items,
-            Eventos   = tEventos.Result,
-            Alertas   = tAlertas.Result,
-            Pasos     = tPasos.Result,
-            DetalleTt = detalleTt,
+            NumPed            = numPed,
+            Serie             = serie,
+            Items             = items,
+            Eventos           = tEventos.Result,
+            Alertas           = tAlertas.Result,
+            Pasos             = tPasos.Result,
+            DetalleTt         = detalleTt,
+            DetalleTtAnterior = detalleTtAnt,
         };
         return View(vm);
     }
@@ -240,11 +259,54 @@ public class PlaneamientoController : OracleBaseController
         return View();
     }
 
-    // GET /Planeamiento/Alertas
-    public async Task<IActionResult> Alertas()
+    // GET /Planeamiento/Alertas[?fchIni=DD/MM/YYYY&fchFin=DD/MM/YYYY&diasAtras=N]
+    public async Task<IActionResult> Alertas(
+        string? fchIni   = null,
+        string? fchFin   = null,
+        int     diasAtras = 0)
     {
-        var alertas = await _alerta.GetActivasAsync();
-        return View(alertas);
+        // input type="date" envía yyyy-MM-dd; también aceptamos dd/MM/yyyy por compatibilidad.
+        var hoy      = DateTime.Today;
+        var fmts     = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture  = System.Globalization.CultureInfo.InvariantCulture;
+        var ini      = DateTime.TryParseExact(fchIni, fmts, culture,
+                           System.Globalization.DateTimeStyles.None, out var d1) ? d1 : hoy;
+        var fin      = DateTime.TryParseExact(fchFin, fmts, culture,
+                           System.Globalization.DateTimeStyles.None, out var d2) ? d2 : hoy.AddDays(30);
+
+        var tAlertas  = _alerta.GetActivasAsync();
+        var tProximos = _alerta.GetProximosVencerAsync(ini, fin, diasAtras);
+        await Task.WhenAll(tAlertas, tProximos);
+
+        ViewBag.ProximosVencer = tProximos.Result;
+        ViewBag.PvFchIni       = ini.ToString("dd/MM/yyyy");
+        ViewBag.PvFchFin       = fin.ToString("dd/MM/yyyy");
+        ViewBag.PvDiasAtras    = diasAtras;
+
+        return View(tAlertas.Result);
+    }
+
+    // GET /Planeamiento/ProximosVencer[?fchIni=DD/MM/YYYY&fchFin=DD/MM/YYYY&diasAtras=N]
+    public async Task<IActionResult> ProximosVencer(
+        string? fchIni    = null,
+        string? fchFin    = null,
+        int     diasAtras = 0)
+    {
+        var hoy     = DateTime.Today;
+        var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var ini     = DateTime.TryParseExact(fchIni, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : hoy;
+        var fin     = DateTime.TryParseExact(fchFin, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d2) ? d2 : hoy.AddDays(30);
+
+        var proximos = await _alerta.GetProximosVencerAsync(ini, fin, diasAtras);
+
+        ViewBag.PvFchIni   = ini.ToString("dd/MM/yyyy");
+        ViewBag.PvFchFin   = fin.ToString("dd/MM/yyyy");
+        ViewBag.PvDiasAtras = diasAtras;
+
+        return View(proximos);
     }
 
     // GET /Planeamiento/HistorialAlertas?ultDias=30
@@ -314,22 +376,26 @@ public class PlaneamientoController : OracleBaseController
             ViewBag.ErroresPlanif = erroresPlanif;
 
         // Cargar DetalleTt por sublotes con partida asignada (igual que Pedido/Pedido2).
-        var detalleTt = new Dictionary<long, PlnDetalleTt>();
-        foreach (var item in items.Where(x => x.NumPartida > 0))
-        {
-            if (!detalleTt.ContainsKey(item.NumPartida))
-                detalleTt[item.NumPartida] = await _seguimiento.GetDetalleTtAsync(item.NumPartida);
-        }
+        var partidas    = items.Where(x => x.NumPartida    > 0).Select(x => x.NumPartida).Distinct();
+        var partidasAnt = items.Where(x => x.NumPartidaAnt > 0).Select(x => x.NumPartidaAnt).Distinct();
+        var tareasTt    = partidas.Union(partidasAnt).Distinct()
+                             .ToDictionary(p => p, p => _seguimiento.GetDetalleTtAsync(p));
+        await Task.WhenAll(tareasTt.Values);
+        var detalleTt    = partidas.Where(p    => tareasTt.ContainsKey(p))
+                             .ToDictionary(p => p, p => tareasTt[p].Result);
+        var detalleTtAnt = partidasAnt.Where(p => tareasTt.ContainsKey(p))
+                             .ToDictionary(p => p, p => tareasTt[p].Result);
 
         var vm = new PlnPedidoViewModel
         {
-            NumPed    = numPed,
-            Serie     = serie,
-            Items     = items,
-            Eventos   = tEventos.Result,
-            Alertas   = tAlertas.Result,
-            Pasos     = tPasos.Result,
-            DetalleTt = detalleTt,
+            NumPed            = numPed,
+            Serie             = serie,
+            Items             = items,
+            Eventos           = tEventos.Result,
+            Alertas           = tAlertas.Result,
+            Pasos             = tPasos.Result,
+            DetalleTt         = detalleTt,
+            DetalleTtAnterior = detalleTtAnt,
         };
         return View(vm);
     }
@@ -423,14 +489,11 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.TamPagina  = tamPagina;
         ViewBag.Total      = total;
         ViewBag.TotalPags  = (int)Math.Ceiling(total / (double)tamPagina);
-        // Obtener ciclos distintos para el filtro
-        var todosEventos = await _seguimiento.GetEventosPorPedidoAsync(numPed, serie);
-        ViewBag.CiclosDisponibles = todosEventos
-            .Where(e => e.IdSeguim == idSeguim)
-            .Select(e => e.NroCiclo)
-            .Distinct()
-            .OrderBy(c => c)
-            .ToList();
+        // Ciclos disponibles: PLN_LOG_EVENTOS no almacena NRO_CICLO; derivar desde PLN_SEGUIMIENTO.
+        var seguimCiclo = await _seguimiento.GetByIdAsync(idSeguim);
+        ViewBag.CiclosDisponibles = seguimCiclo is null
+            ? new System.Collections.Generic.List<int>()
+            : Enumerable.Range(1, seguimCiclo.NroCiclo).ToList();
         return View(items);
     }
 
