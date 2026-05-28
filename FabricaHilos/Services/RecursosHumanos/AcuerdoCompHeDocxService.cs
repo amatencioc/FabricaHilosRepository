@@ -247,7 +247,7 @@ public class AcuerdoCompHeDocxService
                     SetCellText(doc, nm, cells[2], "");                            // DNI
                     SetCellText(doc, nm, cells[3], "");                            // Firma
                     SetCellText(doc, nm, cells[4], item.FechaDestinoStr ?? "");   // Fecha que no asistió
-                    SetCellText(doc, nm, cells[5], item.TipoCompensacion ?? "");  // Motivo
+                    SetCellText(doc, nm, cells[5], "");                            // Motivo de ausencia (en blanco)
                     SetCellText(doc, nm, cells[6], item.FechaOrigenStr ?? "");    // Fecha HE
                     SetCellText(doc, nm, cells[7], item.TiempoHhMi ?? "");        // N° Horas
                 }
