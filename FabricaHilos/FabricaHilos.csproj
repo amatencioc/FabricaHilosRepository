@@ -90,6 +90,7 @@
     <Content Include="Data\RecursosHumanos\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Folder Include="Data\Logistica\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
+    <Folder Include="Services\Sgc\AnalisisReclamo\" />
   </ItemGroup>
 
   <ItemGroup>
