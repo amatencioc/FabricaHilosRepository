@@ -14,6 +14,7 @@ public class MenuOptions
     public bool Produccion       { get; set; } = true;
     public bool Sgc              { get; set; } = true;
     public bool Facturacion      { get; set; } = true;
+    public bool SireFlag         { get; set; } = false;
     public bool Ventas           { get; set; } = false;
     public bool Seguridad        { get; set; } = false;
 
@@ -95,6 +96,7 @@ public class MenuOptions
         Produccion       = true,
         Sgc              = true,
         Facturacion      = true,
+        SireFlag         = true,
         Ventas           = true,
         Seguridad        = true,
 

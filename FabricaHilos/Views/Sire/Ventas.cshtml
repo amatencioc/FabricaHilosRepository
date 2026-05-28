@@ -1,0 +1,90 @@
+@model IReadOnlyList<FabricaHilos.Sire.Models.RegistroVenta>
+@using FabricaHilos.Sire.Models
+@{
+    ViewData["Title"] = "SIRE - Ventas";
+    var periodos = ViewBag.Periodos as IReadOnlyList<PropuestaDto> ?? Array.Empty<PropuestaDto>();
+    string periodo = ViewBag.Periodo as string ?? string.Empty;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sire" asp-action="Index">SIRE</a></li>
+    <li class="breadcrumb-item active">RVIE</li>
+}
+
+<h4 class="mb-3"><i class="bi bi-receipt-cutoff me-2"></i>Registro de Ventas (RVIE)</h4>
+
+<form asp-controller="Sire" asp-action="Ventas" method="get" class="row g-2 mb-3">
+    <div class="col-sm-4">
+        <select class="form-select" name="periodo" onchange="this.form.submit()">
+            @foreach (var p in periodos)
+            {
+                <option value="@p.Periodo" selected="@(p.Periodo == periodo)">@p.Periodo - @p.Descripcion</option>
+            }
+        </select>
+    </div>
+</form>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <form asp-action="AceptarPropuesta" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="periodo" value="@periodo" />
+        <input type="hidden" name="tipo" value="ventas" />
+        <button class="btn btn-success btn-sm" type="submit"><i class="bi bi-check-circle"></i> Aceptar</button>
+    </form>
+
+    <form asp-action="ReemplazarPropuesta" method="post" enctype="multipart/form-data" class="d-flex gap-2">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="periodo" value="@periodo" />
+        <input type="hidden" name="tipo" value="ventas" />
+        <input type="file" name="archivo" class="form-control form-control-sm" />
+        <button class="btn btn-warning btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Reemplazar</button>
+    </form>
+
+    <form asp-action="CerrarPeriodo" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="periodo" value="@periodo" />
+        <input type="hidden" name="tipo" value="ventas" />
+        <button class="btn btn-danger btn-sm" type="submit"><i class="bi bi-lock"></i> Cerrar</button>
+    </form>
+
+    <a asp-action="DescargarConstancia" asp-route-periodo="@periodo" asp-route-tipo="ventas" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-download"></i> Constancia
+    </a>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Serie</th>
+                <th>Número</th>
+                <th>Cliente</th>
+                <th class="text-end">Total</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="7" class="text-center text-muted">Sin registros del periodo.</td></tr>
+        }
+        else
+        {
+            foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.FechaEmision</td>
+                    <td>@item.TipoComprobante</td>
+                    <td>@item.SerieComprobante</td>
+                    <td>@item.NumeroComprobante</td>
+                    <td>@item.RazonSocialCliente</td>
+                    <td class="text-end">@item.ImporteTotal.ToString("N2")</td>
+                    <td>@item.Estado</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
