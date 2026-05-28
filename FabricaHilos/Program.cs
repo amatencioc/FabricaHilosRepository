@@ -21,6 +21,10 @@ using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
 using FabricaHilos.Services.Sistemas;
 using FabricaHilos.Services.Produccion.Planeamiento;
+using FabricaHilos.Sire.Interfaces;
+using FabricaHilos.Sire.Options;
+using FabricaHilos.Sire.Services;
+using FabricaHilos.Sire.Services.Mock;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -164,6 +168,22 @@ builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
+
+var sireOptions = builder.Configuration.GetSection("Sire").Get<SireOptions>() ?? new SireOptions();
+builder.Services.Configure<SireOptions>(builder.Configuration.GetSection("Sire"));
+
+if (sireOptions.UseMock)
+{
+    builder.Services.AddSingleton<ISireAuthService, SireAuthServiceMock>();
+    builder.Services.AddSingleton<ISireVentasService, SireVentasServiceMock>();
+    builder.Services.AddSingleton<ISireComprasService, SireComprasServiceMock>();
+}
+else
+{
+    builder.Services.AddHttpClient<ISireAuthService, SireAuthService>();
+    builder.Services.AddHttpClient<ISireVentasService, SireVentasService>();
+    builder.Services.AddHttpClient<ISireComprasService, SireComprasService>();
+}
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;

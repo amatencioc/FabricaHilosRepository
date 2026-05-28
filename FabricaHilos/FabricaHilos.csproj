@@ -81,6 +81,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FabricaHilos.Notificaciones\FabricaHilos.Notificaciones.csproj" />
+    <ProjectReference Include="..\FabricaHilos.Sire\FabricaHilos.Sire.csproj" />
   </ItemGroup>
 
   <ItemGroup>

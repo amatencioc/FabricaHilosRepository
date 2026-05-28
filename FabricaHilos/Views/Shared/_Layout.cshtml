@@ -197,9 +197,12 @@
                     </ul>
                 </li>
                 }
-                @if (menus.Facturacion)
+                @if (menus.Facturacion || menus.SireFlag)
                 {
                 <li class="sidebar-section">FINANZAS</li>
+                }
+                @if (menus.Facturacion)
+                {
                 <li>
                     <a asp-controller="Facturacion" asp-action="Index" class="sidebar-link @(ctrl == "Facturacion" ? "active" : "")">
                         <i class="bi bi-receipt"></i> Facturación
@@ -224,6 +227,27 @@
                     </ul>
                 </li>
                 }
+                @if (menus.SireFlag)
+                {
+                <li>
+                    <a asp-controller="Sire" asp-action="Index" class="sidebar-link @(ctrl == "Sire" ? "active" : "")">
+                        <i class="bi bi-journal-text"></i> SIRE
+                    </a>
+                    <ul class="list-unstyled ps-3">
+                        <li>
+                            <a asp-controller="Sire" asp-action="Ventas" class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Ventas" ? "active" : "")">
+                                <i class="bi bi-receipt-cutoff"></i> RVIE
+                            </a>
+                        </li>
+                        <li>
+                            <a asp-controller="Sire" asp-action="Compras" class="sidebar-link sidebar-sublink @(ctrl == "Sire" && act == "Compras" ? "active" : "")">
+                                <i class="bi bi-cart-check"></i> RCE
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                }
+
                 @if (menus.Ventas)
                 {
                 <li class="sidebar-section">COMERCIAL</li>

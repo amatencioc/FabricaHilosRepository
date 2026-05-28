@@ -132,6 +132,8 @@ public class MenuService : IMenuService
                 "FacturacionImportarFacturas",
                 "FacturacionListaDocumentos"),
 
+            SireFlag = global.SireFlag && TieneAlguno("Sire", "SireFlag"),
+
             Ventas = TieneAlguno(
                 "Ventas",
                 "VentasConsultaTC",
@@ -338,6 +340,7 @@ public class MenuService : IMenuService
         if (menus.Produccion)       return ("Produccion",       "Index", null, null);
         if (menus.Sgc)              return ("Sgc",              "Index", null, null);
         if (menus.Facturacion)      return ("Facturacion",      "Index", null, null);
+        if (menus.SireFlag)         return ("Sire",             "Index", null, null);
         if (menus.Ventas)           return ("Ventas",           "Index", null, null);
         if (menus.Seguridad)        return ("Inspeccion",       "Index", null, null);
         if (menus.RecursosHumanos)  return ("RecursosHumanos",  "Index", null, null);

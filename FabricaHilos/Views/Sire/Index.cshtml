@@ -1,0 +1,67 @@
+@model IReadOnlyList<FabricaHilos.Controllers.SirePeriodoDashboardItem>
+@{
+    ViewData["Title"] = "SIRE";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">SIRE</li>
+}
+
+<h4 class="mb-3"><i class="bi bi-journal-text me-2"></i>Dashboard SIRE</h4>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-receipt-cutoff fs-1 text-primary"></i>
+                <h6 class="mt-2 mb-1">RVIE (Ventas)</h6>
+                <a asp-controller="Sire" asp-action="Ventas" class="btn btn-outline-primary btn-sm">Ver propuesta</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-cart-check fs-1 text-success"></i>
+                <h6 class="mt-2 mb-1">RCE (Compras)</h6>
+                <a asp-controller="Sire" asp-action="Compras" class="btn btn-outline-success btn-sm">Ver propuesta</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-light"><strong>Estado por periodo</strong></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Periodo</th>
+                        <th>Descripción</th>
+                        <th>Estado RVIE</th>
+                        <th>Estado RCE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="4" class="text-center text-muted py-3">Sin periodos disponibles.</td></tr>
+                }
+                else
+                {
+                    foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>@item.Periodo</td>
+                            <td>@item.Descripcion</td>
+                            <td>@item.EstadoRvie</td>
+                            <td>@item.EstadoRce</td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
