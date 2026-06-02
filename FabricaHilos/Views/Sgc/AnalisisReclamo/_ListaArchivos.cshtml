@@ -1,0 +1,89 @@
+@model FabricaHilos.Models.Sgc.ListaArchivosVm
+
+@if (Model.Archivos.Any())
+{
+    <h6 class="text-muted small text-uppercase mb-2">
+        <i class="bi bi-paperclip me-1"></i>Archivos adjuntos (@Model.Archivos.Count)
+    </h6>
+    <ul class="list-group list-group-flush mb-2 small">
+        @foreach (var a in Model.Archivos)
+        {
+            <li class="list-group-item d-flex align-items-center gap-2 px-0 py-1">
+                <i class="bi @a.Icono fs-5 text-muted flex-shrink-0"></i>
+                <div class="flex-grow-1 text-truncate" title="@a.NombreOrig">@a.NombreOrig</div>
+                <span class="text-muted text-nowrap">@a.TamanioTexto</span>
+                <div class="d-flex gap-1 flex-shrink-0">
+                    @if (a.EsVisualizableInline)
+                    {
+                        <a href="@Url.Action("VerArchivo", "AnalisisReclamo", new { idArchivo = a.IdArchivo })"
+                           target="_blank" class="btn btn-sm btn-outline-@Model.CssClase py-0"
+                           title="Ver archivo">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    }
+                    <a href="@Url.Action("VerArchivo", "AnalisisReclamo", new { idArchivo = a.IdArchivo, descargar = true })"
+                       class="btn btn-sm btn-outline-secondary py-0" title="Descargar">
+                        <i class="bi bi-download"></i>
+                    </a>
+                    @if (Model.PuedeEliminar)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0"
+                                title="Eliminar"
+                                data-bs-toggle="modal" data-bs-target="#modalEliminarArchivo"
+                                data-archivo-id="@a.IdArchivo"
+                                data-reclamo-id="@Model.IdReclamo"
+                                data-nombre="@a.NombreOrig">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    }
+                </div>
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <p class="text-muted small fst-italic mb-2">Sin archivos adjuntos.</p>
+}
+
+@if (Model.PuedeEliminar)
+{
+    <!-- Modal Eliminar Archivo — solo se renderiza si hay permiso para eliminar -->
+    @if (!ViewData.ContainsKey("_modalEliminarArchivoRendered"))
+    {
+        ViewData["_modalEliminarArchivoRendered"] = true;
+        <div class="modal fade" id="modalEliminarArchivo" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form asp-action="EliminarArchivo" asp-controller="AnalisisReclamo" method="post" id="frmEliminarArchivo">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="idArchivo"  id="inputElimArchivoId" value="" />
+                        <input type="hidden" name="idReclamo"  id="inputElimReclamoId" value="" />
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title"><i class="bi bi-trash me-2"></i>Eliminar Archivo</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>¿Está seguro de eliminar el archivo <strong><span id="lblElimArchivoNombre"></span></strong>?</p>
+                            <p class="text-muted small mb-0">Esta acción es irreversible.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="bi bi-trash me-1"></i>Eliminar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script>
+        document.getElementById('modalEliminarArchivo').addEventListener('show.bs.modal', function (e) {
+            var btn = e.relatedTarget;
+            document.getElementById('inputElimArchivoId').value  = btn.getAttribute('data-archivo-id');
+            document.getElementById('inputElimReclamoId').value  = btn.getAttribute('data-reclamo-id');
+            document.getElementById('lblElimArchivoNombre').textContent = btn.getAttribute('data-nombre');
+        });
+        </script>
+    }
+}

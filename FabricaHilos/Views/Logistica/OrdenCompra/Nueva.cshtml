@@ -887,8 +887,11 @@
         var inp = document.getElementById(inputId);
         var hid = document.getElementById(hiddenId);
         var lst = document.getElementById(listaId);
+        var idx = -1;
+
         function build(q) {
             lst.innerHTML = '';
+            idx = -1;
             var fil = q ? datos.filter(function(d){ return d.txt.toLowerCase().includes(q.toLowerCase()); }) : datos;
             if (!fil.length) { lst.innerHTML='<li class="list-group-item disabled small text-muted py-1 px-2">Sin resultados</li>'; return; }
             fil.forEach(function(d) {
@@ -897,14 +900,38 @@
                 li.style.cursor = 'pointer';
                 li.textContent = d.txt;
                 li.addEventListener('mousedown', function(e) {
-                    e.preventDefault(); inp.value = d.txt; hid.value = d.val; lst.classList.add('d-none');
+                    e.preventDefault(); inp.value = d.txt; hid.value = d.val; lst.classList.add('d-none'); idx = -1;
                 });
                 lst.appendChild(li);
             });
         }
-        inp.addEventListener('focus',  function() { build(''); lst.classList.remove('d-none'); });
+
+        function marcar(items) {
+            items.forEach(function(el, i) { el.classList.toggle('active', i === idx); });
+            if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        function seleccionarActivo() {
+            var items = lst.querySelectorAll('.list-group-item-action');
+            if (idx >= 0 && items[idx]) items[idx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        }
+
+        inp.addEventListener('focus',  function() { build(this.value.trim()); lst.classList.remove('d-none'); });
         inp.addEventListener('input',  function() { hid.value=''; build(this.value.trim()); lst.classList.remove('d-none'); });
-        inp.addEventListener('blur',   function() { setTimeout(function(){ lst.classList.add('d-none'); }, 150); });
+        inp.addEventListener('blur',   function() { setTimeout(function(){ lst.classList.add('d-none'); idx = -1; }, 150); });
+        inp.addEventListener('keydown', function(e) {
+            var items = lst.querySelectorAll('.list-group-item-action');
+            if (lst.classList.contains('d-none') || !items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); marcar(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault(); idx = Math.max(idx - 1, 0); marcar(items);
+            } else if (e.key === 'Enter' && idx >= 0) {
+                e.preventDefault(); seleccionarActivo();
+            } else if (e.key === 'Escape') {
+                lst.classList.add('d-none'); idx = -1;
+            }
+        });
     }
 
     var datosProveedores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(

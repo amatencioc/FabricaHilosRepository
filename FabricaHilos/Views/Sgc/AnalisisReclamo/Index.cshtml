@@ -1,0 +1,203 @@
+﻿@model IEnumerable<FabricaHilos.Models.Sgc.ReclamoDto>
+
+@{
+    ViewData["Title"] = "Análisis de Reclamos";
+    string? buscar = ViewBag.Buscar as string;
+    string? estado = ViewBag.Estado as string;
+    bool hayFiltros = !string.IsNullOrEmpty(buscar) || !string.IsNullOrEmpty(estado);
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item active">Análisis de Reclamos</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-chat-square-warning me-2"></i>Análisis de Reclamos
+    </h4>
+    <a asp-controller="AnalisisReclamo" asp-action="Nuevo" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo Reclamo
+    </a>
+</div>
+
+<!-- Alertas de TempData -->
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-circle me-1"></i>@TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Filtros -->
+<div class="card card-dashboard mb-3">
+    <div class="card-body py-2">
+        <form method="get" asp-action="Index" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="text" name="buscar" value="@buscar"
+                   class="form-control form-control-sm"
+                   placeholder="Buscar por cliente, asunto, vendedor..."
+                   style="max-width:280px;" />
+
+            <select name="estado" class="form-select form-select-sm" style="max-width:175px;">
+                <option value="">-- Todos los estados --</option>
+                <option value="01" selected="@(estado == "01")">Abierto</option>
+                <option value="02" selected="@(estado == "02")">En Revisión</option>
+                <option value="03" selected="@(estado == "03")">Pend. Aprobación</option>
+                <option value="04" selected="@(estado == "04")">Aprobado</option>
+                <option value="05" selected="@(estado == "05")">Rechazado</option>
+            </select>
+
+            <button type="submit" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-search"></i> Buscar
+            </button>
+            @if (hayFiltros)
+            {
+                <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-lg me-1"></i>Limpiar
+                </a>
+            }
+            <span class="ms-auto text-muted small">@Model.Count() registro(s)</span>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de reclamos -->
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-1"></i>
+        No se encontraron reclamos@(hayFiltros ? " con los filtros aplicados." : ".")
+    </div>
+}
+else
+{
+    <div class="card card-dashboard">
+        <div class="table-responsive">
+            <table class="table table-corporate table-hover table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:60px">#</th>
+                        <th>Cliente</th>
+                        <th class="d-none d-md-table-cell">Asunto</th>
+                        <th class="d-none d-lg-table-cell">Contacto</th>
+                        <th>Estado</th>
+                        <th class="d-none d-md-table-cell">Vendedor</th>
+                        <th class="d-none d-lg-table-cell">Fecha</th>
+                        <th style="width:90px" class="text-center">Evidencia</th>
+                        <th style="width:100px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model)
+                    {
+                        <tr>
+                            <td class="fw-semibold text-muted small">@r.IdReclamo</td>
+                            <td>
+                                <div class="fw-semibold text-truncate" style="max-width:180px"
+                                     title="@r.NomCliente">
+                                    @(r.NomCliente ?? r.CodCliente)
+                                </div>
+                                <small class="text-muted">@r.CodCliente</small>
+                            </td>
+                            <td class="d-none d-md-table-cell">
+                                <span class="text-truncate d-inline-block" style="max-width:220px"
+                                      title="@r.Asunto">@r.Asunto</span>
+                            </td>
+                            <td class="d-none d-lg-table-cell small">
+                                <div>@r.Contacto</div>
+                                <div class="text-muted">@r.Telefono</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@r.EstadoBadge">
+                                    <i class="bi @r.EstadoIcono me-1"></i>@r.EstadoDescripcion
+                                </span>
+                            </td>
+                            <td class="d-none d-md-table-cell small text-muted">@r.UsuVendedor</td>
+                            <td class="d-none d-lg-table-cell small text-muted">
+                                @r.FchCreacion.ToString("dd/MM/yyyy")
+                            </td>
+                            <td class="text-center">
+                                <span class="badge rounded-pill bg-light text-secondary border me-1"
+                                      title="Descargos">
+                                    <i class="bi bi-chat-left-text"></i> @r.TotalDescargos
+                                </span>
+                                <span class="badge rounded-pill bg-light text-secondary border"
+                                      title="Archivos adjuntos">
+                                    <i class="bi bi-paperclip"></i> @r.TotalArchivos
+                                </span>
+                            </td>
+                            <td>
+                                <a asp-action="Detalle" asp-route-id="@r.IdReclamo"
+                                   class="btn btn-sm btn-outline-primary" title="Ver detalle">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-1"
+                                        title="Eliminar reclamo"
+                                        data-bs-toggle="modal" data-bs-target="#modalEliminarReclamo"
+                                        data-id="@r.IdReclamo"
+                                        data-cliente="@(r.NomCliente ?? r.CodCliente)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<!-- Modal Eliminar Reclamo -->
+<div class="modal fade" id="modalEliminarReclamo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="EliminarReclamo" method="post" id="frmEliminarReclamo">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idReclamo" id="inputEliminarId" value="" />
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="bi bi-trash me-2"></i>Eliminar Reclamo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Está seguro de eliminar el reclamo <strong>#<span id="lblEliminarId"></span></strong> del cliente <strong><span id="lblEliminarCliente"></span></strong>?</p>
+                    <div class="alert alert-warning py-2 small mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Se borrarán todos los descargos, archivos y la carpeta física. Esta acción es irreversible.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash me-1"></i>Eliminar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+document.getElementById('modalEliminarReclamo').addEventListener('show.bs.modal', function (e) {
+    var btn = e.relatedTarget;
+    document.getElementById('inputEliminarId').value = btn.getAttribute('data-id');
+    document.getElementById('lblEliminarId').textContent  = btn.getAttribute('data-id');
+    document.getElementById('lblEliminarCliente').textContent = btn.getAttribute('data-cliente');
+});
+</script>
+}

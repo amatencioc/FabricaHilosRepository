@@ -1,0 +1,385 @@
+﻿@model FabricaHilos.Models.Sgc.CrearReclamoRequest
+
+@{
+    ViewData["Title"] = "Nuevo Reclamo";
+    var clientes = ViewBag.Clientes as List<FabricaHilos.Models.Sgc.ClienteComboDto>
+                   ?? new List<FabricaHilos.Models.Sgc.ClienteComboDto>();
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="AnalisisReclamo" asp-action="Index">Análisis de Reclamos</a></li>
+    <li class="breadcrumb-item active">Nuevo Reclamo</li>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="section-title mb-0">
+        <i class="bi bi-plus-circle me-2"></i>Nuevo Reclamo
+    </h4>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    var errores = ViewData.ModelState.Values
+        .SelectMany(v => v.Errors)
+        .Select(e => string.IsNullOrWhiteSpace(e.ErrorMessage) ? e.Exception?.Message : e.ErrorMessage)
+        .Where(msg => !string.IsNullOrWhiteSpace(msg))
+        .ToList();
+
+    @if (errores.Any())
+    {
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <strong>Corrija los siguientes errores:</strong>
+            <ul class="mb-0 mt-1">
+                @foreach (var msg in errores)
+                {
+                    <li>@msg</li>
+                }
+            </ul>
+        </div>
+    }
+}
+
+<form asp-action="Nuevo" method="post" enctype="multipart/form-data" id="frmNuevoReclamo">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-3">
+
+        <!-- ── Columna izquierda: datos del reclamo ── -->
+        <div class="col-lg-7">
+            <div class="card card-dashboard h-100">
+                <div class="card-header bg-primary text-white py-2">
+                    <i class="bi bi-info-circle me-1"></i>Datos del Reclamo
+                </div>
+                <div class="card-body">
+
+                    <!-- Cliente (autocomplete) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Cliente <span class="text-danger">*</span>
+                        </label>
+                        <!-- Campo oculto con el código -->
+                        <input type="hidden" id="CodCliente" name="CodCliente" value="@Model.CodCliente" required />
+                        <input type="hidden" id="NomCliente" name="NomCliente" value="@Model.NomCliente" />
+
+                        <!-- Búsqueda de cliente -->
+                        <div class="input-group">
+                            <input type="text" id="buscarCliente" class="form-control"
+                                   placeholder="Escriba nombre o código del cliente..."
+                                   value="@(string.IsNullOrEmpty(Model.NomCliente) ? Model.CodCliente : Model.NomCliente)"
+                                   autocomplete="off" />
+                            <button type="button" class="btn btn-outline-secondary" id="btnLimpiarCliente"
+                                    title="Limpiar selección">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <!-- Resultados del autocomplete -->
+                        <div id="resultadosCliente" class="list-group position-absolute z-3 shadow-sm"
+                             style="max-height:220px; overflow-y:auto; width:calc(100% - 2rem); display:none;">
+                        </div>
+                        <div id="clienteSeleccionado" class="mt-1 small
+                             @(string.IsNullOrEmpty(Model.CodCliente) ? "d-none" : "text-success")">
+                            <i class="bi bi-check-circle me-1"></i>
+                            <span id="lblClienteSeleccionado">@Model.NomCliente (@Model.CodCliente)</span>
+                        </div>
+                    </div>
+
+                    <!-- Contacto -->
+                    <div class="mb-3">
+                        <label asp-for="Contacto" class="form-label fw-semibold">
+                            Persona de Contacto <span class="text-danger">*</span>
+                        </label>
+                        <input asp-for="Contacto" class="form-control"
+                               placeholder="Nombre de la persona de contacto en el cliente"
+                               maxlength="100" required />
+                        <span asp-validation-for="Contacto" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Teléfono -->
+                    <div class="mb-3">
+                        <label asp-for="Telefono" class="form-label fw-semibold">
+                            Teléfono <span class="text-danger">*</span>
+                        </label>
+                        <input asp-for="Telefono" class="form-control"
+                               placeholder="Teléfono o celular de contacto"
+                               maxlength="30" required
+                               inputmode="tel" type="tel" />
+                        <span asp-validation-for="Telefono" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Asunto -->
+                    <div class="mb-3">
+                        <label asp-for="Asunto" class="form-label fw-semibold">
+                            Asunto / Descripción del Reclamo <span class="text-danger">*</span>
+                        </label>
+                        <input asp-for="Asunto" class="form-control"
+                               placeholder="Resumen del reclamo"
+                               maxlength="400" required />
+                        <span asp-validation-for="Asunto" class="text-danger small"></span>
+                    </div>
+
+                    <!-- Descargo del vendedor -->
+                    <div class="mb-3">
+                        <label asp-for="Descargo" class="form-label fw-semibold">
+                            Descargo del Vendedor <span class="text-danger">*</span>
+                        </label>
+                        <textarea asp-for="Descargo" class="form-control" rows="5"
+                                  placeholder="Detalle de lo ocurrido, contexto, acciones tomadas..."
+                                  required></textarea>
+                        <span asp-validation-for="Descargo" class="text-danger small"></span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Columna derecha: adjuntar archivos ── -->
+        <div class="col-lg-5">
+            <div class="card card-dashboard h-100">
+                <div class="card-header bg-secondary text-white py-2">
+                    <i class="bi bi-paperclip me-1"></i>Evidencia del Vendedor
+                    <small class="ms-2 opacity-75">(opcional)</small>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Puede adjuntar fotos, videos, audios, correos, documentos u otro tipo de archivo.
+                        Tamaño máximo: <strong>100 MB</strong> por archivo.
+                    </p>
+
+                    <!-- Zona de drag & drop + botones de cámara -->
+                    <div id="dropZone" class="border border-2 border-dashed rounded-3 p-3 text-center mb-3
+                                              bg-light" style="cursor:pointer; min-height:120px;">
+                        <i class="bi bi-cloud-upload fs-2 text-muted"></i>
+                        <p class="mb-1 text-muted small">Arrastra archivos aquí o usa los botones</p>
+                        <div class="d-flex justify-content-center gap-2 flex-wrap mt-2">
+                            <!-- Botón principal (cualquier archivo) -->
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    onclick="document.getElementById('inputArchivos').click()">
+                                <i class="bi bi-folder2-open me-1"></i>Adjuntar archivo
+                            </button>
+                            <!-- Botón cámara (foto/video directo — mobile) -->
+                            <button type="button" class="btn btn-sm btn-outline-success d-md-none"
+                                    onclick="document.getElementById('inputCamara').click()"
+                                    title="Tomar foto o grabar video con la cámara">
+                                <i class="bi bi-camera me-1"></i>Cámara
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Input oculto principal (PC + mobile, cualquier archivo) -->
+                    <input type="file" id="inputArchivos" name="Archivos" multiple
+                           accept="*/*" class="d-none" />
+
+                    <!-- Input oculto de cámara (solo mobile — capture abre cámara directamente) -->
+                    <input type="file" id="inputCamara" name="Archivos" multiple
+                           accept="image/*,video/*" capture="environment" class="d-none" />
+
+                    <!-- Lista de archivos seleccionados -->
+                    <div id="listaArchivos" class="d-none">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="fw-semibold text-muted">Archivos seleccionados:</small>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                                    onclick="limpiarArchivos()">
+                                <i class="bi bi-trash me-1"></i>Limpiar
+                            </button>
+                        </div>
+                        <ul id="ulArchivos" class="list-group list-group-flush small"></ul>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /row -->
+
+    <!-- Botones de acción -->
+    <div class="d-flex gap-2 justify-content-end mt-3">
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            <i class="bi bi-x-lg me-1"></i>Cancelar
+        </a>
+        <button type="submit" class="btn btn-primary" id="btnGuardar">
+            <i class="bi bi-floppy me-1"></i>Guardar Reclamo
+        </button>
+    </div>
+
+</form>
+
+<!-- Modal: cliente no seleccionado -->
+<div class="modal fade" id="modalSinCliente" tabindex="-1" aria-labelledby="modalSinClienteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="modalSinClienteLabel">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Cliente requerido
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Debe seleccionar un cliente de la lista antes de guardar el reclamo.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-warning" data-bs-dismiss="modal" id="btnModalSinClienteOk">
+                    Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+// ── Selección de archivos ────────────────────────────────────────────────────
+let archivosSeleccionados = new DataTransfer();
+
+function actualizarListaUI() {
+    const lista    = document.getElementById('listaArchivos');
+    const ulItems  = document.getElementById('ulArchivos');
+    const files    = archivosSeleccionados.files;
+
+    if (files.length === 0) {
+        lista.classList.add('d-none');
+        ulItems.innerHTML = '';
+        return;
+    }
+    lista.classList.remove('d-none');
+    ulItems.innerHTML = '';
+    for (let i = 0; i < files.length; i++) {
+        const f    = files[i];
+        const size = f.size < 1048576
+            ? (f.size / 1024).toFixed(1) + ' KB'
+            : (f.size / 1048576).toFixed(2) + ' MB';
+        const li   = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center px-0 py-1';
+        li.innerHTML = `
+            <span class="text-truncate me-2" style="max-width:220px" title="${f.name}">
+                <i class="bi bi-paperclip text-muted me-1"></i>${f.name}
+            </span>
+            <span class="text-muted text-nowrap">${size}</span>`;
+        ulItems.appendChild(li);
+    }
+
+    // Sincronizar con el input real
+    document.getElementById('inputArchivos').files = archivosSeleccionados.files;
+}
+
+function agregarArchivos(nuevosArchivos) {
+    for (const f of nuevosArchivos) {
+        archivosSeleccionados.items.add(f);
+    }
+    actualizarListaUI();
+}
+
+function limpiarArchivos() {
+    archivosSeleccionados = new DataTransfer();
+    document.getElementById('inputArchivos').value  = '';
+    document.getElementById('inputCamara').value    = '';
+    actualizarListaUI();
+}
+
+// Input principal
+document.getElementById('inputArchivos').addEventListener('change', function() {
+    agregarArchivos(this.files);
+});
+
+// Input cámara
+document.getElementById('inputCamara').addEventListener('change', function() {
+    agregarArchivos(this.files);
+    // Resetear para permitir re-capturar
+    this.value = '';
+});
+
+// Drag & drop
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('border-primary', 'bg-white');
+});
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('border-primary', 'bg-white');
+});
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('border-primary', 'bg-white');
+    agregarArchivos(e.dataTransfer.files);
+});
+
+// ── Autocomplete de clientes ──────────────────────────────────────────────────
+let timerCliente = null;
+
+document.getElementById('buscarCliente').addEventListener('input', function() {
+    clearTimeout(timerCliente);
+    const q = this.value.trim();
+    if (q.length < 2) {
+        ocultarResultados();
+        return;
+    }
+    timerCliente = setTimeout(() => buscarClientes(q), 300);
+});
+
+document.getElementById('buscarCliente').addEventListener('blur', function() {
+    setTimeout(ocultarResultados, 200);
+});
+
+document.getElementById('btnLimpiarCliente').addEventListener('click', function() {
+    document.getElementById('CodCliente').value = '';
+    document.getElementById('NomCliente').value = '';
+    document.getElementById('buscarCliente').value = '';
+    document.getElementById('clienteSeleccionado').classList.add('d-none');
+    ocultarResultados();
+});
+
+async function buscarClientes(q) {
+    try {
+        const res  = await fetch(`@Url.Action("BuscarClientes", "AnalisisReclamo")?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        mostrarResultados(data);
+    } catch { /* silencioso */ }
+}
+
+function mostrarResultados(clientes) {
+    const div = document.getElementById('resultadosCliente');
+    div.innerHTML = '';
+    if (!clientes.length) { ocultarResultados(); return; }
+
+    clientes.slice(0, 20).forEach(c => {
+        const btn = document.createElement('button');
+        btn.type      = 'button';
+        btn.className = 'list-group-item list-group-item-action py-1 px-2 small';
+        btn.innerHTML = `<strong>${c.codCliente}</strong> — ${c.nomCliente}`;
+        btn.addEventListener('mousedown', () => seleccionarCliente(c));
+        div.appendChild(btn);
+    });
+    div.style.display = 'block';
+}
+
+function seleccionarCliente(c) {
+    document.getElementById('CodCliente').value = c.codCliente;
+    document.getElementById('NomCliente').value = c.nomCliente;
+    document.getElementById('buscarCliente').value = c.nomCliente + ' (' + c.codCliente + ')';
+    document.getElementById('lblClienteSeleccionado').textContent = c.nomCliente + ' (' + c.codCliente + ')';
+    document.getElementById('clienteSeleccionado').classList.remove('d-none');
+    ocultarResultados();
+}
+
+function ocultarResultados() {
+    document.getElementById('resultadosCliente').style.display = 'none';
+}
+
+// ── Validación antes de enviar ────────────────────────────────────────────────
+document.getElementById('frmNuevoReclamo').addEventListener('submit', function(e) {
+    if (!document.getElementById('CodCliente').value) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('modalSinCliente'));
+        modal.show();
+        document.getElementById('btnModalSinClienteOk').addEventListener('click', function() {
+            document.getElementById('buscarCliente').focus();
+        }, { once: true });
+    }
+});
+</script>
+}

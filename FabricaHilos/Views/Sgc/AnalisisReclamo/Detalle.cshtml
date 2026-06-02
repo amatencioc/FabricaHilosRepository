@@ -1,0 +1,625 @@
+﻿@model FabricaHilos.Models.Sgc.ReclamoDetalleVm
+@using FabricaHilos.Models.Sgc
+
+@{
+    ViewData["Title"] = $"Reclamo #{Model.Reclamo.IdReclamo}";
+    var reclamo   = Model.Reclamo;
+    var descargos = Model.Descargos.ToList();
+    var archivos  = Model.Archivos.ToList();
+
+    var descVendedor  = descargos.Where(d => d.Rol == "VD").ToList();
+    var descAnalista  = descargos.Where(d => d.Rol == "AC").ToList();
+    var descGerente   = descargos.Where(d => d.Rol == "GE").ToList();
+    var archVendedor  = archivos.Where(a => a.Rol == "VD").ToList();
+    var archAnalista  = archivos.Where(a => a.Rol == "AC").ToList();
+    var archGerente   = archivos.Where(a => a.Rol == "GE").ToList();
+
+    bool esFinalizado          = reclamo.EsFinalizado;
+    bool mostrarSeccionGerente = reclamo.Estado is "03" or "04" or "05";
+
+    string geCardBorder = reclamo.Estado == "05" ? "border-danger"
+                        : reclamo.Estado == "04" ? "border-success"
+                                                 : "border-secondary";
+    string geHeaderBg   = reclamo.Estado == "05" ? "bg-danger text-white"
+                        : reclamo.Estado == "04" ? "bg-success text-white"
+                                                 : "bg-secondary text-white";
+
+    // Modo del usuario actual
+    bool modoVendedor  = Model.PuedeEscribirVD;
+    bool modoAnalista  = Model.PuedeEscribirAC;
+    bool modoGerente   = Model.PuedeAprobarGE;
+    bool modoObserver  = Model.EsSoloLectura;
+
+    // Etiqueta de modo para mostrar en el badge del encabezado
+    string modoBadgeText  = modoVendedor ? "Modo Vendedor"
+                          : modoAnalista ? "Modo Analista de Calidad"
+                          : modoGerente  ? "Modo Gerencia"
+                                         : "Solo Lectura";
+    string modoBadgeColor = modoVendedor ? "primary"
+                          : modoAnalista ? "warning"
+                          : modoGerente  ? "success"
+                                         : "secondary";
+    string modoIcono      = modoVendedor ? "bi-person-badge"
+                          : modoAnalista ? "bi-shield-check"
+                          : modoGerente  ? "bi-person-check-fill"
+                                         : "bi-eye";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="AnalisisReclamo" asp-action="Index">Análisis de Reclamos</a></li>
+    <li class="breadcrumb-item active">Reclamo #@reclamo.IdReclamo</li>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     ENCABEZADO DEL RECLAMO
+     ══════════════════════════════════════════════════════ -->
+<div class="card card-dashboard mb-3 shadow-sm">
+    <div class="card-body pb-2">
+        <div class="row g-2 align-items-start">
+
+            <div class="col-md-8">
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-square-warning text-warning me-1"></i>
+                        Reclamo #@reclamo.IdReclamo
+                    </h5>
+                    <span class="badge bg-@reclamo.EstadoBadge fs-6">
+                        <i class="bi @reclamo.EstadoIcono me-1"></i>@reclamo.EstadoDescripcion
+                    </span>
+                    <span class="badge bg-@modoBadgeColor @(modoBadgeColor == "warning" ? "text-dark" : "") fs-6">
+                        <i class="bi @modoIcono me-1"></i>@modoBadgeText
+                    </span>
+                </div>
+
+                <div class="mb-1 fw-semibold">
+                    @(reclamo.NomCliente ?? reclamo.CodCliente)
+                    <small class="text-muted fw-normal ms-1">(@reclamo.CodCliente)</small>
+                </div>
+                <div class="text-muted mb-1 small">
+                    <i class="bi bi-person me-1"></i>@reclamo.Contacto
+                    &nbsp;<i class="bi bi-telephone ms-2 me-1"></i>@reclamo.Telefono
+                </div>
+                <div>@reclamo.Asunto</div>
+            </div>
+
+            <div class="col-md-4 text-md-end">
+                <div class="small text-muted mb-1">
+                    <i class="bi bi-person-badge me-1"></i>Vendedor: <strong>@reclamo.UsuVendedor</strong>
+                </div>
+                <div class="small text-muted mb-1">
+                    <i class="bi bi-calendar me-1"></i>Creado: @reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm")
+                </div>
+                @if (!string.IsNullOrEmpty(reclamo.UsuAnalista))
+                {
+                    <div class="small text-muted mb-1">
+                        <i class="bi bi-person-check me-1"></i>Analista: <strong>@reclamo.UsuAnalista</strong>
+                    </div>
+                }
+                @if (reclamo.FchAnalisis.HasValue)
+                {
+                    <div class="small text-muted mb-2">
+                        <i class="bi bi-calendar-check me-1"></i>Revisado: @reclamo.FchAnalisis.Value.ToString("dd/MM/yyyy HH:mm")
+                    </div>
+                }
+
+                <!-- Controles de estado -->
+                <div class="d-flex gap-1 justify-content-md-end flex-wrap mt-2">
+                    @if (modoVendedor && reclamo.Estado == "01")
+                    {
+                        <button type="button" class="btn btn-sm btn-info text-white"
+                                data-bs-toggle="modal" data-bs-target="#modalEnviarCalidad">
+                            <i class="bi bi-box-arrow-right me-1"></i>Enviar a Calidad
+                        </button>
+                    }
+                    @if (modoAnalista && reclamo.Estado == "02")
+                    {
+                        <button type="button" class="btn btn-sm btn-success"
+                                data-bs-toggle="modal" data-bs-target="#modalEscalarGerencia">
+                            <i class="bi bi-send me-1"></i>Escalar a Gerencia
+                        </button>
+                    }
+                    @if (modoAnalista && reclamo.Estado == "03")
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-warning"
+                                data-bs-toggle="modal" data-bs-target="#modalReabrir">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir
+                        </button>
+                    }
+                    @if (modoGerente && reclamo.Estado == "03")
+                    {
+                        <button type="button" class="btn btn-sm btn-success"
+                                data-bs-toggle="modal" data-bs-target="#modalAprobar">
+                            <i class="bi bi-check-circle me-1"></i>Aprobar
+                        </button>
+                        <button type="button" class="btn btn-sm btn-danger"
+                                data-bs-toggle="modal" data-bs-target="#modalRechazar">
+                            <i class="bi bi-x-circle me-1"></i>Rechazar
+                        </button>
+                    }
+                    <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>Volver
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Alertas -->
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-circle me-1"></i>@TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     CUERPO: VENDEDOR | ANALISTA DE CALIDAD
+     ══════════════════════════════════════════════════════ -->
+<div class="row g-3">
+
+    <!-- ═══════════════ SECCIÓN VENDEDOR ═══════════════ -->
+    @{
+        // Estilo visual según si el usuario activo puede escribir en esta sección
+        var vdActivo       = modoVendedor && reclamo.Estado == "01";
+        var vdBorderColor  = vdActivo ? "border-primary" : "border-secondary";
+        var vdHeaderBg     = vdActivo ? "bg-primary text-white" : "bg-secondary bg-opacity-25 text-secondary";
+        var vdCardBg       = vdActivo ? "" : "bg-light";
+    }
+    <div class="col-xl-6">
+        <div class="card card-dashboard @vdBorderColor @vdCardBg h-100 shadow-sm">
+            <div class="card-header @vdHeaderBg py-2 d-flex align-items-center gap-2">
+                <i class="bi bi-person-lines-fill"></i>
+                <span class="fw-semibold">Sección Vendedor</span>
+                @if (vdActivo)
+                {
+                    <span class="badge bg-white text-primary ms-auto small">
+                        <i class="bi bi-pencil-square me-1"></i>Puede editar
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary bg-opacity-50 text-white ms-auto small">
+                        <i class="bi bi-eye me-1"></i>Solo lectura
+                    </span>
+                }
+            </div>
+            <div class="card-body">
+
+                <!-- Descargos del vendedor -->
+                @if (descVendedor.Any())
+                {
+                    <h6 class="text-muted small text-uppercase mb-2">
+                        <i class="bi bi-chat-left-text me-1"></i>Descargos
+                    </h6>
+                    <div class="mb-3">
+                        @foreach (var d in descVendedor)
+                        {
+                            <div class="card card-dashboard border-start border-primary border-3 shadow-none mb-2">
+                                <div class="card-body py-2 px-3">
+                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                        <span><i class="bi bi-person me-1"></i><strong>@d.Usuario</strong></span>
+                                        <span>@d.FchRegistro.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                    <p class="mb-0 small" style="white-space:pre-line">@d.Descripcion</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted small fst-italic mb-3">Sin descargos del vendedor.</p>
+                }
+
+                <!-- Archivos del vendedor -->
+                @await Html.PartialAsync("_ListaArchivos", new ListaArchivosVm
+                {
+                    Archivos      = archVendedor,
+                    IdReclamo     = reclamo.IdReclamo,
+                    CssClase      = "primary",
+                    PuedeEliminar = modoVendedor && reclamo.Estado == "01"
+                })
+
+                <!-- Formularios: solo si es el vendedor y el reclamo aún no fue enviado a Calidad -->
+                @if (modoVendedor && reclamo.Estado == "01")
+                {
+                    <hr class="my-3" />
+                    <h6 class="text-primary small text-uppercase mb-2">
+                        <i class="bi bi-plus-circle me-1"></i>Agregar descargo
+                    </h6>
+                    <form asp-action="AgregarDescargo" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                        <input type="hidden" name="Rol" value="VD" />
+                        <textarea name="Descripcion" class="form-control form-control-sm mb-2" rows="3"
+                                  placeholder="Ingrese el descargo del vendedor..." required></textarea>
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-send me-1"></i>Enviar Descargo
+                        </button>
+                    </form>
+
+                    <hr class="my-3" />
+
+                    @await Html.PartialAsync("_FormSubirArchivos", new FormSubirArchivosVm
+                    {
+                        IdReclamo     = reclamo.IdReclamo,
+                        Rol           = "VD",
+                        BtnColorClase = "primary",
+                        LabelTexto    = "Adjuntar evidencia del vendedor"
+                    })
+                }
+                else if (modoVendedor)
+                {
+                    <div class="alert alert-info py-2 mt-2 mb-0 small">
+                        <i class="bi bi-send-check me-1"></i>
+                        Ya enviaste este reclamo a Calidad — no puedes agregar más contenido.
+                    </div>
+                }
+                else if (esFinalizado)
+                {
+                    <p class="text-muted small fst-italic mt-2">
+                        <i class="bi bi-lock me-1"></i>Reclamo finalizado — sección bloqueada.
+                    </p>
+                }
+                else
+                {
+                    <div class="alert alert-secondary py-2 mt-2 mb-0 small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Solo el vendedor <strong>@reclamo.UsuVendedor</strong> puede agregar contenido en esta sección.
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ SECCIÓN ANALISTA ═══════════════ -->
+    @{
+        var acActivo       = modoAnalista;
+        var acBorderColor  = acActivo ? "border-warning" : "border-secondary";
+        var acHeaderBg     = acActivo ? "bg-warning text-dark" : "bg-secondary bg-opacity-25 text-secondary";
+        var acCardBg       = acActivo ? "" : "bg-light";
+    }
+    <div class="col-xl-6">
+        <div class="card card-dashboard @acBorderColor @acCardBg h-100 shadow-sm">
+            <div class="card-header @acHeaderBg py-2 d-flex align-items-center gap-2">
+                <i class="bi bi-shield-check"></i>
+                <span class="fw-semibold">Sección Analista de Calidad</span>
+                @if (acActivo)
+                {
+                    <span class="badge bg-dark text-warning ms-auto small">
+                        <i class="bi bi-pencil-square me-1"></i>Puede editar
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary bg-opacity-50 text-white ms-auto small">
+                        <i class="bi bi-eye me-1"></i>Solo lectura
+                    </span>
+                }
+            </div>
+            <div class="card-body">
+
+                <!-- Descargos del analista -->
+                @if (descAnalista.Any())
+                {
+                    <h6 class="text-muted small text-uppercase mb-2">
+                        <i class="bi bi-chat-left-text me-1"></i>Descargos
+                    </h6>
+                    <div class="mb-3">
+                        @foreach (var d in descAnalista)
+                        {
+                            <div class="card card-dashboard border-start border-warning border-3 shadow-none mb-2">
+                                <div class="card-body py-2 px-3">
+                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                        <span><i class="bi bi-person me-1"></i><strong>@d.Usuario</strong></span>
+                                        <span>@d.FchRegistro.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                    <p class="mb-0 small" style="white-space:pre-line">@d.Descripcion</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted small fst-italic mb-3">Sin descargos del analista.</p>
+                }
+
+                <!-- Archivos del analista -->
+                @await Html.PartialAsync("_ListaArchivos", new ListaArchivosVm
+                {
+                    Archivos      = archAnalista,
+                    IdReclamo     = reclamo.IdReclamo,
+                    CssClase      = "warning",
+                    PuedeEliminar = modoAnalista
+                })
+
+                <!-- Formularios: solo si es el analista -->
+                @if (modoAnalista)
+                {
+                    <hr class="my-3" />
+                    <h6 class="text-warning small text-uppercase mb-2">
+                        <i class="bi bi-plus-circle me-1"></i>Agregar descargo / observación
+                    </h6>
+                    <form asp-action="AgregarDescargo" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                        <input type="hidden" name="Rol" value="AC" />
+                        <textarea name="Descripcion" class="form-control form-control-sm mb-2" rows="3"
+                                  placeholder="Ingrese el análisis o descargo del analista de calidad..." required></textarea>
+                        <button type="submit" class="btn btn-warning btn-sm text-dark">
+                            <i class="bi bi-send me-1"></i>Enviar Descargo
+                        </button>
+                    </form>
+
+                    <hr class="my-3" />
+
+                    @await Html.PartialAsync("_FormSubirArchivos", new FormSubirArchivosVm
+                    {
+                        IdReclamo     = reclamo.IdReclamo,
+                        Rol           = "AC",
+                        BtnColorClase = "warning",
+                        LabelTexto    = "Adjuntar evidencia del analista"
+                    })
+                }
+                else if (esFinalizado)
+                {
+                    <p class="text-muted small fst-italic mt-2">
+                        <i class="bi bi-lock me-1"></i>Reclamo finalizado — sección bloqueada.
+                    </p>
+                }
+                else if (modoVendedor || modoGerente || modoObserver)
+                {
+                    <div class="alert alert-secondary py-2 mt-2 mb-0 small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Solo un Analista de Calidad puede agregar contenido en esta sección.
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+
+</div><!-- /row -->
+
+<!-- ══════════════════════════════════════════════════════
+     SECCIÓN GERENTE
+     ══════════════════════════════════════════════════════ -->
+@if (mostrarSeccionGerente)
+{
+    @if (reclamo.Estado == "05" && !string.IsNullOrWhiteSpace(reclamo.MotRechazo))
+    {
+        <div class="alert alert-danger mt-3" role="alert">
+            <h6 class="alert-heading"><i class="bi bi-x-circle-fill me-2"></i>Reclamo RECHAZADO</h6>
+            <hr />
+            <p class="mb-0"><strong>Motivo:</strong> @reclamo.MotRechazo</p>
+            @if (!string.IsNullOrEmpty(reclamo.UsuGerente))
+            {
+                <small class="text-muted">Por: @reclamo.UsuGerente — @reclamo.FchAprobacion?.ToString("dd/MM/yyyy HH:mm")</small>
+            }
+        </div>
+    }
+    @if (reclamo.Estado == "04")
+    {
+        <div class="alert alert-success mt-3" role="alert">
+            <h6 class="alert-heading"><i class="bi bi-check-circle-fill me-2"></i>Reclamo APROBADO</h6>
+            @if (!string.IsNullOrEmpty(reclamo.UsuGerente))
+            {
+                <p class="mb-0"><small>Aprobado por: <strong>@reclamo.UsuGerente</strong> — @reclamo.FchAprobacion?.ToString("dd/MM/yyyy HH:mm")</small></p>
+            }
+        </div>
+    }
+
+    <div class="card card-dashboard @geCardBorder mt-3 shadow-sm">
+        <div class="card-header @geHeaderBg py-2">
+            <i class="bi bi-person-check-fill me-1"></i>Sección Gerente
+            <span class="badge bg-light text-dark ms-2">
+                <i class="bi @reclamo.EstadoIcono me-1"></i>@reclamo.EstadoDescripcion
+            </span>
+        </div>
+        <div class="card-body">
+
+            @if (descGerente.Any())
+            {
+                <h6 class="text-muted small text-uppercase mb-2">
+                    <i class="bi bi-chat-left-text me-1"></i>Observaciones del Gerente
+                </h6>
+                <div class="mb-3">
+                    @foreach (var d in descGerente)
+                    {
+                        <div class="card card-dashboard border-start border-success border-3 shadow-none mb-2">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span><i class="bi bi-person-check-fill me-1"></i><strong>@d.Usuario</strong></span>
+                                    <span>@d.FchRegistro.ToString("dd/MM/yyyy HH:mm")</span>
+                                </div>
+                                <p class="mb-0 small" style="white-space:pre-line">@d.Descripcion</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="text-muted small fst-italic mb-3">Sin observaciones del gerente aún.</p>
+            }
+
+            @await Html.PartialAsync("_ListaArchivos", new ListaArchivosVm
+            {
+                Archivos      = archGerente,
+                IdReclamo     = reclamo.IdReclamo,
+                CssClase      = "success",
+                PuedeEliminar = false
+            })
+        </div>
+    </div>
+}
+
+<!-- Modal Enviar a Calidad -->
+<div class="modal fade" id="modalEnviarCalidad" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CambiarEstado" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idReclamo" value="@reclamo.IdReclamo" />
+                <input type="hidden" name="estado" value="02" />
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-right me-2"></i>Enviar a Calidad</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Confirma que desea enviar el reclamo <strong>#@reclamo.IdReclamo</strong> al área de Calidad para su revisión?</p>
+                    <p class="text-muted small mb-0">Una vez enviado, no podrá agregar más contenido como vendedor.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info btn-sm text-white">
+                        <i class="bi bi-box-arrow-right me-1"></i>Confirmar Envío
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Escalar a Gerencia -->
+<div class="modal fade" id="modalEscalarGerencia" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CambiarEstado" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idReclamo" value="@reclamo.IdReclamo" />
+                <input type="hidden" name="estado" value="03" />
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="bi bi-send me-2"></i>Escalar a Gerencia</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Confirma que desea escalar el reclamo <strong>#@reclamo.IdReclamo</strong> a Gerencia para su aprobación?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-send me-1"></i>Confirmar Escalado
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Reabrir -->
+<div class="modal fade" id="modalReabrir" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CambiarEstado" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idReclamo" value="@reclamo.IdReclamo" />
+                <input type="hidden" name="estado" value="01" />
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Reabrir Reclamo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Confirma que desea reabrir el reclamo <strong>#@reclamo.IdReclamo</strong>?</p>
+                    <p class="text-muted small mb-0">El reclamo volverá al estado <strong>Abierto</strong> para que el vendedor pueda editarlo.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning btn-sm text-dark">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Confirmar Reapertura
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aprobar -->
+<div class="modal fade" id="modalAprobar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Aprobar" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="bi bi-check-circle me-2"></i>Aprobar Reclamo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Confirme que este reclamo es válido y será marcado como <strong>Aprobado</strong>.</p>
+                    <label class="form-label fw-semibold">Observación <span class="text-muted fw-normal">(opcional)</span></label>
+                    <textarea name="Observacion" class="form-control" rows="3"
+                              placeholder="Observación de cierre del gerente..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle me-1"></i>Confirmar Aprobación
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Rechazar -->
+<div class="modal fade" id="modalRechazar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Rechazar" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Rechazar Reclamo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold">Motivo del rechazo <span class="text-danger">*</span></label>
+                    <textarea name="Motivo" class="form-control" rows="4"
+                              placeholder="Indique el motivo por el cual este reclamo no es válido..."
+                              required minlength="10"></textarea>
+                    <small class="text-muted">Mínimo 10 caracteres.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-x-circle me-1"></i>Confirmar Rechazo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+setTimeout(() => {
+    document.querySelectorAll('.alert.fade.show').forEach(el => {
+        const bsAlert = bootstrap.Alert.getOrCreateInstance(el);
+        bsAlert.close();
+    });
+}, 5000);
+</script>
+}
+
+

@@ -29,6 +29,7 @@ public class MenuOptions
     public bool SgcDespachos { get; set; } = true;
     public bool SgcDespachosRelacionFacCli { get; set; } = true;
     public bool SgcDespachosCargarTC { get; set; } = true;
+    public bool SgcAnalisisReclamo { get; set; } = true;
 
     // ── Submenús: Facturación ─────────────────────────────────────────────
     public bool FacturacionImportarFacturas { get; set; } = true;
@@ -113,6 +114,7 @@ public class MenuOptions
         SgcDespachos = true,
         SgcDespachosRelacionFacCli = true,
         SgcDespachosCargarTC = true,
+        SgcAnalisisReclamo = true,
 
         FacturacionImportarFacturas = true,
         FacturacionListaDocumentos  = true,

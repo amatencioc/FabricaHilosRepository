@@ -289,22 +289,31 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
     public async Task<List<ItemOrdDestinoDto>> ObtenerDestinosPorOcAsync(string tipoDocto, int serie, long numPed)
     {
         var result = new List<ItemOrdDestinoDto>();
-        // Trae todos los ítems de ITEMREQ vinculados a esta OC via DESP_ITEMREQ,
-        // incluyendo su destino, solicitante, cantidad y precio
-        string sql = $@"SELECT D.NUMREQ, D.ORDEN,
-                               I.COD_ART, I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
-                               I.CANTIDAD, I.PRECIO,
-                               (I.CANTIDAD * I.PRECIO) AS IMPORTE
+        // D.CANTIDAD  = cantidad asignada a esta OC desde cada ítem del REQ (DESP_ITEMREQ)
+        // IO.PRECIO   = precio real del ítem en la orden (ITEMORD), coherente con la fila principal
+        // I.*destino  = destino y solicitante del ítem del requerimiento (ITEMREQ)
+        string sql = $@"SELECT D.NUMREQ, D.ORDEN, D.ORDEN_REF,
+                               D.COD_ART, I.TP_DESTINO, I.DESTINO, I.COD_SOLICITA,
+                               D.CANTIDAD,
+                               IO.PRECIO,
+                               (D.CANTIDAD * IO.PRECIO) AS IMPORTE
                         FROM {S}DESP_ITEMREQ D
-                        JOIN {S}ITEMREQ I ON I.NUMREQ = D.NUMREQ AND I.ORDEN = D.ORDEN
-                        WHERE D.NRO_DOC_REF = TO_CHAR(:numPed)
-                        ORDER BY D.NUMREQ ASC, I.ORDEN ASC";
+                        JOIN {S}ITEMREQ I  ON  I.NUMREQ = D.NUMREQ
+                                           AND I.ORDEN  = D.ORDEN
+                        JOIN {S}ITEMORD IO ON  IO.TIPO_DOCTO = D.TIP_DOC_REF
+                                           AND IO.SERIE      = D.SER_DOC_REF
+                                           AND IO.NUM_PED    = D.NRO_DOC_REF
+                                           AND IO.ORDEN      = D.ORDEN_REF
+                        WHERE D.NRO_DOC_REF = :numPed
+                          AND D.TIP_DOC_REF = :tipoDocto
+                        ORDER BY D.NUMREQ ASC, D.ORDEN_REF ASC, D.ORDEN ASC";
         try
         {
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
             await using var cmd = new OracleCommand(sql, conn) { BindByName = true };
-            cmd.Parameters.Add("numPed", OracleDbType.Decimal).Value = numPed;
+            cmd.Parameters.Add("numPed",    OracleDbType.Decimal).Value    = numPed;
+            cmd.Parameters.Add("tipoDocto", OracleDbType.Varchar2).Value   = tipoDocto;
             await using var reader = await cmd.ExecuteReaderAsync() as OracleDataReader
                 ?? throw new InvalidOperationException();
             while (await reader.ReadAsync())
@@ -313,6 +322,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                 {
                     NumReq      = GetLong(reader, "NUMREQ"),
                     OrdenReq    = GetInt(reader,  "ORDEN"),
+                    OrdenRef    = GetInt(reader,  "ORDEN_REF"),
                     CodArt      = GetStr(reader,  "COD_ART"),
                     TpDestino   = GetStr(reader,  "TP_DESTINO"),
                     Destino     = GetStr(reader,  "DESTINO"),

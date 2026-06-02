@@ -425,8 +425,10 @@
                                 : "—";
                             // Sub-filas de destino para este artículo en este req
                             var reqKey = it.NumReq.HasValue && it.NumReq > 0 ? it.NumReq.Value : 0;
+                            // Matching exacto por ITEMORD.ORDEN (OrdenRef) para evitar
+                            // que ítems repetidos del mismo artículo compartan destinos
                             var destsItem = destinosOc
-                                .Where(d => d.NumReq == reqKey && d.CodArt == it.CodArt)
+                                .Where(d => d.OrdenRef == it.Orden)
                                 .OrderBy(d => d.OrdenReq)
                                 .ToList();
                             <tr>

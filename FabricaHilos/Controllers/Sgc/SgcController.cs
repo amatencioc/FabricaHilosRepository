@@ -96,6 +96,20 @@ namespace FabricaHilos.Controllers.Sgc
                 modulos.Add(moduloDespachos);
             }
 
+            // Análisis de Reclamos
+            if (menus.SgcAnalisisReclamo)
+            {
+                modulos.Add(new SgcModuloDto
+                {
+                    Nombre = "Análisis de Reclamos",
+                    Descripcion = "Registro, seguimiento y análisis de reclamos de clientes.",
+                    Icono = "bi-clipboard2-x",
+                    ColorClase = "text-danger",
+                    Controller = "AnalisisReclamo",
+                    Action = "Index"
+                });
+            }
+
             return View(modulos);
         }
 

@@ -145,7 +145,7 @@
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>
                 <li>
-                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" ? "active" : "")">
+                    <a asp-controller="Sgc" asp-action="Index" class="sidebar-link @(ctrl == "Sgc" || ctrl == "RelacionFacCli" || ctrl == "CargaTc" || ctrl == "AnalisisReclamo" ? "active" : "")">
                         <i class="bi bi-file-earmark-text"></i> SGC
                     </a>
                     <ul class="list-unstyled ps-3">
@@ -175,20 +175,28 @@
                                     </a>
                                 </li>
                                 }
-                                @if (menus.SgcDespachosCargarTC)
-                                {
-                                <li>
-                                    <a asp-controller="CargaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTc" ? "active" : "")">
-                                        <i class="bi bi-file-earmark-arrow-up"></i> Cargar TC
-                                    </a>
+                                        @if (menus.SgcDespachosCargarTC)
+                                                {
+                                                <li>
+                                                    <a asp-controller="CargaTc" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "CargaTc" ? "active" : "")">
+                                                        <i class="bi bi-file-earmark-arrow-up"></i> Cargar TC
+                                                    </a>
+                                                </li>
+                                                }
+                                            </ul>
+                                        </li>
+                                        }
+                                        @if (menus.SgcAnalisisReclamo)
+                                        {
+                                        <li>
+                                            <a asp-controller="AnalisisReclamo" asp-action="Index" class="sidebar-link sidebar-sublink @(ctrl == "AnalisisReclamo" ? "active" : "")">
+                                                <i class="bi bi-clipboard2-x"></i> Análisis de Reclamos
+                                            </a>
+                                        </li>
+                                        }
+                                    </ul>
                                 </li>
                                 }
-                            </ul>
-                        </li>
-                        }
-                    </ul>
-                </li>
-                }
                 @if (menus.Facturacion || menus.SireFlag)
                 {
                 <li class="sidebar-section">FINANZAS</li>

@@ -1,0 +1,125 @@
+@model FabricaHilos.Models.Sgc.FormSubirArchivosVm
+
+@{
+    // IDs únicos para evitar conflicto entre el form del vendedor y del analista
+    var uid       = Model.Rol.ToLower();
+    var inputId   = $"inputArch_{uid}";
+    var camaraId  = $"inputCam_{uid}";
+    var dropId    = $"drop_{uid}";
+    var listaId   = $"lista_{uid}";
+    var ulId      = $"ul_{uid}";
+}
+
+<h6 class="text-muted small text-uppercase mb-2">
+    <i class="bi bi-cloud-upload me-1"></i>@Model.LabelTexto
+</h6>
+
+<form asp-action="SubirArchivos" asp-controller="AnalisisReclamo"
+      method="post" enctype="multipart/form-data" id="frm_@uid">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="IdReclamo" value="@Model.IdReclamo" />
+    <input type="hidden" name="Rol" value="@Model.Rol" />
+
+    <!-- Zona drag & drop -->
+    <div id="@dropId" class="border border-2 border-dashed rounded-3 p-3 text-center mb-2 bg-light"
+         style="cursor:pointer; min-height:90px;">
+        <i class="bi bi-cloud-upload fs-3 text-muted"></i>
+        <p class="mb-1 text-muted small">Arrastra archivos aquí o usa los botones</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap mt-1">
+            <button type="button" class="btn btn-sm btn-outline-@Model.BtnColorClase"
+                    onclick="document.getElementById('@inputId').click()">
+                <i class="bi bi-folder2-open me-1"></i>Adjuntar
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success d-md-none"
+                    onclick="document.getElementById('@camaraId').click()"
+                    title="Tomar foto o grabar video">
+                <i class="bi bi-camera me-1"></i>Cámara
+            </button>
+        </div>
+    </div>
+
+    <!-- Input oculto principal -->
+    <input type="file" id="@inputId" name="Archivos" multiple accept="*/*" class="d-none" />
+    <!-- Input cámara (mobile) -->
+    <input type="file" id="@camaraId" name="Archivos" multiple
+           accept="image/*,video/*,audio/*" capture="environment" class="d-none" />
+
+    <!-- Lista de archivos seleccionados -->
+    <div id="@listaId" class="d-none mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <small class="fw-semibold text-muted">Seleccionados:</small>
+            <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                    onclick="limpiarArch_@(uid)()">
+                <i class="bi bi-trash me-1"></i>Limpiar
+            </button>
+        </div>
+        <ul id="@ulId" class="list-group list-group-flush small"></ul>
+    </div>
+
+    <button type="submit" class="btn btn-sm btn-@Model.BtnColorClase @(Model.BtnColorClase == "warning" ? "text-dark" : "")"
+            id="btnSubir_@uid" disabled>
+        <i class="bi bi-upload me-1"></i>Subir archivos
+    </button>
+</form>
+
+<script>
+(function () {
+    let dt_@(uid) = new DataTransfer();
+
+    function actualizarUI_@(uid)() {
+        const files = dt_@(uid).files;
+        const lista = document.getElementById('@listaId');
+        const ul    = document.getElementById('@ulId');
+        const btn   = document.getElementById('btnSubir_@(uid)');
+
+        btn.disabled = files.length === 0;
+        if (files.length === 0) { lista.classList.add('d-none'); ul.innerHTML = ''; return; }
+
+        lista.classList.remove('d-none');
+        ul.innerHTML = '';
+        for (let i = 0; i < files.length; i++) {
+            const f    = files[i];
+            const size = f.size < 1048576
+                ? (f.size / 1024).toFixed(1) + ' KB'
+                : (f.size / 1048576).toFixed(2) + ' MB';
+            const li   = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between px-0 py-1';
+            li.innerHTML = `<span class="text-truncate me-2" style="max-width:180px" title="${f.name}">
+                <i class="bi bi-paperclip text-muted me-1"></i>${f.name}</span>
+                <span class="text-muted text-nowrap">${size}</span>`;
+            ul.appendChild(li);
+        }
+        // sincronizar con el input real
+        document.getElementById('@inputId').files = dt_@(uid).files;
+    }
+
+    function agregarArch_@(uid)(files) {
+        for (const f of files) dt_@(uid).items.add(f);
+        actualizarUI_@(uid)();
+    }
+
+    window.limpiarArch_@(uid) = function() {
+        dt_@(uid) = new DataTransfer();
+        document.getElementById('@inputId').value = '';
+        document.getElementById('@camaraId').value = '';
+        actualizarUI_@(uid)();
+    };
+
+    document.getElementById('@inputId').addEventListener('change', function() {
+        agregarArch_@(uid)(this.files);
+    });
+    document.getElementById('@camaraId').addEventListener('change', function() {
+        agregarArch_@(uid)(this.files);
+        this.value = '';
+    });
+
+    const dz = document.getElementById('@dropId');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('border-primary','bg-white'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('border-primary','bg-white'));
+    dz.addEventListener('drop', e => {
+        e.preventDefault();
+        dz.classList.remove('border-primary','bg-white');
+        agregarArch_@(uid)(e.dataTransfer.files);
+    });
+})();
+</script>

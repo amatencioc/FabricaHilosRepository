@@ -81,6 +81,8 @@ public class ItemOrdDestinoDto
 {
     public long      NumReq        { get; set; }
     public int       OrdenReq      { get; set; }
+    /// <summary>ITEMORD.ORDEN (= DESP_ITEMREQ.ORDEN_REF). Clave de matching con ItemOrdDto.Orden.</summary>
+    public int       OrdenRef      { get; set; }
     public string?   CodArt        { get; set; }
     public string?   TpDestino     { get; set; }
     public string?   Destino       { get; set; }

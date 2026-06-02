@@ -1,6 +1,105 @@
 // Fábrica de Hilos - JavaScript del sitio
 
 // =============================================
+// AUTOCOMPLETE GLOBAL — FabAutoComplete
+// =============================================
+/**
+ * Inicializa navegación por teclado (↑ ↓ Enter Escape) en un combo
+ * de tipo autocomplete/filtro.
+ *
+ * Uso:
+ *   FabAutoComplete.init(wrapSelector);
+ *   FabAutoComplete.initAll();   // inicializa todos los .autocomplete-wrap del DOM
+ *
+ * Estructura HTML esperada:
+ *   <div class="autocomplete-wrap">
+ *     <input type="text" ... />
+ *     <div class="autocomplete-list">
+ *       <div class="ac-item" data-value="..." data-name="...">...</div>
+ *     </div>
+ *   </div>
+ *
+ * Los ítems pueden usar mousedown o click para seleccionar.
+ * La función no interfiere con esa lógica — solo agrega teclado.
+ */
+const FabAutoComplete = (() => {
+    /**
+     * Inicializa un único wrap.
+     * @param {Element} wrap - Elemento raíz .autocomplete-wrap
+     */
+    function init(wrap) {
+        if (!wrap || wrap._fabAcInited) return;
+        wrap._fabAcInited = true;
+
+        const input = wrap.querySelector('input');
+        const list  = wrap.querySelector('.autocomplete-list');
+        if (!input || !list) return;
+
+        let idx = -1;
+
+        // Resetear índice cuando cambia el texto
+        input.addEventListener('input', () => { idx = -1; });
+
+        // Navegación por teclado
+        input.addEventListener('keydown', (e) => {
+            const items = list.querySelectorAll('.ac-item');
+            const visible = list.style.display !== 'none' && items.length > 0;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (!visible) return;
+                idx = Math.min(idx + 1, items.length - 1);
+                _marcar(items, idx, list);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!visible) return;
+                idx = Math.max(idx - 1, 0);
+                _marcar(items, idx, list);
+            } else if (e.key === 'Enter') {
+                if (visible && idx >= 0) {
+                    e.preventDefault();
+                    // Dispara mousedown para compatibilidad con el handler existente
+                    items[idx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                }
+                // Si idx === -1, deja que el form haga submit normalmente
+            } else if (e.key === 'Escape') {
+                list.style.display = 'none';
+                list.innerHTML     = '';
+                idx = -1;
+            }
+        });
+
+        // Resetear índice cuando la lista se actualiza (MutationObserver)
+        new MutationObserver(() => { idx = -1; })
+            .observe(list, { childList: true });
+    }
+
+    /**
+     * Inicializa todos los .autocomplete-wrap presentes en el documento.
+     * Seguro llamarlo varias veces (idempotente por _fabAcInited).
+     */
+    function initAll() {
+        document.querySelectorAll('.autocomplete-wrap').forEach(init);
+    }
+
+    function _marcar(items, currentIdx, list) {
+        items.forEach((el, i) => {
+            el.classList.toggle('ac-active', i === currentIdx);
+        });
+        // Hacer scroll al ítem activo si está fuera del área visible
+        const active = items[currentIdx];
+        if (active) {
+            active.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    // Auto-inicializar cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', initAll);
+
+    return { init, initAll };
+})();
+
+// =============================================
 // OVERLAY DE CARGA GLOBAL
 // =============================================
 const GlobalLoading = {

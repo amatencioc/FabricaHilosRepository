@@ -125,7 +125,8 @@ public class MenuService : IMenuService
                 "SgcPedidos",
                 "SgcDespachos",
                 "SgcDespachosRelacionFacCli",
-                "SgcDespachosCargarTC"),
+                "SgcDespachosCargarTC",
+                "SgcAnalisisReclamo"),
 
             Facturacion = TieneAlguno(
                 "Facturacion",
@@ -209,6 +210,9 @@ public class MenuService : IMenuService
 
             SgcDespachosCargarTC = global.SgcDespachosCargarTC
                 && TieneAlguno("Sgc", "SgcDespachos", "SgcDespachosCargarTC"),
+
+            SgcAnalisisReclamo = global.SgcAnalisisReclamo
+                && TieneAlguno("Sgc", "SgcAnalisisReclamo"),
 
             // ?? Sub-módulos: Facturación ??????????????????????????????????????
             FacturacionImportarFacturas = global.FacturacionImportarFacturas
