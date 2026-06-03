@@ -2,34 +2,30 @@
 
 @if (Model.Archivos.Any())
 {
-    <h6 class="text-muted small text-uppercase mb-2">
-        <i class="bi bi-paperclip me-1"></i>Archivos adjuntos (@Model.Archivos.Count)
-    </h6>
     <ul class="list-group list-group-flush mb-2 small">
         @foreach (var a in Model.Archivos)
         {
             <li class="list-group-item d-flex align-items-center gap-2 px-0 py-1">
-                <i class="bi @a.Icono fs-5 text-muted flex-shrink-0"></i>
+                <i class="bi @a.Icono @a.IconoColor fs-5 flex-shrink-0"></i>
                 <div class="flex-grow-1 text-truncate" title="@a.NombreOrig">@a.NombreOrig</div>
-                <span class="text-muted text-nowrap">@a.TamanioTexto</span>
+                <span class="text-muted text-nowrap me-1">@a.TamanioTexto</span>
                 <div class="d-flex gap-1 flex-shrink-0">
-                    @if (a.EsVisualizableInline)
-                    {
-                        <a href="@Url.Action("VerArchivo", "AnalisisReclamo", new { idArchivo = a.IdArchivo })"
-                           target="_blank" class="btn btn-sm btn-outline-@Model.CssClase py-0"
-                           title="Ver archivo">
-                            <i class="bi bi-eye"></i>
-                        </a>
-                    }
+                    <button type="button"
+                            class="btn btn-sm btn-outline-@Model.CssClase py-0 btn-ver-archivo"
+                            title="@(a.EsVisualizableInline ? "Ver archivo" : "Información del archivo")"
+                            data-nombre="@a.NombreOrig"
+                            data-tipo="@a.TipoVisor"
+                            data-url="@Url.Action("VerArchivo", "AnalisisReclamo", new { idArchivo = a.IdArchivo })">
+                        <i class="bi @(a.EsVisualizableInline ? "bi-eye" : "bi-info-circle")"></i>
+                    </button>
                     <a href="@Url.Action("VerArchivo", "AnalisisReclamo", new { idArchivo = a.IdArchivo, descargar = true })"
-                       class="btn btn-sm btn-outline-secondary py-0" title="Descargar">
+                       class="btn btn-sm btn-outline-secondary py-0" title="Descargar" data-no-loading="true">
                         <i class="bi bi-download"></i>
                     </a>
                     @if (Model.PuedeEliminar)
                     {
-                        <button type="button" class="btn btn-sm btn-outline-danger py-0"
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 btn-eliminar-archivo"
                                 title="Eliminar"
-                                data-bs-toggle="modal" data-bs-target="#modalEliminarArchivo"
                                 data-archivo-id="@a.IdArchivo"
                                 data-reclamo-id="@Model.IdReclamo"
                                 data-nombre="@a.NombreOrig">
@@ -48,7 +44,6 @@ else
 
 @if (Model.PuedeEliminar)
 {
-    <!-- Modal Eliminar Archivo — solo se renderiza si hay permiso para eliminar -->
     @if (!ViewData.ContainsKey("_modalEliminarArchivoRendered"))
     {
         ViewData["_modalEliminarArchivoRendered"] = true;
@@ -78,12 +73,340 @@ else
             </div>
         </div>
         <script>
-        document.getElementById('modalEliminarArchivo').addEventListener('show.bs.modal', function (e) {
-            var btn = e.relatedTarget;
-            document.getElementById('inputElimArchivoId').value  = btn.getAttribute('data-archivo-id');
-            document.getElementById('inputElimReclamoId').value  = btn.getAttribute('data-reclamo-id');
-            document.getElementById('lblElimArchivoNombre').textContent = btn.getAttribute('data-nombre');
+        document.addEventListener('DOMContentLoaded', function() {
+            var mElimEl = document.getElementById('modalEliminarArchivo');
+            if (mElimEl && mElimEl.parentElement !== document.body) {
+                document.body.appendChild(mElimEl);
+            }
+            var bsElim = bootstrap.Modal.getOrCreateInstance(mElimEl);
+            document.addEventListener('click', function(e) {
+                var btn = e.target.closest('.btn-eliminar-archivo');
+                if (!btn) return;
+                document.getElementById('inputElimArchivoId').value         = btn.getAttribute('data-archivo-id');
+                document.getElementById('inputElimReclamoId').value         = btn.getAttribute('data-reclamo-id');
+                document.getElementById('lblElimArchivoNombre').textContent = btn.getAttribute('data-nombre');
+                bsElim.show();
+            });
         });
         </script>
     }
+}
+
+@* ── Visor de archivos: overlay CSS puro (sin Bootstrap Modal) ── *@
+@if (!ViewData.ContainsKey("_modalVisorArchivoRendered"))
+{
+    ViewData["_modalVisorArchivoRendered"] = true;
+
+    @* Estilos del overlay *@
+    <style>
+    #visorOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1055;
+        background: rgba(0,0,0,.65);
+        align-items: center;
+        justify-content: center;
+    }
+    #visorPanel {
+        background: #fff;
+        border-radius: .5rem;
+        width: 90vw;
+        max-width: 1100px;
+        max-height: 92vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 1rem 3rem rgba(0,0,0,.5);
+    }
+    #visorHeader {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .5rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+        background: #f8f9fa;
+        flex-shrink: 0;
+    }
+    #visorTitulo {
+        flex: 1;
+        font-size: .95rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    #visorBody {
+        flex: 1;
+        overflow-y: auto;
+        background: #212529;
+        min-height: 0;
+    }
+    #visorCargando {
+        height: 75vh;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #aaa;
+        text-align: center;
+    }
+    #visorContenido {
+        display: none;
+        width: 100%;
+        height: 75vh;
+    }
+    </style>
+
+    @* Overlay *@
+    <div id="visorOverlay" aria-labelledby="visorTitulo" tabindex="-1">
+        <div id="visorPanel">
+            <div id="visorHeader">
+                <i class="bi bi-file-earmark me-1" id="visorIcono"></i>
+                <span id="visorTitulo"></span>
+                <a id="visorBtnDescargar" href="#" class="btn btn-sm btn-outline-secondary ms-auto me-2" title="Descargar" data-no-loading="true">
+                    <i class="bi bi-download me-1"></i>Descargar
+                </a>
+                <button type="button" id="visorBtnCerrar" class="btn-close" aria-label="Cerrar"></button>
+            </div>
+            <div id="visorBody">
+                <div id="visorCargando">
+                    <i class="bi bi-hourglass-split" style="font-size:2rem;margin-bottom:.75rem;"></i>
+                    <div style="font-size:.85rem;">Cargando...</div>
+                </div>
+                <div id="visorContenido"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/mammoth/mammoth.browser.min.js"></script>
+    <script>
+    (function initVisor() {
+        // Guard global: solo inicializar UNA vez por página, sin importar cuántas
+        // veces se incluya el partial (_ListaArchivos se renderiza 3 veces en Detalle.cshtml)
+        if (window.__visorArchivoInited) return;
+        window.__visorArchivoInited = true;
+
+        // Eliminar overlays duplicados: conservar solo el primero del DOM
+        var todosOverlays = document.querySelectorAll('#visorOverlay');
+        for (var i = 1; i < todosOverlays.length; i++) {
+            todosOverlays[i].parentNode && todosOverlays[i].parentNode.removeChild(todosOverlays[i]);
+        }
+
+        var overlay   = document.getElementById('visorOverlay');
+        var contenido = document.getElementById('visorContenido');
+        var cargando  = document.getElementById('visorCargando');
+        var lblTitulo = document.getElementById('visorTitulo');
+        var lblIcono  = document.getElementById('visorIcono');
+        var btnDesc   = document.getElementById('visorBtnDescargar');
+        var btnCerrar = document.getElementById('visorBtnCerrar');
+
+        if (!overlay || !btnCerrar) return;
+
+        // Mover al body para que el z-index no quede atrapado en un stacking context
+        if (overlay.parentElement !== document.body) {
+            document.body.appendChild(overlay);
+            // Re-obtener btnCerrar tras moverlo al body
+            btnCerrar = document.getElementById('visorBtnCerrar');
+        }
+
+        var _token = 0;
+
+        var ICONOS = {
+            imagen:'bi-file-image', video:'bi-file-play', audio:'bi-file-music',
+            pdf:'bi-file-pdf', texto:'bi-file-text', word:'bi-file-word', ninguno:'bi-file-earmark'
+        };
+
+        function iconoPorNombre(nombre) {
+            var ext = (nombre.split('.').pop() || '').toLowerCase();
+            var mapa = {
+                doc:'bi-file-word', docx:'bi-file-word',
+                xls:'bi-file-excel', xlsx:'bi-file-excel',
+                ppt:'bi-file-ppt', pptx:'bi-file-ppt',
+                zip:'bi-file-zip', rar:'bi-file-zip', '7z':'bi-file-zip',
+                eml:'bi-envelope', msg:'bi-envelope'
+            };
+            return mapa[ext] || null;
+        }
+
+        // ── Abrir ──────────────────────────────────────────────────────────────
+        function abrirVisor() {
+            document.body.style.overflow = 'hidden';
+            overlay.style.display = 'flex';
+        }
+
+        // ── Cerrar ─────────────────────────────────────────────────────────────
+        function cerrarVisor() {
+            _token++;
+            vaciarNodos();
+            contenido.style.display = 'none';
+            cargando.style.display  = 'none';
+            overlay.style.display   = 'none';
+            document.body.style.overflow = '';
+        }
+
+        // ── Limpiar nodos media ────────────────────────────────────────────────
+        function vaciarNodos() {
+            while (contenido.firstChild) {
+                var child = contenido.firstChild;
+                if (child.tagName === 'IFRAME' || child.tagName === 'VIDEO') {
+                    child.onload = null; child.onerror = null; child.onloadedmetadata = null;
+                    try { child.src = 'about:blank'; } catch(e) {}
+                } else if (child.tagName === 'AUDIO') {
+                    child.oncanplay = null; child.onerror = null;
+                    try { child.src = ''; child.load(); } catch(e) {}
+                }
+                contenido.removeChild(child);
+            }
+        }
+
+        function resetVisor() {
+            vaciarNodos();
+            contenido.style.display = 'none';
+            cargando.style.display  = 'flex';
+        }
+
+        function mostrar(tk) {
+            if (tk !== _token) return;
+            cargando.style.display  = 'none';
+            contenido.style.display = 'block';
+        }
+        function mostrarError(tk) {
+            if (tk !== _token) return;
+            cargando.style.display  = 'none';
+            contenido.innerHTML =
+                '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#fff;text-align:center;padding:3rem;">' +
+                '<i class="bi bi-exclamation-triangle-fill fs-1 mb-3 text-warning"></i>' +
+                '<p class="mb-3 text-secondary">No se pudo cargar el archivo.</p>' +
+                '<a href="' + btnDesc.href + '" class="btn btn-outline-light btn-sm visor-btn-descargar" data-no-loading="true"><i class="bi bi-download me-1"></i>Descargar</a>' +
+                '</div>';
+            contenido.style.display = 'block';
+        }
+
+        // ── Eventos de cierre ─────────────────────────────────────────────────
+        btnCerrar.addEventListener('click', cerrarVisor);
+
+        overlay.addEventListener('click', function(ev) {
+            if (ev.target === overlay) cerrarVisor();
+        });
+
+        // Cerrar visor al descargar (header o botón interno)
+        overlay.addEventListener('click', function(ev) {
+            if (ev.target.closest('#visorBtnDescargar, .visor-btn-descargar')) cerrarVisor();
+        });
+
+        document.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Escape' && overlay.style.display === 'flex') cerrarVisor();
+        });
+
+        // ── Abrir archivo ─────────────────────────────────────────────────────
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-ver-archivo');
+            if (!btn) return;
+
+            var url    = btn.getAttribute('data-url');
+            var nombre = btn.getAttribute('data-nombre');
+            var tipo   = btn.getAttribute('data-tipo');
+
+            lblTitulo.textContent = nombre;
+            lblIcono.className    = 'bi ' + (iconoPorNombre(nombre) || ICONOS[tipo] || ICONOS.ninguno) + ' me-1';
+            btnDesc.href          = url + '?descargar=true';
+
+            resetVisor();
+            var miToken = ++_token;
+            abrirVisor();
+
+            if (tipo === 'imagen') {
+                var img = new Image();
+                img.onload  = function() {
+                    if (miToken !== _token) return;
+                    img.className = 'img-fluid d-block mx-auto';
+                    img.style.cssText = 'max-height:72vh;object-fit:contain;';
+                    contenido.appendChild(img);
+                    mostrar(miToken);
+                };
+                img.onerror = function() { mostrarError(miToken); };
+                img.src = url;
+
+            } else if (tipo === 'video') {
+                var vid = document.createElement('video');
+                vid.controls = true; vid.autoplay = false;
+                vid.style.cssText = 'width:100%;max-height:72vh;';
+                vid.onloadedmetadata = function() {
+                    if (miToken !== _token) return;
+                    contenido.appendChild(vid); mostrar(miToken);
+                };
+                vid.onerror = function() { mostrarError(miToken); };
+                vid.src = url;
+
+            } else if (tipo === 'audio') {
+                var wrap = document.createElement('div');
+                wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:3rem;text-align:center;';
+                wrap.innerHTML = '<i class="bi bi-file-music text-white fs-1 mb-3"></i>';
+                var aud = document.createElement('audio');
+                aud.controls = true; aud.style.width = '100%';
+                aud.oncanplay = function() { if (miToken !== _token) return; mostrar(miToken); };
+                aud.onerror   = function() { mostrarError(miToken); };
+                aud.src = url;
+                wrap.appendChild(aud);
+                contenido.appendChild(wrap);
+                mostrar(miToken);
+
+            } else if (tipo === 'pdf') {
+                var frame = document.createElement('iframe');
+                frame.style.cssText = 'width:100%;height:72vh;border:none;';
+                frame.onload  = function() { if (miToken !== _token) return; mostrar(miToken); };
+                frame.onerror = function() { mostrarError(miToken); };
+                contenido.appendChild(frame);
+                frame.src = url;
+
+            } else if (tipo === 'texto') {
+                fetch(url)
+                    .then(function(r) { if (!r.ok) throw new Error(); return r.text(); })
+                    .then(function(txt) {
+                        if (miToken !== _token) return;
+                        var pre = document.createElement('pre');
+                        pre.textContent = txt;
+                        pre.style.cssText = 'color:#fff;padding:1rem;margin:0;white-space:pre-wrap;word-break:break-all;background:transparent;font-size:.82rem;';
+                        contenido.appendChild(pre);
+                        mostrar(miToken);
+                    })
+                    .catch(function() { mostrarError(miToken); });
+
+            } else if (tipo === 'word') {
+                fetch(url)
+                    .then(function(r) { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
+                    .then(function(buf) {
+                        if (miToken !== _token) return;
+                        return mammoth.convertToHtml({ arrayBuffer: buf });
+                    })
+                    .then(function(result) {
+                        if (!result || miToken !== _token) return;
+                        var wrap = document.createElement('div');
+                        wrap.style.cssText = 'background:#fff;color:#212529;padding:2rem 3rem;min-height:100%;font-family:Calibri,Arial,sans-serif;font-size:1rem;line-height:1.6;';
+                        wrap.innerHTML = result.value;
+                        contenido.appendChild(wrap);
+                        mostrar(miToken);
+                    })
+                    .catch(function() { mostrarError(miToken); });
+
+            } else {
+                var ext  = (nombre.split('.').pop() || '').toLowerCase();
+                var msgs = { doc:'Archivo Word (.doc)', docx:'Archivo Word (.docx)', xls:'Archivo Excel (.xls)', xlsx:'Archivo Excel (.xlsx)', ppt:'Archivo PowerPoint (.ppt)', pptx:'Archivo PowerPoint (.pptx)', zip:'Archivo comprimido (.zip)', rar:'Archivo comprimido (.rar)', '7z':'Archivo comprimido (.7z)', eml:'Correo electrónico (.eml)', msg:'Correo electrónico (.msg)' };
+                var desc  = msgs[ext] || 'Este tipo de archivo';
+                var icono = iconoPorNombre(nombre) || 'bi-file-earmark-x';
+                var div   = document.createElement('div');
+                div.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#fff;text-align:center;padding:3rem;';
+                div.innerHTML =
+                    '<i class="bi ' + icono + ' fs-1 mb-3 text-secondary"></i>' +
+                    '<p class="mb-1 fw-semibold">' + desc + '</p>' +
+                    '<p class="mb-3 text-secondary small">No puede previsualizarse. Descárguelo para abrirlo.</p>' +
+                    '<a href="' + url + '?descargar=true" class="btn btn-outline-light btn-sm visor-btn-descargar" data-no-loading="true"><i class="bi bi-download me-1"></i>Descargar archivo</a>';
+                contenido.appendChild(div);
+                mostrar(miToken);
+            }
+        });
+
+    })();
+    </script>
 }

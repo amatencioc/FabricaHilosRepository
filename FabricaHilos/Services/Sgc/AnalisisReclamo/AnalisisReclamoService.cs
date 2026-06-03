@@ -315,7 +315,7 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             cmd.Parameters.Add("contacto",   OracleDbType.Varchar2,  req.Contacto,      ParameterDirection.Input);
             cmd.Parameters.Add("telefono",   OracleDbType.Varchar2,  req.Telefono,      ParameterDirection.Input);
             cmd.Parameters.Add("asunto",     OracleDbType.Varchar2,  req.Asunto,        ParameterDirection.Input);
-            cmd.Parameters.Add("descargo",   OracleDbType.Clob,      req.Descargo,      ParameterDirection.Input);
+            cmd.Parameters.Add("descargo",   OracleDbType.Varchar2,  req.Descargo,      ParameterDirection.Input);
             cmd.Parameters.Add("usuario",    OracleDbType.Varchar2,  usuario,           ParameterDirection.Input);
             cmd.Parameters.Add("idReclamo",  OracleDbType.Decimal,   ParameterDirection.Output);
             cmd.Parameters.Add("msgerror",   OracleDbType.Varchar2,  4000, ParameterDirection.Output);
@@ -354,7 +354,7 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
 
             cmd.Parameters.Add("idReclamo",   OracleDbType.Decimal,  idReclamo,   ParameterDirection.Input);
             cmd.Parameters.Add("rol",         OracleDbType.Varchar2, rol,         ParameterDirection.Input);
-            cmd.Parameters.Add("descripcion", OracleDbType.Clob,     descripcion, ParameterDirection.Input);
+            cmd.Parameters.Add("descripcion", OracleDbType.Varchar2, descripcion, ParameterDirection.Input);
             cmd.Parameters.Add("usuario",     OracleDbType.Varchar2, usuario,     ParameterDirection.Input);
             cmd.Parameters.Add("idDescargo",  OracleDbType.Decimal,  ParameterDirection.Output);
             cmd.Parameters.Add("msgerror",    OracleDbType.Varchar2, 4000, ParameterDirection.Output);
@@ -549,7 +549,7 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             cmd.Parameters.Add("msgerror",  OracleDbType.Varchar2, 4000, ParameterDirection.Output);
 
             await cmd.ExecuteNonQueryAsync();
-            var msg = cmd.Parameters["msgerror"].Value?.ToString();
+            var msg = OraOutStr(cmd, "msgerror");
             return string.IsNullOrWhiteSpace(msg) ? null : msg;
         }
         catch (Exception ex)
@@ -572,8 +572,8 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             cmd.CommandText = $"BEGIN {S}PKG_SGC_RECLAMO.P_ELIMINAR_RECLAMO(:idReclamo,:usuario,:nombresServer,:msgerror); END;";
             cmd.Parameters.Add("idReclamo",     OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
             cmd.Parameters.Add("usuario",        OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
-            cmd.Parameters.Add("nombresServer",  OracleDbType.Varchar2, 4000, ParameterDirection.Output);
-            cmd.Parameters.Add("msgerror",       OracleDbType.Varchar2, 4000, ParameterDirection.Output);
+            cmd.Parameters.Add("nombresServer",  OracleDbType.Varchar2, 32767, ParameterDirection.Output);
+            cmd.Parameters.Add("msgerror",       OracleDbType.Varchar2, 4000,  ParameterDirection.Output);
 
             await cmd.ExecuteNonQueryAsync();
 

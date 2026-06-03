@@ -145,10 +145,64 @@
                     <small class="ms-2 opacity-75">(opcional)</small>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        Puede adjuntar fotos, videos, audios, correos, documentos u otro tipo de archivo.
-                        Tamaño máximo: <strong>100 MB</strong> por archivo.
-                    </p>
+                    <p class="text-muted small mb-2">Tamaño máximo: <strong>100 MB</strong> por archivo.</p>
+
+                    <!-- Tipos de archivo permitidos -->
+                    <p class="text-muted small mb-1 fw-semibold">Tipos de archivo permitidos:</p>
+                    <div class="mb-1">
+                        <div class="d-flex flex-wrap gap-1">
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-pdf text-danger me-1"></i>
+                                <span class="fw-semibold">PDF</span>
+                                <span class="text-muted fw-normal ms-1">.pdf</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-word text-primary me-1"></i>
+                                <span class="fw-semibold">Word</span>
+                                <span class="text-muted fw-normal ms-1">.doc .docx</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-excel text-success me-1"></i>
+                                <span class="fw-semibold">Excel</span>
+                                <span class="text-muted fw-normal ms-1">.xls .xlsx</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-ppt text-warning me-1"></i>
+                                <span class="fw-semibold">PowerPoint</span>
+                                <span class="text-muted fw-normal ms-1">.ppt .pptx</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-image text-info me-1"></i>
+                                <span class="fw-semibold">Imagen</span>
+                                <span class="text-muted fw-normal ms-1">.jpg .jpeg .png .gif .bmp .webp .heic</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-play text-danger me-1"></i>
+                                <span class="fw-semibold">Video</span>
+                                <span class="text-muted fw-normal ms-1">.mp4 .mov .avi .mkv .webm .3gp</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-music text-secondary me-1"></i>
+                                <span class="fw-semibold">Audio</span>
+                                <span class="text-muted fw-normal ms-1">.mp3 .wav .ogg .m4a .aac</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-envelope text-secondary me-1"></i>
+                                <span class="fw-semibold">Correo</span>
+                                <span class="text-muted fw-normal ms-1">.eml .msg</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-zip text-secondary me-1"></i>
+                                <span class="fw-semibold">Comprimido</span>
+                                <span class="text-muted fw-normal ms-1">.zip .rar .7z</span>
+                            </span>
+                            <span class="badge bg-light text-secondary border">
+                                <i class="bi bi-file-text text-secondary me-1"></i>
+                                <span class="fw-semibold">Texto</span>
+                                <span class="text-muted fw-normal ms-1">.txt .csv .rtf</span>
+                            </span>
+                        </div>
+                    </div>
 
                     <!-- Zona de drag & drop + botones de cámara -->
                     <div id="dropZone" class="border border-2 border-dashed rounded-3 p-3 text-center mb-3
@@ -248,22 +302,81 @@ function actualizarListaUI() {
     lista.classList.remove('d-none');
     ulItems.innerHTML = '';
     for (let i = 0; i < files.length; i++) {
-        const f    = files[i];
-        const size = f.size < 1048576
+        const f      = files[i];
+        const size   = f.size < 1048576
             ? (f.size / 1024).toFixed(1) + ' KB'
             : (f.size / 1048576).toFixed(2) + ' MB';
-        const li   = document.createElement('li');
-        li.className = 'list-group-item d-flex justify-content-between align-items-center px-0 py-1';
+        const style  = getFileStyle(f);
+        const ext    = f.name.includes('.') ? f.name.slice(f.name.lastIndexOf('.')).toLowerCase() : '';
+        const li     = document.createElement('li');
+        li.className = 'list-group-item px-0 py-1';
+        li.dataset.index = i;
         li.innerHTML = `
-            <span class="text-truncate me-2" style="max-width:220px" title="${f.name}">
-                <i class="bi bi-paperclip text-muted me-1"></i>${f.name}
-            </span>
-            <span class="text-muted text-nowrap">${size}</span>`;
+            <div class="d-flex align-items-center gap-2">
+                <!-- Ícono con color de la leyenda -->
+                <i class="bi ${style.icon} ${style.color} fs-4 flex-shrink-0"></i>
+                <!-- Nombre + extensión -->
+                <div class="flex-grow-1 overflow-hidden">
+                    <div class="text-truncate small fw-semibold" title="${f.name}">${f.name}</div>
+                    <div class="d-flex align-items-center gap-1 mt-1">
+                        <span class="badge bg-light text-secondary border" style="font-size:.65rem">${ext || '–'}</span>
+                        <span class="text-muted" style="font-size:.72rem">${style.label}</span>
+                    </div>
+                </div>
+                <!-- Tamaño + quitar -->
+                <div class="d-flex flex-column align-items-end flex-shrink-0 gap-1">
+                    <span class="text-muted text-nowrap" style="font-size:.72rem">${size}</span>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-danger lh-1"
+                            title="Quitar archivo" onclick="quitarArchivo(${i})">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                </div>
+            </div>`;
         ulItems.appendChild(li);
     }
 
-    // Sincronizar con el input real
-    document.getElementById('inputArchivos').files = archivosSeleccionados.files;
+    // Nota: NO sincronizamos a inputArchivos.files aquí porque la asignación
+    // falla silenciosamente para ciertos MIME types (Excel, .msg, etc.).
+    // El envío se realiza vía FormData en el handler de submit.
+}
+
+/**
+ * Devuelve { icon, color, label } que coinciden exactamente con los colores de la leyenda.
+ */
+function getFileStyle(file) {
+    const mime = file.type.toLowerCase();
+    const ext  = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : '';
+    if (mime.startsWith('image/'))
+        return { icon: 'bi-file-image',  color: 'text-info',    label: 'Imagen'      };
+    if (mime.startsWith('video/'))
+        return { icon: 'bi-file-play',   color: 'text-danger',  label: 'Video'       };
+    if (mime.startsWith('audio/'))
+        return { icon: 'bi-file-music',  color: 'text-secondary', label: 'Audio'     };
+    if (mime === 'application/pdf')
+        return { icon: 'bi-file-pdf',    color: 'text-danger',  label: 'PDF'         };
+    if (mime.includes('word')        || ext === '.doc'  || ext === '.docx')
+        return { icon: 'bi-file-word',   color: 'text-primary', label: 'Word'        };
+    if (mime.includes('excel')       || ext === '.xls'  || ext === '.xlsx')
+        return { icon: 'bi-file-excel',  color: 'text-success', label: 'Excel'       };
+    if (mime.includes('powerpoint')  || ext === '.ppt'  || ext === '.pptx')
+        return { icon: 'bi-file-ppt',    color: 'text-warning', label: 'PowerPoint'  };
+    if (mime === 'message/rfc822'    || ext === '.eml'  || ext === '.msg')
+        return { icon: 'bi-envelope',    color: 'text-secondary', label: 'Correo'    };
+    if (mime.includes('zip') || ext === '.zip' || ext === '.rar' || ext === '.7z')
+        return { icon: 'bi-file-zip',    color: 'text-secondary', label: 'Comprimido' };
+    if (mime.startsWith('text/')     || ext === '.txt'  || ext === '.csv' || ext === '.rtf')
+        return { icon: 'bi-file-text',   color: 'text-secondary', label: 'Texto'     };
+    return   { icon: 'bi-file-earmark', color: 'text-secondary', label: 'Archivo'    };
+}
+
+function quitarArchivo(index) {
+    const nuevo = new DataTransfer();
+    const files = archivosSeleccionados.files;
+    for (let i = 0; i < files.length; i++) {
+        if (i !== index) nuevo.items.add(files[i]);
+    }
+    archivosSeleccionados = nuevo;
+    actualizarListaUI();
 }
 
 function agregarArchivos(nuevosArchivos) {
@@ -310,8 +423,11 @@ dropZone.addEventListener('drop', e => {
 
 // ── Autocomplete de clientes ──────────────────────────────────────────────────
 let timerCliente = null;
+let _clientesData = [];   // cache del último resultado
+let _idxActivo    = -1;   // índice de la fila resaltada
 
 document.getElementById('buscarCliente').addEventListener('input', function() {
+    _idxActivo = -1;
     clearTimeout(timerCliente);
     const q = this.value.trim();
     if (q.length < 2) {
@@ -320,6 +436,36 @@ document.getElementById('buscarCliente').addEventListener('input', function() {
     }
     timerCliente = setTimeout(() => buscarClientes(q), 300);
 });
+
+document.getElementById('buscarCliente').addEventListener('keydown', function(e) {
+    const div  = document.getElementById('resultadosCliente');
+    const items = div.querySelectorAll('.list-group-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _idxActivo = (_idxActivo + 1) % items.length;
+        resaltarItem(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _idxActivo = (_idxActivo - 1 + items.length) % items.length;
+        resaltarItem(items);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (_idxActivo >= 0 && _idxActivo < _clientesData.length) {
+            seleccionarCliente(_clientesData[_idxActivo]);
+        }
+    } else if (e.key === 'Escape') {
+        ocultarResultados();
+    }
+});
+
+function resaltarItem(items) {
+    items.forEach((el, i) => {
+        el.classList.toggle('active', i === _idxActivo);
+    });
+    if (_idxActivo >= 0) items[_idxActivo].scrollIntoView({ block: 'nearest' });
+}
 
 document.getElementById('buscarCliente').addEventListener('blur', function() {
     setTimeout(ocultarResultados, 200);
@@ -342,16 +488,22 @@ async function buscarClientes(q) {
 }
 
 function mostrarResultados(clientes) {
+    _clientesData = clientes.slice(0, 20);
+    _idxActivo    = -1;
     const div = document.getElementById('resultadosCliente');
     div.innerHTML = '';
-    if (!clientes.length) { ocultarResultados(); return; }
+    if (!_clientesData.length) { ocultarResultados(); return; }
 
-    clientes.slice(0, 20).forEach(c => {
+    _clientesData.forEach((c, i) => {
         const btn = document.createElement('button');
         btn.type      = 'button';
         btn.className = 'list-group-item list-group-item-action py-1 px-2 small';
         btn.innerHTML = `<strong>${c.codCliente}</strong> — ${c.nomCliente}`;
         btn.addEventListener('mousedown', () => seleccionarCliente(c));
+        btn.addEventListener('mouseover', () => {
+            _idxActivo = i;
+            resaltarItem(div.querySelectorAll('.list-group-item'));
+        });
         div.appendChild(btn);
     });
     div.style.display = 'block';
@@ -360,8 +512,8 @@ function mostrarResultados(clientes) {
 function seleccionarCliente(c) {
     document.getElementById('CodCliente').value = c.codCliente;
     document.getElementById('NomCliente').value = c.nomCliente;
-    document.getElementById('buscarCliente').value = c.nomCliente + ' (' + c.codCliente + ')';
-    document.getElementById('lblClienteSeleccionado').textContent = c.nomCliente + ' (' + c.codCliente + ')';
+    document.getElementById('buscarCliente').value = c.nomCliente;
+    document.getElementById('lblClienteSeleccionado').textContent = c.codCliente + ' — ' + c.nomCliente;
     document.getElementById('clienteSeleccionado').classList.remove('d-none');
     ocultarResultados();
 }
@@ -370,15 +522,68 @@ function ocultarResultados() {
     document.getElementById('resultadosCliente').style.display = 'none';
 }
 
-// ── Validación antes de enviar ────────────────────────────────────────────────
-document.getElementById('frmNuevoReclamo').addEventListener('submit', function(e) {
+// ── Envío del formulario vía FormData para garantizar todos los tipos de archivo ──
+document.getElementById('frmNuevoReclamo').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Validación: cliente obligatorio
     if (!document.getElementById('CodCliente').value) {
-        e.preventDefault();
         const modal = new bootstrap.Modal(document.getElementById('modalSinCliente'));
         modal.show();
         document.getElementById('btnModalSinClienteOk').addEventListener('click', function() {
             document.getElementById('buscarCliente').focus();
         }, { once: true });
+        return;
+    }
+
+    const btn  = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando…';
+
+    // Construir FormData con los campos del formulario
+    const form = this;
+    const fd   = new FormData(form);
+
+    // Eliminar los inputs de archivo nativos del FormData (vienen vacíos o incompletos)
+    // y añadir los archivos directamente desde el DataTransfer acumulado.
+    fd.delete('Archivos');
+    const files = archivosSeleccionados.files;
+    for (let i = 0; i < files.length; i++) {
+        fd.append('Archivos', files[i], files[i].name);
+    }
+
+    try {
+        const resp = await fetch(form.action, {
+            method : 'POST',
+            body   : fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        // Si el servidor devuelve un redirect (303/302) o HTML de éxito, navegar
+        if (resp.redirected) {
+            window.location.href = resp.url;
+            return;
+        }
+        if (resp.ok) {
+            // El controlador puede responder con JSON {redirect: url} o directamente redirigir
+            const ct = resp.headers.get('Content-Type') || '';
+            if (ct.includes('application/json')) {
+                const json = await resp.json();
+                if (json.redirect) { window.location.href = json.redirect; return; }
+            }
+            // Fallback: recargar la respuesta como navegación normal
+            window.location.href = resp.url || form.action;
+            return;
+        }
+        // Error HTTP: mostrar como alerta
+        const text = await resp.text();
+        console.error('Error al guardar reclamo:', text);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Guardar Reclamo';
+    } catch (err) {
+        console.error('Error de red:', err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Guardar Reclamo';
     }
 });
 </script>

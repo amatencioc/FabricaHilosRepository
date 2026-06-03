@@ -82,10 +82,11 @@
             const size = f.size < 1048576
                 ? (f.size / 1024).toFixed(1) + ' KB'
                 : (f.size / 1048576).toFixed(2) + ' MB';
+            const ico  = getFileIconIn_@(uid)(f);
             const li   = document.createElement('li');
             li.className = 'list-group-item d-flex justify-content-between px-0 py-1';
             li.innerHTML = `<span class="text-truncate me-2" style="max-width:180px" title="${f.name}">
-                <i class="bi bi-paperclip text-muted me-1"></i>${f.name}</span>
+                <i class="bi ${ico.icon} ${ico.color} me-1"></i>${f.name}</span>
                 <span class="text-muted text-nowrap">${size}</span>`;
             ul.appendChild(li);
         }
@@ -121,5 +122,21 @@
         dz.classList.remove('border-primary','bg-white');
         agregarArch_@(uid)(e.dataTransfer.files);
     });
+
+    function getFileIconIn_@(uid)(file) {
+        const mime = file.type.toLowerCase();
+        const ext  = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : '';
+        if (mime.startsWith('image/'))           return { icon: 'bi-file-image',  color: 'text-info'      };
+        if (mime.startsWith('video/'))           return { icon: 'bi-file-play',   color: 'text-danger'    };
+        if (mime.startsWith('audio/'))           return { icon: 'bi-file-music',  color: 'text-secondary' };
+        if (mime === 'application/pdf')          return { icon: 'bi-file-pdf',    color: 'text-danger'    };
+        if (mime.includes('word')   || ext === '.doc'  || ext === '.docx') return { icon: 'bi-file-word',  color: 'text-primary'  };
+        if (mime.includes('excel')  || ext === '.xls'  || ext === '.xlsx') return { icon: 'bi-file-excel', color: 'text-success'  };
+        if (mime.includes('powerpoint') || ext === '.ppt' || ext === '.pptx') return { icon: 'bi-file-ppt', color: 'text-warning' };
+        if (mime === 'message/rfc822' || ext === '.eml' || ext === '.msg') return { icon: 'bi-envelope',   color: 'text-secondary'};
+        if (mime.includes('zip') || ext === '.zip' || ext === '.rar' || ext === '.7z') return { icon: 'bi-file-zip', color: 'text-secondary' };
+        if (mime.startsWith('text/') || ext === '.txt' || ext === '.csv' || ext === '.rtf') return { icon: 'bi-file-text', color: 'text-secondary' };
+        return { icon: 'bi-file-earmark', color: 'text-secondary' };
+    }
 })();
 </script>

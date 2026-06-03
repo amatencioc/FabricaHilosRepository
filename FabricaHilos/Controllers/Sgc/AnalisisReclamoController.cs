@@ -93,6 +93,8 @@ public class AnalisisReclamoController : OracleBaseController
 
     [HttpPost("Nuevo")]
     [ValidateAntiForgeryToken]
+    [RequestSizeLimit(524_288_000)]           // 500 MB máximo por request
+    [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000)]
     public async Task<IActionResult> Nuevo(CrearReclamoRequest model)
     {
         if (!ModelState.IsValid)
@@ -174,8 +176,13 @@ public class AnalisisReclamoController : OracleBaseController
                     rolUsuario = "AC";
                 else if (accesoSgc.TieneModificador("GE"))
                     rolUsuario = "GE";
+                // Sin modificador explícito: si el usuario es el vendedor que creó el
+                // reclamo lo tratamos como VD (puede editar su propio reclamo).
+                // Si no, solo lectura.
+                else if (string.Equals(usuario, reclamo.UsuVendedor, StringComparison.OrdinalIgnoreCase))
+                    rolUsuario = "VD";
                 else
-                    rolUsuario = "OB"; // Sin modificador explícito → solo lectura
+                    rolUsuario = "OB";
             }
         }
 
@@ -230,6 +237,8 @@ public class AnalisisReclamoController : OracleBaseController
 
     [HttpPost("SubirArchivos")]
     [ValidateAntiForgeryToken]
+    [RequestSizeLimit(524_288_000)]           // 500 MB máximo por request
+    [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000)]
     public async Task<IActionResult> SubirArchivos(SubirArchivosReclamoRequest model)
     {
         var usuario = User.Identity?.Name ?? "SYS";
@@ -267,7 +276,12 @@ public class AnalisisReclamoController : OracleBaseController
         var mime  = string.IsNullOrWhiteSpace(archivo.MimeType) ? "application/octet-stream" : archivo.MimeType;
         var disp  = descargar ? "attachment" : "inline";
 
-        Response.Headers["Content-Disposition"] = $"{disp}; filename=\"{archivo.NombreOrig}\"";
+        // RFC 6266: filename* con UTF-8 percent-encoding para nombres con caracteres no-ASCII
+        // filename= (ASCII fallback) + filename*= (UTF-8 completo)
+        var nombreAscii  = RemoverNoAscii(archivo.NombreOrig);
+        var nombreEnc    = Uri.EscapeDataString(archivo.NombreOrig);
+        Response.Headers["Content-Disposition"] =
+            $"{disp}; filename=\"{nombreAscii}\"; filename*=UTF-8''{nombreEnc}";
         return PhysicalFile(ruta, mime);
     }
 
@@ -527,4 +541,19 @@ public class AnalisisReclamoController : OracleBaseController
     /// <summary>Ruta física completa de un archivo.</summary>
     private string ObtenerRutaFisica(long idReclamo, string nombreServer)
         => Path.Combine(ObtenerCarpetaReclamo(idReclamo), nombreServer);
+
+    /// <summary>
+    /// Fallback ASCII para el parámetro filename= del header Content-Disposition.
+    /// Reemplaza caracteres no imprimibles / no-ASCII por '_' y elimina comillas.
+    /// </summary>
+    private static string RemoverNoAscii(string nombre)
+    {
+        var sb = new System.Text.StringBuilder(nombre.Length);
+        foreach (var c in nombre)
+        {
+            if (c == '"' || c == '\\') continue;
+            sb.Append(c < 0x20 || c > 0x7E ? '_' : c);
+        }
+        return sb.Length == 0 ? "archivo" : sb.ToString();
+    }
 }

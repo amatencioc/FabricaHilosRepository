@@ -29,6 +29,12 @@ using FabricaHilos.Sire.Services.Mock;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Aumentar límite de Kestrel para subida de archivos (máx. 500 MB por request)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 524_288_000; // 500 MB
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // SERILOG: Configurar logging estructurado con persistencia en archivos
 // ══════════════════════════════════════════════════════════════════════════════

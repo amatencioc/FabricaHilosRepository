@@ -138,11 +138,33 @@ public class ReclamoArchivoDto
             if (mime.StartsWith("video/"))                return "bi-file-play";
             if (mime.StartsWith("audio/"))                return "bi-file-music";
             if (mime == "application/pdf")                return "bi-file-pdf";
-            if (mime.Contains("word")   || ext == ".doc" || ext == ".docx") return "bi-file-word";
-            if (mime.Contains("excel")  || ext == ".xls" || ext == ".xlsx") return "bi-file-excel";
-            if (mime == "message/rfc822" || ext == ".eml") return "bi-envelope";
-            if (mime.Contains("zip")    || ext == ".zip")  return "bi-file-zip";
+            if (mime.Contains("word")   || ext == ".doc"  || ext == ".docx") return "bi-file-word";
+            if (mime.Contains("excel")  || ext == ".xls"  || ext == ".xlsx") return "bi-file-excel";
+            if (mime.Contains("powerpoint") || ext == ".ppt" || ext == ".pptx") return "bi-file-ppt";
+            if (mime == "message/rfc822" || ext == ".eml" || ext == ".msg") return "bi-envelope";
+            if (mime.Contains("zip")    || ext == ".zip"  || ext == ".rar" || ext == ".7z") return "bi-file-zip";
+            if (mime.StartsWith("text/") || ext == ".txt" || ext == ".csv" || ext == ".rtf") return "bi-file-text";
             return "bi-file-earmark";
+        }
+    }
+
+    /// <summary>Clase de color Bootstrap para el ícono del archivo (ej. "text-danger").</summary>
+    public string IconoColor
+    {
+        get
+        {
+            var mime = (MimeType ?? "").ToLower();
+            var ext  = System.IO.Path.GetExtension(NombreOrig).ToLower();
+            if (mime.StartsWith("image/"))                return "text-info";
+            if (mime.StartsWith("video/"))                return "text-danger";
+            if (mime.StartsWith("audio/"))                return "text-secondary";
+            if (mime == "application/pdf")                return "text-danger";
+            if (mime.Contains("word")   || ext == ".doc"  || ext == ".docx") return "text-primary";
+            if (mime.Contains("excel")  || ext == ".xls"  || ext == ".xlsx") return "text-success";
+            if (mime.Contains("powerpoint") || ext == ".ppt" || ext == ".pptx") return "text-warning";
+            if (mime == "message/rfc822" || ext == ".eml" || ext == ".msg") return "text-secondary";
+            if (mime.Contains("zip")    || ext == ".zip"  || ext == ".rar" || ext == ".7z") return "text-secondary";
+            return "text-secondary";
         }
     }
 
@@ -152,10 +174,35 @@ public class ReclamoArchivoDto
         get
         {
             var mime = (MimeType ?? "").ToLower();
+            var ext  = System.IO.Path.GetExtension(NombreOrig).ToLower();
             return mime.StartsWith("image/")
                 || mime.StartsWith("video/")
                 || mime.StartsWith("audio/")
-                || mime == "application/pdf";
+                || mime == "application/pdf"
+                || mime.StartsWith("text/")
+                || ext == ".txt" || ext == ".csv" || ext == ".rtf"
+                || ext == ".docx";
+        }
+    }
+
+    /// <summary>
+    /// Tipo de visor a usar en el modal:
+    /// "imagen" | "video" | "audio" | "pdf" | "texto" | "ninguno"
+    /// </summary>
+    public string TipoVisor
+    {
+        get
+        {
+            var mime = (MimeType ?? "").ToLower();
+            var ext  = System.IO.Path.GetExtension(NombreOrig).ToLower();
+            if (mime.StartsWith("image/"))                              return "imagen";
+            if (mime.StartsWith("video/"))                              return "video";
+            if (mime.StartsWith("audio/"))                              return "audio";
+            if (mime == "application/pdf")                              return "pdf";
+            if (mime.StartsWith("text/") || ext == ".txt"
+                || ext == ".csv" || ext == ".rtf")                     return "texto";
+            if (ext == ".docx")                                         return "word";
+            return "ninguno";
         }
     }
 }
@@ -199,11 +246,19 @@ public class ReclamoDetalleVm
 /// </summary>
 public class CrearReclamoRequest
 {
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Debe seleccionar un cliente.")]
     public string              CodCliente { get; set; } = "";
     public string              NomCliente { get; set; } = "";  // se resuelve desde el combo
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "El contacto es obligatorio.")]
+    [System.ComponentModel.DataAnnotations.MaxLength(100)]
     public string              Contacto   { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "El teléfono es obligatorio.")]
+    [System.ComponentModel.DataAnnotations.MaxLength(30)]
     public string              Telefono   { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "El asunto es obligatorio.")]
+    [System.ComponentModel.DataAnnotations.MaxLength(400)]
     public string              Asunto     { get; set; } = "";
+    [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "El descargo del vendedor es obligatorio.")]
     public string              Descargo   { get; set; } = "";
     public List<IFormFile>?    Archivos   { get; set; }
 }

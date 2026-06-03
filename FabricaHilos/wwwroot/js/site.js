@@ -132,6 +132,19 @@ const GlobalLoading = {
             this.activeRequests = 0;
             this.hide();
         });
+
+        // Auto-ocultar cuando la ventana recupera el foco (cubre el caso de descargas
+        // donde el browser NO navega y los eventos load/pageshow no se disparan)
+        window.addEventListener('focus', () => {
+            this.activeRequests = 0;
+            this.hide();
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.activeRequests = 0;
+                this.hide();
+            }
+        });
     },
 
     show: function(message = 'Cargando...') {
@@ -164,13 +177,15 @@ const GlobalLoading = {
                 // - descarga de archivos
                 // - collapse de Bootstrap
                 // - logout
+                // - URLs con parámetro descargar=true (attachment download)
                 if (href && 
                     href !== '#' && 
                     !href.startsWith('#') &&
                     !link.hasAttribute('target') &&
                     !link.hasAttribute('download') &&
                     !link.hasAttribute('data-bs-toggle') &&
-                    !href.toLowerCase().includes('logout')) {
+                    !href.toLowerCase().includes('logout') &&
+                    !href.toLowerCase().includes('descargar=true')) {
 
                     this.show('Cargando página...');
                 }
