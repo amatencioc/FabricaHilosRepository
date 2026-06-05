@@ -4,6 +4,7 @@ using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Models;
 using FabricaHilos.Sire.Options;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FabricaHilos.Sire.Services;
@@ -15,6 +16,7 @@ public sealed class SireAuthService : ISireAuthService
 
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
+    private readonly ILogger<SireAuthService> _logger;
     private readonly string _authUrl;
     private readonly string _username;
     private readonly string _password;
@@ -22,17 +24,25 @@ public sealed class SireAuthService : ISireAuthService
     private readonly string _clientId;
     private readonly string _clientSecret;
 
-    public SireAuthService(HttpClient httpClient, IOptions<SireOptions> options, IMemoryCache memoryCache)
+    public SireAuthService(
+        HttpClient httpClient,
+        IOptions<SireOptions> options,
+        IMemoryCache memoryCache,
+        ILogger<SireAuthService> logger)
     {
         var o = options.Value;
-        _httpClient = httpClient;
-        _memoryCache = memoryCache;
-        _authUrl = $"{o.AuthUrl.TrimEnd('/')}/{o.ClientId}/oauth2/token/";
-        _username = $"{o.Ruc}{o.UsuarioSol}";
-        _password = o.ClaveSol;
-        _scope = o.Scope;
-        _clientId = o.ClientId;
+        _httpClient   = httpClient;
+        _memoryCache  = memoryCache;
+        _logger       = logger;
+        _authUrl      = $"{o.AuthUrl.TrimEnd('/')}/{o.ClientId}/oauth2/token/";
+        _username     = $"{o.Ruc} {o.UsuarioSol}";
+        _password     = o.ClaveSol;
+        _scope        = o.Scope;
+        _clientId     = o.ClientId;
         _clientSecret = o.ClientSecret;
+
+        _logger.LogDebug("[SIRE-AUTH] Configuración cargada: AuthUrl={AuthUrl} | Username={Username} | Scope={Scope} | ClientId={ClientId}",
+            _authUrl, _username, _scope, _clientId);
     }
 
     public async Task<AuthToken> GetTokenAsync(CancellationToken cancellationToken = default)
@@ -41,17 +51,23 @@ public sealed class SireAuthService : ISireAuthService
             && cached is not null
             && cached.ExpiraEnUtc > DateTime.UtcNow.AddMinutes(5))
         {
+            _logger.LogDebug("[SIRE-AUTH] Token en caché válido, expira {Expira:u}", cached.ExpiraEnUtc);
             return cached;
         }
 
+        _logger.LogDebug("[SIRE-AUTH] Solicitando nuevo token a SUNAT...");
+        _logger.LogDebug("[SIRE-AUTH] POST {Url}", _authUrl);
+        _logger.LogDebug("[SIRE-AUTH] Parámetros: grant_type=password | scope={Scope} | client_id={ClientId} | username={Username} | password=*** ({PwdLen} chars)",
+            _scope, _clientId, _username, _password?.Length ?? 0);
+
         var form = new Dictionary<string, string>
         {
-            ["grant_type"] = "password",
-            ["scope"] = _scope,
-            ["client_id"] = _clientId,
+            ["grant_type"]    = "password",
+            ["scope"]         = _scope,
+            ["client_id"]     = _clientId,
             ["client_secret"] = _clientSecret,
-            ["username"] = _username,
-            ["password"] = _password
+            ["username"]      = _username,
+            ["password"]      = _password
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _authUrl)
@@ -63,8 +79,12 @@ public sealed class SireAuthService : ISireAuthService
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
+        _logger.LogDebug("[SIRE-AUTH] Respuesta HTTP {StatusCode}: {Body}", (int)response.StatusCode, content);
+
         if (!response.IsSuccessStatusCode)
         {
+            _logger.LogError("[SIRE-AUTH] Autenticación fallida. URL={Url} | Username={Username} | HTTP={StatusCode} | Body={Body}",
+                _authUrl, _username, (int)response.StatusCode, content);
             throw new SireApiException($"Error de autenticación SUNAT: {(int)response.StatusCode} - {content}", response.StatusCode);
         }
 
@@ -73,7 +93,10 @@ public sealed class SireAuthService : ISireAuthService
 
         token.ExpiraEnUtc = DateTime.UtcNow.AddSeconds(token.ExpiresIn);
         _memoryCache.Set(CacheKey, token, token.ExpiraEnUtc);
+
+        _logger.LogInformation("[SIRE-AUTH] Token obtenido correctamente. Tipo={Tipo} | Expira={Expira:u}",
+            token.TokenType, token.ExpiraEnUtc);
+
         return token;
     }
-
-    }
+}

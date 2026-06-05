@@ -303,9 +303,9 @@
             <div id="collapseConsulta" class="collapse">
                 <div class="section-card-body">
                     <div class="row g-3 align-items-end">
-                        <div class="col-sm-6 col-md-3">
-                            <label class="form-label fw-semibold small mb-1">Código personal <small class="text-muted fw-normal">(opcional)</small></label>
-                            <input type="text" id="consPersonal" class="form-control form-control-sm" placeholder="00123..." />
+                        <div class="col-sm-6 col-md-4">
+                            <label class="form-label fw-semibold small mb-1">Nombre empleado <small class="text-muted fw-normal">(opcional)</small></label>
+                            <input type="text" id="consNombre" class="form-control form-control-sm" placeholder="Apellidos o nombre..." />
                         </div>
                         <div class="col-sm-6 col-md-2">
                             <label class="form-label fw-semibold small mb-1">Desde</label>
@@ -1255,14 +1255,13 @@ async function hacerRollback() {
 // ── PASO 5: Historial / Consulta ──────────────────────────────────────────
 
 async function consultarRango() {
-    const personal    = document.getElementById('consPersonal').value.trim();
     const fechaInicio = isoADdMmYyyy(document.getElementById('consFechaIni').value);
     const fechaFin    = isoADdMmYyyy(document.getElementById('consFechaFin').value);
     if (!fechaInicio || !fechaFin) { await msgModal('Aviso', '<p>Ingrese las fechas de consulta.</p>'); return; }
 
     setBusy('btnConsultar', true, 'Consultando...');
     try {
-        const params = new URLSearchParams({ fechaInicio, fechaFin, ...(personal && { codPersonal: personal }) });
+        const params = new URLSearchParams({ fechaInicio, fechaFin });
         const res  = await fetch(`${URL_BASE}/ConsultarRango?${params}`);
         const json = await res.json();
         if (!json.ok) { await msgModal('Error', `<p>${json.error}</p>`); return; }
@@ -1283,6 +1282,12 @@ function renderConsulta(data) {
     // Limpiar almacén
     Object.keys(_consultaEmpleados).forEach(k => delete _consultaEmpleados[k]);
 
+    // Filtrar por nombre si se ingresó
+    const filtroNombre = (document.getElementById('consNombre').value.trim() || '').toLowerCase();
+    if (filtroNombre) {
+        data = data.filter(r => (r.nombreCompleto ?? '').toLowerCase().includes(filtroNombre));
+    }
+
     if (!data.length) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin registros en el rango indicado.</td></tr>';
     } else {
@@ -1292,7 +1297,7 @@ function renderConsulta(data) {
         // Agrupar por empleado
         data.forEach(r => {
             const key = r.codPersonal ?? '';
-            if (!_consultaEmpleados[key]) _consultaEmpleados[key] = { nombre: r.nombreCompleto ?? '', filas: [] };
+            if (!_consultaEmpleados[key]) _consultaEmpleados[key] = { nombre: r.nombreCompleto ?? '', fotocheck: r.numFotocheck ?? '', filas: [] };
             _consultaEmpleados[key].filas.push(r);
         });
 
@@ -1300,7 +1305,7 @@ function renderConsulta(data) {
             const exportUrl = `${URL_BASE}/ExportarAcuerdo?codPersonal=${encodeURIComponent(cod)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
             tbody.insertAdjacentHTML('beforeend', `
               <tr>
-                <td><code style="color:var(--aq-dk);">${cod}</code></td>
+                <td><code style="color:var(--aq-dk);">${emp.fotocheck || cod}</code></td>
                 <td class="fw-semibold">${emp.nombre}</td>
                 <td class="text-center">
                   <span class="badge rounded-pill" style="background:var(--aq-lt);color:var(--aq-dk);border:1px solid var(--aq-mid);">${emp.filas.length} comp.</span>
@@ -1328,7 +1333,7 @@ function verDetalleEmpleado(cod) {
     const emp = _consultaEmpleados[cod];
     if (!emp) return;
     document.getElementById('modalDetalleEmpTitulo').innerHTML =
-        `<i class="bi bi-list-ul me-2"></i><code>${cod}</code> — ${emp.nombre} <span class="ms-2 fw-normal small">(${emp.filas.length} compensaciones)</span>`;
+        `<i class="bi bi-list-ul me-2"></i><code>${emp.fotocheck || cod}</code> — ${emp.nombre} <span class="ms-2 fw-normal small">(${emp.filas.length} compensaciones)</span>`;
     const tbody = document.getElementById('bodyDetalleEmp');
     tbody.innerHTML = '';
     emp.filas.forEach(r => {

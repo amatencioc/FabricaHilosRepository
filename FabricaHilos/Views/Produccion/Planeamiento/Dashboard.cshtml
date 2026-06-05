@@ -11,6 +11,7 @@
     var paginaActual     = (int)(ViewBag.Pagina       ?? 1);
     var totalPaginas     = (int)(ViewBag.TotalPaginas  ?? 1);
     var totalPedidos     = (int)(ViewBag.TotalPedidos  ?? 0);
+    var tamPagina        = (int)(ViewBag.TamPagina     ?? 50);
 
     // KPIs globales (sobre el conjunto completo filtrado, no solo la página)
     var totalActivos        = (int)(ViewBag.TotalItems      ?? 0);
@@ -25,7 +26,7 @@
 }
 
 @section Styles {
-<link rel="stylesheet" href="~/css/planeamiento.css" />
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
     /* ── Dashboard: estilos exclusivos ─────────────────────────── */
 
@@ -370,12 +371,24 @@
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <span class="text-muted small">
             @totalPedidos pedidos en total · página @paginaActual de @totalPaginas
             · @totalActivos ítems @(incluyeCerrados ? "(incl. cerrados)" : "activos")
         </span>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <div class="d-flex align-items-center gap-1">
+                <span class="text-muted small">Mostrar:</span>
+                @foreach (var tp in new[] { 50, 100, 200 })
+                {
+                    var urlTp = new System.Text.StringBuilder("/Planeamiento/Dashboard?pagina=1&tamPagina=").Append(tp);
+                    if (!string.IsNullOrEmpty(filtroCliente)) urlTp.Append("&busquedaCliente=").Append(Uri.EscapeDataString(filtroCliente));
+                    if (!string.IsNullOrEmpty(filtroPaso))    urlTp.Append("&codPaso=").Append(Uri.EscapeDataString(filtroPaso));
+                    if (!string.IsNullOrEmpty(filtroNumPed))  urlTp.Append("&numPed=").Append(Uri.EscapeDataString(filtroNumPed));
+                    if (incluyeCerrados)                      urlTp.Append("&incluyeCerrados=true");
+                    <a href="@urlTp" class="btn btn-sm @(tamPagina == tp ? "btn-primary" : "btn-outline-secondary")" style="min-width:2.8rem;font-size:.72rem;padding:.18rem .45rem;">@tp</a>
+                }
+            </div>
             <button type="button" id="btnExpandAll" class="btn btn-outline-secondary btn-sm"
                     title="Expandir todos los pedidos para ver sus ítems">
                 <i class="bi bi-chevron-double-down me-1"></i>Expandir todo
@@ -660,6 +673,7 @@ else
         Func<int, string> urlPagina = pg =>
         {
             var qs = new System.Text.StringBuilder("?pagina=").Append(pg);
+            qs.Append("&tamPagina=").Append(tamPagina);
             if (!string.IsNullOrEmpty(filtroCliente))  qs.Append("&busquedaCliente=").Append(Uri.EscapeDataString(filtroCliente));
             if (!string.IsNullOrEmpty(filtroPaso))     qs.Append("&codPaso=").Append(Uri.EscapeDataString(filtroPaso));
             if (!string.IsNullOrEmpty(filtroNumPed))   qs.Append("&numPed=").Append(Uri.EscapeDataString(filtroNumPed));
@@ -710,7 +724,7 @@ else
                 </li>
             </ul>
             <p class="text-center text-muted mb-0" style="font-size:.72rem;">
-                Mostrando pedidos @((paginaActual - 1) * 10 + 1)–@(Math.Min(paginaActual * 10, totalPedidos)) de @totalPedidos
+                Mostrando pedidos @((paginaActual - 1) * tamPagina + 1)–@(Math.Min(paginaActual * tamPagina, totalPedidos)) de @totalPedidos
             </p>
         </nav>
     }

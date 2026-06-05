@@ -73,6 +73,7 @@ public class DdcRangoConsultaDto
     public long?   IdCompen          { get; set; }
     public string? CodEmpresa        { get; set; }
     public string? CodPersonal       { get; set; }
+    public string? NumFotocheck      { get; set; }
     public string? NombreCompleto    { get; set; }
     public string? FechaOrigenStr    { get; set; }
     public string? FechaDestinoStr   { get; set; }

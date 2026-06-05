@@ -72,14 +72,15 @@
     }
 
     /* ── Tabla ────────────────────────────────────────────────────────── */
+    #pvTable { table-layout: fixed; width: 100%; min-width: 900px; }
     #pvTable thead th {
         font-size: .68rem; font-weight: 700; color: #4a5568;
         text-transform: uppercase; letter-spacing: .04em;
         border-bottom: 2px solid #cdd4e0; padding: .28rem .45rem;
-        background: #e2e7f0;
+        background: #e2e7f0; white-space: nowrap; overflow: hidden;
     }
-    #pvTable tbody td     { font-size: .77rem; vertical-align: middle; padding: .27rem .45rem; }
-    #pvTable tbody tr     { background: #f8fafc; }
+    #pvTable tbody td { font-size: .77rem; vertical-align: middle; padding: .27rem .45rem; overflow: hidden; }
+    #pvTable tbody tr { background: #f8fafc; }
     #pvTable tbody tr:hover td                  { background: #edf2f7 !important; }
     #pvTable tbody tr.table-danger              { background: #fff5f5 !important; }
     #pvTable tbody tr.table-danger:hover td     { background: #ffe4e4 !important; }
@@ -214,17 +215,17 @@
             <table class="table table-sm table-hover align-middle mb-0" id="pvTable">
                 <thead>
                     <tr>
-                        <th style="width:8px;"></th>
-                        <th class="text-nowrap">Pedido / Ítem</th>
-                        <th>Cliente</th>
-                        <th>Artículo</th>
-                        <th>Proceso</th>
-                        <th class="text-nowrap">Etapa actual</th>
-                        <th class="text-nowrap">F.Compromiso</th>
-                        <th class="text-nowrap text-center">Días</th>
-                        <th class="text-nowrap text-end">KG Pend.</th>
-                        <th class="text-nowrap text-end">% Pend.</th>
-                        <th class="text-nowrap text-center">Ciclo</th>
+                        <th style="width:2%;"></th>
+                        <th style="width:7%;">Pedido / Ítem</th>
+                        <th style="width:16%;">Cliente</th>
+                        <th style="width:22%;">Artículo</th>
+                        <th style="width:13%;">Etapa actual</th>
+                        <th style="width:9%;">F. Etapa Act.</th>
+                        <th style="width:9%;">F.Compromiso</th>
+                        <th style="width:5%;" class="text-center">Días</th>
+                        <th style="width:8%;" class="text-end">KG Pend.</th>
+                        <th style="width:6%;" class="text-end">% Pend.</th>
+                        <th style="width:3%;" class="text-center">Ciclo</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -249,31 +250,55 @@
                                     <i class="bi bi-fire urgente-flame ms-1" title="Urgente"></i>
                                 }
                             </td>
-                            <td class="text-nowrap"
-                                style="max-width:160px;overflow:hidden;text-overflow:ellipsis;"
+                            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                 title="@pv.NombreCliente">
                                 @(pv.NombreCliente ?? pv.CodCliente)
                             </td>
-                            <td>
-                                <span class="fw-semibold">@pv.CodArt</span>
+                            <td style="width:280px;max-width:280px;">
+                                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                    <span class="fw-semibold">@pv.CodArt</span>
+                                    @if (!string.IsNullOrEmpty(pv.Color))
+                                    {
+                                        <span class="badge ms-1"
+                                              style="background:#e2e7f0;color:#4a5568;font-size:.63rem;">@pv.Color</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrEmpty(pv.DescArt))
+                                {
+                                    <div class="text-muted" style="font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@pv.DescArt">@pv.DescArt</div>
+                                }
                                 @if (!string.IsNullOrEmpty(pv.Titulo))
                                 {
-                                    <span class="text-muted">· @pv.Titulo</span>
-                                }
-                                @if (!string.IsNullOrEmpty(pv.Color))
-                                {
-                                    <span class="badge ms-1"
-                                          style="background:#e2e7f0;color:#4a5568;font-size:.63rem;">@pv.Color</span>
+                                    <div class="text-muted" style="font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">· @pv.Titulo</div>
                                 }
                             </td>
-                            <td class="text-nowrap text-muted">@pv.ProcesoTexto</td>
-                            <td class="text-nowrap">
+                            <td style="white-space:nowrap;">
                                 <span class="paso-dot me-1"
                                       style="background:@(pv.ColorUiPaso ?? "#6c757d");"></span>
                                 @pv.NombrePaso
                                 @if (pv.EstaEnReproceso)
                                 {
                                     <span class="badge bg-danger ms-1" style="font-size:.6rem;">REPR</span>
+                                }
+                                @if (pv.TieneMultiSublotes)
+                                {
+                                    <span class="badge bg-secondary ms-1 pv-sl-badge"
+                                          style="font-size:.6rem;cursor:pointer;"
+                                          data-sl-detail="@pv.SubLotesDetalle"
+                                          data-sl-count="@pv.NumSubLotesActivos">
+                                        @pv.NumSubLotesActivos&nbsp;SL
+                                    </span>
+                                }
+                            </td>
+                            <td class="text-nowrap text-muted" style="font-size:.78rem;">
+                                @if (pv.FchIniPaso.HasValue)
+                                {
+                                    @pv.FchIniPaso.Value.ToString("dd/MM/yy")
+                                    <div style="font-size:.68rem;">(@pv.DiasEnPaso&nbsp;d)</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
                                 }
                             </td>
                             <td class="text-nowrap">
@@ -358,6 +383,21 @@ document.querySelectorAll('.pv-preset').forEach(btn => {
 document.getElementById('pvDiasAtras').addEventListener('input', () => {
     document.querySelectorAll('.pv-preset').forEach(b => b.classList.remove('pv-preset-active'));
     document.getElementById('pvPresetHidden').value = '';
+});
+
+// ── Popovers de sub-lotes (badge "N SL") ─────────────────────────────────────
+document.querySelectorAll('.pv-sl-badge').forEach(el => {
+    const lines = el.dataset.slDetail.split('§').filter(l => l.trim());
+    const html  = '<div style="font-size:.78rem;line-height:1.7;">' +
+                  lines.map(l => '<div>&#9658; ' + l + '</div>').join('') +
+                  '</div>';
+    new bootstrap.Popover(el, {
+        html:      true,
+        trigger:   'hover focus',
+        placement: 'right',
+        title:     el.dataset.slCount + ' sublotes activos &mdash; <small class="text-muted fw-normal">etapa: la m&aacute;s retrasada</small>',
+        content:   html
+    });
 });
 
 // ── Al cargar: re-marcar preset activo desde URL y sincronizar hidden field ───

@@ -373,11 +373,11 @@
                             <li>
                                 <a class="sidebar-link sidebar-sublink @(ctrl == "HorasExtras" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuRhIndicadores" role="button"
-                                   aria-expanded="@(ctrl == "HorasExtras" || ctrl == "ConcentracionSobretiempoArea" || ctrl == "EvolucionMasaSalarial" ? "true" : "false")"
+                                   aria-expanded="@(ctrl == "HorasExtras" || ctrl == "CostoSalarialHorasExtras" ? "true" : "false")"
                                    aria-controls="submenuRhIndicadores">
                                     <i class="bi bi-graph-up-arrow"></i> Indicadores
                                 </a>
-                                <ul class="collapse @(ctrl == "HorasExtras" || ctrl == "ConcentracionSobretiempoArea" || ctrl == "EvolucionMasaSalarial" ? "show" : "") list-unstyled ps-3" id="submenuRhIndicadores">
+                                <ul class="collapse @(ctrl == "HorasExtras" || ctrl == "CostoSalarialHorasExtras" ? "show" : "") list-unstyled ps-3" id="submenuRhIndicadores">
                                     @if (menus.RhIndicadoresHorasExtras)
                                     {
                                     <li>
@@ -386,19 +386,11 @@
                                         </a>
                                     </li>
                                     }
-                                    @if (menus.RhIndicadoresConcentracionSobretiempo)
+                                    @if (menus.RhIndicadoresCostoSalarialHorasExtras)
                                     {
                                     <li>
-                                        <a href="/RecursosHumanos/ConcentracionSobretiempoArea" class="sidebar-link sidebar-sublink @(ctrl == "ConcentracionSobretiempoArea" ? "active" : "")">
-                                            <i class="bi bi-people-fill"></i> KPI Concentración HE
-                                        </a>
-                                    </li>
-                                    }
-                                    @if (menus.RhIndicadoresEvolucionMasaSalarial)
-                                    {
-                                    <li>
-                                        <a href="/RecursosHumanos/EvolucionMasaSalarial" class="sidebar-link sidebar-sublink @(ctrl == "EvolucionMasaSalarial" ? "active" : "")">
-                                            <i class="bi bi-currency-dollar"></i> KPI Masa Salarial
+                                        <a href="/RecursosHumanos/CostoSalarialHorasExtras" class="sidebar-link sidebar-sublink @(ctrl == "CostoSalarialHorasExtras" ? "active" : "")">
+                                            <i class="bi bi-coin"></i> Costo Salarial HE
                                         </a>
                                     </li>
                                     }

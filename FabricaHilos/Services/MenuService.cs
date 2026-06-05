@@ -10,8 +10,8 @@ public interface IMenuService
     (string? controller, string? action, string? area, string? url) GetLanding();
 
     /// <summary>
-    /// Devuelve los modificadores/parámetros asociados a un módulo específico
-    /// según el token de acceso almacenado en sesión.
+    /// Devuelve los modificadores/parï¿½metros asociados a un mï¿½dulo especï¿½fico
+    /// segï¿½n el token de acceso almacenado en sesiï¿½n.
     /// Ejemplo token Oracle: LogisticaOrdenCompra[noNuevaOC,estado=2]
     /// </summary>
     ModuloAcceso ObtenerAccesoModulo(string nombreModulo);
@@ -98,19 +98,19 @@ public class MenuService : IMenuService
         var tokens  = ObtenerTokens();
         var modulos = tokens.Select(t => t.nombre).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Admin tiene acceso a todo el menú según la configuración global
+        // Admin tiene acceso a todo el menï¿½ segï¿½n la configuraciï¿½n global
         if (modulos.Contains("Admin", StringComparer.OrdinalIgnoreCase))
             return global;
 
-        // Tiene: token exacto del módulo o sub-módulo
+        // Tiene: token exacto del mï¿½dulo o sub-mï¿½dulo
         bool Tiene(string modulo) => modulos.Contains(modulo);
 
-        // TieneAlguno: padre visible si tiene acceso al módulo completo O a cualquier sub-módulo específico
+        // TieneAlguno: padre visible si tiene acceso al mï¿½dulo completo O a cualquier sub-mï¿½dulo especï¿½fico
         bool TieneAlguno(params string[] tkns) => tkns.Any(Tiene);
 
         return new MenuOptions
         {
-            // ?? Menús principales ?????????????????????????????????????????????
+            // ?? Menï¿½s principales ?????????????????????????????????????????????
             Dashboard = global.Dashboard && TieneAlguno("Dashboard"),
 
             Produccion = TieneAlguno(
@@ -154,8 +154,7 @@ public class MenuService : IMenuService
                 "RhAutorizacionHoras",
                 "RhIndicadores",
                 "RhIndicadoresHorasExtras",
-                "RhIndicadoresConcentracionSobretiempo",
-                "RhIndicadoresEvolucionMasaSalarial"),
+                "RhIndicadoresComparativoCostoLaboral"),
 
             Logistica = TieneAlguno(
                 "Logistica",
@@ -181,11 +180,11 @@ public class MenuService : IMenuService
                 "SistemasRequerimientos",
                 "SistemasRequerimientosAnularDocumento"),
 
-            // ?? Sub-módulos: Producción ???????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Producciï¿½n ???????????????????????????????????????
             ProduccionRegistroPreparatoria = global.ProduccionRegistroPreparatoria
                 && TieneAlguno("Produccion", "ProduccionRegistroPreparatoria"),
 
-            // Sub-padre Autoconer visible si tiene también cualquier hijo suyo
+            // Sub-padre Autoconer visible si tiene tambiï¿½n cualquier hijo suyo
             ProduccionAutoconer = global.ProduccionAutoconer
                 && TieneAlguno("Produccion", "ProduccionAutoconer",
                                "ProduccionAutoconerPorPartida", "ProduccionAutoconerPorCanillas"),
@@ -196,11 +195,11 @@ public class MenuService : IMenuService
             ProduccionAutoconerPorCanillas = global.ProduccionAutoconerPorCanillas
                 && TieneAlguno("Produccion", "ProduccionAutoconer", "ProduccionAutoconerPorCanillas"),
 
-            // ?? Sub-módulos: SGC ??????????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: SGC ??????????????????????????????????????????????
             SgcPedidos = global.SgcPedidos
                 && TieneAlguno("Sgc", "SgcPedidos"),
 
-            // Sub-padre Despachos visible si tiene también cualquier hijo suyo
+            // Sub-padre Despachos visible si tiene tambiï¿½n cualquier hijo suyo
             SgcDespachos = global.SgcDespachos
                 && TieneAlguno("Sgc", "SgcDespachos",
                                "SgcDespachosRelacionFacCli", "SgcDespachosCargarTC"),
@@ -214,14 +213,14 @@ public class MenuService : IMenuService
             SgcAnalisisReclamo = global.SgcAnalisisReclamo
                 && TieneAlguno("Sgc", "SgcAnalisisReclamo"),
 
-            // ?? Sub-módulos: Facturación ??????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Facturaciï¿½n ??????????????????????????????????????
             FacturacionImportarFacturas = global.FacturacionImportarFacturas
                 && TieneAlguno("Facturacion", "FacturacionImportarFacturas"),
 
             FacturacionListaDocumentos = global.FacturacionListaDocumentos
                 && TieneAlguno("Facturacion", "FacturacionListaDocumentos"),
 
-            // ?? Sub-módulos: Ventas ???????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Ventas ???????????????????????????????????????????
             VentasConsultaTC = global.VentasConsultaTC
                 && TieneAlguno("Ventas", "VentasConsultaTC"),
 
@@ -234,11 +233,11 @@ public class MenuService : IMenuService
             VentasDashboardGerencial = global.VentasDashboardGerencial
                 && TieneAlguno("Ventas", "VentasDashboardGerencial"),
 
-            // ?? Sub-módulos: Seguridad ????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Seguridad ????????????????????????????????????????
             SeguridadInspecciones = global.SeguridadInspecciones
                 && TieneAlguno("Seguridad", "SeguridadInspecciones"),
 
-            // ?? Sub-módulos: Recursos Humanos ?????????????????????????????????
+            // ?? Sub-mï¿½dulos: Recursos Humanos ?????????????????????????????????
             RhMarcaciones = global.RhMarcaciones
                 && TieneAlguno("RecursosHumanos", "RhMarcaciones"),
 
@@ -251,23 +250,19 @@ public class MenuService : IMenuService
             RhAutorizacionHoras = global.RhAutorizacionHoras
                 && TieneAlguno("RecursosHumanos", "RhAutorizacionHoras"),
 
-            // Sub-padre RhIndicadores visible si tiene también cualquier hijo suyo
+            // Sub-padre RhIndicadores visible si tiene tambiï¿½n cualquier hijo suyo
             RhIndicadores = global.RhIndicadores
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
                                "RhIndicadoresHorasExtras",
-                               "RhIndicadoresConcentracionSobretiempo",
-                               "RhIndicadoresEvolucionMasaSalarial"),
+                               "RhIndicadoresComparativoCostoLaboral"),
 
             RhIndicadoresHorasExtras = global.RhIndicadoresHorasExtras
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresHorasExtras"),
 
-            RhIndicadoresConcentracionSobretiempo = global.RhIndicadoresConcentracionSobretiempo
-                && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresConcentracionSobretiempo"),
+            RhIndicadoresComparativoCostoLaboral = global.RhIndicadoresComparativoCostoLaboral
+                && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresComparativoCostoLaboral"),
 
-            RhIndicadoresEvolucionMasaSalarial = global.RhIndicadoresEvolucionMasaSalarial
-                && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresEvolucionMasaSalarial"),
-
-            // ?? Sub-módulos: Logística ????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Logï¿½stica ????????????????????????????????????????
             LogisticaRequerimiento = global.LogisticaRequerimiento
                 && TieneAlguno("Logistica", "LogisticaRequerimiento"),
 
@@ -277,14 +272,14 @@ public class MenuService : IMenuService
             LogisticaIndicadores = global.LogisticaIndicadores
                 && TieneAlguno("Logistica", "LogisticaIndicadores"),
 
-            // ?? Sub-módulos: Créditos y Cobranzas ????????????????????????????
+            // ?? Sub-mï¿½dulos: Crï¿½ditos y Cobranzas ????????????????????????????
             CcNivelMorosidad = global.CcNivelMorosidad
                 && TieneAlguno("CreditosCobranza", "CcNivelMorosidad"),
 
             CcNivelTiempo = global.CcNivelTiempo
                 && TieneAlguno("CreditosCobranza", "CcNivelTiempo"),
 
-            // ?? Sub-módulos: Contabilidad ??????????????????????????????????????????
+            // ?? Sub-mï¿½dulos: Contabilidad ??????????????????????????????????????????
             ContabilidadSire = global.ContabilidadSire
                 && TieneAlguno("Contabilidad", "ContabilidadSire"),
 
@@ -318,7 +313,7 @@ public class MenuService : IMenuService
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendientesDespacho"),
 
             // ?? Sub-m
-            // Sub-padre SistemasIndicadores visible si tiene también cualquier hijo suyo
+            // Sub-padre SistemasIndicadores visible si tiene tambiï¿½n cualquier hijo suyo
             SistemasIndicadores = global.SistemasIndicadores
                 && TieneAlguno("Sistemas", "SistemasIndicadores",
                                "SistemasIndicadoresDesarrollo",
@@ -334,7 +329,7 @@ public class MenuService : IMenuService
             SistemasIndicadoresSeguimientoDev = global.SistemasIndicadoresSeguimientoDev
                 && TieneAlguno("Sistemas", "SistemasIndicadores", "SistemasIndicadoresSeguimientoDev"),
 
-            // Sub-padre SistemasRequerimientos visible si tiene también cualquier hijo suyo
+            // Sub-padre SistemasRequerimientos visible si tiene tambiï¿½n cualquier hijo suyo
             SistemasRequerimientos = global.SistemasRequerimientos
                 && TieneAlguno("Sistemas", "SistemasRequerimientos",
                                "SistemasRequerimientosAnularDocumento"),
@@ -361,8 +356,8 @@ public class MenuService : IMenuService
         if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
         if (menus.Planeamiento)  return ("Planeamiento",     "Index", null, null);
         if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
-        // Sin módulos asignados o AccesoWeb vacío: redirigir a login para evitar
-        // aterrizar en un módulo al que el usuario no tiene acceso.
+        // Sin mï¿½dulos asignados o AccesoWeb vacï¿½o: redirigir a login para evitar
+        // aterrizar en un mï¿½dulo al que el usuario no tiene acceso.
         return ("Account", "Login", null, null);
     }
 }

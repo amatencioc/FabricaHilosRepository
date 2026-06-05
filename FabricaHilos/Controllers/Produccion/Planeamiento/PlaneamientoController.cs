@@ -111,9 +111,10 @@ public class PlaneamientoController : OracleBaseController
     }
 
     // GET /Planeamiento/Dashboard
-    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false, int pagina = 1)
+    public async Task<IActionResult> Dashboard(string? busquedaCliente, string? codPaso, string? numPed, bool incluyeCerrados = false, int pagina = 1, int tamPagina = 50)
     {
-        var tPagina  = _seguimiento.GetActivosPaginadoAsync(busquedaCliente, codPaso, numPed, incluyeCerrados, pagina);
+        if (tamPagina != 50 && tamPagina != 100 && tamPagina != 200) tamPagina = 50;
+        var tPagina  = _seguimiento.GetActivosPaginadoAsync(busquedaCliente, codPaso, numPed, incluyeCerrados, pagina, tamPagina);
         var tEstados = _seguimiento.GetEstadosAsync();
         var tAlertas = _alerta.GetActivasAsync();
         await Task.WhenAll(tPagina, tEstados, tAlertas);
@@ -131,6 +132,7 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.Pagina         = resultado.Pagina;
         ViewBag.TotalPaginas   = resultado.TotalPaginas;
         ViewBag.TotalPedidos   = resultado.TotalPedidos;
+        ViewBag.TamPagina      = tamPagina;
         // Totales globales para KPIs
         ViewBag.TotalItems       = resultado.TotalItems;
         ViewBag.TotalRetrasados  = resultado.TotalRetrasados;

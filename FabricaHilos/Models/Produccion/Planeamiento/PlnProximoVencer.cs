@@ -14,6 +14,7 @@ public class PlnProximoVencer
     public string? CodCliente     { get; set; }
     public string? NombreCliente  { get; set; }
     public string? CodArt         { get; set; }
+    public string? DescArt        { get; set; }
     public string? Color          { get; set; }
     public string? Titulo         { get; set; }
     public string? Proceso        { get; set; }
@@ -35,6 +36,21 @@ public class PlnProximoVencer
     public decimal  CantidadOrig  { get; set; }
     public decimal  KgPendientes  { get; set; }
     public int      NroCiclo      { get; set; } = 1;
+
+    /// <summary>Fecha real de inicio del paso actual (FCH_REAL_* de PLN_SEGUIMIENTO).</summary>
+    public DateTime? FchIniPaso    { get; set; }
+
+    /// <summary>Días acumulados en el paso actual (calculado desde FchIniPaso).</summary>
+    public int DiasEnPaso => FchIniPaso.HasValue
+        ? Math.Max(0, (int)(DateTime.Today - FchIniPaso.Value.Date).TotalDays)
+        : 0;
+
+    /// <summary>Cantidad de sub-lotes (NUM_DET) activos que componen este ítem en ProximosVencer.</summary>
+    public int     NumSubLotesActivos { get; set; } = 1;
+    /// <summary>Detalle de cada sub-lote activo: "Paso (Xkg) · Paso (Ykg)" — para tooltip.</summary>
+    public string  SubLotesDetalle    { get; set; } = "";
+    /// <summary>Verdadero cuando hay más de un sub-lote activo y provienen de etapas distintas.</summary>
+    public bool    TieneMultiSublotes => NumSubLotesActivos > 1;
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     public bool EstaRetrasado   => IndRetraso   == "S";

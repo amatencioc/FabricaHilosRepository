@@ -35,10 +35,12 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
             SELECT a.id_alerta, a.serie, a.tip_alerta, a.nivel, a.titulo, a.detalle,
                    a.fch_alerta, a.fch_limite, a.dias_retraso, a.num_ped, a.nro, a.num_det,
                    a.cod_cliente, a.nom_cliente, a.cod_maq, a.estado, a.horas_sin_resolver,
-                   a.cod_art, a.titulo_art, a.proceso, a.cod_paso_act, a.nombre_paso, a.color_ui,
+                   a.cod_art, ar.descripcion AS desc_art, a.titulo_art, a.proceso,
+                   a.cod_paso_act, a.nombre_paso, a.color_ui,
                    a.fch_entrega_comp, a.dias_retraso_ent, a.cantidad_orig, a.kg_pendientes,
                    a.nro_ciclo, a.ind_urgente
-            FROM   {S}V_PLN_ALERTAS_ACTIVAS a";
+            FROM   {S}V_PLN_ALERTAS_ACTIVAS a
+            LEFT JOIN {S}ARTICUL ar ON ar.cod_art = a.cod_art";
 
         var list = new List<PlnAlerta>();
         await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -70,6 +72,7 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 CodCliente       = SafeStr(r["cod_cliente"]),
                 NombreCliente    = SafeStr(r["nom_cliente"]),
                 CodArt           = r["cod_art"]        == DBNull.Value ? null : SafeStr(r["cod_art"]),
+                DescArt          = r["desc_art"]       == DBNull.Value ? null : SafeStr(r["desc_art"]),
                 TituloArt        = r["titulo_art"]     == DBNull.Value ? null : SafeStr(r["titulo_art"]),
                 Proceso          = SafeStr(r["proceso"]),
                 CodPasoAct       = SafeStr(r["cod_paso_act"]),
@@ -187,32 +190,81 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
         // Una fila por ítem de pedido (NUM_PED/NRO), agrupando todos sus sub-lotes (NUM_DET).
         // Muestra la etapa más rezagada (mínimo orden_paso) y suma los KGs.
         var sql = $@"
-            SELECT s.serie, s.num_ped, s.nro,
-                   s.cod_cliente,
-                   MAX(NVL(cl.nombre, s.cod_cliente)) AS nombre_cliente,
-                   s.cod_art, s.color, s.titulo, s.proceso,
-                   MIN(s.cod_paso_act) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS cod_paso_act,
-                   MIN(ec.nombre_paso) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS nombre_paso,
-                   MIN(ec.color_ui) KEEP (DENSE_RANK FIRST ORDER BY ec.orden_paso) AS color_ui,
-                   MIN(s.fch_pedido) AS fch_pedido,
-                   MIN(s.fch_entrega_comp) AS fch_entrega_comp,
-                   TRUNC(MIN(s.fch_entrega_comp)) - TRUNC(SYSDATE) AS dias_hasta_vencer,
-                   MAX(s.dias_retraso) AS dias_retraso,
-                   MAX(s.ind_retraso) AS ind_retraso,
-                   MAX(s.ind_urgente) AS ind_urgente,
-                   MAX(s.ind_reproceso) AS ind_reproceso,
-                   SUM(s.cantidad_orig) AS cantidad_orig,
-                   SUM(s.kg_pendientes) AS kg_pendientes,
-                   MAX(s.nro_ciclo) AS nro_ciclo
-            FROM   {S}PLN_SEGUIMIENTO s
-            JOIN   {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
-            LEFT JOIN {S}CLIENTES cl ON cl.cod_cliente = s.cod_cliente
-            WHERE  s.estado = 'A'
-              AND  s.fch_entrega_comp BETWEEN
-                       TRUNC(:fchIni) - :diasAtras AND TRUNC(:fchFin)
-            GROUP BY s.serie, s.num_ped, s.nro,
-                     s.cod_cliente, s.cod_art, s.color, s.titulo, s.proceso
-            ORDER BY MIN(s.fch_entrega_comp), MAX(s.ind_urgente) DESC, s.num_ped";
+            WITH paso_min AS (
+                SELECT s2.serie, s2.num_ped, s2.nro,
+                       MIN(ec2.orden_paso) AS min_orden
+                FROM   {S}PLN_SEGUIMIENTO s2
+                JOIN   {S}PLN_ESTADO_CODIGO ec2 ON ec2.cod_paso = s2.cod_paso_act
+                WHERE  s2.estado = 'A'
+                GROUP BY s2.serie, s2.num_ped, s2.nro
+            ),
+            base AS (
+                SELECT s.serie, s.num_ped, s.nro,
+                       s.cod_cliente,
+                       MAX(NVL(cl.nombre, s.cod_cliente)) AS nombre_cliente,
+                       s.cod_art, MAX(ar.descripcion) AS desc_art, s.color, s.titulo, s.proceso,
+                       MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN s.cod_paso_act END) AS cod_paso_act,
+                       MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN ec.nombre_paso END) AS nombre_paso,
+                       MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN ec.color_ui    END) AS color_ui,
+                       MIN(s.fch_pedido)           AS fch_pedido,
+                       -- F.COMPROMISO del sublote más retrasado (mismo que etapa mostrada)
+                       MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN s.fch_entrega_comp END) AS fch_entrega_comp,
+                       TRUNC(MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN s.fch_entrega_comp END)) - TRUNC(SYSDATE) AS dias_hasta_vencer,
+                       MAX(s.dias_retraso)         AS dias_retraso,
+                       MAX(s.ind_retraso)          AS ind_retraso,
+                       MAX(s.ind_urgente)          AS ind_urgente,
+                       MAX(s.ind_reproceso)        AS ind_reproceso,
+                       SUM(s.cantidad_orig)        AS cantidad_orig,
+                       SUM(s.kg_pendientes)        AS kg_pendientes,
+                       MAX(s.nro_ciclo)            AS nro_ciclo,
+                       COUNT(DISTINCT s.num_det)   AS num_sublotes_activos,
+                       LISTAGG(
+                           'SL' || s.num_det || ': ' || ec.nombre_paso ||
+                           ' · ' || ROUND(s.kg_pendientes) || ' kg pend.' ||
+                           ' · Ent.' || NVL(TO_CHAR(s.fch_entrega_comp,'DD/MM/YY'),'?'),
+                           '§')
+                         WITHIN GROUP (ORDER BY ec.orden_paso, s.num_det) AS sublotes_detalle,
+                       MAX(CASE WHEN ec.orden_paso = pm.min_orden THEN
+                         CASE s.cod_paso_act
+                           WHEN '01'  THEN s.fch_pedido
+                           WHEN '02'  THEN s.fch_real_programado
+                           WHEN '03'  THEN s.fch_real_produccion
+                           WHEN '04'  THEN s.fch_real_partida
+                           WHEN '05'  THEN s.fch_real_partida
+                           WHEN '06'  THEN s.fch_real_tin_ini
+                           WHEN '07'  THEN s.fch_real_tin_fin
+                           WHEN '08'  THEN s.fch_real_secado
+                           WHEN '09'  THEN s.fch_real_cc_tinto
+                           WHEN '09B' THEN s.fch_real_gaseado
+                           WHEN '9R'  THEN s.fch_real_cc_rechazo
+                           WHEN '10'  THEN s.fch_real_devanado
+                           WHEN '11'  THEN s.fch_real_calidad
+                           WHEN '12'  THEN s.fch_real_alm_pt
+                           WHEN '13'  THEN s.fch_real_alm_pt
+                           WHEN '14'  THEN s.fch_real_despacho
+                           ELSE NULL
+                         END
+                       END)                        AS fch_ini_paso
+                FROM   {S}PLN_SEGUIMIENTO s
+                JOIN   {S}PLN_ESTADO_CODIGO ec ON ec.cod_paso = s.cod_paso_act
+                JOIN   paso_min pm ON pm.serie = s.serie AND pm.num_ped = s.num_ped AND pm.nro = s.nro
+                LEFT JOIN {S}CLIENTES cl ON cl.cod_cliente = s.cod_cliente
+                LEFT JOIN {S}ARTICUL  ar ON ar.cod_art     = s.cod_art
+                WHERE  s.estado = 'A'
+                  AND  s.fch_entrega_comp BETWEEN TRUNC(:fchIni) - :diasAtras AND TRUNC(:fchFin)
+                GROUP BY s.serie, s.num_ped, s.nro,
+                         s.cod_cliente, s.cod_art, s.color, s.titulo, s.proceso
+            )
+            SELECT b.*,
+                   NVL(b.fch_ini_paso,
+                       (SELECT MIN(ev.fch_evento)
+                        FROM   {S}PLN_LOG_EVENTOS ev
+                        WHERE  ev.num_ped  = b.num_ped
+                          AND  ev.serie    = b.serie
+                          AND  ev.nro      = b.nro
+                          AND  ev.cod_paso = b.cod_paso_act)) AS fch_ini_paso
+            FROM   base b
+            ORDER BY b.fch_entrega_comp, b.ind_urgente DESC, b.num_ped";
 
         var list = new List<PlnProximoVencer>();
         await using var conn = new OracleConnection(GetOracleConnectionString());
@@ -233,6 +285,7 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 CodCliente       = SafeStr(r["cod_cliente"]),
                 NombreCliente    = SafeStr(r["nombre_cliente"]),
                 CodArt           = SafeStr(r["cod_art"]),
+                DescArt          = SafeStr(r["desc_art"]),
                 Color            = SafeStr(r["color"]),
                 Titulo           = SafeStr(r["titulo"]),
                 Proceso          = SafeStr(r["proceso"]),
@@ -249,6 +302,9 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 CantidadOrig     = SafeVal<decimal>(r["cantidad_orig"]),
                 KgPendientes     = SafeVal<decimal>(r["kg_pendientes"]),
                 NroCiclo         = SafeVal<int>(r["nro_ciclo"]),
+                NumSubLotesActivos = SafeVal<int>(r["num_sublotes_activos"]),
+                SubLotesDetalle  = SafeStr(r["sublotes_detalle"]),
+                FchIniPaso       = SafeDate(r["fch_ini_paso"]),
             });
         }
         return list;

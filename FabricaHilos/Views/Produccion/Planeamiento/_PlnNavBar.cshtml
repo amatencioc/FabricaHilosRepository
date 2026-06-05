@@ -11,7 +11,16 @@
     bool esCargaMaquinas   = ctrl == "Planeamiento" && act == "CargaMaquinas";
     bool esPendDespacho    = ctrl == "Planeamiento" && act == "PendientesDespacho";
     bool esProximosVencer  = ctrl == "Planeamiento" && act == "ProximosVencer";
-    bool esHistEventos     = false;
+
+    // Auto-refresh: segundos por vista (0 = sin auto-refresh)
+    int autoRefreshSeg = act switch {
+        "PendientesDespacho" => 180,   // 3 min — más operacional (despachos en curso)
+        "Dashboard"          => 300,   // 5 min
+        "CargaMaquinas"      => 300,   // 5 min
+        "Alertas"            => 300,   // 5 min (JOB hourly + triggers inmediatos)
+        "ProximosVencer"     => 300,   // 5 min
+        _                    => 0
+    };
 }
 <nav class="pln-navbar mb-3">
     <ul class="pln-navbar-list">
@@ -75,4 +84,85 @@
             </span>
         </li>
     </ul>
+
+    @if (autoRefreshSeg > 0)
+    {
+        <div id="pln-autorefresh" class="pln-autorefresh-badge" title="Actualización automática activa">
+            <i class="bi bi-arrow-clockwise" id="pln-refresh-icon"></i>
+            <span id="pln-refresh-countdown"></span>
+        </div>
+    }
 </nav>
+
+@if (autoRefreshSeg > 0)
+{
+    <script>
+    (function () {
+        var total    = @autoRefreshSeg;
+        var restante = total;
+        var pausado  = false;
+        var el       = document.getElementById('pln-refresh-countdown');
+        var icon     = document.getElementById('pln-refresh-icon');
+        var badge    = document.getElementById('pln-autorefresh');
+
+        function fmt(s) {
+            var m = Math.floor(s / 60), ss = s % 60;
+            return m + ':' + (ss < 10 ? '0' : '') + ss;
+        }
+
+        function estaInteractuando() {
+            // Modal de Bootstrap abierto
+            if (document.querySelector('.modal.show')) return true;
+            // Input / select / textarea con foco
+            var f = document.activeElement;
+            if (f && (f.tagName === 'INPUT' || f.tagName === 'SELECT' || f.tagName === 'TEXTAREA')) return true;
+            return false;
+        }
+
+        function actualizarBadge() {
+            if (!el) return;
+            if (pausado) {
+                el.textContent = 'Pausado';
+                if (badge) { badge.classList.remove('pln-autorefresh-soon'); badge.style.opacity = '.45'; }
+            } else {
+                el.textContent = fmt(restante);
+                if (badge) { badge.style.opacity = ''; badge.classList.toggle('pln-autorefresh-soon', restante <= 30); }
+            }
+        }
+
+        function setPausado(val) {
+            pausado = val;
+            actualizarBadge();
+        }
+
+        // Pausa cuando el tab queda en segundo plano
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                setPausado(true);
+            } else {
+                // Al volver: si ya expiró, recargar inmediatamente; si no, reanudar
+                if (restante <= 0) { location.reload(); }
+                else { setPausado(false); }
+            }
+        });
+
+        function tick() {
+            if (pausado || estaInteractuando()) {
+                actualizarBadge();
+                return;
+            }
+            restante--;
+            if (restante <= 0) {
+                if (icon) icon.classList.add('spin');
+                el.textContent = 'Actualizando…';
+                location.reload();
+                return;
+            }
+            actualizarBadge();
+        }
+
+        actualizarBadge();
+        setInterval(tick, 1000);
+    })();
+    </script>
+}

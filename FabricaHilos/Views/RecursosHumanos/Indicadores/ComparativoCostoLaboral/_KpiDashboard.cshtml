@@ -1,0 +1,311 @@
+@model FabricaHilos.Models.RecursosHumanos.ComparativoCostoLaboralViewModel
+@using System.Globalization
+@using FabricaHilos.Models.RecursosHumanos
+
+@{
+    var ci = CultureInfo.GetCultureInfo("es-PE");
+    string FmtSoles(decimal v) => "S/ " + v.ToString("N2", ci);
+    string FmtN1(decimal v)    => v.ToString("N1", ci);
+    string FmtPct(decimal v)   => v.ToString("N2", ci) + "%";
+
+    string DeltaIcon(decimal d)  => d > 0 ? "▲" : d < 0 ? "▼" : "=";
+    string DeltaClass(decimal d) => d > 0 ? "delta-up" : d < 0 ? "delta-down" : "delta-eq";
+    // Para personas: aumentar es positivo (verde), disminuir negativo (rojo)
+    string DeltaClassPersonas(decimal d) => d > 0 ? "delta-down" : d < 0 ? "delta-up" : "delta-eq";
+    // Para costos: aumentar es negativo (rojo), disminuir positivo (verde) → coincide con DeltaClass por defecto
+
+    string MesRango(int mi, int mf)
+    {
+        if (mi == mf) return ci.DateTimeFormat.GetMonthName(mi);
+        return $"{ci.DateTimeFormat.GetMonthName(mi)}–{ci.DateTimeFormat.GetMonthName(mf)}";
+    }
+
+    string periodoAno1 = $"{MesRango(Model.MesIniAno1, Model.MesFinAno1)} {Model.Ano1}";
+    string periodoAno2 = $"{MesRango(Model.MesIniAno2, Model.MesFinAno2)} {Model.Ano2}";
+}
+
+@if (Model.FilasCrudo.Count == 0)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Sin datos para los periodos seleccionados.
+    </div>
+    return;
+}
+
+<!-- ── Encabezado ─────────────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1B4D3E; letter-spacing:.06em; font-size:.95rem;">
+        Comparativo Costo Laboral — Año @Model.Ano1 vs Año @Model.Ano2
+    </h5>
+    <p class="text-muted mb-0" style="font-size:.8rem;">
+        <strong>@periodoAno1</strong> &nbsp;·&nbsp; vs &nbsp;·&nbsp; <strong>@periodoAno2</strong>
+        &nbsp;|&nbsp; Costo laboral = básico × <code>1.4232</code>
+    </p>
+    @if (Model.BasicoManual > 0m)
+    {
+        <p class="mb-0 mt-1" style="font-size:.78rem;">
+            <span class="badge" style="background:#b8860b; color:#fff;">
+                <i class="bi bi-cash-stack me-1"></i>
+                Básico manual aplicado a ambos períodos: <strong>@FmtSoles(Model.BasicoManual)</strong>
+            </span>
+        </p>
+    }
+    else
+    {
+        <p class="text-muted mb-0 mt-1" style="font-size:.75rem;">
+            <i class="bi bi-database me-1"></i>
+            Básico calculado desde planilla (concepto <code>0121</code>) — promediado por área y año.
+        </p>
+    }
+    @{
+        var tipoLabel = (Model.Tipo ?? "T").ToUpperInvariant() switch
+        {
+            "O" => ("Obreros",   "bg-primary-subtle text-primary",              "bi-person-gear"),
+            "E" => ("Empleados", "bg-info-subtle text-info-emphasis",           "bi-person-badge"),
+            _   => ("Todos",     "bg-secondary-subtle text-secondary-emphasis", "bi-people")
+        };
+    }
+    <p class="mb-0 mt-1" style="font-size:.75rem;">
+        <span class="badge rounded-pill @tipoLabel.Item2">
+            <i class="bi @tipoLabel.Item3 me-1"></i>Tipo: @tipoLabel.Item1
+        </span>
+    </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CUADRO 1 — Comparativo Costo Laboral por Área                      -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="card cuadro-card">
+    <div class="card-header">
+        <i class="bi bi-1-square-fill me-1"></i> Cuadro 1 — Comparativo Costo Laboral por Área
+        <div class="subtitle">
+            Promedio mensual de trabajadores y costo laboral mensual (con factor <code>1.4232</code>) por área.
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover tbl-comp align-middle">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="vertical-align:middle; text-align:left;">Área</th>
+                        <th colspan="2">N° Trabajadores (promedio mensual)</th>
+                        <th colspan="2">Costo Laboral Mensual (S/.)</th>
+                        <th colspan="2">Variación Año2 vs Año1</th>
+                    </tr>
+                    <tr>
+                        <th>@Model.Ano1</th>
+                        <th>@Model.Ano2</th>
+                        <th>@Model.Ano1</th>
+                        <th>@Model.Ano2</th>
+                        <th>Δ Personas</th>
+                        <th>Δ Costo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Cuadro1)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@c.Area</td>
+                            <td class="text-end">@FmtN1(c.NroTrabPromAno1)</td>
+                            <td class="text-end">@FmtN1(c.NroTrabPromAno2)</td>
+                            <td class="text-end">@FmtSoles(c.CostoLaboralPromMesAno1)</td>
+                            <td class="text-end">@FmtSoles(c.CostoLaboralPromMesAno2)</td>
+                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrab)">
+                                @DeltaIcon(c.DiferenciaNroTrab) @FmtN1(Math.Abs(c.DiferenciaNroTrab))
+                            </td>
+                            <td class="text-end @DeltaClass(c.DiferenciaCostoMes)">
+                                @DeltaIcon(c.DiferenciaCostoMes) @FmtSoles(Math.Abs(c.DiferenciaCostoMes))
+                                <small class="d-block text-muted">(@FmtPct(c.VariacionCostoPct))</small>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>TOTAL EMPRESA</td>
+                        <td class="text-end">@FmtN1(Model.TotalNroTrabAno1)</td>
+                        <td class="text-end">@FmtN1(Model.TotalNroTrabAno2)</td>
+                        <td class="text-end">@FmtSoles(Model.TotalCostoLaboralAno1)</td>
+                        <td class="text-end">@FmtSoles(Model.TotalCostoLaboralAno2)</td>
+                        <td class="text-end">
+                            @DeltaIcon(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1)
+                            @FmtN1(Math.Abs(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1))
+                        </td>
+                        <td class="text-end">
+                            @DeltaIcon(Model.TotalCostoLaboralAno2 - Model.TotalCostoLaboralAno1)
+                            @FmtSoles(Math.Abs(Model.TotalCostoLaboralAno2 - Model.TotalCostoLaboralAno1))
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CUADRO 2 — Impacto de la variación de personal                     -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="card cuadro-card">
+    <div class="card-header">
+        <i class="bi bi-2-square-fill me-1"></i> Cuadro 2 — Impacto Monetario de la Variación de Personal
+        <div class="subtitle">
+            Aplica la diferencia de NTrab (Año2 − Año1) al costo laboral promedio por trabajador del Año 2.
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover tbl-comp align-middle">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="vertical-align:middle; text-align:left;">Área</th>
+                        <th colspan="3">N° Trabajadores Promedio Mensual</th>
+                        <th rowspan="2">Costo Laboral / Trab. (S/.)<br /><small class="text-muted fw-normal">Año @Model.Ano2 — con factor 1.4232</small></th>
+                        <th rowspan="2">Impacto Mensual (S/.)</th>
+                        <th rowspan="2">Impacto Anual Estimado (S/.)</th>
+                    </tr>
+                    <tr>
+                        <th>@Model.Ano1</th>
+                        <th>@Model.Ano2</th>
+                        <th>Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Cuadro2)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@c.Area</td>
+                            <td class="text-end">@FmtN1(c.NroTrabPromAno1)</td>
+                            <td class="text-end">@FmtN1(c.NroTrabPromAno2)</td>
+                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrab)">
+                                @DeltaIcon(c.DiferenciaNroTrab) @FmtN1(Math.Abs(c.DiferenciaNroTrab))
+                            </td>
+                            <td class="text-end">@FmtSoles(c.CostoXTrabAno2)</td>
+                            <td class="text-end @DeltaClass(c.ImpactoMensual)">
+                                @(c.ImpactoMensual >= 0 ? "+" : "") @FmtSoles(c.ImpactoMensual)
+                            </td>
+                            <td class="text-end fw-semibold @DeltaClass(c.ImpactoAnualEstimado)">
+                                @(c.ImpactoAnualEstimado >= 0 ? "+" : "") @FmtSoles(c.ImpactoAnualEstimado)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>TOTAL EMPRESA</td>
+                        <td class="text-end">@FmtN1(Model.TotalNroTrabAno1)</td>
+                        <td class="text-end">@FmtN1(Model.TotalNroTrabAno2)</td>
+                        <td class="text-end">
+                            @DeltaIcon(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1)
+                            @FmtN1(Math.Abs(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1))
+                        </td>
+                        <td class="text-end">—</td>
+                        <td class="text-end">
+                            @(Model.TotalImpactoMensual >= 0 ? "+" : "") @FmtSoles(Model.TotalImpactoMensual)
+                        </td>
+                        <td class="text-end">
+                            @(Model.TotalImpactoAnual >= 0 ? "+" : "") @FmtSoles(Model.TotalImpactoAnual)
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CUADRO 3 — Desglose del costo unitario mensual                     -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="card cuadro-card">
+    <div class="card-header">
+        <i class="bi bi-3-square-fill me-1"></i> Cuadro 3 — Desglose del Costo Mensual por Trabajador (Año @Model.Ano2)
+        <div class="subtitle">
+            Sueldo básico + cargas sociales devengadas por Ley aplicadas sobre el básico promedio del trabajador.
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover tbl-comp align-middle">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Área</th>
+                        <th>Sueldo Básico (S/.)<br /><small class="text-muted fw-normal">100.00%</small></th>
+                        <th>EsSalud (S/.)<br /><small class="text-muted fw-normal">9.00%</small></th>
+                        <th>CTS (S/.)<br /><small class="text-muted fw-normal">8.33%</small></th>
+                        <th>Gratificaciones (S/.)<br /><small class="text-muted fw-normal">16.66%</small></th>
+                        <th>Vacaciones (S/.)<br /><small class="text-muted fw-normal">8.33%</small></th>
+                        <th class="table-success">Costo Total / Mes (S/.)<br /><small class="text-muted fw-normal">142.32% (×1.4232)</small></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Cuadro3)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@c.Area</td>
+                            <td class="text-end">@FmtSoles(c.SueldoBasico)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoEsSalud)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoCts)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoGratif)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoVacaciones)</td>
+                            <td class="text-end fw-bold" style="background:#e7f7ef; color:#1B4D3E;">
+                                @FmtSoles(c.CostoTotalMes)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Nota al pie con la explicación obligatoria ─────────────────── -->
+<div class="nota-explicativa mt-4">
+    <strong><i class="bi bi-info-circle-fill me-1"></i>¿Qué se está considerando en cada cifra?</strong>
+    <ul class="mb-2 mt-2">
+        <li>
+            <strong>Sueldo Básico:</strong> concepto RTPS <code>0121</code> de la planilla mensual
+            (<code>TIPO_PLA='N'</code>). Se promedia mes a mes y se divide entre el promedio de
+            trabajadores para obtener el básico por trabajador.
+        </li>
+        <li>
+            <strong>EsSalud (9%):</strong> aporte patronal mensual sobre la remuneración asegurable
+            — Ley N° 26790.
+        </li>
+        <li>
+            <strong>CTS (8.33% = 1/12):</strong> compensación por tiempo de servicios devengada
+            mes a mes. Se desembolsa en mayo y noviembre.
+        </li>
+        <li>
+            <strong>Gratificaciones (16.66% = 2/12):</strong> 2 gratificaciones al año (Fiestas
+            Patrias y Navidad) prorrateadas mensualmente.
+        </li>
+        <li>
+            <strong>Vacaciones (8.33% = 1/12):</strong> 30 días de vacaciones al año prorrateados
+            mensualmente.
+        </li>
+        <li class="mt-2">
+            <strong>Factor total 1.4232 (142.32%):</strong> es el multiplicador legal estándar para
+            estimar el <em>costo laboral real</em> de cada trabajador a partir de su básico mensual.
+            <br />
+            <em>Ejemplo de referencia (PDF):</em> S/ 1,243.11 × 1.4233 ≈ <strong>S/ 1,769.19</strong>.
+        </li>
+        <li>
+            <strong>Impacto Mensual (Cuadro 2):</strong> diferencia de trabajadores entre los dos
+            años multiplicada por el costo laboral promedio por trabajador del Año 2. Si Año 2
+            tiene menos personal → impacto positivo (ahorro). Si tiene más → impacto negativo
+            (mayor costo).
+        </li>
+        <li>
+            <strong>Conceptos NO incluidos en el básico</strong> (excluidos a propósito de la masa
+            base): Horas Extras (<code>0105/0106/0107</code>), bonificaciones, asignación familiar,
+            comisiones, refrigerios, prestaciones alimentarias y demás conceptos variables. Estos
+            se analizan en el KPI "Costo Salarial de Horas Extras".
+        </li>
+    </ul>
+    <small class="text-muted">
+        <i class="bi bi-shield-check me-1"></i>
+        Validado contra planilla SIG mayo 2026: conceptos <code>0118</code>, <code>0406</code>,
+        <code>0604</code> = S/ 0 en la planilla mensual, lo que confirma que los beneficios
+        sociales se devengan pero NO se pagan en planilla normal.
+    </small>
+</div>

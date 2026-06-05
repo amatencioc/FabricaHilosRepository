@@ -1,0 +1,816 @@
+@*
+    ════════════════════════════════════════════════════════════════════════
+    ARCHIVO: _KpiDashboard.cshtml  (Razor Partial View)
+    MÓDULO:  RecursosHumanos / Indicadores / CostoSalarialHorasExtras
+    PROPÓSITO:
+        Partial que renderiza TODO el contenido del dashboard KPI:
+          • Banner explicativo para usuarios no técnicos
+          • Tarjetas KPI (acumulado del período / último mes / promedio mensual)
+          • Tarjetas secundarias (desglose HE 25/35/100, masa salarial, ratio)
+          • Tabla resumen por período
+          • Tabla comparativa año-vs-año (totaliza SOLO meses comparados)
+          • Tabla detalle por área
+          • Placeholders <canvas> para los 3 charts de Chart.js
+          • Payload JSON oculto #chartRawData con los datos de los charts
+
+    RECIBE: CostoSalarialHorasExtrasViewModel (filtros + lista de filas).
+    USADO POR: Index.cshtml (lo inyecta vía AJAX en #kpi-container).
+
+    NOTAS PARA USUARIOS DE NEGOCIO:
+        • "Acumulado del período"  → suma de TODOS los meses del filtro.
+        • "Último mes"             → snapshot del mes más reciente.
+        • "Promedio mensual"       → acumulado / cantidad de meses con datos.
+        • "Ratio HE / Básico (%)"  → cuánto representa el costo HE sobre el básico.
+    ════════════════════════════════════════════════════════════════════════
+*@
+@model FabricaHilos.Models.RecursosHumanos.CostoSalarialHorasExtrasViewModel
+@using System.Globalization
+
+@{
+    // Cultura es-PE para nombres de mes en español y formato S/ 1,234.56
+    var culture = CultureInfo.GetCultureInfo("es-PE");
+    string NombreMes(int m) => culture.DateTimeFormat.GetMonthName(m);
+    string FmtSoles(decimal v) => "S/ " + v.ToString("N2", culture);
+
+    // Flag clave: si el año inicial difiere del final, estamos en modo COMPARATIVO año-vs-año.
+    bool comparativoAnos = Model.AnoIni != Model.AnoFin;
+
+    // Texto del subtítulo del dashboard según el modo de filtro elegido.
+    string periodo = comparativoAnos
+        ? $"Comparativo: Enero–{NombreMes(Model.MesIni)} {Model.AnoIni}  vs.  Enero–{NombreMes(Model.MesFin)} {Model.AnoFin}"
+        : (Model.MesIni == Model.MesFin
+            ? $"{NombreMes(Model.MesIni)} {Model.AnoIni}"
+            : $"{NombreMes(Model.MesIni)} – {NombreMes(Model.MesFin)} {Model.AnoIni}");
+
+    // ══════════════════════════════════════════════════════════════════
+    //  PRE-CÁLCULO DE TODAS LAS AGREGACIONES (una sola pasada)
+    //  Se hace una única iteración sobre Model.Filas para evitar
+    //  recorrer la lista varias veces en la misma vista.
+    // ══════════════════════════════════════════════════════════════════
+
+    // Totales globales
+    decimal gMontoHeTotal = 0m;
+    decimal gMontoHe25 = 0m;
+    decimal gMontoHe35 = 0m;
+    decimal gMontoHe100 = 0m;
+    decimal gMasa = 0m;
+    int gNroTrabMax = 0;
+
+    // Diccionarios para lookup rápido
+    var filaPorPeriodoArea = new Dictionary<string, FabricaHilos.Models.RecursosHumanos.CostoSalarialHorasExtrasDto>();
+    var agregadosPorPeriodo = new Dictionary<string, (int nroT, int nroHe, decimal h25, decimal h35, decimal h100, decimal hT, decimal ma, decimal rt)>();
+    var totalesPorAno = new Dictionary<int, decimal>();
+
+    // Procesamiento único de Model.Filas
+    foreach (var f in Model.Filas)
+    {
+        // Totales globales
+        gMontoHeTotal += f.MontoHeTotal;
+        gMontoHe25 += f.MontoHe25;
+        gMontoHe35 += f.MontoHe35;
+        gMontoHe100 += f.MontoHe100;
+        gMasa += f.MasaSalarial;
+
+        // Lookup período-área
+        string key = $"{f.Ano}_{f.Mes}_{f.Area}";
+        filaPorPeriodoArea[key] = f;
+
+        // Agregados por período
+        string periodoKey = $"{f.Ano}_{f.Mes}";
+        if (agregadosPorPeriodo.ContainsKey(periodoKey))
+        {
+            var curr = agregadosPorPeriodo[periodoKey];
+            agregadosPorPeriodo[periodoKey] = (
+                curr.nroT + f.NroTrab,
+                curr.nroHe + f.NroTrabConHe,
+                curr.h25 + f.MontoHe25,
+                curr.h35 + f.MontoHe35,
+                curr.h100 + f.MontoHe100,
+                curr.hT + f.MontoHeTotal,
+                curr.ma + f.MasaSalarial,
+                0m // se calculará después
+            );
+        }
+        else
+        {
+            agregadosPorPeriodo[periodoKey] = (
+                f.NroTrab,
+                f.NroTrabConHe,
+                f.MontoHe25,
+                f.MontoHe35,
+                f.MontoHe100,
+                f.MontoHeTotal,
+                f.MasaSalarial,
+                0m
+            );
+        }
+
+        // Totales por año
+        if (totalesPorAno.ContainsKey(f.Ano))
+            totalesPorAno[f.Ano] += f.MontoHeTotal;
+        else
+            totalesPorAno[f.Ano] = f.MontoHeTotal;
+    }
+
+    // Calcular ratio para cada período
+    var agregadosPorPeriodoFinal = new Dictionary<string, (int nroT, int nroHe, decimal h25, decimal h35, decimal h100, decimal hT, decimal ma, decimal rt)>();
+    foreach (var kvp in agregadosPorPeriodo)
+    {
+        decimal rt = kvp.Value.ma > 0 ? Math.Round(kvp.Value.hT / kvp.Value.ma * 100, 2) : 0m;
+        agregadosPorPeriodoFinal[kvp.Key] = (
+            kvp.Value.nroT,
+            kvp.Value.nroHe,
+            kvp.Value.h25,
+            kvp.Value.h35,
+            kvp.Value.h100,
+            kvp.Value.hT,
+            kvp.Value.ma,
+            rt
+        );
+    }
+
+    // NroTrab máximo
+    gNroTrabMax = agregadosPorPeriodoFinal.Values.Any() ? agregadosPorPeriodoFinal.Values.Max(x => x.nroT) : 0;
+    decimal gRatio = gMasa > 0 ? Math.Round(gMontoHeTotal / gMasa * 100, 2) : 0m;
+
+    // Períodos únicos ordenados
+    var periodos = agregadosPorPeriodoFinal.Keys
+        .Select(k => {
+            var parts = k.Split('_');
+            return new { Ano = int.Parse(parts[0]), Mes = int.Parse(parts[1]) };
+        })
+        .OrderBy(p => p.Ano).ThenBy(p => p.Mes)
+        .ToList();
+
+    // ══════════════════════════════════════════════════════════════════
+    //  KPIs DEL ÚLTIMO MES (snapshot del mes más reciente del período)
+    // ══════════════════════════════════════════════════════════════════
+    decimal uMontoHeTotal = 0m;
+    decimal uMasa         = 0m;
+    decimal uRatio        = 0m;
+    int     uNroTrab      = 0;
+    string  uNombreMes    = string.Empty;
+    int     uAno          = 0;
+
+    if (periodos.Any())
+    {
+        var ultimo = periodos.Last();
+        uAno = ultimo.Ano;
+        uNombreMes = NombreMes(ultimo.Mes);
+        string ultimoKey = $"{ultimo.Ano}_{ultimo.Mes}";
+        if (agregadosPorPeriodoFinal.ContainsKey(ultimoKey))
+        {
+            var uAgg = agregadosPorPeriodoFinal[ultimoKey];
+            uMontoHeTotal = uAgg.hT;
+            uMasa         = uAgg.ma;
+            uRatio        = uAgg.rt;
+            uNroTrab      = uAgg.nroT;
+        }
+    }
+
+    // Promedios mensuales (acumulado del período / número de meses)
+    int numMeses          = periodos.Count > 0 ? periodos.Count : 1;
+    decimal gMontoHeProm  = gMontoHeTotal / numMeses;
+    decimal gMasaProm     = gMasa / numMeses;
+
+    // Áreas únicas ordenadas por HE total desc
+    var areas = Model.Filas
+        .GroupBy(f => f.Area)
+        .OrderByDescending(g => g.Sum(x => x.MontoHeTotal))
+        .Select(g => g.Key)
+        .ToList();
+
+    // Helper para obtener fila
+    Func<int, int, string, FabricaHilos.Models.RecursosHumanos.CostoSalarialHorasExtrasDto?> GetFila =
+        (ano, mes, area) => {
+            string key = $"{ano}_{mes}_{area}";
+            return filaPorPeriodoArea.ContainsKey(key) ? filaPorPeriodoArea[key] : null;
+        };
+
+    // Datos comparativos año vs año
+    var anios = periodos.Select(p => p.Ano).Distinct().OrderBy(a => a).ToList();
+    var mesesComunes = periodos.Select(p => p.Mes).Distinct().OrderBy(m => m).ToList();
+
+    string DeltaIcon(decimal delta) => delta > 0 ? "↑" : delta < 0 ? "↓" : "=";
+    string DeltaClass(decimal delta) => delta > 0 ? "delta-up" : delta < 0 ? "delta-down" : "delta-eq";
+
+    // JSON para gráficos (simplificado)
+    var chartRows = Model.Filas.Select(f => new {
+        ano     = f.Ano,
+        mes     = f.Mes,
+        area    = f.Area,
+        nroTrab = f.NroTrab,
+        nroHe   = f.NroTrabConHe,
+        he25    = f.MontoHe25,
+        he35    = f.MontoHe35,
+        he100   = f.MontoHe100,
+        heTotal = f.MontoHeTotal,
+        masa    = f.MasaSalarial,
+        ratio   = f.RatioHePct
+    });
+    var rawJson = System.Text.Json.JsonSerializer.Serialize(chartRows);
+}
+
+<!-- Datos para Chart.js (value="..." para que Razor escape automáticamente comillas y caracteres especiales del JSON) -->
+<input type="hidden" id="chartRawData" value="@rawJson" />
+
+<!-- ── Título y período ─────────────────────────────────── -->
+<div class="text-center mb-4">
+    <h5 class="fw-bold text-uppercase mb-1" style="color:#1B4D3E; letter-spacing:.06em; font-size:.95rem;">
+        KPI Costo Salarial de Horas Extras
+    </h5>
+    <p class="text-muted mb-1" style="font-size:.8rem;">Período: @periodo</p>
+    @{
+        var tipoLabel = (Model.Tipo ?? "T").ToUpperInvariant() switch
+        {
+            "O" => ("Obreros",   "bg-primary-subtle text-primary",       "bi-person-gear"),
+            "E" => ("Empleados", "bg-info-subtle text-info-emphasis",    "bi-person-badge"),
+            _   => ("Todos",     "bg-secondary-subtle text-secondary-emphasis", "bi-people")
+        };
+    }
+    <span class="badge rounded-pill @tipoLabel.Item2" style="font-size:.72rem;">
+        <i class="bi @tipoLabel.Item3 me-1"></i>Tipo: @tipoLabel.Item1
+    </span>
+</div>
+
+@if (Model.Filas.Count == 0)
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Sin datos para el período seleccionado.
+    </div>
+    return;
+}
+
+<!-- ── NOTA EXPLICATIVA PARA EL USUARIO ─────────────────── -->
+<div class="alert alert-info border-0 mb-4" style="background:#e7f3fe; border-left:4px solid #1565C0 !important;">
+    <div class="d-flex align-items-start">
+        <i class="bi bi-info-circle-fill me-2 mt-1" style="color:#1565C0; font-size:1.1rem;"></i>
+        <div style="font-size:.85rem;">
+            <strong style="color:#1565C0;">¿Cómo leer estos indicadores?</strong>
+            <br />
+            • Las tarjetas <strong>verdes (Período)</strong> muestran los valores <strong>acumulados</strong> de todos los meses seleccionados.<br />
+            • Las tarjetas <strong>azules (Último Mes)</strong> muestran solo el mes más reciente (<strong>@uNombreMes @uAno</strong>) — útil para ver la situación actual.<br />
+            • Las tarjetas <strong>moradas (Promedio Mensual)</strong> muestran el valor promedio por mes del período seleccionado.
+        </div>
+    </div>
+</div>
+
+<!-- ── KPI Cards: ACUMULADOS DEL PERÍODO ─────────────────── -->
+<div class="section-title">
+    <i class="bi bi-calendar3-range me-1"></i>Acumulado del Período (@numMeses @(numMeses == 1 ? "mes" : "meses"))
+    <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+        — Suma total de todos los meses seleccionados
+    </small>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card" style="border-top:3px solid #1B4D3E;">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-label">HE Total Acumulado</div>
+            <div class="kpi-value" style="color:#c0392b;">@FmtSoles(gMontoHeTotal)</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Suma de todas las horas extras (25% + 35% + 100%) pagadas durante los meses seleccionados."></i>
+                suma de todos los meses
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card" style="border-top:3px solid #1B4D3E;">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-label">Ratio Promedio HE / Básico</div>
+            <div class="kpi-value" style="color:@(gRatio > 30 ? "#c0392b" : gRatio > 15 ? "#e67e22" : "#1B4D3E");">
+                @gRatio.ToString("N2")%
+            </div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Indica cuánto representa el costo de horas extras frente al pago básico del personal. Verde ≤15%, Naranja 15-30%, Rojo >30%."></i>
+                peso ponderado del período
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card" style="border-top:3px solid #1B4D3E;">
+            <div class="kpi-icon">🏢</div>
+            <div class="kpi-label">Básico Acumulado</div>
+            <div class="kpi-value" style="color:#1B4D3E;">@FmtSoles(gMasa)</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Suma del pago básico (concepto 0121) de todos los empleados durante los meses seleccionados. NO es la masa salarial mensual."></i>
+                masa salarial acumulada
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="kpi-card" style="border-top:3px solid #1B4D3E;">
+            <div class="kpi-icon">👥</div>
+            <div class="kpi-label">Trabajadores (pico)</div>
+            <div class="kpi-value">@gNroTrabMax</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Número MÁXIMO de empleados en planilla alcanzado en algún mes del período. No es el promedio."></i>
+                mes con más personal
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── KPI Cards: ÚLTIMO MES (snapshot actual) ─────────── -->
+@if (periodos.Count > 1)
+{
+    <div class="section-title">
+        <i class="bi bi-calendar-check me-1"></i>Situación del Último Mes (@uNombreMes @uAno)
+        <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+            — Snapshot del mes más reciente del período
+        </small>
+    </div>
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="kpi-card" style="background:#f0f7ff; border-top:3px solid #1565C0;">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-label">HE del Mes</div>
+                <div class="kpi-value" style="color:#c0392b;">@FmtSoles(uMontoHeTotal)</div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="Horas extras pagadas SOLO en el último mes del período."></i>
+                    pagado en @uNombreMes
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="kpi-card" style="background:#f0f7ff; border-top:3px solid #1565C0;">
+                <div class="kpi-icon">📊</div>
+                <div class="kpi-label">Ratio del Mes</div>
+                <div class="kpi-value" style="color:@(uRatio > 30 ? "#c0392b" : uRatio > 15 ? "#e67e22" : "#1B4D3E");">
+                    @uRatio.ToString("N2")%
+                </div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="Proporción HE/Básico del último mes. Útil para ver el estado actual sin promediar meses anteriores."></i>
+                    situación actual
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="kpi-card" style="background:#f0f7ff; border-top:3px solid #1565C0;">
+                <div class="kpi-icon">🏢</div>
+                <div class="kpi-label">Básico del Mes</div>
+                <div class="kpi-value" style="color:#1B4D3E;">@FmtSoles(uMasa)</div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="Masa salarial básica del último mes — esta sí es la planilla mensual real."></i>
+                    planilla de @uNombreMes
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="kpi-card" style="background:#f0f7ff; border-top:3px solid #1565C0;">
+                <div class="kpi-icon">👥</div>
+                <div class="kpi-label">Personal del Mes</div>
+                <div class="kpi-value">@uNroTrab</div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="Empleados en planilla en el último mes."></i>
+                    en planilla @uNombreMes
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── KPI Cards: PROMEDIO MENSUAL ─────────────────────── -->
+    <div class="section-title">
+        <i class="bi bi-calculator me-1"></i>Promedio Mensual del Período
+        <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+            — Acumulado dividido entre @numMeses meses
+        </small>
+    </div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="kpi-card" style="background:#f5f0fb; border-top:3px solid #6f42c1;">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-label">HE Promedio Mensual</div>
+                <div class="kpi-value" style="color:#c0392b;">@FmtSoles(gMontoHeProm)</div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="HE Total Acumulado / Número de meses. Útil para presupuestar."></i>
+                    promedio por mes
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="kpi-card" style="background:#f5f0fb; border-top:3px solid #6f42c1;">
+                <div class="kpi-icon">🏢</div>
+                <div class="kpi-label">Básico Promedio Mensual</div>
+                <div class="kpi-value" style="color:#1B4D3E;">@FmtSoles(gMasaProm)</div>
+                <div class="kpi-sub">
+                    <i class="bi bi-info-circle" title="Básico Acumulado / Número de meses. Representa la planilla básica típica del período."></i>
+                    masa salarial típica
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Desglose por tipo de HE (KPI secundario) ───────── -->
+<div class="section-title">
+    <i class="bi bi-pie-chart me-1"></i>Desglose por Tipo de Hora Extra
+    <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+        — Acumulado del período, dividido por tipo de recargo
+    </small>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="kpi-card" style="background:#eef4fb;">
+            <div class="kpi-label">HE 25%</div>
+            <div class="kpi-value" style="color:#1565C0;">@FmtSoles(gMontoHe25)</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Horas extras realizadas en día laborable. Recargo del 25% sobre la hora normal."></i>
+                extras en día laborable
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card" style="background:#fdf3e7;">
+            <div class="kpi-label">HE 35%</div>
+            <div class="kpi-value" style="color:#e67e22;">@FmtSoles(gMontoHe35)</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Horas extras realizadas en horario nocturno. Recargo del 35% sobre la hora normal."></i>
+                extras en horario nocturno
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card" style="background:#fbeaea;">
+            <div class="kpi-label">HE 100%</div>
+            <div class="kpi-value" style="color:#c0392b;">@FmtSoles(gMontoHe100)</div>
+            <div class="kpi-sub">
+                <i class="bi bi-info-circle" title="Horas extras en feriados o días de descanso semanal obligatorio. Recargo del 100%."></i>
+                feriados / dominicales
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Tabla comparativa por período ─────────────────── -->
+@if (periodos.Count > 1)
+{
+    <div class="section-title">
+        <i class="bi bi-calendar-range me-1"></i>Resumen por Período
+        <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+            — Una fila por cada mes del período seleccionado
+        </small>
+    </div>
+    <div class="alert alert-light border mb-2 py-2" style="font-size:.8rem;">
+        <i class="bi bi-info-circle me-1 text-primary"></i>
+        <strong>¿Cómo leer esta tabla?</strong>
+        Cada fila representa <strong>un mes</strong>. Las columnas muestran cuántos trabajadores hubo,
+        cuántos cobraron horas extras y el monto pagado por cada tipo de HE (25%, 35%, 100%).
+        El <strong>Ratio</strong> indica qué porcentaje del básico fue gastado en HE:
+        <span class="badge bg-success ms-1">≤ 15% saludable</span>
+        <span class="badge bg-warning text-dark">15-30% atención</span>
+        <span class="badge bg-danger">&gt; 30% crítico</span>
+    </div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-hover table-corporate align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th class="text-center" title="Número de trabajadores en planilla en ese mes (suma por área, puede contar dos veces si un trabajador rota de área)">
+                        N° Trab. <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-center" title="Trabajadores que cobraron al menos S/ 1 de horas extras en el mes">
+                        N° con HE <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Monto pagado por HE realizadas en día laborable (recargo 25%)">
+                        HE 25% <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Monto pagado por HE realizadas en horario nocturno (recargo 35%)">
+                        HE 35% <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Monto pagado por HE en feriados o domingos (recargo 100%)">
+                        HE 100% <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Suma de HE 25% + HE 35% + HE 100% del mes">
+                        HE Total <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Masa salarial básica del mes (concepto 0121)">
+                        Básico <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Porcentaje del básico que representa la HE: (HE Total / Básico) × 100">
+                        Ratio <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in periodos)
+                {
+                    string periodoKey = $"{p.Ano}_{p.Mes}";
+                    var agg = agregadosPorPeriodoFinal[periodoKey];
+                    <tr>
+                        <td class="fw-semibold">
+                            <span class="badge badge-year-@(p.Ano)">@p.Ano</span>
+                            @NombreMes(p.Mes)
+                        </td>
+                        <td class="text-center">@agg.nroT</td>
+                        <td class="text-center text-danger fw-semibold">@agg.nroHe</td>
+                        <td class="text-end">@FmtSoles(agg.h25)</td>
+                        <td class="text-end">@FmtSoles(agg.h35)</td>
+                        <td class="text-end">@FmtSoles(agg.h100)</td>
+                        <td class="text-end fw-bold">@FmtSoles(agg.hT)</td>
+                        <td class="text-end text-muted">@FmtSoles(agg.ma)</td>
+                        <td class="text-end">
+                            <span class="badge bg-@(agg.rt > 30 ? "danger" : agg.rt > 15 ? "warning text-dark" : "success")">
+                                @agg.rt.ToString("N2")%
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- ── Comparativo año vs año (cuando AnoIni ≠ AnoFin) ─── -->
+@if (comparativoAnos && anios.Count == 2)
+{
+    var aA = anios[0];
+    var aB = anios[1];
+
+    <div class="section-title">
+        <i class="bi bi-bar-chart-steps me-1"></i>Comparativo @aA vs @aB
+        <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+            — Diferencias mes a mes entre los dos años
+        </small>
+    </div>
+    <div class="alert alert-light border mb-2 py-2" style="font-size:.8rem;">
+        <i class="bi bi-info-circle me-1 text-primary"></i>
+        <strong>¿Cómo leer esta tabla?</strong>
+        Compara el mismo mes entre los dos años seleccionados.
+        Las columnas <strong>Δ Soles</strong> y <strong>Δ %</strong> muestran cuánto AUMENTÓ
+        (<span class="delta-up">↑ rojo</span>) o DISMINUYÓ
+        (<span class="delta-down">↓ verde</span>) el costo de @aB respecto a @aA.
+        La fila <strong>Total</strong> al final suma solo los meses comparados (los que aparecen en ambos años).
+    </div>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-hover table-corporate align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Mes</th>
+                    <th class="text-end" title="HE Total pagado en ese mes del año @aA">
+                        HE @aA <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="HE Total pagado en ese mes del año @aB">
+                        HE @aB <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Diferencia en soles: HE @aB - HE @aA. Rojo = aumentó, Verde = bajó">
+                        Δ Soles <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Variación porcentual respecto al año anterior">
+                        Δ % <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Ratio HE/Básico de ese mes del año @aA">
+                        Ratio @aA <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" title="Ratio HE/Básico de ese mes del año @aB">
+                        Ratio @aB <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    // FIX BUG: acumular totales sumando SOLO los meses comparables
+                    // (no usar totalesPorAno global que incluye meses fuera del comparativo)
+                    decimal tA = 0m, tB = 0m;
+                }
+                @foreach (var m in mesesComunes)
+                {
+                    // Crear diccionario para lookup rápido por año-mes
+                    var heByYear = new Dictionary<int, decimal>();
+                    var maByYear = new Dictionary<int, decimal>();
+
+                    foreach (var ano in anios)
+                    {
+                        string periodoKey = $"{ano}_{m}";
+                        if (agregadosPorPeriodoFinal.ContainsKey(periodoKey))
+                        {
+                            var agg = agregadosPorPeriodoFinal[periodoKey];
+                            heByYear[ano] = agg.hT;
+                            maByYear[ano] = agg.ma;
+                        }
+                        else
+                        {
+                            heByYear[ano] = 0m;
+                            maByYear[ano] = 0m;
+                        }
+                    }
+
+                    decimal heA = heByYear.ContainsKey(anios[0]) ? heByYear[anios[0]] : 0m;
+                    decimal heB = heByYear.ContainsKey(anios[1]) ? heByYear[anios[1]] : 0m;
+                    decimal maA = maByYear.ContainsKey(anios[0]) ? maByYear[anios[0]] : 0m;
+                    decimal maB = maByYear.ContainsKey(anios[1]) ? maByYear[anios[1]] : 0m;
+                    decimal rA  = maA > 0 ? Math.Round(heA / maA * 100, 2) : 0m;
+                    decimal rB  = maB > 0 ? Math.Round(heB / maB * 100, 2) : 0m;
+                    decimal d   = heB - heA;
+                    decimal dPct = heA > 0 ? Math.Round(d / heA * 100, 2) : 0m;
+
+                    // Acumular para el Total
+                    tA += heA;
+                    tB += heB;
+
+                    <tr>
+                        <td class="fw-semibold">@NombreMes(m)</td>
+                        <td class="text-end">@FmtSoles(heA)</td>
+                        <td class="text-end">@FmtSoles(heB)</td>
+                        <td class="text-end @DeltaClass(d)">@DeltaIcon(d) @FmtSoles(Math.Abs(d))</td>
+                        <td class="text-end @DeltaClass(d)">@DeltaIcon(d) @dPct.ToString("N2")%</td>
+                        <td class="text-end">@rA.ToString("N2")%</td>
+                        <td class="text-end">@rB.ToString("N2")%</td>
+                    </tr>
+                }
+                @{
+                    decimal tD = tB - tA;
+                    decimal tDPct = tA > 0 ? Math.Round(tD / tA * 100, 2) : 0m;
+                }
+            </tbody>
+            <tfoot>
+                <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;">
+                    <td>Total</td>
+                    <td class="text-end">@FmtSoles(tA)</td>
+                    <td class="text-end">@FmtSoles(tB)</td>
+                    <td class="text-end @DeltaClass(tD)">@DeltaIcon(tD) @FmtSoles(Math.Abs(tD))</td>
+                    <td class="text-end @DeltaClass(tD)">@DeltaIcon(tD) @tDPct.ToString("N2")%</td>
+                    <td colspan="2" class="text-muted small text-center">— suma de meses comparados —</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+}
+
+<!-- ── Tabla detallada por área ─────────────────────────────── -->
+<div class="section-title">
+    <i class="bi bi-table me-1"></i>Detalle por Área
+    <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+        — Vista cruzada de área × período con HE y ratio
+    </small>
+</div>
+<div class="alert alert-light border mb-2 py-2" style="font-size:.8rem;">
+    <i class="bi bi-info-circle me-1 text-primary"></i>
+    <strong>¿Cómo leer esta tabla?</strong>
+    Cada <strong>fila es un área</strong> de la empresa (Hilandería, Tintorería, Coneras, etc.).
+    Cada grupo de columnas corresponde a <strong>un mes</strong> del período seleccionado.
+    Para cada combinación se muestra: cantidad de trabajadores (<strong>N°</strong>),
+    monto pagado en horas extras (<strong>HE Total</strong>) y porcentaje del básico (<strong>Ratio</strong>).
+    Las áreas están ordenadas de mayor a menor gasto en HE.
+    El símbolo <strong>—</strong> indica que no hubo datos para esa área en ese mes.
+</div>
+<div class="table-responsive mb-4">
+    <table class="table table-sm table-hover table-corporate align-middle mb-0">
+        <thead>
+            <tr>
+                <th rowspan="2" class="align-middle">Área</th>
+                @foreach (var p in periodos)
+                {
+                    <th colspan="3" class="text-center border-start">
+                        <span class="badge badge-year-@(p.Ano)">@p.Ano</span>
+                        @NombreMes(p.Mes)
+                    </th>
+                }
+            </tr>
+            <tr>
+                @foreach (var p in periodos)
+                {
+                    <th class="text-center border-start" style="font-size:.72rem;" title="Número de trabajadores del área en ese mes">
+                        N° <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" style="font-size:.72rem;" title="Suma de HE 25% + 35% + 100% pagadas a esa área en ese mes">
+                        HE Total <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                    <th class="text-end" style="font-size:.72rem;" title="% del básico del área que se gastó en HE">
+                        Ratio <i class="bi bi-info-circle small text-muted"></i>
+                    </th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var areaName in areas)
+            {
+                <tr>
+                    <td class="fw-semibold">@areaName</td>
+                    @foreach (var p in periodos)
+                    {
+                        var cell = GetFila(p.Ano, p.Mes, areaName);
+                        <td class="text-center border-start">@(cell?.NroTrab.ToString() ?? "—")</td>
+                        <td class="text-end">@(cell != null ? FmtSoles(cell.MontoHeTotal) : "—")</td>
+                        <td class="text-end">
+                            @if (cell != null && cell.RatioHePct > 0)
+                            {
+                                var rt = cell.RatioHePct;
+                                <span class="badge bg-@(rt > 30 ? "danger" : rt > 15 ? "warning text-dark" : "success")">
+                                    @rt.ToString("N1")%
+                                </span>
+                            }
+                            else { <span class="text-muted">—</span> }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr style="background:#e8f0e9; font-weight:700; border-top:2px solid #1B4D3E;"
+                title="Totales del mes — suman todas las áreas">
+                <td>Total <small class="text-muted fw-normal">(todas las áreas)</small></td>
+                @foreach (var p in periodos)
+                {
+                    string periodoKey = $"{p.Ano}_{p.Mes}";
+                    var agg = agregadosPorPeriodoFinal[periodoKey];
+                    <td class="text-center border-start">@agg.nroT</td>
+                    <td class="text-end">@FmtSoles(agg.hT)</td>
+                    <td class="text-end">
+                        <span class="badge bg-@(agg.rt > 30 ? "danger" : agg.rt > 15 ? "warning text-dark" : "success")">
+                            @agg.rt.ToString("N2")%
+                        </span>
+                    </td>
+                }
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- ── Gráficos ───────────────────────────────────────────── -->
+<div class="section-title">
+    <i class="bi bi-bar-chart-line me-1"></i>Análisis Gráfico
+    <small class="text-muted ms-2" style="font-weight:normal; font-size:.75rem;">
+        — Visualización interactiva de los datos
+    </small>
+</div>
+<div class="alert alert-light border mb-3 py-2" style="font-size:.8rem;">
+    <i class="bi bi-info-circle me-1 text-primary"></i>
+    <strong>Tip:</strong>
+    Pasa el cursor sobre los puntos/barras de los gráficos para ver los valores exactos.
+    Puedes hacer clic en la leyenda (arriba) para <strong>ocultar/mostrar</strong> series específicas.
+</div>
+<div class="row g-3 mb-2">
+    <div class="col-lg-12">
+        <div class="card chart-card">
+            <div class="card-header small">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        @if (comparativoAnos)
+                        {
+                            <text>📈 Evolución Mensual del Costo de HE — Comparativo año vs. año</text>
+                        }
+                        else
+                        {
+                            <text>📈 Evolución Mensual del Costo de HE</text>
+                        }
+                    </span>
+                    <i class="bi bi-info-circle text-muted" style="cursor:help;"
+                       title="Muestra la suma total de HE pagadas cada mes. Cada línea representa un año distinto, lo que permite comparar la evolución mes a mes entre años."></i>
+                </div>
+            </div>
+            <div class="card-body" style="height:340px;">
+                <canvas id="chartLineMes"></canvas>
+            </div>
+            <div class="card-footer bg-white border-top-0 py-2" style="font-size:.75rem; color:#637381;">
+                <i class="bi bi-lightbulb me-1 text-warning"></i>
+                <strong>Cómo interpretar:</strong>
+                Picos altos indican meses con mayor pago de horas extras.
+                Si la línea de un año está por encima de otro, ese año tuvo más sobretiempo.
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-3 mb-2 mt-2">
+    <div class="col-lg-7">
+        <div class="card chart-card">
+            <div class="card-header small">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>📊 Distribución por Tipo de HE — Apilado por Área</span>
+                    <i class="bi bi-info-circle text-muted" style="cursor:help;"
+                       title="Cada barra representa un área. Los colores apilados muestran cómo se reparte el gasto entre HE 25% (azul), HE 35% (naranja) y HE 100% (rojo)."></i>
+                </div>
+            </div>
+            <div class="card-body" style="height:380px;">
+                <canvas id="chartStackTipo"></canvas>
+            </div>
+            <div class="card-footer bg-white border-top-0 py-2" style="font-size:.75rem; color:#637381;">
+                <i class="bi bi-lightbulb me-1 text-warning"></i>
+                <strong>Cómo interpretar:</strong>
+                Áreas con barras altas tienen el mayor costo en HE.
+                Si predomina el color rojo (HE 100%), hay mucho trabajo en feriados/domingos.
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card chart-card">
+            <div class="card-header small">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>🎯 Ratio HE / Básico (%) por Área</span>
+                    <i class="bi bi-info-circle text-muted" style="cursor:help;"
+                       title="Muestra qué porcentaje del básico se gasta en HE en cada área. Verde ≤15% (saludable), Naranja 15-30% (atención), Rojo >30% (crítico)."></i>
+                </div>
+            </div>
+            <div class="card-body" style="height:380px;">
+                <canvas id="chartRatio"></canvas>
+            </div>
+            <div class="card-footer bg-white border-top-0 py-2" style="font-size:.75rem; color:#637381;">
+                <i class="bi bi-lightbulb me-1 text-warning"></i>
+                <strong>Cómo interpretar:</strong>
+                Las áreas con barras rojas tienen un costo de HE excesivo respecto a su planilla básica
+                — son candidatas a revisión.
+            </div>
+        </div>
+    </div>
+</div>

@@ -479,6 +479,14 @@ else
                                     }
                                 </td>
                                 <td>
+                                    @if (!string.IsNullOrEmpty(a.CodArt))
+                                    {
+                                        <div class="fw-semibold" style="font-size:.78rem;">@a.CodArt</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(a.DescArt))
+                                    {
+                                        <div class="text-muted" style="font-size:.7rem;white-space:normal;">@a.DescArt</div>
+                                    }
                                     @if (!string.IsNullOrEmpty(a.TituloArt))
                                     {
                                         <span class="badge bg-light text-dark border">Nm&nbsp;@a.TituloArt</span>

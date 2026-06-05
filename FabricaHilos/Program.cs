@@ -26,6 +26,7 @@ using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using FabricaHilos.Sire.Services.Mock;
+using FabricaHilos.Sire.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -146,8 +147,8 @@ builder.Services.AddScoped<ICompensacionDiaDiaService, CompensacionDiaDiaService
 builder.Services.AddScoped<ICompensacionDdcService, CompensacionDdcService>();
 builder.Services.AddScoped<IAuthHorasService, AuthHorasService>();
 builder.Services.AddScoped<IHorasExtrasService, HorasExtrasService>();
-builder.Services.AddScoped<IConcentracionSobretiempoAreaService, ConcentracionSobretiempoAreaService>();
-builder.Services.AddScoped<IEvolucionMasaSalarialService, EvolucionMasaSalarialService>();
+builder.Services.AddScoped<ICostoSalarialHorasExtrasService, CostoSalarialHorasExtrasService>();
+builder.Services.AddScoped<IComparativoCostoLaboralService, ComparativoCostoLaboralService>();
 builder.Services.AddHostedService<CompensacionTxCleanupService>();
 builder.Services.AddSingleton<DepuracionJobService>();
 builder.Services.AddSingleton<IDepuracionJobService>(sp => sp.GetRequiredService<DepuracionJobService>());
@@ -185,13 +186,16 @@ if (sireOptions.UseMock)
     builder.Services.AddSingleton<ISireAuthService, SireAuthServiceMock>();
     builder.Services.AddSingleton<ISireVentasService, SireVentasServiceMock>();
     builder.Services.AddSingleton<ISireComprasService, SireComprasServiceMock>();
+    builder.Services.AddSingleton<ITusUploadService, TusUploadServiceMock>();
 }
 else
 {
     builder.Services.AddHttpClient<ISireAuthService, SireAuthService>();
     builder.Services.AddHttpClient<ISireVentasService, SireVentasService>();
     builder.Services.AddHttpClient<ISireComprasService, SireComprasService>();
+    builder.Services.AddHttpClient<ITusUploadService, TusUploadService>();
 }
+builder.Services.AddScoped<TicketPollingHelper>();
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;

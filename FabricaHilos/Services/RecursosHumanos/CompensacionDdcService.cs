@@ -541,6 +541,7 @@ public class CompensacionDdcService : ICompensacionDdcService
                     IdCompen         = GetNullLong(r, "id_compen"),
                     CodEmpresa       = GetStr(r, "cod_empresa"),
                     CodPersonal      = GetStr(r, "cod_personal"),
+                    NumFotocheck     = GetStr(r, "num_fotocheck"),
                     NombreCompleto   = GetStr(r, "nombre_completo"),
                     FechaOrigenStr   = GetStr(r, "fechaorigen_str"),
                     FechaDestinoStr  = GetStr(r, "fechadestino_str"),

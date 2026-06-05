@@ -22,11 +22,19 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieAceptar(periodo), new { }, cancellationToken);
 
+    /// <remarks>
+    /// En el servicio real el reemplazo se realiza vía TUS (ITusUploadService).
+    /// Este método queda como fallback multipart para compatibilidad.
+    /// El controlador invoca directamente <see cref="ITusUploadService.ReemplazarPropuestaRvieAsync"/>.
+    /// </remarks>
     public Task<TicketEstado> ReemplazarPropuestaAsync(string periodo, Stream contenidoArchivo, string nombreArchivo, CancellationToken cancellationToken = default)
-        => SendMultipartAsync(SireEndpoints.RvieReemplazo(periodo), contenidoArchivo, nombreArchivo, cancellationToken);
+        => SendMultipartAsync(SireEndpoints.TusUploadPath, contenidoArchivo, nombreArchivo, cancellationToken);
 
     public Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieCierre(periodo), new { }, cancellationToken);
+
+    public Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
+        => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);
 
     public Task<ConstanciaCierre> DescargarConstanciaAsync(string periodo, CancellationToken cancellationToken = default)
         => DescargarConstanciaBaseAsync(SireEndpoints.RvieConstancia(periodo), $"RVIE_Constancia_{periodo}.pdf", cancellationToken);

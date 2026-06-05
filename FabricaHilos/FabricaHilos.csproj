@@ -36,6 +36,8 @@
     <Compile Include="Models\RecursosHumanos\CompensacionDiaDiaDtos.cs" />
     <Compile Include="Models\RecursosHumanos\HorasExtrasDtos.cs" />
     <Compile Include="Models\RecursosHumanos\MarcacionesDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\CostoSalarialHorasExtrasDtos.cs" />
+    <Compile Include="Models\RecursosHumanos\ComparativoCostoLaboralDtos.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,12 +51,10 @@
 
   <ItemGroup>
     <Content Include="Views\RecursosHumanos\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\_KpiDashboard.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\_KpiDashboard.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\Index.cshtml" />
-    <Content Include="Views\RecursosHumanos\Indicadores\EvolucionMasaSalarial\_KpiDashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\CostoSalarialHorasExtras\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\CostoSalarialHorasExtras\_KpiDashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\ComparativoCostoLaboral\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\ComparativoCostoLaboral\_KpiDashboard.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -89,8 +89,10 @@
     <Content Include="Data\Sistemas\Indicadores\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Data\RecursosHumanos\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Folder Include="Data\Logistica\" />
+    <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
     <Folder Include="Services\Sgc\AnalisisReclamo\" />
+    <Folder Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
   </ItemGroup>
 
   <ItemGroup>

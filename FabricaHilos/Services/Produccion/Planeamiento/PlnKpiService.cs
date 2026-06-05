@@ -303,12 +303,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                         WHERE  ev.num_ped  = s.num_ped
                           AND  ev.serie    = s.serie
                           AND  ev.nro      = s.nro
-                          AND  ev.cod_paso = s.cod_paso_act), 0)             AS dias_en_paso
+                          AND  ev.cod_paso = s.cod_paso_act), 0)             AS dias_en_paso,
+                   NVL((SELECT MAX(hp.kg_unidad)
+                        FROM   {S}h_programacion hp
+                        WHERE  hp.guia = s.num_partida
+                          AND  hp.kg_unidad > 0), 0)                        AS kg_por_cono,
+                   NVL(pa.nro_rmc, 0)                                        AS nro_rmc,
+                   NVL(pa.rmc, '')                                            AS rmc
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
             LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
             LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
             JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
+            LEFT JOIN {S}partida     pa ON pa.numero = s.num_partida
             LEFT JOIN (SELECT cod_art, SUM(NVL(stock, 0)) AS stock
                        FROM   {S}almacen
                        WHERE  cod_alm IN ('03','07','22','30')
@@ -355,6 +362,12 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 ColorUi         = SafeStr(r["color_ui"]),
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
                 DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
+                KgPorCono       = SafeVal<decimal>(r["kg_por_cono"]),
+                NumConos        = SafeVal<decimal>(r["kg_por_cono"]) > 0
+                                  ? (int)Math.Round(SafeVal<decimal>(r["kg_pendientes"]) / SafeVal<decimal>(r["kg_por_cono"]))
+                                  : 0,
+                NroRmc          = SafeVal<int>(r["nro_rmc"]),
+                Rmc             = SafeStr(r["rmc"]),
             });
         }
         return list;
@@ -370,18 +383,40 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    s.cod_art,     ar.descripcion       AS desc_art,
                    s.color, s.titulo, s.proceso,
                    s.kg_pendientes, s.kg_producidos,
-                   0                                                          AS stock_disponible,
-                   0                                                          AS kg_a_despachar,
                    s.fch_entrega_comp,
+                   s.fch_est_despacho,
                    TRUNC(SYSDATE) - s.fch_entrega_comp                        AS dias_vencido,
                    s.dias_retraso, s.ind_urgente, s.ind_retraso,
                    s.cod_paso_act, ec.nombre_paso, ec.color_ui,
-                   p.prioridad                                                 AS prioridad_pedido
+                   p.prioridad                                                 AS prioridad_pedido,
+                   NVL(pa.nro_rmc, 0)                                         AS nro_rmc,
+                   NVL(pa.rmc, '')                                             AS rmc,
+                   -- Fecha real de inicio del paso actual (para DiasEnPaso)
+                   CASE s.cod_paso_act
+                     WHEN '08'  THEN s.fch_real_secado
+                     WHEN '09'  THEN s.fch_real_cc_tinto
+                     WHEN '09B' THEN s.fch_real_gaseado
+                     WHEN '9R'  THEN s.fch_real_cc_rechazo
+                     WHEN '10'  THEN s.fch_real_devanado
+                     WHEN '11'  THEN s.fch_real_calidad
+                     ELSE NULL
+                   END                                                         AS fch_ini_paso,
+                   NVL(TRUNC(SYSDATE) - TRUNC(
+                     CASE s.cod_paso_act
+                       WHEN '08'  THEN s.fch_real_secado
+                       WHEN '09'  THEN s.fch_real_cc_tinto
+                       WHEN '09B' THEN s.fch_real_gaseado
+                       WHEN '9R'  THEN s.fch_real_cc_rechazo
+                       WHEN '10'  THEN s.fch_real_devanado
+                       WHEN '11'  THEN s.fch_real_calidad
+                       ELSE NULL
+                     END), 0)                                                  AS dias_en_paso
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
             LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
             LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
             JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
+            LEFT JOIN {S}partida    pa ON pa.numero = s.num_partida
             WHERE  s.estado = 'A'
               AND  s.cod_paso_act IN ('08','09','09B','9R','10','11')
             ORDER BY CASE WHEN s.ind_urgente='S' THEN 0 ELSE 1 END,
@@ -412,15 +447,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 KgProducidos    = SafeVal<decimal>(r["kg_producidos"]),
                 StockDisponible = 0,
                 KgADespachar    = 0,
-                FchEntregaComp  = r["fch_entrega_comp"] == DBNull.Value ? null : Convert.ToDateTime(r["fch_entrega_comp"]),
+                FchEntregaComp  = r["fch_entrega_comp"]  == DBNull.Value ? null : (DateTime?)Convert.ToDateTime(r["fch_entrega_comp"]),
+                FchEstDespacho  = r["fch_est_despacho"]  == DBNull.Value ? null : (DateTime?)Convert.ToDateTime(r["fch_est_despacho"]),
                 DiasVencido     = SafeVal<int>(r["dias_vencido"]),
                 DiasRetraso     = SafeVal<int>(r["dias_retraso"]),
+                DiasEnPaso      = SafeVal<int>(r["dias_en_paso"]),
                 IndUrgente      = SafeStr(r["ind_urgente"]),
                 IndRetraso      = SafeStr(r["ind_retraso"]),
                 CodPasoAct      = SafeStr(r["cod_paso_act"]),
                 NombrePaso      = SafeStr(r["nombre_paso"]),
                 ColorUi         = SafeStr(r["color_ui"]),
                 PrioridadPedido = SafeStr(r["prioridad_pedido"]),
+                NroRmc          = SafeVal<int>(r["nro_rmc"]),
+                Rmc             = SafeStr(r["rmc"]),
             });
         }
         return list;
@@ -651,7 +690,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    num_ped, serie, nro, num_det,
                    nombre_cliente, cod_art, titulo,
                    cod_paso_act, nombre_paso, color_ui,
-                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg
+                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg,
+                   descripcion
             FROM (
                 -- Activas via IR: TT_RPRODUC → ING_RECETAS_G → PARTIDA_MAS → PARTIDA → ITEMPED_DET
                 SELECT 'ACTIVA'                                     AS estado_maq,
@@ -676,8 +716,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                        NVL(s.dias_retraso, 0)                       AS dias_retraso,
                        NVL(s.ind_retraso,  'N')                     AS ind_retraso,
                        NVL(s.ind_urgente,  'N')                     AS ind_urgente,
-                       NVL(s.kg_en_tin, 0)                          AS kg
+                       NVL(s.kg_en_tin, 0)                          AS kg,
+                       NVL(tm.descripcion, '-')                     AS descripcion
                 FROM   {S}TT_RPRODUC tt
+                LEFT   JOIN {S}T_MAQUINAS tm ON tm.cod_maq = tt.cod_maq AND tm.tp_maq = 'T'
                 JOIN   {S}ING_RECETAS_G ig ON ig.numero  = tt.receta
                 JOIN   {S}PARTIDA_MAS   pm ON pm.numero  = ig.r_numero
                 LEFT   JOIN {S}PARTIDA p   ON p.numero    = pm.partida
@@ -719,8 +761,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                        NVL(s.dias_retraso, 0)                       AS dias_retraso,
                        NVL(s.ind_retraso,  'N')                     AS ind_retraso,
                        NVL(s.ind_urgente,  'N')                     AS ind_urgente,
-                       NVL(s.kg_en_tin, 0)                          AS kg
+                       NVL(s.kg_en_tin, 0)                          AS kg,
+                       NVL(tm.descripcion, '-')                     AS descripcion
                 FROM   {S}TT_RPRODUC tt
+                LEFT   JOIN {S}T_MAQUINAS tm ON tm.cod_maq = tt.cod_maq AND tm.tp_maq = 'T'
                 LEFT   JOIN {S}PARTIDA p   ON p.numero = tt.receta
                 LEFT   JOIN {S}ITEMPED_DET id ON id.nroprog = p.nroprog AND id.serie = p.serie
                 LEFT   JOIN {S}ITEMPED it  ON it.serie    = id.serie
@@ -737,7 +781,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 WHERE  tt.tipodoc = 'PA'
                   AND  tt.estado IN ('1','2')
                 UNION ALL
-                -- Libres: TODAS las máquinas activas del catálogo T_MAQUINAS (tipo T=Tintorería, M=Mercerizadora) sin proceso activo
+                -- Libres: TODAS las máquinas de Tintorería (R,M,MR) sin proceso activo
                 SELECT 'LIBRE'                                      AS estado_maq,
                        maq.cod_maq,
                        '-'                                          AS tipodoc,
@@ -756,14 +800,13 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                        0                                            AS dias_retraso,
                        'N'                                          AS ind_retraso,
                        'N'                                          AS ind_urgente,
-                       0                                            AS kg
+                       0                                            AS kg,
+                       maq.descripcion                              AS descripcion
                 FROM   {S}TT_MAQUINA maq
-                WHERE  maq.TIPO_MAQ IN ('T', 'M')
-                  AND  maq.ESTADO   = '0'
-                  AND  NOT EXISTS (
-                           SELECT 1 FROM {S}TT_RPRODUC act
-                           WHERE  act.cod_maq  = maq.cod_maq
-                             AND  act.tipodoc IN ('PA','IR')
+                WHERE  SUBSTR(maq.cod_maq, 1, 1) IN ('R','M')
+                  AND  maq.cod_maq NOT IN (
+                           SELECT act.cod_maq FROM {S}TT_RPRODUC act
+                           WHERE  act.tipodoc IN ('PA','IR')
                              AND  act.estado  IN ('1','2'))
             )
             ORDER BY estado_maq ASC, cod_maq ASC";  /* ACTIVA < LIBRE alfabético */
@@ -780,6 +823,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             {
                 EstadoMaq      = SafeStr(r["estado_maq"]),
                 CodMaq         = SafeStr(r["cod_maq"]),
+                Descripcion    = r.IsDBNull(r.GetOrdinal("descripcion")) ? null : SafeStr(r["descripcion"]),
                 TipDoc         = SafeStr(r["tipodoc"]),
                 Proceso        = SafeStr(r["proceso"]),
                 NumPed         = r.IsDBNull(r.GetOrdinal("num_ped"))         ? 0  : Convert.ToInt64(r["num_ped"]),
@@ -868,7 +912,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    num_ped, serie, nro, num_det,
                    nombre_cliente, cod_art, titulo,
                    cod_paso_act, nombre_paso, color_ui,
-                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg
+                   fch_entrega_comp, dias_retraso, ind_retraso, ind_urgente, kg,
+                   descripcion
             FROM (
                 -- Activas (una fila por máquina: el lote más reciente, ROW_NUMBER)
                 SELECT q.*, ROW_NUMBER() OVER (PARTITION BY q.cod_maq ORDER BY q.fch_ini_sec DESC) AS rn
@@ -896,8 +941,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                            NVL(s.ind_retraso,  'N')                     AS ind_retraso,
                            NVL(s.ind_urgente,  'N')                     AS ind_urgente,
                            NVL(t.peso_neto, 0)                          AS kg,
+                           NVL(tm.descripcion, '-')                     AS descripcion,
                            t.fecha_ini                                  AS fch_ini_sec
                     FROM   {S}TT_RSECADO t
+                    LEFT   JOIN {S}TT_MAQUINA tm ON tm.cod_maq = t.cod_maq AND tm.tipo_maq = 'S'
                     LEFT   JOIN {S}PARTIDA p       ON p.numero   = t.guia
                     LEFT   JOIN {S}ITEMPED_DET id  ON id.nroprog = p.nroprog AND id.serie = p.serie
                     LEFT   JOIN {S}ITEMPED it      ON it.serie   = id.serie
@@ -917,7 +964,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             )
             WHERE rn = 1
             UNION ALL
-            -- Libres: T_MAQUINAS tipo S sin proceso activo en TT_RSECADO
+            -- Libres: TT_MAQUINA tipo Secadora (S) sin proceso activo en TT_RSECADO
             SELECT 'LIBRE'                                      AS estado_maq,
                    maq.cod_maq,
                    '-'                                          AS tipodoc,
@@ -936,7 +983,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    0                                            AS dias_retraso,
                    'N'                                          AS ind_retraso,
                    'N'                                          AS ind_urgente,
-                   0                                            AS kg
+                   0                                            AS kg,
+                   maq.descripcion                              AS descripcion
             FROM   {S}TT_MAQUINA maq
             WHERE  maq.TIPO_MAQ = 'S'
               AND  maq.ESTADO   = '0'
@@ -974,6 +1022,7 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                 IndRetraso     = SafeStr(r["ind_retraso"]),
                 IndUrgente     = SafeStr(r["ind_urgente"]),
                 Kg             = r.IsDBNull(r.GetOrdinal("kg"))               ? 0m  : Convert.ToDecimal(r["kg"]),
+                Descripcion    = r.IsDBNull(r.GetOrdinal("descripcion")) ? null : SafeStr(r["descripcion"]),
             });
         }
         return list;

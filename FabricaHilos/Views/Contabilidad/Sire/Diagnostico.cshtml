@@ -1,0 +1,219 @@
+@model FabricaHilos.Controllers.Contabilidad.SireDiagnosticoViewModel
+@{
+    ViewData["Title"] = "SIRE - Diagnóstico de Conexión";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Contabilidad" asp-action="Index">Contabilidad</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Sire" asp-action="Index">SIRE</a></li>
+    <li class="breadcrumb-item active">Diagnóstico</li>
+}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+    <div class="bg-secondary rounded-3 p-2 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
+        <i class="bi bi-plug fs-4 text-white"></i>
+    </div>
+    <div>
+        <h4 class="mb-0 fw-semibold">Diagnóstico de Conexión SUNAT</h4>
+        <small class="text-muted">Verifica la autenticación y acceso a las APIs SIRE</small>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm ms-auto">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Configuración -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-light d-flex align-items-center gap-2">
+                <i class="bi bi-gear text-secondary"></i>
+                <strong>Configuración</strong>
+                @if (Model.UseMock)
+                {
+                    <span class="badge bg-warning text-dark ms-auto">MODO MOCK</span>
+                }
+                else
+                {
+                    <span class="badge bg-success ms-auto">API REAL</span>
+                }
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted fw-semibold" style="width:130px">RUC</td>
+                        <td><code>@Model.Ruc</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted fw-semibold">Usuario SOL</td>
+                        <td><code>@Model.UsuarioSol</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted fw-semibold">Client ID</td>
+                        <td><code class="small">@Model.ClientId</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted fw-semibold">Auth URL</td>
+                        <td><code class="small text-break">@Model.AuthUrl</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted fw-semibold">API Base URL</td>
+                        <td><code class="small text-break">@Model.ApiBaseUrl</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token OAuth2 -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100 @(Model.TokenOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.TokenOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
+            <div class="card-header bg-light d-flex align-items-center gap-2">
+                <i class="bi bi-key text-secondary"></i>
+                <strong>Autenticación OAuth2 SUNAT</strong>
+                @if (Model.TokenOk)
+                {
+                    <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                }
+                else
+                {
+                    <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                }
+            </div>
+            <div class="card-body">
+                @if (Model.TokenOk)
+                {
+                    <table class="table table-sm table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted fw-semibold" style="width:120px">Tipo</td>
+                            <td><span class="badge bg-primary">@Model.TokenTipo</span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Expira</td>
+                            <td>@Model.TokenExpira.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted fw-semibold">Token</td>
+                            <td><code class="small text-break">@Model.TokenFragment</code></td>
+                        </tr>
+                    </table>
+                }
+                else
+                {
+                    <div class="alert alert-danger mb-0 small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Error:</strong> @Model.TokenError
+                    </div>
+                    <div class="mt-3 small text-muted">
+                        <strong>Posibles causas:</strong>
+                        <ul class="mb-0 mt-1">
+                            <li>Usuario SOL o Clave SOL incorrectos</li>
+                            <li>La aplicación no está habilitada para el RUC en el portal SUNAT</li>
+                            <li>El Client ID / Client Secret no corresponden a la empresa</li>
+                            <li>La aplicación está en entorno LOCAL_DEV (no producción)</li>
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.TokenOk)
+{
+    <div class="row g-3">
+        <!-- RVIE -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100 @(Model.RvieOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.RvieOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
+                <div class="card-header bg-light d-flex align-items-center gap-2">
+                    <i class="bi bi-receipt-cutoff text-primary"></i>
+                    <strong>API RVIE — Periodos</strong>
+                    @if (Model.RvieOk)
+                    {
+                        <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (Model.RvieOk)
+                    {
+                        <div class="text-center py-2">
+                            <div class="display-6 fw-bold text-primary">@Model.RviePeriodos</div>
+                            <div class="text-muted small">periodos disponibles</div>
+                        </div>
+                        <div class="text-center mt-2">
+                            <a asp-action="Ventas" class="btn btn-primary btn-sm">
+                                <i class="bi bi-arrow-right-circle me-1"></i>Ir a RVIE
+                            </a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-danger mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>@Model.RvieError
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- RCE -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100 @(Model.RceOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.RceOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
+                <div class="card-header bg-light d-flex align-items-center gap-2">
+                    <i class="bi bi-cart-check text-success"></i>
+                    <strong>API RCE — Periodos</strong>
+                    @if (Model.RceOk)
+                    {
+                        <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                    }
+                </div>
+                <div class="card-body">
+                    @if (Model.RceOk)
+                    {
+                        <div class="text-center py-2">
+                            <div class="display-6 fw-bold text-success">@Model.RcePeriodos</div>
+                            <div class="text-muted small">periodos disponibles</div>
+                        </div>
+                        <div class="text-center mt-2">
+                            <a asp-action="Compras" class="btn btn-success btn-sm">
+                                <i class="bi bi-arrow-right-circle me-1"></i>Ir a RCE
+                            </a>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-danger mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>@Model.RceError
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!Model.TokenOk)
+{
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-warning bg-opacity-25">
+            <i class="bi bi-lightbulb me-2 text-warning"></i><strong>Pasos para resolver el error de autenticación</strong>
+        </div>
+        <div class="card-body">
+            <ol class="mb-0">
+                <li class="mb-2">Ingresa al portal <strong>SUNAT SOL</strong> → <em>Empresas → Servicios en Línea → API SUNAT</em></li>
+                <li class="mb-2">Verifica que la aplicación con Client ID <code>@Model.ClientId</code> esté <strong>habilitada para producción</strong> y tenga el RUC <code>@Model.Ruc</code> como contribuyente autorizado.</li>
+                <li class="mb-2">Confirma que el usuario SOL <code>@Model.UsuarioSol</code> tenga el perfil <strong>«Acceso API SUNAT - SIRE»</strong> asignado.</li>
+                <li class="mb-2">Verifica que la Clave SOL sea correcta (puede caducar).</li>
+                <li>Si la aplicación muestra <code>X-ServiceEnvironment: LOCAL_DEV</code>, contáctese con SUNAT para migrar la app a producción.</li>
+            </ol>
+        </div>
+    </div>
+}

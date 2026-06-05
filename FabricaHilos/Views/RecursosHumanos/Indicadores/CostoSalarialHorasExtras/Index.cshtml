@@ -1,0 +1,489 @@
+@*
+    ════════════════════════════════════════════════════════════════════════
+    ARCHIVO: Index.cshtml
+    MÓDULO:  RecursosHumanos / Indicadores / CostoSalarialHorasExtras
+    PROPÓSITO:
+        Vista principal (shell) del dashboard "KPI Costo Salarial de HE".
+        Contiene:
+          • Filtros de período (Año/Mes inicio y fin)
+          • Acordeón con la ayuda técnica del indicador
+          • Contenedor vacío #kpi-container que se llena vía AJAX
+          • Script que carga el partial _KpiDashboard.cshtml y dibuja
+            los gráficos de Chart.js a partir del JSON oculto.
+
+    FLUJO EN EL NAVEGADOR:
+        1. Razor renderiza la UI estática (filtros + acordeón + skeleton).
+        2. cargarKpi() hace fetch a /RecursosHumanos/CostoSalarialHorasExtras/Kpi
+        3. El servidor devuelve el HTML del partial.
+        4. Se inyecta el HTML en #kpi-container.
+        5. inicializarGraficos() lee #chartRawData y dibuja 3 charts.
+
+    DEPENDENCIAS DE FRONT-END:
+        • Bootstrap 5 (layout y componentes)
+        • Chart.js + chartjs-plugin-datalabels (cargados desde _Layout.cshtml)
+    ════════════════════════════════════════════════════════════════════════
+*@
+@{
+    ViewData["Title"] = "KPI Costo Salarial de Horas Extras";
+    // Valores por defecto del filtro vienen del Controller (Mayo 2025 → Mayo 2026).
+    int anoIni = ViewBag.AnoIni;
+    int mesIni = ViewBag.MesIni;
+    int anoFin = ViewBag.AnoFin;
+    int mesFin = ViewBag.MesFin;
+}
+
+@section Styles {
+<style>
+    .chart-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        height: 100%;
+        background: #f5f5f2;
+    }
+    .chart-card .card-body  { background: #f0f0ec; border-radius: 0 0 12px 12px; }
+    .chart-card .card-header {
+        background: transparent;
+        color: #1B4D3E;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+        border-radius: 12px 12px 0 0 !important;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        padding: .85rem 1.25rem;
+        margin-bottom: 1.4rem;
+    }
+    .kpi-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        background: #fff;
+        text-align: center;
+        padding: 1.1rem .75rem;
+    }
+    .kpi-card .kpi-icon  { font-size: 2rem; line-height: 1; margin-bottom: .35rem; }
+    .kpi-card .kpi-label { font-size: .72rem; color: #637381; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi-card .kpi-value { font-size: 1.55rem; font-weight: 700; color: #1B4D3E; line-height: 1.1; }
+    .kpi-card .kpi-sub   { font-size: .72rem; color: #9ca3af; margin-top: .15rem; }
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1B4D3E;
+        margin: 1.4rem 0 .4rem;
+        border-left: 4px solid #1B4D3E;
+        padding-left: .5rem;
+    }
+    #kpi-container { min-height: 200px; }
+    /* Selector genérico para cualquier badge-year-XXXX (fallback corporativo).
+       Las reglas específicas más abajo sobreescriben este color cuando aplican. */
+    [class*="badge-year-"] { background:#37474f; color:#fff; }
+    .badge-year-2025 { background:#1565C0; color:#fff; }
+    .badge-year-2026 { background:#1B4D3E; color:#fff; }
+    .delta-up   { color: #c0392b; font-weight: 600; }
+    .delta-down { color: #1B4D3E; font-weight: 600; }
+    .delta-eq   { color: #6c757d; font-weight: 600; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a href="/RecursosHumanos">Recursos Humanos</a></li>
+    <li class="breadcrumb-item active">KPI Costo Salarial de Horas Extras</li>
+}
+
+<!-- ── Filtros ─────────────────────────────────────────────── -->
+<div class="filter-bar">
+    <form id="frmFiltro" class="d-flex flex-wrap align-items-end gap-3" data-no-loading>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Inicio</label>
+            <input type="number" id="anoIni" name="anoIni" class="form-control form-control-sm" style="width:90px"
+                   value="@anoIni" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Inicio</label>
+            <select id="mesIni" name="mesIni" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    if (m == mesIni)
+                    { <option value="@m" selected>@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option> }
+                    else
+                    { <option value="@m">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option> }
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Año Fin</label>
+            <input type="number" id="anoFin" name="anoFin" class="form-control form-control-sm" style="width:90px"
+                   value="@anoFin" min="2000" max="2099" />
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">Mes Fin</label>
+            <select id="mesFin" name="mesFin" class="form-select form-select-sm" style="width:120px">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    if (m == mesFin)
+                    { <option value="@m" selected>@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option> }
+                    else
+                    { <option value="@m">@System.Globalization.CultureInfo.GetCultureInfo("es-PE").DateTimeFormat.GetMonthName(m)</option> }
+                }
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold">
+                <i class="bi bi-people-fill me-1"></i>Tipo
+            </label>
+            <select id="tipo" name="tipo" class="form-select form-select-sm" style="width:140px"
+                    title="Filtra por tipo de personal: Todos / sólo Obreros (C_EO='O') / sólo Empleados (C_EO='E')">
+                <option value="T" selected>Todos</option>
+                <option value="O">Obreros</option>
+                <option value="E">Empleados</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-sm btn-success">
+            <i class="bi bi-arrow-clockwise me-1"></i>Consultar
+        </button>
+    </form>
+</div>
+
+<div id="kpi-container">
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-cash-coin display-4 d-block mb-2"></i>
+        Seleccione el período y presione <strong>Consultar</strong> para ver el dashboard.
+    </div>
+</div>
+
+<!-- ── Ficha Técnica ────────────────────────────────────────── -->
+<div class="accordion mt-4" id="accordionFicha">
+    <div class="accordion-item border-0 shadow-sm">
+        <h2 class="accordion-header" id="headingFicha">
+            <button class="accordion-button collapsed fw-semibold" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#collapseFicha"
+                    aria-expanded="false" aria-controls="collapseFicha"
+                    style="background:#f8f9fa; color:#1B4D3E; border-radius:8px;">
+                <i class="bi bi-info-circle me-2"></i> Ficha Técnica del Indicador — <span class="ms-1 text-muted fw-normal">CostoSalarialHorasExtras</span>
+            </button>
+        </h2>
+        <div id="collapseFicha" class="accordion-collapse collapse" aria-labelledby="headingFicha">
+            <div class="accordion-body pt-3" style="background:#fff; border-radius:0 0 8px 8px;">
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <p class="mb-1"><span class="fw-semibold">Nombre:</span> Costo Salarial de Horas Extras</p>
+                        <p class="mb-1"><span class="fw-semibold">Tipo:</span> KPI de Gestión de Costos Laborales</p>
+                        <p class="mb-1"><span class="fw-semibold">Periodicidad:</span> Mensual con comparativo año vs. año</p>
+                        <p class="mb-1"><span class="fw-semibold">Dimensiones de análisis:</span> Área / Mes / Año</p>
+                        <p class="mb-0"><span class="fw-semibold">Fuente de datos:</span> Planilla mensual — conceptos RTPS <code>0105</code> (HE 25%), <code>0106</code> (HE 35%), <code>0107</code> (Feriado 100%) y <code>0121</code> (Básico).</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1 fw-semibold">Definición:</p>
+                        <p class="mb-2 text-secondary small">Mide el monto en soles pagado por horas extras (HE 25%, HE 35%, HE 100% feriado) y su proporción frente a la masa salarial básica del período, segmentado por área.</p>
+                        <p class="mb-1 fw-semibold">Lógica del filtro <em>comparativo</em>:</p>
+                        <p class="mb-0 text-secondary small">
+                            Si <code>Año Inicio = Año Fin</code> → muestra los meses entre <code>Mes Inicio</code> y <code>Mes Fin</code>.<br>
+                            Si <code>Año Inicio ≠ Año Fin</code> → muestra <strong>enero–MesInicio</strong> del año inicial vs. <strong>enero–MesFin</strong> del año final (comparativo año-vs-año).
+                        </p>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <p class="fw-semibold mb-2">Fórmulas:</p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded" style="background:#f5f5f2;">
+                            <div class="small text-muted fw-semibold mb-2">Costo HE Total</div>
+                            <code>HE_TOTAL = HE 25% + HE 35% + HE 100%</code>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded" style="background:#f5f5f2;">
+                            <div class="small text-muted fw-semibold mb-2">Ratio HE / Masa Salarial</div>
+                            <code>RATIO_HE_PCT = HE_TOTAL / MASA_SALARIAL × 100</code>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <p class="fw-semibold mb-2">Indicadores que expone:</p>
+                <ul class="list-unstyled small mb-0">
+                    <li class="mb-1"><code>NRO_TRAB</code> — Headcount del área en planilla</li>
+                    <li class="mb-1"><code>NRO_TRAB_CON_HE</code> — Trabajadores que cobraron HE en el período</li>
+                    <li class="mb-1"><code>MONTO_HE25 / HE35 / HE100</code> — Costo desglosado por tipo de HE (S/.)</li>
+                    <li class="mb-1"><code>MONTO_HE_TOTAL</code> — Costo total de HE del área (S/.)</li>
+                    <li class="mb-1"><code>MASA_SALARIAL</code> — Costo del básico (S/.)</li>
+                    <li class="mb-0"><code>RATIO_HE_PCT</code> — % del básico que representa la HE</li>
+                </ul>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/lib/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js" asp-append-version="true"></script>
+<script>
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+
+    Chart.defaults.font.family = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = '#374151';
+
+    const fmtSoles = v => 'S/ ' + (v || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtMiles = v => (v || 0).toLocaleString('es-PE', { maximumFractionDigits: 0 });
+
+    document.getElementById('frmFiltro').addEventListener('submit', function (e) {
+        e.preventDefault();
+        cargarKpi();
+    });
+
+    // AbortController compartido para evitar race condition al presionar Consultar varias veces.
+    let kpiAbortCtrl = null;
+
+    function cargarKpi() {
+        const anoIni = document.getElementById('anoIni').value;
+        const mesIni = document.getElementById('mesIni').value;
+        const anoFin = document.getElementById('anoFin').value;
+        const mesFin = document.getElementById('mesFin').value;
+        const tipo   = document.getElementById('tipo').value || 'T';
+
+        const container = document.getElementById('kpi-container');
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-success" style="width:2.5rem;height:2.5rem;"></div>
+                <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
+            </div>`;
+
+        // Cancela request previa pendiente antes de disparar la nueva.
+        if (kpiAbortCtrl) kpiAbortCtrl.abort();
+        kpiAbortCtrl = new AbortController();
+
+        fetch(`/RecursosHumanos/CostoSalarialHorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${encodeURIComponent(tipo)}`, { noLoading: true, signal: kpiAbortCtrl.signal })
+            .then(r => {
+                if (!r.ok) throw new Error('Error ' + r.status);
+                return r.text();
+            })
+            .then(html => {
+                container.innerHTML = html;
+                inicializarGraficos();
+            })
+            .catch(err => {
+                if (err.name === 'AbortError') return; // request reemplazada por otra más reciente: ignorar.
+                container.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>${err.message}</div>`;
+            });
+    }
+
+    function inicializarGraficos() {
+        const rawData = document.getElementById('chartRawData');
+        if (!rawData) return;
+
+        const rows = JSON.parse(rawData.value);
+        if (!rows || rows.length === 0) return;
+
+        // Periodos = año-mes únicos ordenados
+        const periodos = [...new Map(rows.map(r => [`${r.ano}-${r.mes}`, r])).keys()]
+                        .sort((a, b) => {
+                            const [aa, am] = a.split('-').map(Number);
+                            const [ba, bm] = b.split('-').map(Number);
+                            return aa - ba || am - bm;
+                        });
+
+        const areas = [...new Set(rows.map(r => r.area))];
+
+        const meses = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                       'Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+        const labelP = k => { const [a, m] = k.split('-'); return `${meses[+m]} ${a}`; };
+
+        // Detección años distintos para gráfico comparativo
+        const aniosDistintos = [...new Set(rows.map(r => r.ano))].sort();
+        const COLORS_YEAR = { };
+        const PAL = ['#1565C0','#1B4D3E','#e65100','#6a1b9a','#00838f','#c62828'];
+        aniosDistintos.forEach((y, i) => COLORS_YEAR[y] = PAL[i % PAL.length]);
+
+        const baseOpts = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top', labels: { boxWidth: 14, font: { size: 11 } } },
+                datalabels: { display: false }
+            },
+            scales: {
+                x: { ticks: { maxRotation: 40, minRotation: 20, font: { size: 10 } }, grid: { display: false } },
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,.06)' }, ticks: { callback: v => fmtMiles(v) } }
+            }
+        };
+
+        // ── Gráfico 1: Costo HE total por mes — comparativo año vs año ──
+        const ctxLine = document.getElementById('chartLineMes');
+        if (ctxLine) {
+            // Agrupar por (año, mes) → HE total
+            const mesesEjeX = [...new Set(rows.map(r => r.mes))].sort((a,b) => a-b).map(m => meses[m]);
+            const mesesNum  = [...new Set(rows.map(r => r.mes))].sort((a,b) => a-b);
+
+            const datasets = aniosDistintos.map(y => ({
+                label: y.toString(),
+                data: mesesNum.map(m => {
+                    const fr = rows.filter(r => r.ano === y && r.mes === m);
+                    return fr.reduce((s, x) => s + x.heTotal, 0);
+                }),
+                borderColor: COLORS_YEAR[y],
+                backgroundColor: COLORS_YEAR[y] + '33',
+                tension: 0.35,
+                fill: false,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                borderWidth: 2.5
+            }));
+
+            new Chart(ctxLine.getContext('2d'), {
+                type: 'line',
+                data: { labels: mesesEjeX, datasets },
+                options: {
+                    ...baseOpts,
+                    plugins: {
+                        ...baseOpts.plugins,
+                        tooltip: {
+                            backgroundColor: 'rgba(27, 77, 62, 0.95)',
+                            padding: 10,
+                            titleFont: { size: 12, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            callbacks: {
+                                title: items => items[0].label, // Mes
+                                label: c => ` Año ${c.dataset.label}: ${fmtSoles(c.parsed.y)}`,
+                                afterBody: (items) => {
+                                    if (items.length === 2) {
+                                        const v0 = items[0].parsed.y;
+                                        const v1 = items[1].parsed.y;
+                                        const dif = v1 - v0;
+                                        const pct = v0 > 0 ? ((dif / v0) * 100).toFixed(1) : 0;
+                                        const signo = dif > 0 ? '↑' : dif < 0 ? '↓' : '=';
+                                        return `\nDiferencia: ${signo} ${fmtSoles(Math.abs(dif))} (${pct}%)`;
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── Gráfico 2: Distribución HE por tipo (25/35/100) — apilado por área ──
+        const ctxStack = document.getElementById('chartStackTipo');
+        if (ctxStack) {
+            // Agregar por área (todos los períodos)
+            const heByArea = areas.map(a => {
+                const fr = rows.filter(r => r.area === a);
+                return {
+                    he25:  fr.reduce((s, x) => s + x.he25,  0),
+                    he35:  fr.reduce((s, x) => s + x.he35,  0),
+                    he100: fr.reduce((s, x) => s + x.he100, 0)
+                };
+            });
+
+            // Ordenar áreas por total desc
+            const sortedIdx = areas.map((_, i) => i)
+                .sort((a, b) => (heByArea[b].he25 + heByArea[b].he35 + heByArea[b].he100)
+                              - (heByArea[a].he25 + heByArea[a].he35 + heByArea[a].he100));
+            const areasOrd = sortedIdx.map(i => areas[i]);
+            const heOrd    = sortedIdx.map(i => heByArea[i]);
+
+            new Chart(ctxStack.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: areasOrd,
+                    datasets: [
+                        { label: 'HE 25% (día laborable)',  data: heOrd.map(x => Math.round(x.he25  * 100) / 100), backgroundColor: '#1565C0' },
+                        { label: 'HE 35% (nocturna)',       data: heOrd.map(x => Math.round(x.he35  * 100) / 100), backgroundColor: '#e67e22' },
+                        { label: 'HE 100% (feriado/dom.)',  data: heOrd.map(x => Math.round(x.he100 * 100) / 100), backgroundColor: '#c0392b' }
+                    ]
+                },
+                options: {
+                    ...baseOpts,
+                    scales: {
+                        x: { stacked: true, ticks: { maxRotation: 50, minRotation: 30, font: { size: 9 } }, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true, ticks: { callback: v => fmtMiles(v) } }
+                    },
+                    plugins: {
+                        ...baseOpts.plugins,
+                        tooltip: {
+                            backgroundColor: 'rgba(27, 77, 62, 0.95)',
+                            padding: 10,
+                            titleFont: { size: 12, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            callbacks: {
+                                title: items => `Área: ${items[0].label}`,
+                                label: c => ` ${c.dataset.label}: ${fmtSoles(c.parsed.y)}`,
+                                footer: items => {
+                                    const total = items.reduce((s, i) => s + i.parsed.y, 0);
+                                    return `\nTotal HE del área: ${fmtSoles(total)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ── Gráfico 3: Ratio HE/Masa Salarial por área (línea / barra) ──
+        const ctxRatio = document.getElementById('chartRatio');
+        if (ctxRatio) {
+            // Promedio del ratio acumulado por área (todos los periodos)
+            const ratioByArea = areas.map(a => {
+                const fr = rows.filter(r => r.area === a);
+                const heT  = fr.reduce((s, x) => s + x.heTotal, 0);
+                const mas  = fr.reduce((s, x) => s + x.masa,    0);
+                return mas > 0 ? Math.round(heT / mas * 100 * 100) / 100 : 0;
+            });
+
+            // Ordenar por ratio desc
+            const sortedIdx = areas.map((_, i) => i).sort((a, b) => ratioByArea[b] - ratioByArea[a]);
+            const areasOrd  = sortedIdx.map(i => areas[i]);
+            const ratioOrd  = sortedIdx.map(i => ratioByArea[i]);
+
+            new Chart(ctxRatio.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: areasOrd,
+                    datasets: [{
+                        label: 'Ratio HE / Básico (%)',
+                        data: ratioOrd,
+                        backgroundColor: ratioOrd.map(v => v > 30 ? '#c0392b' : v > 15 ? '#e67e22' : '#1B4D3E'),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    ...baseOpts,
+                    scales: {
+                        x: { ticks: { maxRotation: 50, minRotation: 30, font: { size: 9 } }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { callback: v => v + '%' } }
+                    },
+                    plugins: {
+                        ...baseOpts.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(27, 77, 62, 0.95)',
+                            padding: 10,
+                            titleFont: { size: 12, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            callbacks: {
+                                title: items => `Área: ${items[0].label}`,
+                                label: c => {
+                                    const v = c.parsed.y;
+                                    let estado = '';
+                                    if (v > 30) estado = ' 🔴 CRÍTICO';
+                                    else if (v > 15) estado = ' 🟠 Atención';
+                                    else estado = ' 🟢 Saludable';
+                                    return ` Ratio: ${v.toFixed(2)}%${estado}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+</script>
+}

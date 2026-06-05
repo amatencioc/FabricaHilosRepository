@@ -35,9 +35,9 @@
 
     // Paleta suave por año (hasta 5 años) — diccionarios para acceso en todo el archivo
     var anosUnicos = periodos.Select(p => p.Ano).Distinct().OrderBy(a => a).ToList();
-    string[] _bgRow    = ["#eaf4f0","#eaf0fb","#fdf3e7","#fce8e8","#f3eafd"];
-    string[] _bgHeader = ["#c8e6da","#c5d9f7","#fde8c8","#fac5c5","#dfc8f7"];
-    string[] _border   = ["#1B4D3E","#1565C0","#e65100","#c62828","#6a1b9a"];
+    string[] _bgRow    = new[] {"#eaf4f0","#eaf0fb","#fdf3e7","#fce8e8","#f3eafd"};
+    string[] _bgHeader = new[] {"#c8e6da","#c5d9f7","#fde8c8","#fac5c5","#dfc8f7"};
+    string[] _border   = new[] {"#1B4D3E","#1565C0","#e65100","#c62828","#6a1b9a"};
     var yearBgRowMap    = anosUnicos.Select((ano,i) => (ano, c:_bgRow[i%_bgRow.Length])).ToDictionary(x=>x.ano, x=>x.c);
     var yearBgHeaderMap = anosUnicos.Select((ano,i) => (ano, c:_bgHeader[i%_bgHeader.Length])).ToDictionary(x=>x.ano, x=>x.c);
     var yearBorderMap   = anosUnicos.Select((ano,i) => (ano, c:_border[i%_border.Length])).ToDictionary(x=>x.ano, x=>x.c);
@@ -54,8 +54,8 @@
     var rawJson = System.Text.Json.JsonSerializer.Serialize(chartRows);
 }
 
-<!-- Datos para Chart.js comparativo -->
-<input type="hidden" id="chartRawData" value='@rawJson' />
+<!-- Datos para Chart.js comparativo (value="..." para que Razor escape automáticamente comillas y caracteres especiales del JSON) -->
+<input type="hidden" id="chartRawData" value="@rawJson" />
 
 <!-- ── Título y período ─────────────────────────────────── -->
 <div class="text-center mb-4">
@@ -206,7 +206,6 @@
         <tbody>
             @{
                 decimal totalGlobal = Model.Areas.Sum(a => a.TotalHorasExtras);
-                decimal maxPct = Model.Areas.Any() ? Model.Areas.Max(a => a.PctTrabajadoresConHe) : 100;
             }
             @foreach (var areaName in areas)
             {

@@ -107,7 +107,7 @@
                                 <th>Ítem</th>
                                 <th>Cliente</th>
                                 <th>Artículo / Color</th>
-                                <th class="text-center">Proceso</th>
+                                <th class="text-center">Conos</th>
                                 <th class="text-center">Kg Pend.</th>
                                 <th class="text-center">Stock PT</th>
                                 <th class="text-center fw-bold">Kg a Desp.</th>
@@ -150,10 +150,25 @@
                                             @item.Titulo
                                         </small>
                                     </td>
-                                    <td class="text-center">
-                                        <small class="badge bg-light text-dark border">@item.NombreProceso</small>
+                                    <td class="text-center text-muted">
+                                        @if ((item.CodPasoAct is "12" or "13") && item.KgProducidos == 0)
+                                        {
+                                            <small class="badge bg-info text-dark" style="font-size:.66rem;" title="Despacho directo desde stock – sin partida de producción propia">
+                                                Stock
+                                            </small>
+                                        }
+                                        else if (item.NroRmc > 0)
+                                        {
+                                            <span class="fw-semibold">@item.NroRmc.ToString("N0")</span><br />
+                                            <small class="badge bg-secondary" style="font-size:.66rem;">
+                                                @(item.Rmc == "R" ? "Rollo" : item.Rmc == "M" ? "Madeja" : item.Rmc)
+                                            </small>
+                                        }
+                                        else { @("—") }
                                     </td>
-                                    <td class="text-end">@item.KgPendientes.ToString("N2")</td>
+                                    <td class="text-end">
+                                        @item.KgPendientes.ToString("N2")
+                                    </td>
                                     <td class="text-end @(item.StockDisponible < item.KgPendientes ? "text-warning fw-bold" : "text-success")">
                                         @item.StockDisponible.ToString("N2")
                                         @if (item.StockDisponible < item.KgPendientes)
@@ -214,11 +229,12 @@
                         </tbody>
                         <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
                             <tr>
-                                <td colspan="5" class="text-end text-muted">Totales:</td>
+                                <td colspan="4" class="text-end text-muted">Totales:</td>
+                                <td class="text-center">—</td>
                                 <td class="text-end">@lista.Sum(x => x.KgPendientes).ToString("N2")</td>
                                 <td class="text-end">@lista.Sum(x => x.StockDisponible).ToString("N2")</td>
                                 <td class="text-end text-primary">@lista.Sum(x => x.KgADespachar).ToString("N2")</td>
-                                <td colspan="6"></td>
+                                <td colspan="5"></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -254,8 +270,12 @@
                                 <th>Cliente</th>
                                 <th>Artículo / Color</th>
                                 <th class="text-center">Paso actual</th>
+                                <th class="text-center" title="Días acumulados en el paso actual">Días paso</th>
+                                <th class="text-center">Conos</th>
                                 <th class="text-center">Kg Pend.</th>
+                                <th class="text-center" title="Kg producidos vs Kg pedidos">% Avance</th>
                                 <th class="text-center">F. Entrega</th>
+                                <th class="text-center" title="Fecha estimada de llegada a Almacén PT">F. Est. Desp.</th>
                                 <th class="text-center">Tiempo</th>
                                 <th class="text-center">Acciones</th>
                             </tr>
@@ -271,6 +291,10 @@
                                            class="fw-bold text-decoration-none">
                                             @item.NumPed
                                         </a>
+                                        @if (!string.IsNullOrEmpty(item.PrioridadPedido))
+                                        {
+                                            <br /><small class="badge bg-info text-dark" style="font-size:.65rem;">Prio @item.PrioridadPedido</small>
+                                        }
                                     </td>
                                     <td class="text-center text-muted">@item.Nro</td>
                                     <td>
@@ -290,12 +314,43 @@
                                     <td class="text-center">
                                         <span class="badge" style="background-color:@item.ColorUi;font-size:.7rem;">@item.NombrePaso</span>
                                     </td>
+                                    <td class="text-center @(item.DiasEnPaso >= 3 ? "text-warning fw-bold" : "text-muted")">
+                                        @item.DiasEnPaso&nbsp;d
+                                    </td>
+                                    <td class="text-center text-muted">
+                                        @if (item.NroRmc > 0)
+                                        {
+                                            <span class="fw-semibold">@item.NroRmc.ToString("N0")</span><br />
+                                            <small class="badge bg-secondary" style="font-size:.6rem;">
+                                                @(item.Rmc == "R" ? "Rollo" : item.Rmc == "M" ? "Madeja" : item.Rmc)
+                                            </small>
+                                        }
+                                        else { @("—") }
+                                    </td>
                                     <td class="text-end">@item.KgPendientes.ToString("N2")</td>
+                                    <td class="text-center">
+                                        @{
+                                            var pct = item.PctCumplimiento;
+                                            var pctCss = pct >= 100 ? "success" : pct >= 75 ? "info" : pct >= 50 ? "warning" : "secondary";
+                                        }
+                                        <span class="badge bg-@pctCss" title="@item.KgProducidos.ToString("N2") kg producidos">@pct%</span>
+                                    </td>
                                     <td class="text-center">
                                         @if (item.FchEntregaComp.HasValue)
                                         {
                                             <span class="text-@item.SemaforoCss fw-semibold" title="@item.SemaforoTexto">
                                                 @item.FchEntregaComp.Value.ToString("dd/MM/yy")
+                                            </span>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                    <td class="text-center text-muted" style="font-size:.78rem;">
+                                        @if (item.FchEstDespacho.HasValue)
+                                        {
+                                            var diff = (int)(item.FchEstDespacho.Value.Date - DateTime.Today).TotalDays;
+                                            var estCss = diff < 0 ? "danger" : diff <= 3 ? "warning" : "secondary";
+                                            <span class="text-@estCss" title="Estimado de llegada a Almacén PT">
+                                                @item.FchEstDespacho.Value.ToString("dd/MM/yy")
                                             </span>
                                         }
                                         else { <span class="text-muted">—</span> }

@@ -27,9 +27,9 @@
     .tt-maq-card       { border-radius:6px; border:1px solid #e2e8f0; box-shadow:var(--pln-shadow-sm); background:#fff;
                          transition:box-shadow .15s,transform .15s; overflow:hidden; }
     .tt-maq-card:hover { box-shadow:var(--pln-shadow-md); transform:translateY(-1px); }
-    .tt-maq-card .tt-head  { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem .4rem; }
-    .tt-maq-card .tt-cod   { font-size:.95rem; font-weight:800; color:var(--pln-navy); }
-    .tt-maq-card .tt-nom   { font-size:.7rem; color:var(--pln-gray-500); }
+    .tt-maq-card .tt-head  { display:flex; align-items:flex-start; gap:.5rem; padding:.5rem .75rem .4rem; flex-wrap:wrap; }
+    .tt-maq-card .tt-cod   { font-size:.95rem; font-weight:800; color:var(--pln-navy); flex-shrink:0; }
+    .tt-maq-card .tt-nom   { font-size:.7rem; color:var(--pln-gray-600); font-weight:500; flex:1; min-width:0; line-height:1.25; word-break:break-word; }
     .tt-maq-card .tt-body  { padding:.4rem .75rem .6rem; font-size:.78rem; }
     .tt-maq-card .tt-row   { display:flex; gap:.35rem; align-items:baseline; margin-bottom:.18rem; }
     .tt-maq-card .tt-lbl   { color:var(--pln-gray-500); min-width:4rem; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; }
@@ -267,10 +267,12 @@
                             <div class="tt-maq-card @(maq.EsActiva ? (maq.EstaRetrasado ? "tt-retrasada" : "") : "tt-libre") h-100"
                                  style="border-left:3px solid @maq.ColorBorde;">
                                 <div class="tt-head">
-                                    <i class="bi bi-circle-fill" style="color:@maq.ColorBorde; font-size:.55rem;"></i>
-                                    <span class="tt-cod">@maq.CodMaq</span>
-                                    <span class="tt-nom">@maq.NombreMaqDisplay</span>
-                                    <span class="ms-auto badge @maq.BadgeClase" style="font-size:.62rem;">
+                                    <i class="bi bi-circle-fill" style="color:@maq.ColorBorde; font-size:.55rem; flex-shrink:0;"></i>
+                                    <div style="flex:1; min-width:0;">
+                                        <div class="tt-cod">@maq.CodMaq</div>
+                                        <div class="tt-nom">@maq.NombreMaqDisplay</div>
+                                    </div>
+                                    <span class="badge @maq.BadgeClase" style="font-size:.62rem; flex-shrink:0;">
                                         @(maq.EsActiva ? (maq.EstaRetrasado ? "RETRASADA" : "ACTIVA") : "LIBRE")
                                     </span>
                                 </div>
@@ -307,7 +309,7 @@
                                         {
                                             <div class="tt-row">
                                                 <span class="tt-lbl">Cliente</span>
-                                                <span class="text-truncate" style="max-width:140px; font-size:.75rem;" title="@maq.NombreCliente">@maq.NombreCliente</span>
+                                                <span style="font-size:.75rem; flex:1; min-width:0; word-break:break-word;" title="@maq.NombreCliente">@maq.NombreCliente</span>
                                             </div>
                                         }
                                         @if (!string.IsNullOrEmpty(maq.Titulo))

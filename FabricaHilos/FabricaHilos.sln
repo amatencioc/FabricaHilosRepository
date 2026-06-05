@@ -4,6 +4,8 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabricaHilos", "FabricaHilos.csproj", "{0454DD23-9F1C-F419-976F-9AE922435793}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FabricaHilos.Sire", "..\FabricaHilos.Sire\FabricaHilos.Sire.csproj", "{E644CBC6-0BDB-47CA-9C38-87001E092037}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{0454DD23-9F1C-F419-976F-9AE922435793}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0454DD23-9F1C-F419-976F-9AE922435793}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0454DD23-9F1C-F419-976F-9AE922435793}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E644CBC6-0BDB-47CA-9C38-87001E092037}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E644CBC6-0BDB-47CA-9C38-87001E092037}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E644CBC6-0BDB-47CA-9C38-87001E092037}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E644CBC6-0BDB-47CA-9C38-87001E092037}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -104,26 +104,26 @@ namespace FabricaHilos.Controllers.RecursosHumanos
                 });
             }
 
-            if (menus.RhIndicadoresConcentracionSobretiempo)
+            if (menus.RhIndicadoresCostoSalarialHorasExtras)
             {
                 moduloIndicadores.SubModulos.Add(new SgcSubModuloDto
                 {
-                    Nombre      = "KPI Concentración de Sobretiempo",
-                    Descripcion = "Mide qué proporción de trabajadores generó HE en el período — identifica si la carga está distribuida o concentrada en pocos colaboradores.",
-                    Icono       = "bi-people-fill",
-                    Controller  = "ConcentracionSobretiempoArea",
+                    Nombre      = "Costo Salarial Horas Extraordinarias",
+                    Descripcion = "Análisis detallado del costo de horas extraordinarias por área, categoría de costo y período.",
+                    Icono       = "bi-coin",
+                    Controller  = "CostoSalarialHorasExtras",
                     Action      = "Index"
                 });
             }
 
-            if (menus.RhIndicadoresEvolucionMasaSalarial)
+            if (menus.RhIndicadoresComparativoCostoLaboral)
             {
                 moduloIndicadores.SubModulos.Add(new SgcSubModuloDto
                 {
-                    Nombre      = "KPI Masa Salarial y Sobretiempo",
-                    Descripcion = "Evolución mensual del gasto en remuneraciones por área, con ratio sobretiempo/masa y variación vs mes anterior.",
-                    Icono       = "bi-currency-dollar",
-                    Controller  = "EvolucionMasaSalarial",
+                    Nombre      = "Comparativo Costo Laboral (Áño vs Áño)",
+                    Descripcion = "Compara N° de trabajadores y costo laboral total (básico + cargas sociales por Ley, factor 1.4232) entre dos años, con desglose de beneficios sociales por área.",
+                    Icono       = "bi-bar-chart-line-fill",
+                    Controller  = "ComparativoCostoLaboral",
                     Action      = "Index"
                 });
             }

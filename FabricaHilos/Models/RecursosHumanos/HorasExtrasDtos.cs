@@ -100,6 +100,12 @@ public class EvolucionMasaSalarialViewModel
     public int AnoFin  { get; set; }
     public int MesFin  { get; set; }
 
+    /// <summary>
+    /// Filtro de tipo de empleado aplicado (campo Oracle <c>PARAMPLA.C_EO</c>):
+    ///  <c>"T"</c> = Todos, <c>"O"</c> = Solo Obreros, <c>"E"</c> = Solo Empleados.
+    /// </summary>
+    public string Tipo { get; set; } = "T";
+
     public List<EvolucionMasaSalarialResumenDto> Resumen { get; set; } = new();
     public List<EvolucionMasaSalarialAreaDto>    Areas   { get; set; } = new();
 }

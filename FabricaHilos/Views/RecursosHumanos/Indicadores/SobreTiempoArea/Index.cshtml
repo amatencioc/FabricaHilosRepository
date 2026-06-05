@@ -500,6 +500,9 @@
             .catch(() => { lista.innerHTML = '<span class="text-muted small">Error al cargar áreas</span>'; });
     }
 
+    // AbortController compartido para evitar race condition al presionar Consultar varias veces.
+    let kpiAbortCtrl = null;
+
     function cargarKpi() {
         const anoIni = document.getElementById('anoIni').value;
         const mesIni = document.getElementById('mesIni').value;
@@ -512,7 +515,7 @@
         const areasParam = (areasSeleccionadas.length > 0 && areasSeleccionadas.length < totalAreas)
             ? areasSeleccionadas.map(a => `areas=${encodeURIComponent(a)}`).join('&')
             : '';
-        const url = `/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${tipo}${areasParam ? '&' + areasParam : ''}`;
+        const url = `/RecursosHumanos/HorasExtras/Kpi?anoIni=${anoIni}&mesIni=${mesIni}&anoFin=${anoFin}&mesFin=${mesFin}&tipo=${encodeURIComponent(tipo)}${areasParam ? '&' + areasParam : ''}`;
 
         const container = document.getElementById('kpi-container');
         container.innerHTML = `
@@ -521,7 +524,11 @@
                 <p class="mt-3 text-muted small fw-semibold">Cargando datos...</p>
             </div>`;
 
-        fetch(url, { noLoading: true })
+        // Cancela request previa pendiente antes de disparar la nueva.
+        if (kpiAbortCtrl) kpiAbortCtrl.abort();
+        kpiAbortCtrl = new AbortController();
+
+        fetch(url, { noLoading: true, signal: kpiAbortCtrl.signal })
             .then(r => {
                 if (!r.ok) throw new Error('Error ' + r.status);
                 return r.text();
@@ -531,6 +538,7 @@
                 inicializarGraficos();
             })
             .catch(err => {
+                if (err.name === 'AbortError') return; // request reemplazada por otra más reciente: ignorar.
                 container.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>${err.message}</div>`;
             });
     }

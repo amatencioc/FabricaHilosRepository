@@ -49,6 +49,14 @@ public class PlnPendienteDespacho
     public string   CodMaqSecado      { get; set; } = "";   // secadora que procesó el lote
     public string   CodMaqDevan       { get; set; } = "";   // devanadora que procesó el lote
 
+    // — Conos programados —
+    public decimal  KgPorCono         { get; set; }         // H_PROGRAMACION.KG_UNIDAD
+    public int      NumConos          { get; set; }         // ROUND(kg_pendientes / kg_por_cono)
+
+    // — Conos reales (PARTIDA.NRO_RMC / RMC) —
+    public int      NroRmc            { get; set; }         // PARTIDA.NRO_RMC — cantidad de conos/madejas
+    public string   Rmc               { get; set; } = "";   // PARTIDA.RMC — 'R'=Rollo, 'M'=Madeja
+
     // — Pedido —
     public string   PrioridadPedido   { get; set; } = "";
 

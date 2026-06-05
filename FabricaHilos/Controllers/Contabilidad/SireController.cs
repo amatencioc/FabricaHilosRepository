@@ -1,8 +1,11 @@
+using FabricaHilos.Sire.Helpers;
 using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Models;
+using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace FabricaHilos.Controllers.Contabilidad;
 
@@ -11,16 +14,28 @@ public class SireController : OracleBaseController
 {
     private readonly ISireVentasService _ventasService;
     private readonly ISireComprasService _comprasService;
+    private readonly ISireAuthService _authService;
+    private readonly ITusUploadService _tusUploadService;
+    private readonly TicketPollingHelper _ticketPolling;
+    private readonly SireOptions _sireOptions;
     private readonly ILogger<SireController> _logger;
 
     public SireController(
         ISireVentasService ventasService,
         ISireComprasService comprasService,
+        ISireAuthService authService,
+        ITusUploadService tusUploadService,
+        TicketPollingHelper ticketPolling,
+        IOptions<SireOptions> sireOptions,
         ILogger<SireController> logger)
     {
-        _ventasService = ventasService;
-        _comprasService = comprasService;
-        _logger = logger;
+        _ventasService    = ventasService;
+        _comprasService   = comprasService;
+        _authService      = authService;
+        _tusUploadService = tusUploadService;
+        _ticketPolling    = ticketPolling;
+        _sireOptions      = sireOptions.Value;
+        _logger           = logger;
     }
 
     [HttpGet]
@@ -31,6 +46,7 @@ public class SireController : OracleBaseController
             var ventas = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
             var compras = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
             var model = ConstruirDashboard(ventas, compras);
+            ViewBag.EsMock = _sireOptions.UseMock;
             return View("~/Views/Contabilidad/Sire/Index.cshtml", model);
         }
         catch (SireApiException ex)
@@ -54,6 +70,7 @@ public class SireController : OracleBaseController
 
             ViewBag.Periodos = periodos;
             ViewBag.Periodo = periodoSeleccionado;
+            ViewBag.EsMock = _sireOptions.UseMock;
             return View("~/Views/Contabilidad/Sire/Ventas.cshtml", registros);
         }
         catch (Exception ex)
@@ -79,6 +96,7 @@ public class SireController : OracleBaseController
 
             ViewBag.Periodos = periodos;
             ViewBag.Periodo = periodoSeleccionado;
+            ViewBag.EsMock = _sireOptions.UseMock;
             return View("~/Views/Contabilidad/Sire/Compras.cshtml", registros);
         }
         catch (Exception ex)
@@ -119,18 +137,56 @@ public class SireController : OracleBaseController
     {
         if (archivo is null || archivo.Length == 0)
         {
-            TempData["Error"] = "Debe seleccionar un archivo de reemplazo.";
+            TempData["Error"] = "Debe seleccionar un archivo ZIP de reemplazo.";
+            return RedirigirPorTipo(tipo, periodo);
+        }
+
+        if (!Path.GetExtension(archivo.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "El archivo debe tener extensión .zip (error SUNAT 1348).";
             return RedirigirPorTipo(tipo, periodo);
         }
 
         try
         {
             await using var stream = archivo.OpenReadStream();
-            var resultado = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
-                ? await _ventasService.ReemplazarPropuestaAsync(periodo, stream, archivo.FileName, cancellationToken)
-                : await _comprasService.ReemplazarPropuestaAsync(periodo, stream, archivo.FileName, cancellationToken);
 
-            TempData["Success"] = $"Reemplazo procesado. Ticket: {resultado.Ticket}";
+            // Subida vía protocolo TUS a SUNAT
+            var tusResult = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
+                ? await _tusUploadService.ReemplazarPropuestaRvieAsync(stream, periodo, archivo.FileName, cancellationToken)
+                : await _tusUploadService.ReemplazarPropuestaRceAsync(stream, periodo, archivo.FileName, cancellationToken);
+
+            if (!tusResult.Exitoso)
+            {
+                TempData["Error"] = $"Error en la subida TUS: {tusResult.Mensaje}";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            _logger.LogInformation("TUS reemplazo {Tipo} {Periodo}: ticket={Ticket} bytes={Bytes}",
+                tipo, periodo, tusResult.NumTicket, tusResult.BytesSubidos);
+
+            // Polling del ticket hasta que SUNAT termine de procesar
+            if (!string.IsNullOrWhiteSpace(tusResult.NumTicket))
+            {
+                var ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
+                    ct => tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
+                        ? _ventasService.ConsultarTicketAsync(tusResult.NumTicket, periodo, ct)
+                        : _comprasService.ConsultarTicketAsync(tusResult.NumTicket, periodo, ct),
+                    cancellationToken);
+
+                if (ticketFinal.Estado.Equals("ERROR", StringComparison.OrdinalIgnoreCase)
+                    || ticketFinal.Estado.Equals("RECHAZADO", StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["Error"] = $"SUNAT rechazó el archivo: {ticketFinal.Mensaje}";
+                    return RedirigirPorTipo(tipo, periodo);
+                }
+
+                TempData["Success"] = $"Reemplazo procesado por SUNAT. Ticket: {tusResult.NumTicket}";
+            }
+            else
+            {
+                TempData["Success"] = $"Archivo subido. {tusResult.Mensaje}";
+            }
         }
         catch (Exception ex)
         {
@@ -180,6 +236,68 @@ public class SireController : OracleBaseController
             TempData["Error"] = ex.Message;
             return RedirigirPorTipo(tipo, periodo);
         }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Diagnostico(CancellationToken cancellationToken)
+    {
+        var vm = new SireDiagnosticoViewModel
+        {
+            Ruc        = _sireOptions.Ruc,
+            UsuarioSol = _sireOptions.UsuarioSol,
+            AuthUrl    = _sireOptions.AuthUrl,
+            ApiBaseUrl = _sireOptions.ApiBaseUrl,
+            ClientId   = _sireOptions.ClientId,
+            UseMock    = _sireOptions.UseMock
+        };
+
+        try
+        {
+            var token = await _authService.GetTokenAsync(cancellationToken);
+            vm.TokenOk       = true;
+            vm.TokenTipo     = token.TokenType;
+            vm.TokenExpira   = token.ExpiraEnUtc;
+            vm.TokenFragment = token.AccessToken.Length > 0
+                ? $"{token.AccessToken[..Math.Min(40, token.AccessToken.Length)]}..."
+                : "(vacío)";
+        }
+        catch (Exception ex)
+        {
+            vm.TokenOk    = false;
+            vm.TokenError = ex.Message;
+            _logger.LogWarning(ex, "Diagnóstico SIRE: error al obtener token");
+        }
+
+        if (vm.TokenOk)
+        {
+            try
+            {
+                var periodos = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
+                vm.RvieOk      = true;
+                vm.RviePeriodos = periodos.Count;
+            }
+            catch (Exception ex)
+            {
+                vm.RvieOk    = false;
+                vm.RvieError = ex.Message;
+                _logger.LogWarning(ex, "Diagnóstico SIRE: error RVIE periodos");
+            }
+
+            try
+            {
+                var periodos = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
+                vm.RceOk      = true;
+                vm.RcePeriodos = periodos.Count;
+            }
+            catch (Exception ex)
+            {
+                vm.RceOk    = false;
+                vm.RceError = ex.Message;
+                _logger.LogWarning(ex, "Diagnóstico SIRE: error RCE periodos");
+            }
+        }
+
+        return View("~/Views/Contabilidad/Sire/Diagnostico.cshtml", vm);
     }
 
     private static List<SirePeriodoDashboardItem> ConstruirDashboard(
@@ -235,3 +353,27 @@ public class SireController : OracleBaseController
 }
 
 public sealed record SirePeriodoDashboardItem(string Periodo, string Descripcion, string EstadoRvie, string EstadoRce);
+
+public sealed class SireDiagnosticoViewModel
+{
+    public string Ruc        { get; set; } = string.Empty;
+    public string UsuarioSol { get; set; } = string.Empty;
+    public string AuthUrl    { get; set; } = string.Empty;
+    public string ApiBaseUrl { get; set; } = string.Empty;
+    public string ClientId   { get; set; } = string.Empty;
+    public bool   UseMock    { get; set; }
+
+    public bool      TokenOk       { get; set; }
+    public string    TokenTipo     { get; set; } = string.Empty;
+    public DateTime  TokenExpira   { get; set; }
+    public string    TokenFragment { get; set; } = string.Empty;
+    public string    TokenError    { get; set; } = string.Empty;
+
+    public bool   RvieOk      { get; set; }
+    public int    RviePeriodos { get; set; }
+    public string RvieError   { get; set; } = string.Empty;
+
+    public bool   RceOk      { get; set; }
+    public int    RcePeriodos { get; set; }
+    public string RceError   { get; set; } = string.Empty;
+}

@@ -54,8 +54,8 @@ public class MenuOptions
     // ── Submenús: RH → Indicadores
     public bool RhIndicadores                              { get; set; } = true;
     public bool RhIndicadoresHorasExtras                   { get; set; } = true;
-    public bool RhIndicadoresConcentracionSobretiempo      { get; set; } = true;
-    public bool RhIndicadoresEvolucionMasaSalarial         { get; set; } = true;
+    public bool RhIndicadoresCostoSalarialHorasExtras      { get; set; } = true;
+    public bool RhIndicadoresComparativoCostoLaboral       { get; set; } = true;
 
     // ── Menús: Logística
     public bool Logistica                { get; set; } = false;
@@ -132,6 +132,8 @@ public class MenuOptions
 
         RhIndicadores          = true,
         RhIndicadoresHorasExtras = true,
+        RhIndicadoresCostoSalarialHorasExtras = true,
+        RhIndicadoresComparativoCostoLaboral  = true,
 
         Logistica              = true,
         LogisticaRequerimiento = true,
