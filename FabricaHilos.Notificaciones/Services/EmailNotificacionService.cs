@@ -99,6 +99,10 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 "⚠️ Documento pendiente de validación — Acción requerida",
             TipoNotificacion.EnvioCertificadoFacturacion =>
                 "📄 Requerimiento de emisión de Factura — Certificado listo",
+            TipoNotificacion.ReclamoEnviadoCalidad =>
+                "🔍 Reclamo recibido para análisis de calidad",
+            TipoNotificacion.ReclamoEvaluadoVendedor =>
+                "✅ Su reclamo ha sido evaluado — Acción requerida",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

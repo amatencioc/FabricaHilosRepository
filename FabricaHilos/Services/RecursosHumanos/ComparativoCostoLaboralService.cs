@@ -48,7 +48,7 @@ public class ComparativoCostoLaboralService : IComparativoCostoLaboralService
     private readonly string _connStr;
     private readonly ILogger<ComparativoCostoLaboralService> _logger;
     private readonly IDistributedCache _cache;
-    private const string CACHE_KEY_PREFIX = "ComparativoCostoLab_";
+    private const string CACHE_KEY_PREFIX = "ComparativoCostoLab_v2_";
     private const int CACHE_DURATION_MINUTES = 60;
 
     // Devuelve una fila por (ANO, AREA) con promedios mensuales y totales.
@@ -229,8 +229,15 @@ ORDER BY ANO, AREA";
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    //  Construye los 3 cuadros a partir de las filas crudo (Año1 + Año2).
+    //  Construye los 2 cuadros a partir de las filas crudo (Año1 + Año2).
     //  TODO el cálculo de beneficios sociales (factor 1.4232) se hace aquí.
+    //
+    //  REDONDEO Δ PERSONAS (Cuadros 1 y 2):
+    //   La diferencia de personas se redondea al entero más cercano usando
+    //   MidpointRounding.AwayFromZero, de modo que:
+    //     0.6 → 1,  4.2 → 4,  0.2 → 0,  −0.6 → −1,  −4.2 → −4.
+    //   A partir de este entero redondeado se recalcula el Δ Costo y el
+    //   Impacto Mensual / Anual para que todo sea internamente consistente.
     //
     //  Override de básico manual (vm.BasicoManual > 0):
     //   • El básico por trabajador deja de leerse de planilla y pasa a ser el
@@ -271,20 +278,41 @@ ORDER BY ANO, AREA";
                 ? Math.Round(vm.BasicoManual * nro2 * factor, 2)
                 : (a2?.CostoLaboralPromMes ?? 0m);
 
+            // Δ Personas redondeado al entero: 0.6→1, 4.2→4, 0.2→0
+            decimal difRaw        = nro2 - nro1;
+            decimal difRedondeada = Math.Round(difRaw, 0, MidpointRounding.AwayFromZero);
+
+            // Δ Costo recalculado a partir del Δ Personas redondeado × costo/trab Año2
+            decimal costoXTrabA2c1 = usarManual
+                ? Math.Round(vm.BasicoManual * factor, 2)
+                : (a2?.CostoLaboralPromXTrab ?? 0m);
+            decimal difCosto = Math.Round(difRedondeada * costoXTrabA2c1, 2);
+
+            // VariacionCostoPct recalculado en base al Δ Costo redondeado
+            decimal varPct = c1 > 0 ? Math.Round(difCosto / c1 * 100m, 2) : 0m;
+
             vm.Cuadro1.Add(new ComparativoCuadro1Dto
             {
-                Area                   = area,
-                NroTrabPromAno1        = nro1,
-                NroTrabPromAno2        = nro2,
-                CostoLaboralPromMesAno1 = c1,
-                CostoLaboralPromMesAno2 = c2,
-                DiferenciaNroTrab      = nro2 - nro1,
-                DiferenciaCostoMes     = c2 - c1,
-                VariacionCostoPct      = c1 > 0 ? Math.Round((c2 - c1) / c1 * 100m, 2) : 0m,
+                Area                        = area,
+                NroTrabPromAno1             = nro1,
+                NroTrabPromAno2             = nro2,
+                CostoLaboralPromMesAno1     = c1,
+                CostoLaboralPromMesAno2     = c2,
+                DiferenciaNroTrab           = difRaw,
+                DiferenciaNroTrabRedondeada = difRedondeada,
+                DiferenciaCostoMes          = difCosto,
+                VariacionCostoPct           = varPct,
             });
         }
 
         // ── Cuadro 2 ──
+        // SEMÁNTICA DEL IMPACTO (validada con el usuario, jun/2026):
+        //   • DiferenciaNroTrab = nro2 − nro1   → variación REAL de dotación
+        //                                          (positiva = creció, negativa = bajó).
+        //   • Impacto = (nro1 − nro2_redondeado) × CostoXTrabAño2
+        //       → POSITIVO  = AHORRO    (la dotación BAJÓ en Año 2 ⇒ menos costo)
+        //       → NEGATIVO  = SOBRECOSTO (la dotación SUBIÓ en Año 2 ⇒ más costo)
+        //   Usa el mismo redondeo que Cuadro 1.
         foreach (var area in areas)
         {
             fA1.TryGetValue(area, out var a1);
@@ -292,49 +320,27 @@ ORDER BY ANO, AREA";
 
             decimal nro1 = a1?.NroTrabProm ?? 0m;
             decimal nro2 = a2?.NroTrabProm ?? 0m;
+
+            decimal difRaw        = nro2 - nro1;
+            decimal difRedondeada = Math.Round(difRaw, 0, MidpointRounding.AwayFromZero);
+
             decimal costoXTrabA2 = usarManual
                 ? Math.Round(vm.BasicoManual * factor, 2)
                 : (a2?.CostoLaboralPromXTrab ?? 0m);
-            decimal dif          = nro2 - nro1;
-            decimal impacto      = Math.Round(dif * costoXTrabA2, 2);
+
+            // Impacto usa Δ redondeado: (nro1 − nro2_redondeado) × CostoXTrab
+            decimal impacto = Math.Round(-difRedondeada * costoXTrabA2, 2);   // + ahorro, − sobrecosto
 
             vm.Cuadro2.Add(new ComparativoCuadro2Dto
             {
-                Area                 = area,
-                NroTrabPromAno1      = nro1,
-                NroTrabPromAno2      = nro2,
-                DiferenciaNroTrab    = dif,
-                CostoXTrabAno2       = costoXTrabA2,
-                ImpactoMensual       = impacto,
-                ImpactoAnualEstimado = Math.Round(impacto * 12m, 2),
-            });
-        }
-
-        // ── Cuadro 3 — desglose costo unitario mensual por área (año 2 = año actual) ──
-        foreach (var area in areas)
-        {
-            decimal basico;
-            if (usarManual)
-            {
-                basico = vm.BasicoManual;
-            }
-            else
-            {
-                fA2.TryGetValue(area, out var a2);
-                basico = a2?.BasicoPromXTrab ?? 0m;
-                if (basico <= 0m && fA1.TryGetValue(area, out var a1Fallback))
-                    basico = a1Fallback.BasicoPromXTrab;
-            }
-
-            vm.Cuadro3.Add(new ComparativoCuadro3Dto
-            {
-                Area            = area,
-                SueldoBasico    = Math.Round(basico, 2),
-                MontoEsSalud    = Math.Round(basico * ComparativoCostoLaboralConstants.FactorEsSalud,    2),
-                MontoCts        = Math.Round(basico * ComparativoCostoLaboralConstants.FactorCts,        2),
-                MontoGratif     = Math.Round(basico * ComparativoCostoLaboralConstants.FactorGratif,     2),
-                MontoVacaciones = Math.Round(basico * ComparativoCostoLaboralConstants.FactorVacaciones, 2),
-                CostoTotalMes   = Math.Round(basico * ComparativoCostoLaboralConstants.FactorTotal,      2),
+                Area                        = area,
+                NroTrabPromAno1             = nro1,
+                NroTrabPromAno2             = nro2,
+                DiferenciaNroTrab           = difRaw,
+                DiferenciaNroTrabRedondeada = difRedondeada,
+                CostoXTrabAno2              = costoXTrabA2,
+                ImpactoMensual              = impacto,
+                ImpactoAnualEstimado        = Math.Round(impacto * 12m, 2),
             });
         }
 

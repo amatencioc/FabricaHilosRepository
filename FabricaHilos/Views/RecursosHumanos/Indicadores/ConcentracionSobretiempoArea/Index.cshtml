@@ -427,20 +427,23 @@
 
                 <hr class="my-3" />
 
-                <p class="fw-semibold mb-2">Estructura del dashboard (2 cuadros):</p>
+                <p class="fw-semibold mb-2">Estructura del dashboard (3 cuadros):</p>
                 <ol class="small">
                     <li class="mb-1">
                         <strong>Cuadro 1 — Comparativo Costo Laboral por Área</strong>: muestra
                         para cada área el promedio mensual de trabajadores y el costo laboral
                         promedio mensual (con factor 1.4232) en Año 1 vs Año 2 con su variación.
-                        El Δ Personas se redondea al entero más cercano y el Δ Costo se recalcula
-                        en base a ese entero redondeado.
                     </li>
                     <li class="mb-1">
                         <strong>Cuadro 2 — Impacto de la variación de personal</strong>: aplica
-                        la diferencia de trabajadores redondeada (igual que Cuadro 1) al costo laboral
-                        promedio por trabajador del Año 2, mostrando el <em>impacto mensual</em> y
+                        la diferencia de trabajadores (Año2 − Año1) al costo laboral promedio
+                        por trabajador del Año 2, mostrando el <em>impacto mensual</em> y
                         anual estimado en S/.
+                    </li>
+                    <li class="mb-1">
+                        <strong>Cuadro 3 — Desglose del costo unitario mensual</strong>: para
+                        cada área expone qué representa cada beneficio social sobre el sueldo
+                        básico promedio del trabajador (Año 2).
                     </li>
                 </ol>
 
@@ -711,6 +714,47 @@
             });
         }
 
+        // ── Cuadro 3: barras horizontales apiladas (composición) ──────
+        const c3 = data.cuadro3 || [];
+        const ctx3 = document.getElementById('chCuadro3');
+        if (ctx3 && c3.length) {
+            new Chart(ctx3.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: c3.map(x => x.area),
+                    datasets: [
+                        { label: 'Básico (100%)',        data: c3.map(x => x.basico),  backgroundColor: '#1B4D3E' },
+                        { label: 'EsSalud (9%)',         data: c3.map(x => x.essalud), backgroundColor: '#1565C0' },
+                        { label: 'CTS (8.33%)',          data: c3.map(x => x.cts),     backgroundColor: '#b8860b' },
+                        { label: 'Gratificaciones (16.66%)', data: c3.map(x => x.gratif), backgroundColor: '#6f42c1' },
+                        { label: 'Vacaciones (8.33%)',   data: c3.map(x => x.vacac),   backgroundColor: '#e67e22' }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { size: 10, weight: '600' }, boxWidth: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ${fmtSoles(ctx.parsed.x)}`,
+                                footer: items => {
+                                    if (!items.length) return '';
+                                    const row = c3[items[0].dataIndex];
+                                    return 'Total: ' + fmtSoles(row.total);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 }, callback: v => fmtSolesK(v) }, grid: { color: '#eef2ee' } },
+                        y: { stacked: true, ticks: { font: { size: 10 } }, grid: { display: false } }
+                    }
+                }
+            });
         }
+    }
 </script>
 }

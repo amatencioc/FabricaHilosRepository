@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Su Reclamo ha Sido Evaluado y Aprobado</title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background-color: #F4F6F5; color: #1A1A1E; margin: 0; padding: 0; }
+    .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .info-table th { background-color: #1B4D3E; color: #ffffff; text-align: left; padding: 10px 14px; font-weight: 600; }
+    .info-table td { padding: 10px 14px; border: 1px solid #CBD2D9; color: #3D4451; background-color: #ffffff; }
+    .info-table tr:nth-child(even) td { background-color: #E8EDEB; }
+    .highlight { background-color: #C8A951; color: #1A1A1E; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+    @media only screen and (max-width: 640px) {
+      .email-outer { padding: 16px 8px !important; }
+      .email-wrapper { width: 100% !important; }
+      .email-body-td { padding: 24px 20px !important; }
+      .header-td { padding: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#F4F6F5;">
+
+  <!-- OUTER WRAPPER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" class="email-outer"
+         style="background-color:#F4F6F5; padding:32px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- EMAIL CARD -->
+        <table width="640" cellpadding="0" cellspacing="0" border="0" class="email-wrapper"
+               style="max-width:640px; width:640px; background-color:#ffffff;
+                      border-radius:8px; overflow:hidden;
+                      box-shadow:0 10px 30px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.08);">
+
+          <!-- ===== HEADER ===== -->
+          <tr>
+            <td bgcolor="#1B4D3E" align="center" class="header-td"
+                style="background-color:#1B4D3E; padding:28px 36px; text-align:center;">
+              <img src="{{Asset:logo_colo.png}}"
+                   alt="La Colonial Fábrica de Hilos S.A."
+                   width="auto" height="56"
+                   style="display:block; height:56px; margin:0 auto 14px; border:0;" />
+              <h1 style="color:#C8A951; font-size:20px; font-weight:700;
+                         letter-spacing:0.5px; margin:0;
+                         font-family:Arial, Helvetica, sans-serif;">
+                &#9989; Su Reclamo ha Sido Evaluado
+              </h1>
+              <p style="color:rgba(255,255,255,0.82); font-size:13px; margin-top:6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Sistema de Gestión de Calidad (SGC)
+              </p>
+            </td>
+          </tr>
+
+          <!-- ===== BANDA DORADA ===== -->
+          <tr>
+            <td bgcolor="#C8A951" height="4"
+                style="background-color:#C8A951; height:4px;
+                       line-height:4px; font-size:1px; mso-line-height-rule:exactly;">
+              &nbsp;
+            </td>
+          </tr>
+
+          <!-- ===== CUERPO ===== -->
+          <tr>
+            <td class="email-body-td"
+                style="padding:32px 36px; background-color:#ffffff;">
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Estimado/a <strong style="color:#1A1A1E;">{{NombreDestinatario}}</strong>,
+              </p>
+
+              <p style="font-size:14px; line-height:1.75; color:#3D4451;
+                        margin:0 0 14px; font-family:Arial, Helvetica, sans-serif;">
+                Le comunicamos que su reclamo ha sido <strong style="color:#1B4D3E;">completamente evaluado</strong>
+                por el equipo de análisis de calidad y aprobado por gerencia.
+                Puede consultar todos los detalles y la decisión final en el portal SGC.
+              </p>
+
+              <!-- ALERTA DESTACADA -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:16px 0;">
+                <tr>
+                  <td bgcolor="#E8F5E9"
+                      style="background-color:#E8F5E9;
+                             border-left:5px solid #1B4D3E;
+                             padding:14px 18px; border-radius:4px;">
+                    <p style="margin:0; font-size:14px; color:#1B4D3E;
+                               line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
+                      &#128203; <strong>Reclamo N.°:</strong>
+                      <span class="highlight" style="background-color:#C8A951; color:#1A1A1E;
+                            padding:2px 8px; border-radius:3px; font-weight:600;">#{{IdReclamo}}</span><br/>
+                      &#128467; <strong>Asunto:</strong> {{Asunto}}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- TABLA: INFORMACIÓN DEL RECLAMO -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Información del Reclamo
+              </p>
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Cliente</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;"><strong>{{NombreCliente}}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">RUC</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">{{RucCliente}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Fecha de Creación</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{FechaCreacion}}</td>
+                </tr>
+              </table>
+
+              <!-- TABLA: DECISIÓN FINAL -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Decisión Final
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin-bottom:16px;">
+                <tr>
+                  <td style="padding:14px 16px; border:1px solid #CBD2D9; border-radius:4px;
+                             background-color:#F0F7F0; border-left:4px solid #1B4D3E;
+                             font-size:13px; color:#1B4D3E; line-height:1.7; white-space:pre-line;
+                             font-family:Arial, Helvetica, sans-serif;">{{DecisionFinal}}</td>
+                </tr>
+              </table>
+
+              <!-- TABLA: EVALUACIÓN Y APROBACIÓN -->
+              <p style="font-size:14px; font-weight:700; color:#1B4D3E;
+                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                Evaluación y Aprobación
+              </p>
+              <table class="info-table" cellpadding="0" cellspacing="0" border="0"
+                     style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Campo</th>
+                  <th style="background-color:#1B4D3E; color:#ffffff; text-align:left;
+                             padding:10px 14px; font-weight:600;
+                             font-family:Arial, Helvetica, sans-serif;">Valor</th>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Analista de Calidad</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;"><strong>{{NombreAnalista}}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;">Gerente Aprobador</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#E8EDEB; font-family:Arial, Helvetica, sans-serif;"><strong>{{NombreGerente}}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">Fecha de Aprobación</td>
+                  <td style="padding:10px 14px; border:1px solid #CBD2D9; color:#3D4451;
+                             background-color:#ffffff; font-family:Arial, Helvetica, sans-serif;">{{FechaAprobacion}}</td>
+                </tr>
+              </table>
+
+              <!-- BOTÓN VER EN PORTAL -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="margin:8px 0 20px; text-align:center;">
+                <tr>
+                  <td align="center">
+                    <a href="{{UrlPortal}}"
+                       style="display:inline-block; padding:12px 28px;
+                              background-color:#1B4D3E; color:#C8A951;
+                              text-decoration:none; border-radius:4px;
+                              font-weight:700; font-size:14px;
+                              font-family:Arial, Helvetica, sans-serif;
+                              letter-spacing:0.3px;">
+                      &#128196; Ver Detalle Completo en Portal SGC
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:13px; line-height:1.75; color:#6B7280;
+                        margin:0; font-family:Arial, Helvetica, sans-serif;">
+                Si tiene alguna consulta o requiere información adicional,
+                no dude en contactar al área de Análisis de Calidad o al administrador del sistema.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- ===== FOOTER ===== -->
+          <tr>
+            <td bgcolor="#E8EDEB"
+                style="background-color:#E8EDEB; padding:20px 36px; border-top:1px solid #CBD2D9;">
+              <p style="font-size:12px; color:#6B7280; text-align:center; margin:0 0 6px;
+                        font-family:Arial, Helvetica, sans-serif;">
+                <strong>La Colonial Fábrica de Hilos S.A.</strong>
+              </p>
+              <p style="font-size:11px; color:#9CA3AF; text-align:center; margin:0;
+                        font-family:Arial, Helvetica, sans-serif;">
+                Este correo fue generado automáticamente por el SGC. Por favor, no responder directamente a este mensaje.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- FIN EMAIL CARD -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- FIN OUTER WRAPPER -->
+
+</body>
+</html>
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 4px solid #ff9900;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px 20px;
+        }
+        .greeting {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #28a745;
+            border-radius: 4px;
+        }
+        .section h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #28a745;
+            font-weight: 600;
+        }
+        .section p {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .detail-item {
+            padding: 10px;
+            background-color: #ffffff;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .detail-value {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+        .decision-box {
+            background-color: #e8f5e9;
+            border: 2px solid #28a745;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1b5e20;
+        }
+        .approval-section {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #c8e6c9;
+            border-left: 4px solid #28a745;
+            border-radius: 4px;
+        }
+        .approval-section h3 {
+            margin: 0 0 15px 0;
+            color: #1b5e20;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .approval-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .approval-item {
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .approval-label {
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .approval-value {
+            color: #1b5e20;
+            font-weight: 500;
+        }
+        .action-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 14px;
+        }
+        .action-button:hover {
+            background-color: #1e7e34;
+        }
+        .footer {
+            background-color: #f0f0f0;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #666;
+        }
+        .footer a {
+            color: #28a745;
+            text-decoration: none;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background-color: #28a745;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>✅ Su Reclamo ha Sido Evaluado</h1>
+            <p>Sistema de Gestión de Calidad (SGC)</p>
+        </div>
+
+        <!-- CONTENIDO -->
+        <div class="content">
+            <p class="greeting">Estimado {{NombreDestinatario}},</p>
+            <p>
+                Le comunicamos que su reclamo ha sido completamente evaluado por el equipo de análisis de calidad
+                y aprobado por gerencia. Puede consultar todos los detalles y la decisión final en el portal SGC.
+            </p>
+
+            <!-- INFORMACIÓN DEL RECLAMO -->
+            <div class="section">
+                <h2>📋 Información del Reclamo</h2>
+                <div class="badge">Reclamo #{{IdReclamo}}</div>
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Cliente</div>
+                        <div class="detail-value">{{NombreCliente}}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">RUC</div>
+                        <div class="detail-value">{{RucCliente}}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Asunto</div>
+                        <div class="detail-value">{{Asunto}}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Fecha Creación</div>
+                        <div class="detail-value">{{FechaCreacion}}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DECISIÓN FINAL -->
+            <div class="section">
+                <h2>🎯 Decisión Final</h2>
+                <div class="decision-box">
+                    {{DecisionFinal}}
+                </div>
+            </div>
+
+            <!-- APROBACIÓN DE GERENCIA -->
+            <div class="approval-section">
+                <h3>👥 Evaluación y Aprobación</h3>
+                <div class="approval-grid">
+                    <div class="approval-item">
+                        <div class="approval-label">Analista de Calidad:</div>
+                        <div class="approval-value">{{NombreAnalista}}</div>
+                    </div>
+                    <div class="approval-item">
+                        <div class="approval-label">Gerente Aprobador:</div>
+                        <div class="approval-value">{{NombreGerente}}</div>
+                    </div>
+                    <div class="approval-item">
+                        <div class="approval-label">Fecha de Aprobación:</div>
+                        <div class="approval-value">{{FechaAprobacion}}</div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="{{UrlPortal}}" class="action-button">
+                        📄 Ver Detalle Completo en Portal SGC
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <p>
+                Este es un correo automático del Sistema de Gestión de Calidad (SGC).<br />
+                Por favor, no responda a este correo. Contáctese con el administrador si tiene preguntas.
+            </p>
+            <p>
+                © La Colonial Fábrica de Hilos — Todos los derechos reservados.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

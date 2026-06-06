@@ -1753,7 +1753,7 @@ END;";
                             var mime = DetectImageMimeType(bytes);
                             if (mime == "image/tiff")
                             {
-                                bytes = ConvertirTiffAPng(bytes);
+                                bytes = ConvertirTiffAPng(bytes, _logger);
                                 mime  = "image/png";
                             }
                             if (mime != null)
@@ -1809,7 +1809,7 @@ END;";
     /// Convierte bytes de imagen TIFF a PNG usando ImageSharp, para que el navegador pueda mostrarla.
     /// Devuelve los bytes PNG, o el array original si la conversión falla.
     /// </summary>
-    private byte[] ConvertirTiffAPng(byte[] tiffBytes)
+    public static byte[] ConvertirTiffAPng(byte[] tiffBytes, ILogger? logger = null)
     {
         try
         {
@@ -1821,7 +1821,7 @@ END;";
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "No se pudo convertir TIFF a PNG (longitud={Len})", tiffBytes.Length);
+            logger?.LogWarning(ex, "No se pudo convertir TIFF a PNG (longitud={Len})", tiffBytes.Length);
             return tiffBytes;
         }
     }

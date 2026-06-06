@@ -166,6 +166,7 @@ builder.Services.AddScoped<ISeguimientoDevService, SeguimientoDevService>();
 builder.Services.AddScoped<IAnularDocumentoService, AnularDocumentoService>();
 builder.Services.AddSingleton<AnularDocumentoJobManager>();
 builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>();
+builder.Services.AddSingleton<IReclamoPdfService, ReclamoPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 builder.Services.AddScoped<AcuerdoCompHeDocxService>();
 

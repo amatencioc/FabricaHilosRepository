@@ -224,9 +224,24 @@ public class SireController : OracleBaseController
     {
         try
         {
-            var constancia = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
-                ? await _ventasService.DescargarConstanciaAsync(periodo, cancellationToken)
-                : await _comprasService.DescargarConstanciaAsync(periodo, cancellationToken);
+            // NOTA: El manual v25 pág 60 requiere nomArchivo para descargar constancia.
+            // Este controlador actualmente solo recibe periodo. El nomArchivo debería obtenerse
+            // de la respuesta previa del sistema SUNAT (ej: ticket, propuesta).
+            // Como solución temporal, se construye el nomArchivo con el patrón esperado.
+            // TODO: Modificar el frontend para pasar el nomArchivo real cuando esté disponible.
+
+            var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
+            var codLibro = esVentas ? "140000" : "080000";
+            var ruc = _sireOptions.Ruc;
+
+            // Patrón: LE{ruc}{periodo}{codLibro}{estadoGrabacion}{indicadorOperacion}{contenidoLibro}.pdf
+            // Ejemplo: LE20100096260202212001404000111112.pdf
+            // Para simplificar, usamos valores genéricos para los últimos componentes
+            var nomArchivo = $"LE{ruc}{periodo}{codLibro}00111112.pdf";
+
+            var constancia = esVentas
+                ? await _ventasService.DescargarConstanciaAsync(nomArchivo, cancellationToken)
+                : await _comprasService.DescargarConstanciaAsync(nomArchivo, cancellationToken);
 
             return File(constancia.Contenido, constancia.ContentType, constancia.NombreArchivo);
         }
@@ -239,6 +254,7 @@ public class SireController : OracleBaseController
     }
 
     [HttpGet]
+    [AllowAnonymous] // Temporal: permitir acceso sin auth para pruebas de conectividad SUNAT
     public async Task<IActionResult> Diagnostico(CancellationToken cancellationToken)
     {
         var vm = new SireDiagnosticoViewModel
@@ -298,6 +314,97 @@ public class SireController : OracleBaseController
         }
 
         return View("~/Views/Contabilidad/Sire/Diagnostico.cshtml", vm);
+    }
+
+    [HttpGet]
+    [Route("Sire/DiagnosticoJson")]
+    [AllowAnonymous] // Temporal: endpoint JSON para pruebas sin layout
+    public async Task<IActionResult> DiagnosticoJson(CancellationToken cancellationToken)
+    {
+        var resultado = new
+        {
+            Configuracion = new
+            {
+                Ruc = _sireOptions.Ruc,
+                UsuarioSol = _sireOptions.UsuarioSol,
+                AuthUrl = _sireOptions.AuthUrl,
+                ApiBaseUrl = _sireOptions.ApiBaseUrl,
+                ClientId = _sireOptions.ClientId,
+                UseMock = _sireOptions.UseMock
+            },
+            Token = new { Ok = false, Error = "", Tipo = "", Expira = "", Fragment = "" },
+            Rvie = new { Ok = false, Error = "", Periodos = 0 },
+            Rce = new { Ok = false, Error = "", Periodos = 0 }
+        };
+
+        try
+        {
+            var token = await _authService.GetTokenAsync(cancellationToken);
+            resultado = resultado with
+            {
+                Token = new
+                {
+                    Ok = true,
+                    Error = "",
+                    Tipo = token.TokenType,
+                    Expira = token.ExpiraEnUtc.ToString("o"),
+                    Fragment = token.AccessToken.Length > 0
+                        ? $"{token.AccessToken[..Math.Min(40, token.AccessToken.Length)]}..."
+                        : "(vacío)"
+                }
+            };
+
+            try
+            {
+                var periodos = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
+                resultado = resultado with
+                {
+                    Rvie = new { Ok = true, Error = "", Periodos = periodos.Count }
+                };
+            }
+            catch (Exception ex)
+            {
+                resultado = resultado with
+                {
+                    Rvie = new { Ok = false, Error = ex.Message, Periodos = 0 }
+                };
+                _logger.LogWarning(ex, "Diagnóstico SIRE: error RVIE periodos");
+            }
+
+            try
+            {
+                var periodos = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
+                resultado = resultado with
+                {
+                    Rce = new { Ok = true, Error = "", Periodos = periodos.Count }
+                };
+            }
+            catch (Exception ex)
+            {
+                resultado = resultado with
+                {
+                    Rce = new { Ok = false, Error = ex.Message, Periodos = 0 }
+                };
+                _logger.LogWarning(ex, "Diagnóstico SIRE: error RCE periodos");
+            }
+        }
+        catch (Exception ex)
+        {
+            resultado = resultado with
+            {
+                Token = new
+                {
+                    Ok = false,
+                    Error = ex.Message,
+                    Tipo = "",
+                    Expira = "",
+                    Fragment = ""
+                }
+            };
+            _logger.LogError(ex, "Diagnóstico SIRE: error al obtener token");
+        }
+
+        return Json(resultado);
     }
 
     private static List<SirePeriodoDashboardItem> ConstruirDashboard(

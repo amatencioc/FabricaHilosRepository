@@ -14,6 +14,12 @@ public enum TipoNotificacion
     /// <summary>Notifica a facturación sobre un requerimiento de certificado listo para facturar.</summary>
     EnvioCertificadoFacturacion,
 
+    /// <summary>Notifica al equipo de calidad que un reclamo ha sido enviado para análisis.</summary>
+    ReclamoEnviadoCalidad,
+
+    /// <summary>Notifica al vendedor que su reclamo ha sido evaluado y completado.</summary>
+    ReclamoEvaluadoVendedor,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

@@ -11,6 +11,7 @@ namespace FabricaHilos.Controllers.Sgc;
 public class AnalisisReclamoController : OracleBaseController
 {
     private readonly IAnalisisReclamoService _service;
+    private readonly IReclamoPdfService      _pdfService;
     private readonly IWebHostEnvironment     _env;
     private readonly IConfiguration          _config;
     private readonly ILogger<AnalisisReclamoController> _logger;
@@ -42,12 +43,14 @@ public class AnalisisReclamoController : OracleBaseController
 
     public AnalisisReclamoController(
         IAnalisisReclamoService service,
+        IReclamoPdfService      pdfService,
         IWebHostEnvironment     env,
         IConfiguration          config,
         ILogger<AnalisisReclamoController> logger,
         IMenuService            menuService)
     {
         _service     = service;
+        _pdfService  = pdfService;
         _env         = env;
         _config      = config;
         _logger      = logger;
@@ -150,9 +153,35 @@ public class AnalisisReclamoController : OracleBaseController
         //   GE (Gerencia) = solo lectura + puede aprobar/rechazar cuando estado=03
         //   Si el reclamo ya está finalizado → siempre OB (solo lectura)
         string rolUsuario;
-        if (reclamo.EsFinalizado)
+        if (reclamo.Estado == "05")
         {
+            // Rechazado → todos en solo lectura
             rolUsuario = "OB";
+        }
+        else if (reclamo.Estado == "04")
+        {
+            // Aprobado → el analista puede registrar Decisión Final y notificar al vendedor;
+            // los demás roles se determinan normalmente (VD y GE quedan en solo lectura
+            // porque sus formularios exigen estado '01' y '03' respectivamente).
+            var accesoModulo = _menuService.ObtenerAccesoModulo("SgcAnalisisReclamo");
+            if (accesoModulo.TieneModificador("AC"))
+                rolUsuario = "AC";
+            else if (accesoModulo.TieneModificador("GE"))
+                rolUsuario = "GE";
+            else if (accesoModulo.TieneModificador("VD"))
+                rolUsuario = "VD";
+            else if (accesoModulo.TieneModificador("OB"))
+                rolUsuario = "OB";
+            else
+            {
+                var accesoSgc = _menuService.ObtenerAccesoModulo("Sgc");
+                if (accesoSgc.TieneModificador("AC"))
+                    rolUsuario = "AC";
+                else if (accesoSgc.TieneModificador("GE"))
+                    rolUsuario = "GE";
+                else
+                    rolUsuario = "OB";
+            }
         }
         else
         {
@@ -442,6 +471,172 @@ public class AnalisisReclamoController : OracleBaseController
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  GUARDAR ANÁLISIS DE CAUSA  (Analista de Calidad)
+    // ════════════════════════════════════════════════════════════════════════
+
+    [HttpPost("GuardarAnalisisCausa")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GuardarAnalisisCausa(GuardarAnalisisCausaRequest model)
+    {
+        var usuario = User.Identity?.Name ?? "SYS";
+
+        if (string.IsNullOrWhiteSpace(model.Texto))
+        {
+            TempData["Error"] = "El Análisis de Causa no puede estar vacío.";
+            return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+        }
+
+        var error = await _service.GuardarAnalisisCausaAsync(model.IdReclamo, model.Texto, usuario);
+
+        if (error != null)
+            TempData["Error"] = error;
+        else
+            TempData["Success"] = "Análisis de Causa guardado correctamente.";
+
+        return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  GUARDAR DECISIÓN  (Analista de Calidad - solo cuando APROBADO)
+    // ════════════════════════════════════════════════════════════════════════
+
+    [HttpPost("GuardarDecision")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GuardarDecision(GuardarDecisionRequest model)
+    {
+        var usuario = User.Identity?.Name ?? "SYS";
+
+        if (string.IsNullOrWhiteSpace(model.Texto))
+        {
+            TempData["Error"] = "La Decisión no puede estar vacía.";
+            return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+        }
+
+        var error = await _service.GuardarDecisionAsync(model.IdReclamo, model.Texto, usuario);
+
+        if (error != null)
+            TempData["Error"] = error;
+        else
+            TempData["Success"] = "Decisión guardada correctamente.";
+
+        return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  NOTIFICAR A CALIDAD  (Vendedor envía el reclamo)
+    // ════════════════════════════════════════════════════════════════════════
+
+    [HttpPost("NotificarCalidad")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NotificarCalidad(NotificarCalidadRequest model)
+    {
+        var usuario = User.Identity?.Name ?? "SYS";
+
+        _logger.LogInformation("[NotificarCalidad] Usuario {Usuario} intenta notificar a calidad para reclamo {Id}", usuario, model.IdReclamo);
+
+        var (destinatarios, asuntoMail, nomCliente, error) = 
+            await _service.NotificarCalidadAsync(model.IdReclamo, usuario);
+
+        if (error != null)
+        {
+            _logger.LogError("[NotificarCalidad] Error retornado por servicio: {Error}", error);
+            TempData["Error"] = error;
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(destinatarios))
+            {
+                _logger.LogWarning("[NotificarCalidad] Servicio retornó null/empty destinatarios para reclamo {Id}", model.IdReclamo);
+                TempData["Warning"] = "No se encontraron destinatarios configurados en el sistema para notificar a Calidad.";
+            }
+            else
+            {
+                _logger.LogInformation("[NotificarCalidad] Notificación enviada exitosamente a: {Destinatarios}", destinatarios);
+                TempData["Success"] = $"Notificación enviada a Calidad: {destinatarios}";
+            }
+        }
+
+        return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  NOTIFICAR AL VENDEDOR (Reclamo APROBADO)
+    // ════════════════════════════════════════════════════════════════════════
+
+    [HttpPost("NotificarVendedorAprobado")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NotificarVendedorAprobado(NotificarVendedorAprobadoRequest model)
+    {
+        var usuario = User.Identity?.Name ?? "SYS";
+
+        var (destinatario, asuntoMail, nomCliente, error) = 
+            await _service.NotificarVendedorAprobadoAsync(model.IdReclamo, usuario);
+
+        if (error != null)
+        {
+            TempData["Error"] = error;
+        }
+        else
+        {
+            // Aquí se podría integrar un servicio de envío de correos
+            // Por ahora solo registramos que se notificó
+            TempData["Success"] = $"Notificación enviada al Vendedor: {destinatario}";
+        }
+
+        return RedirectToAction(nameof(Detalle), new { id = model.IdReclamo });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  IMPRIMIR RECLAMO APROBADO
+    // ════════════════════════════════════════════════════════════════════════
+
+    [HttpGet("Imprimir/{id:long}")]
+    public async Task<IActionResult> Imprimir(long id)
+    {
+        var datosImpresion = await _service.ObtenerDatosImpresionAsync(id);
+        if (datosImpresion is null)
+        {
+            TempData["Error"] = $"El reclamo #{id} no existe o no puede ser impreso (debe estar aprobado).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return View("~/Views/Sgc/AnalisisReclamo/Imprimir.cshtml", datosImpresion);
+    }
+
+    /// <summary>
+    /// Descarga el reclamo aprobado como PDF.
+    /// Requiere la librería QuestPDF o similar instalada.
+    /// </summary>
+    [HttpGet("DescargarPdf/{id:long}")]
+    public async Task<IActionResult> DescargarPdf(long id)
+    {
+        var datosImpresion = await _service.ObtenerDatosImpresionAsync(id);
+        if (datosImpresion is null)
+        {
+            return NotFound("El reclamo no existe o no puede ser descargado como PDF.");
+        }
+
+        try
+        {
+            // Obtener ruta del logo (si existe)
+            var logoPath = Path.Combine(_env.WebRootPath, "img", "logo.png");
+
+            // Generar PDF
+            var pdfBytes = _pdfService.GenerarPdf(datosImpresion, logoPath);
+
+            // Retornar como descarga
+            var nombreArchivo = $"Reclamo_{id}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+            return File(pdfBytes, "application/pdf", nombreArchivo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar PDF del reclamo {Id}", id);
+            TempData["Error"] = "Error al generar el PDF. Por favor intente nuevamente.";
+            return RedirectToAction(nameof(Imprimir), new { id });
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  BÚSQUEDA DE CLIENTES (AJAX)
     // ════════════════════════════════════════════════════════════════════════
 
@@ -495,8 +690,12 @@ public class AnalisisReclamoController : OracleBaseController
 
             try
             {
-                await using var stream = new FileStream(rutaDest, FileMode.Create, FileAccess.Write, FileShare.None);
-                await archivo.CopyToAsync(stream);
+                // Escribir el archivo físico y cerrar el stream ANTES de llamar al servicio,
+                // para evitar que un Delete posterior falle con "file being used by another process".
+                await using (var stream = new FileStream(rutaDest, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await archivo.CopyToAsync(stream);
+                }   // ← stream cerrado y liberado aquí
 
                 var (_, errBD) = await _service.RegistrarArchivoAsync(
                     idReclamo, rol,
@@ -508,8 +707,8 @@ public class AnalisisReclamoController : OracleBaseController
 
                 if (errBD != null)
                 {
-                    // Limpiar el archivo físico si falló el registro en BD
-                    System.IO.File.Delete(rutaDest);
+                    // El stream ya está cerrado → Delete no lanza IOException
+                    try { System.IO.File.Delete(rutaDest); } catch { /* ignorar */ }
                     errores.Add($"{archivo.FileName}: {errBD}");
                 }
                 else

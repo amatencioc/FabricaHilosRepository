@@ -11,10 +11,12 @@ public class ReclamoDto
 {
     public long      IdReclamo       { get; set; }
     public string    CodCliente      { get; set; } = "";
+    public string?   RucCliente      { get; set; }     // RUC del cliente (para mostrar en combo)
     public string?   NomCliente      { get; set; }
     public string    Contacto        { get; set; } = "";
     public string    Telefono        { get; set; } = "";
     public string    Asunto          { get; set; } = "";
+    public string?   Descripcion     { get; set; }     // Descripción/detalle del reclamo
     public string    Estado          { get; set; } = "01";
     public string    UsuVendedor     { get; set; } = "";
     public DateTime  FchCreacion     { get; set; }
@@ -23,6 +25,12 @@ public class ReclamoDto
     public string?   UsuGerente      { get; set; }
     public DateTime? FchAprobacion   { get; set; }
     public string?   MotRechazo      { get; set; }
+    public string?   AnalisisCausa   { get; set; }     // Análisis de causa del analista
+    public string?   DecisionFinal   { get; set; }     // Decisión final del analista (solo cuando aprobado)
+    public DateTime? FchDecision     { get; set; }     // Fecha de la decisión
+    public string?   UsuDecision     { get; set; }     // Usuario que registró la decisión
+    public DateTime? FchNotiCalidad  { get; set; }     // Última notificación a calidad
+    public DateTime? FchNotiVend     { get; set; }     // Última notificación al vendedor
     public int       TotalDescargos  { get; set; }
     public int       TotalArchivos   { get; set; }
 
@@ -119,6 +127,7 @@ public class ReclamoArchivoDto
     public bool   EsAnalista    => Rol == "AC";
     public bool   EsGerente     => Rol == "GE";
     public string RolTexto      => Rol switch { "VD" => "Vendedor", "AC" => "Analista de Calidad", "GE" => "Gerente", _ => Rol };
+    public string RolColorClase => Rol switch { "VD" => "primary", "AC" => "warning", "GE" => "success", _ => "secondary" };
 
     public string TamanioTexto => TamanioBytes switch
     {
@@ -304,12 +313,49 @@ public class RechazarReclamoRequest
 }
 
 /// <summary>
+/// Guardar el Análisis de Causa (Analista de Calidad).
+/// Permitido en estados '01'..'04'. No permitido en '05' (Rechazado).
+/// </summary>
+public class GuardarAnalisisCausaRequest
+{
+    public long   IdReclamo { get; set; }
+    public string Texto     { get; set; } = "";
+}
+
+/// <summary>
+/// Guardar la Decisión (Analista de Calidad).
+/// Sólo permitido cuando el reclamo está APROBADO (ESTADO='04').
+/// </summary>
+public class GuardarDecisionRequest
+{
+    public long   IdReclamo { get; set; }
+    public string Texto     { get; set; } = "";
+}
+
+/// <summary>
+/// Notificar a calidad que el vendedor ha enviado un reclamo.
+/// </summary>
+public class NotificarCalidadRequest
+{
+    public long IdReclamo { get; set; }
+}
+
+/// <summary>
+/// Notificar al vendedor que el reclamo ha sido aprobado.
+/// </summary>
+public class NotificarVendedorAprobadoRequest
+{
+    public long IdReclamo { get; set; }
+}
+
+/// <summary>
 /// DTO de cliente para el combo del formulario Nuevo.
 /// </summary>
 public class ClienteComboDto
 {
     public string CodCliente { get; set; } = "";
     public string NomCliente { get; set; } = "";
+    public string RucCliente { get; set; } = "";
 }
 
 /// <summary>
@@ -323,6 +369,32 @@ public class ListaArchivosVm
     public string                  CssClase      { get; set; } = "primary";
     /// <summary>Mostrar botón Eliminar. False cuando la sección está bloqueada.</summary>
     public bool                    PuedeEliminar { get; set; } = false;
+}
+
+/// <summary>
+/// DTO para la impresión completa de un reclamo aprobado.
+/// Contiene toda la información del reclamo, descargos, archivos y datos de firma.
+/// </summary>
+public class ReclamoImpresionDto
+{
+    public ReclamoDto               Reclamo    { get; set; } = new();
+    public List<ReclamoDescargoDto> Descargos  { get; set; } = new();
+    public List<ReclamoArchivoDto>  Archivos   { get; set; } = new();
+
+    /// <summary>Usuario Oracle que aprobó (para fallback de firma).</summary>
+    public string?                  NombreGerenteAprobador { get; set; }
+
+    /// <summary>Nombre completo obtenido de RH_PERSONAS (APELLIDO P. APELLIDO M., NOMBRES).</summary>
+    public string?                  NombreCompletoGerente  { get; set; }
+
+    /// <summary>Cargo del firmante obtenido de T_CARGO.</summary>
+    public string?                  CargoGerente           { get; set; }
+
+    /// <summary>
+    /// Imagen de la firma (LONG RAW de RH_FIRMAS), ya convertida a PNG/JPEG si era TIFF.
+    /// Null si no existe firma registrada.
+    /// </summary>
+    public byte[]?                  FirmaGerente           { get; set; }
 }
 
 /// <summary>

@@ -1,0 +1,380 @@
+@model FabricaHilos.Models.Sgc.ReclamoImpresionDto
+@using FabricaHilos.Models.Sgc
+@using FabricaHilos.Services.Logistica
+
+@{
+    ViewData["Title"] = $"Impresión Reclamo #{Model.Reclamo.IdReclamo}";
+    var reclamo   = Model.Reclamo;
+    var descargos = Model.Descargos.OrderBy(d => d.FchRegistro).ToList();
+    var archivos  = Model.Archivos.OrderBy(a => a.FchCarga).ToList();
+
+    // Preparar data URI de la firma (si existe)
+    string? firmaSrc = null;
+    if (Model.FirmaGerente != null && Model.FirmaGerente.Length > 0)
+    {
+        var mime = OrdenCompraService.DetectImageMimeType(Model.FirmaGerente);
+        if (mime != null)
+            firmaSrc = $"data:{mime};base64,{Convert.ToBase64String(Model.FirmaGerente)}";
+    }
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Sgc" asp-action="Index">SGC</a></li>
+    <li class="breadcrumb-item"><a asp-controller="AnalisisReclamo" asp-action="Index">Análisis de Reclamos</a></li>
+    <li class="breadcrumb-item"><a asp-controller="AnalisisReclamo" asp-action="Detalle" asp-route-id="@reclamo.IdReclamo">Reclamo #@reclamo.IdReclamo</a></li>
+    <li class="breadcrumb-item active">Impresión</li>
+}
+
+<!-- ══════════════════════════════════════════════════════════
+     BARRA DE ACCIONES — fija en la parte superior
+     ══════════════════════════════════════════════════════════ -->
+<div class="print-action-bar d-flex justify-content-between align-items-center px-3 py-2 mb-3 bg-white border-bottom shadow-sm">
+    <h6 class="mb-0 text-dark fw-semibold">
+        <i class="bi bi-printer text-secondary me-2"></i>
+        Impresión del Reclamo <strong>#@reclamo.IdReclamo</strong>
+    </h6>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-dark" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>Imprimir
+        </button>
+        <a href="javascript:history.back()" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     DOCUMENTO PARA IMPRIMIR
+     ════════════════════════════════════════════════════════════ -->
+<div class="card shadow-lg print-area" style="max-width: 900px; margin: 0 auto;">
+
+    <!-- ENCABEZADO -->
+    <div class="card-header bg-light border-0 p-4">
+        <div class="row align-items-center mb-3">
+            <div class="col-md-8">
+                <h3 class="mb-0 text-dark fw-bold">
+                    <i class="bi bi-chat-square-warning text-warning me-2"></i>
+                    REPORTE DE ANÁLISIS DE RECLAMO
+                </h3>
+                <p class="text-muted small mb-0 mt-1">Sistema de Gestión de Calidad (SGC)</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <p class="mb-1 small"><strong>Reclamo Nº:</strong> <span class="badge bg-primary px-3 py-2">#@reclamo.IdReclamo</span></p>
+                <p class="mb-0 small text-muted">
+                    Generado: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+                </p>
+            </div>
+        </div>
+        <hr class="my-3" />
+    </div>
+
+    <!-- CUERPO -->
+    <div class="card-body p-4">
+
+        <!-- ══════════════════ INFORMACIÓN GENERAL ══════════════════ -->
+        <section class="mb-4">
+            <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                <i class="bi bi-info-circle me-2 text-primary"></i>Información General del Reclamo
+            </h6>
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-2">
+                        <strong>Cliente:</strong><br />
+                        <span class="text-dark">@(reclamo.NomCliente ?? reclamo.CodCliente)</span>
+                        <small class="d-block text-muted">Código: @reclamo.CodCliente</small>
+                    </p>
+                    <p class="mb-2">
+                        <strong>RUC:</strong><br />
+                        <span class="text-dark">@(reclamo.RucCliente ?? "-")</span>
+                    </p>
+                    <p class="mb-2">
+                        <strong>Contacto:</strong><br />
+                        <span class="text-dark">@reclamo.Contacto</span>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <p class="mb-2">
+                        <strong>Teléfono:</strong><br />
+                        <span class="text-dark">@reclamo.Telefono</span>
+                    </p>
+                    <p class="mb-2">
+                        <strong>Asunto:</strong><br />
+                        <span class="text-dark">@reclamo.Asunto</span>
+                    </p>
+                    <p class="mb-0">
+                        <strong>Estado:</strong><br />
+                        <span class="badge bg-success px-3 py-2">
+                            <i class="bi @reclamo.EstadoIcono me-1"></i>@reclamo.EstadoDescripcion
+                        </span>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══════════════════ CRONOLOGÍA ══════════════════ -->
+        <section class="mb-4">
+            <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                <i class="bi bi-calendar me-2 text-primary"></i>Cronología de Eventos
+            </h6>
+            <ul class="list-unstyled">
+                <li class="mb-2 ps-3 border-start border-primary border-2">
+                    <strong class="text-dark">Creación del Reclamo</strong><br />
+                    <small class="text-muted">
+                        @reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm:ss") — Vendedor: <strong>@reclamo.UsuVendedor</strong>
+                    </small>
+                </li>
+                @if (reclamo.FchAnalisis.HasValue && !string.IsNullOrEmpty(reclamo.UsuAnalista))
+                {
+                    <li class="mb-2 ps-3 border-start border-warning border-2">
+                        <strong class="text-dark">Análisis de Calidad</strong><br />
+                        <small class="text-muted">
+                            @reclamo.FchAnalisis.Value.ToString("dd/MM/yyyy HH:mm:ss") — Analista: <strong>@reclamo.UsuAnalista</strong>
+                        </small>
+                    </li>
+                }
+                @if (reclamo.FchAprobacion.HasValue && !string.IsNullOrEmpty(reclamo.UsuGerente))
+                {
+                    <li class="mb-0 ps-3 border-start border-success border-2">
+                        <strong class="text-dark">Aprobación de Gerencia</strong><br />
+                        <small class="text-muted">
+                            @reclamo.FchAprobacion.Value.ToString("dd/MM/yyyy HH:mm:ss") — Gerente: <strong>@reclamo.UsuGerente</strong>
+                        </small>
+                    </li>
+                }
+            </ul>
+        </section>
+
+        <!-- ══════════════════ DESCARGOS ══════════════════ -->
+        <section class="mb-4">
+            <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                <i class="bi bi-chat-left-quote me-2 text-primary"></i>Descargos y Análisis
+            </h6>
+            @if (!descargos.Any())
+            {
+                <p class="text-muted small fst-italic">Sin descargos registrados.</p>
+            }
+            else
+            {
+                @foreach (var d in descargos)
+                {
+                    var colorRol = d.Rol switch
+                    {
+                        "VD" => "primary",
+                        "AC" => "warning",
+                        "GE" => "success",
+                        _ => "secondary"
+                    };
+                    var textRol = d.RolTexto;
+
+                    <div class="card border-start border-@colorRol border-3 shadow-none mb-3 bg-light">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>
+                                    <i class="bi @d.RolIcono me-1 text-@colorRol"></i>
+                                    <strong>@d.Usuario</strong> (<span class="text-@colorRol">@textRol</span>)
+                                </span>
+                                <span class="text-muted">@d.FchRegistro.ToString("dd/MM/yyyy HH:mm:ss")</span>
+                            </div>
+                            <p class="mb-0 text-dark" style="white-space:pre-line;">@d.Descripcion</p>
+                        </div>
+                    </div>
+                }
+            }
+        </section>
+
+        <!-- ══════════════════ ANÁLISIS DE CAUSA ══════════════════ -->
+        @if (!string.IsNullOrWhiteSpace(reclamo.AnalisisCausa))
+        {
+            <section class="mb-4">
+                <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-search me-2 text-primary"></i>Análisis de Causa
+                </h6>
+                <div class="bg-light p-3 rounded border-start border-primary border-3">
+                    <p class="mb-0 text-dark" style="white-space:pre-line;">@reclamo.AnalisisCausa</p>
+                </div>
+            </section>
+        }
+
+        <!-- ══════════════════ DECISIÓN FINAL ══════════════════ -->
+        @if (!string.IsNullOrWhiteSpace(reclamo.DecisionFinal))
+        {
+            <section class="mb-4">
+                <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-clipboard-check me-2 text-success"></i>Decisión Final
+                </h6>
+                <div class="bg-light p-3 rounded border-start border-success border-3">
+                    <p class="mb-0 text-dark" style="white-space:pre-line;">@reclamo.DecisionFinal</p>
+                </div>
+            </section>
+        }
+
+        @* ══════════════════ ARCHIVOS ADJUNTOS (temporalmente deshabilitado) ══════════════════
+        @if (archivos.Any())
+        {
+            <section class="mb-4">
+                <h6 class="text-uppercase text-dark fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-paperclip me-2 text-primary"></i>Archivos Adjuntos
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless">
+                        <thead>
+                            <tr class="border-bottom">
+                                <th class="text-muted small">Descripción</th>
+                                <th class="text-muted small">Rol</th>
+                                <th class="text-muted small">Tamaño</th>
+                                <th class="text-muted small">Fecha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in archivos)
+                            {
+                                <tr class="border-bottom small">
+                                    <td>
+                                        <i class="bi @a.Icono me-1 @a.IconoColor"></i>
+                                        <strong>@a.NombreOrig</strong>
+                                    </td>
+                                    <td><span class="badge bg-@a.RolColorClase">@a.RolTexto</span></td>
+                                    <td class="text-muted">@a.TamanioTexto</td>
+                                    <td class="text-muted">@a.FchCarga.ToString("dd/MM/yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+        *@
+
+    </div>
+
+    <!-- PIE DE PÁGINA / FIRMA -->
+    <div class="card-footer bg-light border-top p-4">
+
+        <div class="firma-section">
+            <!-- FIRMA DEL GERENTE APROBADOR -->
+            <div class="firma-box">
+                @if (firmaSrc != null)
+                {
+                    <img class="firma-img" src="@firmaSrc" alt="Firma" />
+                }
+                else
+                {
+                    <div class="firma-img-placeholder"></div>
+                }
+                <div class="firma-line"></div>
+                @if (!string.IsNullOrWhiteSpace(Model.NombreCompletoGerente))
+                {
+                    <div class="firma-nombre">@Model.NombreCompletoGerente</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(Model.NombreGerenteAprobador))
+                {
+                    <div class="firma-nombre">@Model.NombreGerenteAprobador</div>
+                }
+                <div class="firma-label">Gerencia Aprobador</div>
+                @if (!string.IsNullOrWhiteSpace(Model.CargoGerente))
+                {
+                    <div class="firma-sublabel">@Model.CargoGerente</div>
+                }
+                @if (reclamo.FchAprobacion.HasValue)
+                {
+                    <div class="firma-sublabel" style="margin-top:2px;">
+                        @reclamo.FchAprobacion.Value.ToString("dd/MM/yyyy HH:mm")
+                    </div>
+                }
+            </div>
+        </div>
+
+        <hr class="my-2" />
+        <p class="text-center text-muted small mb-0">
+            <i class="bi bi-shield-check me-1"></i>
+            Sistema de Gestión de Calidad (SGC) — Documento Oficial
+            &nbsp;·&nbsp; Generado: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+        </p>
+    </div>
+
+</div>
+
+@section Scripts {
+<style>
+    /* Barra de acciones fija en la parte superior */
+    .print-action-bar {
+        position: sticky;
+        top: 0;
+        z-index: 1030;
+    }
+
+    /* ── Firmas — mismo estilo que OC ─────────────────────────────────── */
+    .firma-section {
+        display: flex;
+        padding: 6mm 7mm 5mm;
+        gap: 5mm;
+        border-bottom: 1px solid #d0dce8;
+    }
+    .firma-box {
+        flex: 1;
+        text-align: center;
+        padding: 0 4mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .firma-img {
+        height: 16mm;
+        max-width: 100%;
+        object-fit: contain;
+        margin-bottom: 1mm;
+    }
+    .firma-img-placeholder {
+        height: 16mm;
+    }
+    .firma-line {
+        border-top: 1.5px solid #1B4D3E;
+        width: 100%;
+        margin-bottom: 3px;
+    }
+    .firma-label {
+        font-size: 7pt;
+        font-weight: 600;
+        color: #1B4D3E;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+    .firma-sublabel {
+        font-size: 7pt;
+        color: #888;
+    }
+    .firma-nombre {
+        font-size: 7pt;
+        color: #333;
+        font-weight: 500;
+    }
+</style>
+<style media="print">
+    body {
+        background-color: #ffffff;
+        margin: 0;
+        padding: 0;
+    }
+    /* Ocultar barra de acciones y elementos de navegación al imprimir */
+    .print-action-bar,
+    .breadcrumb-section,
+    nav,
+    .btn-group,
+    .btn {
+        display: none !important;
+    }
+    .print-area {
+        box-shadow: none !important;
+        border: none !important;
+    }
+    .card {
+        page-break-inside: avoid;
+    }
+    section {
+        page-break-inside: avoid;
+    }
+</style>
+<script>
+    // window.onload = function() { window.print(); };
+</script>
+}

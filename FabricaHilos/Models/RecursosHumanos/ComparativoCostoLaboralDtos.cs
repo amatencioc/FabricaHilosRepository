@@ -54,9 +54,10 @@ public class ComparativoCuadro1Dto
     public decimal NroTrabPromAno2        { get; set; }
     public decimal CostoLaboralPromMesAno1 { get; set; }   // S/ promedio mensual con beneficios
     public decimal CostoLaboralPromMesAno2 { get; set; }
-    public decimal DiferenciaNroTrab      { get; set; }   // A2 − A1
-    public decimal DiferenciaCostoMes     { get; set; }   // A2 − A1
-    public decimal VariacionCostoPct      { get; set; }   // % cambio
+    public decimal DiferenciaNroTrab      { get; set; }   // A2 − A1 (sin redondear, para mostrar raw)
+    public decimal DiferenciaNroTrabRedondeada { get; set; } // redondeo real: 0.6→1, 4.2→4, 0.2→0
+    public decimal DiferenciaCostoMes     { get; set; }   // basado en DiferenciaNroTrabRedondeada × CostoXTrab
+    public decimal VariacionCostoPct      { get; set; }   // % cambio (recalculado con Δ redondeado)
 }
 
 /// <summary>Cuadro 2 — promedio mensual de NTrab con impacto monetario.</summary>
@@ -65,23 +66,13 @@ public class ComparativoCuadro2Dto
     public string  Area                  { get; set; } = string.Empty;
     public decimal NroTrabPromAno1       { get; set; }
     public decimal NroTrabPromAno2       { get; set; }
-    public decimal DiferenciaNroTrab     { get; set; }     // A2 − A1
+    public decimal DiferenciaNroTrab     { get; set; }     // A2 − A1 (sin redondear)
+    public decimal DiferenciaNroTrabRedondeada { get; set; } // redondeo igual que Cuadro 1
     public decimal CostoXTrabAno2        { get; set; }     // costo laboral promedio por trabajador (con beneficios) Año2
-    public decimal ImpactoMensual        { get; set; }     // DIF × CostoXTrabAno2
+    public decimal ImpactoMensual        { get; set; }     // DiferenciaNroTrabRedondeada × CostoXTrabAno2 (signo: + ahorro, − sobrecosto)
     public decimal ImpactoAnualEstimado  { get; set; }     // ImpactoMensual × 12
 }
 
-/// <summary>Cuadro 3 — desglose del costo total mensual por trabajador.</summary>
-public class ComparativoCuadro3Dto
-{
-    public string  Area              { get; set; } = string.Empty;
-    public decimal SueldoBasico      { get; set; }   // S/ — promedio por trabajador (concepto 0121)
-    public decimal MontoEsSalud      { get; set; }   // 9.00 %
-    public decimal MontoCts          { get; set; }   // 8.33 %
-    public decimal MontoGratif       { get; set; }   // 16.66 %
-    public decimal MontoVacaciones   { get; set; }   // 8.33 %
-    public decimal CostoTotalMes     { get; set; }   // 142.32 % = factor 1.4232
-}
 
 /// <summary>ViewModel completo del dashboard.</summary>
 public class ComparativoCostoLaboralViewModel
@@ -112,7 +103,6 @@ public class ComparativoCostoLaboralViewModel
     public List<ComparativoCostoLaboralFilaDto> FilasCrudo { get; set; } = new();
     public List<ComparativoCuadro1Dto> Cuadro1 { get; set; } = new();
     public List<ComparativoCuadro2Dto> Cuadro2 { get; set; } = new();
-    public List<ComparativoCuadro3Dto> Cuadro3 { get; set; } = new();
 
     // ── Totales generales ──
     public decimal TotalNroTrabAno1       { get; set; }

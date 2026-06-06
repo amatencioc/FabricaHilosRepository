@@ -1,5 +1,6 @@
 using FabricaHilos.Helpers;
 using FabricaHilos.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -22,6 +23,14 @@ namespace FabricaHilos.Controllers
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             base.OnActionExecuting(context);
+
+            // Permitir acceso sin sesión Oracle si el action tiene [AllowAnonymous]
+            var allowAnonymous = context.ActionDescriptor.EndpointMetadata
+                .OfType<AllowAnonymousAttribute>()
+                .Any();
+
+            if (allowAnonymous)
+                return;
 
             if (string.IsNullOrEmpty(HttpContext.Session.GetString("OracleUser")))
             {

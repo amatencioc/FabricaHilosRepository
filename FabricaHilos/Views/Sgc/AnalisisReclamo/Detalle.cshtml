@@ -137,13 +137,6 @@
                                 <i class="bi bi-send me-1"></i>Escalar a Gerencia
                             </button>
                         }
-                        @if (modoAnalista && reclamo.Estado == "03")
-                        {
-                            <button type="button" class="btn btn-sm btn-outline-warning"
-                                    data-bs-toggle="modal" data-bs-target="#modalReabrir">
-                                <i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir
-                            </button>
-                        }
                         @if (modoGerente && reclamo.Estado == "03")
                         {
                             <button type="button" class="btn btn-sm btn-success"
@@ -154,6 +147,20 @@
                                     data-bs-toggle="modal" data-bs-target="#modalRechazar">
                                 <i class="bi bi-x-circle me-1"></i>Rechazar
                             </button>
+                        }
+                        @if (reclamo.Estado == "04")
+                        {
+                            <a asp-action="Imprimir" asp-route-id="@reclamo.IdReclamo"
+                               class="btn btn-sm btn-outline-dark" target="_blank">
+                                <i class="bi bi-printer me-1"></i>Imprimir
+                            </a>
+                            @if (modoAnalista)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="modal" data-bs-target="#modalNotificarVendedor">
+                                    <i class="bi bi-envelope me-1"></i>Notificar Vendedor
+                                </button>
+                            }
                         }
                         <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-arrow-left me-1"></i>Volver
@@ -383,6 +390,65 @@
                     })
                 </div>
 
+                <!-- ── Sub-sección: Análisis de Causa ── -->
+                <div class="px-3 pt-3 pb-2 border-top">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-search text-warning"></i>
+                        <span class="fw-semibold small text-uppercase text-muted">Análisis de Causa</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(reclamo.AnalisisCausa))
+                    {
+                        <div class="card border-start border-warning border-3 shadow-none mb-2 bg-white">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span><i class="bi bi-person me-1"></i><strong>@reclamo.UsuDecision</strong></span>
+                                    <span>@reclamo.FchDecision?.ToString("dd/MM/yyyy HH:mm")</span>
+                                </div>
+                                <p class="mb-0 small" style="white-space:pre-line">@reclamo.AnalisisCausa</p>
+                            </div>
+                        </div>
+                    }
+                    else if (modoAnalista && reclamo.Estado != "05")
+                    {
+                        <p class="text-muted small fst-italic mb-0">Sin análisis de causa aún.</p>
+                    }
+                    else
+                    {
+                        <p class="text-muted small fst-italic mb-0">Sin análisis de causa registrado.</p>
+                    }
+                </div>
+
+                <!-- ── Sub-sección: Decisión ── -->
+                @if (reclamo.Estado == "04")
+                {
+                    <div class="px-3 pt-3 pb-2 border-top">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="bi bi-clipboard-check text-success"></i>
+                            <span class="fw-semibold small text-uppercase text-muted">Decisión Final</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(reclamo.DecisionFinal))
+                        {
+                            <div class="card border-start border-success border-3 shadow-none mb-2 bg-white">
+                                <div class="card-body py-2 px-3">
+                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                        <span><i class="bi bi-person me-1"></i><strong>@reclamo.UsuDecision</strong></span>
+                                        <span>@reclamo.FchDecision?.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                    <p class="mb-0 small" style="white-space:pre-line">@reclamo.DecisionFinal</p>
+                                </div>
+                            </div>
+                        }
+                        else if (modoAnalista)
+                        {
+                            <p class="text-muted small fst-italic mb-0">Sin decisión registrada aún.</p>
+                        }
+                        else
+                        {
+                            <p class="text-muted small fst-italic mb-0">Sin decisión registrada.</p>
+                        }
+                    </div>
+                }
+
                 @if (modoAnalista)
                 {
                     <!-- ── Sub-sección: Agregar descargo ── -->
@@ -402,6 +468,54 @@
                             </button>
                         </form>
                     </div>
+
+                    <!-- ── Sub-sección: Guardar Análisis de Causa ── -->
+                    @if (reclamo.Estado != "05")
+                    {
+                        <div class="px-3 pt-3 pb-3 bg-white border-top">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-search text-warning"></i>
+                                <span class="fw-semibold small text-uppercase text-warning">Guardar Análisis de Causa</span>
+                            </div>
+                            <form asp-action="GuardarAnalisisCausa" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                                <textarea name="Texto" class="form-control form-control-sm mb-2" rows="3"
+                                          placeholder="Análisis detallado de la causa del reclamo..."
+                                          >@(reclamo.AnalisisCausa ?? "")</textarea>
+                                <button type="submit" class="btn btn-warning btn-sm text-dark">
+                                    <i class="bi bi-save me-1"></i>Guardar Análisis
+                                </button>
+                            </form>
+                        </div>
+                    }
+
+                    <!-- ── Sub-sección: Guardar Decisión (solo si APROBADO) ── -->
+                    @if (reclamo.Estado == "04")
+                    {
+                        <div class="px-3 pt-3 pb-3 bg-success bg-opacity-10 border-top">
+                            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-clipboard-check text-success"></i>
+                                    <span class="fw-semibold small text-uppercase text-success">Guardar Decisión Final</span>
+                                </div>
+                                <a asp-action="Imprimir" asp-route-id="@reclamo.IdReclamo"
+                                   class="btn btn-sm btn-outline-dark" target="_blank">
+                                    <i class="bi bi-printer me-1"></i>Imprimir
+                                </a>
+                            </div>
+                            <form asp-action="GuardarDecision" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                                <textarea name="Texto" class="form-control form-control-sm mb-2" rows="3"
+                                          placeholder="Decisión final y recomendaciones..."
+                                          >@(reclamo.DecisionFinal ?? "")</textarea>
+                                <button type="submit" class="btn btn-success btn-sm">
+                                    <i class="bi bi-save me-1"></i>Guardar Decisión
+                                </button>
+                            </form>
+                        </div>
+                    }
 
                     <!-- ── Sub-sección: Adjuntar archivos ── -->
                     <div class="px-3 pt-3 pb-3 bg-white border-top">
@@ -433,6 +547,7 @@
                         Solo un Analista de Calidad puede agregar contenido en esta sección.
                     </div>
                 }
+
 
             </div>
         </div>
@@ -509,33 +624,6 @@
     </div>
 }
 
-<!-- Modal Enviar a Calidad -->
-<div class="modal fade" id="modalEnviarCalidad" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="CambiarEstado" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="idReclamo" value="@reclamo.IdReclamo" />
-                <input type="hidden" name="estado" value="02" />
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title"><i class="bi bi-box-arrow-right me-2"></i>Enviar a Calidad</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>¿Confirma que desea enviar el reclamo <strong>#@reclamo.IdReclamo</strong> al área de Calidad para su revisión?</p>
-                    <p class="text-muted small mb-0">Una vez enviado, no podrá agregar más contenido como vendedor.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-info btn-sm text-white">
-                        <i class="bi bi-box-arrow-right me-1"></i>Confirmar Envío
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <!-- Modal Escalar a Gerencia -->
 <div class="modal fade" id="modalEscalarGerencia" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -554,33 +642,6 @@
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-success btn-sm">
                         <i class="bi bi-send me-1"></i>Confirmar Escalado
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Reabrir -->
-<div class="modal fade" id="modalReabrir" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="CambiarEstado" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="idReclamo" value="@reclamo.IdReclamo" />
-                <input type="hidden" name="estado" value="01" />
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Reabrir Reclamo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>¿Confirma que desea reabrir el reclamo <strong>#@reclamo.IdReclamo</strong>?</p>
-                    <p class="text-muted small mb-0">El reclamo volverá al estado <strong>Abierto</strong> para que el vendedor pueda editarlo.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-warning btn-sm text-dark">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i>Confirmar Reapertura
                     </button>
                 </div>
             </form>
@@ -638,6 +699,76 @@
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-danger btn-sm">
                         <i class="bi bi-x-circle me-1"></i>Confirmar Rechazo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: ENVIAR A CALIDAD
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalEnviarCalidad" tabindex="-1" aria-labelledby="modalEnviarCalidadLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="modalEnviarCalidadLabel">
+                    <i class="bi bi-box-arrow-right me-2"></i>Enviar a Calidad
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" asp-action="NotificarCalidad" asp-controller="AnalisisReclamo">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                    <p class="mb-0 text-muted">
+                        <i class="bi bi-info-circle me-2"></i>
+                        ¿Desea enviar este reclamo al área de Calidad para su análisis?
+                    </p>
+                    <p class="mt-2 mb-0 small">
+                        Se notificará a los analistas configurados del sistema.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info text-white btn-sm">
+                        <i class="bi bi-send me-1"></i>Enviar a Calidad
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: NOTIFICAR VENDEDOR APROBADO
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalNotificarVendedor" tabindex="-1" aria-labelledby="modalNotificarVendedorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalNotificarVendedorLabel">
+                    <i class="bi bi-envelope-check me-2"></i>Notificar al Vendedor
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" asp-action="NotificarVendedorAprobado" asp-controller="AnalisisReclamo">
+                @Html.AntiForgeryToken()
+                <div class="modal-body">
+                    <input type="hidden" name="IdReclamo" value="@reclamo.IdReclamo" />
+                    <p class="mb-0 text-muted">
+                        <i class="bi bi-info-circle me-2"></i>
+                        ¿Desea notificar al vendedor que el reclamo ha sido evaluado y aprobado?
+                    </p>
+                    <p class="mt-2 mb-0 small">
+                        Se enviará un correo al vendedor con el resultado.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-send me-1"></i>Notificar Vendedor
                     </button>
                 </div>
             </form>

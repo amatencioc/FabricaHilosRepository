@@ -498,7 +498,7 @@ function mostrarResultados(clientes) {
         const btn = document.createElement('button');
         btn.type      = 'button';
         btn.className = 'list-group-item list-group-item-action py-1 px-2 small';
-        btn.innerHTML = `<strong>${c.codCliente}</strong> — ${c.nomCliente}`;
+        btn.innerHTML = `<strong>${c.rucCliente || c.codCliente}</strong> — ${c.nomCliente}`;
         btn.addEventListener('mousedown', () => seleccionarCliente(c));
         btn.addEventListener('mouseover', () => {
             _idxActivo = i;
@@ -513,7 +513,7 @@ function seleccionarCliente(c) {
     document.getElementById('CodCliente').value = c.codCliente;
     document.getElementById('NomCliente').value = c.nomCliente;
     document.getElementById('buscarCliente').value = c.nomCliente;
-    document.getElementById('lblClienteSeleccionado').textContent = c.codCliente + ' — ' + c.nomCliente;
+    document.getElementById('lblClienteSeleccionado').textContent = (c.rucCliente || c.codCliente) + ' — ' + c.nomCliente;
     document.getElementById('clienteSeleccionado').classList.remove('d-none');
     ocultarResultados();
 }

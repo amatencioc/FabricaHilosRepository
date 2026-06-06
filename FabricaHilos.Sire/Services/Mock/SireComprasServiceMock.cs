@@ -72,23 +72,23 @@ public sealed class SireComprasServiceMock : ISireComprasService
     }
 
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
-        => Task.FromResult(new TicketEstado { Ticket = $"RCE-ACEPTAR-{periodo}", Estado = "COMPLETADO", Mensaje = "Propuesta RCE aceptada" });
+        => Task.FromResult(new TicketEstado { NumTicket = $"RCE-ACEPTAR-{periodo}", Estado = "COMPLETADO", Mensaje = "Propuesta RCE aceptada" });
 
     public Task<TicketEstado> ReemplazarPropuestaAsync(string periodo, Stream contenidoArchivo, string nombreArchivo, CancellationToken cancellationToken = default)
-        => Task.FromResult(new TicketEstado { Ticket = $"RCE-REEMPLAZO-{periodo}", Estado = "COMPLETADO", Mensaje = $"Archivo {nombreArchivo} procesado" });
+        => Task.FromResult(new TicketEstado { NumTicket = $"RCE-REEMPLAZO-{periodo}", Estado = "COMPLETADO", Mensaje = $"Archivo {nombreArchivo} procesado" });
 
     public Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default)
-        => Task.FromResult(new TicketEstado { Ticket = $"RCE-CIERRE-{periodo}", Estado = "COMPLETADO", Mensaje = "Periodo RCE cerrado" });
+        => Task.FromResult(new TicketEstado { NumTicket = $"RCE-CIERRE-{periodo}", Estado = "COMPLETADO", Mensaje = "Periodo RCE cerrado" });
 
     public Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
-        => Task.FromResult(new TicketEstado { Ticket = numTicket, Estado = "COMPLETADO", Mensaje = "[MOCK] Ticket RCE procesado" });
+        => Task.FromResult(new TicketEstado { NumTicket = numTicket, Estado = "COMPLETADO", Mensaje = "[MOCK] Ticket RCE procesado" });
 
-    public Task<ConstanciaCierre> DescargarConstanciaAsync(string periodo, CancellationToken cancellationToken = default)
+    public Task<ConstanciaCierre> DescargarConstanciaAsync(string nomArchivo, CancellationToken cancellationToken = default)
     {
-        var text = $"CONSTANCIA RCE MOCK\nPeriodo: {periodo}\nFecha: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+        var text = $"CONSTANCIA RCE MOCK\nArchivo: {nomArchivo}\nFecha: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
         return Task.FromResult(new ConstanciaCierre
         {
-            NombreArchivo = $"RCE_Constancia_{periodo}.txt",
+            NombreArchivo = nomArchivo,
             ContentType = "text/plain",
             Contenido = Encoding.UTF8.GetBytes(text)
         });

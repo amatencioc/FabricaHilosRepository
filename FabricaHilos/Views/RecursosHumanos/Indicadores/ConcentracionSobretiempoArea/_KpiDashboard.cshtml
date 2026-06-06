@@ -24,7 +24,7 @@
     string periodoAno1 = $"{MesRango(Model.MesIniAno1, Model.MesFinAno1)} {Model.Ano1}";
     string periodoAno2 = $"{MesRango(Model.MesIniAno2, Model.MesFinAno2)} {Model.Ano2}";
 
-    // ── Payload JSON para los 2 gráficos (uno por cuadro) ────────────────
+    // ── Payload JSON para los 3 gráficos (uno por cuadro) ────────────────
     var chartPayload = new
     {
         ano1 = Model.Ano1,
@@ -40,8 +40,17 @@
             area           = c.Area,
             impactoMensual = c.ImpactoMensual,
             impacto        = c.ImpactoAnualEstimado,
-            difTrab        = c.DiferenciaNroTrabRedondeada,
+            difTrab        = c.DiferenciaNroTrab,
             costoXTrab     = c.CostoXTrabAno2
+        }),
+        cuadro3 = Model.Cuadro3.Select(c => new {
+            area   = c.Area,
+            basico = c.SueldoBasico,
+            essalud= c.MontoEsSalud,
+            cts    = c.MontoCts,
+            gratif = c.MontoGratif,
+            vacac  = c.MontoVacaciones,
+            total  = c.CostoTotalMes
         })
     };
     var rawJson = JsonSerializer.Serialize(chartPayload);
@@ -134,8 +143,8 @@
                             <td class="text-end">@FmtN1(c.NroTrabPromAno2)</td>
                             <td class="text-end">@FmtSoles(c.CostoLaboralPromMesAno1)</td>
                             <td class="text-end">@FmtSoles(c.CostoLaboralPromMesAno2)</td>
-                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrabRedondeada)">
-                                @DeltaIcon(c.DiferenciaNroTrabRedondeada) @(Math.Abs(c.DiferenciaNroTrabRedondeada).ToString("N0", ci))
+                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrab)">
+                                @DeltaIcon(c.DiferenciaNroTrab) @FmtN1(Math.Abs(c.DiferenciaNroTrab))
                             </td>
                             <td class="text-end @DeltaClass(c.DiferenciaCostoMes)">
                                 @DeltaIcon(c.DiferenciaCostoMes) @FmtSoles(Math.Abs(c.DiferenciaCostoMes))
@@ -152,16 +161,12 @@
                         <td class="text-end">@FmtSoles(Model.TotalCostoLaboralAno1)</td>
                         <td class="text-end">@FmtSoles(Model.TotalCostoLaboralAno2)</td>
                         <td class="text-end">
-                            @{
-                                var totalDifPers = Model.Cuadro1.Sum(c => c.DiferenciaNroTrabRedondeada);
-                                var totalDifCosto = Model.Cuadro1.Sum(c => c.DiferenciaCostoMes);
-                            }
-                            @DeltaIcon(totalDifPers)
-                            @(Math.Abs(totalDifPers).ToString("N0", ci))
+                            @DeltaIcon(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1)
+                            @FmtN1(Math.Abs(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1))
                         </td>
                         <td class="text-end">
-                            @DeltaIcon(totalDifCosto)
-                            @FmtSoles(Math.Abs(totalDifCosto))
+                            @DeltaIcon(Model.TotalCostoLaboralAno2 - Model.TotalCostoLaboralAno1)
+                            @FmtSoles(Math.Abs(Model.TotalCostoLaboralAno2 - Model.TotalCostoLaboralAno1))
                         </td>
                     </tr>
                 </tfoot>
@@ -217,8 +222,8 @@
                             <td class="fw-semibold">@c.Area</td>
                             <td class="text-end">@FmtN1(c.NroTrabPromAno1)</td>
                             <td class="text-end">@FmtN1(c.NroTrabPromAno2)</td>
-                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrabRedondeada)">
-                                @DeltaIcon(c.DiferenciaNroTrabRedondeada) @(Math.Abs(c.DiferenciaNroTrabRedondeada).ToString("N0", ci))
+                            <td class="text-end @DeltaClassPersonas(c.DiferenciaNroTrab)">
+                                @DeltaIcon(c.DiferenciaNroTrab) @FmtN1(Math.Abs(c.DiferenciaNroTrab))
                             </td>
                             <td class="text-end">@FmtSoles(c.CostoXTrabAno2)</td>
                             <td class="text-end @DeltaClass(c.ImpactoMensual)">
@@ -236,11 +241,8 @@
                         <td class="text-end">@FmtN1(Model.TotalNroTrabAno1)</td>
                         <td class="text-end">@FmtN1(Model.TotalNroTrabAno2)</td>
                         <td class="text-end">
-                            @{
-                                var totalDifPers2 = Model.Cuadro2.Sum(c => c.DiferenciaNroTrabRedondeada);
-                            }
-                            @DeltaIcon(totalDifPers2)
-                            @(Math.Abs(totalDifPers2).ToString("N0", ci))
+                            @DeltaIcon(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1)
+                            @FmtN1(Math.Abs(Model.TotalNroTrabAno2 - Model.TotalNroTrabAno1))
                         </td>
                         <td class="text-end">—</td>
                         <td class="text-end">
@@ -272,7 +274,61 @@
     </div>
 </div>
 
-<!-- Payload JSON oculto para los 2 charts (renderizados por inicializarGraficos() en Index.cshtml) -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CUADRO 3 — Desglose del costo unitario mensual                     -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="card cuadro-card">
+    <div class="card-header">
+        <i class="bi bi-3-square-fill me-1"></i> Cuadro 3 — Desglose del Costo Mensual por Trabajador (Año @Model.Ano2)
+        <div class="subtitle">
+            Sueldo básico + cargas sociales devengadas por Ley aplicadas sobre el básico promedio del trabajador.
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover tbl-comp align-middle">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;">Área</th>
+                        <th>Sueldo Básico (S/.)<br /><small class="text-muted fw-normal">100.00%</small></th>
+                        <th>EsSalud (S/.)<br /><small class="text-muted fw-normal">9.00%</small></th>
+                        <th>CTS (S/.)<br /><small class="text-muted fw-normal">8.33%</small></th>
+                        <th>Gratificaciones (S/.)<br /><small class="text-muted fw-normal">16.66%</small></th>
+                        <th>Vacaciones (S/.)<br /><small class="text-muted fw-normal">8.33%</small></th>
+                        <th class="table-success">Costo Total / Mes (S/.)<br /><small class="text-muted fw-normal">142.32% (×1.4232)</small></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model.Cuadro3)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@c.Area</td>
+                            <td class="text-end">@FmtSoles(c.SueldoBasico)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoEsSalud)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoCts)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoGratif)</td>
+                            <td class="text-end text-secondary">@FmtSoles(c.MontoVacaciones)</td>
+                            <td class="text-end fw-bold" style="background:#e7f7ef; color:#1B4D3E;">
+                                @FmtSoles(c.CostoTotalMes)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="cuadro-chart-wrap">
+            <div class="cuadro-chart-title">
+                <i class="bi bi-stack me-1"></i>
+                Composición del Costo Mensual por Trabajador (S/.) — básico + cargas sociales
+            </div>
+            <div class="cuadro-chart-box cuadro-chart-box-tall">
+                <canvas id="chCuadro3"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payload JSON oculto para los 3 charts (renderizados por inicializarGraficos() en Index.cshtml) -->
 <input type="hidden" id="chartRawData" value="@rawJson" />
 
 <!-- ── Nota al pie con la explicación obligatoria ─────────────────── -->

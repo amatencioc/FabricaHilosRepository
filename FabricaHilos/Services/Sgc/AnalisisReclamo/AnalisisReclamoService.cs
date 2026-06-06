@@ -1,6 +1,10 @@
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using System.Data;
 using FabricaHilos.Models.Sgc;
+using FabricaHilos.Notificaciones.Abstractions;
+using FabricaHilos.Notificaciones.Models.Payloads;
+using FabricaHilos.Services.Logistica;
 
 namespace FabricaHilos.Services.Sgc.AnalisisReclamo;
 
@@ -65,6 +69,32 @@ public interface IAnalisisReclamoService
     /// La capa de presentación debe borrar la carpeta física.
     /// </summary>
     Task<(string? NombresServer, string? Error)> EliminarReclamoAsync(long idReclamo, string usuario);
+
+    /// <summary>Guarda el Análisis de Causa del Analista de Calidad.</summary>
+    Task<string?> GuardarAnalisisCausaAsync(long idReclamo, string texto, string usuario);
+
+    /// <summary>Guarda la Decisión del Analista de Calidad (solo cuando estado=04).</summary>
+    Task<string?> GuardarDecisionAsync(long idReclamo, string texto, string usuario);
+
+    /// <summary>
+    /// Notifica al área de Calidad que el vendedor ha enviado un reclamo.
+    /// Devuelve (Destinatarios, AsuntoMail, NomCliente, Error).
+    /// Destinatarios es una cadena con correos separados por ';'.
+    /// </summary>
+    Task<(string? Destinatarios, string? AsuntoMail, string? NomCliente, string? Error)> NotificarCalidadAsync(long idReclamo, string usuario);
+
+    /// <summary>
+    /// Notifica al Vendedor que el reclamo ha sido aprobado y evaluado.
+    /// Devuelve (Destinatario, AsuntoMail, NomCliente, Error).
+    /// </summary>
+    Task<(string? Destinatario, string? AsuntoMail, string? NomCliente, string? Error)> NotificarVendedorAprobadoAsync(long idReclamo, string usuario);
+
+    /// <summary>
+    /// Obtiene todos los datos necesarios para imprimir un reclamo aprobado.
+    /// Incluye cabecera, descargos, archivos, análisis de causa, decisión y datos del gerente.
+    /// Solo permitido cuando ESTADO='04' (Aprobado).
+    /// </summary>
+    Task<ReclamoImpresionDto?> ObtenerDatosImpresionAsync(long idReclamo);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -74,14 +104,17 @@ public interface IAnalisisReclamoService
 public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
 {
     private readonly ILogger<AnalisisReclamoService> _logger;
+    private readonly IEmailNotificacionService       _emailService;
 
     public AnalisisReclamoService(
         IConfiguration       configuration,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<AnalisisReclamoService> logger)
+        ILogger<AnalisisReclamoService> logger,
+        IEmailNotificacionService emailService)
         : base(configuration, httpContextAccessor)
     {
-        _logger = logger;
+        _logger       = logger;
+        _emailService = emailService;
     }
 
     // ── Helpers de lectura de OracleDataReader ───────────────────────────────
@@ -281,7 +314,8 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
                 result.Add(new ClienteComboDto
                 {
                     CodCliente = Str(r, "COD_CLIENTE") ?? "",
-                    NomCliente = Str(r, "NOM_CLIENTE") ?? ""
+                    NomCliente = Str(r, "NOM_CLIENTE") ?? "",
+                    RucCliente = Str(r, "RUC_CLIENTE") ?? ""
                 });
             }
         }
@@ -375,6 +409,8 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
     }
 
     // ── P_REGISTRAR_ARCHIVO ──────────────────────────────────────────────────
+    // NOTA: Se bypasea el SP del paquete Oracle (buffer overflow en versión
+    //       desplegada) y se ejecuta el INSERT directamente desde C#.
 
     public async Task<(long IdArchivo, string? Error)> RegistrarArchivoAsync(
         long idReclamo, string rol,
@@ -383,35 +419,93 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
     {
         try
         {
+            _logger.LogInformation("[RegistrarArchivo] Inicio — reclamo={Id} rol={Rol} archivo={Nom}", idReclamo, rol, nombreOrig);
+
+            if (rol != "VD" && rol != "AC")
+                return (0, "ROL inválido.");
+
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
 
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = $@"
-                BEGIN {S}PKG_SGC_RECLAMO.P_REGISTRAR_ARCHIVO(
-                    :idReclamo, :rol,
-                    :nombreOrig, :nombreServer,
-                    :mimeType, :tamanio, :usuario,
-                    :idArchivo, :msgerror
-                ); END;";
+            // 1. Verificar existencia y estado del reclamo
+            string? estado;
+            using (var chkCmd = conn.CreateCommand())
+            {
+                chkCmd.CommandText = $"SELECT ESTADO FROM {S}SGC_RECLAMO WHERE ID_RECLAMO = :id";
+                chkCmd.Parameters.Add("id", OracleDbType.Decimal, idReclamo, ParameterDirection.Input);
+                var val = await chkCmd.ExecuteScalarAsync();
+                if (val == null || val == DBNull.Value)
+                    return (0, $"El reclamo {idReclamo} no existe.");
+                estado = val.ToString();
+            }
+            _logger.LogInformation("[RegistrarArchivo] Estado reclamo={Estado}", estado);
 
-            cmd.Parameters.Add("idReclamo",    OracleDbType.Decimal,  idReclamo,    ParameterDirection.Input);
-            cmd.Parameters.Add("rol",          OracleDbType.Varchar2, rol,          ParameterDirection.Input);
-            cmd.Parameters.Add("nombreOrig",   OracleDbType.Varchar2, nombreOrig,   ParameterDirection.Input);
-            cmd.Parameters.Add("nombreServer", OracleDbType.Varchar2, nombreServer, ParameterDirection.Input);
-            cmd.Parameters.Add("mimeType",     OracleDbType.Varchar2, mimeType,     ParameterDirection.Input);
-            cmd.Parameters.Add("tamanio",      OracleDbType.Decimal,  tamanio,      ParameterDirection.Input);
-            cmd.Parameters.Add("usuario",      OracleDbType.Varchar2, usuario,      ParameterDirection.Input);
-            cmd.Parameters.Add("idArchivo",    OracleDbType.Decimal,  ParameterDirection.Output);
-            cmd.Parameters.Add("msgerror",     OracleDbType.Varchar2, 4000, ParameterDirection.Output);
+            if (estado is "03" or "04" or "05")
+                return (0, "No se puede adjuntar archivos a un reclamo cerrado, aprobado o rechazado.");
 
-            await cmd.ExecuteNonQueryAsync();
+            // 2. Truncar valores a los tamaños de columna para evitar overflow
+            var nomOrig   = nombreOrig  .Length > 500 ? nombreOrig  [..500] : nombreOrig;
+            var nomServer = nombreServer.Length > 500 ? nombreServer[..500] : nombreServer;
+            var mime      = mimeType    .Length > 100 ? mimeType    [..100] : mimeType;
+            var usr       = usuario     .Length >  30 ? usuario     [.. 30] : usuario;
 
-            var msgerror = OraOutStr(cmd, "msgerror");
-            if (!string.IsNullOrWhiteSpace(msgerror)) return (0, msgerror);
+            // 3. INSERT con RETURNING para obtener el ID generado por la secuencia
+            long newId;
+            using var tran = conn.BeginTransaction();
+            try
+            {
+                using (var insCmd = conn.CreateCommand())
+                {
+                    insCmd.Transaction = tran;
+                    insCmd.CommandText = $@"
+                        INSERT INTO {S}SGC_RECLAMO_ARCHIVO (
+                            ID_ARCHIVO, ID_RECLAMO, ROL,
+                            NOMBRE_ORIG, NOMBRE_SERVER,
+                            MIME_TYPE, TAMANIO_BYTES,
+                            USUARIO, FCH_CARGA
+                        ) VALUES (
+                            {S}SGC_RECLAMO_ARCH_SEQ.NEXTVAL, :idReclamo, :rol,
+                            :nomOrig, :nomServer,
+                            :mime, :tamanio,
+                            :usr, SYSDATE
+                        ) RETURNING ID_ARCHIVO INTO :newId";
+                    insCmd.Parameters.Add("idReclamo", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+                    insCmd.Parameters.Add("rol",       OracleDbType.Varchar2, rol,       ParameterDirection.Input);
+                    insCmd.Parameters.Add("nomOrig",   OracleDbType.Varchar2, nomOrig,   ParameterDirection.Input);
+                    insCmd.Parameters.Add("nomServer", OracleDbType.Varchar2, nomServer, ParameterDirection.Input);
+                    insCmd.Parameters.Add("mime",      OracleDbType.Varchar2, mime,      ParameterDirection.Input);
+                    insCmd.Parameters.Add("tamanio",   OracleDbType.Decimal,  tamanio,   ParameterDirection.Input);
+                    insCmd.Parameters.Add("usr",       OracleDbType.Varchar2, usr,       ParameterDirection.Input);
+                    insCmd.Parameters.Add("newId",     OracleDbType.Decimal,  ParameterDirection.Output);
+                    await insCmd.ExecuteNonQueryAsync();
+                    newId = Convert.ToInt64(insCmd.Parameters["newId"].Value.ToString());
+                }
+                _logger.LogInformation("[RegistrarArchivo] INSERT OK — newId={NewId}", newId);
 
-            long id = Convert.ToInt64(cmd.Parameters["idArchivo"].Value.ToString());
-            return (id, null);
+                // 4. Actualizar auditoría del reclamo
+                using (var updCmd = conn.CreateCommand())
+                {
+                    updCmd.Transaction = tran;
+                    updCmd.CommandText = $@"
+                        UPDATE {S}SGC_RECLAMO
+                        SET    A_MDUSER  = :usr,
+                               A_MDFECHA = SYSDATE
+                        WHERE  ID_RECLAMO = :idReclamo";
+                    updCmd.Parameters.Add("usr",       OracleDbType.Varchar2, usr,       ParameterDirection.Input);
+                    updCmd.Parameters.Add("idReclamo", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+                    await updCmd.ExecuteNonQueryAsync();
+                }
+
+                tran.Commit();
+                _logger.LogInformation("[RegistrarArchivo] Commit OK");
+            }
+            catch
+            {
+                tran.Rollback();
+                throw;
+            }
+
+            return (newId, null);
         }
         catch (Exception ex)
         {
@@ -592,6 +686,360 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
         }
     }
 
+    // ── P_GUARDAR_ANALISIS_CAUSA ─────────────────────────────────────────────
+
+    public async Task<string?> GuardarAnalisisCausaAsync(long idReclamo, string texto, string usuario)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"BEGIN {S}PKG_SGC_RECLAMO.P_GUARDAR_ANALISIS_CAUSA(:idReclamo,:texto,:usuario,:msgerror); END;";
+            cmd.Parameters.Add("idReclamo", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            cmd.Parameters.Add("texto",     OracleDbType.Varchar2, texto,     ParameterDirection.Input);
+            cmd.Parameters.Add("usuario",   OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+            cmd.Parameters.Add("msgerror",  OracleDbType.Varchar2, 4000, ParameterDirection.Output);
+
+            await cmd.ExecuteNonQueryAsync();
+            var msg = OraOutStr(cmd, "msgerror");
+            return string.IsNullOrWhiteSpace(msg) ? null : msg;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en GuardarAnalisisCausaAsync({Id})", idReclamo);
+            return $"Error al guardar Análisis de Causa: {ex.Message}";
+        }
+    }
+
+    // ── P_GUARDAR_DECISION ───────────────────────────────────────────────────
+
+    public async Task<string?> GuardarDecisionAsync(long idReclamo, string texto, string usuario)
+    {
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"BEGIN {S}PKG_SGC_RECLAMO.P_GUARDAR_DECISION(:idReclamo,:texto,:usuario,:msgerror); END;";
+            cmd.Parameters.Add("idReclamo", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            cmd.Parameters.Add("texto",     OracleDbType.Varchar2, texto,     ParameterDirection.Input);
+            cmd.Parameters.Add("usuario",   OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+            cmd.Parameters.Add("msgerror",  OracleDbType.Varchar2, 4000, ParameterDirection.Output);
+
+            await cmd.ExecuteNonQueryAsync();
+            var msg = OraOutStr(cmd, "msgerror");
+            return string.IsNullOrWhiteSpace(msg) ? null : msg;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en GuardarDecisionAsync({Id})", idReclamo);
+            return $"Error al guardar Decisión: {ex.Message}";
+        }
+    }
+
+    // ── NotificarCalidadAsync ────────────────────────────────────────────────
+    // NOTA: No llama a P_NOTIFICAR_CALIDAD para evitar ORA-06502 en versiones
+    //       antiguas del paquete Oracle. Hace el UPDATE directamente en C#.
+
+    public async Task<(string? Destinatarios, string? AsuntoMail, string? NomCliente, string? Error)>
+        NotificarCalidadAsync(long idReclamo, string usuario)
+    {
+        try
+        {
+            // Paso 1: Leer datos del reclamo (validación + datos para email)
+            _logger.LogInformation("[Reclamo {Id}] Paso 1: leyendo datos del reclamo", idReclamo);
+            var reclamo = await ObtenerReclamoAsync(idReclamo);
+            if (reclamo == null)
+            {
+                _logger.LogError("[Reclamo {Id}] Paso 1 FALLO — reclamo no encontrado", idReclamo);
+                return (null, null, null, $"El reclamo {idReclamo} no existe.");
+            }
+            _logger.LogInformation("[Reclamo {Id}] Paso 1 OK — estado={Estado} asunto={Asunto}",
+                idReclamo, reclamo.Estado, reclamo.Asunto);
+
+            // Paso 2: Validar estado ('01'=Abierto o '02'=En Revisión)
+            _logger.LogInformation("[Reclamo {Id}] Paso 2: validando estado={Estado}", idReclamo, reclamo.Estado);
+            if (reclamo.Estado is not ("01" or "02"))
+            {
+                var msgEstado = $"Solo se puede notificar a Calidad cuando el reclamo está Abierto o En Revisión. Estado actual: {reclamo.Estado}";
+                _logger.LogWarning("[Reclamo {Id}] Paso 2 FALLO — {Msg}", idReclamo, msgEstado);
+                return (null, null, null, msgEstado);
+            }
+            _logger.LogInformation("[Reclamo {Id}] Paso 2 OK — estado válido", idReclamo);
+
+            // Paso 3: Cambiar estado a '02' (En Revisión) + marcar FCH_NOTI_CALIDAD
+            //         Solo cambia estado si está en '01'; si ya es '02' solo actualiza la fecha.
+            _logger.LogInformation("[Reclamo {Id}] Paso 3: cambiando estado a '02' y marcando FCH_NOTI_CALIDAD", idReclamo);
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            using var cmdUpd = conn.CreateCommand();
+            cmdUpd.CommandText = $@"
+                UPDATE {S}SGC_RECLAMO
+                SET    ESTADO           = CASE WHEN ESTADO = '01' THEN '02' ELSE ESTADO END,
+                       FCH_NOTI_CALIDAD = SYSDATE,
+                       A_MDUSER         = :u,
+                       A_MDFECHA        = SYSDATE
+                WHERE  ID_RECLAMO = :id";
+            cmdUpd.CommandType = System.Data.CommandType.Text;
+            cmdUpd.Parameters.Add("u",  OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+            cmdUpd.Parameters.Add("id", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            var filas = await cmdUpd.ExecuteNonQueryAsync();
+            _logger.LogInformation("[Reclamo {Id}] Paso 3 OK — filas actualizadas={Filas} (estado ahora '02' si era '01')", idReclamo, filas);
+
+            // Paso 4: Construir datos de notificación en C# (sin OUT params de Oracle)
+            _logger.LogInformation("[Reclamo {Id}] Paso 4: construyendo datos de notificación", idReclamo);
+            const string destinatarios = "vmatencio@colonial.com.pe";
+            var asuntoRaw  = $"Nuevo reclamo #{idReclamo} - {reclamo.Asunto}";
+            var asuntoMail = asuntoRaw.Length > 400 ? asuntoRaw[..400] : asuntoRaw;
+            var nomCliente = reclamo.NomCliente ?? reclamo.CodCliente;
+            if (nomCliente.Length > 200) nomCliente = nomCliente[..200];
+            _logger.LogInformation("[Reclamo {Id}] Paso 4 OK — dest={Dest} asunto(40)={Asunto}",
+                idReclamo, destinatarios, asuntoMail[..Math.Min(asuntoMail.Length, 40)]);
+
+            // Paso 5: Enviar correos
+            _logger.LogInformation("[Reclamo {Id}] Paso 5: enviando correos", idReclamo);
+            var emails = destinatarios.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(e => e.Trim()).Where(e => !string.IsNullOrEmpty(e)).ToList();
+            int enviados = 0, fallidos = 0;
+
+            foreach (var email in emails)
+            {
+                try
+                {
+                    _logger.LogInformation("[Reclamo {Id}] Paso 5: preparando correo para {Email}", idReclamo, email);
+                    var correoVendedor = await ObtenerCorreoVendedorAsync(reclamo.UsuVendedor);
+                    var payload = new ReclamoEnviadoCalidadPayload
+                    {
+                        CorreoDestinatario = email,
+                        NombreDestinatario = "Equipo de Calidad",
+                        IdReclamo          = reclamo.IdReclamo.ToString(),
+                        NombreCliente      = reclamo.NomCliente ?? reclamo.CodCliente,
+                        RucCliente         = reclamo.RucCliente ?? "-",
+                        Asunto             = reclamo.Asunto,
+                        NombreVendedor     = reclamo.UsuVendedor,
+                        CorreoVendedor     = correoVendedor,
+                        FechaCreacion      = reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
+                        Descripcion        = reclamo.Descripcion ?? ""
+                    };
+                    var ok = await _emailService.EnviarAsync(payload);
+                    if (ok) { enviados++; _logger.LogInformation("[Reclamo {Id}] Paso 5: correo OK → {Email}", idReclamo, email); }
+                    else    { fallidos++; _logger.LogWarning(    "[Reclamo {Id}] Paso 5: EmailService=false → {Email}", idReclamo, email); }
+                }
+                catch (Exception exMail)
+                {
+                    fallidos++;
+                    _logger.LogError(exMail, "[Reclamo {Id}] Paso 5: excepción al enviar correo a {Email}", idReclamo, email);
+                }
+            }
+            _logger.LogInformation("[Reclamo {Id}] Paso 5 OK — {Enviados} enviados, {Fallidos} fallidos",
+                idReclamo, enviados, fallidos);
+
+            return (destinatarios, asuntoMail, nomCliente, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Reclamo {Id}] Error en NotificarCalidadAsync", idReclamo);
+            return (null, null, null, $"Error al notificar a calidad: {ex.Message}");
+        }
+    }
+
+    // ── NotificarVendedorAprobadoAsync ──────────────────────────────────────
+    // NOTA: No llama a P_NOTIFICAR_VENDEDOR_APROBADO para evitar ORA-06502 en
+    //       versiones antiguas del paquete. Hace el UPDATE directamente en C#.
+
+    public async Task<(string? Destinatario, string? AsuntoMail, string? NomCliente, string? Error)>
+        NotificarVendedorAprobadoAsync(long idReclamo, string usuario)
+    {
+        try
+        {
+            // Paso 1: Leer datos del reclamo
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 1: leyendo datos del reclamo", idReclamo);
+            var reclamo = await ObtenerReclamoAsync(idReclamo);
+            if (reclamo == null)
+            {
+                _logger.LogError("[NotifVendedor {Id}] Paso 1 FALLO — reclamo no encontrado", idReclamo);
+                return (null, null, null, $"El reclamo {idReclamo} no existe.");
+            }
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 1 OK — estado={Estado}", idReclamo, reclamo.Estado);
+
+            // Paso 2: Validar estado = '04' Aprobado
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 2: validando estado={Estado}", idReclamo, reclamo.Estado);
+            if (reclamo.Estado != "04")
+            {
+                var msgEstado = $"Solo se puede notificar al vendedor cuando el reclamo está Aprobado. Estado actual: {reclamo.Estado}";
+                _logger.LogWarning("[NotifVendedor {Id}] Paso 2 FALLO — {Msg}", idReclamo, msgEstado);
+                return (null, null, null, msgEstado);
+            }
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 2 OK", idReclamo);
+
+            // Paso 3: Marcar FCH_NOTI_VEND directamente en C# (sin SP Oracle)
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 3: actualizando FCH_NOTI_VEND en BD", idReclamo);
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            using var cmdUpd = conn.CreateCommand();
+            cmdUpd.CommandText = $@"
+                UPDATE {S}SGC_RECLAMO
+                SET    FCH_NOTI_VEND = SYSDATE,
+                       A_MDUSER      = :u,
+                       A_MDFECHA     = SYSDATE
+                WHERE  ID_RECLAMO = :id";
+            cmdUpd.CommandType = System.Data.CommandType.Text;
+            cmdUpd.Parameters.Add("u",  OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+            cmdUpd.Parameters.Add("id", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            var filas = await cmdUpd.ExecuteNonQueryAsync();
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 3 OK — filas={Filas}", idReclamo, filas);
+
+            // Paso 4: Construir datos de notificación en C#
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 4: construyendo datos de notificación", idReclamo);
+            var destinatario = await ObtenerCorreoVendedorAsync(reclamo.UsuVendedor);
+            if (string.IsNullOrWhiteSpace(destinatario))
+                destinatario = "vmatencio@colonial.com.pe";   // fallback de pruebas
+            var asuntoRaw  = reclamo.Asunto;
+            var asuntoMail = asuntoRaw.Length > 400 ? asuntoRaw[..400] : asuntoRaw;
+            var nomCliente = reclamo.NomCliente ?? reclamo.CodCliente;
+            if (nomCliente.Length > 200) nomCliente = nomCliente[..200];
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 4 OK — dest={Dest}", idReclamo, destinatario);
+
+            // Paso 5: Enviar correo al vendedor
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 5: enviando correo a {Dest}", idReclamo, destinatario);
+            if (destinatario.Contains('@'))
+            {
+                var urlPortal = GetUrlPortal(reclamo.IdReclamo);
+                var payload = new ReclamoEvaluadoVendedorPayload
+                {
+                    CorreoDestinatario = destinatario,
+                    NombreDestinatario = reclamo.UsuVendedor,
+                    IdReclamo          = reclamo.IdReclamo.ToString(),
+                    NombreCliente      = reclamo.NomCliente ?? reclamo.CodCliente,
+                    RucCliente         = reclamo.RucCliente ?? "-",
+                    Asunto             = reclamo.Asunto,
+                    FechaCreacion      = reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
+                    DecisionFinal      = reclamo.DecisionFinal ?? "",
+                    NombreAnalista     = reclamo.UsuAnalista ?? "",
+                    NombreGerente      = reclamo.UsuGerente ?? "",
+                    FechaAprobacion    = reclamo.FchAprobacion?.ToString("dd/MM/yyyy HH:mm:ss") ?? "",
+                    UrlPortal          = urlPortal
+                };
+                var enviado = await _emailService.EnviarAsync(payload);
+                if (enviado) _logger.LogInformation("[NotifVendedor {Id}] Paso 5 OK — correo enviado a {Dest}", idReclamo, destinatario);
+                else         _logger.LogWarning(    "[NotifVendedor {Id}] Paso 5 — EmailService=false para {Dest}", idReclamo, destinatario);
+            }
+            else
+            {
+                _logger.LogWarning("[NotifVendedor {Id}] Paso 5 — destinatario sin '@', correo omitido: {Dest}", idReclamo, destinatario);
+            }
+
+            return (destinatario, asuntoMail, nomCliente, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[NotifVendedor {Id}] Error en NotificarVendedorAprobadoAsync", idReclamo);
+            return (null, null, null, $"Error al notificar al vendedor: {ex.Message}");
+        }
+    }
+
+    // ── ObtenerDatosImpresionAsync ──────────────────────────────────────────
+
+    // Código de firma hardcodeado — cambiar cuando se requiera lógica dinámica.
+    private const string CodigoFirmaGerencia = "034001";
+
+    public async Task<ReclamoImpresionDto?> ObtenerDatosImpresionAsync(long idReclamo)
+    {
+        try
+        {
+            var reclamo = await ObtenerReclamoAsync(idReclamo);
+            if (reclamo == null) return null;
+
+            if (reclamo.Estado != "04") return null;
+
+            var descargos = await ObtenerDescargosAsync(idReclamo);
+            var archivos  = await ObtenerArchivosAsync(idReclamo);
+
+            // ── Leer datos del firmante desde RH_PERSONAS / RH_PERSONAL / T_CARGO ──
+            byte[]?  firmaBytes      = null;
+            string?  nombreCompleto  = null;
+            string?  cargo           = null;
+
+            try
+            {
+                await using var connF = new OracleConnection(GetOracleConnectionString());
+                await connF.OpenAsync();
+
+                // 1. Nombre completo + cargo
+                var sqlPer = $@"
+                    SELECT ps.APELLIDO_PATERNO || ' ' || ps.APELLIDO_MATERNO
+                           || ', ' || ps.NOMBRES AS NOMBRE_COMPLETO,
+                           NVL(tc.DESCRIPCION, '') AS CARGO
+                    FROM   {S}RH_PERSONAS ps
+                    JOIN   {S}RH_PERSONAL pr  ON pr.C_CODIGO = ps.C_CODIGO
+                    LEFT JOIN {S}T_CARGO  tc  ON tc.C_CARGO  = pr.C_CARGO
+                    WHERE  ps.C_CODIGO = :cod
+                    AND    ROWNUM = 1";
+                await using (var cmdP = new OracleCommand(sqlPer, connF) { BindByName = true })
+                {
+                    cmdP.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = CodigoFirmaGerencia;
+                    await using var rp = (OracleDataReader)await cmdP.ExecuteReaderAsync();
+                    if (await rp.ReadAsync())
+                    {
+                        nombreCompleto = rp["NOMBRE_COMPLETO"] == DBNull.Value ? null : rp["NOMBRE_COMPLETO"].ToString()?.Trim();
+                        cargo          = rp["CARGO"]           == DBNull.Value ? null : rp["CARGO"].ToString()?.Trim();
+                    }
+                }
+
+                // 2. Imagen de firma desde RH_FIRMAS
+                await using var cmdF = new OracleCommand(
+                    $"SELECT FIRMA FROM {S}RH_FIRMAS WHERE C_CODIGO = :cod", connF)
+                {
+                    InitialLONGFetchSize = -1
+                };
+                cmdF.Parameters.Add("cod", OracleDbType.Varchar2, 20).Value = CodigoFirmaGerencia;
+
+                await using var rdr = (OracleDataReader)await cmdF.ExecuteReaderAsync();
+                if (await rdr.ReadAsync() && !rdr.IsDBNull(0))
+                {
+                    var val = rdr.GetValue(0);
+                    byte[]? raw = val is byte[] b && b.Length > 0 ? b
+                               : val is OracleBinary ob && !ob.IsNull ? ob.Value
+                               : null;
+
+                    if (raw != null && raw.Length > 0)
+                    {
+                        var mime = OrdenCompraService.DetectImageMimeType(raw);
+                        if (mime == "image/tiff")
+                            raw = OrdenCompraService.ConvertirTiffAPng(raw);
+                        if (raw != null && raw.Length > 0)
+                            firmaBytes = raw;
+                    }
+                }
+            }
+            catch (Exception exF)
+            {
+                _logger.LogWarning(exF, "No se pudo leer firma/datos para código {Cod}", CodigoFirmaGerencia);
+            }
+
+            return new ReclamoImpresionDto
+            {
+                Reclamo               = reclamo,
+                Descargos             = descargos,
+                Archivos              = archivos,
+                NombreGerenteAprobador = reclamo.UsuGerente,
+                NombreCompletoGerente = nombreCompleto,
+                CargoGerente          = cargo,
+                FirmaGerente          = firmaBytes
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en ObtenerDatosImpresionAsync({Id})", idReclamo);
+            return null;
+        }
+    }
+
 
 
     private static ReclamoDto MapReclamo(OracleDataReader r)
@@ -600,6 +1048,7 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
         {
             IdReclamo    = Long(r, "ID_RECLAMO"),
             CodCliente   = Str(r, "COD_CLIENTE")  ?? "",
+            RucCliente   = Str(r, "RUC_CLIENTE"),
             NomCliente   = Str(r, "NOM_CLIENTE"),
             Contacto     = Str(r, "CONTACTO")     ?? "",
             Telefono     = Str(r, "TELEFONO")      ?? "",
@@ -611,12 +1060,21 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             FchAnalisis    = NullDt(r, "FCH_ANALISIS"),
             UsuGerente     = Str(r, "USU_GERENTE"),
             FchAprobacion  = NullDt(r, "FCH_APROBACION"),
-            MotRechazo     = Str(r, "MOT_RECHAZO")
+            MotRechazo     = Str(r, "MOT_RECHAZO"),
+            AnalisisCausa  = Str(r, "ANALISIS_CAUSA"),
+            DecisionFinal  = Str(r, "DECISION_FINAL"),
+            FchDecision    = NullDt(r, "FCH_DECISION"),
+            UsuDecision    = Str(r, "USU_DECISION"),
+            FchNotiCalidad = NullDt(r, "FCH_NOTI_CALIDAD"),
+            FchNotiVend    = NullDt(r, "FCH_NOTI_VEND")
         };
 
         // Contadores opcionales (presentes en el listado, no en detalle individual)
         if (HasColumn(r, "TOTAL_DESCARGOS")) dto.TotalDescargos = Int(r, "TOTAL_DESCARGOS");
         if (HasColumn(r, "TOTAL_ARCHIVOS"))  dto.TotalArchivos  = Int(r, "TOTAL_ARCHIVOS");
+
+        // Descripción del primer descargo del vendedor (solo en P_OBTENER_RECLAMO)
+        if (HasColumn(r, "DESCRIPCION")) dto.Descripcion = Str(r, "DESCRIPCION");
 
         return dto;
     }
@@ -640,4 +1098,93 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             if (string.Equals(r.GetName(i), name, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers para notificaciones
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task<string> ObtenerCorreoVendedorAsync(string usuVendedor)
+    {
+        if (string.IsNullOrWhiteSpace(usuVendedor)) return "";
+
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            // Intento 1: CS_USER.C_EMAIL (el más actualizado)
+            using var cmd1 = conn.CreateCommand();
+            cmd1.CommandText = $@"
+                SELECT U.C_EMAIL
+                FROM   {S}CS_USER U
+                WHERE  U.C_USER  = :usuario
+                  AND  U.ESTADO  = '1'
+                  AND  U.C_EMAIL IS NOT NULL";
+            cmd1.Parameters.Add("usuario", OracleDbType.Varchar2, usuVendedor, ParameterDirection.Input);
+
+            using var r1 = await cmd1.ExecuteReaderAsync();
+            if (await r1.ReadAsync())
+            {
+                var email = r1[0] == DBNull.Value ? null : r1[0].ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(email))
+                {
+                    _logger.LogInformation("[ObtenerCorreoVendedor] Email de CS_USER para {Usuario}: {Email}", usuVendedor, email);
+                    return email;
+                }
+            }
+            r1.Close();
+
+            // Intento 2: CS_ANEXO.EMAIL vinculado por C_CODIGO
+            using var cmd2 = conn.CreateCommand();
+            cmd2.CommandText = $@"
+                SELECT AN.EMAIL
+                FROM   {S}CS_USER  U
+                JOIN   {S}CS_ANEXO AN ON AN.C_CODIGO = U.C_CODIGO
+                WHERE  U.C_USER  = :usuario
+                  AND  U.ESTADO  = '1'
+                  AND  AN.EMAIL  IS NOT NULL";
+            cmd2.Parameters.Add("usuario", OracleDbType.Varchar2, usuVendedor, ParameterDirection.Input);
+
+            using var r2 = await cmd2.ExecuteReaderAsync();
+            if (await r2.ReadAsync())
+            {
+                var email = r2[0] == DBNull.Value ? null : r2[0].ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(email))
+                {
+                    _logger.LogInformation("[ObtenerCorreoVendedor] Email de CS_ANEXO para {Usuario}: {Email}", usuVendedor, email);
+                    return email;
+                }
+            }
+            r2.Close();
+
+            _logger.LogWarning("[ObtenerCorreoVendedor] No se encontró email para {Usuario}, usando placeholder", usuVendedor);
+            return $"{usuVendedor.ToLower()}@lacolonial.com.pe";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ObtenerCorreoVendedor] Error consultando email de {Usuario}", usuVendedor);
+            return "";
+        }
+    }
+
+    private string GetUrlPortal(long idReclamo)
+    {
+        try
+        {
+            var httpContext = _httpContextAccessor?.HttpContext;
+            if (httpContext == null) return "";
+
+            var scheme   = httpContext.Request.Scheme;
+            var host     = httpContext.Request.Host;
+            var baseUrl  = $"{scheme}://{host}";
+
+            return $"{baseUrl}/Sgc/Reclamos/Detalle/{idReclamo}";
+        }
+        catch
+        {
+            return "";
+        }
+    }
 }
+
+
