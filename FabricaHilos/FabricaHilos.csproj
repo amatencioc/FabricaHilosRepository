@@ -55,6 +55,8 @@
     <Content Include="Views\RecursosHumanos\Indicadores\CostoSalarialHorasExtras\_KpiDashboard.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\ComparativoCostoLaboral\Index.cshtml" />
     <Content Include="Views\RecursosHumanos\Indicadores\ComparativoCostoLaboral\_KpiDashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Indicadores\SobreTiempoArea\_KpiDashboard.cshtml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -108,10 +110,7 @@
     <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaLibrePorCompensar\Index.cshtml" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\Index.cshtml" />
-    <None Include="Views\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\_KpiDashboard.cshtml" />
-  </ItemGroup>
+
 
 
 

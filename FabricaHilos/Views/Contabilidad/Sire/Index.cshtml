@@ -1,15 +1,15 @@
 @model IReadOnlyList<FabricaHilos.Controllers.Contabilidad.SirePeriodoDashboardItem>
 @{
-    ViewData["Title"] = "SIRE - Sistema de Llevado de Libros Electrónicos";
+    ViewData["Title"] = "SIRE — Gestión de Libros Electrónicos";
 
     string BadgeEstado(string estado) => estado switch
     {
-        "PROPUESTA_DISPONIBLE" => "bg-warning text-dark",
-        "CERRADO"              => "bg-success",
-        "EN_PROCESO"           => "bg-info text-dark",
-        "SIN_INFORMACION"      => "bg-secondary",
-        "-"                    => "bg-light text-muted border",
-        _                      => "bg-secondary"
+        "PROPUESTA_DISPONIBLE" => "badge-warning-light",
+        "CERRADO"              => "badge-success-light",
+        "EN_PROCESO"           => "badge-info-light",
+        "SIN_INFORMACION"      => "badge-secondary-light",
+        "-"                    => "badge-secondary-light",
+        _                      => "badge-secondary-light"
     };
 
     string LabelEstado(string estado) => estado switch
@@ -20,6 +20,14 @@
         "SIN_INFORMACION"      => "Sin información",
         "-"                    => "—",
         _                      => estado
+    };
+
+    string ColorTextEstado(string estado) => estado switch
+    {
+        "PROPUESTA_DISPONIBLE" => "text-warning",
+        "CERRADO"              => "text-success",
+        "EN_PROCESO"           => "text-info",
+        _                      => "text-secondary"
     };
 
     int rvieDisponibles = Model.Count(x => x.EstadoRvie == "PROPUESTA_DISPONIBLE");
@@ -35,141 +43,179 @@
     <li class="breadcrumb-item active">SIRE</li>
 }
 
+@section Styles {
+<style>
+    .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+    .page-header-icon { width: 60px; height: 60px; background: linear-gradient(135deg, #1B4D3E 0%, #2e6b55 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: #fff; box-shadow: 0 4px 12px rgba(27, 77, 62, 0.15); flex-shrink: 0; }
+    .page-header-content h3 { margin: 0; font-weight: 700; color: #1a202c; font-size: 1.5rem; }
+    .page-header-content small { color: #718096; font-size: 0.9rem; }
+    .page-header-actions { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+    /* Table compactness with visible borders */
+    .table-contab {
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .table-contab thead th {
+        padding: 0.5rem 0.75rem;
+        font-weight: 600;
+        background-color: #f9fafb;
+        border-bottom: 2px solid #e5e7eb;
+        border-right: 1px solid #e5e7eb;
+    }
+    .table-contab thead th:last-child {
+        border-right: none;
+    }
+    .table-contab tbody td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #e5e7eb;
+        border-right: 1px solid #e5e7eb;
+    }
+    .table-contab tbody td:last-child {
+        border-right: none;
+    }
+    .table-contab tbody tr:hover {
+        background-color: #f0f9ff;
+    }
+</style>
+}
+
+<!-- Alerts -->
 @if (TempData["Error"] is string err)
 {
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>@err
+    <div class="alert alert-contab alert-contab-danger alert-dismissible fade show mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Error:</strong> @err
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 }
+
 @if (TempData["Success"] is string ok)
 {
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
+    <div class="alert alert-contab alert-contab-success alert-dismissible fade show mb-3" role="alert">
         <i class="bi bi-check-circle-fill me-2"></i>@ok
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 }
+
 @if (ViewBag.EsMock == true)
 {
-    <div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+    <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
         <i class="bi bi-cone-striped fs-5"></i>
         <span><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</span>
     </div>
 }
 
-<div class="d-flex align-items-center gap-2 mb-4">
-    <div class="bg-primary rounded-3 p-2 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
-        <i class="bi bi-journal-text fs-4 text-white"></i>
+<!-- Header -->
+<div class="page-header">
+    <div class="page-header-icon">
+        <i class="bi bi-journal-text"></i>
     </div>
-    <div>
-        <h4 class="mb-0 fw-semibold">SIRE</h4>
-        <small class="text-muted">Sistema de Llevado de Libros Electrónicos — SUNAT</small>
+    <div class="page-header-content">
+        <h3>SIRE</h3>
+        <small>Sistema de Llevado de Libros Electrónicos — SUNAT</small>
     </div>
-    <a asp-action="Diagnostico" class="btn btn-outline-secondary btn-sm ms-auto">
-        <i class="bi bi-plug me-1"></i>Diagnóstico de conexión
-    </a>
+    <div class="page-header-actions">
+        <a asp-action="Diagnostico" class="btn btn-contab btn-contab-outline btn-sm" title="Verificar conectividad">
+            <i class="bi bi-plug me-1"></i>Diagnóstico
+        </a>
+        <a asp-action="HealthHistory" class="btn btn-contab btn-contab-outline btn-sm" title="Historial de salud">
+            <i class="bi bi-graph-up me-1"></i>Monitoreo
+        </a>
+    </div>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100" style="border-left:4px solid var(--bs-primary) !important">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width:56px;height:56px;flex-shrink:0">
-                    <i class="bi bi-receipt-cutoff fs-3 text-primary"></i>
+<!-- Operation Cards -->
+<div class="row g-3 mb-5">
+    <div class="col-lg-6">
+        <div class="card-contab accent-primary h-100">
+            <div class="card-body d-flex align-items-center gap-3" style="padding: 1.4rem;">
+                <div class="rounded-circle bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" 
+                     style="width:64px;height:64px;background: rgba(27, 77, 62, 0.1);">
+                    <i class="bi bi-receipt-cutoff fs-3" style="color: #1B4D3E;"></i>
                 </div>
                 <div class="flex-grow-1">
-                    <div class="fw-semibold mb-1">RVIE — Registro de Ventas e Ingresos</div>
-                    <div class="text-muted small mb-2">Consulta y gestión de propuestas de ventas electrónicas.</div>
-                    <a asp-controller="Sire" asp-action="Ventas" class="btn btn-primary btn-sm">
-                        <i class="bi bi-arrow-right-circle me-1"></i>Acceder a RVIE
+                    <h6 class="card-title mb-2 fw-semibold" style="color: #1B4D3E;">RVIE</h6>
+                    <p class="card-text text-muted small mb-3">Registro de Ventas e Ingresos — Consulta y gestiona propuestas de ventas electrónicas.</p>
+                    <a asp-controller="Sire" asp-action="Ventas" class="btn btn-contab btn-contab-primary btn-sm">
+                        <i class="bi bi-arrow-right me-1"></i>Acceder a RVIE
                     </a>
                 </div>
+                <div class="badge badge-contab-warning fs-6 align-self-start ms-2">@rvieDisponibles</div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100" style="border-left:4px solid var(--bs-success) !important">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center" style="width:56px;height:56px;flex-shrink:0">
-                    <i class="bi bi-cart-check fs-3 text-success"></i>
+
+    <div class="col-lg-6">
+        <div class="card-contab accent-blue h-100">
+            <div class="card-body d-flex align-items-center gap-3" style="padding: 1.4rem;">
+                <div class="rounded-circle bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" 
+                     style="width:64px;height:64px;background: rgba(21, 101, 192, 0.1);">
+                    <i class="bi bi-cart-check fs-3" style="color: #1565C0;"></i>
                 </div>
                 <div class="flex-grow-1">
-                    <div class="fw-semibold mb-1">RCE — Registro de Compras y Gastos</div>
-                    <div class="text-muted small mb-2">Consulta y gestión de propuestas de compras electrónicas.</div>
-                    <a asp-controller="Sire" asp-action="Compras" class="btn btn-success btn-sm">
-                        <i class="bi bi-arrow-right-circle me-1"></i>Acceder a RCE
+                    <h6 class="card-title mb-2 fw-semibold" style="color: #1565C0;">RCE</h6>
+                    <p class="card-text text-muted small mb-3">Registro de Compras y Gastos — Consulta y gestiona propuestas de compras electrónicas.</p>
+                    <a asp-controller="Sire" asp-action="Compras" class="btn btn-contab btn-contab-primary btn-sm">
+                        <i class="bi bi-arrow-right me-1"></i>Acceder a RCE
                     </a>
                 </div>
+                <div class="badge badge-contab-info fs-6 align-self-start ms-2">@rceDisponibles</div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-light d-flex align-items-center gap-2">
-        <i class="bi bi-bar-chart text-secondary"></i>
-        <strong>Resumen de estado</strong>
-    </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-6 col-md-3">
-                <div class="card border-0 bg-warning bg-opacity-10 text-center py-3">
-                    <div class="display-6 fw-bold text-warning">@rvieDisponibles</div>
-                    <div class="small text-muted">RVIE con propuesta</div>
-                </div>
+<!-- Summary Metrics (KPI Cards) -->
+<div class="row g-3 mb-5">
+    <div class="col-md-4">
+        <div class="kpi-card accent-green">
+            <div class="kpi-icon" style="color: #1B4D3E;">
+                <i class="bi bi-exclamation-circle"></i>
             </div>
-            <div class="col-6 col-md-3">
-                <div class="card border-0 bg-info bg-opacity-10 text-center py-3">
-                    <div class="display-6 fw-bold text-info">@rvieEnProceso</div>
-                    <div class="small text-muted">RVIE en proceso</div>
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <div class="card border-0 bg-warning bg-opacity-10 text-center py-3">
-                    <div class="display-6 fw-bold text-warning">@rceDisponibles</div>
-                    <div class="small text-muted">RCE con propuesta</div>
-                </div>
-            </div>
-            <div class="col-6 col-md-3">
-                <div class="card border-0 bg-info bg-opacity-10 text-center py-3">
-                    <div class="display-6 fw-bold text-info">@rceEnProceso</div>
-                    <div class="small text-muted">RCE en proceso</div>
-                </div>
-            </div>
+            <div class="kpi-label">RVIE con propuesta</div>
+            <div class="kpi-value">@rvieDisponibles</div>
+            <div class="kpi-sub">Pendiente de aceptación</div>
         </div>
-        <div class="row g-3 mt-1">
-            <div class="col-6 col-md-3 offset-md-3">
-                <div class="card border-0 bg-success bg-opacity-10 text-center py-2">
-                    <div class="fw-bold text-success fs-5">@rvieCerrados</div>
-                    <div class="small text-muted">RVIE cerrados</div>
-                </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card accent-blue">
+            <div class="kpi-icon" style="color: #1565C0;">
+                <i class="bi bi-arrow-repeat"></i>
             </div>
-            <div class="col-6 col-md-3">
-                <div class="card border-0 bg-success bg-opacity-10 text-center py-2">
-                    <div class="fw-bold text-success fs-5">@rceCerrados</div>
-                    <div class="small text-muted">RCE cerrados</div>
-                </div>
+            <div class="kpi-label">En Proceso</div>
+            <div class="kpi-value">@(rvieEnProceso + rceEnProceso)</div>
+            <div class="kpi-sub">RVIE y RCE en tramite</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="kpi-card accent-green" style="box-shadow: 0 3px 14px rgba(39, 174, 96, 0.14);">
+            <div class="kpi-icon" style="color: #27ae60;">
+                <i class="bi bi-check-circle"></i>
             </div>
+            <div class="kpi-label">Cerrados</div>
+            <div class="kpi-value">@(rvieCerrados + rceCerrados)</div>
+            <div class="kpi-sub">RVIE y RCE completados</div>
         </div>
     </div>
 </div>
 
-<div class="card border-0 shadow-sm">
-    <div class="card-header bg-light d-flex align-items-center gap-2">
-        <i class="bi bi-calendar3 text-secondary"></i>
-        <strong>Estado de periodos</strong>
-        <span class="badge bg-secondary ms-auto">@Model.Count periodo(s)</span>
+<!-- Periods Table -->
+<div class="chart-card">
+    <div class="card-header d-flex align-items-center gap-2 py-3">
+        <i class="bi bi-calendar3"></i>
+        <h6 class="mb-0 fw-semibold">Períodos registrados</h6>
+        <span class="badge bg-secondary ms-auto">@Model.Count</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
-                <thead class="table-light">
+            <table class="table table-contab table-sm table-hover align-middle mb-0">
+                <thead>
                     <tr>
-                        <th style="width:120px">Periodo</th>
+                        <th>Período</th>
                         <th>Descripción</th>
-                        <th class="text-center" style="width:200px">Estado RVIE</th>
-                        <th class="text-center" style="width:200px">Estado RCE</th>
-                        <th class="text-center" style="width:120px">Acciones</th>
+                        <th class="text-center">RVIE</th>
+                        <th class="text-center">RCE</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -178,32 +224,40 @@
                     <tr>
                         <td colspan="5" class="text-center text-muted py-4">
                             <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                            Sin periodos disponibles. Verifique la conexión con SUNAT.
+                            <small>Sin períodos disponibles. Verifique la conexión con SUNAT.</small>
                         </td>
                     </tr>
                 }
                 else
                 {
-                    foreach (var item in Model)
+                    @foreach (var item in Model)
                     {
                         var periodo = item.Periodo;
                         var yyyyMm = periodo.Length == 6 ? $"{periodo[..4]}/{periodo[4..]}" : periodo;
                         <tr>
-                            <td><span class="fw-semibold">@yyyyMm</span></td>
+                            <td><span class="badge badge-contab-primary">@yyyyMm</span></td>
                             <td>@item.Descripcion</td>
                             <td class="text-center">
-                                <span class="badge @BadgeEstado(item.EstadoRvie)">@LabelEstado(item.EstadoRvie)</span>
+                                <span class="badge badge-contab @(item.EstadoRvie == "PROPUESTA_DISPONIBLE" ? "badge-contab-warning" : item.EstadoRvie == "CERRADO" ? "badge-contab-success" : item.EstadoRvie == "EN_PROCESO" ? "badge-contab-info" : "badge-contab-secondary")">
+                                    @LabelEstado(item.EstadoRvie)
+                                </span>
                             </td>
                             <td class="text-center">
-                                <span class="badge @BadgeEstado(item.EstadoRce)">@LabelEstado(item.EstadoRce)</span>
+                                <span class="badge badge-contab @(item.EstadoRce == "PROPUESTA_DISPONIBLE" ? "badge-contab-warning" : item.EstadoRce == "CERRADO" ? "badge-contab-success" : item.EstadoRce == "EN_PROCESO" ? "badge-contab-info" : "badge-contab-secondary")">
+                                    @LabelEstado(item.EstadoRce)
+                                </span>
                             </td>
                             <td class="text-center">
-                                <a asp-controller="Sire" asp-action="Ventas" asp-route-periodo="@periodo" class="btn btn-outline-primary btn-sm" title="Ver RVIE">
-                                    <i class="bi bi-receipt"></i>
-                                </a>
-                                <a asp-controller="Sire" asp-action="Compras" asp-route-periodo="@periodo" class="btn btn-outline-success btn-sm" title="Ver RCE">
-                                    <i class="bi bi-cart3"></i>
-                                </a>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a asp-controller="Sire" asp-action="Ventas" asp-route-periodo="@periodo" 
+                                       class="btn btn-outline-secondary btn-sm" title="Ver RVIE" data-bs-toggle="tooltip">
+                                        <i class="bi bi-receipt"></i>
+                                    </a>
+                                    <a asp-controller="Sire" asp-action="Compras" asp-route-periodo="@periodo" 
+                                       class="btn btn-outline-secondary btn-sm" title="Ver RCE" data-bs-toggle="tooltip">
+                                        <i class="bi bi-cart3"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     }
@@ -213,3 +267,7 @@
         </div>
     </div>
 </div>
+
+<style>
+    .badge-contab-secondary { background-color: rgba(108, 117, 125, 0.15); color: #383d41; }
+</style>

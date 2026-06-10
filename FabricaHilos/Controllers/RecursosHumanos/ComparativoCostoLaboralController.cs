@@ -40,7 +40,8 @@ public class ComparativoCostoLaboralController : OracleBaseController
         int ano1, int mesIniAno1, int mesFinAno1,
         int ano2, int mesIniAno2, int mesFinAno2,
         decimal basicoManual = 0m,
-        string tipo = "T")
+        string tipo = "T",
+        [FromQuery] List<string>? areas = null)
     {
         try
         {
@@ -48,13 +49,35 @@ public class ComparativoCostoLaboralController : OracleBaseController
                 ano1, mesIniAno1, mesFinAno1,
                 ano2, mesIniAno2, mesFinAno2,
                 basicoManual,
-                tipo);
+                tipo,
+                areas);
             return PartialView("~/Views/RecursosHumanos/Indicadores/ComparativoCostoLaboral/_KpiDashboard.cshtml", vm);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error KPI ComparativoCostoLaboral ({A1} vs {A2}) Tipo={Tipo}", ano1, ano2, tipo);
             return StatusCode(500, "Error al obtener los datos. Intente nuevamente.");
+        }
+    }
+
+    [HttpGet("Areas")]
+    public async Task<IActionResult> Areas(
+        int ano1, int mesIniAno1, int mesFinAno1,
+        int ano2, int mesIniAno2, int mesFinAno2,
+        string tipo = "T")
+    {
+        try
+        {
+            var areas = await _service.ObtenerAreasAsync(
+                ano1, mesIniAno1, mesFinAno1,
+                ano2, mesIniAno2, mesFinAno2,
+                tipo);
+            return Json(areas);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error Areas ComparativoCostoLaboral Tipo={Tipo}", tipo);
+            return Json(Array.Empty<string>());
         }
     }
 }

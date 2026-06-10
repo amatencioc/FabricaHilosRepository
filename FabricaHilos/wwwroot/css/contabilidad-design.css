@@ -1,0 +1,460 @@
+/* ═════════════════════════════════════════════════════════════════
+   CONTABILIDAD — Sistema de Diseño Unificado
+   Basado en el patrón profesional de LOGÍSTICA
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ─── PALETA DE COLORES ─── */
+:root {
+    --color-contab-primary: #1B4D3E;      /* Verde oscuro principal */
+    --color-contab-primary-light: #2e6b55;
+    --color-contab-accent: #1565C0;       /* Azul complementario */
+    --color-contab-accent-light: #42a5f5;
+    --color-contab-success: #27ae60;      /* Verde para éxito */
+    --color-contab-warning: #e67e22;      /* Naranja para advertencia */
+    --color-contab-danger: #e74c3c;       /* Rojo para error */
+    --color-contab-info: #3498db;         /* Azul para info */
+}
+
+/* ─── HEADER PRINCIPAL ─── */
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-contab-primary);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 1.4rem 0 .5rem;
+    border-left: 4px solid var(--color-contab-primary);
+    padding-left: .5rem;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.page-header-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--color-contab-primary) 0%, var(--color-contab-primary-light) 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(27, 77, 62, 0.15);
+    flex-shrink: 0;
+}
+
+.page-header-content h3 {
+    margin: 0;
+    font-weight: 700;
+    color: #1a202c;
+    font-size: 1.5rem;
+}
+
+.page-header-content small {
+    color: #718096;
+    font-size: 0.9rem;
+}
+
+.page-header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ─── CARDS PROFESIONALES ─── */
+.card-contab {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+}
+
+.card-contab:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.card-contab::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--color-contab-primary), var(--color-contab-accent));
+    border-radius: 12px 12px 0 0;
+}
+
+/* Variantes de cards */
+.card-contab.accent-primary::before {
+    background: linear-gradient(90deg, #1B4D3E, #2e6b55);
+    box-shadow: 0 3px 14px rgba(27, 77, 62, 0.14);
+}
+
+.card-contab.accent-blue::before {
+    background: linear-gradient(90deg, #1565C0, #42a5f5);
+    box-shadow: 0 3px 14px rgba(21, 101, 192, 0.14);
+}
+
+.card-contab.accent-success::before {
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    box-shadow: 0 3px 14px rgba(39, 174, 96, 0.14);
+}
+
+/* ─── KPI CARDS ─── */
+.kpi-card {
+    border: none;
+    border-radius: 14px;
+    text-align: center;
+    padding: 1.4rem 1rem 1.1rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform .18s, box-shadow .18s;
+}
+
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.13) !important;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 14px 14px 0 0;
+}
+
+.kpi-card.accent-green {
+    box-shadow: 0 3px 14px rgba(27, 77, 62, 0.14);
+}
+
+.kpi-card.accent-green::before {
+    background: linear-gradient(90deg, #1B4D3E, #2e8b6a);
+}
+
+.kpi-card.accent-blue {
+    box-shadow: 0 3px 14px rgba(21, 101, 192, 0.14);
+}
+
+.kpi-card.accent-blue::before {
+    background: linear-gradient(90deg, #1565C0, #42a5f5);
+}
+
+.kpi-card.accent-orange {
+    box-shadow: 0 3px 14px rgba(230, 81, 0, 0.14);
+}
+
+.kpi-card.accent-orange::before {
+    background: linear-gradient(90deg, #e65100, #ffa726);
+}
+
+.kpi-card .kpi-icon {
+    font-size: 2.1rem;
+    line-height: 1;
+    margin-bottom: .4rem;
+}
+
+.kpi-card .kpi-label {
+    font-size: .68rem;
+    color: #6b7280;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: .2rem;
+}
+
+.kpi-card .kpi-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+}
+
+.kpi-card .kpi-sub {
+    font-size: .7rem;
+    color: #9ca3af;
+    margin-top: .2rem;
+}
+
+/* ─── BADGES ─── */
+.badge-contab {
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.4rem 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.badge-contab-primary {
+    background-color: rgba(27, 77, 62, 0.15);
+    color: #1B4D3E;
+}
+
+.badge-contab-success {
+    background-color: rgba(39, 174, 96, 0.15);
+    color: #27ae60;
+}
+
+.badge-contab-warning {
+    background-color: rgba(230, 81, 0, 0.15);
+    color: #e65100;
+}
+
+.badge-contab-danger {
+    background-color: rgba(231, 76, 60, 0.15);
+    color: #c0392b;
+}
+
+.badge-contab-info {
+    background-color: rgba(52, 152, 219, 0.15);
+    color: #2980b9;
+}
+
+/* ─── BUTTONS ─── */
+.btn-contab {
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    border: none;
+}
+
+.btn-contab-primary {
+    background-color: var(--color-contab-primary);
+    color: #fff;
+}
+
+.btn-contab-primary:hover {
+    background-color: var(--color-contab-primary-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(27, 77, 62, 0.2);
+}
+
+.btn-contab-outline {
+    border: 2px solid var(--color-contab-primary);
+    color: var(--color-contab-primary);
+    background-color: transparent;
+}
+
+.btn-contab-outline:hover {
+    background-color: rgba(27, 77, 62, 0.05);
+}
+
+/* ─── FILTER BAR ─── */
+.filter-bar {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    padding: 0.9rem 1.4rem;
+    margin-bottom: 1.2rem;
+}
+
+.filter-bar label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.3rem;
+}
+
+/* ─── CHART CARDS ─── */
+.chart-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    height: 100%;
+}
+
+.chart-card .card-header {
+    background: transparent;
+    color: var(--color-contab-primary);
+    font-weight: 600;
+    border-bottom: 1px solid #e0e0e0;
+    border-radius: 12px 12px 0 0 !important;
+}
+
+.chart-card .card-body {
+    background: #fafaf8;
+    border-radius: 0 0 12px 12px;
+}
+
+/* ─── TABS UNIFICADOS ─── */
+.nav-tabs-contab {
+    display: flex;
+    gap: 2px;
+    background: #cfdce9;
+    border-bottom: 2px solid #8ea8c3;
+    padding: 0.35rem 0.5rem 0;
+    border-radius: 4px 4px 0 0;
+    flex-wrap: wrap;
+}
+
+.nav-tabs-contab .nav-link {
+    border-radius: 4px 4px 0 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #4a5568;
+    border: 1px solid transparent;
+    border-bottom: none;
+    padding: 0.38rem 0.9rem;
+    background: transparent;
+}
+
+.nav-tabs-contab .nav-link:hover {
+    background: #dce9f5;
+    color: #2d3748;
+}
+
+.nav-tabs-contab .nav-link.active {
+    color: #1a365d;
+    background: #eef4fc;
+    border-color: #8ea8c3;
+    border-bottom-color: #eef4fc;
+    border-top: 2px solid #3b6ea5;
+    font-weight: 800;
+}
+
+.tab-content-contab {
+    background: #eef4fc !important;
+    border-color: #8ea8c3 !important;
+    border-top: none !important;
+}
+
+/* ─── ALERTS ─── */
+.alert-contab {
+    border: none;
+    border-radius: 10px;
+    border-left: 4px solid;
+}
+
+.alert-contab-info {
+    background-color: rgba(21, 101, 192, 0.08);
+    border-left-color: #1565C0;
+    color: #0d47a1;
+}
+
+.alert-contab-success {
+    background-color: rgba(39, 174, 96, 0.08);
+    border-left-color: #27ae60;
+    color: #1e7e34;
+}
+
+.alert-contab-warning {
+    background-color: rgba(230, 81, 0, 0.08);
+    border-left-color: #e65100;
+    color: #bf360c;
+}
+
+.alert-contab-danger {
+    background-color: rgba(231, 76, 60, 0.08);
+    border-left-color: #e74c3c;
+    color: #a93226;
+}
+
+/* ─── TABLAS ─── */
+.table-contab {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.table-contab thead {
+    background-color: #f5f7fa;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.table-contab thead th {
+    color: var(--color-contab-primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    padding: 1rem 0.75rem;
+    border: none;
+}
+
+.table-contab tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.15s;
+}
+
+.table-contab tbody tr:hover {
+    background-color: rgba(27, 77, 62, 0.02);
+}
+
+.table-contab tbody td {
+    padding: 0.9rem 0.75rem;
+    color: #4a5568;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .page-header-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .filter-bar {
+        padding: 0.7rem 1rem;
+    }
+
+    .kpi-card {
+        padding: 1rem 0.8rem 0.9rem;
+    }
+
+    .kpi-card .kpi-value {
+        font-size: 1.5rem;
+    }
+}
+
+/* ─── UTILIDADES ─── */
+.text-contab-primary {
+    color: var(--color-contab-primary) !important;
+}
+
+.text-contab-accent {
+    color: var(--color-contab-accent) !important;
+}
+
+.bg-contab-primary-light {
+    background-color: rgba(27, 77, 62, 0.05);
+}
+
+.shadow-contab {
+    box-shadow: 0 2px 10px rgba(27, 77, 62, 0.1) !important;
+}
+
+.shadow-contab-lg {
+    box-shadow: 0 4px 20px rgba(27, 77, 62, 0.15) !important;
+}
+
+/* ─── ANIMACIONES ─── */
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slideInUp {
+    animation: slideInUp 0.3s ease-out;
+}

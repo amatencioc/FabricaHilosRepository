@@ -20,9 +20,17 @@ public static class ArchivoPlanoHelper
 
     public static string GenerarVentasTxt(IEnumerable<RegistroVenta> registros)
     {
-        var sb = new StringBuilder();
+        // Pre-allocate StringBuilder: ~1.2 KB por registro es conservador; usar 1KB mínimo
+        const int capacidadInicialPorRegistro = 1024;
+        var sb = new StringBuilder(capacidadInicialPorRegistro);
+
+        // Buffer reutilizable para formateo decimal (línea a línea)
+        var primero = true;
         foreach (var r in registros)
         {
+            if (!primero)
+                sb.AppendLine();
+
             sb.Append(r.PeriodoTributario).Append('|')
               .Append(r.Cuo).Append('|')
               .Append(r.CorrelativoAsiento).Append('|')
@@ -36,28 +44,29 @@ public static class ArchivoPlanoHelper
               .Append(r.TipoDocIdentidadCliente).Append('|')
               .Append(r.NumeroDocIdentidadCliente).Append('|')
               .Append(r.RazonSocialCliente).Append('|')
-              .Append(DecimalStr(r.BaseImponibleGravada)).Append('|')
-              .Append(DecimalStr(r.BaseImponibleGravadaTasaDiferenciada)).Append('|')
-              .Append(DecimalStr(r.IgvTasaDiferenciada)).Append('|')
-              .Append(DecimalStr(r.BaseImponibleIsc)).Append('|')
-              .Append(DecimalStr(r.Isc)).Append('|')
-              .Append(DecimalStr(r.BaseImponibleIvap)).Append('|')
-              .Append(DecimalStr(r.Ivap)).Append('|')
-              .Append(DecimalStr(r.OperacionesExoneradas)).Append('|')
-              .Append(DecimalStr(r.OperacionesInafectas)).Append('|')
-              .Append(DecimalStr(r.Igv)).Append('|')
-              .Append(DecimalStr(r.Icbper)).Append('|')
-              .Append(DecimalStr(r.OtrosTributosCargos)).Append('|')
-              .Append(DecimalStr(r.ImporteTotal)).Append('|')
-              .Append(DecimalStr(r.TipoCambio)).Append('|')
+              .Append(r.BaseImponibleGravada.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.BaseImponibleGravadaTasaDiferenciada.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.IgvTasaDiferenciada.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.BaseImponibleIsc.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Isc.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.BaseImponibleIvap.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Ivap.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.OperacionesExoneradas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.OperacionesInafectas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Igv.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Icbper.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.OtrosTributosCargos.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.ImporteTotal.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.TipoCambio.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
               .Append(r.FechaEmisionDocModificado).Append('|')
               .Append(r.TipoDocModificado).Append('|')
               .Append(r.SerieDocModificado).Append('|')
               .Append(r.NumeroDocModificado).Append('|')
               .Append(r.CodigoErrorTipo1).Append('|')
               .Append(r.IndicadorComprobanteCancelado).Append('|')
-              .Append(r.Estado)
-              .AppendLine();
+              .Append(r.Estado);
+
+            primero = false;
         }
 
         return sb.ToString();
@@ -65,9 +74,15 @@ public static class ArchivoPlanoHelper
 
     public static string GenerarComprasTxt(IEnumerable<RegistroCompra> registros)
     {
-        var sb = new StringBuilder();
+        const int capacidadInicialPorRegistro = 1024;
+        var sb = new StringBuilder(capacidadInicialPorRegistro);
+
+        var primero = true;
         foreach (var r in registros)
         {
+            if (!primero)
+                sb.AppendLine();
+
             sb.Append(r.PeriodoTributario).Append('|')
               .Append(r.Cuo).Append('|')
               .Append(r.CorrelativoAsiento).Append('|')
@@ -80,18 +95,18 @@ public static class ArchivoPlanoHelper
               .Append(r.TipoDocIdentidadProveedor).Append('|')
               .Append(r.NumeroDocIdentidadProveedor).Append('|')
               .Append(r.RazonSocialProveedor).Append('|')
-              .Append(DecimalStr(r.BaseImponibleGravadaDestinoGravadas)).Append('|')
-              .Append(DecimalStr(r.IgvDestinoGravadas)).Append('|')
-              .Append(DecimalStr(r.BaseImponibleGravadaDestinoMixtas)).Append('|')
-              .Append(DecimalStr(r.IgvDestinoMixtas)).Append('|')
-              .Append(DecimalStr(r.BaseImponibleGravadaDestinoNoGravadas)).Append('|')
-              .Append(DecimalStr(r.IgvDestinoNoGravadas)).Append('|')
-              .Append(DecimalStr(r.ValorAdquisicionesNoGravadas)).Append('|')
-              .Append(DecimalStr(r.Isc)).Append('|')
-              .Append(DecimalStr(r.Icbper)).Append('|')
-              .Append(DecimalStr(r.OtrosTributosCargos)).Append('|')
-              .Append(DecimalStr(r.ImporteTotal)).Append('|')
-              .Append(DecimalStr(r.TipoCambio)).Append('|')
+              .Append(r.BaseImponibleGravadaDestinoGravadas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.IgvDestinoGravadas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.BaseImponibleGravadaDestinoMixtas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.IgvDestinoMixtas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.BaseImponibleGravadaDestinoNoGravadas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.IgvDestinoNoGravadas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.ValorAdquisicionesNoGravadas.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Isc.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.Icbper.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.OtrosTributosCargos.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.ImporteTotal.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
+              .Append(r.TipoCambio.ToString("0.00", CultureInfo.InvariantCulture)).Append('|')
               .Append(r.FechaEmisionDocModificado).Append('|')
               .Append(r.TipoDocModificado).Append('|')
               .Append(r.SerieDocModificado).Append('|')
@@ -102,8 +117,9 @@ public static class ArchivoPlanoHelper
               .Append(r.ClasificacionBienesServicios).Append('|')
               .Append(r.IdentificacionContrato).Append('|')
               .Append(r.CodigoErrorTipo1).Append('|')
-              .Append(r.Estado)
-              .AppendLine();
+              .Append(r.Estado);
+
+            primero = false;
         }
 
         return sb.ToString();

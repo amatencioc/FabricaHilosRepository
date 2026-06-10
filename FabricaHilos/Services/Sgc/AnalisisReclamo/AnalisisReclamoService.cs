@@ -741,15 +741,15 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
     }
 
     // ── NotificarCalidadAsync ────────────────────────────────────────────────
-    // NOTA: No llama a P_NOTIFICAR_CALIDAD para evitar ORA-06502 en versiones
-    //       antiguas del paquete Oracle. Hace el UPDATE directamente en C#.
+    // Utiliza el stored procedure P_NOTIFICAR_CALIDAD para determinar destinatarios,
+    // validar estado, actualizar FCH_NOTI_CALIDAD, y construir asunto/nombre cliente.
 
     public async Task<(string? Destinatarios, string? AsuntoMail, string? NomCliente, string? Error)>
         NotificarCalidadAsync(long idReclamo, string usuario)
     {
         try
         {
-            // Paso 1: Leer datos del reclamo (validación + datos para email)
+            // Paso 1: Leer datos del reclamo (para construir payload de email)
             _logger.LogInformation("[Reclamo {Id}] Paso 1: leyendo datos del reclamo", idReclamo);
             var reclamo = await ObtenerReclamoAsync(idReclamo);
             if (reclamo == null)
@@ -760,49 +760,60 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             _logger.LogInformation("[Reclamo {Id}] Paso 1 OK — estado={Estado} asunto={Asunto}",
                 idReclamo, reclamo.Estado, reclamo.Asunto);
 
-            // Paso 2: Validar estado ('01'=Abierto o '02'=En Revisión)
-            _logger.LogInformation("[Reclamo {Id}] Paso 2: validando estado={Estado}", idReclamo, reclamo.Estado);
-            if (reclamo.Estado is not ("01" or "02"))
-            {
-                var msgEstado = $"Solo se puede notificar a Calidad cuando el reclamo está Abierto o En Revisión. Estado actual: {reclamo.Estado}";
-                _logger.LogWarning("[Reclamo {Id}] Paso 2 FALLO — {Msg}", idReclamo, msgEstado);
-                return (null, null, null, msgEstado);
-            }
-            _logger.LogInformation("[Reclamo {Id}] Paso 2 OK — estado válido", idReclamo);
-
-            // Paso 3: Cambiar estado a '02' (En Revisión) + marcar FCH_NOTI_CALIDAD
-            //         Solo cambia estado si está en '01'; si ya es '02' solo actualiza la fecha.
-            _logger.LogInformation("[Reclamo {Id}] Paso 3: cambiando estado a '02' y marcando FCH_NOTI_CALIDAD", idReclamo);
+            // Paso 2: Invocar P_NOTIFICAR_CALIDAD (valida estado, obtiene destinatarios, actualiza BD)
+            _logger.LogInformation("[Reclamo {Id}] Paso 2: llamando a P_NOTIFICAR_CALIDAD", idReclamo);
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
 
-            using var cmdUpd = conn.CreateCommand();
-            cmdUpd.CommandText = $@"
-                UPDATE {S}SGC_RECLAMO
-                SET    ESTADO           = CASE WHEN ESTADO = '01' THEN '02' ELSE ESTADO END,
-                       FCH_NOTI_CALIDAD = SYSDATE,
-                       A_MDUSER         = :u,
-                       A_MDFECHA        = SYSDATE
-                WHERE  ID_RECLAMO = :id";
-            cmdUpd.CommandType = System.Data.CommandType.Text;
-            cmdUpd.Parameters.Add("u",  OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
-            cmdUpd.Parameters.Add("id", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
-            var filas = await cmdUpd.ExecuteNonQueryAsync();
-            _logger.LogInformation("[Reclamo {Id}] Paso 3 OK — filas actualizadas={Filas} (estado ahora '02' si era '01')", idReclamo, filas);
+            using var cmd = conn.CreateCommand();
+            // Usar CommandType.StoredProcedure para que ODP.NET maneje los parámetros correctamente
+            cmd.CommandText = $"{S}PKG_SGC_RECLAMO.P_NOTIFICAR_CALIDAD";
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-            // Paso 4: Construir datos de notificación en C# (sin OUT params de Oracle)
-            _logger.LogInformation("[Reclamo {Id}] Paso 4: construyendo datos de notificación", idReclamo);
-            const string destinatarios = "vmatencio@colonial.com.pe";
-            var asuntoRaw  = $"Nuevo reclamo #{idReclamo} - {reclamo.Asunto}";
-            var asuntoMail = asuntoRaw.Length > 400 ? asuntoRaw[..400] : asuntoRaw;
-            var nomCliente = reclamo.NomCliente ?? reclamo.CodCliente;
-            if (nomCliente.Length > 200) nomCliente = nomCliente[..200];
-            _logger.LogInformation("[Reclamo {Id}] Paso 4 OK — dest={Dest} asunto(40)={Asunto}",
-                idReclamo, destinatarios, asuntoMail[..Math.Min(asuntoMail.Length, 40)]);
+            // Parámetros en ORDEN correcto (IN, IN, OUT, OUT, OUT, OUT)
+            cmd.Parameters.Add("P_ID_RECLAMO",    OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            cmd.Parameters.Add("P_USUARIO",       OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+
+            // Para parámetros OUT de VARCHAR2, Size DEBE declararse explícitamente
+            // con new OracleParameter para garantizar el buffer en ODP.NET
+            var pDest    = new OracleParameter("P_DESTINATARIOS", OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pAsunto  = new OracleParameter("P_ASUNTO_MAIL",   OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pCliente = new OracleParameter("P_NOM_CLIENTE",   OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pError   = new OracleParameter("P_MSGERROR",      OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            cmd.Parameters.Add(pDest);
+            cmd.Parameters.Add(pAsunto);
+            cmd.Parameters.Add(pCliente);
+            cmd.Parameters.Add(pError);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            // Extraer parámetros OUT usando OraOutStr para evitar problemas con NULL
+            string? pMsgerror       = OraOutStr(cmd, "P_MSGERROR");
+            string? pDestinatarios  = OraOutStr(cmd, "P_DESTINATARIOS");
+            string? pAsuntoMail     = OraOutStr(cmd, "P_ASUNTO_MAIL");
+            string? pNomCliente     = OraOutStr(cmd, "P_NOM_CLIENTE");
+
+            // Paso 3: Validar error del procedure
+            if (!string.IsNullOrWhiteSpace(pMsgerror))
+            {
+                _logger.LogWarning("[Reclamo {Id}] Paso 2 FALLO — procedure error: {Error}", idReclamo, pMsgerror);
+                return (null, null, null, pMsgerror);
+            }
+
+            // Paso 4: Validar que se obtuvieron destinatarios
+            if (string.IsNullOrWhiteSpace(pDestinatarios))
+            {
+                var msgSinDestinatarios = $"P_NOTIFICAR_CALIDAD no retornó destinatarios para reclamo {idReclamo}";
+                _logger.LogWarning("[Reclamo {Id}] Paso 4 FALLO — {Msg}", idReclamo, msgSinDestinatarios);
+                return (null, null, null, msgSinDestinatarios);
+            }
+
+            _logger.LogInformation("[Reclamo {Id}] Paso 2 OK — destinatarios={Dest} asunto(40)={Asunto}",
+                idReclamo, pDestinatarios, pAsuntoMail?[..Math.Min(pAsuntoMail.Length, 40)] ?? "");
 
             // Paso 5: Enviar correos
             _logger.LogInformation("[Reclamo {Id}] Paso 5: enviando correos", idReclamo);
-            var emails = destinatarios.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            var emails = pDestinatarios.Split(';', StringSplitOptions.RemoveEmptyEntries)
                 .Select(e => e.Trim()).Where(e => !string.IsNullOrEmpty(e)).ToList();
             int enviados = 0, fallidos = 0;
 
@@ -823,7 +834,8 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
                         NombreVendedor     = reclamo.UsuVendedor,
                         CorreoVendedor     = correoVendedor,
                         FechaCreacion      = reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
-                        Descripcion        = reclamo.Descripcion ?? ""
+                        Descripcion        = reclamo.Descripcion ?? "",
+                        CorreoCopia        = string.IsNullOrEmpty(correoVendedor) ? null : correoVendedor
                     };
                     var ok = await _emailService.EnviarAsync(payload);
                     if (ok) { enviados++; _logger.LogInformation("[Reclamo {Id}] Paso 5: correo OK → {Email}", idReclamo, email); }
@@ -838,7 +850,7 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             _logger.LogInformation("[Reclamo {Id}] Paso 5 OK — {Enviados} enviados, {Fallidos} fallidos",
                 idReclamo, enviados, fallidos);
 
-            return (destinatarios, asuntoMail, nomCliente, null);
+            return (pDestinatarios, pAsuntoMail, pNomCliente, null);
         }
         catch (Exception ex)
         {
@@ -848,8 +860,8 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
     }
 
     // ── NotificarVendedorAprobadoAsync ──────────────────────────────────────
-    // NOTA: No llama a P_NOTIFICAR_VENDEDOR_APROBADO para evitar ORA-06502 en
-    //       versiones antiguas del paquete. Hace el UPDATE directamente en C#.
+    // Utiliza el stored procedure P_NOTIFICAR_VENDEDOR_APROBADO para obtener el email
+    // del vendedor, validar estado, actualizar FCH_NOTI_VEND, y construir asunto/nombre cliente.
 
     public async Task<(string? Destinatario, string? AsuntoMail, string? NomCliente, string? Error)>
         NotificarVendedorAprobadoAsync(long idReclamo, string usuario)
@@ -866,75 +878,89 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
             }
             _logger.LogInformation("[NotifVendedor {Id}] Paso 1 OK — estado={Estado}", idReclamo, reclamo.Estado);
 
-            // Paso 2: Validar estado = '04' Aprobado
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 2: validando estado={Estado}", idReclamo, reclamo.Estado);
-            if (reclamo.Estado != "04")
-            {
-                var msgEstado = $"Solo se puede notificar al vendedor cuando el reclamo está Aprobado. Estado actual: {reclamo.Estado}";
-                _logger.LogWarning("[NotifVendedor {Id}] Paso 2 FALLO — {Msg}", idReclamo, msgEstado);
-                return (null, null, null, msgEstado);
-            }
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 2 OK", idReclamo);
-
-            // Paso 3: Marcar FCH_NOTI_VEND directamente en C# (sin SP Oracle)
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 3: actualizando FCH_NOTI_VEND en BD", idReclamo);
+            // Paso 2: Invocar P_NOTIFICAR_VENDEDOR_APROBADO (valida estado, obtiene email vendedor, actualiza BD)
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 2: llamando a P_NOTIFICAR_VENDEDOR_APROBADO", idReclamo);
             await using var conn = new OracleConnection(GetOracleConnectionString());
             await conn.OpenAsync();
 
-            using var cmdUpd = conn.CreateCommand();
-            cmdUpd.CommandText = $@"
-                UPDATE {S}SGC_RECLAMO
-                SET    FCH_NOTI_VEND = SYSDATE,
-                       A_MDUSER      = :u,
-                       A_MDFECHA     = SYSDATE
-                WHERE  ID_RECLAMO = :id";
-            cmdUpd.CommandType = System.Data.CommandType.Text;
-            cmdUpd.Parameters.Add("u",  OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
-            cmdUpd.Parameters.Add("id", OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
-            var filas = await cmdUpd.ExecuteNonQueryAsync();
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 3 OK — filas={Filas}", idReclamo, filas);
+            using var cmd = conn.CreateCommand();
+            // Usar CommandType.StoredProcedure para que ODP.NET maneje los parámetros correctamente
+            cmd.CommandText = $"{S}PKG_SGC_RECLAMO.P_NOTIFICAR_VENDEDOR_APROBADO";
+            cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-            // Paso 4: Construir datos de notificación en C#
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 4: construyendo datos de notificación", idReclamo);
-            var destinatario = await ObtenerCorreoVendedorAsync(reclamo.UsuVendedor);
-            if (string.IsNullOrWhiteSpace(destinatario))
-                destinatario = "vmatencio@colonial.com.pe";   // fallback de pruebas
-            var asuntoRaw  = reclamo.Asunto;
-            var asuntoMail = asuntoRaw.Length > 400 ? asuntoRaw[..400] : asuntoRaw;
-            var nomCliente = reclamo.NomCliente ?? reclamo.CodCliente;
-            if (nomCliente.Length > 200) nomCliente = nomCliente[..200];
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 4 OK — dest={Dest}", idReclamo, destinatario);
+            // Parámetros en ORDEN correcto (IN, IN, OUT, OUT, OUT, OUT)
+            cmd.Parameters.Add("P_ID_RECLAMO",   OracleDbType.Decimal,  idReclamo, ParameterDirection.Input);
+            cmd.Parameters.Add("P_USUARIO",      OracleDbType.Varchar2, usuario,   ParameterDirection.Input);
+
+            var pDest2    = new OracleParameter("P_DESTINATARIO", OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pAsunto2  = new OracleParameter("P_ASUNTO_MAIL",  OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pCliente2 = new OracleParameter("P_NOM_CLIENTE",  OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            var pError2   = new OracleParameter("P_MSGERROR",     OracleDbType.Varchar2, 4000) { Direction = ParameterDirection.Output };
+            cmd.Parameters.Add(pDest2);
+            cmd.Parameters.Add(pAsunto2);
+            cmd.Parameters.Add(pCliente2);
+            cmd.Parameters.Add(pError2);
+
+            await cmd.ExecuteNonQueryAsync();
+
+            // Extraer parámetros OUT usando OraOutStr para evitar problemas con NULL
+            string? pMsgerror     = OraOutStr(cmd, "P_MSGERROR");
+            string? pDestinatario = OraOutStr(cmd, "P_DESTINATARIO");
+            string? pAsuntoMail   = OraOutStr(cmd, "P_ASUNTO_MAIL");
+            string? pNomCliente   = OraOutStr(cmd, "P_NOM_CLIENTE");
+
+            // Paso 3: Validar error del procedure
+            if (!string.IsNullOrWhiteSpace(pMsgerror))
+            {
+                _logger.LogWarning("[NotifVendedor {Id}] Paso 2 FALLO — procedure error: {Error}", idReclamo, pMsgerror);
+                return (null, null, null, pMsgerror);
+            }
+
+            // Paso 4: Validar que se obtuvo destinatario
+            if (string.IsNullOrWhiteSpace(pDestinatario))
+            {
+                var msgSinDestinatario = $"P_NOTIFICAR_VENDEDOR_APROBADO no retornó destinatario para reclamo {idReclamo}";
+                _logger.LogWarning("[NotifVendedor {Id}] Paso 4 FALLO — {Msg}", idReclamo, msgSinDestinatario);
+                return (null, null, null, msgSinDestinatario);
+            }
+
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 2 OK — destinatario={Dest}", idReclamo, pDestinatario);
 
             // Paso 5: Enviar correo al vendedor
-            _logger.LogInformation("[NotifVendedor {Id}] Paso 5: enviando correo a {Dest}", idReclamo, destinatario);
-            if (destinatario.Contains('@'))
+            _logger.LogInformation("[NotifVendedor {Id}] Paso 5: enviando correo a {Dest}", idReclamo, pDestinatario);
+            if (pDestinatario.Contains('@'))
             {
                 var urlPortal = GetUrlPortal(reclamo.IdReclamo);
+                // Obtener nombres completos del vendedor, analista y gerente para un email más formal
+                var nombreVendedor = await ObtenerNombreCompletoUsuarioAsync(reclamo.UsuVendedor ?? "");
+                var nombreAnalista = await ObtenerNombreCompletoUsuarioAsync(reclamo.UsuAnalista ?? "");
+                var nombreGerente = await ObtenerNombreCompletoUsuarioAsync(reclamo.UsuGerente ?? "");
+
                 var payload = new ReclamoEvaluadoVendedorPayload
                 {
-                    CorreoDestinatario = destinatario,
-                    NombreDestinatario = reclamo.UsuVendedor,
+                    CorreoDestinatario = pDestinatario,
+                    NombreDestinatario = nombreVendedor,
                     IdReclamo          = reclamo.IdReclamo.ToString(),
                     NombreCliente      = reclamo.NomCliente ?? reclamo.CodCliente,
                     RucCliente         = reclamo.RucCliente ?? "-",
                     Asunto             = reclamo.Asunto,
                     FechaCreacion      = reclamo.FchCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
                     DecisionFinal      = reclamo.DecisionFinal ?? "",
-                    NombreAnalista     = reclamo.UsuAnalista ?? "",
-                    NombreGerente      = reclamo.UsuGerente ?? "",
+                    NombreAnalista     = nombreAnalista,
+                    NombreGerente      = nombreGerente,
                     FechaAprobacion    = reclamo.FchAprobacion?.ToString("dd/MM/yyyy HH:mm:ss") ?? "",
                     UrlPortal          = urlPortal
                 };
                 var enviado = await _emailService.EnviarAsync(payload);
-                if (enviado) _logger.LogInformation("[NotifVendedor {Id}] Paso 5 OK — correo enviado a {Dest}", idReclamo, destinatario);
-                else         _logger.LogWarning(    "[NotifVendedor {Id}] Paso 5 — EmailService=false para {Dest}", idReclamo, destinatario);
+                if (enviado) _logger.LogInformation("[NotifVendedor {Id}] Paso 5 OK — correo enviado a {Dest}", idReclamo, pDestinatario);
+                else         _logger.LogWarning(    "[NotifVendedor {Id}] Paso 5 — EmailService=false para {Dest}", idReclamo, pDestinatario);
             }
             else
             {
-                _logger.LogWarning("[NotifVendedor {Id}] Paso 5 — destinatario sin '@', correo omitido: {Dest}", idReclamo, destinatario);
+                _logger.LogWarning("[NotifVendedor {Id}] Paso 5 — destinatario sin '@', correo omitido: {Dest}", idReclamo, pDestinatario);
             }
 
-            return (destinatario, asuntoMail, nomCliente, null);
+            return (pDestinatario, pAsuntoMail, pNomCliente, null);
         }
         catch (Exception ex)
         {
@@ -1164,6 +1190,49 @@ public class AnalisisReclamoService : OracleServiceBase, IAnalisisReclamoService
         {
             _logger.LogError(ex, "[ObtenerCorreoVendedor] Error consultando email de {Usuario}", usuVendedor);
             return "";
+        }
+    }
+
+    /// <summary>
+    /// Obtiene el nombre completo del usuario desde CS_USER (C_NOMBRE).
+    /// Formato de retorno: "Apellido Nombre (CODIGO)" ej: "García Juan (VENTA10)"
+    /// Si no encuentra, retorna solo el código entre paréntesis.
+    /// </summary>
+    private async Task<string> ObtenerNombreCompletoUsuarioAsync(string codigoUsuario)
+    {
+        if (string.IsNullOrWhiteSpace(codigoUsuario)) return "";
+
+        try
+        {
+            await using var conn = new OracleConnection(GetOracleConnectionString());
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $@"
+                SELECT U.C_NOMBRE
+                FROM   {S}CS_USER U
+                WHERE  U.C_USER = :usuario
+                  AND  U.ESTADO = '1'";
+            cmd.Parameters.Add("usuario", OracleDbType.Varchar2, codigoUsuario, ParameterDirection.Input);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var nombreCompleto = reader[0] == DBNull.Value ? null : reader[0].ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(nombreCompleto))
+                {
+                    _logger.LogInformation("[ObtenerNombreCompleto] Nombre de CS_USER para {Usuario}: {Nombre}", codigoUsuario, nombreCompleto);
+                    return $"{nombreCompleto} ({codigoUsuario})";
+                }
+            }
+
+            _logger.LogWarning("[ObtenerNombreCompleto] No se encontró nombre para {Usuario}, usando solo código", codigoUsuario);
+            return $"({codigoUsuario})";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ObtenerNombreCompleto] Error consultando nombre de {Usuario}", codigoUsuario);
+            return $"({codigoUsuario})";
         }
     }
 

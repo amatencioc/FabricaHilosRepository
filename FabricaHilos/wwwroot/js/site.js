@@ -106,6 +106,7 @@ const GlobalLoading = {
     overlay: null,
     messageElement: null,
     activeRequests: 0,
+    _navigating: false,
 
     init: function() {
         this.overlay = document.getElementById('globalLoadingOverlay');
@@ -129,6 +130,7 @@ const GlobalLoading = {
         // event.persisted === true cuando la página viene del back-forward cache
         window.addEventListener('pageshow', (event) => {
             // Forzar reset completo del contador para que el overlay siempre desaparezca
+            this._navigating = false;
             this.activeRequests = 0;
             this.hide();
         });
@@ -136,11 +138,13 @@ const GlobalLoading = {
         // Auto-ocultar cuando la ventana recupera el foco (cubre el caso de descargas
         // donde el browser NO navega y los eventos load/pageshow no se disparan)
         window.addEventListener('focus', () => {
-            this.activeRequests = 0;
-            this.hide();
+            if (!this._navigating) {
+                this.activeRequests = 0;
+                this.hide();
+            }
         });
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
+            if (document.visibilityState === 'visible' && !this._navigating) {
                 this.activeRequests = 0;
                 this.hide();
             }
@@ -187,6 +191,7 @@ const GlobalLoading = {
                     !href.toLowerCase().includes('logout') &&
                     !href.toLowerCase().includes('descargar=true')) {
 
+                    this._navigating = true;
                     this.show('Cargando página...');
                 }
             }
@@ -209,6 +214,7 @@ const GlobalLoading = {
                 }
 
                 this.show(message);
+                this._navigating = true;
             }
         });
     },

@@ -15,7 +15,6 @@ public sealed class SireComprasService : SireServiceBase, ISireComprasService
 
     public async Task<IReadOnlyList<PropuestaDto>> ObtenerPeriodosAsync(CancellationToken cancellationToken = default)
     {
-        // Deserializar estructura anidada de SUNAT y aplanar a PropuestaDto
         var ejercicios = await SendAsync<IReadOnlyList<EjercicioPeriodosDto>>(
             HttpMethod.Get, SireEndpoints.RcePeriodos, null, cancellationToken);
 
@@ -36,20 +35,35 @@ public sealed class SireComprasService : SireServiceBase, ISireComprasService
     }
 
     /// <summary>
-    /// Obtiene los registros de compras de la propuesta para un periodo.
-    /// NOTA: El manual v25 (de RVIE) no documenta endpoint GET directo de "cabecera" para RCE.
-    /// Este método se mantiene por compatibilidad pero probablemente falle.
-    /// Considerar usar ExportarPropuestaAsync + descargar archivo en su lugar.
+    /// ⚠️ DEPRECATED: Obtiene los registros de compras de la propuesta para un periodo.
+    /// El endpoint original (/registroslibros/{periodo}/cabecera) no está documentado en manual v25
+    /// y retorna HTTP 500 en producción.
+    /// 
+    /// USO CORRECTO: Para obtener registros, use el flujo:
+    /// 1. ExportarPropuestaAsync(periodo) → obtiene TicketEstado
+    /// 2. TicketPollingHelper.EsperarEstadoFinalAsync() → espera procesamiento
+    /// 3. DescargarConstanciaAsync(nomArchivo) → descarga archivo ZIP resultante
+    /// 4. Descomprimir y procesar archivo plano con registros
     /// </summary>
+    [Obsolete("Endpoint no documentado en SUNAT manual v25. Use ExportarPropuestaAsync() + TicketPollingHelper + DescargarConstanciaAsync() en su lugar. Este método retorna HTTP 500.", false)]
     public Task<IReadOnlyList<RegistroCompra>> ObtenerPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
     {
-        // Endpoint no documentado en manual v25, mantenido por compatibilidad
+        // ❌ Endpoint INCORRECTO: no documentado en manual v25, retorna 500 en producción
+        // Mantenido solo para referencia histórica
         var endpoint = $"/libros/rce/propuesta/web/registroslibros/{periodo}/cabecera";
         return SendAsync<IReadOnlyList<RegistroCompra>>(HttpMethod.Get, endpoint, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Exporta propuesta RCE y obtiene un ticket para monitorear el procesamiento.
+    /// Patrón equivalente a RVIE (manual v25 pág 48, servicio 5.18). Método: GET (parámetros en query string).
+    /// Retorna TicketEstado con el número de ticket que puede consultarse con ConsultarTicketAsync.
+    /// </summary>
+    public Task<TicketEstado> ExportarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
+        => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.RceExportarPropuesta(periodo), null, cancellationToken);
+
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
-        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RceAceptar(periodo), new { }, cancellationToken);
+        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RceAceptar(periodo), null, cancellationToken);
 
     /// <remarks>
     /// En el servicio real el reemplazo se realiza vía TUS (ITusUploadService).
@@ -64,7 +78,7 @@ public sealed class SireComprasService : SireServiceBase, ISireComprasService
     /// Patrón equivalente a RVIE (manual v25 pág 35, servicio 5.9).
     /// </summary>
     public Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default)
-        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RceRegistrarPreliminar(periodo), new { }, cancellationToken);
+        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RceRegistrarPreliminar(periodo), null, cancellationToken);
 
     public Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);

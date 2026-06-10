@@ -39,10 +39,13 @@
 
     .tareo-table th { white-space: nowrap; font-size: .8rem; }
     .tareo-table td { font-size: .82rem; vertical-align: middle; }
+    .tareo-table td, .tareo-table th { padding: .22rem .4rem; }
+    .tareo-table .col-sep { border-left: 2px solid rgba(0,0,0,.12) !important; }
 
     .col-fecha  { min-width: 90px; }
     .col-horas  { min-width: 65px; }
-    .col-accion { min-width: 110px; }
+    .col-accion { min-width: 150px; }
+    .col-motivo  { min-width: 160px; max-width: 220px; }
 
     .badge-pendiente     { background-color: var(--aq-wlt);   color: var(--aq-warn); }
     .badge-autorizado    { background-color: var(--aq-ok-lt); color: var(--aq-ok);   }
@@ -154,18 +157,21 @@
                             <th>Salida</th>
                             <th class="col-horas">Efect.</th>
                             <th class="text-center" style="min-width:110px">Alerta</th>
-                            <th colspan="2" class="text-center" style="background:var(--aq-wlt);color:var(--aq-warn)">HEA<br/><small>Antes entr.</small></th>
-                            <th colspan="2" class="text-center" style="background:var(--aq-lt);color:var(--aq-dk)">HED<br/><small>Desp. sal.</small></th>
-                            <th colspan="2" class="text-center" style="background:var(--aq-mid);color:var(--aq-dk)">HEO<br/><small>Dobles</small></th>
-                        </tr>
-                        <tr class="table-secondary" style="font-size:.72rem">
-                            <th></th><th></th><th></th><th></th><th></th>
-                            <th class="col-horas" style="color:var(--aq-warn)">HEA</th>
-                                            <th class="col-accion" style="color:var(--aq-warn)">Autorización</th>
-                                            <th class="col-horas" style="color:var(--aq)">HED</th>
-                                            <th class="col-accion" style="color:var(--aq)">Autorización</th>
-                                            <th class="col-horas" style="color:var(--aq-dk)">HEO</th>
-                                            <th class="col-accion" style="color:var(--aq-dk)">Autorización</th>
+                            <th class="col-horas  col-sep" style="background:var(--aq-lt);color:var(--aq)">
+                                HE Simples<br/><span class="fw-normal" style="font-size:.7rem">Horas</span>
+                            </th>
+                            <th class="col-accion" style="background:var(--aq-lt);color:var(--aq-dk)">
+                                HE Simples<br/><span class="fw-normal" style="font-size:.7rem">Autorización</span>
+                            </th>
+                            <th class="col-horas  col-sep" style="background:var(--aq-mid);color:var(--aq-dk)">
+                                HE Dobles<br/><span class="fw-normal" style="font-size:.7rem">Horas</span>
+                            </th>
+                            <th class="col-accion" style="background:var(--aq-mid);color:var(--aq-dk)">
+                                HE Dobles<br/><span class="fw-normal" style="font-size:.7rem">Autorización</span>
+                            </th>
+                            <th class="col-motivo">
+                                Motivo / Observación
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="tbodyTareo">
@@ -191,8 +197,8 @@
                     <input type="time" id="inpHoras" class="form-control" step="60" />
                 </div>
                 <div class="mb-2">
-                    <label class="form-label fw-semibold">Observaciones <span class="text-muted">(opcional)</span></label>
-                    <input type="text" id="inpObs" class="form-control" maxlength="200" />
+                    <label class="form-label fw-semibold">Motivo / Observación <span class="text-danger">*</span></label>
+                    <input type="text" id="inpObs" class="form-control" maxlength="200" placeholder="Ingrese el motivo de autorización" />
                 </div>
             </div>
             <div class="modal-footer">
@@ -403,7 +409,7 @@ async function cargarTareo() {
 function renderTareo(lista, empresa) {
     const tbody = document.getElementById('tbodyTareo');
     if (!lista.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-muted text-center p-3">Sin registros en el período.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-muted text-center p-3">Sin registros en el período.</td></tr>';
         return;
     }
 
@@ -414,15 +420,26 @@ function renderTareo(lista, empresa) {
             ? `<span class="badge bg-danger" title="Número impar de marcaciones — verificar entrada/salida"><i class="bi bi-exclamation-triangle-fill me-1"></i>Marca impar</span>`
             : '<span class="text-muted">—</span>';
 
+        // Motivo único: combina la obs de HED y HEO si existen
+        const obsHed = t.authHedHoras ? escapeHtml(t.authHedObs) : null;
+        const obsHeo = t.authHeoHoras ? escapeHtml(t.authHeoObs) : null;
+        let motivoFila = '<span class="text-muted">—</span>';
+        if (obsHed || obsHeo) {
+            const partes = [];
+            if (obsHed) partes.push(`<span style="font-size:.78rem">${obsHed}</span>`);
+            if (obsHeo) partes.push(`<span style="font-size:.78rem">${obsHeo}</span>`);
+            motivoFila = partes.join('<br/>');
+        }
+
         return `<tr class="${rowCls}">
             <td class="col-fecha fw-semibold">${t.fechaMarStr}<br/><small class="text-muted">${t.diaSemana}</small></td>
             <td>${t.entrada || '—'}</td>
             <td>${t.salida  || '—'}</td>
             <td>${t.horaEfectiva || '—'}</td>
             <td class="text-center">${alertaMI}</td>
-            ${celdaHE(t, 'HEA', empresa)}
             ${celdaHE(t, 'HED', empresa)}
             ${celdaHE(t, 'HEO', empresa)}
+            <td class="col-motivo">${motivoFila}</td>
         </tr>`;
     }).join('');
 }
@@ -430,14 +447,7 @@ function renderTareo(lista, empresa) {
 function celdaHE(t, tipo, empresa) {
     let horasTareo, horasAuth, hayPorAut, tipoAuth, tipoDesauth, authUsr, authObs;
 
-    if (tipo === 'HEA') {
-        horasTareo  = t.horaExtAntesOfi;
-        horasAuth   = t.authHeaHoras;
-        hayPorAut   = t.hayHeaPorAut;
-        authUsr     = t.authHeaUsr;
-        authObs     = t.authHeaObs;
-        tipoAuth    = '1'; tipoDesauth = '3';
-    } else if (tipo === 'HED') {
+    if (tipo === 'HED') {
         horasTareo  = t.horaExtraOfi;
         horasAuth   = t.authHedHoras;
         hayPorAut   = t.hayHedPorAut;
@@ -453,8 +463,11 @@ function celdaHE(t, tipo, empresa) {
         tipoAuth    = '5'; tipoDesauth = '6';
     }
 
+    const esPrimerGrupo = tipo === 'HED';
+    const sepCls = esPrimerGrupo ? ' col-sep' : '';
+
     if (!horasTareo || horasTareo === '00:00') {
-        return '<td>—</td><td>—</td>';
+        return `<td class="${sepCls}">—</td><td>—</td>`;
     }
 
     const authData = JSON.stringify({
@@ -468,22 +481,17 @@ function celdaHE(t, tipo, empresa) {
     let acciones   = '';
 
     if (horasAuth) {
-        // Fix XSS: escapar datos de Oracle antes de incluirlos en atributos HTML
-        const usr = escapeHtml(authUsr);
-        const obs = escapeHtml(authObs);
-        const tooltip = usr ? ` title="Autorizado por: ${usr}${obs ? ' — ' + obs : ''}"` : '';
-        badgeHoras = `<span class="badge badge-autorizado he-badge"${tooltip}>${horasAuth}</span>`;
-        acciones   = `<button class="btn btn-sm btn-desauth" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);" onclick="abrirDesauth('${authData}')">
+        badgeHoras = `<span class="badge badge-autorizado he-badge">${horasAuth}</span>`;
+        acciones   = `<button class="btn btn-sm btn-desauth py-0" style="background:var(--aq-err);color:#fff;border-color:var(--aq-err);font-size:.75rem;" onclick="abrirDesauth('${authData}')">
                           <i class="bi bi-x-circle me-1"></i>Quitar
                       </button>`;
     } else {
-        // Mostrar botón Autorizar si hay horas (independientemente del flag hayPorAut)
-        acciones = `<button class="btn btn-sm btn-auth" style="background:var(--aq);color:#fff;border-color:var(--aq);" onclick="abrirAuth('${authData}')">
+        acciones = `<button class="btn btn-sm btn-auth py-0" style="background:var(--aq);color:#fff;border-color:var(--aq);font-size:.75rem;" onclick="abrirAuth('${authData}')">
                         <i class="bi bi-check-circle me-1"></i>Autorizar
                     </button>`;
     }
 
-    return `<td>${badgeHoras}</td><td>${acciones || '<span class="text-muted">—</span>'}</td>`;
+    return `<td class="${sepCls}">${badgeHoras}</td><td>${acciones}</td>`;
 }
 
 // ─── Modales Autorizar / Desautorizar ─────────────────────────────────────
@@ -511,10 +519,16 @@ function abrirDesauth(dataStr) {
 
 async function confirmarAuth() {
     const horas = document.getElementById('inpHoras').value;
+    const obs   = document.getElementById('inpObs').value.trim();
     if (!horas) { mostrarError('Ingrese las horas a autorizar.'); return; }
+    if (!obs)   { mostrarError('El motivo / observación es obligatorio.'); return; }
+    if (pendingAuth.horasTareo && horas > pendingAuth.horasTareo) {
+        mostrarError(`Las horas a autorizar (${horas}) no pueden superar las registradas en el tareo (${pendingAuth.horasTareo}).`);
+        return;
+    }
     bootstrap.Modal.getInstance(document.getElementById('modalAuth')).hide();
     await grabar(pendingAuth.empresa, pendingAuth.personal, pendingAuth.fecha,
-                 pendingAuth.tipo, horas, document.getElementById('inpObs').value);
+                 pendingAuth.tipo, horas, obs);
 }
 
 async function confirmarDesauth() {

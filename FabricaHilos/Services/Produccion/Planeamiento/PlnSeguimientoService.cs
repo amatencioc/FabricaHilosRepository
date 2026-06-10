@@ -1347,7 +1347,7 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
     public async Task<(int BanosActivos, bool EsLibre, decimal PctCargaHoy, bool HayCargaHoy, int DiasAntiguo)> GetMaquinaStatusAsync(string codMaq)
     {
         var sqlBanos = $@"
-            SELECT NVL(SUM(CASE WHEN estado != '3' THEN 1 ELSE 0 END), 0) AS banos_activos
+            SELECT NVL(SUM(CASE WHEN estado IN ('1','2') THEN 1 ELSE 0 END), 0) AS banos_activos
             FROM   {S}TT_RPRODUC
             WHERE  cod_maq   = :codMaq
               AND  fecha_ini >= TRUNC(SYSDATE) - 7";

@@ -109,6 +109,18 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
+                if (menus.PlaneamientoSeguimientoTintoreria)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Seg. Programación Tintorería",
+                        Descripcion = "Reporte de producción de tintorería por fecha de entrega, programa, teñido, pedido o aprobación.",
+                        Icono = "bi-table",
+                        Controller = "Planeamiento",
+                        Action = "SeguimientoTintoreria"
+                    });
+                }
+
                 if (menus.PlaneamientoCargaMaquinas)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto

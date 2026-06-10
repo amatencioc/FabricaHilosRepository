@@ -8,6 +8,7 @@
     var otraMaquinas = (ViewBag.EstadoOtras        as List<PlnEstadoMaquinaTT>)    ?? new List<PlnEstadoMaquinaTT>();
     var hilMaquinas  = (ViewBag.EstadoHilanderia   as List<PlnResumenHilanderia>)  ?? new List<PlnResumenHilanderia>();
     var compromisos  = (ViewBag.Compromisos        as List<PlnMaquinaCompromiso>)  ?? new List<PlnMaquinaCompromiso>();
+    var cargaDiaria  = (ViewBag.CargaDiaria        as List<PlnCargaDiaria>)        ?? new List<PlnCargaDiaria>();
 
     int ttActivas    = ttMaquinas.Count(m => m.EsActiva);
     int ttLibres     = ttMaquinas.Count(m => !m.EsActiva);
@@ -15,6 +16,7 @@
     int secActivas   = secMaquinas.Count(m => m.EsActiva);
     int hilActivas   = hilMaquinas.Count(m => m.EsActiva);
     int plnRetrasos  = compromisos.Count(c => c.EstaRetrasado);
+    int cdSobrecarg  = cargaDiaria.Count(c => c.EstadoCarga == "SOBRECARGADA");
 }
 
 @section Styles {
@@ -135,6 +137,15 @@
             </div>
         </div>
     </div>
+    <div class="col-6 col-md-3 col-xl-2">
+        <div class="card cm-kpi p-3 text-center">
+            <div class="cm-kpi-val @(cdSobrecarg > 0 ? "text-danger" : "text-secondary")">@cdSobrecarg</div>
+            <div class="cm-kpi-lbl">
+                <i class="bi bi-thermometer-high @(cdSobrecarg > 0 ? "text-danger" : "text-secondary") me-1"></i>
+                Sobrecargadas (30d)
+            </div>
+        </div>
+    </div>
 </div>
 
 <ul class="nav nav-tabs pln-tabs" id="cmTabs" role="tablist">
@@ -185,6 +196,20 @@
             <span class="badge bg-secondary ms-1" style="font-size:.63rem;">
                 @(compromisos.Select(x => x.CodMaq).Distinct().Count()) máq.
             </span>
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="tab-cd-btn" data-bs-toggle="tab" data-bs-target="#tab-cd"
+                type="button" role="tab" aria-controls="tab-cd" aria-selected="false">
+            <i class="bi bi-calendar3-week me-1" style="color:#0dcaf0;"></i>Heatmap Carga
+            @if (cdSobrecarg > 0)
+            {
+                <span class="badge bg-danger ms-1" style="font-size:.63rem;">@cdSobrecarg sobrec.</span>
+            }
+            else
+            {
+                <span class="badge bg-secondary ms-1" style="font-size:.63rem;">@cargaDiaria.Select(c => c.CodMaq).Distinct().Count() máq.</span>
+            }
         </button>
     </li>
 </ul>
@@ -851,6 +876,114 @@
     }
 </div>@*/ tab-pln *@
 
+@*══════════════════════════════════════════════════════════════════ TAB: HEATMAP CARGA PLN *@
+<div class="tab-pane fade pln-tab-panel" id="tab-cd" role="tabpanel" aria-labelledby="tab-cd-btn">
+
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+        <div class="grupo-legend"><span class="grupo-dot" style="background:#198754;"></span> &lt; 50% Disponible</div>
+        <div class="grupo-legend"><span class="grupo-dot" style="background:#ffc107;"></span> 50–80% Carga media</div>
+        <div class="grupo-legend"><span class="grupo-dot" style="background:#fd7e14;"></span> 80–95% Carga alta</div>
+        <div class="grupo-legend"><span class="grupo-dot" style="background:#dc3545;"></span> &gt; 95% Sobrecargada</div>
+        <div class="ms-auto">
+            <form asp-action="RefreshCargaDiaria" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="fchIni" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="fchFin" value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
+                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Recalcular carga
+                </button>
+            </form>
+        </div>
+    </div>
+
+    @if (!cargaDiaria.Any())
+    {
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            No hay datos en <strong>PLN_CARGA_DIARIA</strong> para los próximos 30 días.
+            Haz clic en <strong>Recalcular carga</strong> para generarlos.
+        </div>
+    }
+    else
+    {
+        @* — Heatmap Tintorería — *@
+        var cdTt  = cargaDiaria.Where(c => c.TpMaq == "W" || c.TpMaq == "T").ToList();
+        var cdHil = cargaDiaria.Where(c => c.TpMaq == "H").ToList();
+
+        if (cdTt.Any())
+        {
+            <h6 class="text-muted fw-bold mb-2" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;">
+                <i class="bi bi-droplet-fill me-1" style="color:#6f42c1;"></i>Tintorería — carga 30 días
+            </h6>
+            <div id="cd-heatmap-tt" class="mb-4"></div>
+        }
+        if (cdHil.Any())
+        {
+            <h6 class="text-muted fw-bold mb-2" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;">
+                <i class="bi bi-gear-wide me-1" style="color:#0d6efd;"></i>Hilandería — carga 30 días
+            </h6>
+            <div id="cd-heatmap-hil" class="mb-4"></div>
+        }
+
+        @* — Tabla detallada con cola activa — *@
+        var cdConCola = cargaDiaria
+            .Where(c => c.KgAsignados > 0 || c.EstadoCarga == "SOBRECARGADA" || c.EstadoCarga == "CARGA_ALTA")
+            .OrderByDescending(c => c.PctCarga)
+            .ToList();
+
+        if (cdConCola.Any())
+        {
+            <h6 class="text-muted fw-bold mb-2 mt-3" style="font-size:.78rem; text-transform:uppercase; letter-spacing:.06em;">
+                <i class="bi bi-table me-1"></i>Detalle — máquinas con cola o carga alta
+            </h6>
+            <div class="table-responsive">
+                <table class="table table-sm tbl-hil align-middle">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Máquina</th>
+                            <th>Área</th>
+                            <th class="text-end">Cap (h)</th>
+                            <th class="text-end">Real (h)</th>
+                            <th class="text-end">Cola (h)</th>
+                            <th class="text-end">Kg cola</th>
+                            <th class="text-end">Pedidos cola</th>
+                            <th class="text-end">% Utiliz.</th>
+                            <th class="text-end">% Carga</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in cdConCola)
+                        {
+                            var badgeClass = row.EstadoCarga switch
+                            {
+                                "SOBRECARGADA" => "bg-danger",
+                                "CARGA_ALTA"   => "bg-warning text-dark",
+                                "CARGA_MEDIA"  => "bg-info text-dark",
+                                _              => "bg-success"
+                            };
+                            <tr>
+                                <td>@row.Fecha.ToString("dd/MM")</td>
+                                <td class="maq-name">@row.CodMaq</td>
+                                <td><span class="proceso-tag">@row.Area</span></td>
+                                <td class="text-end">@row.HorasCapacidad.ToString("N1")</td>
+                                <td class="text-end">@row.HorasReal.ToString("N1")</td>
+                                <td class="text-end @(row.HorasAsignadas > 0 ? "text-warning fw-bold" : "")">@row.HorasAsignadas.ToString("N1")</td>
+                                <td class="text-end @(row.KgAsignados > 0 ? "text-warning fw-bold" : "")">@row.KgAsignados.ToString("N0")</td>
+                                <td class="text-end @(row.NroPedidos > 0 ? "fw-bold" : "text-muted")">@(row.NroPedidos > 0 ? row.NroPedidos.ToString() : "—")</td>
+                                <td class="text-end">@row.PctUtilizacion.ToString("N0")%</td>
+                                <td class="text-end fw-bold" style="color:@row.ColorSemaforo;">@row.PctCarga.ToString("N0")%</td>
+                                <td><span class="badge @badgeClass" style="font-size:.62rem;">@row.EstadoCarga.Replace("_", " ")</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>@*/ tab-cd *@
+
 </div>@*/ tab-content *@
 
 </div>@*/ container-fluid *@
@@ -911,5 +1044,106 @@ function cmExpandAll(open) {
         if (open) col.show(); else col.hide();
     });
 }
+
+// ── Heatmap Carga PLN (PLN_CARGA_DIARIA) ─────────────────────────────────────
+(function () {
+    var rawData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        cargaDiaria.Select(c => new {
+            f  = c.Fecha.ToString("dd/MM"),
+            m  = c.CodMaq,
+            tp = c.TpMaq,
+            p  = (int)Math.Round(c.PctCarga),
+            u  = (int)Math.Round(c.PctUtilizacion),
+            k  = (double)c.KgAsignados,
+            kr = (double)c.KgReal,
+            n  = c.NroPedidos,
+            e  = c.EstadoCarga
+        })
+    ));
+
+    var colorRanges = [
+        { from: 0,   to: 50,  color: '#198754', name: '< 50% Disponible' },
+        { from: 51,  to: 80,  color: '#ffc107', name: '50–80% Media' },
+        { from: 81,  to: 95,  color: '#fd7e14', name: '80–95% Alta' },
+        { from: 96,  to: 999, color: '#dc3545', name: '> 95% Sobrecargada' }
+    ];
+
+    function buildHeatmap(divId, area) {
+        var el = document.getElementById(divId);
+        if (!el) return;
+        var subset = rawData.filter(function(d) {
+            return area === 'W' ? (d.tp === 'W' || d.tp === 'T') : d.tp === area;
+        });
+        if (!subset.length) return;
+
+        var fechas   = [...new Set(subset.map(function(d) { return d.f; }))].sort();
+        var maquinas = [...new Set(subset.map(function(d) { return d.m; }))].sort();
+
+        var series = maquinas.map(function(maq) {
+            return {
+                name: maq,
+                data: fechas.map(function(fecha) {
+                    var row = subset.find(function(d) { return d.m === maq && d.f === fecha; });
+                    return {
+                        x:    fecha,
+                        y:    row ? row.p : 0,
+                        meta: row || null
+                    };
+                })
+            };
+        });
+
+        var options = {
+            chart: {
+                type:    'heatmap',
+                height:  Math.max(220, maquinas.length * 24 + 60),
+                toolbar: { show: false },
+                animations: { enabled: false }
+            },
+            series: series,
+            dataLabels: { enabled: false },
+            plotOptions: {
+                heatmap: {
+                    radius: 2,
+                    useFillColorAsStroke: false,
+                    colorScale: { ranges: colorRanges }
+                }
+            },
+            xaxis: { type: 'category', labels: { style: { fontSize: '11px' } } },
+            yaxis: { labels: { style: { fontSize: '11px', fontWeight: 700 } } },
+            legend: { show: false },
+            tooltip: {
+                custom: function (o) {
+                    var d = o.w.config.series[o.seriesIndex].data[o.dataPointIndex];
+                    var m = d.meta;
+                    if (!m) return '<div class="px-2 py-1 small">Sin datos</div>';
+                    var estadoLabel = (m.e || '').replace(/_/g, ' ');
+                    var colaHtml = m.k > 0
+                        ? '<br><span style="color:#fd7e14;font-weight:600;">Cola: ' + m.k.toFixed(0) + ' kg · ' + m.n + ' pedidos</span>'
+                        : '';
+                    return '<div class="px-2 py-1" style="font-size:.76rem;line-height:1.5;">'
+                        + '<strong>' + d.x + ' · ' + o.w.config.series[o.seriesIndex].name + '</strong><br>'
+                        + 'Carga: <b style="color:' + (m.p > 95 ? '#dc3545' : m.p > 80 ? '#fd7e14' : m.p > 50 ? '#e6a817' : '#198754') + '">' + m.p + '%</b>'
+                        + ' (' + estadoLabel + ')<br>'
+                        + 'Utiliz. real: ' + m.u + '% · Kg prod: ' + m.kr.toFixed(0)
+                        + colaHtml
+                        + '</div>';
+                }
+            }
+        };
+
+        new ApexCharts(el, options).render();
+    }
+
+    // Renderizar solo cuando el tab se muestra (evitar render en DOM oculto)
+    var cdTab = document.getElementById('tab-cd-btn');
+    if (cdTab) {
+        cdTab.addEventListener('shown.bs.tab', function () {
+            buildHeatmap('cd-heatmap-tt',  'W');
+            buildHeatmap('cd-heatmap-hil', 'H');
+            cdTab.removeEventListener('shown.bs.tab', arguments.callee);
+        });
+    }
+})();
 </script>
 }

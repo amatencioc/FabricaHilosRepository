@@ -35,14 +35,21 @@ public sealed class SireAuthService : ISireAuthService
         _memoryCache  = memoryCache;
         _logger       = logger;
         _authUrl      = $"{o.AuthUrl.TrimEnd('/')}/{o.ClientId}/oauth2/token/";
-        _username     = $"{o.Ruc} {o.UsuarioSol}";
-        _password     = o.ClaveSol;
+        _username     = $"{o.Ruc}{o.UsuarioSol}";  // SIN espacio: RUC+Usuario (formato SUNAT confirmado)
+        _password     = o.ClaveSol?.Trim() ?? "";  // Eliminar espacios en blanco
         _scope        = o.Scope;
         _clientId     = o.ClientId;
-        _clientSecret = o.ClientSecret;
+        _clientSecret = o.ClientSecret?.Trim() ?? "";
 
         _logger.LogDebug("[SIRE-AUTH] Configuración cargada: AuthUrl={AuthUrl} | Username={Username} | Scope={Scope} | ClientId={ClientId}",
             _authUrl, _username, _scope, _clientId);
+
+        // Validación de credenciales en construcción
+        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_clientSecret) 
+            || string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+        {
+            _logger.LogWarning("[SIRE-AUTH] ⚠️ ADVERTENCIA: Credenciales incompletas detectadas en appsettings.json");
+        }
     }
 
     public async Task<AuthToken> GetTokenAsync(CancellationToken cancellationToken = default)
@@ -51,11 +58,21 @@ public sealed class SireAuthService : ISireAuthService
             && cached is not null
             && cached.ExpiraEnUtc > DateTime.UtcNow.AddMinutes(5))
         {
-            _logger.LogDebug("[SIRE-AUTH] Token en caché válido, expira {Expira:u}", cached.ExpiraEnUtc);
+            var minutosRestantes = (cached.ExpiraEnUtc - DateTime.UtcNow).TotalMinutes;
+            _logger.LogDebug("[SIRE-AUTH] Token en caché válido, expira en {Minutos:F1} minutos ({Expira:u})", 
+                minutosRestantes, cached.ExpiraEnUtc);
+
+            // ⚠️ MONITOREO: Advertir si el token expira pronto (última renovación antes de expirar)
+            if (minutosRestantes < 10)
+            {
+                _logger.LogWarning("[SIRE-AUTH] ⚠️ Token próximo a expirar en {Minutos:F1} minutos. Renovación inminente en próxima petición.",
+                    minutosRestantes);
+            }
+
             return cached;
         }
 
-        _logger.LogDebug("[SIRE-AUTH] Solicitando nuevo token a SUNAT...");
+        _logger.LogInformation("[SIRE-AUTH] Solicitando nuevo token a SUNAT (caché vacío o expirado)...");
         _logger.LogDebug("[SIRE-AUTH] POST {Url}", _authUrl);
         _logger.LogDebug("[SIRE-AUTH] Parámetros: grant_type=password | scope={Scope} | client_id={ClientId} | username={Username} | password=*** ({PwdLen} chars)",
             _scope, _clientId, _username, _password?.Length ?? 0);
@@ -83,9 +100,38 @@ public sealed class SireAuthService : ISireAuthService
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("[SIRE-AUTH] Autenticación fallida. URL={Url} | Username={Username} | HTTP={StatusCode} | Body={Body}",
-                _authUrl, _username, (int)response.StatusCode, content);
-            throw new SireApiException($"Error de autenticación SUNAT: {(int)response.StatusCode} - {content}", response.StatusCode);
+            // ❌ MONITOREO: Clasificar errores comunes para facilitar diagnóstico
+            var statusCode = (int)response.StatusCode;
+            var errorMsg = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
+
+            if (statusCode == 400)
+            {
+                _logger.LogError("[SIRE-AUTH] ❌ ERROR 400 Bad Request: Credenciales rechazadas por SUNAT. " +
+                    "Verificar RUC ({Ruc}), UsuarioSOL ({Usuario}), y ClaveSol en appsettings.json. " +
+                    "Body: {Body}", _username.Substring(0, Math.Min(11, _username.Length)), _username.Length > 11 ? _username.Substring(11) : "?", errorMsg);
+            }
+            else if (statusCode == 401)
+            {
+                _logger.LogError("[SIRE-AUTH] ❌ ERROR 401 Unauthorized: ClientId/ClientSecret inválidos o aplicación deshabilitada en SUNAT. " +
+                    "Verificar ClientId ({ClientId}) en portal SUNAT → Aplicaciones registradas. " +
+                    "Body: {Body}", _clientId, errorMsg);
+            }
+            else if (statusCode == 403)
+            {
+                _logger.LogError("[SIRE-AUTH] ❌ ERROR 403 Forbidden: Scope ({Scope}) no autorizado para esta aplicación. " +
+                    "Verificar permisos en portal SUNAT. Body: {Body}", _scope, errorMsg);
+            }
+            else if (statusCode >= 500)
+            {
+                _logger.LogError("[SIRE-AUTH] ❌ ERROR {Status} Server Error: SUNAT no disponible temporalmente. " +
+                    "Reintentar en unos minutos. Body: {Body}", statusCode, errorMsg);
+            }
+            else
+            {
+                _logger.LogError("[SIRE-AUTH] ❌ ERROR {Status}: {Body}", statusCode, errorMsg);
+            }
+
+            throw new SireApiException($"Error de autenticación SUNAT: {statusCode} - {content}", response.StatusCode);
         }
 
         var token = JsonSerializer.Deserialize<AuthToken>(content, JsonOptions)
@@ -94,8 +140,8 @@ public sealed class SireAuthService : ISireAuthService
         token.ExpiraEnUtc = DateTime.UtcNow.AddSeconds(token.ExpiresIn);
         _memoryCache.Set(CacheKey, token, token.ExpiraEnUtc);
 
-        _logger.LogInformation("[SIRE-AUTH] Token obtenido correctamente. Tipo={Tipo} | Expira={Expira:u}",
-            token.TokenType, token.ExpiraEnUtc);
+        _logger.LogInformation("[SIRE-AUTH] ✅ Token obtenido correctamente. Tipo={Tipo} | ExpiresIn={Segundos}s | Expira={Expira:u}",
+            token.TokenType, token.ExpiresIn, token.ExpiraEnUtc);
 
         return token;
     }

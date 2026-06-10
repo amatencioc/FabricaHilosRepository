@@ -87,18 +87,20 @@
 
               <!-- ALERTA DESTACADA -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0"
-                     style="margin:16px 0;">
+                     style="margin:16px 0; border-collapse:collapse;">
                 <tr>
                   <td bgcolor="#E8F4FD"
                       style="background-color:#E8F4FD;
                              border-left:5px solid #0066CC;
-                             padding:14px 18px; border-radius:4px;">
+                             padding:14px 18px; border-radius:4px;
+                             font-family:Arial, Helvetica, sans-serif;">
                     <p style="margin:0; font-size:14px; color:#003D7A;
                                line-height:1.8; font-family:Arial, Helvetica, sans-serif;">
-                      &#128203; <strong>Reclamo N.°:</strong>
-                      <span class="highlight" style="background-color:#C8A951; color:#1A1A1E;
-                            padding:2px 8px; border-radius:3px; font-weight:600;">#{{IdReclamo}}</span><br/>
-                      &#128467; <strong>Asunto:</strong> {{Asunto}}
+                      <strong>Reclamo N.°:</strong>
+                      <span style="background-color:#C8A951; color:#1A1A1E;
+                            padding:2px 8px; border-radius:3px; font-weight:600;
+                            font-family:Arial, Helvetica, sans-serif;">#{{IdReclamo}}</span><br/>
+                      <strong>Asunto:</strong> {{Asunto}}
                     </p>
                   </td>
                 </tr>
@@ -106,7 +108,7 @@
 
               <!-- TABLA: INFORMACIÓN DEL RECLAMO -->
               <p style="font-size:14px; font-weight:700; color:#1B4D3E;
-                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                        margin:20px 0 8px; font-family:Arial, Helvetica, sans-serif;">
                 Información del Reclamo
               </p>
               <table class="info-table" cellpadding="0" cellspacing="0" border="0"
@@ -141,7 +143,7 @@
 
               <!-- TABLA: INFORMACIÓN DEL VENDEDOR -->
               <p style="font-size:14px; font-weight:700; color:#1B4D3E;
-                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                        margin:20px 0 8px; font-family:Arial, Helvetica, sans-serif;">
                 Información del Vendedor
               </p>
               <table class="info-table" cellpadding="0" cellspacing="0" border="0"
@@ -173,11 +175,11 @@
 
               <!-- TABLA: DESCRIPCIÓN DEL RECLAMO -->
               <p style="font-size:14px; font-weight:700; color:#1B4D3E;
-                        margin:16px 0 8px; font-family:Arial, Helvetica, sans-serif;">
+                        margin:20px 0 8px; font-family:Arial, Helvetica, sans-serif;">
                 Descripción del Reclamo
               </p>
               <table width="100%" cellpadding="0" cellspacing="0" border="0"
-                     style="margin-bottom:20px;">
+                     style="margin-bottom:20px; border-collapse:collapse;">
                 <tr>
                   <td style="padding:14px 16px; border:1px solid #CBD2D9; border-radius:4px;
                              background-color:#F9FBFA; font-size:13px; color:#3D4451;
@@ -188,15 +190,16 @@
 
               <!-- LLAMADA A LA ACCIÓN -->
               <table width="100%" cellpadding="0" cellspacing="0" border="0"
-                     style="margin:16px 0;">
+                     style="margin:20px 0; border-collapse:collapse;">
                 <tr>
                   <td bgcolor="#FFF8E1"
                       style="background-color:#FFF8E1;
                              border-left:5px solid #C8A951;
-                             padding:14px 18px; border-radius:4px; text-align:center;">
+                             padding:14px 18px; border-radius:4px; text-align:center;
+                             font-family:Arial, Helvetica, sans-serif;">
                     <p style="margin:0 0 6px; font-size:14px; color:#7B5800;
                                font-weight:700; font-family:Arial, Helvetica, sans-serif;">
-                      &#9888;&#65039; Acción Requerida
+                      ⚠️ Acción Requerida
                     </p>
                     <p style="margin:0; font-size:13px; color:#5C4200;
                                font-family:Arial, Helvetica, sans-serif;">
@@ -238,214 +241,5 @@
   </table>
   <!-- FIN OUTER WRAPPER -->
 
-</body>
-</html>
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 600px;
-            margin: 20px auto;
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-        .header {
-            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
-            color: white;
-            padding: 30px 20px;
-            text-align: center;
-            border-bottom: 4px solid #ff9900;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }
-        .header p {
-            margin: 5px 0 0 0;
-            font-size: 14px;
-            opacity: 0.9;
-        }
-        .content {
-            padding: 30px 20px;
-        }
-        .greeting {
-            font-size: 16px;
-            margin-bottom: 20px;
-            color: #333;
-        }
-        .section {
-            margin-bottom: 25px;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-left: 4px solid #0066cc;
-            border-radius: 4px;
-        }
-        .section h2 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            color: #0066cc;
-            font-weight: 600;
-        }
-        .section p {
-            margin: 8px 0;
-            font-size: 14px;
-        }
-        .details-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 10px;
-        }
-        .detail-item {
-            padding: 10px;
-            background-color: #ffffff;
-            border-radius: 4px;
-            border: 1px solid #e0e0e0;
-        }
-        .detail-label {
-            font-size: 12px;
-            color: #666;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-        .detail-value {
-            font-size: 14px;
-            color: #333;
-            font-weight: 500;
-        }
-        .description-box {
-            background-color: #ffffff;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 12px;
-            margin-top: 10px;
-            font-size: 13px;
-            line-height: 1.5;
-            color: #555;
-        }
-        .action-section {
-            margin-top: 25px;
-            padding: 20px;
-            background-color: #fff3cd;
-            border-left: 4px solid #ff9900;
-            border-radius: 4px;
-            text-align: center;
-        }
-        .action-section h3 {
-            margin: 0 0 10px 0;
-            color: #cc7700;
-            font-size: 15px;
-            font-weight: 600;
-        }
-        .action-section p {
-            margin: 5px 0;
-            font-size: 13px;
-            color: #666;
-        }
-        .footer {
-            background-color: #f0f0f0;
-            padding: 20px;
-            text-align: center;
-            border-top: 1px solid #ddd;
-            font-size: 12px;
-            color: #666;
-        }
-        .footer a {
-            color: #0066cc;
-            text-decoration: none;
-        }
-        .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            background-color: #0066cc;
-            color: white;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- HEADER -->
-        <div class="header">
-            <h1>🔍 Reclamo Enviado para Análisis</h1>
-            <p>Sistema de Gestión de Calidad (SGC)</p>
-        </div>
-
-        <!-- CONTENIDO -->
-        <div class="content">
-            <p class="greeting">Estimado Equipo de Calidad,</p>
-            <p>
-                Un nuevo reclamo ha sido enviado por el departamento de ventas y requiere su análisis y evaluación.
-                Por favor, revise la información del reclamo y proceda según los protocolos establecidos.
-            </p>
-
-            <!-- INFORMACIÓN DEL RECLAMO -->
-            <div class="section">
-                <h2>📋 Información del Reclamo</h2>
-                <div class="badge">Reclamo #{{IdReclamo}}</div>
-                <div class="details-grid">
-                    <div class="detail-item">
-                        <div class="detail-label">Cliente</div>
-                        <div class="detail-value">{{NombreCliente}}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">RUC</div>
-                        <div class="detail-value">{{RucCliente}}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Asunto</div>
-                        <div class="detail-value">{{Asunto}}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Fecha Creación</div>
-                        <div class="detail-value">{{FechaCreacion}}</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- INFORMACIÓN DEL VENDEDOR -->
-            <div class="section">
-                <h2>👤 Información del Vendedor</h2>
-                <p><strong>Nombre:</strong> {{NombreVendedor}}</p>
-                <p><strong>Correo:</strong> <a href="mailto:{{CorreoVendedor}}">{{CorreoVendedor}}</a></p>
-            </div>
-
-            <!-- DESCRIPCIÓN DEL RECLAMO -->
-            <div class="section">
-                <h2>📝 Descripción del Reclamo</h2>
-                <div class="description-box">
-                    {{Descripcion}}
-                </div>
-            </div>
-
-            <!-- LLAMADO A LA ACCIÓN -->
-            <div class="action-section">
-                <h3>⚠️ Acción Requerida</h3>
-                <p>
-                    Por favor, inicie el análisis del reclamo en el portal SGC.
-                    Registre el análisis de causa y complete la evaluación.
-                </p>
-            </div>
-        </div>
-
-        <!-- FOOTER -->
-        <div class="footer">
-            <p>
-                Este es un correo automático del Sistema de Gestión de Calidad (SGC).<br />
-                Por favor, no responda a este correo. Contáctese con el administrador si tiene preguntas.
-            </p>
-            <p>
-                © La Colonial Fábrica de Hilos — Todos los derechos reservados.
-            </p>
-        </div>
-    </div>
 </body>
 </html>

@@ -1,5 +1,6 @@
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
+using FabricaHilos.Services.Sire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,14 +10,36 @@ namespace FabricaHilos.Controllers.Contabilidad;
 public class ContabilidadController : OracleBaseController
 {
     private readonly IMenuService _menuService;
+    private readonly ILazySireInitializer _lazySireInitializer;
+    private readonly ILogger<ContabilidadController> _logger;
 
-    public ContabilidadController(IMenuService menuService)
+    public ContabilidadController(
+        IMenuService menuService,
+        ILazySireInitializer lazySireInitializer,
+        ILogger<ContabilidadController> logger)
     {
         _menuService = menuService;
+        _lazySireInitializer = lazySireInitializer;
+        _logger = logger;
     }
 
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
+        // Iniciar lazy loading de servicios SIRE cuando se accede a Contabilidad
+        if (!_lazySireInitializer.IsInitialized)
+        {
+            try
+            {
+                _logger.LogInformation("[CONTABILIDAD] Iniciando servicios SIRE...");
+                await _lazySireInitializer.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CONTABILIDAD] Error al inicializar servicios SIRE");
+                TempData["ErrorMessage"] = "Error al inicializar servicios SIRE. Por favor intente de nuevo.";
+            }
+        }
+
         var menus = _menuService.GetMenusActuales();
 
         var tarjetas = new List<SgcModuloDto>();

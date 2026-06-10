@@ -292,7 +292,8 @@ public class MenuService : IMenuService
                 "PlaneamientoCargaMaquinas",
                 "PlaneamientoAlertas",
                 "PlaneamientoKPIs",
-                "PlaneamientoPendientesDespacho"),
+                "PlaneamientoPendientesDespacho",
+                "PlaneamientoSeguimientoTintoreria"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoDashboard"),
@@ -305,6 +306,12 @@ public class MenuService : IMenuService
 
             PlaneamientoAlertas = global.PlaneamientoAlertas
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoAlertas"),
+
+            PlaneamientoProximosVencer = global.PlaneamientoProximosVencer
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoProximosVencer"),
+
+            PlaneamientoSeguimientoTintoreria = global.PlaneamientoSeguimientoTintoreria
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoSeguimientoTintoreria"),
 
             PlaneamientoKPIs = global.PlaneamientoKPIs
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoKPIs"),

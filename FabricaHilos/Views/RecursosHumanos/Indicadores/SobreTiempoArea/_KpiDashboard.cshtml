@@ -192,8 +192,8 @@
                 {
                     var bgH = yearBgHeaderMap[p.Ano];
                     var bdr = yearBorderMap[p.Ano];
-                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH; border-left:2px solid @bdr;">HE (h)</th>
-                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH;">Prom.</th>
+                    <th class="text-center" style="font-size:.72rem; white-space:nowrap; background:@bgH; border-left:2px solid @bdr;">Trabajadores</th>
+                    <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH;">HE (h)</th>
                     <th class="text-end" style="font-size:.72rem; white-space:nowrap; background:@bgH;">% HE</th>
                 }
                 @if (periodos.Count > 1)
@@ -218,8 +218,8 @@
                         sumHE += cell?.TotalHorasExtras ?? 0m;
                         var bgR = yearBgRowMap[p.Ano];
                         var bdr = yearBorderMap[p.Ano];
-                        <td class="text-end" style="background:@bgR; border-left:2px solid @bdr;">@(cell?.TotalHorasExtras.ToString("N1") ?? "—")</td>
-                        <td class="text-end" style="background:@bgR;">@(cell?.PromHorasExtrasTrab.ToString("N2") ?? "—")</td>
+                        <td class="text-center" style="background:@bgR; border-left:2px solid @bdr;">@(cell?.TotalTrabajadores.ToString() ?? "—")</td>
+                        <td class="text-end" style="background:@bgR;">@(cell?.TotalHorasExtras.ToString("N1") ?? "—")</td>
                         <td class="text-end" style="background:@bgR;">@(cell is not null ? cell.PctTotalHorasExtras.ToString("N1") + "%" : "—")</td>
                     }
                     @if (periodos.Count > 1)
@@ -242,8 +242,8 @@
                     decimal promP  = sumTrp > 0 ? Math.Round(sumHEp / sumTrp, 2) : 0m;
                     var bgF = yearBgHeaderMap[p.Ano];
                     var bdF = yearBorderMap[p.Ano];
-                    <td class="text-end" style="background:@bgF; border-left:2px solid @bdF;">@sumHEp.ToString("N1")</td>
-                    <td class="text-end" style="background:@bgF;">@promP.ToString("N2")</td>
+                    <td class="text-center" style="background:@bgF; border-left:2px solid @bdF;">@sumTrp</td>
+                    <td class="text-end" style="background:@bgF;">@sumHEp.ToString("N1")</td>
                     <td class="text-end" style="background:@bgF;">100%</td>
                 }
                 @if (periodos.Count > 1)
@@ -263,8 +263,8 @@
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
             <div class="card-header">
-                <div class="fw-semibold" style="font-size:.82rem;">📊 Comparativo Mensual de Sobretiempo Total</div>
-                <div class="text-muted" style="font-size:.72rem;">Suma de horas extras de todas las áreas, agrupadas por mes y comparadas entre años del período seleccionado.</div>
+                <div class="fw-semibold" style="font-size:.82rem;">📊 Total de Sobretiempo Empresa — Comparativo por Mes</div>
+                <div class="text-muted" style="font-size:.72rem;">Muestra el <strong>total de horas extras de toda la empresa</strong> (suma de todas las áreas) agrupado por mes. Cada color representa un año. Úsalo para detectar si el sobretiempo global sube o baja respecto al año anterior en cada mes.</div>
             </div>
             <div class="card-body" style="height:420px;">
                 <canvas id="chartBarComparativo"></canvas>
@@ -274,8 +274,8 @@
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
             <div class="card-header">
-                <div class="fw-semibold" style="font-size:.82rem;">🏆 Área Líder en Sobretiempo por Mes y Año</div>
-                <div class="text-muted" style="font-size:.72rem;">Por cada mes, muestra el área que registró el mayor total de horas extras. Permite identificar focos de presión operativa recurrentes.</div>
+                <div class="fw-semibold" style="font-size:.82rem;">🏆 Área con Mayor Sobretiempo — Por Mes y Año</div>
+                <div class="text-muted" style="font-size:.72rem;">Muestra <strong>solo el área que registró más horas extras</strong> en cada mes (no la suma de todas). La etiqueta sobre cada barra indica el nombre del área. Úsalo para identificar qué área lidera consistentemente el sobretiempo y si ese liderazgo cambia entre años.</div>
             </div>
             <div class="card-body" style="height:420px;">
                 <canvas id="chartTopAreas"></canvas>
@@ -288,8 +288,8 @@
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
             <div class="card-header">
-                <div class="fw-semibold" style="font-size:.82rem;">📦 Sobretiempo Total por Área y Período</div>
-                <div class="text-muted" style="font-size:.72rem;">Detalle de horas extras acumuladas por área en cada período del rango. Permite comparar la carga entre áreas mes a mes.</div>
+                <div class="fw-semibold" style="font-size:.82rem;">📦 Sobretiempo por Área — Detalle por Período</div>
+                <div class="text-muted" style="font-size:.72rem;">Muestra el total de horas extras de <strong>cada área individual</strong> en cada período seleccionado. A diferencia del gráfico superior (que suma todo), aquí se ve el aporte de cada área por separado. Úsalo para comparar el peso relativo de cada área dentro de un mismo mes o entre años.</div>
             </div>
             <div class="card-body" style="height:360px;">
                 <canvas id="chartBarTotal"></canvas>
@@ -299,8 +299,8 @@
     <div class="col-lg-6">
         <div class="card chart-card position-relative">
             <div class="card-header">
-                <div class="fw-semibold" style="font-size:.82rem;">👤 Promedio de Sobretiempo por Trabajador y Área</div>
-                <div class="text-muted" style="font-size:.72rem;">Horas extras promedio por colaborador en cada área. Indica si la carga está distribuida o concentrada en pocas personas.</div>
+                <div class="fw-semibold" style="font-size:.82rem;">👤 Intensidad de Sobretiempo por Trabajador y Área</div>
+                <div class="text-muted" style="font-size:.72rem;">Muestra el <strong>promedio de horas extras por colaborador</strong> en cada área. Un área puede tener pocas horas totales pero un promedio alto (carga concentrada en pocas personas) o muchas horas pero promedio bajo (bien repartidas). Complementa al gráfico de totales para entender si el sobretiempo es masivo o recae en un grupo reducido.</div>
             </div>
             <div class="card-body" style="height:360px;">
                 <canvas id="chartLineProm"></canvas>

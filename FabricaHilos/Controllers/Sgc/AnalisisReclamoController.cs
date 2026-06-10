@@ -67,13 +67,31 @@ public class AnalisisReclamoController : OracleBaseController
     {
         var reclamos = await _service.ObtenerReclamosAsync(buscar, estado);
 
-        // El analista no ve reclamos en estado '01' (aún no enviados a Calidad)
         var accesoModulo = _menuService.ObtenerAccesoModulo("SgcAnalisisReclamo");
-        bool esAnalista = accesoModulo.TieneModificador("AC")
-                       || (!accesoModulo.TieneModificador("VD")
+        var accesoSgc    = _menuService.ObtenerAccesoModulo("Sgc");
+
+        bool esVendedor = accesoModulo.TieneModificador("VD")
+                       || (!accesoModulo.TieneModificador("AC")
                            && !accesoModulo.TieneModificador("GE")
                            && !accesoModulo.TieneModificador("OB")
-                           && _menuService.ObtenerAccesoModulo("Sgc").TieneModificador("AC"));
+                           && accesoSgc.TieneModificador("VD"));
+
+        bool esAnalista = !esVendedor
+                       && (accesoModulo.TieneModificador("AC")
+                           || (!accesoModulo.TieneModificador("GE")
+                               && !accesoModulo.TieneModificador("OB")
+                               && accesoSgc.TieneModificador("AC")));
+
+        // El vendedor solo ve sus propios reclamos
+        if (esVendedor)
+        {
+            var usuario = User.Identity?.Name ?? "";
+            reclamos = reclamos
+                .Where(r => string.Equals(r.UsuVendedor, usuario, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        // El analista no ve reclamos en estado '01' (aún no enviados a Calidad)
         if (esAnalista)
             reclamos = reclamos.Where(r => r.Estado != "01").ToList();
 
@@ -227,6 +245,13 @@ public class AnalisisReclamoController : OracleBaseController
         if (rolUsuario == "AC" && reclamo.Estado == "01")
         {
             TempData["Error"] = $"El reclamo #{id} aún no ha sido enviado a Calidad.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // El vendedor solo puede ver sus propios reclamos
+        if (rolUsuario == "VD" && !string.Equals(usuario, reclamo.UsuVendedor, StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "No tiene acceso a este reclamo.";
             return RedirectToAction(nameof(Index));
         }
 

@@ -31,6 +31,7 @@ public class ReclamoEvaluadoVendedorPayload : INotificacionPayload
     /// </summary>
     public Dictionary<string, string> ObtenerReemplazos() => new()
     {
+        { "NombreDestinatario", NombreDestinatario },
         { "IdReclamo",        IdReclamo        },
         { "NombreCliente",    NombreCliente    },
         { "RucCliente",       RucCliente       },

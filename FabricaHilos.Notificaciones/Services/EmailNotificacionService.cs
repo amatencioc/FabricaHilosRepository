@@ -59,6 +59,13 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 }
             }
 
+            // CC al vendedor en correos de reclamo enviado a calidad
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.ReclamoEnviadoCalidadPayload reclamoPayload
+                && !string.IsNullOrEmpty(reclamoPayload.CorreoCopia))
+            {
+                mensaje.Cc.Add(new MailboxAddress(reclamoPayload.NombreVendedor, reclamoPayload.CorreoCopia));
+            }
+
             mensaje.Body = builder.ToMessageBody();
 
             // 3. Enviar con MailKit

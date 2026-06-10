@@ -1518,8 +1518,8 @@
                         const n      = info.banosActivos;
                         const propio = el.dataset.propio === 'true';
                         if (txt) txt.textContent = (cerrado || !propio)
-                            ? `En uso por otro lote · ${n} baño${n !== 1 ? 's' : ''} activo${n !== 1 ? 's' : ''}`
-                            : `Ocupada · ${n} baño${n !== 1 ? 's' : ''} en proceso`;
+                            ? `En uso por otro lote · ${n} programación${n !== 1 ? 'es' : ''} activa${n !== 1 ? 's' : ''}`
+                            : `Ocupada · ${n} programación${n !== 1 ? 'es' : ''} en proceso`;
                     }
                     if (cargaPct) {
                         if (info.hayCargaHoy) {

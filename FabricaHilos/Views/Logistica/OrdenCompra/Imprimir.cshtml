@@ -49,11 +49,13 @@
         "0" => "EMITIDA",
         "1" => "ATENDIDA PARCIAL",
         "2" => "ATENDIDA TOTAL",
+        "6" => "CERRADA",
         "9" => "ANULADA",
         _   => oc.Estado ?? "—"
     };
     var estadoColor = oc.Estado switch {
         "0" => "#1a5276",
+        "6" => "#1e8449",
         "9" => "#c0392b",
         "2" => "#1e8449",
         _   => "#784212"

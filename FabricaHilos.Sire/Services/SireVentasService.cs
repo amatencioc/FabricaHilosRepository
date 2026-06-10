@@ -15,7 +15,6 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
 
     public async Task<IReadOnlyList<PropuestaDto>> ObtenerPeriodosAsync(CancellationToken cancellationToken = default)
     {
-        // Deserializar estructura anidada de SUNAT y aplanar a PropuestaDto
         var ejercicios = await SendAsync<IReadOnlyList<EjercicioPeriodosDto>>(
             HttpMethod.Get, SireEndpoints.RviePeriodos, null, cancellationToken);
 
@@ -36,20 +35,35 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     }
 
     /// <summary>
-    /// Obtiene los registros de ventas de la propuesta para un periodo.
-    /// NOTA: El manual v25 no documenta un endpoint GET directo de "cabecera".
-    /// Este método se mantiene por compatibilidad pero probablemente falle.
-    /// Considerar usar ExportarPropuestaAsync + descargar archivo en su lugar.
+    /// ⚠️ DEPRECATED: Obtiene los registros de ventas de la propuesta para un periodo.
+    /// El endpoint original (/registroslibros/{periodo}/cabecera) no está documentado en manual v25
+    /// y retorna HTTP 500 en producción.
+    /// 
+    /// USO CORRECTO: Para obtener registros, use el flujo:
+    /// 1. ExportarPropuestaAsync(periodo) → obtiene TicketEstado
+    /// 2. TicketPollingHelper.EsperarEstadoFinalAsync() → espera procesamiento
+    /// 3. DescargarConstanciaAsync(nomArchivo) → descarga archivo ZIP resultante
+    /// 4. Descomprimir y procesar archivo plano con registros
     /// </summary>
+    [Obsolete("Endpoint no documentado en SUNAT manual v25. Use ExportarPropuestaAsync() + TicketPollingHelper + DescargarConstanciaAsync() en su lugar. Este método retorna HTTP 500.", false)]
     public Task<IReadOnlyList<RegistroVenta>> ObtenerPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
     {
-        // Endpoint no documentado en manual v25, mantenido por compatibilidad
+        // ❌ Endpoint INCORRECTO: no documentado en manual v25, retorna 500 en producción
+        // Mantenido solo para referencia histórica
         var endpoint = $"/libros/rvie/propuesta/web/registroslibros/{periodo}/cabecera";
         return SendAsync<IReadOnlyList<RegistroVenta>>(HttpMethod.Get, endpoint, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Exporta propuesta RVIE y obtiene un ticket para monitorear el procesamiento.
+    /// Según manual v25 pág 48, servicio 5.18. Método: GET (parámetros en query string).
+    /// Retorna TicketEstado con el número de ticket que puede consultarse con ConsultarTicketAsync.
+    /// </summary>
+    public Task<TicketEstado> ExportarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
+        => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.RvieExportarPropuesta(periodo), null, cancellationToken);
+
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
-        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieAceptar(periodo), new { }, cancellationToken);
+        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieAceptar(periodo), null, cancellationToken);
 
     /// <remarks>
     /// En el servicio real el reemplazo se realiza vía TUS (ITusUploadService).
@@ -64,7 +78,7 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     /// Según manual v25 pág 35, servicio 5.9.
     /// </summary>
     public Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default)
-        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieRegistrarPreliminar(periodo), new { }, cancellationToken);
+        => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieRegistrarPreliminar(periodo), null, cancellationToken);
 
     public Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);

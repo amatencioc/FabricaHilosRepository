@@ -86,10 +86,11 @@ public class MenuOptions
     public bool PlaneamientoDashboard     { get; set; } = true;
     public bool PlaneamientoPedido        { get; set; } = true;
     public bool PlaneamientoCargaMaquinas { get; set; } = true;
-    public bool PlaneamientoAlertas            { get; set; } = true;
-    public bool PlaneamientoProximosVencer      { get; set; } = true;
-    public bool PlaneamientoKPIs                { get; set; } = false;
-    public bool PlaneamientoPendientesDespacho   { get; set; } = true;
+    public bool PlaneamientoAlertas                  { get; set; } = true;
+    public bool PlaneamientoProximosVencer            { get; set; } = true;
+    public bool PlaneamientoSeguimientoTintoreria     { get; set; } = true;
+    public bool PlaneamientoKPIs                      { get; set; } = false;
+    public bool PlaneamientoPendientesDespacho        { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -151,10 +152,11 @@ public class MenuOptions
         PlaneamientoDashboard     = true,
         PlaneamientoPedido        = true,
         PlaneamientoCargaMaquinas = true,
-        PlaneamientoAlertas            = true,
-        PlaneamientoProximosVencer      = true,
-        PlaneamientoKPIs                = true,
-        PlaneamientoPendientesDespacho  = true,
+        PlaneamientoAlertas                  = true,
+        PlaneamientoProximosVencer            = true,
+        PlaneamientoSeguimientoTintoreria     = true,
+        PlaneamientoKPIs                      = true,
+        PlaneamientoPendientesDespacho        = true,
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,

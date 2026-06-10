@@ -1,0 +1,426 @@
+@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+@using FabricaHilos.Sire.Models
+@{
+    ViewData["Title"] = "SIRE - RVIE (Registro de Ventas)";
+
+    var periodos = Model?.Periodos ?? Array.Empty<PropuestaDto>();
+    var periodoSeleccionado = Model?.PeriodoSeleccionado ?? string.Empty;
+    var registros = Model?.RegistrosVentas ?? Array.Empty<RegistroVenta>();
+    var esMock = Model?.EsMock ?? false;
+
+    var yyyyMm = periodoSeleccionado.Length == 6 
+        ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}" 
+        : periodoSeleccionado;
+
+    decimal totalBase = registros.Sum(r => r.BaseImponibleGravada);
+    decimal totalIgv = registros.Sum(r => r.Igv);
+    decimal totalMonto = registros.Sum(r => r.ImporteTotal);
+
+    static (string Desc, string Css) TipoComprobante(string cod) => cod switch
+    {
+        "01" => ("Factura", "bg-primary"),
+        "03" => ("Boleta", "bg-info text-dark"),
+        "07" => ("Nota de Crédito", "bg-warning text-dark"),
+        "08" => ("Nota de Débito", "bg-orange text-dark"),
+        "09" => ("Guía Remisión", "bg-secondary"),
+        "20" => ("Ret. 2da Cat.", "bg-secondary"),
+        _ => (cod, "bg-secondary")
+    };
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Contabilidad" asp-action="Index">Contabilidad</a></li>
+    <li class="breadcrumb-item"><a asp-controller="Sire" asp-action="Index">SIRE</a></li>
+    <li class="breadcrumb-item active">RVIE - Ventas</li>
+}
+
+@section Styles {
+<style>
+    .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+    .page-header-icon { width: 54px; height: 54px; background: linear-gradient(135deg, #1B4D3E 0%, #2e6b55 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: #fff; box-shadow: 0 4px 12px rgba(27, 77, 62, 0.15); flex-shrink: 0; }
+</style>
+}
+
+@if (esMock)
+{
+    <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+        <i class="bi bi-cone-striped fs-5"></i>
+        <span><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</span>
+    </div>
+}
+
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-contab alert-contab-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>@err
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="alert alert-contab alert-contab-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@ok
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Header Section -->
+<div class="page-header mb-4">
+    <div class="page-header-icon">
+        <i class="bi bi-receipt-cutoff"></i>
+    </div>
+    <div class="page-header-content">
+        <h3>RVIE — Registro de Ventas e Ingresos</h3>
+        <small>Gestión de propuestas de ventas electrónicas desde SUNAT</small>
+    </div>
+    <div style="margin-left: auto;">
+        <a asp-controller="Sire" asp-action="Index" class="btn btn-contab btn-contab-outline btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Volver
+        </a>
+    </div>
+</div>
+
+<!-- Anti-forgery token para POST -->
+@Html.AntiForgeryToken()
+
+<!-- Period Selector -->
+<div class="filter-bar">
+    <label class="form-label fw-semibold mb-2">Seleccionar Período</label>
+    <div class="input-group">
+        <select class="form-select form-select-sm" id="periodoSelect" onchange="cambiarPeriodo()">
+            <option value="">--- Seleccionar período ---</option>
+            @foreach (var p in periodos)
+            {
+                <option value="@p.Periodo" selected="@(p.Periodo == periodoSeleccionado)">
+                    @($"{p.Periodo[..4]}/{p.Periodo[4..]}"): @p.Descripcion
+                </option>
+            }
+        </select>
+        <button class="btn btn-contab btn-contab-primary btn-sm" type="button" onclick="recargarPeriodo()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Recargar
+        </button>
+    </div>
+</div>
+
+@if (string.IsNullOrWhiteSpace(periodoSeleccionado))
+{
+    <div class="alert alert-contab alert-contab-info d-flex align-items-center gap-2 py-3">
+        <i class="bi bi-info-circle fs-5"></i>
+        <span>Seleccione un período para ver los registros de ventas disponibles.</span>
+    </div>
+}
+else
+{
+    <!-- Summary Cards (KPI) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="kpi-card accent-green">
+                <div class="kpi-icon" style="color: #1B4D3E;"><i class="bi bi-file-earmark-text"></i></div>
+                <div class="kpi-label">Total Registros</div>
+                <div class="kpi-value">@registros.Count</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card accent-green">
+                <div class="kpi-icon" style="color: #1B4D3E;"><i class="bi bi-calculator"></i></div>
+                <div class="kpi-label">Base Imponible</div>
+                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalBase.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card accent-blue">
+                <div class="kpi-icon" style="color: #1565C0;"><i class="bi bi-percent"></i></div>
+                <div class="kpi-label">IGV</div>
+                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalIgv.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card accent-green" style="box-shadow: 0 3px 14px rgba(39, 174, 96, 0.14);">
+                <div class="kpi-icon" style="color: #27ae60;"><i class="bi bi-credit-card"></i></div>
+                <div class="kpi-label">Total</div>
+                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalMonto.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nuevo Flujo de Exportación: Export → Poll → Download -->
+    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+    {
+        <div class="alert alert-contab alert-contab-info d-flex align-items-center gap-2 py-3 mb-4">
+            <i class="bi bi-info-circle fs-5"></i>
+            <span>
+                <strong>Nuevo flujo de exportación:</strong> Haga clic en <strong>"Exportar Propuesta"</strong> para iniciar el procesamiento en SUNAT. 
+                Se abrirá un modal con el estado del ticket. Una vez completado, podrá descargar el archivo ZIP.
+            </span>
+        </div>
+
+        <div class="mb-4 d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-contab btn-contab-primary btn-sm" 
+                    onclick="iniciarExportacion('@periodoSeleccionado', 'ventas')">
+                <i class="bi bi-upload me-1"></i>Exportar Propuesta
+            </button>
+            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "ventas" })" 
+               class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-file-pdf me-1"></i>Descargar Constancia PDF
+            </a>
+        </div>
+    }
+
+    <!-- Modal de Progreso de Exportación -->
+    <div class="modal fade" id="modalExportacion" tabindex="-1" aria-labelledby="modalExportacionLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalExportacionLabel">
+                        <i class="bi bi-cloud-upload me-2"></i>Exportación de Propuesta RVIE
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="estadoExportacion">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Cargando...</span>
+                            </div>
+                            <p class="fw-semibold">Iniciando exportación...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" id="btnDescargarZip" class="btn btn-contab btn-contab-success btn-sm" 
+                            style="display: none;" onclick="descargarArchivoExportado('@periodoSeleccionado', 'ventas')">
+                        <i class="bi bi-download me-1"></i>Descargar ZIP
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (registros.Count == 0)
+    {
+        <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-3">
+            <i class="bi bi-exclamation-circle fs-5"></i>
+            <span>No hay registros de ventas para el período <strong>@yyyyMm</strong>.</span>
+        </div>
+    }
+    else
+    {
+        <!-- Registros Table -->
+        <div class="chart-card">
+            <div class="card-header d-flex align-items-center gap-2 py-3">
+                <i class="bi bi-table"></i>
+                <h6 class="mb-0 fw-semibold">Registros de Ventas — @yyyyMm</h6>
+                <span class="badge bg-secondary ms-auto">@registros.Count</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-contab table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Serie</th>
+                            <th>Número</th>
+                            <th>Documento Cliente</th>
+                            <th>Razón Social</th>
+                            <th class="text-end">Base</th>
+                            <th class="text-end">IGV</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var reg in registros)
+                        {
+                            var (tipoDesc, tipoCss) = TipoComprobante(reg.TipoComprobante);
+                            <tr>
+                                <td>
+                                    <span class="badge badge-contab @(tipoCss switch
+                                    {
+                                        "bg-primary" => "badge-contab-primary",
+                                        "bg-info text-dark" => "badge-contab-info",
+                                        "bg-warning text-dark" => "badge-contab-warning",
+                                        "bg-orange text-dark" => "badge-contab-warning",
+                                        _ => "badge-contab-secondary"
+                                    })">@tipoDesc</span>
+                                </td>
+                                <td><code style="background: rgba(27, 77, 62, 0.08); padding: 2px 6px; border-radius: 4px;">@reg.SerieComprobante</code></td>
+                                <td><code style="background: rgba(27, 77, 62, 0.08); padding: 2px 6px; border-radius: 4px;">@reg.NumeroComprobante</code></td>
+                                <td>@reg.TipoDocIdentidadCliente @reg.NumeroDocIdentidadCliente</td>
+                                <td>@reg.RazonSocialCliente</td>
+                                <td class="text-end">S/ @reg.BaseImponibleGravada.ToString("N2")</td>
+                                <td class="text-end">S/ @reg.Igv.ToString("N2")</td>
+                                <td class="text-end fw-semibold" style="color: #1B4D3E;">S/ @reg.ImporteTotal.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+<script>
+    function cambiarPeriodo() {
+        const periodo = document.getElementById('periodoSelect').value;
+        if (periodo) {
+            window.location.href = '@Url.Action("Ventas", new { })' + '?periodo=' + periodo;
+        }
+    }
+
+    function recargarPeriodo() {
+        location.reload();
+    }
+
+    // Flujo de exportación: inicia la exportación y muestra modal de progreso
+    async function iniciarExportacion(periodo, tipo) {
+        const modal = new bootstrap.Modal(document.getElementById('modalExportacion'));
+        modal.show();
+
+        try {
+            // Obtener token anti-forgery del input oculto generado por @Html.AntiForgeryToken()
+            const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenInput ? tokenInput.value : '';
+
+            const response = await fetch('@Url.Action("ExportarPropuesta", "Sire")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify({ periodo, tipo })
+            });
+
+            const result = await response.json();
+
+            if (!result.exitoso) {
+                mostrarErrorExportacion(result.mensaje || result.error);
+                return;
+            }
+
+            // Guardar numTicket en sessionStorage para uso posterior
+            sessionStorage.setItem('numTicketExportacion', result.numTicket);
+            sessionStorage.setItem('periodoExportacion', periodo);
+            sessionStorage.setItem('tipoExportacion', tipo);
+
+            // Iniciar polling del estado del ticket
+            consultarEstadoExportacion(result.numTicket, periodo, tipo);
+        }
+        catch (error) {
+            mostrarErrorExportacion('Error al iniciar exportación: ' + error.message);
+        }
+    }
+
+    // Consulta el estado del ticket con polling
+    async function consultarEstadoExportacion(numTicket, periodo, tipo, intentos = 0) {
+        const maxIntentos = 60; // 60 x 2s = 2 minutos
+        const intervalo = 2000; // 2 segundos
+
+        if (intentos >= maxIntentos) {
+            mostrarErrorExportacion('Tiempo de espera agotado. El procesamiento en SUNAT tardó demasiado.');
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                `@Url.Action("ConsultarEstadoExportacion", "Sire")?numTicket=${encodeURIComponent(numTicket)}&periodo=${encodeURIComponent(periodo)}&tipo=${encodeURIComponent(tipo)}`,
+                { method: 'GET' }
+            );
+
+            const result = await response.json();
+
+            if (!result.exitoso) {
+                mostrarErrorExportacion(result.mensaje || result.error);
+                return;
+            }
+
+            // Actualizar estado en el modal
+            const estado = result.estado || 'EN_PROCESO';
+            const mensaje = result.mensaje || 'Procesando...';
+            actualizarModalExportacion(estado, mensaje, numTicket);
+
+            // Verificar si completado
+            if (estado.toUpperCase() === 'COMPLETADO' || estado.toUpperCase() === 'ACEPTADO') {
+                mostrarExitoExportacion(mensaje);
+                return; // Usuario puede descargar
+            }
+
+            if (estado.toUpperCase() === 'ERROR' || estado.toUpperCase() === 'RECHAZADO') {
+                mostrarErrorExportacion(mensaje);
+                return;
+            }
+
+            // Continuar polling
+            setTimeout(() => consultarEstadoExportacion(numTicket, periodo, tipo, intentos + 1), intervalo);
+        }
+        catch (error) {
+            mostrarErrorExportacion('Error al consultar estado: ' + error.message);
+        }
+    }
+
+    function actualizarModalExportacion(estado, mensaje, numTicket) {
+        const estadoDiv = document.getElementById('estadoExportacion');
+        const badgeColor = estado.toUpperCase() === 'EN_PROCESO' ? 'info' : 
+                           estado.toUpperCase() === 'COMPLETADO' ? 'success' : 'warning';
+
+        estadoDiv.innerHTML = `
+            <div class="text-center">
+                <div class="mb-3">
+                    <span class="badge bg-${badgeColor} p-2" style="font-size: 0.9rem;">
+                        ${estado}
+                    </span>
+                </div>
+                <p class="fw-semibold mb-2">${mensaje}</p>
+                <small class="text-muted">Ticket: ${numTicket}</small>
+            </div>
+        `;
+    }
+
+    function mostrarExitoExportacion(mensaje) {
+        const estadoDiv = document.getElementById('estadoExportacion');
+        const btnDescargar = document.getElementById('btnDescargarZip');
+
+        estadoDiv.innerHTML = `
+            <div class="text-center">
+                <div class="mb-3">
+                    <i class="bi bi-check-circle fs-1" style="color: #27ae60;"></i>
+                </div>
+                <p class="fw-semibold text-success">${mensaje}</p>
+                <small class="text-muted">El archivo ZIP está listo para descargar.</small>
+            </div>
+        `;
+        btnDescargar.style.display = '';
+    }
+
+    function mostrarErrorExportacion(error) {
+        const estadoDiv = document.getElementById('estadoExportacion');
+        const btnDescargar = document.getElementById('btnDescargarZip');
+
+        estadoDiv.innerHTML = `
+            <div class="text-center">
+                <div class="mb-3">
+                    <i class="bi bi-exclamation-circle fs-1" style="color: #e74c3c;"></i>
+                </div>
+                <p class="fw-semibold text-danger">Error en la exportación</p>
+                <small class="text-muted">${error}</small>
+            </div>
+        `;
+        btnDescargar.style.display = 'none';
+    }
+
+    // Descarga el archivo ZIP cuando está listo
+    async function descargarArchivoExportado(periodo, tipo) {
+        const numTicket = sessionStorage.getItem('numTicketExportacion');
+        if (!numTicket) {
+            alert('No hay ticket de exportación disponible.');
+            return;
+        }
+
+        // Descargar archivo prediciendo el nombre estándar SUNAT
+        // Formato: PP{RUC}{PERIODO}{CODLIBRO}{SUFIJO9DIGITOS}.ZIP
+        const ruc = '@Model.Ruc'; // RUC desde el ViewModel
+        const codLibro = tipo === 'ventas' ? '140000' : '080000';
+        const nomArchivo = `PP${ruc}${periodo}${codLibro}001111110.ZIP`;
+
+        window.location.href = `@Url.Action("DescargarArchivoExportado", "Sire")?periodo=${encodeURIComponent(periodo)}&tipo=${encodeURIComponent(tipo)}&nomArchivo=${encodeURIComponent(nomArchivo)}`;
+    }
+</script>

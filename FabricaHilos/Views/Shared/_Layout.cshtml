@@ -107,23 +107,7 @@
                                 {
                                 <li>
                                     <a asp-controller="Planeamiento" asp-action="Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Dashboard" ? "active" : "")">
-                                        <i class="bi bi-speedometer2"></i> Dashboard
-                                    </a>
-                                </li>
-                                }
-                                @if (menus.PlaneamientoCargaMaquinas)
-                                {
-                                <li>
-                                    <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
-                                        <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
-                                    </a>
-                                </li>
-                                }
-                                @if (menus.PlaneamientoAlertas)
-                                {
-                                <li>
-                                    <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
-                                        <i class="bi bi-bell"></i> Alertas
+                                        <i class="bi bi-kanban"></i> Seguimiento de Pedidos
                                     </a>
                                 </li>
                                 }
@@ -135,12 +119,50 @@
                                     </a>
                                 </li>
                                 }
-                                            </ul>
-                                        </li>
-                                        }
-                                    </ul>
+                                @if (menus.PlaneamientoSeguimientoTintoreria)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="SeguimientoTintoreria" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "SeguimientoTintoreria" ? "active" : "")">
+                                        <i class="bi bi-table"></i> Seg. Programación Tintorería
+                                    </a>
                                 </li>
                                 }
+                                @if (menus.PlaneamientoCargaMaquinas)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
+                                        <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendientesDespacho)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PendientesDespacho" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesDespacho" ? "active" : "")">
+                                        <i class="bi bi-truck"></i> Pendientes de Despacho
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoAlertas)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
+                                        <i class="bi bi-bell"></i> Alertas
+                                    </a>
+                                </li>
+                                }
+                                <li class="disabled" title="Módulo en desarrollo">
+                                    <span class="sidebar-link sidebar-sublink" style="opacity:.5;cursor:not-allowed;">
+                                        <i class="bi bi-sliders"></i> Parámetros
+                                        <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Dev</span>
+                                    </span>
+                                </li>
+                            </ul>
+                        </li>
+                        }
+                    </ul>
+                </li>
+                }
                 @if (menus.Sgc)
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>

@@ -11,6 +11,13 @@ public interface IComparativoCostoLaboralService
         int ano1, int mesIniAno1, int mesFinAno1,
         int ano2, int mesIniAno2, int mesFinAno2,
         decimal basicoManual = 0m,
+        string tipo = "T",
+        IEnumerable<string>? areas = null);
+
+    /// <summary>Devuelve las áreas disponibles para el rango combinado de ambos períodos.</summary>
+    Task<IEnumerable<string>> ObtenerAreasAsync(
+        int ano1, int mesIniAno1, int mesFinAno1,
+        int ano2, int mesIniAno2, int mesFinAno2,
         string tipo = "T");
 }
 
@@ -109,6 +116,7 @@ SELECT ANO,
        ROUND(AVG(BASICO / NULLIF(NRO_TRAB, 0)), 2)  BASICO_PROM_X_TRAB
 FROM   POR_MES_AREA
 GROUP BY ANO, AREA
+HAVING SUM(BASICO) > 0
 ORDER BY ANO, AREA";
 
     public ComparativoCostoLaboralService(
@@ -129,72 +137,92 @@ ORDER BY ANO, AREA";
         int ano1, int mesIniAno1, int mesFinAno1,
         int ano2, int mesIniAno2, int mesFinAno2,
         decimal basicoManual = 0m,
-        string tipo = "T")
+        string tipo = "T",
+        IEnumerable<string>? areas = null)
     {
-        // Normaliza: cualquier valor <= 0 se trata como "no manual" (vuelve al cálculo desde planilla).
         if (basicoManual < 0m) basicoManual = 0m;
-
-        // Normaliza filtro de tipo: cualquier valor distinto de 'O' o 'E' → 'T' (todos).
         tipo = (tipo ?? "T").Trim().ToUpperInvariant();
         if (tipo != "O" && tipo != "E") tipo = "T";
 
+        // Normaliza el filtro de áreas (null o vacío = sin filtro)
+        var filtroAreas = areas
+            ?.Select(a => a.Trim()).Where(a => a.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool tieneFilAreas = filtroAreas is { Count: > 0 };
+
+        // La clave de caché es para el dataset COMPLETO (sin filtro de áreas),
+        // así el caché se reutiliza independientemente de las áreas seleccionadas.
         var cacheKey = GenerateCacheKey(ano1, mesIniAno1, mesFinAno1, ano2, mesIniAno2, mesFinAno2, basicoManual, tipo);
 
-        // ── Caché ──
+        ComparativoCostoLaboralViewModel? vmCompleto = null;
+
+        // ── Caché (solo dataset completo) ──
         try
         {
             var cached = await _cache.GetAsync(cacheKey);
             if (cached != null)
             {
                 var json = System.Text.Encoding.UTF8.GetString(cached);
-                var hit  = JsonSerializer.Deserialize<ComparativoCostoLaboralViewModel>(json);
-                if (hit != null)
-                {
+                vmCompleto = JsonSerializer.Deserialize<ComparativoCostoLaboralViewModel>(json);
+                if (vmCompleto != null)
                     _logger.LogInformation("Cache hit ComparativoCostoLaboral: {Key}", cacheKey);
-                    return hit;
-                }
             }
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Cache get failed {Key}", cacheKey); }
 
-        var vm = new ComparativoCostoLaboralViewModel
+        // ── Si no hay caché, leer de Oracle ──
+        if (vmCompleto == null)
         {
-            Ano1 = ano1, MesIniAno1 = mesIniAno1, MesFinAno1 = mesFinAno1,
-            Ano2 = ano2, MesIniAno2 = mesIniAno2, MesFinAno2 = mesFinAno2,
-            BasicoManual = basicoManual,
-            Tipo = tipo,
-        };
-
-        try
-        {
-            await using var conn = new OracleConnection(_connStr);
-            await conn.OpenAsync();
-
-            // Ejecutar el query dos veces (una por año). Esto permite usar
-            // rangos de meses distintos en cada año (ej. compara YTD parcial).
-            vm.FilasCrudo.AddRange(await EjecutarPorAnoAsync(conn, ano1, mesIniAno1, mesFinAno1, tipo));
-            vm.FilasCrudo.AddRange(await EjecutarPorAnoAsync(conn, ano2, mesIniAno2, mesFinAno2, tipo));
-
-            ConstruirCuadros(vm);
-
-            // ── Guardar cache ──
+            vmCompleto = new ComparativoCostoLaboralViewModel
+            {
+                Ano1 = ano1, MesIniAno1 = mesIniAno1, MesFinAno1 = mesFinAno1,
+                Ano2 = ano2, MesIniAno2 = mesIniAno2, MesFinAno2 = mesFinAno2,
+                BasicoManual = basicoManual,
+                Tipo = tipo,
+            };
             try
             {
-                var json = JsonSerializer.Serialize(vm);
-                var bytes = System.Text.Encoding.UTF8.GetBytes(json);
-                var opts = new DistributedCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
-                await _cache.SetAsync(cacheKey, bytes, opts);
+                await using var conn = new OracleConnection(_connStr);
+                await conn.OpenAsync();
+                vmCompleto.FilasCrudo.AddRange(await EjecutarPorAnoAsync(conn, ano1, mesIniAno1, mesFinAno1, tipo));
+                vmCompleto.FilasCrudo.AddRange(await EjecutarPorAnoAsync(conn, ano2, mesIniAno2, mesFinAno2, tipo));
+
+                // Solo construimos cuadros completos para guardar en caché (sin filtro de áreas)
+                ConstruirCuadros(vmCompleto);
+
+                // Guardar el dataset completo en caché
+                try
+                {
+                    var json  = JsonSerializer.Serialize(vmCompleto);
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                    var opts  = new DistributedCacheEntryOptions()
+                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+                    await _cache.SetAsync(cacheKey, bytes, opts);
+                }
+                catch (Exception ex) { _logger.LogWarning(ex, "Cache set failed {Key}", cacheKey); }
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "Cache set failed {Key}", cacheKey); }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error ComparativoCostoLaboral ({A1}/{A2})", ano1, ano2);
-            throw;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error ComparativoCostoLaboral ({A1}/{A2})", ano1, ano2);
+                throw;
+            }
         }
 
-        return vm;
+        // ── Aplicar filtro de áreas en memoria (no afecta el caché) ──
+        if (!tieneFilAreas) return vmCompleto;
+
+        // Construir un nuevo ViewModel filtrado a partir de FilasCrudo del completo
+        var vmFiltrado = new ComparativoCostoLaboralViewModel
+        {
+            Ano1 = vmCompleto.Ano1, MesIniAno1 = vmCompleto.MesIniAno1, MesFinAno1 = vmCompleto.MesFinAno1,
+            Ano2 = vmCompleto.Ano2, MesIniAno2 = vmCompleto.MesIniAno2, MesFinAno2 = vmCompleto.MesFinAno2,
+            BasicoManual = vmCompleto.BasicoManual,
+            Tipo = vmCompleto.Tipo,
+        };
+        vmFiltrado.FilasCrudo.AddRange(
+            vmCompleto.FilasCrudo.Where(f => filtroAreas!.Contains(f.Area ?? "")));
+        ConstruirCuadros(vmFiltrado);
+        return vmFiltrado;
     }
 
     private static async Task<List<ComparativoCostoLaboralFilaDto>> EjecutarPorAnoAsync(
@@ -358,4 +386,64 @@ ORDER BY ANO, AREA";
 
     private static int GetInt(System.Data.Common.DbDataReader r, string col)
         => r[col] == DBNull.Value ? 0 : Convert.ToInt32(r[col]);
+
+    public async Task<IEnumerable<string>> ObtenerAreasAsync(
+        int ano1, int mesIniAno1, int mesFinAno1,
+        int ano2, int mesIniAno2, int mesFinAno2,
+        string tipo = "T")
+    {
+        tipo = (tipo ?? "T").Trim().ToUpperInvariant();
+        if (tipo != "O" && tipo != "E") tipo = "T";
+
+        const string sql = @"
+SELECT DISTINCT Y.DESC_GRAN_CCOSTO AS AREA
+FROM   PARAMPLA           X,
+       PLANILLA           P,
+       INGRE_PLA          I,
+       T_CONCEPTO         T,
+       PLA_COSTO          C,
+       V_CENTRO_DE_COSTOS Y
+WHERE  (   (X.ANO = :P_ANO1 AND X.MES BETWEEN :P_MI1 AND :P_MF1)
+        OR (X.ANO = :P_ANO2 AND X.MES BETWEEN :P_MI2 AND :P_MF2) )
+AND    X.TIPO_PLA     = 'N'
+AND    (:P_TIPO = 'T' OR X.C_EO = :P_TIPO)
+AND    P.NUM_PLA      = X.NUM_PLA
+AND    I.NUM_PLA      = P.NUM_PLA
+AND    I.C_CODIGO     = P.C_CODIGO
+AND    T.C_ID         = I.C_ID
+AND    T.C_EO         = I.C_EO
+AND    T.C_CONCEPTO   = I.C_CONCEPTO
+AND    T.C_CODRTPS    = '0121'
+AND    I.VALOR_CAL    > 0
+AND    C.NUM_PLA      = P.NUM_PLA
+AND    C.C_CODIGO     = P.C_CODIGO
+AND    Y.CCOSTO_DET   = C.C_COSTO
+AND    Y.DESC_GRAN_CCOSTO IS NOT NULL
+ORDER BY AREA";
+
+        var result = new List<string>();
+        try
+        {
+            await using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.BindByName  = true;
+            cmd.Parameters.Add("P_ANO1", OracleDbType.Int32).Value = ano1;
+            cmd.Parameters.Add("P_MI1",  OracleDbType.Int32).Value = mesIniAno1;
+            cmd.Parameters.Add("P_MF1",  OracleDbType.Int32).Value = mesFinAno1;
+            cmd.Parameters.Add("P_ANO2", OracleDbType.Int32).Value = ano2;
+            cmd.Parameters.Add("P_MI2",  OracleDbType.Int32).Value = mesIniAno2;
+            cmd.Parameters.Add("P_MF2",  OracleDbType.Int32).Value = mesFinAno2;
+            cmd.Parameters.Add("P_TIPO", OracleDbType.Varchar2).Value = tipo;
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                var area = r["AREA"]?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(area)) result.Add(area);
+            }
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "ObtenerAreasAsync ComparativoCostoLaboral falló"); }
+        return result;
+    }
 }

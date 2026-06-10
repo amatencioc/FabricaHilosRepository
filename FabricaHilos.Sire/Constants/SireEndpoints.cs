@@ -16,13 +16,13 @@ public static class SireEndpoints
     /// <summary>5.2 SIRE: periodos RVIE habilitados para el contribuyente (codLibro=140000 según manual v25 pág 24).</summary>
     public static string RviePeriodos => "/libros/rvierce/padron/web/omisos/140000/periodos";
 
-    /// <summary>5.18 SIRE: exportar propuesta RVIE (genera ticket). Según manual v25 pág 48.</summary>
+    /// <summary>5.18 SIRE: exportar propuesta RVIE (genera ticket). Según manual v25 pág 48. codLibro=140000.</summary>
     public static string RvieExportarPropuesta(string periodo, int codTipoArchivo = 0)
-        => $"/libros/rvie/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}";
+        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}&codLibro=140000";
 
-    /// <summary>5.8 SIRE: aceptar propuesta del RVIE. Según manual v25 pág 34.</summary>
+    /// <summary>5.8 SIRE: aceptar propuesta del RVIE. Según manual v25 pág 34. codLibro=140000.</summary>
     public static string RvieAceptar(string periodo)
-        => $"/libros/rvie/propuesta/web/propuesta/{periodo}/aceptapropuesta";
+        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/aceptapropuesta?codLibro=140000";
 
     /// <summary>5.9 SIRE: registrar preliminar RVIE. Según manual v25 pág 35.</summary>
     public static string RvieRegistrarPreliminar(string periodo)
@@ -36,13 +36,13 @@ public static class SireEndpoints
     /// <summary>5.2 SIRE: periodos RCE habilitados para el contribuyente (codLibro=080000).</summary>
     public static string RcePeriodos => "/libros/rvierce/padron/web/omisos/080000/periodos";
 
-    /// <summary>RCE: exportar propuesta RCE (genera ticket). Patrón equivalente a RVIE.</summary>
+    /// <summary>RCE: exportar propuesta RCE (genera ticket). Mismo path base que RVIE con codLibro=080000.</summary>
     public static string RceExportarPropuesta(string periodo, int codTipoArchivo = 0)
-        => $"/libros/rce/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}";
+        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}&codLibro=080000";
 
-    /// <summary>RCE: aceptar propuesta del RCE. Patrón equivalente a RVIE.</summary>
+    /// <summary>RCE: aceptar propuesta del RCE. Mismo path base que RVIE con codLibro=080000.</summary>
     public static string RceAceptar(string periodo)
-        => $"/libros/rce/propuesta/web/propuesta/{periodo}/aceptapropuesta";
+        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/aceptapropuesta?codLibro=080000";
 
     /// <summary>RCE: registrar preliminar RCE. Patrón equivalente a RVIE.</summary>
     public static string RceRegistrarPreliminar(string periodo)

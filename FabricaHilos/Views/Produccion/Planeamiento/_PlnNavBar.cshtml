@@ -11,15 +11,17 @@
     bool esCargaMaquinas   = ctrl == "Planeamiento" && act == "CargaMaquinas";
     bool esPendDespacho    = ctrl == "Planeamiento" && act == "PendientesDespacho";
     bool esProximosVencer  = ctrl == "Planeamiento" && act == "ProximosVencer";
+    bool esSeguimTinto     = ctrl == "Planeamiento" && act == "SeguimientoTintoreria";
 
     // Auto-refresh: segundos por vista (0 = sin auto-refresh)
     int autoRefreshSeg = act switch {
-        "PendientesDespacho" => 180,   // 3 min — más operacional (despachos en curso)
-        "Dashboard"          => 300,   // 5 min
-        "CargaMaquinas"      => 300,   // 5 min
-        "Alertas"            => 300,   // 5 min (JOB hourly + triggers inmediatos)
-        "ProximosVencer"     => 300,   // 5 min
-        _                    => 0
+        "PendientesDespacho"     => 180,
+        "Dashboard"              => 300,
+        "CargaMaquinas"          => 300,
+        "Alertas"                => 300,
+        "ProximosVencer"         => 300,
+        "SeguimientoTintoreria"  => 0,
+        _                        => 0
     };
 }
 <nav class="pln-navbar mb-3">
@@ -39,6 +41,15 @@
                 <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="pln-navbar-link">
                     <i class="bi bi-calendar-event-fill"></i>
                     <span>Próx. a Vencer</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoSeguimientoTintoreria)
+        {
+            <li class="pln-navbar-item @(esSeguimTinto ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="SeguimientoTintoreria" class="pln-navbar-link">
+                    <i class="bi bi-table"></i>
+                    <span>Seg. Prog. Tintorería</span>
                 </a>
             </li>
         }

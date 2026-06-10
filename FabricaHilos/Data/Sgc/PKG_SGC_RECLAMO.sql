@@ -1083,21 +1083,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
     PROCEDURE P_NOTIFICAR_CALIDAD (
         P_ID_RECLAMO    IN  NUMBER,
         P_USUARIO       IN  VARCHAR2,
-        P_DESTINATARIOS OUT VARCHAR2,
-        P_ASUNTO_MAIL   OUT VARCHAR2,
-        P_NOM_CLIENTE   OUT VARCHAR2,
+        P_DESTINATARIOS OUT VARCHAR2,     -- max 1000 bytes (lista de correos)
+        P_ASUNTO_MAIL   OUT VARCHAR2,     -- max 400 bytes (tamaño columna SGC_RECLAMO.ASUNTO)
+        P_NOM_CLIENTE   OUT VARCHAR2,     -- max 200 bytes (tamaño columna SGC_RECLAMO.NOM_CLIENTE)
         P_MSGERROR      OUT VARCHAR2
     ) IS
-        -- Variables internas con tamaño explícito >= tamaño de columna en BD
         V_ESTADO      VARCHAR2(2);
-        V_ASUNTO      VARCHAR2(400);   -- SGC_RECLAMO.ASUNTO     VARCHAR2(400)
-        V_CLIENTE     VARCHAR2(200);   -- SGC_RECLAMO.NOM_CLIENTE VARCHAR2(200)
-        V_DEST        VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_ASUNTO_MAIL VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_NOM_CLIENTE VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_MSGERROR    VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
+        V_ASUNTO      VARCHAR2(400);
+        V_CLIENTE     VARCHAR2(200);
+        V_DEST        VARCHAR2(4000);
+        V_ASUNTO_MAIL VARCHAR2(4000);
+        V_NOM_CLIENTE VARCHAR2(4000);
+        V_MSGERROR    VARCHAR2(4000);
     BEGIN
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] INICIO — reclamo=' || P_ID_RECLAMO || ' usuario=' || P_USUARIO);
 
         -- Inicializar parámetros OUT en NULL antes de cualquier operación
         P_MSGERROR      := NULL;
@@ -1106,7 +1104,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
         P_NOM_CLIENTE   := NULL;
 
         -- Paso 1: Leer datos del reclamo
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 1: Leyendo reclamo de BD');
         BEGIN
             SELECT ESTADO,
                    SUBSTR(NVL(ASUNTO,     ''), 1, 400),
@@ -1117,67 +1114,63 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 V_MSGERROR := 'El reclamo ' || P_ID_RECLAMO || ' no existe.';
-                DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] ERROR: ' || V_MSGERROR);
                 P_MSGERROR := V_MSGERROR;
                 RETURN;
         END;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 1 OK — estado=' || V_ESTADO || ' asunto(30)=' || SUBSTR(V_ASUNTO, 1, 30));
 
         -- Paso 2: Validar estado
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 2: Validando estado');
         IF V_ESTADO NOT IN ('01','02') THEN
             V_MSGERROR := SUBSTR('Solo se puede notificar a Calidad cuando el reclamo esta Abierto o En Revision. Estado actual: ' || V_ESTADO, 1, 4000);
-            DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] ERROR estado invalido: ' || V_MSGERROR);
             P_MSGERROR := V_MSGERROR;
             RETURN;
         END IF;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 2 OK');
 
         -- Paso 3: Determinar destinatarios
-        --   PRUEBAS: correo hardcodeado.
-        --   PRODUCCION: descomentar el bloque SELECT para obtenerlos de CS_USER.
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 3: Asignando destinatarios');
-        V_DEST := 'vmatencio@colonial.com.pe';
-        -- TODO PRODUCCION: reemplazar bloque anterior por:
-        -- BEGIN
-        --     SELECT SUBSTR(
-        --                (SELECT LISTAGG(NVL(U2.C_EMAIL, A2.EMAIL), ';')
-        --                 FROM   (SELECT DISTINCT U3.C_USER, NVL(U3.C_EMAIL, A3.EMAIL) AS EMAIL
-        --                         FROM   CS_USER U3
-        --                         LEFT   JOIN CS_ANEXO A3 ON U3.C_CODIGO = A3.C_CODIGO
-        --                         WHERE  U3.ACCESO_WEB LIKE 'Sgc%'
-        --                           AND  U3.ESTADO = '1'
-        --                           AND  NVL(U3.C_EMAIL, A3.EMAIL) IS NOT NULL) U2
-        --                         LEFT JOIN CS_ANEXO A2 ON 1=0
-        --                ), 1, 3900)
-        --     INTO V_DEST FROM DUAL;
-        -- EXCEPTION WHEN OTHERS THEN V_DEST := NULL; END;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 3 OK — destinatarios(50)=' || SUBSTR(NVL(V_DEST,'(null)'), 1, 50));
+        --   Obtener correos de usuarios con acceso SGC desde CS_USER y CS_ANEXO
+        --   Compatible con Oracle 10g (sin LISTAGG)
+        BEGIN
+            V_DEST := NULL;
+            FOR C_EMAILS IN (
+                SELECT DISTINCT NVL(U.C_EMAIL, A.EMAIL) AS EMAIL
+                FROM   CS_USER U
+                LEFT   JOIN CS_ANEXO A ON U.C_CODIGO = A.C_CODIGO
+                WHERE  U.ACCESO_WEB LIKE 'Sgc%'
+                  AND  U.ESTADO = '1'
+                  AND  NVL(U.C_EMAIL, A.EMAIL) IS NOT NULL
+                ORDER  BY EMAIL
+            )
+            LOOP
+                IF V_DEST IS NULL THEN
+                    V_DEST := C_EMAILS.EMAIL;
+                ELSE
+                    V_DEST := V_DEST || ';' || C_EMAILS.EMAIL;
+                END IF;
+            END LOOP;
+            -- Si no hay correos, dejar NULL
+            V_DEST := SUBSTR(NVL(V_DEST,''), 1, 4000);
+        EXCEPTION WHEN OTHERS THEN 
+            V_DEST := NULL;
+        END;
 
-        -- Paso 4: Actualizar FCH_NOTI_CALIDAD
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 4: Actualizando FCH_NOTI_CALIDAD');
+        -- Paso 4: Actualizar FCH_NOTI_CALIDAD y cambiar estado a "02" (En Revisión)
         UPDATE SGC_RECLAMO
-        SET    FCH_NOTI_CALIDAD = SYSDATE,
+        SET    ESTADO            = '02',
+               FCH_NOTI_CALIDAD = SYSDATE,
                A_MDUSER         = SUBSTR(NVL(P_USUARIO,'SYS'), 1, 30),
                A_MDFECHA        = SYSDATE
         WHERE  ID_RECLAMO = P_ID_RECLAMO;
         COMMIT;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 4 OK — filas=' || SQL%ROWCOUNT);
 
         -- Paso 5: Construir asunto y nombre cliente con SUBSTR al tamaño de columna
         --   ASUNTO max 400 → prefijo 30 chars + id 10 → total <= 440 → substr a 400
         --   NOM_CLIENTE max 200 → substr a 200
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 5: Construyendo valores de salida');
-        V_ASUNTO_MAIL := SUBSTR('Nuevo reclamo #' || TO_CHAR(P_ID_RECLAMO) || ' - ' || V_ASUNTO, 1, 400);
-        V_NOM_CLIENTE := SUBSTR(V_CLIENTE, 1, 200);
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 5 OK — asunto_mail(50)=' || SUBSTR(V_ASUNTO_MAIL,1,50));
+        V_ASUNTO_MAIL := SUBSTR('Nuevo reclamo #' || TO_CHAR(P_ID_RECLAMO) || ' - ' || V_ASUNTO, 1, 4000);
+        V_NOM_CLIENTE := SUBSTR(V_CLIENTE, 1, 4000);
 
         -- Paso 6: Asignar parámetros OUT (siempre desde variables intermedias ya truncadas)
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] Paso 6: Asignando parametros OUT');
         P_DESTINATARIOS := V_DEST;
         P_ASUNTO_MAIL   := V_ASUNTO_MAIL;
         P_NOM_CLIENTE   := V_NOM_CLIENTE;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] FIN OK');
 
     EXCEPTION
         WHEN OTHERS THEN
@@ -1187,7 +1180,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
             P_DESTINATARIOS := NULL;
             P_ASUNTO_MAIL   := NULL;
             P_NOM_CLIENTE   := NULL;
-            DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_CALIDAD] EXCEPTION: ' || SUBSTR(SQLERRM, 1, 200));
     END P_NOTIFICAR_CALIDAD;
 
     -- ── P_NOTIFICAR_VENDEDOR_APROBADO ──────────────────────────
@@ -1198,22 +1190,20 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
     PROCEDURE P_NOTIFICAR_VENDEDOR_APROBADO (
         P_ID_RECLAMO    IN  NUMBER,
         P_USUARIO       IN  VARCHAR2,
-        P_DESTINATARIO  OUT VARCHAR2,
-        P_ASUNTO_MAIL   OUT VARCHAR2,
-        P_NOM_CLIENTE   OUT VARCHAR2,
+        P_DESTINATARIO  OUT VARCHAR2,     -- max 300 bytes (email del vendedor)
+        P_ASUNTO_MAIL   OUT VARCHAR2,     -- max 400 bytes (tamaño columna SGC_RECLAMO.ASUNTO)
+        P_NOM_CLIENTE   OUT VARCHAR2,     -- max 200 bytes (tamaño columna SGC_RECLAMO.NOM_CLIENTE)
         P_MSGERROR      OUT VARCHAR2
     ) IS
-        -- Variables internas con tamaño explícito >= tamaño de columna en BD
         V_ESTADO      VARCHAR2(2);
-        V_USU_VEND    VARCHAR2(30);    -- SGC_RECLAMO.USU_VENDEDOR VARCHAR2(30)
-        V_ASUNTO      VARCHAR2(400);   -- SGC_RECLAMO.ASUNTO       VARCHAR2(400)
-        V_CLIENTE     VARCHAR2(200);   -- SGC_RECLAMO.NOM_CLIENTE  VARCHAR2(200)
-        V_DEST        VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_ASUNTO_MAIL VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_NOM_CLIENTE VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
-        V_MSGERROR    VARCHAR2(4000);  -- buffer igual al parámetro OUT de C#
+        V_USU_VEND    VARCHAR2(30);
+        V_ASUNTO      VARCHAR2(400);
+        V_CLIENTE     VARCHAR2(200);
+        V_DEST        VARCHAR2(4000);
+        V_ASUNTO_MAIL VARCHAR2(4000);
+        V_NOM_CLIENTE VARCHAR2(4000);
+        V_MSGERROR    VARCHAR2(4000);
     BEGIN
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] INICIO — reclamo=' || P_ID_RECLAMO || ' usuario=' || P_USUARIO);
 
         -- Inicializar parámetros OUT
         P_MSGERROR     := NULL;
@@ -1222,7 +1212,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
         P_NOM_CLIENTE  := NULL;
 
         -- Paso 1: Leer datos del reclamo
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 1: Leyendo reclamo de BD');
         BEGIN
             SELECT ESTADO,
                    SUBSTR(NVL(USU_VENDEDOR,''), 1, 30),
@@ -1234,59 +1223,44 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 V_MSGERROR := 'El reclamo ' || P_ID_RECLAMO || ' no existe.';
-                DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] ERROR: ' || V_MSGERROR);
                 P_MSGERROR := V_MSGERROR;
                 RETURN;
         END;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 1 OK — estado=' || V_ESTADO || ' vendedor=' || V_USU_VEND);
 
         -- Paso 2: Validar estado = '04' Aprobado
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 2: Validando estado');
         IF V_ESTADO != '04' THEN
             V_MSGERROR := SUBSTR('Solo se puede notificar al vendedor cuando el reclamo esta Aprobado. Estado actual: ' || V_ESTADO, 1, 4000);
-            DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] ERROR estado invalido: ' || V_MSGERROR);
             P_MSGERROR := V_MSGERROR;
             RETURN;
         END IF;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 2 OK');
 
         -- Paso 3: Determinar destinatario
-        --   PRUEBAS: correo hardcodeado.
-        --   PRODUCCION: descomentar la llamada a P_OBTENER_EMAIL_USUARIO.
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 3: Determinando destinatario (vendedor=' || V_USU_VEND || ')');
-        V_DEST := 'vmatencio@colonial.com.pe';
-        -- TODO PRODUCCION: reemplazar línea anterior por:
-        -- BEGIN
-        --     P_OBTENER_EMAIL_USUARIO(V_USU_VEND, V_DEST, V_MSGERROR);
-        --     IF V_MSGERROR IS NOT NULL THEN
-        --         DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] ADVERTENCIA email: ' || V_MSGERROR);
-        --         V_MSGERROR := NULL;   -- No fatal: continuamos sin correo
-        --     END IF;
-        -- END;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 3 OK — dest=' || NVL(V_DEST,'(null)'));
+        --   Obtener el email del usuario vendedor que abrió el reclamo
+        BEGIN
+            P_OBTENER_EMAIL_USUARIO(V_USU_VEND, V_DEST, V_MSGERROR);
+            IF V_MSGERROR IS NOT NULL THEN
+                V_MSGERROR := NULL;   -- No fatal: continuamos sin correo
+            END IF;
+        EXCEPTION WHEN OTHERS THEN
+            V_DEST := NULL;
+        END;
 
         -- Paso 4: Actualizar FCH_NOTI_VEND
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 4: Actualizando FCH_NOTI_VEND');
         UPDATE SGC_RECLAMO
         SET    FCH_NOTI_VEND = SYSDATE,
                A_MDUSER      = SUBSTR(NVL(P_USUARIO,'SYS'), 1, 30),
                A_MDFECHA     = SYSDATE
         WHERE  ID_RECLAMO = P_ID_RECLAMO;
         COMMIT;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 4 OK — filas=' || SQL%ROWCOUNT);
 
         -- Paso 5: Construir asunto y nombre cliente con SUBSTR al tamaño de columna
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 5: Construyendo valores de salida');
-        V_ASUNTO_MAIL := SUBSTR(V_ASUNTO, 1, 400);
-        V_NOM_CLIENTE := SUBSTR(V_CLIENTE, 1, 200);
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 5 OK');
+        V_ASUNTO_MAIL := SUBSTR(V_ASUNTO, 1, 4000);
+        V_NOM_CLIENTE := SUBSTR(V_CLIENTE, 1, 4000);
 
         -- Paso 6: Asignar parámetros OUT (siempre desde variables intermedias ya truncadas)
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] Paso 6: Asignando parametros OUT');
         P_DESTINATARIO := V_DEST;
         P_ASUNTO_MAIL  := V_ASUNTO_MAIL;
         P_NOM_CLIENTE  := V_NOM_CLIENTE;
-        DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] FIN OK');
 
     EXCEPTION
         WHEN OTHERS THEN
@@ -1296,7 +1270,6 @@ CREATE OR REPLACE PACKAGE BODY PKG_SGC_RECLAMO AS
             P_DESTINATARIO := NULL;
             P_ASUNTO_MAIL  := NULL;
             P_NOM_CLIENTE  := NULL;
-            DBMS_OUTPUT.PUT_LINE('[P_NOTIFICAR_VENDEDOR_APROBADO] EXCEPTION: ' || SUBSTR(SQLERRM, 1, 200));
     END P_NOTIFICAR_VENDEDOR_APROBADO;
 
     -- ── P_OBTENER_IMPRESION ────────────────────────────────────

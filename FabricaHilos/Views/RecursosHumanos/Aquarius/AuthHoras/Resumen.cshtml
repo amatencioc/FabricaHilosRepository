@@ -34,6 +34,8 @@
 
     .resumen-table th { white-space: nowrap; font-size: .78rem; }
     .resumen-table td { font-size: .82rem; vertical-align: middle; }
+    .resumen-table td, .resumen-table th { padding: .22rem .4rem; }
+    .resumen-table .col-sep { border-left: 2px solid rgba(0,0,0,.12) !important; }
 
     .form-control:focus, .form-select:focus {
         border-color: var(--aq);
@@ -146,17 +148,24 @@
                     <th class="text-center">Días HE</th>
                     <th class="text-center" style="color:var(--aq-warn)">Pendientes</th>
                     <th class="text-center" style="color:var(--aq-ok)">Autorizados</th>
-                    <th class="text-center" style="color:var(--aq-warn)">HEA</th>
-                    <th class="text-center" style="color:var(--aq-warn)">HEA Aut.</th>
-                    <th class="text-center" style="color:var(--aq)">HED</th>
-                    <th class="text-center" style="color:var(--aq)">HED Aut.</th>
-                    <th class="text-center" style="color:var(--aq-dk)">HEO</th>
-                    <th class="text-center" style="color:var(--aq-dk)">HEO Aut.</th>
+                    <th class="text-center col-sep" style="background:var(--aq-lt);color:var(--aq)">
+                        HE Simples<br/><span class="fw-normal" style="font-size:.7rem">Horas</span>
+                    </th>
+                    <th class="text-center" style="background:var(--aq-lt);color:var(--aq-dk)">
+                        HE Simples<br/><span class="fw-normal" style="font-size:.7rem">Aut.</span>
+                    </th>
+                    <th class="text-center col-sep" style="background:var(--aq-mid);color:var(--aq-dk)">
+                        HE Dobles<br/><span class="fw-normal" style="font-size:.7rem">Horas</span>
+                    </th>
+                    <th class="text-center" style="background:var(--aq-mid);color:var(--aq-dk)">
+                        HE Dobles<br/><span class="fw-normal" style="font-size:.7rem">Aut.</span>
+                    </th>
+                    <th class="col-motivo-res">Motivo / Observación</th>
                     <th>% Autorizado</th>
                 </tr>
             </thead>
             <tbody id="tbodyResumen">
-                <tr><td colspan="14" class="text-muted text-center p-4">Seleccione empresa, período y presione Consultar.</td></tr>
+                <tr><td colspan="13" class="text-muted text-center p-4">Seleccione empresa, período y presione Consultar.</td></tr>
             </tbody>
         </table>
     </div>
@@ -295,7 +304,7 @@ function renderTabla(filtro = '') {
     }
 
     if (!lista.length) {
-        tbody.innerHTML = `<tr><td colspan="14" class="text-muted text-center p-4">Sin resultados${filtro ? ' para "' + filtro + '"' : ''}.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" class="text-muted text-center p-4">Sin resultados${filtro ? ' para "' + filtro + '"' : ''}.</td></tr>`;
         return;
     }
 
@@ -303,6 +312,11 @@ function renderTabla(filtro = '') {
         const badgeEstado = estadoBadge(e.estado);
         const pct         = e.diasConHe > 0 ? Math.min(100, Math.round(e.diasAutorizados / e.diasConHe * 100)) : 0;
         const barFill     = `<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><span style="font-size:.75rem">${pct}%</span></div>`;
+
+        const partes = [];
+        if (e.obsHed) partes.push(`<span style="font-size:.78rem;word-break:break-word;">${escapeHtml(e.obsHed)}</span>`);
+        if (e.obsHeo) partes.push(`<span style="font-size:.78rem;word-break:break-word;">${escapeHtml(e.obsHeo)}</span>`);
+        const motivoFila = partes.length ? partes.join('<br/>') : '<span class="text-muted">—</span>';
 
         return `<tr>
             <td><span style="color:var(--aq-dk);font-weight:600">${e.numFotocheck || '—'}</span></td>
@@ -312,12 +326,11 @@ function renderTabla(filtro = '') {
             <td class="text-center">${e.diasConHe}</td>
             <td class="text-center">${e.diasPendientes > 0 ? `<span class="badge badge-pendiente">${e.diasPendientes}</span>` : '—'}</td>
             <td class="text-center">${e.diasAutorizados > 0 ? `<span class="badge badge-completo">${e.diasAutorizados}</span>` : '—'}</td>
-            <td class="text-center">${fmtMin(e.minHea)}</td>
-            <td class="text-center">${fmtMin(e.minHeaAut)}</td>
-            <td class="text-center">${fmtMin(e.minHed)}</td>
+            <td class="text-center col-sep">${fmtMin(e.minHed)}</td>
             <td class="text-center">${fmtMin(e.minHedAut)}</td>
-            <td class="text-center">${fmtMin(e.minHeo)}</td>
+            <td class="text-center col-sep">${fmtMin(e.minHeo)}</td>
             <td class="text-center">${fmtMin(e.minHeoAut)}</td>
+            <td>${motivoFila}</td>
             <td>${barFill}</td>
         </tr>`;
     }).join('');

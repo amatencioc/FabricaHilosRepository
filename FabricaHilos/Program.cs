@@ -22,11 +22,18 @@ using FabricaHilos.Services.CreditosCobranza;
 using FabricaHilos.Services.Facturacion;
 using FabricaHilos.Services.Sistemas;
 using FabricaHilos.Services.Produccion.Planeamiento;
+using FabricaHilos.Services.Sire;
 using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using FabricaHilos.Sire.Services.Mock;
 using FabricaHilos.Sire.Helpers;
+using System.Net;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FORZAR TLS 1.2+ PARA SUNAT SIRE: Requerido por APIs de seguridad SUNAT
+// ══════════════════════════════════════════════════════════════════════════════
+ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -175,10 +182,14 @@ builder.Services.AddScoped<IPlnSeguimientoService, PlnSeguimientoService>();
 builder.Services.AddScoped<IPlnAlertaService, PlnAlertaService>();
 builder.Services.AddScoped<IPlnKpiService, PlnKpiService>();
 builder.Services.AddScoped<IPlnParamService, PlnParamService>();
+builder.Services.AddScoped<IPlnReporteService, PlnReporteService>();
 
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SIRE LAZY INITIALIZATION: Defer SIRE services until Contabilidad module is accessed
+// ══════════════════════════════════════════════════════════════════════════════
 var sireOptions = builder.Configuration.GetSection("Sire").Get<SireOptions>() ?? new SireOptions();
 builder.Services.Configure<SireOptions>(builder.Configuration.GetSection("Sire"));
 
@@ -197,6 +208,20 @@ else
     builder.Services.AddHttpClient<ITusUploadService, TusUploadService>();
 }
 builder.Services.AddScoped<TicketPollingHelper>();
+builder.Services.AddSingleton<ILazySireInitializer, LazySireInitializer>();
+
+// NOTE: SireMonitoringService was previously registered as AddHostedService
+// It is now DEFERRED to lazy initialization - see LazySireInitializer
+// builder.Services.AddHostedService<FabricaHilos.Services.Sire.SireMonitoringService>();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HEALTH CHECKS: Monitoreo de integraciones externas (SUNAT SIRE)
+// Registrado pero sin ejecutarse automáticamente al startup
+// ══════════════════════════════════════════════════════════════════════════════
+builder.Services.AddHealthChecks()
+    .AddCheck<FabricaHilos.Health.SireHealthCheck>(
+        "sire",
+        tags: new[] { "sunat", "sire", "external" });
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;
@@ -298,6 +323,37 @@ app.UseSession();
 app.UseMiddleware<FabricaHilos.Middleware.NetworkAccessMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HEALTH CHECKS: Endpoints de monitoreo
+// ══════════════════════════════════════════════════════════════════════════════
+// Endpoint general: /health (todos los health checks registrados)
+app.MapHealthChecks("/health");
+
+// Endpoint específico SIRE: /health/sire (solo para monitoreo SUNAT)
+app.MapHealthChecks("/health/sire", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("sire"),
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            duration = report.TotalDuration.TotalMilliseconds,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                duration = e.Value.Duration.TotalMilliseconds,
+                data = e.Value.Data,
+                exception = e.Value.Exception?.Message
+            })
+        }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        await context.Response.WriteAsync(result);
+    }
+});
 
 app.MapControllerRoute(
     name: "default",

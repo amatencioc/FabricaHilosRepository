@@ -1,0 +1,682 @@
+@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion>
+
+@{
+    ViewData["Title"] = "Seguimiento de Programación de Tintorería";
+
+    var items    = Model.ToList();
+    var opc      = (string?)ViewBag.StOpc      ?? "POR FECHA DE ENTREGA";
+    var iniHtml  = (string?)ViewBag.StIniHtml  ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var finHtml  = (string?)ViewBag.StFinHtml  ?? DateTime.Today.AddDays(30).ToString("yyyy-MM-dd");
+    var fchIni   = (string?)ViewBag.StFchIni   ?? DateTime.Today.ToString("dd/MM/yyyy");
+    var fchFin   = (string?)ViewBag.StFchFin   ?? DateTime.Today.AddDays(30).ToString("dd/MM/yyyy");
+    long? numPed = (long?)ViewBag.StNumPed;
+    var cliente  = (string?)ViewBag.StCliente;
+    var asesor   = (string?)ViewBag.StAsesor;
+    var titulo   = (string?)ViewBag.StTitulo;
+    var fibra    = (string?)ViewBag.StFibra;
+    var proceso  = (string?)ViewBag.StProceso;
+
+    var filtroClientes = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroCliente>?)ViewBag.FiltroClientes ?? new();
+    var filtroAsesores = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroAsesor>?)ViewBag.FiltroAsesores   ?? new();
+    var filtroTitulos  = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroTitulo>?)ViewBag.FiltroTitulos     ?? new();
+    var filtroFibras   = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroFibra>?)ViewBag.FiltroFibras       ?? new();
+    var filtroProcesos = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroProceso>?)ViewBag.FiltroProcesos   ?? new();
+
+    var opciones = new[]
+    {
+        "POR FECHA DE ENTREGA",
+        "POR PEDIDO",
+        "POR FECHA DE PROGRAMA",
+        "POR FECHA DE TEÑIDO",
+        "POR FECHA APROB PEDIDO"
+    };
+
+    bool buscado = Context.Request.Query.Count > 0;
+
+    var conTenido   = buscado ? items.Count(x => x.FechaTenido.HasValue) : 0;
+    var conCc       = buscado ? items.Count(x => x.FechaCcalid.HasValue) : 0;
+    var despachados = buscado ? items.Count(x => x.CantDesp.HasValue && x.CantDesp > 0) : 0;
+    var retrasados  = buscado ? items.Count(x => x.EstaRetrasado) : 0;
+
+    bool hayCliente = !string.IsNullOrEmpty(cliente);
+    bool hayAsesor  = !string.IsNullOrEmpty(asesor);
+    bool hayTitulo  = !string.IsNullOrEmpty(titulo);
+    bool hayFibra   = !string.IsNullOrEmpty(fibra);
+    bool hayProceso = !string.IsNullOrEmpty(proceso);
+
+    var nombreCliente = hayCliente ? filtroClientes.FirstOrDefault(x => x.CodCliente == cliente)?.Nombre ?? cliente : null;
+    var nombreAsesor  = hayAsesor  ? filtroAsesores.FirstOrDefault(x => x.CodVende   == asesor )?.Nombre ?? asesor  : null;
+    var nombreTitulo  = hayTitulo  ? filtroTitulos .FirstOrDefault(x => x.Titulo     == titulo )?.Descripcion ?? titulo : null;
+    var nombreFibra   = hayFibra   ? filtroFibras  .FirstOrDefault(x => x.TipoFibra  == fibra  )?.Descripcion ?? fibra  : null;
+    var nombreProceso = hayProceso ? filtroProcesos.FirstOrDefault(x => x.Proceso    == proceso)?.Descripcion ?? proceso : null;
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
+<style>
+/* ════════════════════════════════════════════════════════════
+   PANEL PRINCIPAL
+   ════════════════════════════════════════════════════════════ */
+.spt-card {
+    border: 1px solid #d1d9e6;
+    border-radius: .6rem;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(15,41,71,.10);
+    margin-bottom: .6rem;
+}
+.spt-card + .spt-card {
+    margin-top: .6rem;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.spt-header {
+    background: linear-gradient(135deg, #0f2947 0%, #1a4971 60%, #1e5a8a 100%);
+    padding: .6rem 1.1rem;
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+}
+.spt-header-title {
+    font-size: .82rem; font-weight: 800; letter-spacing: .07em;
+    text-transform: uppercase; color: #e2f0ff; white-space: nowrap;
+}
+.spt-sep { width: 1px; height: 1rem; background: rgba(255,255,255,.22); flex-shrink: 0; }
+.spt-kpi {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 999px; padding: .2rem .7rem; font-size: .71rem; color: #cde4ff; white-space: nowrap;
+}
+.spt-kpi b { font-size: .82rem; color: #fff; }
+
+/* ── Bloque de filtros ───────────────────────────────────────── */
+.spt-filters {
+    background: #f4f7fb;
+    border-bottom: 1px solid #d1d9e6;
+    padding: .75rem 1rem .6rem;
+}
+.spt-filters-row1 {
+    display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
+    padding-bottom: .55rem;
+    border-bottom: 1px dashed #d1d9e6;
+    margin-bottom: .55rem;
+}
+.spt-filters-row2 {
+    display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
+}
+.spt-fld { display: flex; flex-direction: column; gap: .18rem; }
+.spt-label {
+    font-size: .69rem; font-weight: 700; color: #4a6080;
+    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+    display: flex; align-items: center; gap: .25rem;
+}
+.spt-label i { font-size: .75rem; opacity: .7; }
+.spt-ctrl {
+    font-size: .78rem !important;
+    border-radius: .32rem !important;
+    border: 1px solid #bfcad8 !important;
+    background: #fff !important;
+    color: #1e2d3d !important;
+    padding: .28rem .55rem !important;
+    height: auto !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04) !important;
+    transition: border-color .15s, box-shadow .15s;
+}
+.spt-ctrl:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important;
+    outline: none !important;
+}
+.spt-btn-buscar {
+    background: #1a4971; color: #fff; border: none;
+    border-radius: .35rem; font-size: .78rem; font-weight: 600;
+    padding: .32rem .9rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: .3rem;
+    transition: background .15s, transform .1s;
+    box-shadow: 0 2px 4px rgba(0,0,0,.15);
+}
+.spt-btn-buscar:hover  { background: #0f2947; transform: translateY(-1px); }
+.spt-btn-buscar:active { transform: translateY(0); }
+.spt-btn-limpiar {
+    background: #fff; color: #64748b; border: 1px solid #bfcad8;
+    border-radius: .35rem; font-size: .78rem; font-weight: 500;
+    padding: .32rem .8rem; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: .3rem;
+    transition: border-color .15s, color .15s;
+}
+.spt-btn-limpiar:hover { border-color: #94a3b8; color: #1e2d3d; }
+
+/* ── Chips de filtros activos ──────────────────────────────── */
+.spt-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem 1rem; background: #edf2f7; border-bottom: 1px solid #d1d9e6; }
+.spt-chip {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe;
+    border-radius: 999px; padding: .12rem .55rem; font-size: .68rem; font-weight: 600;
+}
+.spt-chip-label { color: #64748b; font-weight: 500; }
+
+/* ── Select2 ──────────────────────────────────────────────── */
+.select2-container .select2-selection--single {
+    height: auto !important; min-height: 30px !important;
+    background: #fff !important; border: 1px solid #bfcad8 !important;
+    border-radius: .32rem !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04) !important;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    font-size: .63rem !important; color: #1e2d3d !important;
+    font-weight: 500; padding: .25rem .5rem !important;
+    line-height: 1.5 !important;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__placeholder {
+    color: #94a3b8 !important; font-style: italic; font-size: .63rem !important;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__arrow {
+    height: 30px !important;
+}
+.select2-container--bootstrap-5.select2-container--open .select2-selection--single {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important;
+}
+.select2-container--bootstrap-5 .select2-dropdown {
+    border: 1px solid #d1d9e6; border-radius: .35rem;
+    box-shadow: 0 6px 18px rgba(0,0,0,.10);
+    font-size: .63rem !important;
+}
+.select2-container--bootstrap-5 .select2-search__field {
+    font-size: .63rem !important; border: 1px solid #d1d9e6 !important;
+    border-radius: .25rem !important; padding: .22rem .45rem !important;
+    background: #f8fafc; color: #334155;
+}
+.select2-container--bootstrap-5 .select2-results__option {
+    font-size: .63rem !important; padding: .22rem .6rem !important;
+    color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.4 !important; letter-spacing: .005em;
+    transition: background .1s;
+}
+.select2-container--bootstrap-5 .select2-results__option--highlighted[aria-selected=false] {
+    background: #eff6ff !important; color: #2563eb !important;
+}
+.select2-container--bootstrap-5 .select2-results__option[aria-selected=true] {
+    background: #dbeafe !important; color: #1e3a8a !important; font-weight: 600;
+}
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__clear {
+    color: #94a3b8; font-size: .85rem; line-height: 1.5;
+}
+.select2-container--bootstrap-5 .select2-results > .select2-results__options {
+    max-height: 200px !important;
+    font-size: .63rem !important;
+}
+
+/* ── Tabla ─────────────────────────────────────────────────── */
+.spt-table-wrap {
+    overflow-x: auto;
+    max-height: calc(100vh - 310px);
+    overflow-y: auto;
+    position: relative;
+}
+.spt-table-wrap::-webkit-scrollbar { height: 7px; width: 7px; }
+.spt-table-wrap::-webkit-scrollbar-track { background: #f1f5f9; }
+.spt-table-wrap::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+.spt-table-wrap::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+#stTable {
+    table-layout: auto; width: 100%; min-width: 3000px;
+    border-collapse: separate; border-spacing: 0;
+}
+#stTable thead th {
+    font-size: .64rem; font-weight: 700; color: #334155;
+    text-transform: uppercase; letter-spacing: .04em;
+    background: #e8eef6; padding: .38rem .45rem;
+    border-bottom: 2px solid #bfcad8;
+    white-space: nowrap; position: sticky; top: 0; z-index: 10;
+    cursor: default; user-select: none;
+}
+#stTable thead th:hover { background: #dce4f0; }
+#stTable thead .grp-id   th { border-top: 3px solid #3b82f6; }
+#stTable thead .grp-base th { border-top: 3px solid #6366f1; }
+#stTable thead .grp-etap th { border-top: 3px solid #10b981; }
+#stTable thead .grp-qty  th { border-top: 3px solid #f59e0b; }
+#stTable thead .grp-ext  th { border-top: 3px solid #8b5cf6; }
+
+#stTable tbody td {
+    font-size: .73rem; vertical-align: middle;
+    padding: .28rem .45rem;
+    border-bottom: 1px solid #edf2f7;
+}
+#stTable tbody tr:nth-child(even) td { background: #f8fafc; }
+#stTable tbody tr:nth-child(odd)  td { background: #fff; }
+#stTable tbody tr:hover td { background: #eff6ff !important; }
+#stTable tbody tr.row-retraso:nth-child(even) td { background: #fef2f2 !important; }
+#stTable tbody tr.row-retraso:nth-child(odd)  td { background: #fff5f5 !important; }
+#stTable tbody tr.row-retraso:hover td { background: #fee2e2 !important; }
+
+/* ── Separadores de grupo en la tabla ─────────────────────── */
+.col-sep { border-left: 2px solid #d1d9e6 !important; }
+
+/* ── Badges ───────────────────────────────────────────────── */
+.eb {
+    display: inline-flex; align-items: center; gap: .2rem;
+    border-radius: .22rem; padding: .08rem .3rem;
+    font-size: .63rem; font-weight: 600; white-space: nowrap;
+}
+.eb-ok   { background: #d1fae5; color: #065f46; }
+.eb-sin  { background: #f1f5f9; color: #94a3b8; }
+.eb-proc { background: #dbeafe; color: #1e40af; }
+.eb-est  { background: #e0e7ff; color: #3730a3; }
+
+.dias-ok  { color: #059669; font-weight: 700; }
+.dias-ret { color: #dc2626; font-weight: 700; }
+
+/* ── Footer tabla ─────────────────────────────────────────── */
+.spt-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .45rem .9rem; background: #f4f7fb;
+    border-top: 1px solid #d1d9e6; font-size: .71rem; color: #64748b;
+    flex-wrap: wrap; gap: .4rem;
+}
+.spt-legend { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Seguimiento Tintorería</li>
+}
+
+@await Html.PartialAsync("_PlnNavBar")
+
+<div class="container-fluid py-3">
+<div class="spt-card">
+
+    @* ── Header ──────────────────────────────────────────────────────── *@
+    <div class="spt-header">
+        <i class="bi bi-grid-3x3-gap-fill" style="color:#93c5fd;font-size:1rem;flex-shrink:0;"></i>
+        <span class="spt-header-title">Seguimiento Programación Tintorería</span>
+        <span class="spt-sep"></span>
+        @if (buscado && items.Any())
+        {
+            <span class="spt-kpi"><i class="bi bi-list-check"></i><b>@items.Count</b> registros</span>
+            <span class="spt-kpi" style="--c:#6ee7b7"><i class="bi bi-droplet-half" style="color:#6ee7b7"></i><b style="color:#6ee7b7">@conTenido</b> teñidos</span>
+            <span class="spt-kpi"><i class="bi bi-patch-check" style="color:#a5f3fc"></i><b style="color:#a5f3fc">@conCc</b> CC ok</span>
+            <span class="spt-kpi"><i class="bi bi-truck" style="color:#fcd34d"></i><b style="color:#fcd34d">@despachados</b> desp.</span>
+            @if (retrasados > 0)
+            {
+                <span class="spt-kpi"><i class="bi bi-exclamation-triangle-fill" style="color:#f87171"></i><b style="color:#f87171">@retrasados</b> retraso</span>
+            }
+            <span class="ms-auto" style="font-size:.68rem;color:rgba(200,225,255,.7);white-space:nowrap;">
+                <i class="bi bi-funnel me-1"></i>@opc
+                @if (opc == "POR PEDIDO")
+                { <span> · Ped. <b style="color:#fff">@numPed</b></span> }
+                else
+                { <span> · <b style="color:#fff">@fchIni</b> → <b style="color:#fff">@fchFin</b></span> }
+            </span>
+        }
+        else if (!buscado)
+        {
+            <span style="font-size:.75rem;color:rgba(200,225,255,.7);">Aplica los filtros para consultar los datos.</span>
+        }
+    </div>
+
+    @* ── Filtros ──────────────────────────────────────────────────────── *@
+    <div class="spt-filters">
+        <form method="get" asp-action="SeguimientoTintoreria" id="stForm">
+
+            @* Fila 1: modo de búsqueda *@
+            <div class="spt-filters-row1">
+                <div class="spt-fld">
+                    <label class="spt-label" for="stOpc"><i class="bi bi-search"></i>Buscar por</label>
+                    <select class="spt-ctrl" name="opc" id="stOpc" style="min-width:200px;">
+                        @foreach (var op in opciones)
+                        {
+                            <option value="@op" selected="@(opc == op ? "selected" : null)">@op</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="spt-fld" id="stGrpFechas">
+                    <label class="spt-label" for="stFchIni"><i class="bi bi-calendar-event"></i>Fecha inicio</label>
+                    <input type="date" class="spt-ctrl" name="fchIni" id="stFchIni" value="@iniHtml" style="min-width:135px;" />
+                </div>
+                <div class="spt-fld" id="stGrpFechaFin">
+                    <label class="spt-label" for="stFchFin"><i class="bi bi-calendar-check"></i>Fecha fin</label>
+                    <input type="date" class="spt-ctrl" name="fchFin" id="stFchFin" value="@finHtml" style="min-width:135px;" />
+                </div>
+
+                <div class="spt-fld" id="stGrpNumPed" style="display:none;">
+                    <label class="spt-label" for="stNumPed"><i class="bi bi-hash"></i>N.° Pedido</label>
+                    <input type="number" class="spt-ctrl" name="numPed" id="stNumPed"
+                           value="@numPed" style="width:125px;" placeholder="Ej. 88797" />
+                </div>
+
+                <div class="spt-fld">
+                    <label class="spt-label" style="visibility:hidden;">Acción</label>
+                    <div style="display:flex;gap:.4rem;align-items:center;">
+                        <button type="submit" class="spt-btn-buscar">
+                            <i class="bi bi-search"></i> Buscar
+                        </button>
+                        <a asp-action="SeguimientoTintoreria" class="spt-btn-limpiar">
+                            <i class="bi bi-x-circle"></i> Limpiar
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            @* Fila 2: filtros adicionales *@
+            <div class="spt-filters-row2">
+                <div class="spt-fld">
+                    <label class="spt-label" for="stCliente"><i class="bi bi-building"></i>Cliente</label>
+                    <select class="spt-ctrl" name="cliente" id="stCliente" style="min-width:260px;">
+                        <option value="">— Todos —</option>
+                        @foreach (var c in filtroClientes)
+                        {
+                            <option value="@c.CodCliente" selected="@(cliente == c.CodCliente ? "selected" : null)">@c.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="spt-fld">
+                    <label class="spt-label" for="stAsesor"><i class="bi bi-person-badge"></i>Asesor</label>
+                    <select class="spt-ctrl" name="asesor" id="stAsesor" style="min-width:210px;">
+                        <option value="">— Todos —</option>
+                        @foreach (var a in filtroAsesores)
+                        {
+                            <option value="@a.CodVende" selected="@(asesor == a.CodVende ? "selected" : null)">@a.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div class="spt-fld">
+                    <label class="spt-label" for="stTitulo"><i class="bi bi-tag"></i>Título</label>
+                    <select class="spt-ctrl" name="titulo" id="stTitulo" style="min-width:180px;">
+                        <option value="">— Todos —</option>
+                        @foreach (var t in filtroTitulos)
+                        {
+                            <option value="@t.Titulo" selected="@(titulo == t.Titulo ? "selected" : null)">@t.Descripcion</option>
+                        }
+                    </select>
+                </div>
+                <div class="spt-fld">
+                    <label class="spt-label" for="stFibra"><i class="bi bi-layers"></i>Fibra</label>
+                    <select class="spt-ctrl" name="fibra" id="stFibra" style="min-width:190px;">
+                        <option value="">— Todas —</option>
+                        @foreach (var f in filtroFibras)
+                        {
+                            <option value="@f.TipoFibra" selected="@(fibra == f.TipoFibra ? "selected" : null)">@f.Descripcion</option>
+                        }
+                    </select>
+                </div>
+                <div class="spt-fld">
+                    <label class="spt-label" for="stProceso"><i class="bi bi-cpu"></i>Proceso</label>
+                    <select class="spt-ctrl" name="proceso" id="stProceso" style="min-width:220px;">
+                        <option value="">— Todos —</option>
+                        @foreach (var p in filtroProcesos)
+                        {
+                            <option value="@p.Proceso" selected="@(proceso == p.Proceso ? "selected" : null)">@p.Descripcion</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    @* ── Chips de filtros activos ─────────────────────────────────────── *@
+    @if (buscado && (hayCliente || hayAsesor || hayTitulo || hayFibra || hayProceso))
+    {
+        <div class="spt-chips">
+            <span style="font-size:.68rem;color:#64748b;font-weight:600;margin-right:.2rem;">Filtros:</span>
+            @if (hayCliente) { <span class="spt-chip"><span class="spt-chip-label">Cliente</span> @nombreCliente</span> }
+            @if (hayAsesor)  { <span class="spt-chip"><span class="spt-chip-label">Asesor</span>  @nombreAsesor</span>  }
+            @if (hayTitulo)  { <span class="spt-chip"><span class="spt-chip-label">Título</span>  @nombreTitulo</span>  }
+            @if (hayFibra)   { <span class="spt-chip"><span class="spt-chip-label">Fibra</span>   @nombreFibra</span>   }
+            @if (hayProceso) { <span class="spt-chip"><span class="spt-chip-label">Proceso</span> @nombreProceso</span> }
+        </div>
+    }
+
+</div>@* /spt-card filtros *@
+
+<div class="spt-card">
+    @* ── Resultados ──────────────────────────────────────────────────── *@
+    @if (!buscado)
+    {
+        <div style="padding:2rem 1.5rem;text-align:center;color:#64748b;">
+            <i class="bi bi-funnel" style="font-size:2.2rem;opacity:.35;display:block;margin-bottom:.5rem;"></i>
+            <div style="font-size:.88rem;font-weight:600;">Aplica los filtros para consultar los datos</div>
+            <div style="font-size:.78rem;opacity:.75;margin-top:.2rem;">Selecciona una opción de búsqueda y pulsa <strong>Buscar</strong>.</div>
+        </div>
+    }
+    else if (!items.Any())
+    {
+        <div style="padding:2rem 1.5rem;text-align:center;color:#64748b;">
+            <i class="bi bi-search" style="font-size:2rem;opacity:.35;display:block;margin-bottom:.5rem;"></i>
+            <div style="font-size:.88rem;font-weight:600;">Sin resultados</div>
+            <div style="font-size:.78rem;opacity:.75;margin-top:.2rem;">No se encontraron registros para los filtros seleccionados.</div>
+        </div>
+    }
+    else
+    {
+        <div class="spt-table-wrap">
+            <table id="stTable">
+                <thead>
+                    <tr>
+                        @* Grupo Identificación *@
+                        <th>Partida</th>
+                        <th>Est.Prog</th>
+                        <th>Cliente</th>
+                        <th>Material</th>
+                        @* Grupo Base *@
+                        <th class="col-sep">F.Pedido</th>
+                        <th>F.Entrega</th>
+                        <th>F.Partida</th>
+                        <th style="text-align:right">P.Neto</th>
+                        <th>RMC</th>
+                        <th>Nro.RMC</th>
+                        <th>Ref.</th>
+                        <th>Proceso</th>
+                        @* Grupo Etapas producción *@
+                        <th class="col-sep">F.Teñido</th>
+                        <th>F.CC</th>
+                        <th>F.Encono</th>
+                        <th>F.Secado</th>
+                        <th>F.Receta</th>
+                        <th>F.Revisado</th>
+                        <th>F.Ing</th>
+                        @* Grupo Cantidades *@
+                        <th class="col-sep" style="text-align:right">Cant.Desp</th>
+                        <th>Título</th>
+                        <th style="text-align:right">Cant.Prog</th>
+                        <th>Lote</th>
+                        <th>Tit.Texto</th>
+                        <th>F.Prog</th>
+                        <th>P.Matiz</th>
+                        <th>Est.Eval</th>
+                        <th>Defecto</th>
+                        <th>Resultado</th>
+                        <th style="text-align:center">Días.Atraso</th>
+                        @* Grupo Extras *@
+                        <th class="col-sep">F.Ent.Cono1</th>
+                        <th>F.Val.Rec</th>
+                        <th>F.Est.Cono1</th>
+                        <th>F.Ent.Tin</th>
+                        <th>F.Est.Tenido</th>
+                        <th>F.Progval</th>
+                        <th>Lab.Val</th>
+                        <th>F.Ult.Ing.Almpi</th>
+                        <th>Maq.Prog</th>
+                        <th>Aca.Mad</th>
+                        <th>F.Secado.Mad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in items)
+                    {
+                        <tr class="@(row.EstaRetrasado ? "row-retraso" : "")">
+                            @* Identificación *@
+                            <td style="white-space:nowrap;font-weight:600;color:#1e3a5f;">@(row.Partida ?? "—")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(row.EstadoProg))
+                                { <span class="eb eb-est">@row.EstadoProg</span> }
+                                else { <span style="color:#94a3b8">—</span> }
+                            </td>
+                            <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@row.Cliente">
+                                @(row.Cliente ?? "—")
+                            </td>
+                            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@row.Material">
+                                @(row.Material ?? "—")
+                            </td>
+                            @* Base *@
+                            <td class="col-sep" style="white-space:nowrap;">
+                                @(row.FchPedido.HasValue ? row.FchPedido.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;" class="@row.SemaforoClass">
+                                @(row.FchEntrega.HasValue ? row.FchEntrega.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.FchPartida ?? "—")</td>
+                            <td style="text-align:right;white-space:nowrap;">
+                                @(row.PesoNeto.HasValue ? row.PesoNeto.Value.ToString("N2") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.Rmc ?? "—")</td>
+                            <td style="white-space:nowrap;" title="@row.NroRmc">@(row.NroRmc ?? "—")</td>
+                            <td style="white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis;" title="@row.Referencia">
+                                @(row.Referencia ?? "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (!string.IsNullOrEmpty(row.Proceso))
+                                { <span class="eb eb-proc">@row.Proceso</span> }
+                                else { <span style="color:#94a3b8">—</span> }
+                            </td>
+                            @* Etapas *@
+                            <td class="col-sep" style="white-space:nowrap;">
+                                @if (row.FechaTenido.HasValue)
+                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaTenido.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FechaCcalid.HasValue)
+                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaCcalid.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FechaEncon.HasValue)
+                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaEncon.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FechaSecado.HasValue)
+                                { <span class="eb eb-ok">@row.FechaSecado.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FechaReceta.HasValue)
+                                { <span class="eb eb-ok">@row.FechaReceta.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FchRevisado.HasValue)
+                                { <span class="eb eb-ok">@row.FchRevisado.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @if (row.FechaIng.HasValue)
+                                { <span class="eb eb-ok">@row.FechaIng.Value.ToString("dd/MM/yy")</span> }
+                                else { <span class="eb eb-sin">—</span> }
+                            </td>
+                            @* Cantidades y resto *@
+                            <td class="col-sep" style="text-align:right;white-space:nowrap;">
+                                @(row.CantDesp.HasValue && row.CantDesp > 0 ? row.CantDesp.Value.ToString("N2") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.Titulo ?? "—")</td>
+                            <td style="text-align:right;white-space:nowrap;">
+                                @(row.CantProg.HasValue ? row.CantProg.Value.ToString("N2") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.Lote ?? "—")</td>
+                            <td style="white-space:nowrap;">@(row.TituloTexto ?? "—")</td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchProg.HasValue ? row.FchProg.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.PartMatiz ?? "—")</td>
+                            <td style="white-space:nowrap;">@(row.EstEvaluacion ?? "—")</td>
+                            <td style="white-space:nowrap;">@(row.Defecto ?? "—")</td>
+                            <td style="white-space:nowrap;">@(row.Resultado ?? "—")</td>
+                            <td style="text-align:center;white-space:nowrap;">
+                                @if (row.DiasRetraso.HasValue)
+                                {
+                                    <span class="@(row.EstaRetrasado ? "dias-ret" : "dias-ok")"
+                                          title="@(row.EstaRetrasado ? "Retrasado" : "En plazo")">
+                                        @row.DiasRetraso.Value.ToString("N0") d
+                                    </span>
+                                }
+                                else { <span style="color:#94a3b8">—</span> }
+                            </td>
+                            @* Extras *@
+                            <td class="col-sep" style="white-space:nowrap;">
+                                @(row.FchEntregaConoUno.HasValue ? row.FchEntregaConoUno.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchValRec.HasValue ? row.FchValRec.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchEstimaConoUno.HasValue ? row.FchEstimaConoUno.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchEntTin.HasValue ? row.FchEntTin.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchEstimaTenido.HasValue ? row.FchEstimaTenido.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchProgval.HasValue ? row.FchProgval.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.LaboVal ?? "—")</td>
+                            <td style="white-space:nowrap;">
+                                @(row.FchUltIngAlmpi.HasValue ? row.FchUltIngAlmpi.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td style="white-space:nowrap;">@(row.MaqProg ?? "—")</td>
+                            <td style="white-space:nowrap;">@(row.AcaMad ?? "—")</td>
+                            <td style="white-space:nowrap;">
+                                @(row.FechaSecadoMad.HasValue ? row.FechaSecadoMad.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="spt-footer">
+            <div>
+                <i class="bi bi-table me-1"></i>
+                <strong>@items.Count</strong> registros encontrados
+            </div>
+            <div class="spt-legend">
+                <span class="eb eb-ok"><i class="bi bi-check-lg"></i> Etapa completada</span>
+                <span class="eb eb-sin">— Sin fecha</span>
+                <span class="dias-ret" style="font-size:.68rem;">■</span><span style="font-size:.68rem;">Retrasado</span>
+                <span class="dias-ok"  style="font-size:.68rem;">■</span><span style="font-size:.68rem;">En plazo</span>
+            </div>
+        </div>
+    }
+
+</div>@* /spt-card tabla *@
+</div>@* /container-fluid *@
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+// ── Toggle fecha/pedido ──────────────────────────────────────────────────────
+const stOpc = document.getElementById('stOpc');
+function toggleCampos() {
+    const esPedido = stOpc.value === 'POR PEDIDO';
+    document.getElementById('stGrpFechas').style.display    = esPedido ? 'none' : '';
+    document.getElementById('stGrpFechaFin').style.display  = esPedido ? 'none' : '';
+    document.getElementById('stGrpNumPed').style.display    = esPedido ? '' : 'none';
+}
+stOpc.addEventListener('change', toggleCampos);
+toggleCampos();
+
+// ── Select2 ─────────────────────────────────────────────────────────────────
+$(function () {
+    const s2 = { theme: 'bootstrap-5', allowClear: true, dropdownAutoWidth: true, width: 'style' };
+    $('#stCliente').select2({ ...s2, placeholder: '— Todos —' });
+    $('#stAsesor' ).select2({ ...s2, placeholder: '— Todos —' });
+    $('#stTitulo' ).select2({ ...s2, placeholder: '— Todos —' });
+    $('#stFibra'  ).select2({ ...s2, placeholder: '— Todas —' });
+    $('#stProceso').select2({ ...s2, placeholder: '— Todos —' });
+});
+</script>
+}

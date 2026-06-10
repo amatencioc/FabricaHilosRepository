@@ -15,19 +15,22 @@ public class PlaneamientoController : OracleBaseController
     private readonly IPlnAlertaService       _alerta;
     private readonly IPlnKpiService          _kpi;
     private readonly IPlnParamService        _param;
+    private readonly IPlnReporteService      _reporte;
 
     public PlaneamientoController(
         IMenuService           menuService,
         IPlnSeguimientoService seguimiento,
         IPlnAlertaService      alerta,
         IPlnKpiService         kpi,
-        IPlnParamService       param)
+        IPlnParamService       param,
+        IPlnReporteService     reporte)
     {
         _menuService = menuService;
         _seguimiento = seguimiento;
         _alerta      = alerta;
         _kpi         = kpi;
         _param       = param;
+        _reporte     = reporte;
     }
 
     // GET /Planeamiento  — redirige directamente al Dashboard (Index es redundante)
@@ -57,19 +60,30 @@ public class PlaneamientoController : OracleBaseController
             modulos.Add(new SgcModuloDto
             {
                 Nombre      = "Próximos a Vencer",
-                Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima. Identifica pedidos en riesgo antes de que venzan.",
+                Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima.",
                 Icono       = "bi-calendar-event-fill",
                 ColorClase  = "text-warning",
                 Controller  = "Planeamiento",
                 Action      = "ProximosVencer"
             });
 
+        if (menus.PlaneamientoSeguimientoTintoreria)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Seguimiento de Programación de Tintorería",
+                Descripcion = "Reporte de producción de tintorería por fecha de entrega, programa, teñido, pedido o aprobación.",
+                Icono       = "bi-table",
+                ColorClase  = "text-primary",
+                Controller  = "Planeamiento",
+                Action      = "SeguimientoTintoreria"
+            });
+
         if (menus.PlaneamientoCargaMaquinas)
             modulos.Add(new SgcModuloDto
             {
                 Nombre      = "Carga de Máquinas",
-                Descripcion = "Capacidad vs. carga asignada por máquina en los próximos 30 días.",
-                Icono       = "bi-speedometer",
+                Descripcion = "Planificación y carga por máquina",
+                Icono       = "bi-gear-wide-connected",
                 ColorClase  = "text-warning",
                 Controller  = "Planeamiento",
                 Action      = "CargaMaquinas"
@@ -235,18 +249,20 @@ public class PlaneamientoController : OracleBaseController
     // GET /Planeamiento/CargaMaquinas
     public async Task<IActionResult> CargaMaquinas()
     {
-        var tCompromisos = _kpi.GetMaquinasCompromisoAsync();
-        var tTt          = _kpi.GetEstadoMaquinasTintoreriaAsync();
-        var tSec         = _kpi.GetEstadoMaquinasSecadoAsync();
-        var tOtras       = _kpi.GetEstadoMaquinasOtrasAsync();
-        var tHil         = _kpi.GetResumenHilanderiaAsync();
-        await Task.WhenAll(tCompromisos, tTt, tSec, tOtras, tHil);
+        var tCompromisos  = _kpi.GetMaquinasCompromisoAsync();
+        var tTt           = _kpi.GetEstadoMaquinasTintoreriaAsync();
+        var tSec          = _kpi.GetEstadoMaquinasSecadoAsync();
+        var tOtras        = _kpi.GetEstadoMaquinasOtrasAsync();
+        var tHil          = _kpi.GetResumenHilanderiaAsync();
+        var tCargaDiaria  = _kpi.GetCargaMaquinasAsync();
+        await Task.WhenAll(tCompromisos, tTt, tSec, tOtras, tHil, tCargaDiaria);
 
         ViewBag.Compromisos       = tCompromisos.Result.ToList();
         ViewBag.EstadoTintoreria  = tTt.Result.ToList();
         ViewBag.EstadoSecado      = tSec.Result.ToList();
         ViewBag.EstadoOtras       = tOtras.Result.ToList();
         ViewBag.EstadoHilanderia  = tHil.Result.ToList();
+        ViewBag.CargaDiaria       = tCargaDiaria.Result.ToList();
         return View();
     }
 
@@ -298,6 +314,77 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.PvDiasAtras = diasAtras;
 
         return View(proximos);
+    }
+
+    // GET /Planeamiento/SeguimientoTintoreria
+    public async Task<IActionResult> SeguimientoTintoreria(
+        string? opc      = null,
+        string? fchIni   = null,
+        string? fchFin   = null,
+        long?   numPed   = null,
+        string? cliente  = null,
+        string? asesor   = null,
+        string? titulo   = null,
+        string? fibra    = null,
+        string? proceso  = null)
+    {
+        var ct      = HttpContext.RequestAborted;
+        var hoy     = DateTime.Today;
+        var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+
+        opc ??= "POR FECHA DE ENTREGA";
+
+        var ini = DateTime.TryParseExact(fchIni, fmts, culture,
+                      System.Globalization.DateTimeStyles.None, out var d1) ? d1 : hoy;
+        var fin = DateTime.TryParseExact(fchFin, fmts, culture,
+                      System.Globalization.DateTimeStyles.None, out var d2) ? d2 : hoy.AddDays(30);
+
+        // Cargar combos en paralelo (servidos desde caché tras la primera llamada)
+        var tClientes = _reporte.GetFiltroClientesAsync();
+        var tAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tTitulos  = _reporte.GetFiltroTitulosAsync();
+        var tFibras   = _reporte.GetFiltroFibrasAsync();
+        var tProcesos = _reporte.GetFiltroProcesosAsync();
+        await Task.WhenAll(tClientes, tAsesores, tTitulos, tFibras, tProcesos);
+
+        ViewBag.FiltroClientes = tClientes.Result.ToList();
+        ViewBag.FiltroAsesores = tAsesores.Result.ToList();
+        ViewBag.FiltroTitulos  = tTitulos.Result.ToList();
+        ViewBag.FiltroFibras   = tFibras.Result.ToList();
+        ViewBag.FiltroProcesos = tProcesos.Result.ToList();
+
+        IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion> items
+            = Enumerable.Empty<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion>();
+
+        if (HttpContext.Request.Query.Count > 0 || HttpContext.Request.Method == "POST")
+        {
+            items = await _reporte.GetReporteProduccionAsync(
+                opc,
+                opc == "POR PEDIDO" ? null   : ini,
+                opc == "POR PEDIDO" ? null   : fin,
+                opc == "POR PEDIDO" ? numPed : null,
+                string.IsNullOrWhiteSpace(cliente) ? "%" : cliente,
+                string.IsNullOrWhiteSpace(asesor)  ? "%" : asesor,
+                string.IsNullOrWhiteSpace(titulo)  ? "%" : titulo,
+                string.IsNullOrWhiteSpace(fibra)   ? "%" : fibra,
+                string.IsNullOrWhiteSpace(proceso) ? "%" : proceso,
+                ct);
+        }
+
+        ViewBag.StOpc     = opc;
+        ViewBag.StFchIni  = ini.ToString("dd/MM/yyyy");
+        ViewBag.StFchFin  = fin.ToString("dd/MM/yyyy");
+        ViewBag.StIniHtml = ini.ToString("yyyy-MM-dd");
+        ViewBag.StFinHtml = fin.ToString("yyyy-MM-dd");
+        ViewBag.StNumPed  = numPed;
+        ViewBag.StCliente = cliente;
+        ViewBag.StAsesor  = asesor;
+        ViewBag.StTitulo  = titulo;
+        ViewBag.StFibra   = fibra;
+        ViewBag.StProceso = proceso;
+
+        return View(items);
     }
 
     // GET /Planeamiento/HistorialAlertas?ultDias=30

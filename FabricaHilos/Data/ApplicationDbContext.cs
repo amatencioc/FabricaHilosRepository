@@ -5,6 +5,7 @@ using FabricaHilos.Models.Facturacion;
 using FabricaHilos.Models.Logistica;
 using FabricaHilos.Models.Produccion;
 using FabricaHilos.Models.Ventas;
+using FabricaHilos.Models.Sire;
 
 namespace FabricaHilos.Data
 {
@@ -21,6 +22,7 @@ namespace FabricaHilos.Data
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<FhLcDocumento> LcDocumentos { get; set; }
         public DbSet<LogRegistroOc> LogRegistrosOc { get; set; }
+        public DbSet<SireHealthCheckLog> SireHealthCheckLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -66,6 +68,20 @@ namespace FabricaHilos.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Impsto).HasColumnType("decimal(18,4)");
                 entity.HasIndex(e => new { e.Usuario, e.Notificado });
+            });
+
+            // Configuración de SireHealthCheckLog
+            builder.Entity<SireHealthCheckLog>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Descripcion).HasMaxLength(500);
+                entity.Property(e => e.RvieError).HasMaxLength(500);
+                entity.Property(e => e.RceError).HasMaxLength(500);
+                // Índices para búsquedas comunes
+                entity.HasIndex(e => e.FechaUtc).IsDescending();
+                entity.HasIndex(e => new { e.Status, e.FechaUtc }).IsDescending();
+                entity.HasIndex(e => e.AlertaEnviada);
             });
         }
     }

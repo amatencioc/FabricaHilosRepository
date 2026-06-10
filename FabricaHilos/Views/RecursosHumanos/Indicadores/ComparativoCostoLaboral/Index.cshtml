@@ -54,6 +54,7 @@
     .filter-period.is-cmp      { border-left: 4px solid #1B4D3E; }  /* Año 2 (verde) */
     .filter-period.is-basic    { border-left: 4px solid #b8860b; }  /* Básico manual (dorado) */
     .filter-period.is-tipo     { border-left: 4px solid #6f42c1; }  /* Tipo empleado (púrpura) */
+    .filter-period.is-area     { border-left: 4px solid #0097a7; }  /* Áreas (cian) */
     .filter-period .period-title {
         font-size: .72rem;
         font-weight: 700;
@@ -65,6 +66,7 @@
     .filter-period.is-cmp .period-title { color: #1B4D3E; }
     .filter-period.is-basic .period-title { color: #b8860b; }
     .filter-period.is-tipo .period-title { color: #6f42c1; }
+    .filter-period.is-area .period-title { color: #0097a7; }
     .filter-period .mes-sep {
         font-size: .75rem;
         color: #6c757d;
@@ -325,6 +327,30 @@
             </div>
         </div>
 
+        <!-- ── Filtro de Áreas ─────────────────────────────────────── -->
+        <div class="filter-period is-area">
+            <div class="period-title">
+                <i class="bi bi-building me-1"></i>Áreas
+            </div>
+            <div class="dropdown" id="dropdownAreasCL">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                        id="dropdownAreasCLBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                        aria-expanded="false" style="min-width:160px; height:32px; font-size:.8rem;">
+                    <span id="lblAreasCL">Todas las áreas</span>
+                </button>
+                <div class="dropdown-menu p-2" id="menuAreasCL" style="min-width:300px; max-height:360px; overflow-y:auto;">
+                    <div class="mb-1">
+                        <button type="button" class="btn btn-xs btn-link p-0 me-2 small" onclick="seleccionarTodasAreasCL(true)">Todas</button>
+                        <button type="button" class="btn btn-xs btn-link p-0 small" onclick="seleccionarTodasAreasCL(false)">Ninguna</button>
+                    </div>
+                    <hr class="my-1">
+                    <div id="listaAreasCL">
+                        <span class="text-muted small">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <button type="submit" class="btn btn-sm btn-success align-self-end" style="height:38px;">
             <i class="bi bi-arrow-clockwise me-1"></i>Consultar
         </button>
@@ -461,13 +487,72 @@
 @section Scripts {
 <script>
     // ──────────────────────────────────────────────────────────────────
+    //  Filtro de Áreas (dropdown con checkboxes)
+    // ──────────────────────────────────────────────────────────────────
+    let areasCLYaCargadas = false;
+
+    document.getElementById('dropdownAreasCL').addEventListener('show.bs.dropdown', function () {
+        if (!areasCLYaCargadas) cargarListaAreasCL();
+    });
+
+    // Recargar áreas al cambiar tipo
+    document.getElementById('tipo').addEventListener('change', function () {
+        areasCLYaCargadas = false;
+        cargarListaAreasCL();
+    });
+
+    function obtenerAreasSeleccionadasCL() {
+        return [...document.querySelectorAll('#listaAreasCL input[type=checkbox]:checked')]
+            .map(cb => cb.value);
+    }
+
+    function actualizarEtiquetaAreasCL() {
+        const total = document.querySelectorAll('#listaAreasCL input[type=checkbox]').length;
+        const sel   = document.querySelectorAll('#listaAreasCL input[type=checkbox]:checked').length;
+        document.getElementById('lblAreasCL').textContent =
+            total === 0   ? 'Todas las áreas' :
+            sel === total ? 'Todas las áreas' :
+            sel === 0     ? 'Sin áreas' :
+            sel === 1     ? (document.querySelector('#listaAreasCL input[type=checkbox]:checked')?.closest('label')?.textContent?.trim() ?? '1 área') :
+            `${sel} áreas seleccionadas`;
+    }
+
+    function seleccionarTodasAreasCL(estado) {
+        document.querySelectorAll('#listaAreasCL input[type=checkbox]').forEach(cb => cb.checked = estado);
+        actualizarEtiquetaAreasCL();
+    }
+
+    function cargarListaAreasCL() {
+        const ano1       = document.getElementById('ano1').value;
+        const mesIniAno1 = document.getElementById('mesIniAno1').value;
+        const mesFinAno1 = document.getElementById('mesFinAno1').value;
+        const ano2       = document.getElementById('ano2').value;
+        const mesIniAno2 = document.getElementById('mesIniAno2').value;
+        const mesFinAno2 = document.getElementById('mesFinAno2').value;
+        const tipo       = document.getElementById('tipo').value || 'T';
+        const lista      = document.getElementById('listaAreasCL');
+        lista.innerHTML  = '<span class="text-muted small">Cargando...</span>';
+        fetch(`/RecursosHumanos/ComparativoCostoLaboral/Areas?ano1=${ano1}&mesIniAno1=${mesIniAno1}&mesFinAno1=${mesFinAno1}&ano2=${ano2}&mesIniAno2=${mesIniAno2}&mesFinAno2=${mesFinAno2}&tipo=${encodeURIComponent(tipo)}`)
+            .then(r => r.json())
+            .then(areas => {
+                if (!areas || areas.length === 0) {
+                    lista.innerHTML = '<span class="text-muted small">Sin áreas disponibles</span>';
+                    return;
+                }
+                lista.innerHTML = areas.map(a => `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="${a}" id="areaCL_${CSS.escape(a)}" checked
+                               onchange="actualizarEtiquetaAreasCL()">
+                        <label class="form-check-label small" for="areaCL_${CSS.escape(a)}">${a}</label>
+                    </div>`).join('');
+                actualizarEtiquetaAreasCL();
+                areasCLYaCargadas = true;
+            })
+            .catch(() => { lista.innerHTML = '<span class="text-muted small">Error al cargar áreas</span>'; });
+    }
+
+    // ──────────────────────────────────────────────────────────────────
     //  Manejo del formulario de filtros del Comparativo Costo Laboral.
-    //
-    //  Validación cliente:
-    //    • Cada período debe cumplir Mes Desde ≤ Mes Hasta.
-    //    • Año 1 puede ser igual o distinto de Año 2 (la lógica de
-    //      comparación es independiente — los promedios se calculan
-    //      sólo sobre los meses incluidos en cada rango).
     // ──────────────────────────────────────────────────────────────────
     document.getElementById('frmFiltro').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -522,6 +607,13 @@
         let basicoManual = parseFloat(document.getElementById('basicoManual').value);
         if (isNaN(basicoManual) || basicoManual < 0) basicoManual = 0;
 
+        // Áreas seleccionadas
+        const areasSeleccionadas = obtenerAreasSeleccionadasCL();
+        const totalAreas = document.querySelectorAll('#listaAreasCL input[type=checkbox]').length;
+        const areasParam = (totalAreas > 0 && areasSeleccionadas.length > 0 && areasSeleccionadas.length < totalAreas)
+            ? areasSeleccionadas.map(a => `areas=${encodeURIComponent(a)}`).join('&')
+            : '';
+
         const container = document.getElementById('kpi-container');
         container.innerHTML = `
             <div class="text-center py-5">
@@ -533,7 +625,8 @@
                   + `?ano1=${ano1}&mesIniAno1=${mesIniAno1}&mesFinAno1=${mesFinAno1}`
                   + `&ano2=${ano2}&mesIniAno2=${mesIniAno2}&mesFinAno2=${mesFinAno2}`
                   + `&basicoManual=${basicoManual}`
-                  + `&tipo=${encodeURIComponent(tipo)}`;
+                  + `&tipo=${encodeURIComponent(tipo)}`
+                  + (areasParam ? '&' + areasParam : '');
 
         // Cancela request previa pendiente antes de disparar la nueva.
         if (kpiAbortCtrl) kpiAbortCtrl.abort();

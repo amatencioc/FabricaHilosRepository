@@ -11,10 +11,18 @@ public sealed class SireComprasServiceMock : ISireComprasService
     public Task<IReadOnlyList<PropuestaDto>> ObtenerPeriodosAsync(CancellationToken cancellationToken = default)
     {
         var hoy = DateTime.Today;
+        var anioActual = hoy.Year.ToString();
         var list = new List<PropuestaDto>();
-        for (int i = 1; i <= 18; i++)
+
+        // Solo generar meses del año actual, desde el mes anterior al actual hacia atrás
+        for (int i = 1; i <= 12; i++)
         {
             var d = new DateTime(hoy.Year, hoy.Month, 1).AddMonths(-i);
+
+            // Solo incluir si es del año actual
+            if (d.Year.ToString() != anioActual)
+                break;
+
             var per = $"{d.Year}{d.Month:D2}";
             var desc = $"{_meses[d.Month - 1]} {d.Year}";
             var estado = i == 1 ? "PROPUESTA_DISPONIBLE" : i == 2 ? "EN_PROCESO" : "CERRADO";
@@ -70,6 +78,9 @@ public sealed class SireComprasServiceMock : ISireComprasService
 
         return Task.FromResult<IReadOnlyList<RegistroCompra>>(data);
     }
+
+    public Task<TicketEstado> ExportarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
+        => Task.FromResult(new TicketEstado { NumTicket = $"RCE-EXPORT-{periodo}", Estado = "EN_PROCESO", Mensaje = "[MOCK] Exportación iniciada" });
 
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
         => Task.FromResult(new TicketEstado { NumTicket = $"RCE-ACEPTAR-{periodo}", Estado = "COMPLETADO", Mensaje = "Propuesta RCE aceptada" });

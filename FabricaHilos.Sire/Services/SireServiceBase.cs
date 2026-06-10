@@ -25,7 +25,8 @@ public abstract class SireServiceBase
 
     protected async Task<T> SendAsync<T>(HttpMethod method, string path, object? payload, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(method, BuildUrl(path));
+        var url = BuildUrl(path);
+        using var request = new HttpRequestMessage(method, url);
         await ApplyBearerAsync(request, cancellationToken);
 
         if (payload is not null)
@@ -38,7 +39,9 @@ public abstract class SireServiceBase
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new SireApiException($"Error SUNAT {LibroNombre}: {(int)response.StatusCode} - {content}", response.StatusCode);
+            throw new SireApiException(
+                $"Error SUNAT {LibroNombre}: {(int)response.StatusCode} [{method} {url}] - {content}",
+                response.StatusCode);
         }
 
         if (typeof(T) == typeof(string))
@@ -97,7 +100,8 @@ public abstract class SireServiceBase
     private async Task ApplyBearerAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var token = await _authService.GetTokenAsync(cancellationToken);
-        request.Headers.Authorization = new AuthenticationHeaderValue(token.TokenType, token.AccessToken);
+        // IMPORTANTE: Siempre usar "Bearer" como tipo, incluso si SUNAT devuelve "JWT" en token_type
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
     }
 
     /// <summary>Nombre del libro SUNAT para mensajes de error (ej. "RVIE" o "RCE").</summary>

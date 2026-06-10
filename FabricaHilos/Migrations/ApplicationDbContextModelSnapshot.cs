@@ -592,6 +592,69 @@ namespace FabricaHilos.Migrations
                     b.ToTable("RegistrosAutoconer");
                 });
 
+            modelBuilder.Entity("FabricaHilos.Models.Sire.SireHealthCheckLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AlertaEnviada")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AuthOk")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FechaUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RceError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RceOk")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RcePeriodos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RvieError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RvieOk")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RviePeriodos")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("TokenMinutosRestantes")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime?>("UltimaAlertaUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlertaEnviada");
+
+                    b.HasIndex("FechaUtc")
+                        .IsDescending();
+
+                    b.HasIndex("Status", "FechaUtc")
+                        .IsDescending();
+
+                    b.ToTable("SireHealthCheckLogs");
+                });
+
             modelBuilder.Entity("FabricaHilos.Models.Ventas.Cliente", b =>
                 {
                     b.Property<int>("Id")

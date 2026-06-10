@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>FabricaHilos.Sire.Benchmarks.SirePerformanceBenchmarks-20260608-155707</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.2, Windows 11 (10.0.26200.8457)
+12th Gen Intel Core i5-12400 2.50GHz, 1 CPU, 12 logical and 6 physical cores
+.NET SDK 10.0.300
+  [Host]     : .NET 8.0.27 (8.0.2726.22922), X64 RyuJIT AVX2
+  DefaultJob : .NET 8.0.27 (8.0.2726.22922), X64 RyuJIT AVX2
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method           </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Median</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>GenerarVentasTxt_Small</td><td>75.00 &mu;s</td><td>1.271 &mu;s</td><td>1.127 &mu;s</td><td>74.76 &mu;s</td><td>13.9160</td><td>1.8311</td><td>-</td><td>128.95 KB</td>
+</tr><tr><td>GenerarVentasTxt_Large</td><td>5,585.14 &mu;s</td><td>99.756 &mu;s</td><td>166.670 &mu;s</td><td>5,562.43 &mu;s</td><td>328.1250</td><td>328.1250</td><td>328.1250</td><td>5902.95 KB</td>
+</tr><tr><td>GenerarComprasTxt_Small</td><td>67.37 &mu;s</td><td>1.045 &mu;s</td><td>1.910 &mu;s</td><td>66.65 &mu;s</td><td>12.9395</td><td>1.5869</td><td>-</td><td>119.97 KB</td>
+</tr><tr><td>GenerarComprasTxt_Large</td><td>5,066.63 &mu;s</td><td>98.504 &mu;s</td><td>282.626 &mu;s</td><td>4,988.91 &mu;s</td><td>328.1250</td><td>328.1250</td><td>328.1250</td><td>5312.47 KB</td>
+</tr></tbody></table>
+</body>
+</html>

@@ -14,6 +14,11 @@ public class ReclamoEnviadoCalidadPayload : INotificacionPayload
     public required string  CorreoDestinatario { get; set; }
     public required string  NombreDestinatario { get; set; }
 
+    /// <summary>
+    /// Dirección de correo en copia (CC). Se usa para copiar al vendedor que envía el reclamo.
+    /// </summary>
+    public string? CorreoCopia { get; set; }
+
     // --- Datos del reclamo ---
     public required string IdReclamo          { get; set; }
     public required string NombreCliente      { get; set; }

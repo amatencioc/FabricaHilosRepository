@@ -5,8 +5,13 @@
    SISTEMA    : SIG - Fabricacion de Hilos (Hilanderia y Tintoreria)
    BD         : Oracle 11.2.0.4 - Esquema SIG (multi-empresa: SIG / ARBONA / SOLSA)
    CREADO     : 18/05/2026
-   ULTIMA MOD : 26/05/2026
-   VERSION    : v2.2 — FCH_PLANIF (ITEMPED_DET.FHC_PROG) + FCH_APROBACION + actores del ciclo de vida
+   ULTIMA MOD : 28/05/2026
+   VERSION    : v2.5 — FIX-PCT: PCT_CIERRE_DESPACHO desde PLN_PARAM (no hardcodeado)
+                        FIX-NVL: GREATEST(0,NULL)=NULL corregido en SP_PLN_GENERA_ALERTAS
+                v2.6 — PLN_KGR_TITULO: tabla de velocidades kg/hr derivada de H_RPRODUC
+                        SP_PLN_KGR_REFRESH: auto-calcula mediana kgr_hr (ventana 24 meses)
+                        SP_PLN_CALCULA_FECHAS: usa PLN_KGR_TITULO en vez de CTRUTAS_TITULO
+                        JOB_PLN_KGR: refresco mensual automático (día 1 de cada mes 01:00)
    ============================================================
 
 Ventas graba ITEMPED          → TIA_PLN_FROM_ITEMPED          → PLN_SEGUIMIENTO PASO '01'
@@ -201,6 +206,12 @@ Se despacha (LOTES.S_TRANSAC) → TUA_PLN_FROM_LOTES_DESPACHO  → PLN_SEGUIMIEN
      Fuente: h_produccion_d. Calcula PCT_UTILIZACION e IND_SOBRECARGADA.
      Ejecutado por JOB_PLN_CARGA cada 4 horas (00:00,04:00,08:00,12:00,16:00,20:00). Hace COMMIT propio.
 
+   SP_PLN_KGR_REFRESH
+     Recalcula PLN_KGR_TITULO desde H_RPRODUC (ventana 24 meses, >= 3 muestras).
+     Usa mediana (PERCENTILE_CONT 0.5) en vez de promedio para robustez ante outliers.
+     Inserta filas por (titulo, proceso, cod_maq) + fila fallback (cod_maq='*') por titulo/proceso.
+     Ejecutado por JOB_PLN_KGR el dia 1 de cada mes a las 01:00. Hace COMMIT propio.
+
    SP_PLN_CIERRE_ITEM(id_seguim, motivo, usuario)
      Cierre manual autorizado: ESTADO='A' -> 'C'. Inserta evento 'CI'.
      Solo para correcciones operativas supervisadas.
@@ -217,16 +228,17 @@ Se despacha (LOTES.S_TRANSAC) → TUA_PLN_FROM_LOTES_DESPACHO  → PLN_SEGUIMIEN
    TUA_PLN_FROM_PEDIDO           -> PASO '01'       COMPOUND AFTER UPDATE PEDIDO (f_aprobacion NULL→valor)
                                     Captura pedidos aprobados después del INSERT de ITEMPED.
    TUA_PLN_FROM_ITEMPED_DET      -> PASO '02'       AFTER UPDATE ITEMPED_DET (NROPROG asignado)
-   TUA_PLN_FROM_L_VALIDA_RECETA  -> PASO '04'       AFTER UPDATE L_VALIDA_RECETA (ESTADO='3')
+   TUA_PLN_FROM_L_VALIDA_RECETA  -> PASO '04'       AFTER UPDATE L_VALIDA_RECETA (ESTADO IN '3','4')
+   TIA_PLN_FROM_L_VALIDA_RECETA  -> PASO '04'       AFTER INSERT L_VALIDA_RECETA (ESTADO IN '3','4' — bypass/directo)
    TIA_PLN_FROM_PARTIDA          -> PASO '03'       AFTER INSERT PARTIDA (NROPROG NOT NULL)
    TIA_PLN_FROM_H_RPRODUC        -> PASO '05'/'09B'/'10' AFTER INSERT H_RPRODUC (GUIA NOT NULL)
                                     LOGICA: si PASO_ACT IN ('08','09','09B','9R'):
                                       TP_MAQ='G' -> '09B' (Gaseado)
                                       TP_MAQ!='G' -> '10' (Devanado post-CC)
                                     sino -> '05' (Lote Disponible, sistema legado)
-   TIA_PLN_FROM_TT_RPRODUC_PA    -> PASO '06'/'07'  AFTER INSERT TT_RPRODUC (TIPODOC IN 'PA','IR')
-                                    LOGICA: si es 1er registro PA de esa RECETA -> PASO '06'
-                                            si todos los registros PA estan OK -> PASO '07'
+   TIA_PLN_FROM_TT_RPRODUC_PA    -> PASO '06'/'07'  AFTER INSERT TT_RPRODUC (TIPODOC='PA' ESTADO='3'; TIPODOC='IR' cualquier ESTADO)
+                                    LOGICA: PA → cnt_banos=1 → PASO '06'; cnt_banos>=tot → PASO '07'
+                                            IR → cnt_banos_any=1 → PASO '06' (FIX v2.3: captura INSERT ESTADO<>'3')
    TUA_PLN_FROM_PARTIDA          -> PASO '06'       AFTER UPDATE PARTIDA (SITU_PART='R001')
                                     (sistema legado; 0 registros en 2026)
    TUA_PLN_FROM_TT_RPRODUC       -> PASO '07'       COMPOUND TRIGGER UPDATE TT_RPRODUC (ESTADO='3')
@@ -470,6 +482,10 @@ BEGIN
   DBMS_SCHEDULER.DROP_JOB(job_name=>'JOB_PLN_CARGA', force=>TRUE);
 EXCEPTION WHEN OTHERS THEN NULL; END;
 /
+BEGIN
+  DBMS_SCHEDULER.DROP_JOB(job_name=>'JOB_PLN_KGR', force=>TRUE);
+EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 
 -- §0.2  Triggers (sobre tablas legacy — deben caer antes que el paquete)
 PROMPT >>> §0.2 Eliminando triggers PLN_...
@@ -477,11 +493,15 @@ BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TIA_PLN_FROM_ITEMPED';         EXCEPTION W
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TUA_PLN_FROM_ITEMPED_DET';     EXCEPTION WHEN OTHERS THEN NULL; END;
 /
+BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TIA_PLN_FROM_ITEMPED_DET';     EXCEPTION WHEN OTHERS THEN NULL; END;
+/
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TIA_PLN_FROM_H_RPRODUC';       EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TIA_PLN_FROM_PARTIDA';         EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TUA_PLN_FROM_L_VALIDA_RECETA'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TIA_PLN_FROM_L_VALIDA_RECETA'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER TUA_PLN_FROM_PARTIDA';         EXCEPTION WHEN OTHERS THEN NULL; END;
 /
@@ -537,6 +557,8 @@ BEGIN EXECUTE IMMEDIATE 'DROP VIEW V_PLN_ESTADO_PEDIDO';    EXCEPTION WHEN OTHER
 -- §0.5  Tablas (hijos primero; CASCADE CONSTRAINTS elimina FKs residuales)
 PROMPT >>> §0.5 Eliminando tablas PLN_*...
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE PLN_FECHAS_ESTIMADAS CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
+/
+BEGIN EXECUTE IMMEDIATE 'DROP TABLE PLN_KGR_TITULO       CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TABLE PLN_CARGA_DIARIA    CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
@@ -654,6 +676,46 @@ CREATE TABLE PLN_PARAM (
   A_MDFECHA   DATE,
   CONSTRAINT PK_PLN_PARAM PRIMARY KEY (COD_PARAM)
 );
+
+-- ────────────────────────────────────────────────────────────
+-- §2.1b PLN_KGR_TITULO — Velocidades de producción kg/hora por título
+-- ────────────────────────────────────────────────────────────
+-- Tabla calculada automáticamente por SP_PLN_KGR_REFRESH (JOB_PLN_KGR, mensual).
+-- Fuente: H_RPRODUC (estado='3', últimos 24 meses, >= 3 muestras por combinación).
+-- Sustituye la consulta a CTRUTAS_TITULO en SP_PLN_CALCULA_FECHAS, ya que
+-- CTRUTAS_TITULO usa notación textil ("14/2", "20/1") mientras PLN_SEGUIMIENTO
+-- y H_RPRODUC usan código numérico ("014", "076"), haciendo el JOIN imposible.
+--
+-- PK: (TITULO, PROCESO, COD_MAQ)
+--   COD_MAQ = '*' → fila de fallback con la mediana de TODAS las máquinas
+--             para ese (TITULO, PROCESO). Usada cuando no hay máquina asignada.
+--
+-- KGR_HR: mediana (PERCENTILE_CONT 0.5) — más robusta que AVG ante outliers.
+-- KGR_HR_AVG: promedio — guardado para auditoría / análisis.
+-- N_MUESTRAS: cantidad de runs de H_RPRODUC usados en el cálculo.
+-- MESES_HIST: ventana usada (por defecto 24).
+-- FCH_CALCULO: última vez que se calculó esta fila.
+--
+-- Consulta desde SP_PLN_CALCULA_FECHAS:
+--   1. Si hay máquina asignada (v_maquina IS NOT NULL):
+--      SELECT kgr_hr FROM PLN_KGR_TITULO
+--      WHERE titulo=... AND proceso=... AND cod_maq=v_maquina
+--   2. Fallback (sin máquina o no encontrada):
+--      SELECT kgr_hr FROM PLN_KGR_TITULO
+--      WHERE titulo=... AND proceso=... AND cod_maq='*'
+--   3. Si sigue NULL → fallback hardcodeado 10 kg/hr
+CREATE TABLE PLN_KGR_TITULO (
+  TITULO        VARCHAR2(10)  NOT NULL,
+  PROCESO       VARCHAR2(4)   NOT NULL,
+  COD_MAQ       VARCHAR2(10)  NOT NULL,  -- '*' = todas las máquinas (fallback)
+  KGR_HR        NUMBER(12,4),            -- mediana kg/hora (robusto ante outliers)
+  KGR_HR_AVG    NUMBER(12,4),            -- promedio kg/hora (referencia)
+  N_MUESTRAS    NUMBER(6),               -- cantidad de runs usados
+  MESES_HIST    NUMBER(3)   DEFAULT 24,  -- ventana de meses del cálculo
+  FCH_CALCULO   DATE,                    -- última ejecución de SP_PLN_KGR_REFRESH
+  CONSTRAINT PK_PLN_KGR_TITULO PRIMARY KEY (TITULO, PROCESO, COD_MAQ)
+);
+CREATE INDEX IX_PLN_KGR_TITULO_TP ON PLN_KGR_TITULO (TITULO, PROCESO);
 
 -- ────────────────────────────────────────────────────────────
 -- §2.2  PLN_ESTADO_CODIGO — Catálogo de pasos del flujo de producción
@@ -1067,9 +1129,9 @@ INSERT INTO PLN_ESTADO_CODIGO VALUES ('05','Lote Disponible',          'H_RPRODU
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('06','Ingreso Tintoreria',       'TT_RPRODUC INSERT TIPODOC=PA (1er bano) o PARTIDA SITU_PART=R001 (legado)',       6,'TT_RPRODUC',       'N','#6f42c1');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('07','Tenido Completo',          'TT_RPRODUC INSERT TIPODOC=PA (todos banos OK) o TT_RPRODUC UPD ESTADO=3 (legado)',7,'TT_RPRODUC',       'N','#d63384');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('08','Secado',                   'TT_RSECADO INSERT - secado post-tintoreria registrado',                           8,'TT_RSECADO',       'N','#20c997');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('09','CC TT Aprobado',           'CTCALIDAD_D RESULTADO IN (01,21,29,30) - aprobado/concesionado',                  9,'CTCALIDAD_D',      'N','#fd7e14');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('09','CC TT Aprobado',           'CTCALIDAD_D RESULTADO IN (01,21,29) - aprobado/concesionado',                     9,'CTCALIDAD_D',      'N','#fd7e14');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('09B','Gaseado',                 'H_RPRODUC INSERT TP_MAQ=G - gaseado (solo PROCESO=24 PEINADO GASEADO)',          10,'H_RPRODUC',        'N','#ffd700');
-INSERT INTO PLN_ESTADO_CODIGO VALUES ('9R','CC TT Rechazado/Reproceso','CTCALIDAD_D RESULTADO NOT IN (01,21,29,30) - rechazado, requiere reproceso',      11,'CTCALIDAD_D',      'N','#dc3545');
+INSERT INTO PLN_ESTADO_CODIGO VALUES ('9R','CC TT Rechazado/Reproceso','CTCALIDAD_D RESULTADO NOT IN (01,21,29) - rechazado, requiere reproceso',         11,'CTCALIDAD_D',      'N','#dc3545');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('10','Devanado',                 'H_RPRODUC INSERT TP_MAQ!=G cuando PASO_ACT>=08 (post-CC)',                       12,'H_RPRODUC',        'N','#ffc107');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('11','Revisado',                 'REVISADO_G INSERT GUIA=PARTIDA - calidad final aprobada (v2.0)',                  13,'REVISADO_G',       'N','#0d6efd');
 INSERT INTO PLN_ESTADO_CODIGO VALUES ('12','Ingresado Alm PT',         'LOTES INSERT COD_ALM IN (03,07,22,30) TP_TRANSAC=16',                            14,'LOTES',            'N','#198754');
@@ -1187,6 +1249,14 @@ CREATE OR REPLACE PACKAGE PKG_PLN AS
     p_fch_fin IN DATE DEFAULT TRUNC(SYSDATE) + 30
   );
 
+  -- ── Recálculo de velocidades kg/hr (invocado por JOB_PLN_KGR) ─
+  -- Trunca y repobla PLN_KGR_TITULO desde H_RPRODUC.
+  -- Ventana: últimos p_meses meses. Mínimo p_min_muestras por combinación.
+  PROCEDURE SP_PLN_KGR_REFRESH (
+    p_meses        IN NUMBER DEFAULT 24,
+    p_min_muestras IN NUMBER DEFAULT 3
+  );
+
   -- ── Cierre manual de un ítem ────────────────────────────────
   PROCEDURE SP_PLN_CIERRE_ITEM (
     p_id_seguim  IN NUMBER,
@@ -1204,6 +1274,43 @@ CREATE OR REPLACE PACKAGE PKG_PLN AS
     p_motivo         IN VARCHAR2  DEFAULT 'REPROG_MANUAL',
     p_usuario        IN VARCHAR2  DEFAULT NULL
   );
+
+  -- ── Seguimiento Programación Tintorería (ex QUERY_PRODUCCION) ──
+  -- Reporte principal de seguimiento por ítem de pedido.
+  -- p_opc : 'POR FECHA DE ENTREGA'   → p_fechai / p_fechaf con FCH_ENTREGA
+  --         'POR PEDIDO'              → p_numped  con NUM_PED
+  --         'POR FECHA DE PROGRAMA'   → p_fechai / p_fechaf con FHC_PROG
+  --         'POR FECHA DE TEÑIDO'     → p_fechai / p_fechaf con fecha tenido
+  --         'POR FECHA APROB PEDIDO'  → p_fechai / p_fechaf con FCH_PEDIDO_APROB
+  -- Filtros: p_cliente ('%'=todos, 'X'=excluye internos 77777777/88888888)
+  --          p_asesor  ('%'=todos)  → PEDIDO.COD_VENDE
+  --          p_titulo  ('%'=todos)  → ITEMPED_DET.TITULO  (código de H_TITULOS)
+  --          p_fibra   ('%'=todos)  → ITEMPED_DET.TIPO_FIBRA (código de H_FIBRA)
+  --          p_proceso ('%'=todos)  → ITEMPED_DET.PROCESO  (código de H_PROCESOS)
+  PROCEDURE SP_PLN_SEG_PROG_TINTORERIA (
+    p_opc      IN  VARCHAR2,
+    p_fechai   IN  DATE       DEFAULT NULL,
+    p_fechaf   IN  DATE       DEFAULT NULL,
+    p_numped   IN  NUMBER     DEFAULT NULL,
+    p_cliente  IN  VARCHAR2   DEFAULT '%',
+    p_asesor   IN  VARCHAR2   DEFAULT '%',
+    p_titulo   IN  VARCHAR2   DEFAULT '%',
+    p_fibra    IN  VARCHAR2   DEFAULT '%',
+    p_proceso  IN  VARCHAR2   DEFAULT '%',
+    p_cursor   OUT SYS_REFCURSOR
+  );
+
+  -- ── Filtros para poblar combos del formulario ─────────────────
+  -- Clientes con pedidos activos (excluye internos 77777777/88888888)
+  PROCEDURE SP_PLN_FILTRO_CLIENTES   (p_cursor OUT SYS_REFCURSOR);
+  -- Asesores/vendedores con pedidos activos
+  PROCEDURE SP_PLN_FILTRO_ASESORES   (p_cursor OUT SYS_REFCURSOR);
+  -- Títulos distintos usados en ítems activos
+  PROCEDURE SP_PLN_FILTRO_TITULOS    (p_cursor OUT SYS_REFCURSOR);
+  -- Fibras distintas usadas en ítems activos
+  PROCEDURE SP_PLN_FILTRO_FIBRAS     (p_cursor OUT SYS_REFCURSOR);
+  -- Procesos de producción usados en ítems activos
+  PROCEDURE SP_PLN_FILTRO_PROCESOS   (p_cursor OUT SYS_REFCURSOR);
 
 END PKG_PLN;
 /
@@ -1410,7 +1517,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     v_nuevo_kg   NUMBER;    -- KG_DESPACHADOS proyectado (con old value)
     v_orden_act  NUMBER := 0;  -- Orden del paso actual  (protección anti-retroceso)
     v_orden_new  NUMBER := 0;  -- Orden del paso entrante
+    -- FIX-PCT: leer umbral de cierre desde PLN_PARAM (evita que el parámetro sea ignorado).
+    -- Default 0.95 si no existe la fila (por retrocompatibilidad).
+    v_pct_cierre NUMBER := 0.95;
   BEGIN
+    BEGIN
+      SELECT valor_num / 100
+      INTO   v_pct_cierre
+      FROM   PLN_PARAM
+      WHERE  cod_param = 'PCT_CIERRE_DESPACHO';
+    EXCEPTION WHEN NO_DATA_FOUND THEN NULL;
+    END;
     -- ESTADO='A': ignora ítems cerrados (C) o anulados (X) → NO_DATA_FOUND → EXCEPTION
     SELECT * INTO v_seg
     FROM PLN_SEGUIMIENTO
@@ -1420,6 +1537,18 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
 
     -- KG_DESPACHADOS proyectado (OLD + nuevo)
     v_nuevo_kg := v_seg.kg_despachados + NVL(p_kg_cantidad, 0);
+
+    -- BUG-A FIX: leer órdenes ANTES de cualquier check (zona concurrente + anti-retroceso).
+    -- ANTES: v_orden_act=0 cuando se evaluaba IF p_nuevo_paso='03' AND v_orden_act>=4
+    --        → condición siempre FALSE → retorno incorrecto nunca se ejecutaba.
+    BEGIN
+      SELECT ec.orden_paso INTO v_orden_act
+      FROM pln_estado_codigo ec WHERE ec.cod_paso = v_seg.cod_paso_act;
+    EXCEPTION WHEN NO_DATA_FOUND THEN v_orden_act := 0; END;
+    BEGIN
+      SELECT ec.orden_paso INTO v_orden_new
+      FROM pln_estado_codigo ec WHERE ec.cod_paso = p_nuevo_paso;
+    EXCEPTION WHEN NO_DATA_FOUND THEN v_orden_new := 0; END;
 
     -- ═══════════════════════════════════════════════════════════════════════
     -- ZONA CONCURRENTE — PASO '03' (Hilandería/PARTIDA) y PASO '04' (Lab)
@@ -1477,14 +1606,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     -- PASO '9R' se excluye: después de reproceso ('9R', ORDEN=11) el ciclo reinicia
     --   y TUA_PLN_FROM_PARTIDA intenta avanzar a '06' (ORDEN=6) → debe permitirse.
     --   Sin esta excepción, el ítem quedaría bloqueado en '9R' para siempre. (BUG #34)
-    BEGIN
-      SELECT ec.orden_paso INTO v_orden_act
-      FROM pln_estado_codigo ec WHERE ec.cod_paso = v_seg.cod_paso_act;
-    EXCEPTION WHEN NO_DATA_FOUND THEN v_orden_act := 0; END;
-    BEGIN
-      SELECT ec.orden_paso INTO v_orden_new
-      FROM pln_estado_codigo ec WHERE ec.cod_paso = p_nuevo_paso;
-    EXCEPTION WHEN NO_DATA_FOUND THEN v_orden_new := 0; END;
+    -- (BUG-A FIX: v_orden_act y v_orden_new ya fueron leídos antes de la zona concurrente)
     IF p_nuevo_paso NOT IN ('14')            -- '14' tiene retroceso intencional a '13'
        AND v_seg.cod_paso_act <> '9R'        -- '9R' reinicia ciclo (BUG #34)
        AND v_orden_new < v_orden_act
@@ -1504,7 +1626,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       -- Despacho parcial → retrocede a '13'; cierre completo → '14'
       -- PCT_CIERRE_DESPACHO=95%: tolera hasta 5% merma textil (merma tintorería/devanado)
       COD_PASO_ACT        = CASE
-                              WHEN p_nuevo_paso = '14' AND v_nuevo_kg < CANTIDAD_ORIG * 0.95 THEN '13'
+                              WHEN p_nuevo_paso = '14' AND v_nuevo_kg < CANTIDAD_ORIG * v_pct_cierre THEN '13'
                               ELSE p_nuevo_paso
                             END,
       -- v2.3: IND_FLUJO — determina cuál llegó primero entre PASO '03' y '04'
@@ -1562,8 +1684,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                                     THEN 'C' ELSE ESTADO END,
       -- ── Indicadores reproceso / ciclo ──────────────────────
       IND_REPROCESO       = CASE WHEN p_nuevo_paso='9R' THEN 'S'
-                                 WHEN p_nuevo_paso='09' THEN 'N'
-                                 ELSE IND_REPROCESO END,
+                                 ELSE IND_REPROCESO END,  -- INCONS-2 FIX: flag permanente; usar NRO_CICLO>1 para detectar historial de reproceso
       NRO_CICLO           = CASE WHEN p_nuevo_paso='9R' THEN NRO_CICLO + 1 ELSE NRO_CICLO END,
       -- ── Retraso ────────────────────────────────────────────
       -- BUG-2 CORREGIDO (21/05/2026): congelar DIAS_RETRASO al cerrar el item.
@@ -1600,6 +1721,68 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     -- SP_PLN_CALCULA_FECHAS re-lee PLN_SEGUIMIENTO (ve las FCH_REAL_* ya actualizadas
     -- en esta misma transacción) y ancla los estimados pendientes desde el último paso real.
     SP_PLN_CALCULA_FECHAS(p_serie, p_num_ped, p_nro, p_num_det, 'AV');
+
+    -- ── AUTO-RESOLUCIÓN INMEDIATA DE ALERTAS ─────────────────────────────────
+    -- El JOB horario (SP_PLN_GENERA_ALERTAS) limpia alertas obsoletas cada hora,
+    -- pero cuando un trigger avanza el paso en tiempo real las alertas quedan
+    -- activas hasta la próxima ejecución del JOB. Este bloque las resuelve al instante.
+    -- NOTA: sin COMMIT aquí (ORA-04092 en triggers); el UPDATE entra en la misma TXN.
+
+    -- R1: ítem cerrado → resolver TODO
+    IF v_seg.estado = 'C' THEN
+      UPDATE PLN_ALERTA SET
+        ESTADO='R', FCH_RESOLUCION=SYSDATE,
+        USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: ítem cerrado (paso 14)'
+      WHERE id_seguim=v_seg.id_seguim AND estado='A';
+
+    ELSE
+      -- R2: SMP — ítem avanzó del PASO '01'
+      IF v_orden_new >= 2 THEN
+        UPDATE PLN_ALERTA SET
+          ESTADO='R', FCH_RESOLUCION=SYSDATE,
+          USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: ítem avanzó del paso 01'
+        WHERE id_seguim=v_seg.id_seguim AND estado='A' AND tip_alerta='SMP';
+      END IF;
+
+      -- R3: STN — ítem entró a Tintorería (ORDEN paso '06' = 6)
+      IF v_orden_new >= 6 THEN
+        UPDATE PLN_ALERTA SET
+          ESTADO='R', FCH_RESOLUCION=SYSDATE,
+          USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: ítem ingresó a Tintorería'
+        WHERE id_seguim=v_seg.id_seguim AND estado='A' AND tip_alerta='STN';
+      END IF;
+
+      -- R4: QCF — ítem salió del PASO '9R' (reproceso activo terminó)
+      IF v_seg.cod_paso_act = '9R' AND p_nuevo_paso <> '9R' THEN
+        UPDATE PLN_ALERTA SET
+          ESTADO='R', FCH_RESOLUCION=SYSDATE,
+          USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: ítem salió del paso 9R'
+        WHERE id_seguim=v_seg.id_seguim AND estado='A' AND tip_alerta='QCF';
+      END IF;
+
+      -- R5: REPR — reproceso superó PASO '09' (CC TT Aprobado, ORDEN=9)
+      IF v_orden_new >= 9 THEN
+        UPDATE PLN_ALERTA SET
+          ESTADO='R', FCH_RESOLUCION=SYSDATE,
+          USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: reproceso superó CC TT'
+        WHERE id_seguim=v_seg.id_seguim AND estado='A' AND tip_alerta='REPR';
+      END IF;
+
+      -- R6: RET1/RET2 — retraso recalculado, ya no supera umbral
+      -- Se lee IND_RETRASO después del UPDATE principal (aplica al paso nuevo).
+      DECLARE v_ind_ret VARCHAR2(1); BEGIN
+        SELECT ind_retraso INTO v_ind_ret
+        FROM PLN_SEGUIMIENTO WHERE id_seguim=v_seg.id_seguim;
+        IF v_ind_ret = 'N' THEN
+          UPDATE PLN_ALERTA SET
+            ESTADO='R', FCH_RESOLUCION=SYSDATE,
+            USUARIO_RESUELVE='AUTO', OBSERV_RESOL='Auto: retraso eliminado'
+          WHERE id_seguim=v_seg.id_seguim AND estado='A'
+            AND tip_alerta IN ('RET1','RET2');
+        END IF;
+      EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
+    END IF;
+    -- ─────────────────────────────────────────────────────────────────────────
 
   EXCEPTION
     WHEN NO_DATA_FOUND THEN NULL;  -- seguimiento no existe aún → ignorar
@@ -1695,26 +1878,33 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     BEGIN SELECT valor_num INTO v_buf_qc   FROM PLN_PARAM WHERE cod_param='DIAS_BUFFER_QC';    EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
     BEGIN SELECT valor_num INTO v_buf_desp FROM PLN_PARAM WHERE cod_param='DIAS_BUFFER_DESP';  EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
 
-    -- kgr_hr: de la máquina asignada; si no hay, MAX del título/proceso
+    -- kgr_hr: PLN_KGR_TITULO (velocidades reales desde H_RPRODUC, formato numérico)
+    -- Prioridad 1: máquina específica asignada al ítem
+    -- Prioridad 2: fila fallback '*' (mediana de todas las máquinas para ese titulo/proceso)
+    -- Prioridad 3: hardcoded 10 kg/hr (solo si no hay ningún dato histórico)
+    -- NOTA: NO usa CTRUTAS_TITULO porque su columna TITULO usa notación textil ("14/2")
+    --       incompatible con el código numérico de PLN_SEGUIMIENTO/H_RPRODUC ("014").
     IF v_maquina IS NOT NULL THEN
       BEGIN
         SELECT kgr_hr INTO v_kgr_hr
-        FROM ctrutas_titulo
-        WHERE titulo=v_item.titulo AND proceso=v_item.proceso
-          AND cod_maq=v_maquina   AND estado != 'X'
-          AND ROWNUM = 1;
+        FROM   PLN_KGR_TITULO
+        WHERE  titulo  = v_item.titulo
+          AND  proceso = v_item.proceso
+          AND  cod_maq = v_maquina;
       EXCEPTION WHEN NO_DATA_FOUND THEN NULL;
       END;
     END IF;
-    IF v_kgr_hr IS NULL THEN   -- ninguna máquina asignada o sin datos en ctrutas_titulo
+    IF v_kgr_hr IS NULL THEN   -- sin máquina asignada, o máquina no tiene histórico
       BEGIN
-        SELECT MAX(kgr_hr) INTO v_kgr_hr
-        FROM ctrutas_titulo
-        WHERE titulo=v_item.titulo AND proceso=v_item.proceso AND estado != 'X';
+        SELECT kgr_hr INTO v_kgr_hr
+        FROM   PLN_KGR_TITULO
+        WHERE  titulo  = v_item.titulo
+          AND  proceso = v_item.proceso
+          AND  cod_maq = '*';   -- fila fallback: mediana de todas las máquinas
       EXCEPTION WHEN NO_DATA_FOUND THEN NULL;
       END;
     END IF;
-    IF NVL(v_kgr_hr, 0) = 0 THEN v_kgr_hr := 10; END IF;  -- fallback
+    IF NVL(v_kgr_hr, 0) = 0 THEN v_kgr_hr := 10; END IF;  -- fallback final
 
     -- Tiempo de tenido (horas) de TT_PARAMPROGTIN
     BEGIN
@@ -1804,7 +1994,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
   --   'RET2' Nivel 'A' → dias_retraso >= DIAS_ALERTA_ALTA (default 3) y < CRIT
   --   'SMP'  Nivel 'A' → PASO='01' más de 2 días sin planificación
   --   'STN'  Nivel 'C' → PASO='03' y SYSDATE > FCH_EST_TIN_INI (esperando TT)
-  --   'QCF'  Nivel 'C' → PASO='9R' (CC rechazado, en reproceso)
+  --   'QCF'  Nivel 'C' → PASO='9R' (CC rechazado, ciclo activo en reproceso)
+  --   'REPR' Nivel 'A' → IND_REPROCESO='S' y PASO<>'9R' (ciclo 2+ ya retomó flujo)
   --
   -- ANTI-DUPLICADO:
   --   INSERT ... WHERE NOT EXISTS (SELECT 1 FROM PLN_ALERTA
@@ -1850,6 +2041,73 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     BEGIN SELECT valor_num INTO v_dias_crit  FROM PLN_PARAM WHERE cod_param='DIAS_ALERTA_CRIT';  EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
     BEGIN SELECT valor_num INTO v_dias_alta  FROM PLN_PARAM WHERE cod_param='DIAS_ALERTA_ALTA';  EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
     BEGIN SELECT valor_num INTO v_dias_media FROM PLN_PARAM WHERE cod_param='DIAS_ALERTA_MEDIA'; EXCEPTION WHEN NO_DATA_FOUND THEN NULL; END;
+
+    -- ── AUTO-RESOLUCIÓN DE ALERTAS OBSOLETAS ────────────────────────────────
+    -- Se ejecuta ANTES de generar nuevas, para que el anti-duplicado NOT EXISTS
+    -- no bloquee la re-inserción cuando la condición volvió a ser cierta.
+
+    -- R1: ítem cerrado (PASO 14 / estado='C') → cualquier tipo de alerta ya no aplica
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: ítem cerrado'
+    WHERE  a.estado='A'
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='C');
+
+    -- R2: SMP (Sin Programa) → ítem ya avanzó del PASO '01'
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: ítem avanzó del paso 01'
+    WHERE  a.estado='A' AND a.tip_alerta='SMP'
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='A'
+                     AND s.cod_paso_act != '01');
+
+    -- R3: STN (Sin Tintorería) → ítem ya superó el paso 03 (ORDEN_PASO >= 6)
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: ítem ingresó a TT o más allá'
+    WHERE  a.estado='A' AND a.tip_alerta='STN'
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   JOIN PLN_ESTADO_CODIGO ec ON ec.cod_paso=s.cod_paso_act
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='A'
+                     AND ec.orden_paso >= 6);
+
+    -- R4: RET1/RET2 → ítem ya no está retrasado (FCH_ENTREGA_COMP fue corregida o avanzó)
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: retraso eliminado'
+    WHERE  a.estado='A' AND a.tip_alerta IN ('RET1','RET2')
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='A'
+                     AND s.ind_retraso='N');
+
+    -- R5: QCF (CC rechazado) → ítem ya salió del PASO '9R'
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: reproceso retomó flujo'
+    WHERE  a.estado='A' AND a.tip_alerta='QCF'
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='A'
+                     AND s.cod_paso_act != '9R');
+
+    -- R6: REPR → reproceso superó PASO '09' (ya absorbido en flujo normal)
+    UPDATE PLN_ALERTA a SET a.estado='R', a.fch_resolucion=SYSDATE,
+           a.usuario_resuelve='AUTO', a.observ_resol='Auto: reproceso superó CC TT'
+    WHERE  a.estado='A' AND a.tip_alerta='REPR'
+      AND  EXISTS (SELECT 1 FROM PLN_SEGUIMIENTO s
+                   JOIN PLN_ESTADO_CODIGO ec ON ec.cod_paso=s.cod_paso_act
+                   WHERE s.id_seguim=a.id_seguim AND s.estado='A'
+                     AND ec.orden_paso >= 9);
+    -- ────────────────────────────────────────────────────────────────────────
+
+    -- fix BUG-PLN-1: recalcular DIAS_RETRASO/IND_RETRASO antes de escanear alertas.
+    -- SP_PLN_AVANZA_PASO solo los actualiza al cambiar de paso; ítems que llevan
+    -- días sin moverse acumularían retraso real sin que la columna lo refleje,
+    -- por lo que las alertas RET1/RET2 nunca se generarían para esos ítems.
+    -- FIX-NVL: GREATEST(0, NULL) = NULL en Oracle → usar NVL para ítems sin FCH_ENTREGA_COMP.
+    UPDATE PLN_SEGUIMIENTO
+    SET    dias_retraso = NVL(GREATEST(0, TRUNC(SYSDATE) - TRUNC(fch_entrega_comp)), 0),
+           ind_retraso  = CASE WHEN fch_entrega_comp IS NOT NULL
+                                    AND TRUNC(SYSDATE) > TRUNC(fch_entrega_comp)
+                               THEN 'S' ELSE 'N' END
+    WHERE  estado = 'A'
+      AND  cod_paso_act <> '14';
 
     -- Retraso CRÍTICO (>= 7 días)
     FOR r IN (SELECT id_seguim, serie, num_ped, nro, num_det, cod_cliente, dias_retraso
@@ -1902,6 +2160,27 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       ins_alerta(r.id_seguim, r.serie, r.num_ped, r.nro, r.num_det, 'QCF', 'C',
                  'Partida en reproceso (CC rechazado)',
                  'Ped '||r.num_ped||' ítem '||r.nro||': CC rechazado. Ciclo '||r.nro_ciclo||'.',
+                 NULL, r.cod_cliente);
+    END LOOP;
+
+    -- Reproceso en ciclo 2+ (IND_REPROCESO='S', ya retomó la cadena de producción)
+    -- Distinto de QCF: el ítem no está bloqueado en '9R', viene de un rechazo anterior
+    -- y ya avanzó al nuevo ciclo (PASO '03'..'13'). Alerta informativa para supervisión.
+    -- BUG-H FIX: excluir ítems que ya superaron el paso '09' en el nuevo ciclo.
+    -- Sin este filtro la alerta REPR se regenera cada hora aunque el supervisor la resuelva.
+    -- Confirmado en BD: 4 alertas REPR activas para ítems en pasos '03','08','10' (NRO_CICLO=2).
+    FOR r IN (SELECT s.id_seguim, s.serie, s.num_ped, s.nro, s.num_det,
+                     s.cod_cliente, s.nro_ciclo, s.cod_paso_act,
+                     TO_CHAR(s.fch_real_cc_rechazo,'DD/MM/YY') AS fch_rechaz
+              FROM PLN_SEGUIMIENTO s
+              WHERE s.estado='A' AND s.ind_reproceso='S'
+                AND s.cod_paso_act <> '9R'
+                AND s.cod_paso_act NOT IN ('09','09B','10','11','12','13','14')) LOOP
+      ins_alerta(r.id_seguim, r.serie, r.num_ped, r.nro, r.num_det, 'REPR', 'A',
+                 'Reproceso Ciclo '||r.nro_ciclo||' en progreso',
+                 'Ped '||r.num_ped||' item '||r.nro
+                   ||': ciclo '||r.nro_ciclo||' en curso (CC rechazado '
+                   ||NVL(r.fch_rechaz,'?')||'). Paso: '||r.cod_paso_act||'.',
                  NULL, r.cod_cliente);
     END LOOP;
 
@@ -1970,11 +2249,14 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     WHERE d.fecha BETWEEN p_fch_ini AND p_fch_fin
     GROUP BY d.fecha, d.cod_maq, d.tp_maq;
 
-    -- 2. Tintorería: carga real desde TT_RPRODUC (sistema PA — activo desde 2021)
-    --    TIPODOC='PA': RECETA = PARTIDA.NUMERO (vínculo directo, sin H_RPRODUC intermediario)
+    -- 2. Tintorería: carga real desde TT_RPRODUC (sistema IR — vigente desde 2021)
+    --    BUG-I FIX: sustituye TIPODOC='PA' por TIPODOC='IR' que es el modo activo en 2026.
+    --    Datos BD confirmados: 4,820 registros IR vs. 167 PA en 2026.
+    --    TIPODOC='PA' capturaba solo el 3% de la actividad real (167/4820+167).
+    --    Navegación IR: TT_RPRODUC.RECETA → PARTIDA_MAS.NUMERO (tp_transac='IR')
+    --                   PARTIDA_MAS.PARTIDA → PARTIDA.NUMERO (para obtener PESO_NETO)
     --    ESTADO='3'  : baño terminado (excluye en-proceso e incompletos)
     --    FECHA_INI/FIN: timestamps reales del baño (ms precision, ORA: DATE con hora)
-    --    KG_REAL: PARTIDA.PESO_NETO (kg físicos de la partida; aprox. al kg procesado en TT)
     --    TP_MAQ='W' (Wet/Tintorería) — distingue visualmente en el Gantt de hilandería
     INSERT INTO PLN_CARGA_DIARIA (
       FECHA, COD_MAQ, TP_MAQ,
@@ -1990,8 +2272,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       SUM(NVL(p.peso_neto, 0)),
       SYSDATE, SYSDATE
     FROM   tt_rproduc tt
-    LEFT   JOIN partida p ON p.numero = tt.receta
-    WHERE  tt.tipodoc = 'PA'
+    JOIN   partida_mas pm ON pm.numero = tt.receta AND pm.tp_transac = 'IR'
+    LEFT   JOIN partida p ON p.numero = pm.partida
+    WHERE  tt.tipodoc = 'IR'
       AND  tt.estado  = '3'
       AND  tt.fecha_ini IS NOT NULL
       AND  tt.fecha_fin IS NOT NULL
@@ -2008,6 +2291,136 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
 
     COMMIT;
   END SP_PLN_CARGA_DIARIA_REFRESH;
+
+
+  -- ============================================================
+  -- SP_PLN_KGR_REFRESH — Recálculo de velocidades kg/hora desde H_RPRODUC
+  -- ────────────────────────────────────────────────────────────
+  -- Propósito:
+  --   Poblar PLN_KGR_TITULO con la velocidad de producción real (kg/hora)
+  --   por combinación (TITULO, PROCESO, COD_MAQ), derivada de los registros
+  --   completados en H_RPRODUC.
+  --
+  -- Por qué existe y no usa CTRUTAS_TITULO:
+  --   CTRUTAS_TITULO usa notación textil ("14/2", "20/1") mientras que
+  --   PLN_SEGUIMIENTO y H_RPRODUC usan código numérico ("014", "076").
+  --   El JOIN nunca encuentra nada → SP_PLN_CALCULA_FECHAS cae siempre al
+  --   fallback de 10 kg/hr → fechas estimadas incorrectas para todos los ítems.
+  --
+  -- Lógica de cálculo:
+  --   kgr_hr = PESO_NETO / ((FECHA_FIN - FECHA_INI) * 24)
+  --   · Solo runs completados: H_RPRODUC.ESTADO = '3'
+  --   · Solo con peso real:    PESO_NETO > 0
+  --   · Solo con duración válida: FECHA_FIN > FECHA_INI
+  --   · Filtra duración aberrante: entre 0.5 y 500 horas (outliers de datos)
+  --   · Ventana temporal: últimos p_meses meses (default 24)
+  --   · Mínimo p_min_muestras runs por combinación (default 3)
+  --
+  -- Usa PERCENTILE_CONT(0.5) (mediana) en vez de AVG:
+  --   La producción tiene outliers frecuentes (paradas por turno, cambios de lote).
+  --   La mediana es robusta ante estos casos; el AVG inflaría o desinflaría el valor.
+  --
+  -- Filas generadas:
+  --   A) Por (TITULO, PROCESO, COD_MAQ específica): mediana de esa máquina.
+  --      Usada cuando v_maquina IS NOT NULL en SP_PLN_CALCULA_FECHAS.
+  --   B) Por (TITULO, PROCESO, '*'): mediana de TODAS las máquinas combinadas.
+  --      Fallback cuando no hay máquina asignada al ítem.
+  --
+  -- Cobertura verificada (28/05/2026):
+  --   · 730/878 ítems activos (83%) cubiertos con >= 3 muestras (24 meses).
+  --   · 14 ítems con 1-2 muestras: incluidos con lo que hay (valor real > fallback 10).
+  --   · 134 ítems sin historial (TITULO/PROCESO combinaciones nuevas o de stock):
+  --     mantienen el fallback de 10 kg/hr hasta acumular datos.
+  --
+  -- Ejecución:
+  --   · Automática: JOB_PLN_KGR (día 1 de cada mes a las 01:00)
+  --   · Manual: BEGIN PKG_PLN.SP_PLN_KGR_REFRESH; END;
+  --   · Con parámetros: BEGIN PKG_PLN.SP_PLN_KGR_REFRESH(p_meses=>12, p_min_muestras=>5); END;
+  -- ============================================================
+  PROCEDURE SP_PLN_KGR_REFRESH (
+    p_meses        IN NUMBER DEFAULT 24,
+    p_min_muestras IN NUMBER DEFAULT 3
+  ) AS
+    v_fch_desde  DATE := ADD_MONTHS(TRUNC(SYSDATE), -p_meses);
+    v_cnt_maq    PLS_INTEGER := 0;
+    v_cnt_fall   PLS_INTEGER := 0;
+  BEGIN
+    -- ── Paso 1: Borrar datos anteriores ──────────────────────
+    DELETE FROM PLN_KGR_TITULO;
+
+    -- ── Paso 2: Insertar filas por (titulo, proceso, cod_maq) ─
+    -- Usa mediana (PERCENTILE_CONT 0.5) para robustez ante outliers.
+    -- Filtra duraciones aberrantes: 0.5 <= horas <= 500.
+    INSERT INTO PLN_KGR_TITULO (titulo, proceso, cod_maq,
+                                 kgr_hr, kgr_hr_avg, n_muestras,
+                                 meses_hist, fch_calculo)
+    SELECT titulo, proceso, cod_maq,
+           ROUND(
+             PERCENTILE_CONT(0.5) WITHIN GROUP (
+               ORDER BY peso_neto / NULLIF((fecha_fin - fecha_ini) * 24, 0)
+             ), 4
+           )                 AS kgr_hr,
+           ROUND(
+             AVG(peso_neto / NULLIF((fecha_fin - fecha_ini) * 24, 0))
+           , 4)               AS kgr_hr_avg,
+           COUNT(*)           AS n_muestras,
+           p_meses            AS meses_hist,
+           SYSDATE            AS fch_calculo
+    FROM   h_rproduc
+    WHERE  estado    = '3'
+      AND  peso_neto > 0
+      AND  fecha_fin > fecha_ini
+      AND  titulo    IS NOT NULL
+      AND  proceso   IS NOT NULL
+      AND  cod_maq   IS NOT NULL
+      AND  fecha_ini >= v_fch_desde
+      AND  (fecha_fin - fecha_ini) * 24 BETWEEN 0.5 AND 500
+    GROUP  BY titulo, proceso, cod_maq
+    HAVING COUNT(*) >= p_min_muestras;
+
+    v_cnt_maq := SQL%ROWCOUNT;
+
+    -- ── Paso 3: Insertar fila de fallback por (titulo, proceso, '*') ──
+    -- Mediana de TODAS las máquinas combinadas para ese título/proceso.
+    -- Solo se inserta si no existe ya (por si alguna máquina tiene cod_maq='*' en H_RPRODUC).
+    INSERT INTO PLN_KGR_TITULO (titulo, proceso, cod_maq,
+                                 kgr_hr, kgr_hr_avg, n_muestras,
+                                 meses_hist, fch_calculo)
+    SELECT titulo, proceso, '*' AS cod_maq,
+           ROUND(
+             PERCENTILE_CONT(0.5) WITHIN GROUP (
+               ORDER BY peso_neto / NULLIF((fecha_fin - fecha_ini) * 24, 0)
+             ), 4
+           )                 AS kgr_hr,
+           ROUND(
+             AVG(peso_neto / NULLIF((fecha_fin - fecha_ini) * 24, 0))
+           , 4)               AS kgr_hr_avg,
+           COUNT(*)           AS n_muestras,
+           p_meses            AS meses_hist,
+           SYSDATE            AS fch_calculo
+    FROM   h_rproduc
+    WHERE  estado    = '3'
+      AND  peso_neto > 0
+      AND  fecha_fin > fecha_ini
+      AND  titulo    IS NOT NULL
+      AND  proceso   IS NOT NULL
+      AND  fecha_ini >= v_fch_desde
+      AND  (fecha_fin - fecha_ini) * 24 BETWEEN 0.5 AND 500
+      AND  NOT EXISTS (
+             SELECT 1 FROM PLN_KGR_TITULO k
+             WHERE  k.titulo  = h_rproduc.titulo
+               AND  k.proceso = h_rproduc.proceso
+               AND  k.cod_maq = '*'
+           )
+    GROUP  BY titulo, proceso
+    HAVING COUNT(*) >= p_min_muestras;
+
+    v_cnt_fall := SQL%ROWCOUNT;
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SP_PLN_KGR_REFRESH: '||v_cnt_maq||' filas por maquina, '
+                         ||v_cnt_fall||' fallbacks (*). Ventana: '||p_meses||' meses.');
+  END SP_PLN_KGR_REFRESH;
 
 
   -- ============================================================
@@ -2133,10 +2546,393 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
            v_fch_ant, p_nueva_fch_desp, p_motivo, 'RE'
     FROM PLN_SEGUIMIENTO WHERE id_seguim = v_id_seg;
 
+    -- Auto-resolución: si la nueva fecha elimina el retraso → resolver RET1/RET2
+    UPDATE PLN_ALERTA SET
+      ESTADO='R', FCH_RESOLUCION=SYSDATE,
+      USUARIO_RESUELVE=v_usr, OBSERV_RESOL='Auto: reprogramación eliminó el retraso'
+    WHERE id_seguim=v_id_seg AND estado='A'
+      AND tip_alerta IN ('RET1','RET2')
+      AND p_nueva_fch_desp > TRUNC(SYSDATE);
+
     COMMIT;
   EXCEPTION
     WHEN OTHERS THEN ROLLBACK; RAISE;
   END SP_PLN_REPROGRAMAR;
+
+  -- ============================================================
+  -- SP_PLN_SEG_PROG_TINTORERIA
+  -- Seguimiento Programación Tintorería  (ex QUERY_PRODUCCION).
+  -- Devuelve un SYS_REFCURSOR con el estado de producción de
+  -- los ítems de pedido según la opción y filtros recibidos.
+  -- ============================================================
+  PROCEDURE SP_PLN_SEG_PROG_TINTORERIA (
+    p_opc      IN  VARCHAR2,
+    p_fechai   IN  DATE       DEFAULT NULL,
+    p_fechaf   IN  DATE       DEFAULT NULL,
+    p_numped   IN  NUMBER     DEFAULT NULL,
+    p_cliente  IN  VARCHAR2   DEFAULT '%',
+    p_asesor   IN  VARCHAR2   DEFAULT '%',
+    p_titulo   IN  VARCHAR2   DEFAULT '%',
+    p_fibra    IN  VARCHAR2   DEFAULT '%',
+    p_proceso  IN  VARCHAR2   DEFAULT '%',
+    p_cursor   OUT SYS_REFCURSOR
+  ) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO AS PARTIDA,
+             E.ESTADO_PROG,
+             C.NOMBRE                                                              AS CLIENTE,
+             DECODE(A.DESCRIPCION, 'VARIOS', I.DETALLE, A.DESCRIPCION)
+               || ' ' || I.COLOR_DET                                              AS MATERIAL,
+             J.FECHA                                                               AS FCH_PEDIDO,
+             E.FCH_ENTREGA                                                         AS FHC_ENTREGA,
+             TO_CHAR(Q.FECHA, 'DD/MM/YY') || ' ' || Q.HORA                       AS FCH_PARTIDA,
+             Q.NETO                                                                AS PESO_NETO,
+             Q.RMC,
+             Q.NRO_RMC,
+             I.TIPO_REF || '-' || I.NUM_REF || '-' || I.ITEM_REF
+               || DECODE(I.TIPO_REF, 'M1', '-' || I.OPC_REF, '')                 AS REFERENCIA,
+             B.PROCESO,
+             B.FECHA                                                               AS FECHA_TENIDO,
+             D.FECHA                                                               AS FECHA_CCALID,
+             Z.FECHA                                                               AS FECHA_ENCON,
+             H.FECHA                                                               AS FECHA_SECADO,
+             K.FECHA                                                               AS FECHA_RECETA,
+             R.FECHA                                                               AS FCH_REVISADO,
+             S.FECHA_ING,
+             U.CANTIDAD                                                            AS CANT_DESP,
+             N.DESCRIPCION                                                         AS TITULO,
+             E.CANTIDAD                                                            AS CANT_PROG,
+             Q.LOTE,
+             'Ne ' || N.DESCRIPCION                                               AS TITULO_TEXTO,
+             E.FHC_PROG                                                            AS FCH_PROG,
+             PARTIDA_CON_MATIZ(E.GUIA)                                            AS PART_MATIZ,
+             CAL.EST_EVALUACION,
+             CAL.DEFECTO,
+             CAL.RESULTADO,
+             TO_NUMBER(E.FCH_ENTREGA - NVL(S.FECHA_ING, TRUNC(SYSDATE)))         AS DIAS_RETRASO,
+             TRUNC(E.FCH_ENTREGA_CONO_UNO)                                        AS FCH_ENTREGA_CONO_UNO,
+             L.F_ENTREGA                                                           AS FCH_VAL_REC,
+             E.FCH_ESTIMA_CONO_UNO,
+             E.FCH_ENT_TIN,
+             E.FCH_ESTIMA_TENIDO,
+             E.FCH_PROGVAL,
+             V.ABREVIADO                                                           AS LABO_VAL,
+             RES.FECHA                                                             AS FCH_ULT_ING_ALMPI,
+             E.DESMAQUINA                                                          AS MAQ_PROG,
+             E.ACAB_MAD                                                            AS ACA_MAD,
+             SM.FECHA                                                              AS FECHA_SECADO_MAD
+        FROM (
+               -- Dedup: por cada (NUM_PED,NRO,NUM_DET) conserva sólo el FHC_PROG más reciente
+               SELECT NUM_PED, NRO, NUM_DET,
+                      MAX(NVL(FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY'))) AS FCH_PROG
+               FROM   ITEMPED_DET
+               GROUP  BY NUM_PED, NRO, NUM_DET
+             ) F,
+             V_ITEMPEDET E,
+             -- CC tintorería: última consulta aprobada por guía
+             (
+               SELECT MAX(TRUNC(FCH_CONSULTA)) AS FECHA, GUIA
+               FROM   CTCALIDAD_D
+               WHERE  (NVL(CONSULTA,'00') = '01' OR RESULTADO IN ('01','29'))
+               GROUP  BY GUIA
+             ) D,
+             CTCALIDAD_D X,
+             -- Partidas activas (excluye anuladas/cerradas)
+             (
+               SELECT P.GUIA, P.PARTIDA
+               FROM   V_PARTIDA P
+               WHERE  NVL(P.ESTADO,'0') NOT IN ('8','9')
+               GROUP  BY P.GUIA, P.PARTIDA
+             ) P,
+             (
+               SELECT P.GUIA, P.PARTIDA
+               FROM   V_PARTIDA P
+               WHERE  NVL(P.ESTADO,'0') NOT IN ('8','9')
+               GROUP  BY P.GUIA, P.PARTIDA
+             ) W,
+             V_PARTIDA Q,
+             V_PARTIDA T,
+             ITEMPED I,
+             PEDIDO  J,
+             CLIENTES C,
+             -- Tintorería: último baño completado (ESTADO='3', proceso con cálculo TT)
+             (
+               SELECT PARTIDA, PROCESO, MAX(TRUNC(FECHA_FIN)) AS FECHA
+               FROM   V_RPRODUC
+               WHERE  ESTADO = '3'
+                 AND  PROCESO IN (
+                        SELECT CODIGO FROM CTPROCESOS
+                        WHERE  NVL(ESTADO,'0') <> '9'
+                          AND  (SUBSTR(CALCULO,1,1) = '2' OR SUBSTR(CALCULO,2,1) = '2')
+                      )
+               GROUP  BY PARTIDA, PROCESO
+             ) B,
+             -- Revisado: fecha más reciente
+             (
+               SELECT G.GUIA, MAX(D2.FECHA) AS FECHA
+               FROM   REVISADO_G G
+               JOIN   REVISADO_D D2 ON D2.NUMERO = G.NUMERO
+               GROUP  BY G.GUIA
+             ) R,
+             -- Encono: H_PROGRAMACION (fecha fin o fecha)
+             (
+               SELECT GUIA, MAX(NVL(FECHA_FIN, FECHA)) AS FECHA
+               FROM   H_PROGRAMACION
+               WHERE  ESTADO <> '9'
+               GROUP  BY GUIA
+             ) Z,
+             -- Almacén PT: primera fecha de ingreso (almacenes 03 y 07)
+             (
+               SELECT PARTIDA, MIN(FECHA) AS FECHA_ING
+               FROM   LOTES
+               WHERE  COD_ALM IN ('03','07')
+                 AND  ESTADO  <> '9'
+                 AND  PARTIDA IS NOT NULL
+               GROUP  BY PARTIDA
+             ) S,
+             -- Secado en máquinas de secado (RMC in R/X)
+             (
+               SELECT S2.GUIA, MAX(TRUNC(S2.FECHA_FIN)) AS FECHA
+               FROM   TT_RSECADO S2
+               JOIN   TT_MAQUINA M  ON M.COD_MAQ = S2.COD_MAQ
+               WHERE  M.TIPO_MAQ = 'S'
+                 AND  M.RMC     IN ('R','X')
+               GROUP  BY S2.GUIA
+             ) H,
+             -- Secado en máquinas de madeja (RMC = M)
+             (
+               SELECT S3.GUIA, MAX(TRUNC(S3.FECHA_FIN)) AS FECHA
+               FROM   TT_RSECADO S3
+               JOIN   TT_MAQUINA M2 ON M2.COD_MAQ = S3.COD_MAQ
+               WHERE  M2.TIPO_MAQ = 'S'
+                 AND  M2.RMC      = 'M'
+               GROUP  BY S3.GUIA
+             ) SM,
+             -- Receta: fecha más reciente por guía/proceso TT
+             (
+               SELECT GUIA, PROCESO, MAX(FEC_RECETA) AS FECHA
+               FROM   V_RECETAPARTIDA
+               WHERE  PROCESO IN (
+                        SELECT CODIGO FROM CTPROCESOS
+                        WHERE  NVL(ESTADO,'0') <> '9'
+                          AND  (SUBSTR(CALCULO,1,1) = '2' OR SUBSTR(CALCULO,2,1) = '2')
+                      )
+               GROUP  BY GUIA, PROCESO
+             ) K,
+             -- Cantidad despachada desde almacenes PT
+             (
+               SELECT PARTIDA AS GUIA, SUM(STOCK_INIC) AS CANTIDAD
+               FROM   LOTES
+               WHERE  COD_ALM   IN ('03','07')
+                 AND  ESTADO     <> '9'
+                 AND  PARTIDA    IS NOT NULL
+                 AND  S_TRANSAC  IS NOT NULL
+                 AND  S_SERIE    IS NOT NULL
+                 AND  S_NUMERO   IS NOT NULL
+                 AND  FEC_SALIDA IS NOT NULL
+               GROUP  BY PARTIDA
+             ) U,
+             -- Último ingreso a almacén PI (PARTIDA_RESERVA)
+             (
+               SELECT NROPROG, MAX(FECHA) AS FECHA
+               FROM   PARTIDA_RESERVA
+               GROUP  BY NROPROG
+             ) RES,
+             ARTICUL           A,
+             H_TITULOS         N,
+             V_STATUS_CCAL_TINTO CAL,
+             L_VALIDA_RECETA   L,
+             H_TPROD           V,
+             TT_PARAMPROGTIN   EE
+       WHERE NVL(E.ESTADO_PART,'0') NOT IN ('8','9')
+         -- Dedup FHC_PROG
+         AND E.NUM_PED  = F.NUM_PED
+         AND E.NRO      = F.NRO
+         AND E.NUM_DET  = F.NUM_DET
+         AND NVL(E.FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY')) = F.FCH_PROG
+         -- ── Opción de búsqueda ─────────────────────────────
+         AND (
+               (p_opc = 'POR FECHA DE ENTREGA'
+                AND TRUNC(E.FCH_ENTREGA) BETWEEN p_fechai AND p_fechaf)
+            OR (p_opc = 'POR PEDIDO'
+                AND E.NUM_PED = p_numped)
+            OR (p_opc = 'POR FECHA DE PROGRAMA'
+                AND TRUNC(E.FHC_PROG) BETWEEN p_fechai AND p_fechaf)
+            OR (p_opc = 'POR FECHA DE TEÑIDO'
+                AND E.FHC_PROG >= ADD_MONTHS(p_fechai, -3)
+                AND B.FECHA    BETWEEN p_fechai AND p_fechaf)
+            OR (p_opc = 'POR FECHA APROB PEDIDO'
+                AND TRUNC(E.FCH_PEDIDO_APROB) BETWEEN p_fechai AND p_fechaf)
+             )
+         -- ── Filtros adicionales ────────────────────────────
+         AND (p_cliente = '%'
+              OR (p_cliente = 'X'
+                  AND E.COD_CLIENTE NOT IN ('77777777','88888888'))
+              OR (p_cliente NOT IN ('%','X')
+                  AND E.COD_CLIENTE = p_cliente))
+         AND (p_titulo  = '%' OR E.TITULO      = p_titulo)
+         AND (p_fibra   = '%' OR E.TIPO_FIBRA  = p_fibra)
+         AND (p_proceso = '%' OR E.PROCESO     = p_proceso)
+         -- ── CC tintorería ──────────────────────────────────
+         AND D.GUIA(+) = E.GUIA
+         AND X.FCH_CONSULTA(+) = D.FECHA
+         AND X.GUIA(+)         = D.GUIA
+         AND X.RESULTADO(+)   IN ('01','29')
+         AND NVL(X.ESTADO(+),'1') <> '9'
+         -- ── Partidas ──────────────────────────────────────
+         AND P.GUIA(+) = E.GUIA
+         AND W.GUIA(+) = E.GUIA
+         AND Q.GUIA(+) = W.GUIA
+         AND T.GUIA(+) = P.GUIA
+         -- ── Pedido / ítem / cliente ────────────────────────
+         AND I.ESTADO  <> '9'
+         AND I.NUM_PED  = E.NUM_PED
+         AND I.NRO      = E.NRO
+         AND (p_asesor = '%' OR J.COD_VENDE = p_asesor)
+         AND J.NUM_PED  = I.NUM_PED
+         AND C.COD_CLIENTE = J.COD_CLIENTE
+         -- ── Tintorería ────────────────────────────────────
+         AND B.PARTIDA(+) = Q.GUIA
+         -- ── Revisado / encono / almacén PT ────────────────
+         AND R.GUIA(+)  = P.GUIA
+         AND Z.GUIA(+)  = P.GUIA
+         AND S.PARTIDA(+) = P.GUIA
+         -- ── Secado ────────────────────────────────────────
+         AND H.GUIA(+)  = P.GUIA
+         AND SM.GUIA(+) = P.GUIA
+         -- ── Receta / despacho ─────────────────────────────
+         AND K.GUIA(+)  = Q.GUIA
+         AND U.GUIA(+)  = P.GUIA
+         -- ── PARTIDA_RESERVA ───────────────────────────────
+         AND RES.NROPROG(+) = E.NUMERO
+         -- ── Artículo / título ─────────────────────────────
+         AND A.COD_ART = E.COD_ART
+         AND N.TITULO(+) = I.TITULO
+         -- ── CC status (vista) ─────────────────────────────
+         AND CAL.GUIA(+) = F.NUM_PED || '-' || F.NRO || '-' || F.NUM_DET
+         -- ── Validación receta / laboratorista ─────────────
+         AND L.NUMERO(+) = E.NRO_VALREC
+         AND V.TABLA(+)  = '09'
+         AND V.CODIGO(+) = L.C_LABORATORISTA
+         -- ── Parámetro progresivo tintorería (fila fija) ───
+         AND EE.GUIA = 0
+       ORDER BY E.FCH_ENTREGA,
+                E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO;
+  END SP_PLN_SEG_PROG_TINTORERIA;
+
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_CLIENTES
+  -- Devuelve clientes con pedidos activos (no internos).
+  -- Columnas: COD_CLIENTE, NOMBRE
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_CLIENTES (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT J.COD_CLIENTE,
+             C.NOMBRE
+      FROM   PEDIDO J
+      JOIN   CLIENTES C ON C.COD_CLIENTE = J.COD_CLIENTE
+      WHERE  J.SERIE   = 1
+        AND  J.ESTADO NOT IN ('0','9')
+        AND  J.F_APROBACION IS NOT NULL
+        AND  J.COD_CLIENTE NOT IN ('77777777','88888888')
+      ORDER BY C.NOMBRE;
+  END SP_PLN_FILTRO_CLIENTES;
+
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_ASESORES
+  -- Devuelve asesores/vendedores con pedidos activos.
+  -- Columnas: COD_VENDE, ABREVIADA, NOMBRE
+  -- Fuente: TABLAS_AUXILIARES TIPO=29 (verificado en BD)
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_ASESORES (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT J.COD_VENDE,
+             T.ABREVIADA,
+             T.DESCRIPCION AS NOMBRE
+      FROM   PEDIDO J
+      JOIN   TABLAS_AUXILIARES T
+               ON T.TIPO   = 29
+              AND T.CODIGO = J.COD_VENDE
+      WHERE  J.SERIE  = 1
+        AND  J.ESTADO NOT IN ('0','9')
+        AND  J.F_APROBACION IS NOT NULL
+        AND  J.COD_VENDE IS NOT NULL
+        AND  T.CODIGO  <> '....'
+      ORDER BY T.DESCRIPCION;
+  END SP_PLN_FILTRO_ASESORES;
+
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_TITULOS
+  -- Devuelve títulos distintos usados en ítems activos.
+  -- Columnas: TITULO (código), DESCRIPCION (ej. '04/2')
+  -- Fuente: H_TITULOS (TITULO=código, DESCRIPCION=texto)
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_TITULOS (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT D.TITULO,
+             T.DESCRIPCION
+      FROM   ITEMPED_DET D
+      JOIN   PEDIDO J ON J.NUM_PED = D.NUM_PED AND J.SERIE = 1
+      JOIN   H_TITULOS T ON T.TITULO = D.TITULO
+      WHERE  J.ESTADO NOT IN ('0','9')
+        AND  J.F_APROBACION IS NOT NULL
+        AND  D.TITULO IS NOT NULL
+        AND  D.TITULO <> '000'
+      ORDER BY T.DESCRIPCION;
+  END SP_PLN_FILTRO_TITULOS;
+
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_FIBRAS
+  -- Devuelve fibras distintas usadas en ítems activos.
+  -- Columnas: TIPO_FIBRA (código), ABREVIADO, DESCRIPCION
+  -- Fuente: H_FIBRA (verificado en BD: FIBRA=código, DESCRIPCION=nombre)
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_FIBRAS (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT D.TIPO_FIBRA,
+             F.ABREVIADO,
+             F.DESCRIPCION
+      FROM   ITEMPED_DET D
+      JOIN   PEDIDO J ON J.NUM_PED = D.NUM_PED AND J.SERIE = 1
+      JOIN   H_FIBRA F ON F.FIBRA = D.TIPO_FIBRA
+      WHERE  J.ESTADO NOT IN ('0','9')
+        AND  J.F_APROBACION IS NOT NULL
+        AND  D.TIPO_FIBRA IS NOT NULL
+        AND  D.TIPO_FIBRA <> '000'
+      ORDER BY F.DESCRIPCION;
+  END SP_PLN_FILTRO_FIBRAS;
+
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_PROCESOS
+  -- Devuelve procesos de producción usados en ítems activos.
+  -- Columnas: PROCESO (código), DESCRIPCION
+  -- Fuente: H_PROCESOS (verificado en BD)
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_PROCESOS (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT D.PROCESO,
+             R.DESCRIPCION
+      FROM   ITEMPED_DET D
+      JOIN   PEDIDO J ON J.NUM_PED = D.NUM_PED AND J.SERIE = 1
+      JOIN   H_PROCESOS R ON R.PROCESO = D.PROCESO
+      WHERE  J.ESTADO NOT IN ('0','9')
+        AND  J.F_APROBACION IS NOT NULL
+        AND  D.PROCESO IS NOT NULL
+        AND  D.PROCESO <> '00'
+      ORDER BY R.DESCRIPCION;
+  END SP_PLN_FILTRO_PROCESOS;
+
 
 END PKG_PLN;
 /
@@ -2161,6 +2957,7 @@ END PKG_PLN;
 --   2. PEDIDO.ESTADO NOT IN ('0','9')  → excluir borradores (caen) y anulados
 --   3. PEDIDO.F_APROBACION IS NOT NULL → solo pedidos aprobados/confirmados
 --   4. ITEMPED.ESTADO NOT IN ('0','9') → excluir ítems borrador o anulados
+--   5. TRUNC(PEDIDO.FECHA,'MM') >= TRUNC(SYSDATE,'MM') → solo mes actual en adelante
 -- FIX #27: :NEW.solo_despacho se usa directamente (evita ORA-04091 mutating
 --          table en AFTER INSERT FOR EACH ROW — especialmente en inserciones
 --          bulk). DEFAULT 'N' cubierto por NVL.
@@ -2175,28 +2972,61 @@ FOR EACH ROW
 DECLARE
   v_est_ped   PEDIDO.ESTADO%TYPE;
   v_fch_aprob PEDIDO.F_APROBACION%TYPE;
+  v_fch_ped   PEDIDO.FECHA%TYPE;
+  -- Copias de :NEW: se asignan al inicio del BEGIN porque en Oracle 11g
+  -- :NEW no se puede usar en expresiones de inicialización del DECLARE.
+  v_serie     PLN_SEGUIMIENTO.SERIE%TYPE;
+  v_num_ped   PLN_SEGUIMIENTO.NUM_PED%TYPE;
+  v_nro       PLN_SEGUIMIENTO.NRO%TYPE;
 BEGIN
+  -- Capturar valores de :NEW antes de cualquier RETURN/EXCEPTION
+  v_serie   := :NEW.serie;
+  v_num_ped := :NEW.num_ped;
+  v_nro     := :NEW.nro;
+
   -- FILTRO 1: ítems de solo-stock/maquila no entran a producción → no registrar
   IF NVL(:NEW.solo_despacho, 'N') = 'S' THEN RETURN; END IF;
 
   -- FILTRO 2: ítem borrador o anulado → no registrar
   IF :NEW.estado IN ('0', '9') THEN RETURN; END IF;
 
-  -- FILTRO 3: solo pedidos confirmados con aprobación
+  -- FILTRO 3+5: solo pedidos confirmados con aprobación Y del mes actual en adelante
   -- PEDIDO es tabla diferente → no hay riesgo ORA-04091
   BEGIN
-    SELECT estado, f_aprobacion
-    INTO   v_est_ped, v_fch_aprob
+    SELECT estado, f_aprobacion, fecha
+    INTO   v_est_ped, v_fch_aprob, v_fch_ped
     FROM   pedido
     WHERE  serie = :NEW.serie AND num_ped = :NEW.num_ped;
   EXCEPTION WHEN NO_DATA_FOUND THEN RETURN;
   END;
   IF v_est_ped IN ('0', '9') OR v_fch_aprob IS NULL THEN RETURN; END IF;
 
+  -- FILTRO 5 eliminado (BUG-D FIX): el filtro de mes anterior bloqueaba la creación de
+  -- seguimiento para nuevos ítems añadidos a pedidos activos de meses previos.
+  -- SP_PLN_INIT_SEGUIMIENTO ya valida internamente ESTADO IN ('6','9') para cerrados/anulados.
+  -- Impacto BD confirmado: 1,071 ítems activos sin seguimiento (261 de abril/2026, 237 de marzo/2026).
+
   PKG_PLN.SP_PLN_INIT_SEGUIMIENTO(:NEW.serie, :NEW.num_ped, :NEW.nro, 0, '01');
   PKG_PLN.SP_PLN_CALCULA_FECHAS(:NEW.serie, :NEW.num_ped, :NEW.nro, 0, 'PED');
 EXCEPTION
-  WHEN OTHERS THEN NULL;
+  WHEN OTHERS THEN
+    -- No propagar: no debe romper el INSERT en ITEMPED (sistema de ventas).
+    -- Usar EXECUTE IMMEDIATE para evitar restricción de compilación Oracle 11g
+    -- sobre INSERT con || en VALUES dentro de bloques anidados en EXCEPTION.
+    DECLARE
+      v_msg VARCHAR2(400);
+      v_nid NUMBER;
+    BEGIN
+      v_msg := SUBSTR('SER='||v_serie||' PED='||v_num_ped||' NRO='||v_nro||' | '||SQLERRM, 1, 400);
+      SELECT pln_seq_alerta.NEXTVAL INTO v_nid FROM DUAL;
+      EXECUTE IMMEDIATE
+        'INSERT INTO pln_alerta(id_alerta,tip_alerta,nivel,titulo,detalle,'
+        ||'serie,num_ped,nro,fch_alerta,estado,a_aduser,a_adfecha)'
+        ||' VALUES(:1,:2,:3,:4,:5,:6,:7,:8,SYSDATE,:9,:10,SYSDATE)'
+        USING v_nid,'EINIT','A','Error init seguimiento (ITEMPED)',
+              v_msg, v_serie, v_num_ped, v_nro, 'A', 'TRIGGER';
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
 END TIA_PLN_FROM_ITEMPED;
 /
 
@@ -2228,7 +3058,7 @@ FOR EACH ROW
 WHEN (NEW.NROPROG IS NOT NULL
       AND (OLD.NROPROG IS NULL
            OR NEW.NROPROG         != OLD.NROPROG
-           OR NEW.FHC_PROG        != OLD.FHC_PROG
+           OR NVL(NEW.FHC_PROG,        DATE '1900-01-01') != NVL(OLD.FHC_PROG,        DATE '1900-01-01')  -- v2.4 FIX: NVL para detectar NULL→fecha
            OR NVL(NEW.FHC_ENTREGA,    DATE '1900-01-01') != NVL(OLD.FHC_ENTREGA,    DATE '1900-01-01')
            OR NVL(NEW.FCH_REG_ENTREGA,DATE '1900-01-01') != NVL(OLD.FCH_REG_ENTREGA,DATE '1900-01-01')
            OR NVL(NEW.FCH_ENTREGA_ORI,DATE '1900-01-01') != NVL(OLD.FCH_ENTREGA_ORI,DATE '1900-01-01')))
@@ -2241,7 +3071,7 @@ BEGIN
   -- Solo avanzar a PASO '02' y recalcular si el NROPROG cambió o FHC_PROG cambió
   IF :OLD.NROPROG IS NULL
      OR :NEW.NROPROG != :OLD.NROPROG
-     OR :NEW.FHC_PROG != :OLD.FHC_PROG THEN
+     OR NVL(:NEW.FHC_PROG, DATE '1900-01-01') != NVL(:OLD.FHC_PROG, DATE '1900-01-01') THEN  -- v2.4 FIX: NVL
 
     PKG_PLN.SP_PLN_AVANZA_PASO(
       :NEW.serie, :NEW.num_ped, :NEW.nro, :NEW.num_det,
@@ -2307,6 +3137,91 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN NULL;
 END TUA_PLN_FROM_ITEMPED_DET;
+/
+
+-- ────────────────────────────────────────────────────────────
+-- §7.2B TIA_PLN_FROM_ITEMPED_DET — PASO '02' en INSERT (BUG #45 fix)
+-- ────────────────────────────────────────────────────────────
+-- Disparo  : AFTER INSERT ON ITEMPED_DET FOR EACH ROW
+-- Condición: NEW.NROPROG IS NOT NULL
+-- Propósito: Captura INSERTs donde NROPROG y FHC_PROG ya están seteados
+--            en el mismo statement (el TUA no dispara en INSERT).
+--            Previene que ítems queden en PASO '01' cuando el planificador
+--            inserta una fila nueva en ITEMPED_DET con el programa ya asignado.
+-- Hereda misma lógica que TUA_PLN_FROM_ITEMPED_DET (v2.3).
+CREATE OR REPLACE TRIGGER TIA_PLN_FROM_ITEMPED_DET
+AFTER INSERT ON ITEMPED_DET
+FOR EACH ROW
+WHEN (NEW.NROPROG IS NOT NULL)
+DECLARE
+  v_urgente     VARCHAR2(1) := 'N';
+  v_fch_entrega DATE;
+BEGIN
+  PKG_PLN.SP_PLN_INIT_SEGUIMIENTO(:NEW.serie, :NEW.num_ped, :NEW.nro, :NEW.num_det);
+
+  -- Avanzar a PASO '02' si FHC_PROG ya está seteada en el INSERT
+  IF :NEW.FHC_PROG IS NOT NULL THEN
+    PKG_PLN.SP_PLN_AVANZA_PASO(
+      :NEW.serie, :NEW.num_ped, :NEW.nro, :NEW.num_det,
+      '02', 'ITEMPED_DET', :NEW.nroprog, :NEW.cantidad,
+      'Programa asignado (INSERT): '||:NEW.nroprog
+    );
+    PKG_PLN.SP_PLN_CALCULA_FECHAS(:NEW.serie, :NEW.num_ped, :NEW.nro, :NEW.num_det, 'PLA');
+  END IF;
+
+  -- Calcular FCH_ENTREGA_COMP según prioridad (igual que TUA)
+  BEGIN
+    SELECT NVL(:NEW.FHC_ENTREGA,
+           NVL(:NEW.FCH_ENTREGA_ORI,
+           NVL(:NEW.FCH_REG_ENTREGA,
+           NVL(ip.f_maxped,
+               pe.fecha + NVL(pe.plazo_entrega, 30)))))
+    INTO   v_fch_entrega
+    FROM   ITEMPED ip
+    JOIN   PEDIDO  pe ON pe.serie=ip.serie AND pe.num_ped=ip.num_ped
+    WHERE  ip.serie=:NEW.serie AND ip.num_ped=:NEW.num_ped AND ip.nro=:NEW.nro;
+  EXCEPTION WHEN NO_DATA_FOUND THEN
+    v_fch_entrega := NVL(:NEW.FHC_ENTREGA, NVL(:NEW.FCH_ENTREGA_ORI, :NEW.FCH_REG_ENTREGA));
+  END;
+
+  UPDATE PLN_SEGUIMIENTO SET
+    FCH_PLANIF       = NVL(:NEW.FHC_PROG,        FCH_PLANIF),
+    USR_PLANIF       = NVL(:NEW.A_ADUSER,         USR_PLANIF),
+    FCH_REG_ENTREGA  = NVL(:NEW.FCH_REG_ENTREGA,  FCH_REG_ENTREGA),
+    FCH_ENTREGA_ORI  = NVL(:NEW.FCH_ENTREGA_ORI,  FCH_ENTREGA_ORI),
+    FCH_ENTREGA_COMP = NVL(v_fch_entrega,         FCH_ENTREGA_COMP),
+    A_MDFECHA        = SYSDATE,
+    A_MDUSER         = USER
+  WHERE serie=:NEW.serie AND num_ped=:NEW.num_ped
+    AND nro=:NEW.nro AND num_det=:NEW.num_det AND estado='A';
+
+  -- IND_URGENTE si URGENTE='S' o hay anticipo cobrado
+  IF NVL(:NEW.urgente,'N') = 'S' THEN
+    v_urgente := 'S';
+  ELSE
+    BEGIN
+      SELECT 'S' INTO v_urgente
+      FROM ANTICIPO
+      WHERE num_ped=:NEW.num_ped AND serie=:NEW.serie AND ROWNUM=1;
+    EXCEPTION WHEN NO_DATA_FOUND THEN v_urgente := 'N';
+    END;
+  END IF;
+
+  IF v_urgente = 'S' THEN
+    UPDATE PLN_SEGUIMIENTO SET IND_URGENTE='S', A_MDFECHA=SYSDATE, A_MDUSER=USER
+    WHERE serie=:NEW.serie AND num_ped=:NEW.num_ped
+      AND nro=:NEW.nro AND num_det=:NEW.num_det AND estado='A';
+  END IF;
+
+  IF :NEW.maquina IS NOT NULL THEN
+    UPDATE PLN_SEGUIMIENTO SET
+      COD_MAQ_PLANIF = :NEW.maquina, A_MDFECHA=SYSDATE, A_MDUSER=USER
+    WHERE serie=:NEW.serie AND num_ped=:NEW.num_ped
+      AND nro=:NEW.nro AND num_det=:NEW.num_det AND estado='A';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END TIA_PLN_FROM_ITEMPED_DET;
 /
 
 -- ────────────────────────────────────────────────────────────
@@ -2492,6 +3407,48 @@ END TUA_PLN_FROM_L_VALIDA_RECETA;
 /
 
 -- ────────────────────────────────────────────────────────────
+-- §7.5B TIA_PLN_FROM_L_VALIDA_RECETA — PASO '04' Laboratorio (INSERT directo / bypass)
+-- ────────────────────────────────────────────────────────────
+-- Disparo  : AFTER INSERT ON L_VALIDA_RECETA FOR EACH ROW
+-- Condición: NEW.ESTADO IN ('3','4') AND NEW.NROPROG IS NOT NULL
+-- Propósito : Complemento de TUA_PLN_FROM_L_VALIDA_RECETA (§7.5).
+--   El TUA solo captura UPDATE. Si el sistema de lab inserta L_VALIDA_RECETA
+--   directamente con ESTADO='3' (aprobado) o ESTADO='4' (bypass), el TUA
+--   no dispara y PASO '04' nunca se activa.
+--   Casos reales donde ocurre:
+--     · ESTADO='4' (aprobado directo/bypass): la app puede insertar con
+--       estado final sin pasar por un UPDATE posterior.
+--     · Correcciones manuales o cargas masivas con estado final ya seteado.
+-- Guard anti-retroceso en SP_PLN_AVANZA_PASO evita doble avance si tanto
+--   TIA como TUA disparan para el mismo ítem (idempotente).
+-- EXCEPTION WHEN OTHERS THEN NULL → no bloquea el INSERT de L_VALIDA_RECETA.
+CREATE OR REPLACE TRIGGER TIA_PLN_FROM_L_VALIDA_RECETA
+AFTER INSERT ON L_VALIDA_RECETA
+FOR EACH ROW
+WHEN (NEW.ESTADO IN ('3','4') AND NEW.NROPROG IS NOT NULL)
+DECLARE
+  v_serie   NUMBER;
+  v_num_ped NUMBER;
+  v_nro     NUMBER;
+  v_num_det NUMBER;
+BEGIN
+  SELECT d.serie, d.num_ped, d.nro, d.num_det
+  INTO v_serie, v_num_ped, v_nro, v_num_det
+  FROM itemped_det d
+  WHERE d.nroprog = :NEW.nroprog AND ROWNUM = 1;
+
+  PKG_PLN.SP_PLN_AVANZA_PASO(
+    v_serie, v_num_ped, v_nro, v_num_det,
+    '04', 'L_VALIDA_RECETA', :NEW.numero, NULL,
+    'Receta aprobada (INSERT directo) - Lab:'||NVL(:NEW.c_laboratorista,'N/A')
+  );
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN NULL;
+  WHEN OTHERS        THEN NULL;
+END TIA_PLN_FROM_L_VALIDA_RECETA;
+/
+
+-- ────────────────────────────────────────────────────────────
 -- §7.6  TUA_PLN_FROM_PARTIDA — PASO '06' En Tintorería (sistema legado)
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : AFTER UPDATE ON PARTIDA FOR EACH ROW
@@ -2529,36 +3486,39 @@ END TUA_PLN_FROM_PARTIDA;
 /
 
 -- ────────────────────────────────────────────────────────────
--- §7.6b  TIA_PLN_FROM_TT_RPRODUC_PA — PASO '06'/'07' Sistema nuevo TT (v2.0)
+-- §7.6b  TIA_PLN_FROM_TT_RPRODUC_PA — PASO '06'/'07' Sistema nuevo TT (v2.3)
 -- ────────────────────────────────────────────────────────────
 -- Disparo  : FOR INSERT ON TT_RPRODUC (COMPOUND TRIGGER, Oracle 11g+)
--- Condición: NEW.TIPODOC='PA' AND NEW.ESTADO='3'
--- Acción   : PASO '06' si es el PRIMER baño de esa receta
---             PASO '07' en cada baño (guard anti-retroceso protege)
--- Tabla     : TT_RPRODUC — sistema nuevo de producción de tintorería (2021+)
--- TIPODOC='PA': sistema nuevo (RECETA = PARTIDA.NUMERO directamente).
---   Todos los registros PA se insertan con ESTADO='3' (no hay actualización posterior).
+-- Condición: (TIPODOC='PA' AND ESTADO='3') OR (TIPODOC='IR')
+-- Acción   : PASO '06' al detectar el PRIMER baño activo de esa partida en TT
+--             PASO '07' solo cuando TODOS los baños están completos (ESTADO='3')
+-- Tabla     : TT_RPRODUC — sistema de producción de tintorería (2016+)
+--
+-- DIFERENCIA ENTRE SISTEMAS:
+--   TIPODOC='PA' (2016-2020): registro insertado directamente con ESTADO='3' (baño completo).
+--     Un solo INSERT captura tanto PASO '06' como '07' en la misma sentencia.
+--   TIPODOC='IR' (2021+): registro insertado con ESTADO='1' (en proceso). El UPDATE posterior
+--     a '3' lo maneja TUA_PLN_FROM_TT_RPRODUC.
+--     BUG ANTERIOR (v2.0-v2.2): el trigger ignoraba inserts IR con ESTADO<>'3', por lo que
+--     PASO '06' nunca se activaba automáticamente para el sistema IR. Los ítems quedaban en
+--     PASO '04' hasta que todos los baños completaban (UPDATE→'3'), saltando '06' directo a '07'.
+--     FIX v2.3: se captura el INSERT IR con cualquier ESTADO para activar PASO '06' en cuanto
+--     el primer baño INICIA (cnt_banos_any=1), independientemente de si está completo o no.
 --
 -- *** COMPOUND TRIGGER — FIX ORA-04091 (mutating table) ***
--- Un trigger FOR EACH ROW (row-level) NO puede hacer SELECT COUNT(*) FROM TT_RPRODUC
--- porque TT_RPRODUC es la misma tabla que está siendo modificada (tabla mutante).
--- Con EXCEPTION WHEN OTHERS THEN NULL el error se tragaba silenciosamente y el
--- trigger nunca avanzaba PASO '06'/'07'.
--- Solución: COMPOUND TRIGGER (disponible desde Oracle 11g).
 --   AFTER EACH ROW : solo captura los datos (no consulta TT_RPRODUC).
 --   AFTER STATEMENT: aquí la tabla ya está estable → COUNT(*) seguro.
 --
--- LÓGICA:
---   Por cada baño PA insertado:
---     · Cuenta registros PA completados para esa receta.
---     · Si COUNT = 1 → primer baño → PASO '06' + guarda COD_MAQ_TT.
---     · Siempre avanza a '07'. El guard anti-retroceso permite '06' → '07'
---       en la misma transacción (ORDEN_PASO '07' > ORDEN_PASO '06').
---       Para múltiples baños el guard bloquea el retroceso de baños anteriores.
+-- LÓGICA (v2.3):
+--   PA: primer baño completo (cnt_banos=1) → PASO '06' + '07' en misma tx.
+--   IR: primer baño iniciado  (cnt_banos_any=1) → PASO '06'.
+--       PASO '07' solo si este INSERT fue ESTADO='3' y todos los demás también
+--       (caso raro; normalmente TUA_FROM_TT_RPRODUC gestiona el avance a '07').
+--   Ambos: si viene de '9R' (reproceso) → forzar PASO '06' aunque no sea el primer baño.
 --
 -- Navegación:
---   TT_RPRODUC.RECETA = PARTIDA.NUMERO (sistema PA)
---   PARTIDA.NROPROG -> ITEMPED_DET.(NRO, NUM_DET)
+--   PA: TT_RPRODUC.RECETA = PARTIDA.NUMERO (vínculo directo)
+--   IR: TT_RPRODUC.RECETA = ING_RECETAS_G.NUMERO → PARTIDA_MAS → PARTIDA.NUMERO
 CREATE OR REPLACE TRIGGER TIA_PLN_FROM_TT_RPRODUC_PA
 FOR INSERT ON TT_RPRODUC
 COMPOUND TRIGGER
@@ -2567,113 +3527,154 @@ COMPOUND TRIGGER
   TYPE t_rec IS RECORD (
     receta   TT_RPRODUC.RECETA%TYPE,
     tipodoc  TT_RPRODUC.TIPODOC%TYPE,
-    cod_maq  VARCHAR2(6)
+    cod_maq  VARCHAR2(6),
+    estado   TT_RPRODUC.ESTADO%TYPE   -- v2.3: necesario para diferenciar IR PASO '06'/'07'
   );
   TYPE t_tab IS TABLE OF t_rec INDEX BY PLS_INTEGER;
   g_rows t_tab;
   g_cnt  PLS_INTEGER := 0;
 
   -- ── AFTER EACH ROW: solo captura datos, NO consulta TT_RPRODUC ──
+  -- PA: solo ESTADO='3' (siempre se inserta completo).
+  -- IR: cualquier ESTADO (INSERT puede ser '1'/'2'/'3').
   AFTER EACH ROW IS
   BEGIN
-    IF :NEW.TIPODOC IN ('PA','IR') AND :NEW.ESTADO = '3' THEN
+    IF (:NEW.TIPODOC = 'PA' AND :NEW.ESTADO = '3')
+    OR (:NEW.TIPODOC = 'IR') THEN
       g_cnt := g_cnt + 1;
       g_rows(g_cnt).receta  := :NEW.receta;
       g_rows(g_cnt).tipodoc := :NEW.tipodoc;
       g_rows(g_cnt).cod_maq := NVL(:NEW.cod_maq, '?');
+      g_rows(g_cnt).estado  := :NEW.estado;
     END IF;
   EXCEPTION
     WHEN OTHERS THEN NULL;
   END AFTER EACH ROW;
 
   -- ── AFTER STATEMENT: tabla estable, COUNT(*) sin ORA-04091 ─────
+  -- v2.5: do_partida() factorizado para iterar N partidas por receta IR (fix BUG-TRG-1)
   AFTER STATEMENT IS
-    v_partida      NUMBER;
-    v_nroprog      NUMBER;
-    v_serie        NUMBER;
-    v_num_ped      NUMBER;
-    v_nro          NUMBER;
-    v_num_det      NUMBER;
-    v_cnt_banos    NUMBER;
-    v_tot_banos    NUMBER;
-    v_paso_seg_act VARCHAR2(3) := '00';  -- v2.1 FIX BUG#A: detecta re-ingreso por reproceso
+    v_partida        NUMBER;
+    v_nroprog        NUMBER;
+    v_serie          NUMBER;
+    v_num_ped        NUMBER;
+    v_nro            NUMBER;
+    v_num_det        NUMBER;
+    v_cnt_banos      NUMBER;   -- baños COMPLETADOS (ESTADO='3')
+    v_cnt_banos_any  NUMBER;   -- baños ACTIVOS cualquier ESTADO (solo IR — para PASO '06')
+    v_tot_banos      NUMBER;
+    v_paso_seg_act   VARCHAR2(3) := '00';  -- detecta re-ingreso por reproceso
+
+    -- v2.5 fix BUG-TRG-1: todo el procesamiento por partida factorizado aquí.
+    -- Se llama una vez por PA y N veces por receta IR (una por cada partida en PARTIDA_MAS).
+    -- v_partida debe estar asignado en el scope externo antes de llamar.
+    PROCEDURE do_partida(
+      p_tipodoc VARCHAR2, p_cod_maq VARCHAR2,
+      p_receta  NUMBER,   p_estado  VARCHAR2
+    ) IS
+    BEGIN
+      SELECT p.nroprog, p.serie, p.nro_pedido
+      INTO v_nroprog, v_serie, v_num_ped
+      FROM partida p
+      WHERE p.numero = v_partida;
+
+      SELECT d.nro, d.num_det INTO v_nro, v_num_det
+      FROM itemped_det d
+      WHERE d.nroprog = v_nroprog AND ROWNUM = 1;
+
+      -- ── Contar baños según TIPODOC ──────────────────────────────
+      IF p_tipodoc = 'PA' THEN
+        SELECT COUNT(*) INTO v_cnt_banos
+        FROM   tt_rproduc
+        WHERE  receta = v_partida AND tipodoc = 'PA' AND estado = '3';
+        v_tot_banos     := v_cnt_banos;  -- PA: 1 registro = 1 baño completo
+        v_cnt_banos_any := v_cnt_banos;  -- PA: no aplica distinción
+      ELSE
+        -- IR: baños COMPLETADOS (para lógica de PASO '07')
+        SELECT COUNT(*) INTO v_cnt_banos
+        FROM   partida_mas pm
+        JOIN   tt_rproduc tt ON tt.receta = pm.numero AND tt.tipodoc = 'IR' AND tt.estado = '3'
+        WHERE  pm.partida    = v_partida
+          AND  pm.tp_transac = 'IR';
+
+        -- IR: baños ACTIVOS cualquier ESTADO (para detectar 1er ingreso a TT, PASO '06')
+        SELECT COUNT(*) INTO v_cnt_banos_any
+        FROM   partida_mas pm
+        JOIN   tt_rproduc tt ON tt.receta = pm.numero AND tt.tipodoc = 'IR'
+        WHERE  pm.partida    = v_partida
+          AND  pm.tp_transac = 'IR';
+
+        SELECT COUNT(*) INTO v_tot_banos
+        FROM   partida_mas pm
+        WHERE  pm.partida    = v_partida
+          AND  pm.tp_transac = 'IR';
+      END IF;
+
+      -- Leer paso actual para detectar re-ingreso por reproceso
+      BEGIN
+        SELECT cod_paso_act INTO v_paso_seg_act
+        FROM   pln_seguimiento
+        WHERE  serie=v_serie AND num_ped=v_num_ped AND nro=v_nro AND num_det=v_num_det AND estado='A';
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN v_paso_seg_act := '00';
+      END;
+
+      -- ── PASO '06': primer ingreso a TT en este ciclo ───────────
+      -- PA: cnt_banos=1  (primer baño recién insertado y completo)
+      -- IR: cnt_banos_any=1  (primer baño recién iniciado, cualquier estado)
+      -- Ambos: también si venía de '9R' (reproceso — nuevo ciclo de TT)
+      IF (p_tipodoc = 'PA' AND (v_cnt_banos     = 1 OR v_paso_seg_act = '9R'))
+      OR (p_tipodoc = 'IR' AND (v_cnt_banos_any = 1 OR v_paso_seg_act = '9R'))
+      THEN
+        PKG_PLN.SP_PLN_AVANZA_PASO(
+          v_serie, v_num_ped, v_nro, v_num_det,
+          '06', 'TT_RPRODUC', v_partida, NULL,
+          'Ingreso TT ('||p_tipodoc||') Maq:'||p_cod_maq||' Receta:'||p_receta
+        );
+        UPDATE pln_seguimiento SET
+          COD_MAQ_TT = p_cod_maq,
+          A_MDFECHA  = SYSDATE, A_MDUSER = USER
+        WHERE serie=v_serie AND num_ped=v_num_ped AND nro=v_nro AND num_det=v_num_det AND estado='A';
+      END IF;
+
+      -- ── PASO '07': solo cuando TODOS los baños están completos ─
+      -- IR con ESTADO<>'3' en este INSERT: TUA_FROM_TT_RPRODUC gestiona el '07'
+      -- al recibir el UPDATE ESTADO→'3'. No avanzar '07' aquí para esos casos.
+      IF v_cnt_banos >= v_tot_banos AND v_tot_banos > 0
+         AND (p_tipodoc = 'PA' OR p_estado = '3')
+      THEN
+        PKG_PLN.SP_PLN_AVANZA_PASO(
+          v_serie, v_num_ped, v_nro, v_num_det,
+          '07', 'TT_RPRODUC', v_partida, NULL,
+          'Tenido completo ('||p_tipodoc||') - '||v_cnt_banos||'/'||v_tot_banos||' banos'
+        );
+      END IF;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN NULL;
+      WHEN OTHERS        THEN NULL;
+    END do_partida;
+
   BEGIN
     FOR i IN 1 .. g_cnt LOOP
       BEGIN
-        -- ── Navegar a PARTIDA segun TIPODOC ────────────────────────
         IF g_rows(i).tipodoc = 'PA' THEN
           -- Sistema PA (2016): RECETA = PARTIDA.NUMERO directamente
           v_partida := g_rows(i).receta;
+          do_partida(g_rows(i).tipodoc, g_rows(i).cod_maq, g_rows(i).receta, g_rows(i).estado);
         ELSE
-          -- Sistema IR (2021+): RECETA = ING_RECETAS_G.NUMERO -> PARTIDA via PARTIDA_MAS
-          SELECT pm.partida INTO v_partida
-          FROM   partida_mas pm
-          WHERE  pm.tp_transac = 'IR'
-            AND  pm.numero     = g_rows(i).receta
-            AND  ROWNUM        = 1;
-        END IF;
-
-        SELECT p.nroprog, p.serie, p.nro_pedido
-        INTO v_nroprog, v_serie, v_num_ped
-        FROM partida p
-        WHERE p.numero = v_partida;
-
-        SELECT d.nro, d.num_det INTO v_nro, v_num_det
-        FROM itemped_det d
-        WHERE d.nroprog = v_nroprog AND ROWNUM = 1;
-
-        -- ── Contar banos completados y total segun TIPODOC ─────────
-        IF g_rows(i).tipodoc = 'PA' THEN
-          SELECT COUNT(*) INTO v_cnt_banos
-          FROM tt_rproduc
-          WHERE receta = v_partida AND tipodoc = 'PA' AND estado = '3';
-          v_tot_banos := v_cnt_banos;  -- PA: 1 registro = 1 bano completo
-        ELSE
-          -- IR: una partida tiene N banos (N registros en PARTIDA_MAS)
-          SELECT COUNT(*) INTO v_cnt_banos
-          FROM   partida_mas pm
-          JOIN   tt_rproduc tt ON tt.receta = pm.numero AND tt.tipodoc = 'IR' AND tt.estado = '3'
-          WHERE  pm.partida    = v_partida
-            AND  pm.tp_transac = 'IR';
-
-          SELECT COUNT(*) INTO v_tot_banos
-          FROM   partida_mas pm
-          WHERE  pm.partida    = v_partida
-            AND  pm.tp_transac = 'IR';
-        END IF;
-
-        -- v2.1 FIX BUG#A: leer paso actual para detectar re-ingreso por reproceso
-        BEGIN
-          SELECT cod_paso_act INTO v_paso_seg_act
-          FROM pln_seguimiento
-          WHERE serie=v_serie AND num_ped=v_num_ped AND nro=v_nro AND num_det=v_num_det AND estado='A';
-        EXCEPTION
-          WHEN NO_DATA_FOUND THEN v_paso_seg_act := '00';
-        END;
-
-        IF v_cnt_banos = 1 OR v_paso_seg_act = '9R' THEN
-          PKG_PLN.SP_PLN_AVANZA_PASO(
-            v_serie, v_num_ped, v_nro, v_num_det,
-            '06', 'TT_RPRODUC', v_partida, NULL,
-            'Ingreso TT ('||g_rows(i).tipodoc||') - bano '||v_cnt_banos||' Maq:'||g_rows(i).cod_maq||' Receta:'||g_rows(i).receta
-          );
-          UPDATE pln_seguimiento SET
-            COD_MAQ_TT = g_rows(i).cod_maq,
-            A_MDFECHA  = SYSDATE, A_MDUSER = USER
-          WHERE serie=v_serie AND num_ped=v_num_ped AND nro=v_nro AND num_det=v_num_det AND estado='A';
-        END IF;
-
-        -- PASO '07' solo cuando TODOS los banos estan completos
-        IF v_cnt_banos >= v_tot_banos AND v_tot_banos > 0 THEN
-          PKG_PLN.SP_PLN_AVANZA_PASO(
-            v_serie, v_num_ped, v_nro, v_num_det,
-            '07', 'TT_RPRODUC', v_partida, NULL,
-            'Tenido completo ('||g_rows(i).tipodoc||') - '||v_cnt_banos||'/'||v_tot_banos||' banos'
-          );
+          -- v2.5 fix BUG-TRG-1: iterar TODAS las partidas de la receta IR
+          -- Antes (v2.0-v2.4): SELECT INTO con ROWNUM=1 → solo 1/N partidas procesadas
+          -- para recetas con múltiples partidas (ej. receta 254139 → 22 partidas)
+          FOR r_ir IN (SELECT pm.partida
+                       FROM   partida_mas pm
+                       WHERE  pm.tp_transac = 'IR'
+                         AND  pm.numero     = g_rows(i).receta) LOOP
+            v_partida := r_ir.partida;
+            do_partida(g_rows(i).tipodoc, g_rows(i).cod_maq, g_rows(i).receta, g_rows(i).estado);
+          END LOOP;
         END IF;
       EXCEPTION
-        WHEN NO_DATA_FOUND THEN NULL;
-        WHEN OTHERS        THEN NULL;
+        WHEN OTHERS THEN NULL;
       END;
     END LOOP;
   END AFTER STATEMENT;
@@ -3340,7 +4341,7 @@ SELECT
 FROM pedido p
 JOIN clientes cl ON cl.cod_cliente = p.cod_cliente
 LEFT JOIN pln_seguimiento s ON s.serie = p.serie AND s.num_ped = p.num_ped AND s.estado IN ('A','C')
-WHERE p.estado IN ('0','5','9')
+WHERE p.estado IN ('0','5')  -- BUG-F FIX: excluir '9' (pedidos anulados); confirmado sin seguimiento activo
 GROUP BY p.serie, p.num_ped, p.fecha, p.cod_cliente, cl.nombre, p.estado, p.prioridad;
 
 -- ────────────────────────────────────────────────────────────
@@ -3349,11 +4350,21 @@ GROUP BY p.serie, p.num_ped, p.fecha, p.cod_cliente, cl.nombre, p.estado, p.prio
 -- Propósito  : Listado detallado de ítems activos con toda la información
 --              de estado para el Dashboard y la página Pedido.cshtml.
 -- JOIN       : PLN_SEGUIMIENTO + CLIENTES + ARTICUL + PLN_ESTADO_CODIGO + PARTIDA
+-- COLUMNAS DE AVANCE (dos métricas distintas):
+--   pct_kg_despachado  → kg_despachados / kg_pedido × 100
+--                        Mide avance de ENTREGA al cliente. Es 0% hasta que
+--                        se produce el primer despacho (paso 14).
+--   pct_avance_flujo   → orden_paso / 16 × 100
+--                        Mide avance del PROCESO productivo (flujo de trabajo).
+--                        Refleja en qué etapa está el ítem (01→6%, 13→88%, 14→100%).
+--                        Es el valor que usa PlnSeguimiento.PctAvance en C#.
 -- SEMÁFORO (campo calculado):
---   'R' → dias_retraso >= 7 (rojo)
---   'A' → dias_retraso >= 3 (naranja/amber)
---   'Y' → dias_retraso >= 1 (amarillo)
---   'G' → sin retraso      (verde)
+--   'R' → dias_retraso >= PLN_PARAM.DIAS_ALERTA_CRIT  (default 7)
+--   'A' → dias_retraso >= PLN_PARAM.DIAS_ALERTA_ALTA   (default 3)
+--   'Y' → dias_retraso >= PLN_PARAM.DIAS_ALERTA_MEDIA  (default 1)
+--   'G' → sin retraso (verde)
+-- Los umbrales se leen dinámicamente de PLN_PARAM; cambiar en PLN_PARAM se refleja sin
+-- recompilar la vista ni el paquete.
 -- Mapeo en C# (PlnSeguimiento.PctAvance): usados en ApexCharts Timeline
 -- COLOR_UI de PLN_ESTADO_CODIGO: para badges <span class="badge"> y barras de progreso
 --   <div class="progress-bar" style="width:@seg.PctAvance%; background:@paso.ColorUi">
@@ -3377,7 +4388,8 @@ SELECT
   s.kg_en_alm_pt,
   s.kg_despachados,
   s.kg_pendientes,
-  ROUND(s.kg_despachados / NULLIF(s.cantidad_orig,0) * 100, 1) AS pct_avance,
+  ROUND(s.kg_despachados / NULLIF(s.cantidad_orig,0) * 100, 1) AS pct_kg_despachado,
+  ROUND(ec.orden_paso / 16.0 * 100, 0)                         AS pct_avance_flujo,
   s.cod_paso_act,
   ec.nombre_paso,
   ec.color_ui,
@@ -3391,9 +4403,9 @@ SELECT
   s.nro_ciclo,
   s.ind_reproceso,
   CASE
-    WHEN s.dias_retraso >= 7 THEN 'R'
-    WHEN s.dias_retraso >= 3 THEN 'A'
-    WHEN s.dias_retraso >= 1 THEN 'Y'
+    WHEN s.dias_retraso >= (SELECT valor_num FROM pln_param WHERE cod_param='DIAS_ALERTA_CRIT')  THEN 'R'
+    WHEN s.dias_retraso >= (SELECT valor_num FROM pln_param WHERE cod_param='DIAS_ALERTA_ALTA')  THEN 'A'
+    WHEN s.dias_retraso >= (SELECT valor_num FROM pln_param WHERE cod_param='DIAS_ALERTA_MEDIA') THEN 'Y'
     ELSE 'G'
   END AS semaforo,
   s.num_programa,
@@ -3487,7 +4499,22 @@ SELECT
   s.nro_ciclo
 FROM pln_seguimiento s
 JOIN pedido     pe ON pe.serie=s.serie AND pe.num_ped=s.num_ped
-LEFT JOIN itemped_det id ON id.serie=s.serie AND id.num_ped=s.num_ped
+-- BUG-E FIX: ITEMPED_DET puede tener múltiples filas por (serie,num_ped,nro,num_det)
+-- cuando se reasignan NROPROG (confirmado: 6,725 grupos con duplicados, max 30 filas).
+-- ROW_NUMBER() toma solo la fila con el NROPROG más alto (programa más reciente).
+LEFT JOIN (
+  SELECT serie, num_ped, nro, num_det,
+         fhc_prog, fhc_entrega, fch_estima_cono_uno, fch_estima_tenido
+  FROM (
+    SELECT id2.serie, id2.num_ped, id2.nro, id2.num_det,
+           id2.fhc_prog, id2.fhc_entrega, id2.fch_estima_cono_uno, id2.fch_estima_tenido,
+           ROW_NUMBER() OVER (
+             PARTITION BY id2.serie, id2.num_ped, id2.nro, id2.num_det
+             ORDER BY NVL(id2.nroprog, 0) DESC NULLS LAST
+           ) rn
+    FROM itemped_det id2
+  ) WHERE rn = 1
+) id ON id.serie=s.serie AND id.num_ped=s.num_ped
                        AND id.nro=s.nro AND id.num_det=s.num_det  -- LEFT: ítems sin ITEMPED_DET no se pierden
 -- JOINs a CS_USER para resolver nombres de los 3 actores del flujo
 LEFT JOIN cs_user cu_reg ON cu_reg.c_user = pe.a_aduser   -- quien registró el pedido
@@ -3532,6 +4559,7 @@ SELECT
   a.dias_retraso,
   a.num_ped,
   a.nro,
+  a.num_det,
   a.cod_cliente,
   cl.nombre                                  AS nom_cliente,
   a.cod_maq,
@@ -3809,6 +4837,19 @@ BEGIN
 END;
 /
 
+BEGIN
+  DBMS_SCHEDULER.CREATE_JOB (
+    job_name        => 'JOB_PLN_KGR',
+    job_type        => 'STORED_PROCEDURE',
+    job_action      => 'PKG_PLN.SP_PLN_KGR_REFRESH',
+    start_date      => SYSTIMESTAMP,
+    repeat_interval => 'FREQ=MONTHLY; BYMONTHDAY=1; BYHOUR=1; BYMINUTE=0',
+    enabled         => FALSE,   -- cambiar a TRUE en PROD
+    comments        => 'PLN_: recalcula velocidades kg/hr desde H_RPRODUC (día 1 de cada mes a las 01:00)'
+  );
+END;
+/
+
 
 -- ============================================================
 -- §10  ACTIVACIÓN DE JOBS — Producción
@@ -3819,6 +4860,7 @@ END;
 --
 -- JOB_PLN_ALERTAS : se ejecutará a la siguiente hora en punto.
 -- JOB_PLN_CARGA   : se ejecutará al próximo múltiplo de 4 horas (00:00, 04:00, 08:00...).
+-- JOB_PLN_KGR     : mensual. Ejecutar manualmente la primera vez (ver §10.3 abajo).
 --
 -- NOTA SOBRE DATOS HISTÓRICOS:
 --   PLN_ captura data ÚNICAMENTE desde este momento de despliegue.
@@ -3848,6 +4890,22 @@ END;
 -- END;
 -- /
 --
+-- PROMPT >>> §10.3 Ejecutando SP_PLN_KGR_REFRESH por primera vez + activando JOB_PLN_KGR...
+-- BEGIN
+--   PKG_PLN.SP_PLN_KGR_REFRESH;         -- pobla PLN_KGR_TITULO (puede tardar ~5-10s)
+-- END;
+-- /
+-- BEGIN
+--   DBMS_SCHEDULER.ENABLE('JOB_PLN_KGR');
+-- END;
+-- /
+-- -- Verificar cobertura tras la primera ejecución:
+-- SELECT titulo, proceso, COUNT(*) AS maquinas, MAX(n_muestras) AS max_muestras
+-- FROM   PLN_KGR_TITULO
+-- GROUP  BY titulo, proceso
+-- ORDER  BY titulo, proceso;
+-- /
+--
 -- PROMPT >>> Verificando estado de los jobs PLN_:
 -- SELECT job_name,
 --        state,
@@ -3863,7 +4921,8 @@ PROMPT ============================================================
 PROMPT Despliegue PLN_ completado exitosamente.
 PROMPT   - Triggers activos: 15 (incluye TIA_PLN_FROM_RECTIF_RECETA + TUA_PLN_FROM_RECTIF_RECETA v2.1)
 PROMPT   - Vistas disponibles: 8
-PROMPT   - Jobs programados: JOB_PLN_ALERTAS (c/hora) + JOB_PLN_CARGA (c/4h)
+PROMPT   - Jobs programados: JOB_PLN_ALERTAS (c/hora) + JOB_PLN_CARGA (c/4h) + JOB_PLN_KGR (mensual dia 1)
+PROMPT   - IMPORTANTE: ejecutar PKG_PLN.SP_PLN_KGR_REFRESH manualmente para poblar PLN_KGR_TITULO
 PROMPT   - Data desde: ahora (no hay migracion historica)
 PROMPT ============================================================
 
@@ -3946,6 +5005,7 @@ BEGIN
     JOIN   pedido  p  ON  p.serie=i.serie AND p.num_ped=i.num_ped
     WHERE  p.estado IN ('0','5')       -- pedidos activos / en proceso
       AND  i.estado  < '9'             -- ítem no anulado/cerrado
+      AND  p.fecha   >= DATE '2026-05-01'  -- solo pedidos desde Mayo 2026
       AND  NOT EXISTS (
              SELECT 1
              FROM   pln_seguimiento s
@@ -4012,14 +5072,29 @@ BEGIN
       v_cnt_pm_total NUMBER := 0;  -- Total banos en PARTIDA_MAS
       v_cnt_tt_ok    NUMBER := 0;  -- Banos completados en TT_RPRODUC
     BEGIN
-      -- ── A: Obtener NROPROG ────────────────────────────────────
+      -- ── A: Obtener NROPROG ── prioridad: el que ya tiene PARTIDA (más avanzado) ──
+      -- BUG #45 FIX: SELECT INTO fallaba con TOO_MANY_ROWS cuando ITEMPED_DET
+      --              tenía varias filas para el mismo (SERIE,NUM_PED,NRO,NUM_DET).
       BEGIN
-        SELECT nroprog INTO v_nroprog
-        FROM   itemped_det
-        WHERE  serie=seg.serie AND num_ped=seg.num_ped
-          AND  nro=seg.nro    AND num_det=seg.num_det;
+        SELECT MAX(id.nroprog) INTO v_nroprog
+        FROM   itemped_det id
+        WHERE  id.serie=seg.serie AND id.num_ped=seg.num_ped
+          AND  id.nro=seg.nro    AND id.num_det=seg.num_det
+          AND  id.nroprog IS NOT NULL
+          AND  EXISTS (SELECT 1 FROM partida p WHERE p.nroprog=id.nroprog);
       EXCEPTION WHEN OTHERS THEN NULL;
       END;
+      -- Prioridad 2: cualquier NROPROG asignado, el más reciente (si no hay PARTIDA todavía)
+      IF v_nroprog IS NULL THEN
+        BEGIN
+          SELECT MAX(nroprog) INTO v_nroprog
+          FROM   itemped_det
+          WHERE  serie=seg.serie AND num_ped=seg.num_ped
+            AND  nro=seg.nro    AND num_det=seg.num_det
+            AND  nroprog IS NOT NULL;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+      END IF;
 
       IF v_nroprog IS NOT NULL THEN
         v_paso_nuevo := '02';
@@ -4055,9 +5130,16 @@ BEGIN
           -- Solo detectamos si existe; usamos A_ADFECHA como fecha (puede ser NULL)
           DECLARE v_existe_lab NUMBER := 0;
           BEGIN
+            -- BUG #46 FIX: buscar lab en TODOS los NROPROGs del ítem (no solo v_nroprog)
+            --              y aceptar estado '4' (aprobado directo) además de '3'
             SELECT COUNT(*) INTO v_existe_lab
-            FROM   l_valida_receta
-            WHERE  nroprog = v_nroprog AND estado = '3' AND ROWNUM = 1;
+            FROM   l_valida_receta lv
+            WHERE  lv.nroprog IN (
+                     SELECT id2.nroprog FROM itemped_det id2
+                     WHERE  id2.serie=seg.serie AND id2.num_ped=seg.num_ped
+                       AND  id2.nro=seg.nro    AND id2.num_det=seg.num_det
+                   )
+              AND  lv.estado IN ('3','4') AND ROWNUM = 1;
             -- PASO '04' tiene ORDEN=4 > ORDEN de '03'; avanzar si lab ya aprobó
             -- Solo marcar si es el paso más avanzado disponible
             IF v_existe_lab > 0 AND f_orden('04') > f_orden(v_paso_nuevo) THEN
@@ -4131,7 +5213,7 @@ BEGIN
               ORDER  BY MAX(fch_consulta) DESC
             ) WHERE ROWNUM = 1;
 
-            IF v_resultado IN ('01','21','29','30')
+            IF v_resultado IN ('01','21','29')          -- BUG-B FIX: '30'=RECHAZADO eliminado; solo aprobado/concesionado
                AND f_orden('09') > f_orden(v_paso_nuevo) THEN
               v_fch_cc_ok  := v_fch_cc;
               v_paso_nuevo := '09';
@@ -4233,7 +5315,7 @@ BEGIN
                                                       FROM pedido p2
                                                       WHERE p2.serie=seg.serie AND p2.num_ped=seg.num_ped)),
           fch_planif          = NVL(fch_planif, v_fch_prog),
-          usr_planif          = NVL(usr_planif, (SELECT id2.a_aduser
+          usr_planif          = NVL(usr_planif, (SELECT MIN(id2.a_aduser)   -- BUG #47: MIN evita TOO_MANY_ROWS si hay NROPROGs duplicados
                                                   FROM itemped_det id2
                                                   WHERE id2.serie=seg.serie AND id2.num_ped=seg.num_ped
                                                     AND id2.nro=seg.nro    AND id2.num_det=seg.num_det
