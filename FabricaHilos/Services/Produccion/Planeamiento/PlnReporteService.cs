@@ -40,6 +40,20 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     private static decimal? Dec(object? v) =>
         v == null || v == DBNull.Value ? null : Convert.ToDecimal(v);
 
+    /// <summary>
+    /// Devuelve el valor de la primera columna encontrada en el reader.
+    /// Permite fallback para cuando el SP en Oracle tiene un alias distinto al nuevo.
+    /// </summary>
+    private static object? Col(OracleDataReader r, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            try   { return r[name]; }
+            catch (IndexOutOfRangeException) { }
+        }
+        return DBNull.Value;
+    }
+
     // ── SP_PLN_SEG_PROG_TINTORERIA ────────────────────────────────────────────
     public async Task<IEnumerable<PlnReporteProduccion>> GetReporteProduccionAsync(
         string            opc,
@@ -88,47 +102,100 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
         {
             list.Add(new PlnReporteProduccion
             {
+                // Cols 1-4: Dimensiones de tiempo
+                Mes                 = Str(r["MES"]),
+                MesTex              = Str(r["MES_TEX"]),
+                Ano                 = Str(r["ANO"]),
+                Sem                 = Str(r["SEM"]),
+
+                // Cols 5-12: Identificación del ítem
                 Partida             = Str(r["PARTIDA"]),
-                EstadoProg          = Str(r["ESTADO_PROG"]),
                 Cliente             = Str(r["CLIENTE"]),
                 Material            = Str(r["MATERIAL"]),
+                Est                 = Str(r["EST"]),
+                Ne                  = Str(r["NE"]),
+                Mat                 = Str(r["MAT"]),
+                Lote                = Str(r["LOTE"]),
                 FchPedido           = D(r["FCH_PEDIDO"]),
-                FchEntrega          = D(r["FHC_ENTREGA"]),
-                FchPartida          = Str(r["FCH_PARTIDA"]),
+
+                // Cols 13-15: 1er Rodete (CONO UNO)
+                EstimaRod           = D(r["ESTIMA_ROD"]),
+                EntregRod           = D(r["ENTREG_ROD"]),
+                DiasRod             = Dec(r["DIAS_ROD"]),
+
+                // Cols 16-18: Material Hilandería
+                EstimaMat           = D(r["ESTIMA_MAT"]),
+                EntregMat           = D(r["ENTREG_MAT"]),
+                DiasMh              = Dec(r["DIAS_MH"]),
+
+                // Col 19: Fecha de la partida física
+                FchaGuia            = D(r["FCHA_GUIA"]),
+
+                // Cols 20-23: Receta TT
+                EstimaReceta        = D(r["ESTIMA_RECETA"]),
+                EntregReceta        = D(r["ENTREG_RECETA"]),
+                DiasRec             = Dec(r["DIAS_REC"]),
+                X                   = Dec(r["X"]),
+
+                // Cols 24-28: Programa Tintorería
+                FchPrograma         = D(r["FCH_PROGRAMA"]),
+                MaqTen              = Str(r["MAQ_TEN"]),
+                EstimaTenido        = D(r["ESTIMA_TENIDO"]),
+                EntregTenido        = D(r["ENTREG_TENIDO"]),
+                DiasTenido          = Dec(r["DIAS_TENIDO"]),
+
+                // Cols 29-34: Fechas reales de producción
+                // Col() con fallback: SP nuevo usa FCH_SEC_RODETE/FCH_SEC_MADEJA;
+                // si Oracle aún tiene el alias viejo FCH_SECADO, se lee ése en su lugar.
+                FchPartida          = D(r["FCH_PARTIDA"]),
+                FchReceta           = D(r["FCH_RECETA"]),
+                FchSecRodete        = D(Col(r, "FCH_SEC_RODETE", "FCH_SECADO")),
+                FchSecMadeja        = D(Col(r, "FCH_SEC_MADEJA")),
+                FchAprobCal         = D(r["FCH_APROB_CAL"]),
+                TimeAprov           = Dec(r["TIME_APROV"]),
+
+                // Cols 34-37: Acabado, enconado, revisado
+                TipoAcabado         = Str(r["TIPO_ACABADO"]),
+                FchEnconado         = D(r["FCH_ENCONADO"]),
+                FchRevisado         = D(r["FCH_REVISADO"]),
+                EvEncon             = Str(r["EV_ENCON"]),
+
+                // Cols 38-42: Entrega y espera
+                FchEntrega          = D(r["FCH_ENTREGA"]),
+                IngAlmpt            = D(r["ING_ALMPT"]),
+                DiasEnEspera        = Dec(r["DIAS_EN_ESPERA"]),
+                De                  = Dec(r["DE"]),
+                DeCopia             = Dec(r["DE_COPIA"]),
+
+                // Cols 43-46: Kilogramos y tolerancia
+                KgProg              = Dec(r["KG_PROG"]),
+                KgDespa             = Dec(r["KG_DESPA"]),
+                Gap                 = Dec(r["GAP"]),
+                PctToleran          = Dec(r["PCT_TOLERAN"]),
+
+                // Cols 47-48: Clasificaciones
+                EstadoFlujo         = Str(r["ESTADO_FLUJO"]),
+                EstadoDespacho      = Str(r["ESTADO_DESPACHO"]),
+
+                // Cols 49-50: Apoyo
+                AreaResponsable     = Str(r["AREA_RESPONSABLE"]),
+                Bp                  = Str(r["BP"]),
+
+                // Cols 51-66: Adicionales (no en DT Excel)
                 PesoNeto            = Dec(r["PESO_NETO"]),
                 Rmc                 = Str(r["RMC"]),
                 NroRmc              = Str(r["NRO_RMC"]),
-                Referencia          = Str(r["REFERENCIA"]),
-                Proceso             = Str(r["PROCESO"]),
-                FechaTenido         = D(r["FECHA_TENIDO"]),
-                FechaCcalid         = D(r["FECHA_CCALID"]),
-                FechaEncon          = D(r["FECHA_ENCON"]),
-                FechaSecado         = D(r["FECHA_SECADO"]),
-                FechaReceta         = D(r["FECHA_RECETA"]),
-                FchRevisado         = D(r["FCH_REVISADO"]),
-                FechaIng            = D(r["FECHA_ING"]),
-                CantDesp            = Dec(r["CANT_DESP"]),
                 Titulo              = Str(r["TITULO"]),
-                CantProg            = Dec(r["CANT_PROG"]),
-                Lote                = Str(r["LOTE"]),
                 TituloTexto         = Str(r["TITULO_TEXTO"]),
-                FchProg             = D(r["FCH_PROG"]),
+                Referencia          = Str(r["REFERENCIA"]),
+                ProcesoTt           = Str(r["PROCESO_TT"]),
                 PartMatiz           = Str(r["PART_MATIZ"]),
                 EstEvaluacion       = Str(r["EST_EVALUACION"]),
                 Defecto             = Str(r["DEFECTO"]),
                 Resultado           = Str(r["RESULTADO"]),
-                DiasRetraso         = Dec(r["DIAS_RETRASO"]),
-                FchEntregaConoUno   = D(r["FCH_ENTREGA_CONO_UNO"]),
-                FchValRec           = D(r["FCH_VAL_REC"]),
-                FchEstimaConoUno    = D(r["FCH_ESTIMA_CONO_UNO"]),
-                FchEntTin           = D(r["FCH_ENT_TIN"]),
-                FchEstimaTenido     = D(r["FCH_ESTIMA_TENIDO"]),
-                FchProgval          = D(r["FCH_PROGVAL"]),
                 LaboVal             = Str(r["LABO_VAL"]),
-                FchUltIngAlmpi      = D(r["FCH_ULT_ING_ALMPI"]),
-                MaqProg             = Str(r["MAQ_PROG"]),
                 AcaMad              = Str(r["ACA_MAD"]),
-                FechaSecadoMad      = D(r["FECHA_SECADO_MAD"]),
+                DiasRetraso         = Dec(r["DIAS_RETRASO"]),
             });
         }
         return list;

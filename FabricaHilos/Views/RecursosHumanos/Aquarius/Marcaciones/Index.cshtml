@@ -10,7 +10,7 @@
     var totalPages = (int)ViewBag.TotalPages;
 
     string Url(int p) =>
-        $"/RecursosHumanos/Aquarius/Marcaciones?t={Uri.EscapeDataString(navToken ?? string.Empty)}&page={p}";
+        $"/RecursosHumanos/Aquarius/Marcaciones/Index?t={Uri.EscapeDataString(navToken ?? string.Empty)}&page={p}";
 }
 
 @section Breadcrumb {
@@ -158,7 +158,7 @@
 
     <!-- Barra de búsqueda -->
     <div class="search-bar">
-        <form method="get" action="/RecursosHumanos/Aquarius/Marcaciones" class="d-flex gap-2 align-items-center">
+        <form method="get" action="/RecursosHumanos/Aquarius/Marcaciones/Index" class="d-flex gap-2 align-items-center">
             <input type="hidden" name="page" value="1" />
             <div class="autocomplete-wrap" style="max-width:420px; flex:1;">
                 <div class="input-group">
@@ -174,7 +174,7 @@
             </div>
             @if (!string.IsNullOrEmpty(buscar))
             {
-                <a href="/RecursosHumanos/Aquarius/Marcaciones" class="btn btn-clear btn-sm">
+                <a href="/RecursosHumanos/Aquarius/Marcaciones/Index" class="btn btn-clear btn-sm">
                     <i class="bi bi-x-lg me-1"></i>Limpiar
                 </a>
             }

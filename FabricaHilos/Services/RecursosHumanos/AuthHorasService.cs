@@ -13,6 +13,7 @@ public interface IAuthHorasService
     Task<AuthHorasGrabarResult>          GrabarAutorizacionAsync(string codUsuario, AuthHorasGrabarRequest req);
     Task<List<AuthHorasSupervisorDto>>   ObtenerSupervisoresAsync(string codUsuario, string codEmpresa);
     Task<List<AuthHorasResumenDto>>      ObtenerResumenHeAsync(string codUsuario, string codEmpresa, string fechaInicio, string fechaFin);
+    Task<AuthHorasGrabarVisadoResult>          GrabarVisadoAsync(string codUsuario, AuthHorasGrabarVisadoRequest req);
 }
 
 public class AuthHorasService : IAuthHorasService
@@ -316,6 +317,11 @@ public class AuthHorasService : IAuthHorasService
                     MinHeaAut       = GetInt(reader, "min_hea_aut"),
                     MinHeoAut       = GetInt(reader, "min_heo_aut"),
                     Estado          = GetStr(reader, "estado")          ?? string.Empty,
+                    Obs             = GetStr(reader, "obs_authe"),
+                    IndVisado       = GetStr(reader, "ind_visado")?.Trim(),
+                    ObsVisado       = GetStr(reader, "obs_visado"),
+                    CodUsuVisado    = GetStr(reader, "cod_usu_visado"),
+                    FecVisado       = GetStr(reader, "fec_visado"),
                 });
             }
         }
@@ -324,6 +330,75 @@ public class AuthHorasService : IAuthHorasService
             _logger.LogError(ex, "AuthHoras.ObtenerResumenHeAsync error");
         }
         return lista;
+    }
+
+    // =========================================================
+    // 7. GRABAR VISTO BUENO
+    // =========================================================
+    public async Task<AuthHorasGrabarVisadoResult> GrabarVisadoAsync(
+        string codUsuario, AuthHorasGrabarVisadoRequest req)
+    {
+        var result = new AuthHorasGrabarVisadoResult();
+        if (req.Visados == null || req.Visados.Count == 0)
+        {
+            result.Ok = true;
+            return result;
+        }
+        try
+        {
+            await using var conn = new OracleConnection(_connStr);
+            await conn.OpenAsync();
+            using var tran = conn.BeginTransaction();
+            try
+            {
+                foreach (var item in req.Visados)
+                {
+                    await using var cmd = conn.CreateCommand();
+                    cmd.Transaction  = tran;
+                    cmd.CommandText  = $"{Paquete}.sp_grabar_visado";
+                    cmd.CommandType  = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("v_cod_usuario",  OracleDbType.Varchar2).Value = codUsuario;
+                    cmd.Parameters.Add("v_cod_empresa",  OracleDbType.Varchar2).Value = req.CodEmpresa;
+                    cmd.Parameters.Add("v_cod_personal", OracleDbType.Varchar2).Value = item.CodPersonal;
+                    cmd.Parameters.Add("v_fecha_inicio", OracleDbType.Varchar2).Value = req.Desde;
+                    cmd.Parameters.Add("v_fecha_final",  OracleDbType.Varchar2).Value = req.Hasta;
+                    cmd.Parameters.Add("v_ind_visado",   OracleDbType.Varchar2).Value = item.IndVisado;
+                    cmd.Parameters.Add("v_obs_visado",   OracleDbType.Varchar2).Value =
+                        string.IsNullOrEmpty(item.ObsVisado) ? DBNull.Value : (object)item.ObsVisado;
+                    var pCur = cmd.Parameters.Add("cv_1", OracleDbType.RefCursor);
+                    pCur.Direction = ParameterDirection.Output;
+
+                    await cmd.ExecuteNonQueryAsync();
+                    await using var reader = ((OracleRefCursor)pCur.Value).GetDataReader();
+                    if (await reader.ReadAsync())
+                    {
+                        var res = GetStr(reader, "resultado");
+                        if (res != "OK")
+                        {
+                            tran.Rollback();
+                            result.Ok      = false;
+                            result.Mensaje = $"{item.CodPersonal}: {GetStr(reader, "mensaje")}";
+                            return result;
+                        }
+                    }
+                    result.Guardados++;
+                }
+                tran.Commit();
+                result.Ok = true;
+            }
+            catch
+            {
+                tran.Rollback();
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AuthHoras.GrabarVisadoAsync error");
+            result.Ok      = false;
+            result.Mensaje = "Error al grabar el visado.";
+        }
+        return result;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

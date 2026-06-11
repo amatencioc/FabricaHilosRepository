@@ -616,12 +616,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                 t.tothoranocturna_of,
                 -- Horas Extras Antes de entrada (HEA)
                 t.horaantesentrada,
-                t.horaextantes,
-                t.horaextantesofi,
+                TRUNC(t.horaextantes,    'HH')   horaextantes,
+                -- FIX 09/06/2026: si el dia ya esta compensado (EC) y la HEA no fue
+                -- autorizada para planilla, no exponer como pendiente de autorizar.
+                CASE WHEN t.alerta06 = 'EC' AND NVL(t.hayhea_poraut,'S') != 'N'
+                     THEN TO_DATE('01/01/1900','DD/MM/YYYY')
+                     ELSE TRUNC(t.horaextantesofi, 'HH')
+                END                              horaextantesofi,
                 NVL(t.hayhea_poraut, 'N')                                           hayhea_poraut,
                 -- Horas Extras Después de salida (HED)
-                t.horaextra,
-                t.horaextraofi,
+                TRUNC(t.horaextra,       'HH')   horaextra,
+                TRUNC(t.horaextraofi,    'HH')   horaextraofi,
                 t.horaextra_ajus,
                 -- ---------------------------------------------------------------
                 -- horaexofi1/2/3 se calculan en minutos para evitar el problema de
@@ -689,8 +694,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                 NVL(t.hayhed_poraut, 'N')                                           hayhed_poraut,
                 t.haypagohe,
                 -- Horas Dobles / Descanso trabajado (HEO)
-                t.horadobles,
-                t.horadoblesof,
+                TRUNC(t.horadobles,      'HH')   horadobles,
+                TRUNC(t.horadoblesof,    'HH')   horadoblesof,
                 NVL(t.hayheo_poraut, 'N')                                           hayheo_poraut,
                 -- Banco de horas
                 t.horabancoh,
@@ -852,7 +857,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
 
         BEGIN
             -- v_valor formato 'HH:MI' → base 01/01/1900 HH:MI
-            v_can_authe := TO_DATE('01/01/1900 ' || v_valor, 'dd/MM/yyyy HH24:MI');
+            -- TRUNC('HH'): elimina residuos de minutos; solo se autorizan horas enteras.
+            v_can_authe := TRUNC(TO_DATE('01/01/1900 ' || v_valor, 'dd/MM/yyyy HH24:MI'), 'HH');
         EXCEPTION
             WHEN OTHERS THEN
                 OPEN cv_1 FOR
@@ -1101,7 +1107,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                     WHEN sq.dias_pendientes = 0 THEN 'COMPLETO'
                     WHEN sq.dias_autorizados > 0 THEN 'PARCIAL'
                     ELSE                              'PENDIENTE'
-                END  estado
+                END  estado,
+                sq.obs_authe
             FROM (
                 SELECT
                     p.cod_personal,
@@ -1121,11 +1128,11 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                     -- Días con HE de cualquier tipo en el período.
                     -- Lógica: el PROCESO es el árbitro de qué cuenta como HE real:
                     --   HED: hayhed_poraut IN ('S','N')  → proceso confirmó HE ≥ umbral
-                    --        OR (NULL + alerta06='EE')    → exceso de razonabilidad
+                    --        OR (NULL + alerta06 IN ('EN','EE')) → HE calculadas por
+                    --           depura o tareo pero hayhed_poraut no fue seteado
+                    --           (ocurre cuando HAYPAGOHE='N'). EN=normal, EE=excede raz.
                     --   HEO: hayheo_poraut IN ('S','N')
                     --   HEA: horaextantesofi IS NOT NULL con tiempo > 0
-                    --
-                    --   EXCLUIDO: NULL + alerta06 distinto ('EE') = sub-umbral, sin HE real.
                     (SELECT COUNT(*)
                      FROM   SCA_ASISTENCIA_TAREO t
                      WHERE  t.cod_empresa  = p.cod_empresa
@@ -1133,9 +1140,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
                        AND  (
                                 t.hayhed_poraut IN ('S','N')
-                             OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE')
+                             OR (t.hayhed_poraut IS NULL AND t.alerta06 IN ('EN','EE'))
                              OR (   t.horaextantesofi IS NOT NULL
-                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
+                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0
+                                AND NVL(t.alerta06,'') != 'EC')  -- excluir dias ya compensados
                              OR t.hayheo_poraut IN ('S','N')
                             )
                     ) dias_con_he,
@@ -1147,9 +1155,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                        AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
                        AND  (
                                 t.hayhed_poraut IN ('S','N')
-                             OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE')
+                             OR (t.hayhed_poraut IS NULL AND t.alerta06 IN ('EN','EE'))
                              OR (   t.horaextantesofi IS NOT NULL
-                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0)
+                                AND (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0
+                                AND NVL(t.alerta06,'') != 'EC')  -- excluir dias ya compensados
                              OR t.hayheo_poraut IN ('S','N')
                             )
                        AND  NOT EXISTS (
@@ -1170,63 +1179,91 @@ CREATE OR REPLACE PACKAGE BODY PKG_AUTH_HE_SUPERVISOR AS
                     ) dias_autorizados,
                     -- Minutos HED pendientes de autorizar.
                     -- hayhed_poraut='S': pendiente explícito por proceso.
-                    -- hayhed_poraut=NULL + alerta06='EE': exceso razonabilidad, también
-                    -- requiere autorización. Sub-umbral (NULL sin EE) queda excluido.
-                    NVL((SELECT SUM(ROUND((t.horaextra - v_base) * 1440))
+                    -- hayhed_poraut=NULL + alerta06 IN ('EN','EE'): HE calculadas por
+                    -- depura/tareo pero hayhed_poraut no fue seteado (ej: HAYPAGOHE='N').
+                    -- EN=normal (dentro de razonabilidad), EE=excede razonabilidad.
+                    TRUNC(NVL((SELECT SUM(ROUND((t.horaextra - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
                            AND  t.cod_personal = p.cod_personal
                            AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
-                           AND  (t.hayhed_poraut = 'S' OR (t.hayhed_poraut IS NULL AND t.alerta06 = 'EE'))
-                         ), 0)  min_hed,
+                           AND  (t.hayhed_poraut = 'S' OR (t.hayhed_poraut IS NULL AND t.alerta06 IN ('EN','EE')))
+                           AND  NOT EXISTS (      -- FIX 09/06/2026: excluir dias ya autorizados en BD
+                                    SELECT 1 FROM SCA_AUTORIZACION a
+                                    WHERE  a.cod_empresa  = p.cod_empresa
+                                      AND  a.cod_personal = p.cod_personal
+                                      AND  a.fec_authe    = t.fechamar
+                                      AND  a.tip_authe    = '2')
+                         ), 0) / 60) * 60  min_hed,
                     -- Minutos HEA pendientes de autorizar.
                     -- Usa horaextantesofi (seteado por el proceso cuando supera
                     -- el umbral) con TRUNC para extraer solo la parte horaria
                     -- (base de fecha variable: no se puede restar v_base directo)
-                    NVL((SELECT SUM(ROUND((t.horaextantesofi - TRUNC(t.horaextantesofi)) * 1440))
+                    TRUNC(NVL((SELECT SUM(ROUND((t.horaextantesofi - TRUNC(t.horaextantesofi)) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa   = p.cod_empresa
                            AND  t.cod_personal  = p.cod_personal
                            AND  t.fechamar      BETWEEN v_fec_ini AND v_fec_fin
                            AND  t.horaextantesofi IS NOT NULL
                            AND  (t.horaextantesofi - TRUNC(t.horaextantesofi)) > 0
+                           AND  NVL(t.alerta06,'') != 'EC'  -- excluir dias ya compensados
                            AND  NOT EXISTS (
                                     SELECT 1 FROM SCA_AUTORIZACION a
                                     WHERE  a.cod_empresa  = p.cod_empresa
                                       AND  a.cod_personal = p.cod_personal
                                       AND  a.fec_authe    = t.fechamar
                                       AND  a.tip_authe    = '1')
-                         ), 0) min_hea,
+                         ), 0) / 60) * 60  min_hea,
                     -- Minutos HEO pendientes de autorizar.
                     -- hayheo_poraut='S': pendiente (proceso confirmó HEO >= umbral).
-                    NVL((SELECT SUM(ROUND((t.horadobles - v_base) * 1440))
+                    TRUNC(NVL((SELECT SUM(ROUND((t.horadobles - v_base) * 1440))
                          FROM   SCA_ASISTENCIA_TAREO t
                          WHERE  t.cod_empresa  = p.cod_empresa
                            AND  t.cod_personal = p.cod_personal
                            AND  t.fechamar     BETWEEN v_fec_ini AND v_fec_fin
                            AND  t.hayheo_poraut = 'S'
-                         ), 0)  min_heo,
+                           AND  NOT EXISTS (      -- FIX 09/06/2026: excluir dias ya autorizados
+                                    SELECT 1 FROM SCA_AUTORIZACION a
+                                    WHERE  a.cod_empresa  = p.cod_empresa
+                                      AND  a.cod_personal = p.cod_personal
+                                      AND  a.fec_authe    = t.fechamar
+                                      AND  a.tip_authe    = '5')
+                         ), 0) / 60) * 60  min_heo,
                     -- Minutos HED autorizados (tip='2')
-                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                    TRUNC(NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
                          FROM   SCA_AUTORIZACION a
                          WHERE  a.cod_empresa  = p.cod_empresa
                            AND  a.cod_personal = p.cod_personal
                            AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
-                           AND  a.tip_authe    = '2'), 0)  min_hed_aut,
+                           AND  a.tip_authe    = '2'), 0) / 60) * 60  min_hed_aut,
                     -- Minutos HEA autorizados (tip='1')
-                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                    TRUNC(NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
                          FROM   SCA_AUTORIZACION a
                          WHERE  a.cod_empresa  = p.cod_empresa
                            AND  a.cod_personal = p.cod_personal
                            AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
-                           AND  a.tip_authe    = '1'), 0)  min_hea_aut,
+                           AND  a.tip_authe    = '1'), 0) / 60) * 60  min_hea_aut,
                     -- Minutos HEO autorizados (tip='5')
-                    NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
+                    TRUNC(NVL((SELECT SUM(ROUND((a.can_authe - v_base) * 1440))
                          FROM   SCA_AUTORIZACION a
                          WHERE  a.cod_empresa  = p.cod_empresa
                            AND  a.cod_personal = p.cod_personal
                            AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
-                           AND  a.tip_authe    = '5'), 0)  min_heo_aut
+                           AND  a.tip_authe    = '5'), 0) / 60) * 60  min_heo_aut,
+                    -- Última observación registrada en el período (la más reciente por id_authe)
+                    (SELECT a.obs_authe
+                    FROM   SCA_AUTORIZACION a
+                    WHERE  a.cod_empresa  = p.cod_empresa
+                    AND  a.cod_personal = p.cod_personal
+                    AND  a.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                    AND  a.tip_authe   IN ('1','2','5')
+                    AND  a.id_authe     = (SELECT MAX(a2.id_authe)
+                                            FROM   SCA_AUTORIZACION a2
+                                            WHERE  a2.cod_empresa  = p.cod_empresa
+                                                AND  a2.cod_personal = p.cod_personal
+                                                AND  a2.fec_authe    BETWEEN v_fec_ini AND v_fec_fin
+                                                AND  a2.tip_authe   IN ('1','2','5'))
+                    )  obs_authe
                 FROM PLA_PERSONAL p
                 LEFT JOIN MAE_C_COSTOS cc
                        ON cc.cod_empresa      = p.cod_empresa

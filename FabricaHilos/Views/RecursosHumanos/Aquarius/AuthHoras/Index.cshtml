@@ -198,7 +198,8 @@
                 </div>
                 <div class="mb-2">
                     <label class="form-label fw-semibold">Motivo / Observación <span class="text-danger">*</span></label>
-                    <input type="text" id="inpObs" class="form-control" maxlength="200" placeholder="Ingrese el motivo de autorización" />
+                    <input type="text" id="inpObs" class="form-control" maxlength="100" placeholder="Ingrese el motivo de autorización" oninput="actualizarContadorObs()" />
+                    <div class="text-end"><small id="lblContadorObs" class="text-muted"></small></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -420,16 +421,11 @@ function renderTareo(lista, empresa) {
             ? `<span class="badge bg-danger" title="Número impar de marcaciones — verificar entrada/salida"><i class="bi bi-exclamation-triangle-fill me-1"></i>Marca impar</span>`
             : '<span class="text-muted">—</span>';
 
-        // Motivo único: combina la obs de HED y HEO si existen
-        const obsHed = t.authHedHoras ? escapeHtml(t.authHedObs) : null;
-        const obsHeo = t.authHeoHoras ? escapeHtml(t.authHeoObs) : null;
-        let motivoFila = '<span class="text-muted">—</span>';
-        if (obsHed || obsHeo) {
-            const partes = [];
-            if (obsHed) partes.push(`<span style="font-size:.78rem">${obsHed}</span>`);
-            if (obsHeo) partes.push(`<span style="font-size:.78rem">${obsHeo}</span>`);
-            motivoFila = partes.join('<br/>');
-        }
+        // Campo único de observación — se toma HED o HEO (ambos apuntan al mismo campo en Oracle)
+        const obsRaw = t.authHedObs || t.authHeoObs;
+        const motivoFila = obsRaw
+            ? `<span style="font-size:.78rem">${escapeHtml(limpiarPrefijosObs(obsRaw))}</span>`
+            : '<span class="text-muted">—</span>';
 
         return `<tr class="${rowCls}">
             <td class="col-fecha fw-semibold">${t.fechaMarStr}<br/><small class="text-muted">${t.diaSemana}</small></td>
@@ -495,14 +491,25 @@ function celdaHE(t, tipo, empresa) {
 }
 
 // ─── Modales Autorizar / Desautorizar ─────────────────────────────────────
+function actualizarContadorObs() {
+    const inp = document.getElementById('inpObs');
+    const restantes = inp.maxLength - inp.value.length;
+    const lbl = document.getElementById('lblContadorObs');
+    lbl.textContent = `${restantes} car. restantes`;
+    lbl.className = restantes <= 10 ? 'text-danger' : 'text-muted';
+}
+
 function abrirAuth(dataStr) {
     pendingAuth = JSON.parse(dataStr.replace(/&quot;/g, '"'));
+    const inpObs = document.getElementById('inpObs');
+    inpObs.value = '';
+    inpObs.maxLength = sesion.maxObsUsuario ?? 60;
     document.getElementById('inpHoras').value = pendingAuth.valor;
-    document.getElementById('inpObs').value   = '';
     const tipoLabel = pendingAuth.tipo === '1' ? 'HEA' : pendingAuth.tipo === '2' ? 'HED' : 'HEO';
     document.getElementById('modalAuthTitulo').textContent =
         `Autorizar ${tipoLabel} — ${pendingAuth.fecha}`;
     document.getElementById('btnConfirmarAuth').onclick = confirmarAuth;
+    actualizarContadorObs();
     const el = document.getElementById('modalAuth');
     (bootstrap.Modal.getInstance(el) ?? new bootstrap.Modal(el)).show();
 }
@@ -563,6 +570,10 @@ function formatFecha(iso) {
 function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function limpiarPrefijosObs(str) {
+    return (str || '').replace(/^(\[[^\]]+\]\s*)+/, '').trim();
 }
 
 function getAntiForgeryToken() {

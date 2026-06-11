@@ -109,6 +109,36 @@ public class AuthHorasResumenDto
     public int    MinHeaAut       { get; set; }
     public int    MinHeoAut       { get; set; }
     public string Estado          { get; set; } = string.Empty;  // SIN_HE | PENDIENTE | PARCIAL | COMPLETO
+    public string? Obs            { get; set; }  // Campo único de observación (incluye prefijos [COLONIAL] [AQUARIUS])
+    // Visto bueno del jefe de planta
+    public string? IndVisado      { get; set; }   // 'S'=con visto bueno / 'N'=sin visto bueno / null=sin registrar
+    public string? ObsVisado      { get; set; }
+    public string? CodUsuVisado   { get; set; }
+    public string? FecVisado      { get; set; }   // 'DD/MM/YYYY HH24:MI'
+}
+
+// ── Visado HE (visto bueno del jefe de planta) ────────────────────────────
+
+public class AuthHorasVisadoItemRequest
+{
+    public string  CodPersonal { get; set; } = string.Empty;
+    public string  IndVisado   { get; set; } = "S";   // "S" o "N"
+    public string? ObsVisado   { get; set; }
+}
+
+public class AuthHorasGrabarVisadoRequest
+{
+    public string CodEmpresa  { get; set; } = string.Empty;
+    public string Desde       { get; set; } = string.Empty;   // dd/MM/yyyy
+    public string Hasta       { get; set; } = string.Empty;   // dd/MM/yyyy
+    public List<AuthHorasVisadoItemRequest> Visados { get; set; } = new();
+}
+
+public class AuthHorasGrabarVisadoResult
+{
+    public bool   Ok        { get; set; }
+    public string Mensaje   { get; set; } = string.Empty;
+    public int    Guardados { get; set; }
 }
 
 // ── Grabar Autorización ───────────────────────────────────────────────────

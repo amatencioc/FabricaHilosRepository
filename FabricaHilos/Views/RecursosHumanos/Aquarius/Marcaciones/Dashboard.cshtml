@@ -1,0 +1,120 @@
+@{
+    ViewData["Title"] = "Marcaciones — Aquarius";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="RecursosHumanos" asp-action="Index">Recursos Humanos</a></li>
+    <li class="breadcrumb-item">Aquarius</li>
+    <li class="breadcrumb-item active">Marcaciones</li>
+}
+
+@section Styles {
+<style>
+    :root {
+        --aq:       #C0622B;
+        --aq-dk:    #9E4D20;
+        --aq-lt:    #FEF3EB;
+        --aq-mid:   #F5D5BC;
+        --aq-ok:    #4E7E58;
+        --aq-ok-lt: #EAF4EC;
+        --aq-err:   #AE3F3C;
+        --aq-elt:   #FDECEA;
+        --aq-info:  #7A6E9E;
+        --aq-ilt:   #F2EDF7;
+    }
+
+    .dash-header {
+        background: linear-gradient(135deg, var(--aq) 0%, var(--aq-dk) 100%);
+        color: #fff;
+        border-radius: .6rem;
+        padding: 1.4rem 1.8rem;
+        margin-bottom: 2rem;
+    }
+    .dash-header h4 { margin: 0; font-weight: 700; letter-spacing: .3px; }
+    .dash-header p  { margin: .3rem 0 0; opacity: .8; font-size: .9rem; }
+
+    .opt-card {
+        border: 2px solid #e9ecef;
+        border-radius: .8rem;
+        padding: 2rem 1.8rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s ease;
+        text-decoration: none !important;
+        color: inherit !important;
+        display: block;
+        height: 100%;
+        background: #fff;
+    }
+    .opt-card:hover {
+        border-color: var(--aq);
+        box-shadow: 0 6px 24px rgba(192,98,43,.15);
+        transform: translateY(-3px);
+        color: inherit !important;
+    }
+    .opt-card .opt-icon {
+        width: 72px; height: 72px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.9rem;
+        margin: 0 auto 1.2rem;
+    }
+    .opt-card .opt-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #212529;
+        margin-bottom: .5rem;
+    }
+    .opt-card .opt-desc {
+        font-size: .87rem;
+        color: #6c757d;
+        line-height: 1.5;
+    }
+    .opt-card .opt-arrow {
+        margin-top: 1.4rem;
+        font-size: .83rem;
+        font-weight: 600;
+        color: var(--aq);
+        opacity: 0;
+        transition: opacity .2s;
+    }
+    .opt-card:hover .opt-arrow { opacity: 1; }
+
+    .card-individual .opt-icon { background: var(--aq-lt); color: var(--aq); }
+    .card-masiva     .opt-icon { background: var(--aq-ok-lt); color: var(--aq-ok); }
+</style>
+}
+
+<div class="dash-header">
+    <h4><i class="bi bi-fingerprint me-2"></i>Depuración de Marcaciones</h4>
+    <p>Seleccione el modo de depuración que desea ejecutar.</p>
+</div>
+
+<div class="row g-4 justify-content-center">
+    <div class="col-md-5">
+        <a href="/RecursosHumanos/Aquarius/Marcaciones/Index" class="opt-card card-individual">
+            <div class="opt-icon">
+                <i class="bi bi-person-badge"></i>
+            </div>
+            <div class="opt-title">Depurar por Empleado</div>
+            <div class="opt-desc">
+                Selecciona un empleado, elige el rango de fechas y ejecuta la depuración
+                de marcaciones de forma individual. Ideal para correcciones puntuales.
+            </div>
+            <div class="opt-arrow">Ir a depuración individual →</div>
+        </a>
+    </div>
+    <div class="col-md-5">
+        <a href="/RecursosHumanos/Aquarius/Marcaciones/DepuracionMasiva" class="opt-card card-masiva">
+            <div class="opt-icon">
+                <i class="bi bi-people-fill"></i>
+            </div>
+            <div class="opt-title">Depuración Masiva</div>
+            <div class="opt-desc">
+                Selecciona una semana y visualiza los días a depurar de todos los empleados.
+                Ejecuta la depuración de toda la planta con un solo clic.
+            </div>
+            <div class="opt-arrow">Ir a depuración masiva →</div>
+        </a>
+    </div>
+</div>

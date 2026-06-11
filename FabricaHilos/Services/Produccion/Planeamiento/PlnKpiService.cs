@@ -306,16 +306,19 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                           AND  ev.cod_paso = s.cod_paso_act), 0)             AS dias_en_paso,
                    NVL((SELECT MAX(hp.kg_unidad)
                         FROM   {S}h_programacion hp
-                        WHERE  hp.guia = s.num_partida
+                        WHERE  hp.guia = NVL(s.num_partida, xpa.numero)
                           AND  hp.kg_unidad > 0), 0)                        AS kg_por_cono,
-                   NVL(pa.nro_rmc, 0)                                        AS nro_rmc,
-                   NVL(pa.rmc, '')                                            AS rmc
+                   NVL(NVL(pa.nro_rmc, xpa.nro_rmc), 0)                     AS nro_rmc,
+                   NVL(NVL(pa.rmc,     xpa.rmc), '')                        AS rmc
             FROM   {S}pln_seguimiento s
             JOIN   {S}pln_estado_codigo ec ON ec.cod_paso = s.cod_paso_act
             LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
             LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
             JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
-            LEFT JOIN {S}partida     pa ON pa.numero = s.num_partida
+            LEFT JOIN {S}partida     pa  ON pa.numero  = s.num_partida
+            -- fallback: ITEMPED_DET.NROPROG → PARTIDA (cuando num_partida es NULL)
+            LEFT JOIN {S}itemped_det xid ON xid.serie=s.serie AND xid.num_ped=s.num_ped AND xid.nro=s.nro AND xid.num_det=s.num_det AND s.num_partida IS NULL
+            LEFT JOIN {S}partida     xpa ON xpa.nroprog = xid.nroprog       AND s.num_partida IS NULL
             LEFT JOIN (SELECT cod_art, SUM(NVL(stock, 0)) AS stock
                        FROM   {S}almacen
                        WHERE  cod_alm IN ('03','07','22','30')
@@ -389,8 +392,8 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
                    s.dias_retraso, s.ind_urgente, s.ind_retraso,
                    s.cod_paso_act, ec.nombre_paso, ec.color_ui,
                    p.prioridad                                                 AS prioridad_pedido,
-                   NVL(pa.nro_rmc, 0)                                         AS nro_rmc,
-                   NVL(pa.rmc, '')                                             AS rmc,
+                   NVL(NVL(pa.nro_rmc, xpa.nro_rmc), 0)                    AS nro_rmc,
+                   NVL(NVL(pa.rmc,     xpa.rmc), '')                       AS rmc,
                    -- Fecha real de inicio del paso actual (para DiasEnPaso)
                    CASE s.cod_paso_act
                      WHEN '08'  THEN s.fch_real_secado
@@ -416,7 +419,10 @@ public class PlnKpiService : OracleServiceBase, IPlnKpiService
             LEFT JOIN {S}clientes   cl ON cl.cod_cliente = s.cod_cliente
             LEFT JOIN {S}articul    ar ON ar.cod_art     = s.cod_art
             JOIN   {S}pedido         p ON p.num_ped = s.num_ped AND p.serie = s.serie
-            LEFT JOIN {S}partida    pa ON pa.numero = s.num_partida
+            LEFT JOIN {S}partida     pa  ON pa.numero  = s.num_partida
+            -- fallback: ITEMPED_DET.NROPROG → PARTIDA (cuando num_partida es NULL)
+            LEFT JOIN {S}itemped_det xid ON xid.serie=s.serie AND xid.num_ped=s.num_ped AND xid.nro=s.nro AND xid.num_det=s.num_det AND s.num_partida IS NULL
+            LEFT JOIN {S}partida     xpa ON xpa.nroprog = xid.nroprog       AND s.num_partida IS NULL
             WHERE  s.estado = 'A'
               AND  s.cod_paso_act IN ('08','09','09B','9R','10','11')
             ORDER BY CASE WHEN s.ind_urgente='S' THEN 0 ELSE 1 END,

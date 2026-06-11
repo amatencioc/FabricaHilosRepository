@@ -1,64 +1,110 @@
 namespace FabricaHilos.Models.Produccion.Planeamiento;
 
 /// <summary>
-/// Resultado de PKG_PLN.SP_PLN_REPORTE_PRODUCCION.
-/// Representa el estado de producción (tintorería) de un ítem de pedido.
+/// Resultado de PKG_PLN.SP_PLN_SEG_PROG_TINTORERIA.
+/// 66 columnas en orden exacto del SP (v3.2).
+/// Cols 1-50 = hoja DT del Excel SEGUIMIENTO_PARTIDAS_TINTORERIA_KAREN.xlsm.
+/// Cols 51-66 = columnas adicionales web (no en DT).
 /// </summary>
 public class PlnReporteProduccion
 {
-    /// <summary>NUM_PED-NRO-NUM_DET-REPROCESO</summary>
-    public string? Partida          { get; set; }
-    public string? EstadoProg       { get; set; }
-    public string? Cliente          { get; set; }
-    public string? Material         { get; set; }
+    // ── Cols 1-4: Dimensiones de tiempo ───────────────────────────────────
+    public string?   Mes             { get; set; }   // 1  MES
+    public string?   MesTex          { get; set; }   // 2  MES_TEX
+    public string?   Ano             { get; set; }   // 3  ANO
+    public string?   Sem             { get; set; }   // 4  SEM
 
-    public DateTime? FchPedido      { get; set; }
-    public DateTime? FchEntrega     { get; set; }
-    public string?   FchPartida     { get; set; }   // TO_CHAR(Q.FECHA,'DD/MM/YY') || ' ' || Q.HORA
+    // ── Cols 5-12: Identificación del ítem ────────────────────────────────
+    public string?   Partida         { get; set; }   // 5  PARTIDA
+    public string?   Cliente         { get; set; }   // 6  CLIENTE
+    public string?   Material        { get; set; }   // 7  MATERIAL
+    public string?   Est             { get; set; }   // 8  EST
+    public string?   Ne              { get; set; }   // 9  NE  (título/contaje)
+    public string?   Mat             { get; set; }   // 10 MAT (tipo fibra)
+    public string?   Lote            { get; set; }   // 11 LOTE
+    public DateTime? FchPedido       { get; set; }   // 12 FCH_PEDIDO
 
-    public decimal?  PesoNeto       { get; set; }
-    public string?   Rmc            { get; set; }
-    public string?   NroRmc         { get; set; }
-    public string?   Referencia     { get; set; }
-    public string?   Proceso        { get; set; }
+    // ── Cols 13-15: 1er Rodete ────────────────────────────────────────────
+    public DateTime? EstimaRod       { get; set; }   // 13 ESTIMA_ROD
+    public DateTime? EntregRod       { get; set; }   // 14 ENTREG_ROD
+    public decimal?  DiasRod         { get; set; }   // 15 DIAS_ROD
 
-    public DateTime? FechaTenido    { get; set; }
-    public DateTime? FechaCcalid    { get; set; }
-    public DateTime? FechaEncon     { get; set; }
-    public DateTime? FechaSecado    { get; set; }
-    public DateTime? FechaReceta    { get; set; }
-    public DateTime? FchRevisado    { get; set; }
-    public DateTime? FechaIng       { get; set; }
+    // ── Cols 16-18: Material Hilandería ───────────────────────────────────
+    public DateTime? EstimaMat       { get; set; }   // 16 ESTIMA_MAT
+    public DateTime? EntregMat       { get; set; }   // 17 ENTREG_MAT
+    public decimal?  DiasMh          { get; set; }   // 18 DIAS_MH
 
-    public decimal?  CantDesp       { get; set; }
-    public string?   Titulo         { get; set; }
-    public decimal?  CantProg       { get; set; }
-    public string?   Lote           { get; set; }
-    public string?   TituloTexto    { get; set; }
-    public DateTime? FchProg        { get; set; }
-    public string?   PartMatiz      { get; set; }
+    // ── Col 19: Fecha guía ────────────────────────────────────────────────
+    public DateTime? FchaGuia        { get; set; }   // 19 FCHA_GUIA
 
-    public string?   EstEvaluacion  { get; set; }
-    public string?   Defecto        { get; set; }
-    public string?   Resultado      { get; set; }
-    public decimal?  DiasRetraso    { get; set; }
+    // ── Cols 20-23: Receta TT ─────────────────────────────────────────────
+    public DateTime? EstimaReceta    { get; set; }   // 20 ESTIMA_RECETA
+    public DateTime? EntregReceta    { get; set; }   // 21 ENTREG_RECETA
+    public decimal?  DiasRec         { get; set; }   // 22 DIAS_REC
+    public decimal?  X               { get; set; }   // 23 X
 
-    public DateTime? FchEntregaConoUno   { get; set; }
-    public DateTime? FchValRec           { get; set; }
-    public DateTime? FchEstimaConoUno    { get; set; }
-    public DateTime? FchEntTin           { get; set; }
-    public DateTime? FchEstimaTenido     { get; set; }
-    public DateTime? FchProgval          { get; set; }
-    public string?   LaboVal             { get; set; }
-    public DateTime? FchUltIngAlmpi      { get; set; }
-    public string?   MaqProg             { get; set; }
-    public string?   AcaMad              { get; set; }
-    public DateTime? FechaSecadoMad      { get; set; }
+    // ── Cols 24-28: Programa Tintorería ───────────────────────────────────
+    public DateTime? FchPrograma     { get; set; }   // 24 FCH_PROGRAMA
+    public string?   MaqTen          { get; set; }   // 25 MAQ_TEN
+    public DateTime? EstimaTenido    { get; set; }   // 26 ESTIMA_TENIDO
+    public DateTime? EntregTenido    { get; set; }   // 27 ENTREG_TENIDO
+    public decimal?  DiasTenido      { get; set; }   // 28 DIAS_TENIDO
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    /// <summary>Indicador de retraso según DIAS_RETRASO > 0.</summary>
-    public bool EstaRetrasado => DiasRetraso.HasValue && DiasRetraso.Value < 0;
+    // ── Cols 29-34: Fechas reales de producción ───────────────────────────
+    public DateTime? FchPartida      { get; set; }   // 29 FCH_PARTIDA
+    public DateTime? FchReceta       { get; set; }   // 30 FCH_RECETA
+    public DateTime? FchSecRodete    { get; set; }   // 31 FCH_SEC_RODETE  (secado rodete  S01/S03)
+    public DateTime? FchSecMadeja    { get; set; }   // 32 FCH_SEC_MADEJA  (secado madeja  S02/S04)
+    public DateTime? FchAprobCal     { get; set; }   // 33 FCH_APROB_CAL
+    public decimal?  TimeAprov       { get; set; }   // 34 TIME_APROV
 
-    /// <summary>Color semáforo para días de retraso.</summary>
+    // ── Cols 34-37: Acabado, enconado, revisado ───────────────────────────
+    public string?   TipoAcabado     { get; set; }   // 34 TIPO_ACABADO
+    public DateTime? FchEnconado     { get; set; }   // 35 FCH_ENCONADO
+    public DateTime? FchRevisado     { get; set; }   // 36 FCH_REVISADO
+    public string?   EvEncon         { get; set; }   // 37 EV_ENCON
+
+    // ── Cols 38-42: Entrega y días de espera ──────────────────────────────
+    public DateTime? FchEntrega      { get; set; }   // 38 FCH_ENTREGA
+    public DateTime? IngAlmpt        { get; set; }   // 39 ING_ALMPT
+    public decimal?  DiasEnEspera    { get; set; }   // 40 DIAS_EN_ESPERA
+    public decimal?  De              { get; set; }   // 41 DE
+    public decimal?  DeCopia         { get; set; }   // 42 DE_COPIA
+
+    // ── Cols 43-46: Kilogramos y tolerancia ──────────────────────────────
+    public decimal?  KgProg          { get; set; }   // 43 KG_PROG
+    public decimal?  KgDespa         { get; set; }   // 44 KG_DESPA
+    public decimal?  Gap             { get; set; }   // 45 GAP
+    public decimal?  PctToleran      { get; set; }   // 46 PCT_TOLERAN
+
+    // ── Cols 47-48: Estado del flujo ──────────────────────────────────────
+    public string?   EstadoFlujo     { get; set; }   // 47 ESTADO_FLUJO
+    public string?   EstadoDespacho  { get; set; }   // 48 ESTADO_DESPACHO
+
+    // ── Cols 49-50: Columnas de apoyo (NULL en el SP) ─────────────────────
+    public string?   AreaResponsable { get; set; }   // 49 AREA_RESPONSABLE
+    public string?   Bp              { get; set; }   // 50 BP
+
+    // ── Cols 51-65: Columnas adicionales — no en DT Excel ─────────────────
+    public decimal?  PesoNeto        { get; set; }   // 51 PESO_NETO
+    public string?   Rmc             { get; set; }   // 52 RMC
+    public string?   NroRmc          { get; set; }   // 53 NRO_RMC
+    public string?   Titulo          { get; set; }   // 54 TITULO
+    public string?   TituloTexto     { get; set; }   // 55 TITULO_TEXTO
+    public string?   Referencia      { get; set; }   // 56 REFERENCIA
+    public string?   ProcesoTt       { get; set; }   // 57 PROCESO_TT
+    public string?   PartMatiz       { get; set; }   // 58 PART_MATIZ
+    public string?   EstEvaluacion   { get; set; }   // 59 EST_EVALUACION
+    public string?   Defecto         { get; set; }   // 60 DEFECTO
+    public string?   Resultado       { get; set; }   // 61 RESULTADO
+    public string?   LaboVal         { get; set; }   // 62 LABO_VAL
+    public string?   AcaMad          { get; set; }   // 63 ACA_MAD
+    public decimal?  DiasRetraso     { get; set; }   // 64 DIAS_RETRASO
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    /// <summary>Indica si el ítem está vencido según el semáforo de despacho.</summary>
+    public bool EstaRetrasado => EstadoDespacho == "VENCIDO";
+
+    /// <summary>Clase CSS para colorear el semáforo de despacho.</summary>
     public string SemaforoClass => EstaRetrasado ? "text-danger fw-semibold" : "text-success";
 }

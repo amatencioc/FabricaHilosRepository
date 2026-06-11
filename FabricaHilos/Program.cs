@@ -269,6 +269,20 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
+// Compresión HTTP: reduce hasta 70-80% el tamaño de respuestas HTML/JSON grandes
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+    options.MimeTypes = Microsoft.AspNetCore.ResponseCompression.ResponseCompressionDefaults.MimeTypes
+        .Concat(new[] { "text/html", "application/json", "text/css", "application/javascript" });
+});
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(o =>
+    o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(o =>
+    o.Level = System.IO.Compression.CompressionLevel.Fastest);
+
 // Visibilidad de menús del sidebar (configurable en appsettings.json)
 builder.Services.Configure<MenuOptions>(
     builder.Configuration.GetSection(MenuOptions.Seccion));
@@ -316,6 +330,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Permissions-Policy"]      = "geolocation=(), microphone=()";
     await next();
 });
+app.UseResponseCompression();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseRateLimiter();
@@ -390,7 +405,7 @@ static async Task InicializarBD(IServiceProvider services)
         await context.Database.MigrateAsync();
 
         // Crear roles
-        string[] roles = { "Admin", "Trabajador" };
+        string[] roles = { "Admin", "Trabajador", "Gerencia", "Supervisor" };
         foreach (var rol in roles)
         {
             if (!await roleManager.RoleExistsAsync(rol))

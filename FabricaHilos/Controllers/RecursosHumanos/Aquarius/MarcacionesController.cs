@@ -30,9 +30,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             _navToken              = navToken;
         }
 
-        // ========== INDEX — Lista paginada de empleados ==========
+        // ========== DASHBOARD — Selección de modo de depuración ==========
 
         [HttpGet("")]
+        [HttpGet("Dashboard")]
+        public IActionResult Dashboard()
+        {
+            return View("~/Views/RecursosHumanos/Aquarius/Marcaciones/Dashboard.cshtml");
+        }
+
+        // ========== INDEX — Lista paginada de empleados (depuración individual) ==========
+
         [HttpGet("Index")]
         public async Task<IActionResult> Index(string? t = null, string? buscar = null, int page = 1)
         {
@@ -59,6 +67,35 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             ViewBag.Total      = total;
             ViewBag.TotalPages = (int)Math.Ceiling(total / (double)PageSize);
             return View("~/Views/RecursosHumanos/Aquarius/Marcaciones/Index.cshtml", items);
+        }
+
+        // ========== DEPURACIÓN MASIVA — Vista ==========
+
+        [HttpGet("DepuracionMasiva")]
+        public IActionResult DepuracionMasiva()
+        {
+            return View("~/Views/RecursosHumanos/Aquarius/Marcaciones/DepuracionMasiva.cshtml");
+        }
+
+        // ========== CONSULTAR RANGO MASIVO (AJAX — todos los empleados) ==========
+
+        [HttpGet("ConsultarRangoMasivo")]
+        public async Task<IActionResult> ConsultarRangoMasivo(string fechaInicio, string fechaFin)
+        {
+            try
+            {
+                if (!DateTime.TryParseExact(fechaInicio, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtInicio)
+                 || !DateTime.TryParseExact(fechaFin,    "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtFin))
+                    return Json(new { ok = false, mensaje = "Formato de fecha inválido." });
+
+                var marcaciones = await _marcacionesService.ConsultarRangoMasivoAsync(CodEmpresaAquarius, dtInicio, dtFin);
+                return Json(new { ok = true, data = marcaciones });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error en ConsultarRangoMasivo");
+                return Json(new { ok = false, mensaje = "Error al consultar marcaciones masivo." });
+            }
         }
 
         // ========== HORARIOS — Vista de horarios por rango ==========
@@ -135,6 +172,43 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 
             var jobId = _depuracionJobService.Encolar(CodEmpresaAquarius, codPersonal, dtInicio, dtFin, connStr);
             return Json(new { ok = true, jobId });
+        }
+
+        // ========== DEPURAR SELECCIONADOS — Encola un job por empleado y retorna la lista de jobIds ==========
+
+        [HttpPost("DepurarSeleccionados")]
+        [ValidateAntiForgeryToken]
+        public IActionResult DepurarSeleccionados([FromForm] string fechaInicio, [FromForm] string fechaFin, [FromForm] string personales)
+        {
+            if (!DateTime.TryParseExact(fechaInicio, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtInicio)
+             || !DateTime.TryParseExact(fechaFin,    "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var dtFin))
+                return Json(new { ok = false, mensaje = "Formato de fecha inválido." });
+
+            var lista = (personales ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct()
+                .ToList();
+            if (!lista.Any())
+                return Json(new { ok = false, mensaje = "No hay empleados seleccionados." });
+
+            var oracleUser = HttpContext.Session.GetString("OracleUser");
+            var oraclePass = HttpContext.Session.GetString("OraclePass");
+            string connStr = _baseConnStr;
+            if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
+            {
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                {
+                    UserID   = oracleUser,
+                    Password = oraclePass
+                };
+                connStr = csb.ToString();
+            }
+
+            var jobIds = lista
+                .Select(personal => _depuracionJobService.Encolar(CodEmpresaAquarius, personal, dtInicio, dtFin, connStr))
+                .ToList();
+
+            return Json(new { ok = true, jobIds, total = jobIds.Count });
         }
 
         // ========== CONSULTAR ESTADO DE DEPURACIÓN (polling) ==========

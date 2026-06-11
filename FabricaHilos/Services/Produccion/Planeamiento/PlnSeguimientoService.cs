@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
 
@@ -8,16 +9,19 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
 {
     private readonly IMemoryCache _cache;
+    private readonly ILogger<PlnSeguimientoService> _logger;
     private static readonly TimeSpan EstadosCacheTtl = TimeSpan.FromMinutes(30);
     private const string EstadosCacheKey = "PlnEstadoCodigo";
 
     public PlnSeguimientoService(
         IConfiguration       configuration,
         IHttpContextAccessor httpContextAccessor,
-        IMemoryCache         cache)
+        IMemoryCache         cache,
+        ILogger<PlnSeguimientoService> logger)
         : base(configuration, httpContextAccessor)
     {
-        _cache = cache;
+        _cache  = cache;
+        _logger = logger;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -204,6 +208,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             + " ORDER BY v.ind_urgente DESC, v.dias_retraso DESC, v.fch_entrega_comp";
 
         var list = new List<PlnSeguimiento>();
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
@@ -275,7 +281,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oKgProducidos, oKgEnTin, oKgEnAlmPt, oKgDespachados, oKgPendientes,
                 oIndRetraso, oDiasRetraso, oIndUrgente, oIndReproceso, oEstado));
         } while (await r.ReadAsync());
-
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnSeguimientoService] {Vista} no existe en el esquema actual ({S}). Ejecute PKG_PLN.sql para activar el módulo.",
+                "V_PLN_ESTADO_ITEM", S);
+        }
         return list;
     }
 
@@ -315,6 +326,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
         int totalItems = 0, totalRetraso = 0, totalUrgente = 0,
             totalReproceso = 0, totalSinPlanif = 0, totalPedidos = 0;
 
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
 
@@ -486,6 +499,13 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             Pagina         = pagina,
             TamPagina      = tamPagina,
         };
+        } // try
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnSeguimientoService] {Vista} no existe en el esquema actual ({S}). Ejecute PKG_PLN.sql para activar el módulo.",
+                "V_PLN_ESTADO_ITEM", S);
+            return new PlnSeguimientoPagina { Items = [], Pagina = pagina, TamPagina = tamPagina };
+        }
     }
 
 
@@ -584,6 +604,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             ORDER  BY s.NRO, s.NUM_DET";
 
         var list = new List<PlnSeguimiento>();
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
@@ -676,12 +698,17 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 oFchAprobacion: oFchAprobacion, oFchPlanif: oFchPlanif,
                 oUsrRegistro: oUsrRegistro, oNombreRegistro: oNombreRegistro,
                 oUsrAprobacion: oUsrAprobacion, oNombreAprobacion: oNombreAprobacion,
-                oUsrPlanif: oUsrPlanif, oNombrePlanif: oNombrePlanif,
-                oIndFlujo: oIndFlujo));
-        } while (await r.ReadAsync());
-
-        return list;
-    }
+                             oUsrPlanif: oUsrPlanif, oNombrePlanif: oNombrePlanif,
+                             oIndFlujo: oIndFlujo));
+                    } while (await r.ReadAsync());
+                    } // try
+                    catch (OracleException ex) when (ex.Number == 942)
+                    {
+                        _logger.LogWarning("[PlnSeguimientoService] {Vista} no existe en el esquema actual ({S}). Ejecute PKG_PLN.sql para activar el módulo.",
+                            "V_PLN_ESTADO_ITEM / V_PLN_TRAZABILIDAD", S);
+                    }
+                    return list;
+                }
 
     public Task<PlnSeguimiento?> GetByIdAsync(long idSeguim)
         => GetSingleByWhereAsync("s.ID_SEGUIM = :p1", cmd => cmd.Parameters.Add("p1", idSeguim));
@@ -1023,6 +1050,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             ORDER  BY DECODE(a.nivel,'C',1,'A',2,'M',3,'B',4), a.fch_limite";
 
         var list = new List<PlnAlerta>();
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
@@ -1066,6 +1095,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 HorasSinResolver = horasSinResolver,
             });
         }
+        } // try
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnSeguimientoService] {Vista} no existe en el esquema actual ({S}). Ejecute PKG_PLN.sql para activar el módulo.",
+                "V_PLN_ALERTAS_ACTIVAS", S);
+        }
         return list;
     }
 
@@ -1103,6 +1138,8 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
             ORDER  BY t.nro, t.num_det";
 
         var list = new List<PlnTrazabilidad>();
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
@@ -1163,6 +1200,12 @@ public class PlnSeguimientoService : OracleServiceBase, IPlnSeguimientoService
                 UsrPlanif             = SafeStr(r["usr_planif"]),
                 NombrePlanif          = SafeStr(r["nombre_planif"]),
             });
+        }
+        } // try
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            _logger.LogWarning("[PlnSeguimientoService] {Vista} no existe en el esquema actual ({S}). Ejecute PKG_PLN.sql para activar el módulo.",
+                "V_PLN_TRAZABILIDAD", S);
         }
         return list;
     }

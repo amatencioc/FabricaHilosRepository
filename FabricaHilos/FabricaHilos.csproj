@@ -43,6 +43,8 @@
   <ItemGroup>
     <Content Include="Data\Sistemas\SeguimientoDev\ind_seguimientoDev.sql" />
     <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\Index.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\Dashboard.cshtml" />
+    <Content Include="Views\RecursosHumanos\Aquarius\Marcaciones\DepuracionMasiva.cshtml" />
   </ItemGroup>
 
   <ItemGroup>

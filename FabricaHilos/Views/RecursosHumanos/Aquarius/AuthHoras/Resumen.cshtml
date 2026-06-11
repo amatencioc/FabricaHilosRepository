@@ -48,6 +48,27 @@
 
     .aq-modal-header { background: var(--aq);    color: #fff; }
     .aq-modal-err    { background: var(--aq-err);color: #fff; }
+
+    .btn-filter-estado {
+        font-size: .85rem;
+        padding: .35rem .6rem;
+        border: 1px solid #dee2e6;
+        background: #fff;
+        color: #6c757d;
+        cursor: pointer;
+        transition: all .2s ease;
+    }
+    .btn-filter-estado:hover {
+        background: #f8f9fa;
+        border-color: var(--aq);
+    }
+    .btn-filter-estado.active {
+        background: var(--aq);
+        color: #fff;
+        border-color: var(--aq);
+    }
+
+    .fila-visada { background: rgba(78,126,88,0.06) !important; }
 </style>
 }
 
@@ -101,6 +122,25 @@
             <i class="bi bi-search me-1"></i>Consultar
         </button>
     </div>
+    <div class="col-auto">
+        <label class="form-label fw-semibold mb-1">Estado</label>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn-filter-estado active" data-estado="todos" title="Mostrar todos">
+                Todos
+            </button>
+            <button type="button" class="btn-filter-estado" data-estado="PARCIAL" title="Parcialmente autorizados">
+                Parcial
+            </button>
+            <button type="button" class="btn-filter-estado" data-estado="COMPLETO" title="Completamente autorizados">
+                Completo
+            </button>
+        </div>
+    </div>
+    <div class="col-auto" id="divBtnVisado" style="display:none">
+        <button id="btnGuardarVisado" class="btn btn-sm btn-outline-success" disabled>
+            <i class="bi bi-check2-all me-1"></i>Guardar Visado
+        </button>
+    </div>
     <div class="col-auto ms-auto">
         <input type="search" id="inpFiltro" class="form-control form-control-sm"
                placeholder="Filtrar por nombre o fotocheck…" style="min-width:220px" />
@@ -141,6 +181,7 @@
         <table class="table table-sm resumen-table mb-0" id="tblResumen">
             <thead class="table-light sticky-top">
                 <tr>
+                    <th class="text-center" style="width:32px;min-width:32px" title="Estado visado"><i class="bi bi-patch-check" style="font-size:.9rem;color:var(--aq-ok)"></i></th>
                     <th>Fotocheck</th>
                     <th>Empleado</th>
                     <th>Centro Costo</th>
@@ -162,10 +203,11 @@
                     </th>
                     <th class="col-motivo-res">Motivo / Observación</th>
                     <th>% Autorizado</th>
+                    <th id="thVisado" class="text-center" style="min-width:60px">Visado</th>
                 </tr>
             </thead>
             <tbody id="tbodyResumen">
-                <tr><td colspan="13" class="text-muted text-center p-4">Seleccione empresa, período y presione Consultar.</td></tr>
+                <tr><td colspan="15" class="text-muted text-center p-4">Seleccione empresa, período y presione Consultar.</td></tr>
             </tbody>
         </table>
     </div>
@@ -191,6 +233,7 @@
 <script>
 let sesion = {};
 let _listaResumen = [];
+let _estadoFiltro = 'todos';
 
 // ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -198,6 +241,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnBuscar').addEventListener('click', buscar);
     document.getElementById('inpFiltro').addEventListener('input', function () {
         renderTabla(this.value.trim().toLowerCase());
+    });
+
+    // Filtro de estado
+    document.querySelectorAll('.btn-filter-estado').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.btn-filter-estado').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            _estadoFiltro = this.dataset.estado;
+            renderTabla(document.getElementById('inpFiltro').value.trim().toLowerCase());
+        });
     });
 });
 
@@ -210,6 +263,11 @@ async function cargarSesion() {
     if (sesion.esAdmin === 'S') {
         document.getElementById('divSupervisor').style.display = '';
     }
+    
+    // Mostrar columna y botón de visado para todos los supervisores autenticados
+    document.getElementById('divBtnVisado').style.display = '';
+    document.getElementById('thVisado').style.display = '';
+    document.getElementById('btnGuardarVisado').addEventListener('click', guardarVisado);
 
     if (sesion.cntEmpresas == 1 && sesion.codEmpresa) {
         document.getElementById('divEmpresa').style.display = 'none';
@@ -290,12 +348,20 @@ function actualizarKpis() {
     document.getElementById('kpiParcial').textContent  = parcial.length;
     document.getElementById('kpiCompleto').textContent = completo.length;
     document.getElementById('divKpis').style.display   = '';
+    // Habilitar botón guardar visado cuando hay datos
+    document.getElementById('btnGuardarVisado').disabled = _listaResumen.length === 0;
 }
 
 function renderTabla(filtro = '') {
     const tbody = document.getElementById('tbodyResumen');
     let lista = _listaResumen.slice();
 
+    // Aplicar filtro de estado
+    if (_estadoFiltro !== 'todos') {
+        lista = lista.filter(e => e.estado === _estadoFiltro);
+    }
+
+    // Aplicar filtro de búsqueda
     if (filtro) {
         lista = lista.filter(e =>
             (e.nombreCompleto || '').toLowerCase().includes(filtro) ||
@@ -304,7 +370,8 @@ function renderTabla(filtro = '') {
     }
 
     if (!lista.length) {
-        tbody.innerHTML = `<tr><td colspan="13" class="text-muted text-center p-4">Sin resultados${filtro ? ' para "' + filtro + '"' : ''}.</td></tr>`;
+        const nCols = 15;  // 15 columnas (indicador visado + fotocheck + ... + visado)
+        tbody.innerHTML = `<tr><td colspan="${nCols}" class="text-muted text-center p-4">Sin resultados${filtro ? ' para "' + filtro + '"' : ''}.</td></tr>`;
         return;
     }
 
@@ -313,12 +380,35 @@ function renderTabla(filtro = '') {
         const pct         = e.diasConHe > 0 ? Math.min(100, Math.round(e.diasAutorizados / e.diasConHe * 100)) : 0;
         const barFill     = `<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><span style="font-size:.75rem">${pct}%</span></div>`;
 
-        const partes = [];
-        if (e.obsHed) partes.push(`<span style="font-size:.78rem;word-break:break-word;">${escapeHtml(e.obsHed)}</span>`);
-        if (e.obsHeo) partes.push(`<span style="font-size:.78rem;word-break:break-word;">${escapeHtml(e.obsHeo)}</span>`);
-        const motivoFila = partes.length ? partes.join('<br/>') : '<span class="text-muted">—</span>';
+        // Campo único de observación
+        const motivoFila = e.obs
+            ? `<span style="font-size:.78rem;word-break:break-word;">${escapeHtml(limpiarPrefijosObs(e.obs))}</span>`
+            : '<span class="text-muted">—</span>';
 
-        return `<tr>
+        // Checkbox de visado (todos los supervisores, solo COMPLETO o PARCIAL)
+        const puedeVisar = (e.estado === 'COMPLETO' || e.estado === 'PARCIAL');
+        const isVisado   = e.indVisado !== 'N';   // null o 'S' = checked por defecto
+        const tooltipVis = e.fecVisado
+            ? `Visado el ${escapeHtml(e.fecVisado)}${e.codUsuVisado ? ' por ' + escapeHtml(e.codUsuVisado) : ''}`
+            : (e.indVisado === 'N' ? 'Visado como No aprobado' : 'Sin visar aún');
+        let chkVisadoHtml;
+        if (puedeVisar) {
+            chkVisadoHtml = `<input type="checkbox" class="form-check-input chk-visado"
+                style="width:1.2em;height:1.2em;cursor:pointer"
+                data-personal="${e.codPersonal}"
+                title="${tooltipVis}"
+                ${isVisado ? 'checked' : ''}>`;
+        } else {
+            chkVisadoHtml = '<span class="text-muted" style="font-size:.8rem">—</span>';
+        }
+
+        const indV           = (e.indVisado || '').trim();
+        const tieneRegistro  = indV === 'S' || indV === 'N';
+        const iconoVisado    = puedeVisar && tieneRegistro
+            ? `<i class="bi bi-check-circle-fill" style="color:var(--aq-ok);font-size:1rem" title="${tooltipVis}"></i>`
+            : '';
+        return `<tr class="${tieneRegistro ? 'fila-visada' : ''}">
+            <td class="text-center">${iconoVisado}</td>
             <td><span style="color:var(--aq-dk);font-weight:600">${e.numFotocheck || '—'}</span></td>
             <td>${e.nombreCompleto}</td>
             <td><small class="text-muted">${e.desCCostos || e.codCCostos}</small></td>
@@ -332,6 +422,7 @@ function renderTabla(filtro = '') {
             <td class="text-center">${fmtMin(e.minHeoAut)}</td>
             <td>${motivoFila}</td>
             <td>${barFill}</td>
+            <td class="text-center">${chkVisadoHtml}</td>
         </tr>`;
     }).join('');
 }
@@ -370,6 +461,54 @@ function mostrarMsg(ok, msg) {
     document.getElementById('modalMsgTitulo').textContent = ok ? 'Información' : 'Error';
     document.getElementById('modalMsgCuerpo').textContent = msg;
     new bootstrap.Modal(document.getElementById('modalMsg')).show();
+}
+
+async function guardarVisado() {
+    const empresa = getEmpresa();
+    const desde   = formatFecha(document.getElementById('dtDesde').value);
+    const hasta   = formatFecha(document.getElementById('dtHasta').value);
+    if (!empresa || !desde || !hasta) { mostrarMsg(false, 'Seleccione empresa y período.'); return; }
+
+    const checkboxes = document.querySelectorAll('.chk-visado');
+    if (!checkboxes.length) { mostrarMsg(false, 'No hay empleados para visar.'); return; }
+
+    const visados = Array.from(checkboxes).map(chk => ({
+        codPersonal: chk.dataset.personal,
+        indVisado:   chk.checked ? 'S' : 'N',
+        obsVisado:   null
+    }));
+
+    const btn = document.getElementById('btnGuardarVisado');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando…';
+    try {
+        const token = document.querySelector('[name="__RequestVerificationToken"]')?.value ?? '';
+        const r = await fetch('/RecursosHumanos/Aquarius/AuthHoras/GrabarVisado', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+            body:    JSON.stringify({ codEmpresa: empresa, desde, hasta, visados })
+        });
+        if (!r.ok) { mostrarMsg(false, 'Error al guardar el visado.'); return; }
+        const result = await r.json();
+        if (result.ok) {
+            mostrarMsg(true, `Visado guardado: ${result.guardados} empleado(s).`);
+            buscar();   // recargar para reflejar estado
+        } else {
+            mostrarMsg(false, result.mensaje || 'Error al guardar.');
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check2-all me-1"></i>Guardar Visado';
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function limpiarPrefijosObs(str) {
+    return (str || '').replace(/^(\[[^\]]+\]\s*)+/, '').trim();
 }
 </script>
 @Html.AntiForgeryToken()

@@ -13,6 +13,7 @@ public class MarcacionRangoDto
     public string?  CodEmpresa        { get; set; }
     public string?  CodPersonal       { get; set; }
     public string?  Fotocheck         { get; set; }
+    public string?  Empleado          { get; set; }   // nombre completo (columna "empleado" del SP masivo)
     public int?     NumMarcaciones    { get; set; }
 
     // Marcaciones actuales

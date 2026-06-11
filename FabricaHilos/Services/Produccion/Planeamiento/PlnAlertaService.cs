@@ -1,4 +1,5 @@
 using System.Data;
+using Microsoft.Extensions.Logging;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
 
@@ -6,10 +7,16 @@ namespace FabricaHilos.Services.Produccion.Planeamiento;
 
 public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
 {
+    private readonly ILogger<PlnAlertaService> _logger;
+
     public PlnAlertaService(
         IConfiguration       configuration,
-        IHttpContextAccessor httpContextAccessor)
-        : base(configuration, httpContextAccessor) { }
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<PlnAlertaService> logger)
+        : base(configuration, httpContextAccessor)
+    {
+        _logger = logger;
+    }
 
     private static DateTime? SafeDate(object? v) =>
         v == null || v == DBNull.Value ? null : Convert.ToDateTime(v);
@@ -43,6 +50,8 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
             LEFT JOIN {S}ARTICUL ar ON ar.cod_art = a.cod_art";
 
         var list = new List<PlnAlerta>();
+        try
+        {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         await conn.OpenAsync();
         await using var cmd = new OracleCommand(sql, conn);
@@ -86,6 +95,16 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                 IndUrgente       = SafeStr(r["ind_urgente"]),
                 HorasSinResolver = horasSinResolver,
             });
+        }
+        }
+        catch (OracleException ex) when (ex.Number == 942)
+        {
+            // ORA-00942: tabla o vista no existe — el script PKG_PLN.sql aún no se ejecutó
+            // en esta instancia de BD. Se devuelve lista vacía para no bloquear el Dashboard.
+            _logger.LogWarning(ex,
+                "[PlnAlertaService] V_PLN_ALERTAS_ACTIVAS no existe en el esquema actual ({Schema}). " +
+                "Ejecute PKG_PLN.sql contra la BD para activar el módulo de alertas.",
+                S?.TrimEnd('.'));
         }
         return list;
     }

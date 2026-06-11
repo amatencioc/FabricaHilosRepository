@@ -10,6 +10,7 @@ public interface IMarcacionesService
     Task<List<EmpleadoDto>> BuscarEmpleadoAsync(string codEmpresa, string? nombre);
     Task<(List<EmpleadoDto> Items, int Total)> ListarEmpleadosAsync(string codEmpresa, string? buscar, int page, int pageSize);
     Task<List<MarcacionRangoDto>> ConsultarRangoAsync(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin);
+    Task<List<MarcacionRangoDto>> ConsultarRangoMasivoAsync(string codEmpresa, DateTime fechaInicio, DateTime fechaFin);
     Task<DepuraRangoResultadoDto> DepurarRangoAsync(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin);
     void InvalidarCacheEmpleados(string codEmpresa);
 }
@@ -212,7 +213,65 @@ public class MarcacionesService : IMarcacionesService
             throw;
         }
     }
+    // ── CONSULTAR_RANGO MASIVO (todos los empleados — personal=NULL) ───────────
 
+    public async Task<List<MarcacionRangoDto>> ConsultarRangoMasivoAsync(string codEmpresa, DateTime fechaInicio, DateTime fechaFin)
+    {
+        try
+        {
+            return await WithOracleRetryAsync(async () =>
+            {
+                var result = new List<MarcacionRangoDto>();
+                await using var conn = new OracleConnection(GetOracleConnectionString());
+                await conn.OpenAsync();
+
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandType    = CommandType.StoredProcedure;
+                cmd.CommandText    = $"{Paquete}.CONSULTAR_RANGO";
+                cmd.CommandTimeout = 120;
+
+                cmd.Parameters.Add(new OracleParameter("p_cod_empresa",  OracleDbType.Varchar2) { Value = codEmpresa });
+                cmd.Parameters.Add(new OracleParameter("p_cod_personal", OracleDbType.Varchar2) { Value = DBNull.Value });   // NULL = todos
+                cmd.Parameters.Add(new OracleParameter("p_fecha_inicio", OracleDbType.Varchar2) { Value = fechaInicio.ToString("dd/MM/yyyy") });
+                cmd.Parameters.Add(new OracleParameter("p_fecha_fin",    OracleDbType.Varchar2) { Value = fechaFin.ToString("dd/MM/yyyy") });
+                cmd.Parameters.Add(new OracleParameter("cv_resultado",   OracleDbType.RefCursor) { Direction = ParameterDirection.Output });
+
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    var r = (OracleDataReader)reader;
+                    result.Add(new MarcacionRangoDto
+                    {
+                        Fechamar         = GetStr(r, "fechamar"),
+                        CodEmpresa       = GetStr(r, "emp"),
+                        CodPersonal      = GetStr(r, "personal"),
+                        Fotocheck        = GetStr(r, "fotocheck"),
+                        Empleado         = GetStr(r, "empleado"),
+                        HorEntrada       = GetStr(r, "hor_entrada"),
+                        HorIniRefri      = GetStr(r, "hor_ini_ref"),
+                        HorFinRefri      = GetStr(r, "hor_fin_ref"),
+                        HorSalida        = GetStr(r, "hor_salida"),
+                        NumMarcaciones   = GetNullInt(r, "n_marcas"),
+                        Entrada          = GetStr(r, "entrada"),
+                        IniRefri         = GetStr(r, "ini_refri"),
+                        FinRefri         = GetStr(r, "fin_refri"),
+                        Salida           = GetStr(r, "salida"),
+                        CodDepuracion    = GetStr(r, "cod_dep"),
+                        DescDepuracion   = GetStr(r, "desc_dep"),
+                        Pendiente        = GetStr(r, "pendiente"),
+                        CasoAplica       = GetStr(r, "caso_aplica"),
+                        Problema         = GetStr(r, "problema"),
+                    });
+                }
+                return result;
+            }, "CONSULTAR_RANGO_MASIVO");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en CONSULTAR_RANGO_MASIVO: empresa={Empresa}", codEmpresa);
+            throw;
+        }
+    }
     // ── DEPURA_RANGO ───────────────────────────────────────────────────────
 
     public async Task<DepuraRangoResultadoDto> DepurarRangoAsync(string codEmpresa, string codPersonal, DateTime fechaInicio, DateTime fechaFin)

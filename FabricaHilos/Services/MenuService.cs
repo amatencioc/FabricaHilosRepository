@@ -154,6 +154,7 @@ public class MenuService : IMenuService
                 "RhAutorizacionHoras",
                 "RhIndicadores",
                 "RhIndicadoresHorasExtras",
+                "RhIndicadoresCostoSalarialHorasExtras",
                 "RhIndicadoresComparativoCostoLaboral"),
 
             Logistica = TieneAlguno(
@@ -254,10 +255,14 @@ public class MenuService : IMenuService
             RhIndicadores = global.RhIndicadores
                 && TieneAlguno("RecursosHumanos", "RhIndicadores",
                                "RhIndicadoresHorasExtras",
+                               "RhIndicadoresCostoSalarialHorasExtras",
                                "RhIndicadoresComparativoCostoLaboral"),
 
             RhIndicadoresHorasExtras = global.RhIndicadoresHorasExtras
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresHorasExtras"),
+
+            RhIndicadoresCostoSalarialHorasExtras = global.RhIndicadoresCostoSalarialHorasExtras
+                && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresCostoSalarialHorasExtras"),
 
             RhIndicadoresComparativoCostoLaboral = global.RhIndicadoresComparativoCostoLaboral
                 && TieneAlguno("RecursosHumanos", "RhIndicadores", "RhIndicadoresComparativoCostoLaboral"),

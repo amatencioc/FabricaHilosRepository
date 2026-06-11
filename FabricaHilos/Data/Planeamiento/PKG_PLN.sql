@@ -1275,8 +1275,27 @@ CREATE OR REPLACE PACKAGE PKG_PLN AS
     p_usuario        IN VARCHAR2  DEFAULT NULL
   );
 
-  -- ── Seguimiento Programación Tintorería (ex QUERY_PRODUCCION) ──
+  -- ── Seguimiento Programación Tintorería (ex QUERY_PRODUCCION + hoja DT Excel) ──
   -- Reporte principal de seguimiento por ítem de pedido.
+  -- Devuelve ~57 columnas: las 40 originales de QUERY_PRODUCCION + 17 calculadas
+  -- equivalentes a la hoja "DT" del Excel SEGUIMIENTO_PARTIDAS_TINTORERIA_KAREN.xlsm.
+  --
+  -- Columnas DT añadidas (v3.1):
+  --   MES, MES_TEX, ANO, SEM          → dimensiones de tiempo por FCH_ENTREGA
+  --   DIAS_ROD                         → ESTIMA_CONO_UNO − ENTREGA_CONO_UNO
+  --   DIAS_MH                          → demora material hilandería (MAX 0)
+  --   DIAS_REC                         → demora receta (MAX 0)
+  --   DIAS_TENIDO                      → demora teñido (MAX 0)
+  --   TIME_APROV                       → días CC tintorería: FECHA_CCALID − FECHA_SECADO
+  --   TIPO_ACABADO                     → 'REDINA' (madeja) | 'CONERA' (cono/rodete)
+  --   EV_ENCON                         → 'APROBADO' | 'CONCESIONADO' | 'RECHAZADO' | 'EN CONSULTA'
+  --   DIAS_EN_ESPERA                   → MAX(0, ING_ALMPT − FCH_ENTREGA) — positivo=atrasado
+  --   DE                               → ídem con signo (negativo=llegó antes)
+  --   GAP_KG                           → CANT_DESP − CANT_PROG (negativo=faltó despachar)
+  --   PCT_TOLERANCIA                   → % ± respecto a CANT_PROG; NULL=sin despachar
+  --   ESTADO_FLUJO                     → etapa más avanzada ('DESPACHADO'...'SIN RECETA')
+  --   ESTADO_DESPACHO                  → semáforo ('VENCIDO'|'VENCE HOY'|'A TIEMPO'|etc.)
+  --
   -- p_opc : 'POR FECHA DE ENTREGA'   → p_fechai / p_fechaf con FCH_ENTREGA
   --         'POR PEDIDO'              → p_numped  con NUM_PED
   --         'POR FECHA DE PROGRAMA'   → p_fechai / p_fechaf con FHC_PROG
@@ -2197,18 +2216,30 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
   --
   -- OPERACIÓN:
   --   1. DELETE FROM PLN_CARGA_DIARIA WHERE fecha BETWEEN fch_ini AND fch_fin
-  --   2. INSERT hilandería  → H_PRODUCCION_D (tp_maq ∈ 'C','R','T','U')
-  --   3. INSERT tintorería  → TT_RPRODUC (TIPODOC='PA', ESTADO='3') — activo 2021+
-  --   4. UPDATE PCT_CARGA/PCT_UTILIZACION/IND_SOBRECARGADA basado en HORAS
-  --      (KG_CAPACIDAD NO disponible de MA_PROGRAMA — fechas siempre NULL en 2023+)
+  --   2. INSERT hilandería  → H_RPRODUC ESTADO='3'
+  --      FIX-J: reemplaza H_PRODUCCION_D (sin datos desde 14/05/2026).
+  --      Horas = (FECHA_FIN-FECHA_INI)*24; KG = PESO_NETO. Excluye TP_MAQ='G'.
+  --   3. INSERT tintorería REAL → TT_RPRODUC TIPODOC='IR' ESTADO='3'
+  --      → puebla HORAS_REAL / KG_REAL (baños ya terminados)
+  --   4. MERGE  tintorería COLA → TT_RPRODUC TIPODOC='IR' ESTADO='1' (en proceso)
+  --      FIX-K: nueva lógica de cola activa.
+  --      Duración estimada = mediana histórica 90d por máquina (fallback 8h).
+  --      FECHA_FIN_EST = TRUNC(FECHA_INI + hrs_med/24).
+  --      → puebla HORAS_ASIGNADAS / KG_ASIGNADOS / NRO_PEDIDOS
+  --      MERGE: si ya hay fila (producción real ese día) → UPDATE los campos de cola
+  --             si no hay fila (día futuro) → INSERT fila nueva con datos de cola
+  --   5. UPDATE PCT_UTILIZACION / PCT_CARGA / IND_SOBRECARGADA
+  --      PCT_UTILIZACION = HORAS_REAL / HORAS_CAPACIDAD * 100    (producido)
+  --      PCT_CARGA       = (HORAS_REAL+HORAS_ASIGNADAS) / HORAS_CAPACIDAD * 100 (total carga)
+  --      IND_SOBRECARGADA = 'S' si PCT_CARGA > 100%
   --
   -- CAPACIDAD por tipo:
   --   Hilandería  → PLN_PARAM.COD_PARAM='HRS_HILANDERIA'  (default 22 h/día)
   --   Tintorería  → PLN_PARAM.COD_PARAM='HRS_TINTORERIA'  (default 24 h/día)
   --
-  -- TP_MAQ para máquinas de tintorería (TT_RPRODUC): 'W' (Wet processing)
-  --   Distingue de hilandería ('C','R','T','U') en el Gantt/Heatmap.
-  --   COD_MAQ TT conocidos activos: 'R03' (Thies), 'MR2' (Matisa Rodetes)
+  -- TP_MAQ:
+  --   Hilandería → valor directo de H_RPRODUC.TP_MAQ (A,B,C,E,L,M,P,R,T)
+  --   Tintorería → 'W' (Wet processing; Thies R01-R19, Matisa MR, Hank M01-M08)
   -- ============================================================
   PROCEDURE SP_PLN_CARGA_DIARIA_REFRESH (
     p_fch_ini IN DATE DEFAULT TRUNC(SYSDATE),
@@ -2227,37 +2258,39 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     DELETE FROM PLN_CARGA_DIARIA
     WHERE fecha BETWEEN p_fch_ini AND p_fch_fin;
 
-    -- 1. Hilandería: producción real desde H_PRODUCCION_D
-    --    HORAS_TRABAJADAS es VARCHAR2(5) formato 'HH.MM' (no decimal ni 'HH:MM').
-    --    Guard REGEXP evita ORA-01722 por valores inválidos ('.','00.','−5.10',…).
+    -- 1. Hilandería: producción real desde H_RPRODUC (FIX-J: reemplaza H_PRODUCCION_D)
+    --    H_PRODUCCION_D dejó de actualizarse el 14/05/2026; H_RPRODUC es la fuente activa.
+    --    FIX-L (ORA-01438): Las autoconeadoras (TP_MAQ='A') tienen N spindles simultáneos.
+    --    SUM de tiempos de spindle = varios cientos de horas/día → desborda NUMBER(5,2).
+    --    Solución: HORAS_REAL = tiempo CALENDARIO = (MAX(fecha_fin) - MIN(fecha_ini)) * 24,
+    --    que representa cuántas horas del día estuvo activa la máquina (≤ 24h siempre).
+    --    KG_REAL sigue siendo SUM(peso_neto) — suma real de producción.
     INSERT INTO PLN_CARGA_DIARIA (
       FECHA, COD_MAQ, TP_MAQ,
       HORAS_CAPACIDAD, HORAS_REAL, KG_REAL,
       FCH_CALCULO, A_MDFECHA
     )
     SELECT
-      d.fecha, d.cod_maq, d.tp_maq,
+      TRUNC(h.fecha_ini),
+      h.cod_maq,
+      h.tp_maq,
       v_hrs_hil,
-      SUM(CASE WHEN REGEXP_LIKE(d.horas_trabajadas, '^\d{2}\.\d{2}$')
-               THEN TO_NUMBER(SUBSTR(d.horas_trabajadas, 1, 2))
-                  + TO_NUMBER(SUBSTR(d.horas_trabajadas, 4, 2)) / 60
-               ELSE 0
-          END),
-      SUM(d.cantidad),
+      ROUND(LEAST(
+        (MAX(h.fecha_fin) - MIN(h.fecha_ini)) * 24,
+        v_hrs_hil
+      ), 2),
+      ROUND(SUM(NVL(h.peso_neto, 0)), 4),
       SYSDATE, SYSDATE
-    FROM h_produccion_d d
-    WHERE d.fecha BETWEEN p_fch_ini AND p_fch_fin
-    GROUP BY d.fecha, d.cod_maq, d.tp_maq;
+    FROM h_rproduc h
+    WHERE h.estado    = '3'
+      AND h.tp_maq    NOT IN ('G')
+      AND h.peso_neto > 0
+      AND TRUNC(h.fecha_ini) BETWEEN p_fch_ini AND p_fch_fin
+    GROUP BY TRUNC(h.fecha_ini), h.cod_maq, h.tp_maq;
 
-    -- 2. Tintorería: carga real desde TT_RPRODUC (sistema IR — vigente desde 2021)
-    --    BUG-I FIX: sustituye TIPODOC='PA' por TIPODOC='IR' que es el modo activo en 2026.
-    --    Datos BD confirmados: 4,820 registros IR vs. 167 PA en 2026.
-    --    TIPODOC='PA' capturaba solo el 3% de la actividad real (167/4820+167).
+    -- 2. Tintorería REAL: baños terminados → HORAS_REAL / KG_REAL
     --    Navegación IR: TT_RPRODUC.RECETA → PARTIDA_MAS.NUMERO (tp_transac='IR')
-    --                   PARTIDA_MAS.PARTIDA → PARTIDA.NUMERO (para obtener PESO_NETO)
-    --    ESTADO='3'  : baño terminado (excluye en-proceso e incompletos)
-    --    FECHA_INI/FIN: timestamps reales del baño (ms precision, ORA: DATE con hora)
-    --    TP_MAQ='W' (Wet/Tintorería) — distingue visualmente en el Gantt de hilandería
+    --                   PARTIDA_MAS.PARTIDA → PARTIDA.NUMERO (para PESO_NETO)
     INSERT INTO PLN_CARGA_DIARIA (
       FECHA, COD_MAQ, TP_MAQ,
       HORAS_CAPACIDAD, HORAS_REAL, KG_REAL,
@@ -2269,7 +2302,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       'W',
       v_hrs_tt,
       ROUND(SUM((tt.fecha_fin - tt.fecha_ini) * 24), 2),
-      SUM(NVL(p.peso_neto, 0)),
+      ROUND(SUM(NVL(p.peso_neto, 0)), 4),
       SYSDATE, SYSDATE
     FROM   tt_rproduc tt
     JOIN   partida_mas pm ON pm.numero = tt.receta AND pm.tp_transac = 'IR'
@@ -2281,12 +2314,73 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       AND  TRUNC(tt.fecha_ini) BETWEEN p_fch_ini AND p_fch_fin
     GROUP BY TRUNC(tt.fecha_ini), tt.cod_maq;
 
-    -- 3. Calcular porcentajes basados en HORAS (KG_CAPACIDAD = NULL siempre,
-    --    MA_PROGRAMA.FECHA_INI vacío en 2023+ → no usable como fuente de capacidad)
+    -- 3. Tintorería COLA: baños en proceso (ESTADO='1') → HORAS_ASIGNADAS / KG_ASIGNADOS
+    --    FIX-K: permite ver la cola activa de cada máquina en el Heatmap.
+    --    Duración estimada = MEDIAN de (fecha_fin-fecha_ini)*24 de baños completados
+    --    en los últimos 90 días para esa máquina. Fallback: 8h si no hay historial.
+    --    FECHA_FIN_EST = TRUNC(FECHA_INI + hrs_med/24) → determina el día en que ocupa.
+    --    MERGE (no INSERT): la fila puede ya existir si la máquina tuvo baños terminados
+    --    el mismo día (ej: máquina con 2 baños: uno completado ESTADO='3' + otro en curso).
+    MERGE INTO PLN_CARGA_DIARIA cd
+    USING (
+      SELECT
+        TRUNC(tt.fecha_ini + NVL(hist.hrs_med, 8) / 24)  AS fecha,
+        tt.cod_maq,
+        'W'                                               AS tp_maq,
+        v_hrs_tt                                          AS horas_capacidad,
+        ROUND(SUM(NVL(hist.hrs_med, 8)), 2)               AS horas_asignadas,
+        ROUND(SUM(NVL(p.peso_neto, 0)), 4)                AS kg_asignados,
+        COUNT(*)                                          AS nro_pedidos
+      FROM   tt_rproduc tt
+      JOIN   partida_mas pm ON pm.numero = tt.receta AND pm.tp_transac = 'IR'
+      LEFT   JOIN partida p ON p.numero = pm.partida
+      LEFT   JOIN (
+        -- Mediana histórica 90d de duración de baños por máquina
+        SELECT cod_maq,
+               MEDIAN((fecha_fin - fecha_ini) * 24) AS hrs_med
+        FROM   tt_rproduc
+        WHERE  estado  = '3'
+          AND  tipodoc = 'IR'
+          AND  fecha_ini IS NOT NULL
+          AND  fecha_fin > fecha_ini
+          AND  fecha_ini >= TRUNC(SYSDATE) - 90
+          AND  (fecha_fin - fecha_ini) * 24 BETWEEN 0.5 AND 100
+        GROUP BY cod_maq
+      ) hist ON hist.cod_maq = tt.cod_maq
+      WHERE  tt.estado  = '1'
+        AND  tt.tipodoc = 'IR'
+        AND  tt.fecha_ini IS NOT NULL
+        AND  TRUNC(tt.fecha_ini + NVL(hist.hrs_med, 8) / 24)
+             BETWEEN p_fch_ini AND p_fch_fin
+      GROUP  BY TRUNC(tt.fecha_ini + NVL(hist.hrs_med, 8) / 24), tt.cod_maq
+    ) cola ON (cd.fecha = cola.fecha AND cd.cod_maq = cola.cod_maq)
+    WHEN MATCHED THEN
+      UPDATE SET
+        cd.horas_asignadas = cola.horas_asignadas,
+        cd.kg_asignados    = cola.kg_asignados,
+        cd.nro_pedidos     = cola.nro_pedidos,
+        cd.a_mdfecha       = SYSDATE
+    WHEN NOT MATCHED THEN
+      INSERT (fecha, cod_maq, tp_maq, horas_capacidad,
+              horas_asignadas, kg_asignados, nro_pedidos,
+              horas_real, kg_real,
+              fch_calculo, a_mdfecha)
+      VALUES (cola.fecha, cola.cod_maq, cola.tp_maq, cola.horas_capacidad,
+              cola.horas_asignadas, cola.kg_asignados, cola.nro_pedidos,
+              0, 0,
+              SYSDATE, SYSDATE);
+
+    -- 4. Calcular porcentajes finales
+    --    PCT_UTILIZACION : lo producido hasta ahora (solo baños/runs terminados)
+    --    PCT_CARGA       : carga total = producido + cola activa estimada
+    --    IND_SOBRECARGADA: 'S' si la carga total supera la capacidad del día
+    --    LEAST(..., 999.99): cap de seguridad para NUMBER(5,2); evita ORA-01438
+    --    en máquinas multi-spindle (autoconer) si se agrega otro tipo de datos.
     UPDATE PLN_CARGA_DIARIA SET
-      PCT_UTILIZACION  = ROUND(HORAS_REAL / NULLIF(HORAS_CAPACIDAD, 0) * 100, 2),
-      PCT_CARGA        = ROUND(HORAS_REAL / NULLIF(HORAS_CAPACIDAD, 0) * 100, 2),
-      IND_SOBRECARGADA = CASE WHEN HORAS_REAL > HORAS_CAPACIDAD THEN 'S' ELSE 'N' END
+      PCT_UTILIZACION  = LEAST(ROUND(HORAS_REAL / NULLIF(HORAS_CAPACIDAD, 0) * 100, 2), 999.99),
+      PCT_CARGA        = LEAST(ROUND((HORAS_REAL + HORAS_ASIGNADAS) / NULLIF(HORAS_CAPACIDAD, 0) * 100, 2), 999.99),
+      IND_SOBRECARGADA = CASE WHEN (HORAS_REAL + HORAS_ASIGNADAS) > HORAS_CAPACIDAD
+                              THEN 'S' ELSE 'N' END
     WHERE fecha BETWEEN p_fch_ini AND p_fch_fin;
 
     COMMIT;
@@ -2561,7 +2655,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
 
   -- ============================================================
   -- SP_PLN_SEG_PROG_TINTORERIA
-  -- Seguimiento Programación Tintorería  (ex QUERY_PRODUCCION).
+  -- Seguimiento Programación Tintorería  (ex QUERY_PRODUCCION + hoja DT Excel).
+  -- v3.1 (11/06/2026): +17 columnas DT (MES/ANO/SEM, DIAS_*, ESTADO_FLUJO, ESTADO_DESPACHO, etc.)
   -- Devuelve un SYS_REFCURSOR con el estado de producción de
   -- los ítems de pedido según la opción y filtros recibidos.
   -- ============================================================
@@ -2579,54 +2674,194 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
   ) AS
   BEGIN
     OPEN p_cursor FOR
-      SELECT E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO AS PARTIDA,
-             E.ESTADO_PROG,
+      SELECT
+             -- ═══════════════════════════════════════════════════════════════
+             -- Cols 1-48 en orden IDÉNTICO a hoja DT del Excel
+             -- SEGUIMIENTO_PARTIDAS_TINTORERIA_KAREN.xlsm
+             -- ═══════════════════════════════════════════════════════════════
+             -- 1-4: Dimensiones de tiempo (derivadas de FCH_ENTREGA)
+             CASE WHEN E.FCH_ENTREGA IS NULL THEN 'SF'
+                  ELSE TO_CHAR(EXTRACT(MONTH FROM E.FCH_ENTREGA))
+             END                                                                   AS MES,
+             CASE WHEN E.FCH_ENTREGA IS NULL THEN 'SF'
+                  ELSE DECODE(EXTRACT(MONTH FROM E.FCH_ENTREGA),
+                         1,'Ene', 2,'Feb', 3,'Mar', 4,'Abr', 5,'May', 6,'Jun',
+                         7,'Jul', 8,'Ago', 9,'Sep', 10,'Oct', 11,'Nov', 12,'Dic')
+             END                                                                   AS MES_TEX,
+             CASE WHEN E.FCH_ENTREGA IS NULL THEN 'SF'
+                  ELSE TO_CHAR(EXTRACT(YEAR FROM E.FCH_ENTREGA))
+             END                                                                   AS ANO,
+             -- Semana ISO (lunes=inicio de semana); 'SF' si no hay fecha de entrega
+             CASE WHEN E.FCH_ENTREGA IS NULL THEN 'SF'
+                  ELSE TO_CHAR(E.FCH_ENTREGA, 'IW')
+             END                                                                   AS SEM,
+             -- 5-9: Identificación del ítem
+             E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO AS PARTIDA,
              C.NOMBRE                                                              AS CLIENTE,
              DECODE(A.DESCRIPCION, 'VARIOS', I.DETALLE, A.DESCRIPCION)
                || ' ' || I.COLOR_DET                                              AS MATERIAL,
+             E.ESTADO_PROG                                                         AS EST,
+             -- 9: Ne — Título/contaje del hilo (ej: "08/4 T C")
+             N.DESCRIPCION                                                         AS NE,
+             -- 10: MAT — Tipo de fibra (ej: LANA, ACRÍLICO)
+             E.TIPO_FIBRA                                                          AS MAT,
+             -- 11: LOTE — Número de lote de la partida física
+             Q.LOTE                                                                AS LOTE,
+             -- 12: Fecha del pedido
              J.FECHA                                                               AS FCH_PEDIDO,
-             E.FCH_ENTREGA                                                         AS FHC_ENTREGA,
-             TO_CHAR(Q.FECHA, 'DD/MM/YY') || ' ' || Q.HORA                       AS FCH_PARTIDA,
+             -- 13-15: 1er Rodete — fecha estimada / comprometida / días diferencia
+             -- DIAS_ROD positivo = estimada para después del compromiso (= atraso planeado)
+             E.FCH_ESTIMA_CONO_UNO                                                 AS ESTIMA_ROD,
+             TRUNC(E.FCH_ENTREGA_CONO_UNO)                                        AS ENTREG_ROD,
+             CASE WHEN E.FCH_ENTREGA_CONO_UNO IS NULL
+                    OR E.FCH_ESTIMA_CONO_UNO  IS NULL THEN 0
+                  ELSE TRUNC(E.FCH_ESTIMA_CONO_UNO)
+                       - TRUNC(E.FCH_ENTREGA_CONO_UNO)
+             END                                                                   AS DIAS_ROD,
+             -- 13-15: Material Hilandería — estimada entrada TT / real / demora en días
+             -- DIAS_MH = MAX(0, real-est); si aún no llegó: MAX(0, HOY-est)
+             E.FCH_ENT_TIN                                                         AS ESTIMA_MAT,
+             RES.FECHA                                                             AS ENTREG_MAT,
+             CASE WHEN E.FCH_ENT_TIN IS NULL THEN 0
+                  WHEN RES.FECHA IS NULL
+                    THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_ENT_TIN))
+                  ELSE GREATEST(0, TRUNC(RES.FECHA) - TRUNC(E.FCH_ENT_TIN))
+             END                                                                   AS DIAS_MH,
+             -- 16: Fecha de la partida física (DATE — web formatea; misma fuente que col 26)
+             Q.FECHA                                                               AS FCHA_GUIA,
+             -- 17-20: Receta TT — estimada validación / entrega real / demora / copia
+             -- DIAS_REC = MAX(0, ENTREG_RECETA-ESTIMA_RECETA); si pendiente: MAX(0, HOY-est)
+             E.FCH_PROGVAL                                                         AS ESTIMA_RECETA,
+             L.F_ENTREGA                                                           AS ENTREG_RECETA,
+             CASE WHEN E.FCH_PROGVAL IS NULL THEN 0
+                  WHEN L.F_ENTREGA IS NULL
+                    THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_PROGVAL))
+                  ELSE GREATEST(0, TRUNC(L.F_ENTREGA) - TRUNC(E.FCH_PROGVAL))
+             END                                                                   AS DIAS_REC,
+             -- col 20 "X" en Excel = copia exacta de DIAS_REC (control visual en tabla dinámica)
+             CASE WHEN E.FCH_PROGVAL IS NULL THEN 0
+                  WHEN L.F_ENTREGA IS NULL
+                    THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_PROGVAL))
+                  ELSE GREATEST(0, TRUNC(L.F_ENTREGA) - TRUNC(E.FCH_PROGVAL))
+             END                                                                   AS X,
+             -- 21-25: Programa Tintorería
+             E.FHC_PROG                                                            AS FCH_PROGRAMA,
+             E.DESMAQUINA                                                          AS MAQ_TEN,
+             E.FCH_ESTIMA_TENIDO                                                   AS ESTIMA_TENIDO,
+             B.FECHA                                                               AS ENTREG_TENIDO,
+             -- DIAS_TENIDO = MAX(0, real-est); si pendiente: MAX(0, HOY-est)
+             CASE WHEN E.FCH_ESTIMA_TENIDO IS NULL THEN 0
+                  WHEN B.FECHA IS NULL
+                    THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_ESTIMA_TENIDO))
+                  ELSE GREATEST(0, TRUNC(B.FECHA) - TRUNC(E.FCH_ESTIMA_TENIDO))
+             END                                                                   AS DIAS_TENIDO,
+             -- 26-31: Fechas reales de producción
+             -- col 26 "FCH PARTIDA" en Excel = misma fuente que col 16 FCHA_GUIA (Q.FECHA)
+             Q.FECHA                                                               AS FCH_PARTIDA,
+             K.FECHA                                                               AS FCH_RECETA,
+             H.FECHA                                                               AS FCH_SEC_RODETE,
+             SM.FECHA                                                              AS FCH_SEC_MADEJA,
+             D.FECHA                                                               AS FCH_APROB_CAL,
+             -- TIME_APROV = MAX(0, FCH_APROB_CAL-FCH_SEC_RODETE); 0 si alguna es NULL
+             GREATEST(0, NVL(TRUNC(D.FECHA) - TRUNC(H.FECHA), 0))                AS TIME_APROV,
+             -- 31-34: Acabado, enconado y evaluación CC
+             DECODE(E.ACAB_MAD, 'S', 'REDINA', 'CONERA')                         AS TIPO_ACABADO,
+             Z.FECHA                                                               AS FCH_ENCONADO,
+             R.FECHA                                                               AS FCH_REVISADO,
+             -- EV_ENCON: NULL si sin secado; 'EN CONSULTA' si sin CC; resultado CC en otro caso
+             CASE WHEN H.FECHA IS NULL             THEN NULL
+                  WHEN CAL.RESULTADO IS NULL        THEN 'EN CONSULTA'
+                  WHEN CAL.RESULTADO = 'APROBADO'   THEN 'APROBADO'
+                  WHEN CAL.RESULTADO = 'CONCESIONADO' THEN 'CONCESIONADO'
+                  ELSE 'RECHAZADO'
+             END                                                                   AS EV_ENCON,
+             -- 35-39: Entrega y días de espera
+             E.FCH_ENTREGA                                                         AS FCH_ENTREGA,
+             S.FECHA_ING                                                           AS ING_ALMPT,
+             -- col 37 DIAS_EN_ESPERA: MAX(0, llegó_o_hoy-comprometida); NULL si sin FCH_ENTREGA
+             GREATEST(0, NVL(S.FECHA_ING, TRUNC(SYSDATE))
+                         - TRUNC(E.FCH_ENTREGA))                                  AS DIAS_EN_ESPERA,
+             -- col 38 "D.E" Excel: con signo — negativo=llegó antes, positivo=atrasado
+             TRUNC(NVL(S.FECHA_ING, TRUNC(SYSDATE)))
+               - TRUNC(E.FCH_ENTREGA)                                             AS DE,
+             -- col 39 "DE" Excel = copia exacta de col 37 DIAS_EN_ESPERA (MAX 0)
+             GREATEST(0, NVL(S.FECHA_ING, TRUNC(SYSDATE))
+                         - TRUNC(E.FCH_ENTREGA))                                  AS DE_COPIA,
+             -- 40-43: Kilogramos y tolerancia de despacho
+             E.CANTIDAD                                                            AS KG_PROG,
+             U.CANTIDAD                                                            AS KG_DESPA,
+             -- GAP: NULL si sin despacho (Excel retorna ""); KG_DESPA-KG_PROG en otro caso
+             CASE WHEN U.CANTIDAD IS NULL THEN NULL
+                  ELSE U.CANTIDAD - E.CANTIDAD
+             END                                                                   AS GAP,
+             -- PCT_TOLERAN: porcentaje ±% respecto a KG_PROG; NULL=sin despachar
+             -- Nota: Excel retorna ratio crudo (0.05=5%); aquí x100 para claridad web (5.00)
+             CASE WHEN U.CANTIDAD IS NULL OR E.CANTIDAD = 0 THEN NULL
+                  ELSE ROUND((U.CANTIDAD / E.CANTIDAD - 1) * 100, 2)
+             END                                                                   AS PCT_TOLERAN,
+             -- 47: ESTADO_FLUJO (col "PROCESO" en Excel DT) — etapa más avanzada alcanzada
+             CASE
+               WHEN U.CANTIDAD    IS NOT NULL THEN 'DESPACHADO'
+               WHEN S.FECHA_ING   IS NOT NULL THEN 'EN ALMACÉN'
+               WHEN R.FECHA       IS NOT NULL THEN 'PENDIENTE DE PESAR'
+               WHEN Z.FECHA       IS NOT NULL THEN 'PENDIENTE DE REVISAR'
+               WHEN H.FECHA       IS NOT NULL THEN 'PENDIENTE DE ENCONAR'
+               WHEN B.FECHA       IS NOT NULL THEN 'PENDIENTE DE SECAR'
+               WHEN L.F_ENTREGA   IS NOT NULL THEN 'PENDIENTE DE TEÑIR'
+               ELSE                                'SIN RECETA'
+             END                                                                   AS ESTADO_FLUJO,
+             -- 46: ESTADO_DESPACHO (col "DESPACHOS" en Excel DT) — semáforo de puntualidad
+             CASE
+               WHEN E.FCH_ENTREGA IS NULL AND S.FECHA_ING IS NULL
+                                                              THEN 'PENDIENTE SF'
+               WHEN E.FCH_ENTREGA IS NULL AND S.FECHA_ING IS NOT NULL
+                                                              THEN 'DESP SF'
+               WHEN S.FECHA_ING IS NULL
+                AND TRUNC(E.FCH_ENTREGA) = TRUNC(SYSDATE)    THEN 'VENCE HOY'
+               WHEN TRUNC(NVL(S.FECHA_ING, TRUNC(SYSDATE)))
+                      - TRUNC(E.FCH_ENTREGA) > 0             THEN 'VENCIDO'
+               ELSE                                               'A TIEMPO'
+             END                                                                   AS ESTADO_DESPACHO,
+             -- 47-48: columnas de apoyo (solo para fórmulas de otras hojas en Excel)
+             NULL                                                                  AS AREA_RESPONSABLE,
+             NULL                                                                  AS BP,
+             -- ═══════════════════════════════════════════════════════════════
+             -- Columnas adicionales de QUERY_PRODUCCION (no en DT, útiles en web)
+             -- ═══════════════════════════════════════════════════════════════
              Q.NETO                                                                AS PESO_NETO,
              Q.RMC,
              Q.NRO_RMC,
+             N.DESCRIPCION                                                         AS TITULO,
+             'Ne ' || N.DESCRIPCION                                               AS TITULO_TEXTO,
              I.TIPO_REF || '-' || I.NUM_REF || '-' || I.ITEM_REF
                || DECODE(I.TIPO_REF, 'M1', '-' || I.OPC_REF, '')                 AS REFERENCIA,
-             B.PROCESO,
-             B.FECHA                                                               AS FECHA_TENIDO,
-             D.FECHA                                                               AS FECHA_CCALID,
-             Z.FECHA                                                               AS FECHA_ENCON,
-             H.FECHA                                                               AS FECHA_SECADO,
-             K.FECHA                                                               AS FECHA_RECETA,
-             R.FECHA                                                               AS FCH_REVISADO,
-             S.FECHA_ING,
-             U.CANTIDAD                                                            AS CANT_DESP,
-             N.DESCRIPCION                                                         AS TITULO,
-             E.CANTIDAD                                                            AS CANT_PROG,
-             Q.LOTE,
-             'Ne ' || N.DESCRIPCION                                               AS TITULO_TEXTO,
-             E.FHC_PROG                                                            AS FCH_PROG,
-             PARTIDA_CON_MATIZ(E.GUIA)                                            AS PART_MATIZ,
+             B.PROCESO                                                             AS PROCESO_TT,
+             -- OPT-2: EXISTS reemplaza PARTIDA_CON_MATIZ(E.GUIA) — evita N subquerys row-by-row
+             CASE WHEN EXISTS (
+               SELECT 1
+               FROM   PARTIDA_MAS PM2
+               JOIN   ING_RECETAS_G RG2 ON RG2.NUMERO = PM2.NUMERO
+                                       AND RG2.TP_TRANSAC = 'IR'
+                                       AND RG2.SERIE      = 1
+                                       AND RG2.PROCESO    IN ('MA','MAPL','ACOL')
+                                       AND NVL(RG2.ESTADO,'0') <> '9'
+               WHERE  PM2.PARTIDA = E.GUIA
+                 AND  NVL(PM2.ESTADO,'1') <> '9'
+             ) THEN 'S' ELSE 'N' END                                              AS PART_MATIZ,
              CAL.EST_EVALUACION,
              CAL.DEFECTO,
              CAL.RESULTADO,
-             TO_NUMBER(E.FCH_ENTREGA - NVL(S.FECHA_ING, TRUNC(SYSDATE)))         AS DIAS_RETRASO,
-             TRUNC(E.FCH_ENTREGA_CONO_UNO)                                        AS FCH_ENTREGA_CONO_UNO,
-             L.F_ENTREGA                                                           AS FCH_VAL_REC,
-             E.FCH_ESTIMA_CONO_UNO,
-             E.FCH_ENT_TIN,
-             E.FCH_ESTIMA_TENIDO,
-             E.FCH_PROGVAL,
              V.ABREVIADO                                                           AS LABO_VAL,
-             RES.FECHA                                                             AS FCH_ULT_ING_ALMPI,
-             E.DESMAQUINA                                                          AS MAQ_PROG,
              E.ACAB_MAD                                                            AS ACA_MAD,
-             SM.FECHA                                                              AS FECHA_SECADO_MAD
+             -- DIAS_RETRASO original: FCH_ENTREGA − ING_ALMPT (negativo = llegó tarde)
+             -- Distinto de DE (col 38): DE usa TRUNC; DIAS_RETRASO es NUMBER exacto
+             TO_NUMBER(E.FCH_ENTREGA - NVL(S.FECHA_ING, TRUNC(SYSDATE)))         AS DIAS_RETRASO
         FROM (
                -- Dedup: por cada (NUM_PED,NRO,NUM_DET) conserva sólo el FHC_PROG más reciente
                SELECT NUM_PED, NRO, NUM_DET,
                       MAX(NVL(FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY'))) AS FCH_PROG
                FROM   ITEMPED_DET
+               WHERE  (p_opc <> 'POR PEDIDO' OR NUM_PED = p_numped)  -- OPT: filtro temprano para modo POR PEDIDO
                GROUP  BY NUM_PED, NRO, NUM_DET
              ) F,
              V_ITEMPEDET E,
@@ -2638,13 +2873,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                GROUP  BY GUIA
              ) D,
              CTCALIDAD_D X,
-             -- Partidas activas (excluye anuladas/cerradas)
-             (
-               SELECT P.GUIA, P.PARTIDA
-               FROM   V_PARTIDA P
-               WHERE  NVL(P.ESTADO,'0') NOT IN ('8','9')
-               GROUP  BY P.GUIA, P.PARTIDA
-             ) P,
+             -- Partida activa (excluye anuladas/cerradas) -- OPT: P era duplicado de W; T era join muerto (no referenciado en SELECT)
              (
                SELECT P.GUIA, P.PARTIDA
                FROM   V_PARTIDA P
@@ -2652,20 +2881,17 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                GROUP  BY P.GUIA, P.PARTIDA
              ) W,
              V_PARTIDA Q,
-             V_PARTIDA T,
              ITEMPED I,
              PEDIDO  J,
              CLIENTES C,
              -- Tintorería: último baño completado (ESTADO='3', proceso con cálculo TT)
+             -- OPT-3: CTPROCESOS IN literal (9 códigos estables verificados en BD; evita
+             --        subquery decorrelacionado ejecutado en cada evaluación de la subquery B)
              (
                SELECT PARTIDA, PROCESO, MAX(TRUNC(FECHA_FIN)) AS FECHA
                FROM   V_RPRODUC
                WHERE  ESTADO = '3'
-                 AND  PROCESO IN (
-                        SELECT CODIGO FROM CTPROCESOS
-                        WHERE  NVL(ESTADO,'0') <> '9'
-                          AND  (SUBSTR(CALCULO,1,1) = '2' OR SUBSTR(CALCULO,2,1) = '2')
-                      )
+                 AND  PROCESO IN ('BQ','DSTEAC','DSTEPS','IN','PRTE','PRTEPS','TE','TEAC','TEPS')
                GROUP  BY PARTIDA, PROCESO
              ) B,
              -- Revisado: fecha más reciente
@@ -2691,33 +2917,28 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                  AND  PARTIDA IS NOT NULL
                GROUP  BY PARTIDA
              ) S,
-             -- Secado en máquinas de secado (RMC in R/X)
+             -- Secado en máquinas R/X (S01=RMC_R, S03=RMC_X)
+             -- OPT-4: elimina JOIN TT_MAQUINA (39 filas); TT_MAQUINA.TIPO_MAQ='S' tiene
+             --        solo 4 máquinas fijas. IDX_RSECADO_MAQ_GUIA(COD_MAQ,GUIA) ahora sirve.
              (
                SELECT S2.GUIA, MAX(TRUNC(S2.FECHA_FIN)) AS FECHA
                FROM   TT_RSECADO S2
-               JOIN   TT_MAQUINA M  ON M.COD_MAQ = S2.COD_MAQ
-               WHERE  M.TIPO_MAQ = 'S'
-                 AND  M.RMC     IN ('R','X')
+               WHERE  S2.COD_MAQ IN ('S01','S03')
                GROUP  BY S2.GUIA
              ) H,
-             -- Secado en máquinas de madeja (RMC = M)
+             -- Secado en máquinas madeja (S02=RMC_M, S04=RMC_M)
              (
                SELECT S3.GUIA, MAX(TRUNC(S3.FECHA_FIN)) AS FECHA
                FROM   TT_RSECADO S3
-               JOIN   TT_MAQUINA M2 ON M2.COD_MAQ = S3.COD_MAQ
-               WHERE  M2.TIPO_MAQ = 'S'
-                 AND  M2.RMC      = 'M'
+               WHERE  S3.COD_MAQ IN ('S02','S04')
                GROUP  BY S3.GUIA
              ) SM,
              -- Receta: fecha más reciente por guía/proceso TT
+             -- OPT-3 (mismo conjunto de códigos que B)
              (
                SELECT GUIA, PROCESO, MAX(FEC_RECETA) AS FECHA
                FROM   V_RECETAPARTIDA
-               WHERE  PROCESO IN (
-                        SELECT CODIGO FROM CTPROCESOS
-                        WHERE  NVL(ESTADO,'0') <> '9'
-                          AND  (SUBSTR(CALCULO,1,1) = '2' OR SUBSTR(CALCULO,2,1) = '2')
-                      )
+               WHERE  PROCESO IN ('BQ','DSTEAC','DSTEPS','IN','PRTE','PRTEPS','TE','TEAC','TEPS')
                GROUP  BY GUIA, PROCESO
              ) K,
              -- Cantidad despachada desde almacenes PT
@@ -2743,8 +2964,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              H_TITULOS         N,
              V_STATUS_CCAL_TINTO CAL,
              L_VALIDA_RECETA   L,
-             H_TPROD           V,
-             TT_PARAMPROGTIN   EE
+             H_TPROD           V
+             -- OPT-1 (sesión anterior): TT_PARAMPROGTIN EE eliminado — ningún campo de EE
+             --        aparecía en el SELECT; generaba un producto cartesiano innecesario
        WHERE NVL(E.ESTADO_PART,'0') NOT IN ('8','9')
          -- Dedup FHC_PROG
          AND E.NUM_PED  = F.NUM_PED
@@ -2781,10 +3003,8 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
          AND X.RESULTADO(+)   IN ('01','29')
          AND NVL(X.ESTADO(+),'1') <> '9'
          -- ── Partidas ──────────────────────────────────────
-         AND P.GUIA(+) = E.GUIA
          AND W.GUIA(+) = E.GUIA
          AND Q.GUIA(+) = W.GUIA
-         AND T.GUIA(+) = P.GUIA
          -- ── Pedido / ítem / cliente ────────────────────────
          AND I.ESTADO  <> '9'
          AND I.NUM_PED  = E.NUM_PED
@@ -2795,28 +3015,31 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
          -- ── Tintorería ────────────────────────────────────
          AND B.PARTIDA(+) = Q.GUIA
          -- ── Revisado / encono / almacén PT ────────────────
-         AND R.GUIA(+)  = P.GUIA
-         AND Z.GUIA(+)  = P.GUIA
-         AND S.PARTIDA(+) = P.GUIA
+         AND R.GUIA(+)  = W.GUIA
+         AND Z.GUIA(+)  = W.GUIA
+         AND S.PARTIDA(+) = W.GUIA
          -- ── Secado ────────────────────────────────────────
-         AND H.GUIA(+)  = P.GUIA
-         AND SM.GUIA(+) = P.GUIA
+         AND H.GUIA(+)  = W.GUIA
+         AND SM.GUIA(+) = W.GUIA
          -- ── Receta / despacho ─────────────────────────────
          AND K.GUIA(+)  = Q.GUIA
-         AND U.GUIA(+)  = P.GUIA
+         AND U.GUIA(+)  = W.GUIA
          -- ── PARTIDA_RESERVA ───────────────────────────────
          AND RES.NROPROG(+) = E.NUMERO
          -- ── Artículo / título ─────────────────────────────
          AND A.COD_ART = E.COD_ART
          AND N.TITULO(+) = I.TITULO
          -- ── CC status (vista) ─────────────────────────────
-         AND CAL.GUIA(+) = F.NUM_PED || '-' || F.NRO || '-' || F.NUM_DET
+         -- OPT-5: join numérico en vez de string concat; evita comparar strings de 10+ chars
+         --        y permite usar IDX_CTCALIDAD_ITEM(NRO_PEDIDO,SER_PARTIDA,NROPART)
+         --        dentro del GROUP BY de V_STATUS_CCAL_TINTO
+         AND CAL.NUM_PED(+)  = F.NUM_PED
+         AND CAL.ITEM_PED(+) = F.NRO
+         AND CAL.NROPART(+)  = F.NUM_DET
          -- ── Validación receta / laboratorista ─────────────
          AND L.NUMERO(+) = E.NRO_VALREC
          AND V.TABLA(+)  = '09'
          AND V.CODIGO(+) = L.C_LABORATORISTA
-         -- ── Parámetro progresivo tintorería (fila fija) ───
-         AND EE.GUIA = 0
        ORDER BY E.FCH_ENTREGA,
                 E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO;
   END SP_PLN_SEG_PROG_TINTORERIA;

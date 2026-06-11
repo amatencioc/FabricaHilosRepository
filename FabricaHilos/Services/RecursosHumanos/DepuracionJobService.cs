@@ -47,8 +47,8 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
     public DepuracionJobService(ILogger<DepuracionJobService> logger)
     {
         _logger = logger;
-        // Canal con capacidad limitada para evitar acumulación descontrolada
-        _canal = Channel.CreateBounded<DepuracionJob>(new BoundedChannelOptions(50)
+        // Canal con capacidad suficiente para depuración masiva (hasta ~500 empleados)
+        _canal = Channel.CreateBounded<DepuracionJob>(new BoundedChannelOptions(500)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -72,7 +72,8 @@ public class DepuracionJobService : BackgroundService, IDepuracionJobService
         };
 
         _jobs[job.JobId] = job;
-        _canal.Writer.TryWrite(job);
+        if (!_canal.Writer.TryWrite(job))
+            _logger.LogWarning("Canal de depuración lleno al encolar JobId={JobId}", job.JobId);
 
         _logger.LogInformation(
             "Depuración encolada: JobId={JobId}, Personal={Personal}, Rango={Inicio}→{Fin}",

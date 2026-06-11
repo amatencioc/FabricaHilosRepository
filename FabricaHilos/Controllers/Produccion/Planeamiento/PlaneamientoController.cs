@@ -326,7 +326,9 @@ public class PlaneamientoController : OracleBaseController
         string? asesor   = null,
         string? titulo   = null,
         string? fibra    = null,
-        string? proceso  = null)
+        string? proceso  = null,
+        int?    mes      = null,
+        int?    ano      = null)
     {
         var ct      = HttpContext.RequestAborted;
         var hoy     = DateTime.Today;
@@ -335,10 +337,27 @@ public class PlaneamientoController : OracleBaseController
 
         opc ??= "POR FECHA DE ENTREGA";
 
-        var ini = DateTime.TryParseExact(fchIni, fmts, culture,
-                      System.Globalization.DateTimeStyles.None, out var d1) ? d1 : hoy;
-        var fin = DateTime.TryParseExact(fchFin, fmts, culture,
-                      System.Globalization.DateTimeStyles.None, out var d2) ? d2 : hoy.AddDays(30);
+        DateTime ini, fin;
+
+        // Filtro principal: si se especifica mes/año, calcula el rango completo del mes
+        if (mes is >= 1 and <= 12 && ano is > 2000)
+        {
+            var anoVal = ano.Value;
+            var mesVal = mes.Value;
+            ini = new DateTime(anoVal, mesVal, 1);
+            fin = new DateTime(anoVal, mesVal, DateTime.DaysInMonth(anoVal, mesVal));
+            // El filtro de mes siempre usa POR FECHA DE ENTREGA para el rango
+            if (opc == "POR PEDIDO") opc = "POR FECHA DE ENTREGA";
+        }
+        else
+        {
+            mes = null;
+            ano = null;
+            ini = DateTime.TryParseExact(fchIni, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : hoy;
+            fin = DateTime.TryParseExact(fchFin, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d2) ? d2 : hoy.AddDays(30);
+        }
 
         // Cargar combos en paralelo (servidos desde caché tras la primera llamada)
         var tClientes = _reporte.GetFiltroClientesAsync();
@@ -383,6 +402,8 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.StTitulo  = titulo;
         ViewBag.StFibra   = fibra;
         ViewBag.StProceso = proceso;
+        ViewBag.StMes     = mes;
+        ViewBag.StAno     = ano;
 
         return View(items);
     }

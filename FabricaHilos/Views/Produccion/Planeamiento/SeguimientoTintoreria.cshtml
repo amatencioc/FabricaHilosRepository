@@ -22,6 +22,14 @@
     var filtroFibras   = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroFibra>?)ViewBag.FiltroFibras       ?? new();
     var filtroProcesos = (List<FabricaHilos.Models.Produccion.Planeamiento.PlnFiltroProceso>?)ViewBag.FiltroProcesos   ?? new();
 
+    // Filtro principal Mes / Año
+    int? stMes = (int?)ViewBag.StMes;
+    int? stAno = (int?)ViewBag.StAno;
+    int anoActual = DateTime.Today.Year;
+    var nombresMes = new[] { "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre" };
+    bool hayMesAno = stMes.HasValue && stAno.HasValue;
+
     var opciones = new[]
     {
         "POR FECHA DE ENTREGA",
@@ -33,9 +41,9 @@
 
     bool buscado = Context.Request.Query.Count > 0;
 
-    var conTenido   = buscado ? items.Count(x => x.FechaTenido.HasValue) : 0;
-    var conCc       = buscado ? items.Count(x => x.FechaCcalid.HasValue) : 0;
-    var despachados = buscado ? items.Count(x => x.CantDesp.HasValue && x.CantDesp > 0) : 0;
+    var conTenido   = buscado ? items.Count(x => x.EntregTenido.HasValue) : 0;
+    var conCc       = buscado ? items.Count(x => x.FchAprobCal.HasValue) : 0;
+    var despachados = buscado ? items.Count(x => x.KgDespa.HasValue && x.KgDespa > 0) : 0;
     var retrasados  = buscado ? items.Count(x => x.EstaRetrasado) : 0;
 
     bool hayCliente = !string.IsNullOrEmpty(cliente);
@@ -49,12 +57,95 @@
     var nombreTitulo  = hayTitulo  ? filtroTitulos .FirstOrDefault(x => x.Titulo     == titulo )?.Descripcion ?? titulo : null;
     var nombreFibra   = hayFibra   ? filtroFibras  .FirstOrDefault(x => x.TipoFibra  == fibra  )?.Descripcion ?? fibra  : null;
     var nombreProceso = hayProceso ? filtroProcesos.FirstOrDefault(x => x.Proceso    == proceso)?.Descripcion ?? proceso : null;
+
+    // ── KPIs: equivalentes C# de las fórmulas Excel del DT ───────────────
+    // PROMEDIO.SI(<0): promedio solo de los valores negativos (retrasos)
+    static double? PromedioSiNeg(IEnumerable<decimal?> vals)
+    {
+        var neg = vals.Where(v => v.HasValue && v.Value < 0).Select(v => (double)v!.Value).ToList();
+        return neg.Count > 0 ? neg.Average() : null;
+    }
+    // SUBTOTALES(1): promedio simple de todas las filas
+    static double? Promedio(IEnumerable<decimal?> vals)
+    {
+        var nums = vals.Where(v => v.HasValue).Select(v => (double)v!.Value).ToList();
+        return nums.Count > 0 ? nums.Average() : null;
+    }
+
+    double? kpiRod    = buscado ? PromedioSiNeg(items.Select(r => r.DiasRod))    : null;
+    double? kpiMh     = buscado ? PromedioSiNeg(items.Select(r => r.DiasMh))     : null;
+    double? kpiRec    = buscado ? Promedio(items.Select(r => r.DiasRec))          : null;
+    double? kpiDiasT  = buscado ? Promedio(items.Select(r => r.DiasTenido))      : null;
+    // KpiTimeAprov = KpiDiasT (la fórmula Excel usa DIAS T en ambas celdas)
+    double? kpiTimeAprov = kpiDiasT;
+
+    // ── Valores únicos para pre-cargar los filtros client-side ────────────
+    // Solo se calculan cuando hay data cargada
+    static IEnumerable<string> Unicos(IEnumerable<string?> src) =>
+        src.Where(v => !string.IsNullOrWhiteSpace(v))
+           .Select(v => v!.Trim())
+           .Distinct(StringComparer.OrdinalIgnoreCase)
+           .OrderBy(v => v);
+
+    var cfMesesDisp  = buscado ? items.Select(r => r.Mes).Where(v => int.TryParse(v, out _))
+                                      .Select(v => int.Parse(v!)).Distinct().OrderBy(v => v).ToList()
+                               : new List<int>();
+    var cfAnosDisp   = buscado ? items.Select(r => r.Ano).Where(v => int.TryParse(v, out _))
+                                      .Select(v => int.Parse(v!)).Distinct().OrderBy(v => v).ToList()
+                               : new List<int>();
+    var cfEstOpts    = buscado ? Unicos(items.Select(r => r.Est)).ToList()           : new List<string>();
+    var cfMaqOpts    = buscado ? Unicos(items.Select(r => r.MaqTen)).ToList()        : new List<string>();
+    var cfFlujoOpts  = buscado ? Unicos(items.Select(r => r.EstadoFlujo)).ToList()   : new List<string>();
+    var cfDespOpts   = buscado ? Unicos(items.Select(r => r.EstadoDespacho)).ToList(): new List<string>();
+    var cfAreaOpts   = buscado ? Unicos(items.Select(r => r.AreaResponsable)).ToList(): new List<string>();
+    var cfTipoAcOpts = buscado ? Unicos(items.Select(r => r.TipoAcabado)).ToList()   : new List<string>();
+
+    // Datalist para búsqueda por texto libre con sugerencias
+    var cfPartidaOpts  = buscado ? Unicos(items.Select(r => r.Partida)).ToList()   : new List<string>();
+    var cfClienteOpts  = buscado ? Unicos(items.Select(r => r.Cliente)).ToList()   : new List<string>();
+    var cfMaterialOpts = buscado ? Unicos(items.Select(r => r.Material)).ToList()  : new List<string>();
+}
+
+@functions {
+    // ── Helpers de color para celdas de días (equivalentes al formato condicional Excel) ──
+
+    // Regla general: valor > 0 → fondo rosa #FEA8B4 (retraso)
+    static string BgRetraso(decimal? v) => v > 0 ? "background-color:#FEA8B4;" : "";
+
+    // DIAS T usa rosa ligeramente diferente #FE9CB1
+    static string BgDiasT(decimal? v) => v > 0 ? "background-color:#FE9CB1;" : "";
+
+    // D.E (signed): solo > 0 es retraso
+    static string BgDE(decimal? v) => v > 0 ? "background-color:#FEA8B4;" : "";
+
+    // Columna X — iconSet 3-íconos reverso, showValue=0 (sin número)
+    static string IconX(decimal? v)
+    {
+        return v switch
+        {
+            null or 0 => "<i class=\"bi bi-circle-fill text-success\" title=\"A tiempo\"></i>",
+            1         => "<i class=\"bi bi-circle-fill text-warning\" title=\"1 día retraso\"></i>",
+            _         => "<i class=\"bi bi-circle-fill text-danger\"  title=\"Retraso crítico\"></i>"
+        };
+    }
+
+    // Columna DE — iconSet idéntico a X
+    static string IconDE(decimal? v)
+    {
+        return v switch
+        {
+            null or 0 => "<i class=\"bi bi-circle-fill text-success\" title=\"Sin espera\"></i>",
+            1         => "<i class=\"bi bi-circle-fill text-warning\" title=\"1 día espera\"></i>",
+            _         => "<i class=\"bi bi-circle-fill text-danger\"  title=\"En espera crítica\"></i>"
+        };
+    }
+
+    // Formatea un KPI double? con 1 decimal o guión
+    static string Kpi(double? v) => v.HasValue ? v.Value.ToString("F1") : "—";
 }
 
 @section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
 <style>
 /* ════════════════════════════════════════════════════════════
    PANEL PRINCIPAL
@@ -147,6 +238,36 @@
 
 /* ── Chips de filtros activos ──────────────────────────────── */
 .spt-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem 1rem; background: #edf2f7; border-bottom: 1px solid #d1d9e6; }
+
+/* ── Barra de filtros client-side (sobre data cargada) ──────── */
+.cf-bar {
+    display: flex; flex-wrap: wrap; gap: .45rem; align-items: flex-end;
+    padding: .5rem 1rem .45rem;
+    background: #f0f4ff;
+    border-bottom: 2px solid #c7d7f9;
+}
+.cf-bar .spt-label { color: #2563eb; }
+.cf-badge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: #1a4971; color: #e2f0ff;
+    border-radius: .28rem; padding: .2rem .55rem;
+    font-size: .68rem; font-weight: 700; white-space: nowrap;
+    letter-spacing: .04em;
+}
+.cf-count {
+    font-size: .72rem; color: #2563eb; font-weight: 700;
+    background: #dbeafe; border: 1px solid #93c5fd;
+    border-radius: .28rem; padding: .15rem .5rem;
+    white-space: nowrap; align-self: flex-end; margin-bottom: .08rem;
+}
+.cf-reset {
+    background: #fff; color: #64748b; border: 1px solid #bfcad8;
+    border-radius: .28rem; font-size: .72rem; padding: .2rem .55rem;
+    cursor: pointer; align-self: flex-end; margin-bottom: .05rem;
+    display: inline-flex; align-items: center; gap: .2rem;
+    transition: border-color .15s;
+}
+.cf-reset:hover { border-color: #94a3b8; color: #1e2d3d; }
 .spt-chip {
     display: inline-flex; align-items: center; gap: .25rem;
     background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe;
@@ -154,59 +275,7 @@
 }
 .spt-chip-label { color: #64748b; font-weight: 500; }
 
-/* ── Select2 ──────────────────────────────────────────────── */
-.select2-container .select2-selection--single {
-    height: auto !important; min-height: 30px !important;
-    background: #fff !important; border: 1px solid #bfcad8 !important;
-    border-radius: .32rem !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04) !important;
-}
-.select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
-    font-size: .63rem !important; color: #1e2d3d !important;
-    font-weight: 500; padding: .25rem .5rem !important;
-    line-height: 1.5 !important;
-}
-.select2-container--bootstrap-5 .select2-selection--single .select2-selection__placeholder {
-    color: #94a3b8 !important; font-style: italic; font-size: .63rem !important;
-}
-.select2-container--bootstrap-5 .select2-selection--single .select2-selection__arrow {
-    height: 30px !important;
-}
-.select2-container--bootstrap-5.select2-container--open .select2-selection--single {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important;
-}
-.select2-container--bootstrap-5 .select2-dropdown {
-    border: 1px solid #d1d9e6; border-radius: .35rem;
-    box-shadow: 0 6px 18px rgba(0,0,0,.10);
-    font-size: .63rem !important;
-}
-.select2-container--bootstrap-5 .select2-search__field {
-    font-size: .63rem !important; border: 1px solid #d1d9e6 !important;
-    border-radius: .25rem !important; padding: .22rem .45rem !important;
-    background: #f8fafc; color: #334155;
-}
-.select2-container--bootstrap-5 .select2-results__option {
-    font-size: .63rem !important; padding: .22rem .6rem !important;
-    color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    line-height: 1.4 !important; letter-spacing: .005em;
-    transition: background .1s;
-}
-.select2-container--bootstrap-5 .select2-results__option--highlighted[aria-selected=false] {
-    background: #eff6ff !important; color: #2563eb !important;
-}
-.select2-container--bootstrap-5 .select2-results__option[aria-selected=true] {
-    background: #dbeafe !important; color: #1e3a8a !important; font-weight: 600;
-}
-.select2-container--bootstrap-5 .select2-selection--single .select2-selection__clear {
-    color: #94a3b8; font-size: .85rem; line-height: 1.5;
-}
-.select2-container--bootstrap-5 .select2-results > .select2-results__options {
-    max-height: 200px !important;
-    font-size: .63rem !important;
-}
-
-/* ── Tabla ─────────────────────────────────────────────────── */
+/* ── Tabla
 .spt-table-wrap {
     overflow-x: auto;
     max-height: calc(100vh - 310px);
@@ -223,13 +292,43 @@
     border-collapse: separate; border-spacing: 0;
 }
 #stTable thead th {
-    font-size: .64rem; font-weight: 700; color: #334155;
-    text-transform: uppercase; letter-spacing: .04em;
-    background: #e8eef6; padding: .38rem .45rem;
-    border-bottom: 2px solid #bfcad8;
-    white-space: nowrap; position: sticky; top: 0; z-index: 10;
+    font-size: .60rem; font-weight: 600; color: #374151;
+    text-transform: uppercase; letter-spacing: .02em;
+    background: #e8eef6; padding: .28rem .38rem;
+    border-bottom: 1px solid #bfcad8;
+    white-space: nowrap; position: sticky; z-index: 11;
     cursor: default; user-select: none;
+    line-height: 1.3;
 }
+/* Fila 1 (grupos): fija en top:0 — z-index mayor para tapar fila 2 */
+#stTable thead tr:first-child th { top: 0; z-index: 12; }
+/* Fila 2 (columnas): debajo de fila 1 — fondo ligeramente diferente para jerarquía */
+#stTable thead tr:nth-child(2) th {
+    top: var(--thead-row1-h, 30px); z-index: 11;
+    background: #dde5f0;
+    font-size: .595rem; font-weight: 700;
+    color: #1e2d3d; letter-spacing: .03em;
+    padding: .26rem .36rem;
+    text-align: center;
+    border-bottom: 2px solid #a8bbcf;
+}
+/* Esquinas: sticky-izq + sticky-top juntos necesitan z-index máximo */
+#stTable thead tr:first-child th.fc-1,
+#stTable thead tr:first-child th.fc-2,
+#stTable thead tr:first-child th.fc-3,
+#stTable thead tr:first-child th.fc-4,
+#stTable thead tr:first-child th.fc-5,
+#stTable thead tr:first-child th.fc-6,
+#stTable thead tr:first-child th.fc-7,
+#stTable thead tr:first-child th.fc-8 { z-index: 22; }
+#stTable thead tr:nth-child(2) th.fc-1,
+#stTable thead tr:nth-child(2) th.fc-2,
+#stTable thead tr:nth-child(2) th.fc-3,
+#stTable thead tr:nth-child(2) th.fc-4,
+#stTable thead tr:nth-child(2) th.fc-5,
+#stTable thead tr:nth-child(2) th.fc-6,
+#stTable thead tr:nth-child(2) th.fc-7,
+#stTable thead tr:nth-child(2) th.fc-8 { z-index: 21; }
 #stTable thead th:hover { background: #dce4f0; }
 #stTable thead .grp-id   th { border-top: 3px solid #3b82f6; }
 #stTable thead .grp-base th { border-top: 3px solid #6366f1; }
@@ -249,8 +348,114 @@
 #stTable tbody tr.row-retraso:nth-child(odd)  td { background: #fff5f5 !important; }
 #stTable tbody tr.row-retraso:hover td { background: #fee2e2 !important; }
 
+/* ── Columnas fijas (sticky left) — primeras 8 cols ──────────────────── */
+#stTable .fc-1  { position: sticky; left:   0px; z-index: 3; min-width:  38px; max-width:  38px; display:none; }
+#stTable .fc-2  { position: sticky; left:  38px; z-index: 3; min-width:  46px; max-width:  46px; display:none; }
+#stTable .fc-3  { position: sticky; left:  84px; z-index: 3; min-width:  42px; max-width:  42px; display:none; }
+#stTable .fc-4  { position: sticky; left: 126px; z-index: 3; min-width:  38px; max-width:  38px; display:none; }
+#stTable .fc-5  { position: sticky; left:   0px; z-index: 3; min-width: 106px; max-width: 106px; }
+#stTable .fc-6  { position: sticky; left: 106px; z-index: 3; min-width: 130px; max-width: 130px; }
+#stTable .fc-7  { position: sticky; left: 236px; z-index: 3; min-width: 150px; max-width: 150px; }
+#stTable .fc-8  { position: sticky; left: 386px; z-index: 3; min-width:  38px; max-width:  38px; }
+
+/* Sombra derecha en la última columna fija para separar visualmente */
+#stTable .fc-8 { box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
+
+/* Fondo base para celdas fijas (hereda el fondo par/impar del tbody) */
+#stTable tbody tr:nth-child(even) td.fc-1,
+#stTable tbody tr:nth-child(even) td.fc-2,
+#stTable tbody tr:nth-child(even) td.fc-3,
+#stTable tbody tr:nth-child(even) td.fc-4,
+#stTable tbody tr:nth-child(even) td.fc-5,
+#stTable tbody tr:nth-child(even) td.fc-6,
+#stTable tbody tr:nth-child(even) td.fc-7,
+#stTable tbody tr:nth-child(even) td.fc-8  { background: #f8fafc; }
+#stTable tbody tr:nth-child(odd) td.fc-1,
+#stTable tbody tr:nth-child(odd) td.fc-2,
+#stTable tbody tr:nth-child(odd) td.fc-3,
+#stTable tbody tr:nth-child(odd) td.fc-4,
+#stTable tbody tr:nth-child(odd) td.fc-5,
+#stTable tbody tr:nth-child(odd) td.fc-6,
+#stTable tbody tr:nth-child(odd) td.fc-7,
+#stTable tbody tr:nth-child(odd) td.fc-8   { background: #fff; }
+#stTable tbody tr:hover td.fc-1,
+#stTable tbody tr:hover td.fc-2,
+#stTable tbody tr:hover td.fc-3,
+#stTable tbody tr:hover td.fc-4,
+#stTable tbody tr:hover td.fc-5,
+#stTable tbody tr:hover td.fc-6,
+#stTable tbody tr:hover td.fc-7,
+#stTable tbody tr:hover td.fc-8            { background: #eff6ff !important; }
+#stTable tbody tr.row-retraso td.fc-1,
+#stTable tbody tr.row-retraso td.fc-2,
+#stTable tbody tr.row-retraso td.fc-3,
+#stTable tbody tr.row-retraso td.fc-4,
+#stTable tbody tr.row-retraso td.fc-5,
+#stTable tbody tr.row-retraso td.fc-6,
+#stTable tbody tr.row-retraso td.fc-7,
+#stTable tbody tr.row-retraso td.fc-8      { background: #fff5f5 !important; }
+
+/* Fondo en thead para columnas fijas */
+#stTable thead th.fc-1,
+#stTable thead th.fc-2,
+#stTable thead th.fc-3,
+#stTable thead th.fc-4,
+#stTable thead th.fc-5,
+#stTable thead th.fc-6,
+#stTable thead th.fc-7,
+#stTable thead th.fc-8  { background: #e8eef6; }
+/* Fila 2 sticky-cols: fondo más oscuro para distinguir jerarquía */
+#stTable thead tr:nth-child(2) th.fc-5,
+#stTable thead tr:nth-child(2) th.fc-6,
+#stTable thead tr:nth-child(2) th.fc-7,
+#stTable thead tr:nth-child(2) th.fc-8  { background: #d4dff0; }
+
+/* tfoot */
+#stTable tfoot td.fc-1,
+#stTable tfoot td.fc-2,
+#stTable tfoot td.fc-3,
+#stTable tfoot td.fc-4,
+#stTable tfoot td.fc-5,
+#stTable tfoot td.fc-6,
+#stTable tfoot td.fc-7,
+#stTable tfoot td.fc-8  { background: #dee2e6; position: sticky; z-index: 3; }
+#stTable tfoot td.fc-1  { left:   0px; }
+#stTable tfoot td.fc-2  { left:  38px; }
+#stTable tfoot td.fc-3  { left:  84px; }
+#stTable tfoot td.fc-4  { left: 126px; }
+#stTable tfoot td.fc-5  { left:   0px; }
+#stTable tfoot td.fc-6  { left: 106px; }
+#stTable tfoot td.fc-7  { left: 236px; }
+#stTable tfoot td.fc-8  { left: 386px; box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
+
+
 /* ── Separadores de grupo en la tabla ─────────────────────── */
 .col-sep { border-left: 2px solid #d1d9e6 !important; }
+
+.th-grupo {
+    text-align: center;
+    font-size: .58rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: #e2f0ff;
+    background: #1a4971;
+    border-bottom: 2px solid #f59e0b;
+    padding: 2px 5px;
+    line-height: 1.4;
+}
+.th-grupo-adicional {
+    text-align: center;
+    font-size: .63rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    white-space: nowrap;
+    color: #856404;
+    background: #fff3cd;
+    border-bottom: 2px solid #ffc107;
+    padding: 2px 6px;
+}
 
 /* ── Badges ───────────────────────────────────────────────── */
 .eb {
@@ -274,6 +479,36 @@
     flex-wrap: wrap; gap: .4rem;
 }
 .spt-legend { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+
+/* ── Paginación ─────────────────────────────────────────────────────────── */
+.pg-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
+    padding: .38rem .9rem;
+    background: #f0f4ff; border-bottom: 1px solid #c7d7f9;
+    font-size: .72rem;
+}
+.pg-info {
+    font-size: .71rem; color: #2563eb; font-weight: 700;
+    background: #dbeafe; border: 1px solid #93c5fd;
+    border-radius: .28rem; padding: .12rem .45rem; white-space: nowrap;
+    margin-left: auto;
+}
+.pg-size {
+    font-size: .72rem; border: 1px solid #bfcad8; border-radius: .28rem;
+    background: #fff; color: #1e2d3d; padding: .18rem .45rem;
+    cursor: pointer;
+}
+.pg-btn {
+    border: 1px solid #bfcad8; border-radius: .28rem;
+    background: #fff; color: #334155; padding: .18rem .55rem;
+    font-size: .72rem; cursor: pointer; display: inline-flex; align-items: center; gap: .2rem;
+    transition: background .12s, border-color .12s;
+    white-space: nowrap;
+}
+.pg-btn:hover:not(:disabled) { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.pg-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pg-btn.pg-active { background: #1a4971; color: #fff; border-color: #1a4971; font-weight: 700; }
+.pg-nums { display: flex; gap: .2rem; flex-wrap: wrap; }
 </style>
 }
 
@@ -316,11 +551,12 @@
         }
     </div>
 
-    @* ── Filtros ──────────────────────────────────────────────────────── *@
+
+    @* ── Filtros ──────────────────────────────────────────────────────────────────────────────────────────────────────── *@
     <div class="spt-filters">
         <form method="get" asp-action="SeguimientoTintoreria" id="stForm">
 
-            @* Fila 1: modo de búsqueda *@
+            @* Fila 1: modo búsqueda + fechas + acciones *@
             <div class="spt-filters-row1">
                 <div class="spt-fld">
                     <label class="spt-label" for="stOpc"><i class="bi bi-search"></i>Buscar por</label>
@@ -417,10 +653,11 @@
     </div>
 
     @* ── Chips de filtros activos ─────────────────────────────────────── *@
-    @if (buscado && (hayCliente || hayAsesor || hayTitulo || hayFibra || hayProceso))
+    @if (buscado && (hayMesAno || hayCliente || hayAsesor || hayTitulo || hayFibra || hayProceso))
     {
         <div class="spt-chips">
             <span style="font-size:.68rem;color:#64748b;font-weight:600;margin-right:.2rem;">Filtros:</span>
+            @if (hayMesAno)  { <span class="spt-chip" style="background:#dbeafe;border-color:#93c5fd;"><span class="spt-chip-label">Mes</span> @nombresMes[stMes!.Value] @stAno</span> }
             @if (hayCliente) { <span class="spt-chip"><span class="spt-chip-label">Cliente</span> @nombreCliente</span> }
             @if (hayAsesor)  { <span class="spt-chip"><span class="spt-chip-label">Asesor</span>  @nombreAsesor</span>  }
             @if (hayTitulo)  { <span class="spt-chip"><span class="spt-chip-label">Título</span>  @nombreTitulo</span>  }
@@ -451,190 +688,431 @@
     }
     else
     {
+        @* ── Barra de filtros client-side (filtra sobre la data ya cargada) ── *@
+        <div class="cf-bar">
+            <span class="cf-badge"><i class="bi bi-funnel-fill"></i> Filtrar datos</span>
+
+            @* ── Mes ── *@
+            <div class="spt-fld">
+                <label class="spt-label" for="cfMes"><i class="bi bi-calendar-month"></i>Mes</label>
+                <select class="spt-ctrl" id="cfMes" data-cf="mes" style="min-width:110px;">
+                    <option value="">— Todos —</option>
+                    @foreach (var m in cfMesesDisp) {
+                        <option value="@m">@nombresMes[m] (@m)</option>
+                    }
+                </select>
+            </div>
+
+            @* ── Año ── *@
+            <div class="spt-fld">
+                <label class="spt-label" for="cfAno"><i class="bi bi-calendar-check"></i>Año</label>
+                <select class="spt-ctrl" id="cfAno" data-cf="ano" style="min-width:72px;">
+                    <option value="">——</option>
+                    @foreach (var y in cfAnosDisp) {
+                        <option value="@y">@y</option>
+                    }
+                </select>
+            </div>
+
+            <div style="align-self:flex-end;padding-bottom:.32rem;">
+                <div style="width:1px;height:22px;background:#c7d7f9;"></div>
+            </div>
+
+            @* ── Partida (datalist) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-hash"></i>Partida</label>
+                <input type="text" class="spt-ctrl" data-cf="partida" list="dlPartida"
+                       placeholder="Buscar…" style="min-width:90px;" autocomplete="off" />
+                <datalist id="dlPartida">
+                    @foreach (var v in cfPartidaOpts) { <option value="@v"></option> }
+                </datalist>
+            </div>
+
+            @* ── Cliente (datalist) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-building"></i>Cliente</label>
+                <input type="text" class="spt-ctrl" data-cf="cliente" list="dlCliente"
+                       placeholder="Buscar…" style="min-width:120px;" autocomplete="off" />
+                <datalist id="dlCliente">
+                    @foreach (var v in cfClienteOpts) { <option value="@v"></option> }
+                </datalist>
+            </div>
+
+            @* ── Material (datalist) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-box-seam"></i>Material</label>
+                <input type="text" class="spt-ctrl" data-cf="material" list="dlMaterial"
+                       placeholder="Buscar…" style="min-width:110px;" autocomplete="off" />
+                <datalist id="dlMaterial">
+                    @foreach (var v in cfMaterialOpts) { <option value="@v"></option> }
+                </datalist>
+            </div>
+
+            @* ── Est. (select) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-flag"></i>Est.</label>
+                <select class="spt-ctrl" data-cf="est" style="min-width:60px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfEstOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* ── Maq. (select) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-gear"></i>Maq.</label>
+                <select class="spt-ctrl" data-cf="maq" style="min-width:65px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfMaqOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* ── Flujo (select) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-activity"></i>Flujo</label>
+                <select class="spt-ctrl" data-cf="estflujo" style="min-width:90px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfFlujoOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* ── Desp. (select) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-truck"></i>Desp.</label>
+                <select class="spt-ctrl" data-cf="estdesp" style="min-width:90px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfDespOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* ── Área (select) ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-people"></i>Área</label>
+                <select class="spt-ctrl" data-cf="area" style="min-width:90px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfAreaOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* ── Tipo Acabado (select) ── *@
+            @if (cfTipoAcOpts.Count > 0) {
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-layers"></i>Acabado</label>
+                <select class="spt-ctrl" data-cf="tipoac" style="min-width:80px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfTipoAcOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+            }
+
+            <div style="align-self:flex-end;padding-bottom:.32rem;">
+                <div style="width:1px;height:22px;background:#c7d7f9;"></div>
+            </div>
+
+            @* ── Indicadores ── *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-exclamation-triangle"></i>Estado</label>
+                <select class="spt-ctrl" data-cf-ind="retrasado" style="min-width:100px;">
+                    <option value="">Todos</option>
+                    <option value="1">⚠ Retrasados</option>
+                    <option value="0">✔ En plazo</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-check2-circle"></i>Teñido</label>
+                <select class="spt-ctrl" data-cf-ind="conten" style="min-width:95px;">
+                    <option value="">Todos</option>
+                    <option value="1">Con teñido</option>
+                    <option value="0">Sin teñido</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-check2-all"></i>C.C.</label>
+                <select class="spt-ctrl" data-cf-ind="concc" style="min-width:80px;">
+                    <option value="">Todos</option>
+                    <option value="1">Con C.C.</option>
+                    <option value="0">Sin C.C.</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-box-arrow-right"></i>Despacho</label>
+                <select class="spt-ctrl" data-cf-ind="despachado" style="min-width:100px;">
+                    <option value="">Todos</option>
+                    <option value="1">Despachados</option>
+                    <option value="0">Pendientes</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-clock-history"></i>D.Rod</label>
+                <select class="spt-ctrl" data-cf-ind="diasrod" style="min-width:85px;">
+                    <option value="">Todos</option>
+                    <option value="ret">Retrasados</option>
+                    <option value="ok">En plazo</option>
+                    <option value="sin">Sin valor</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-clock-history"></i>D.MH</label>
+                <select class="spt-ctrl" data-cf-ind="diasmh" style="min-width:85px;">
+                    <option value="">Todos</option>
+                    <option value="ret">Retrasados</option>
+                    <option value="ok">En plazo</option>
+                    <option value="sin">Sin valor</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-clock-history"></i>D.Rec</label>
+                <select class="spt-ctrl" data-cf-ind="diasrec" style="min-width:85px;">
+                    <option value="">Todos</option>
+                    <option value="ret">Retrasados</option>
+                    <option value="ok">En plazo</option>
+                    <option value="sin">Sin valor</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-clock-history"></i>Días T</label>
+                <select class="spt-ctrl" data-cf-ind="diast" style="min-width:85px;">
+                    <option value="">Todos</option>
+                    <option value="ret">Retrasados</option>
+                    <option value="ok">En plazo</option>
+                    <option value="sin">Sin valor</option>
+                </select>
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-clock-history"></i>D.E</label>
+                <select class="spt-ctrl" data-cf-ind="de" style="min-width:85px;">
+                    <option value="">Todos</option>
+                    <option value="ret">Retrasados</option>
+                    <option value="ok">En plazo</option>
+                    <option value="sin">Sin valor</option>
+                </select>
+            </div>
+
+            <button id="cfResetBtn" class="cf-reset" type="button">
+                <i class="bi bi-x-circle"></i> Limpiar
+            </button>
+            <span class="cf-count"><span id="cfCount">@items.Count</span> / <span id="cfTotal">@items.Count</span></span>
+
+            @* ── Paginación: selector de tamaño + navegación ── *@
+            <div style="display:flex;align-items:center;gap:.35rem;margin-left:auto;flex-wrap:wrap;">
+                <label style="font-size:.68rem;color:#4a6080;font-weight:700;white-space:nowrap;">Filas/pág</label>
+                <select id="pgSize" class="pg-size">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200" selected>200</option>
+                    <option value="500">500</option>
+                    <option value="0">Todos</option>
+                </select>
+                <div class="pg-nums" id="pgNums"></div>
+                <button class="pg-btn" id="pgPrev" type="button"><i class="bi bi-chevron-left"></i></button>
+                <button class="pg-btn" id="pgNext" type="button"><i class="bi bi-chevron-right"></i></button>
+                <span class="pg-info" id="pgInfo"></span>
+            </div>
+        </div>
+
         <div class="spt-table-wrap">
             <table id="stTable">
                 <thead>
+                    @* ── Fila 1: Cabeceras de grupo ──────────────────────────────────────── *@
                     <tr>
-                        @* Grupo Identificación *@
-                        <th>Partida</th>
-                        <th>Est.Prog</th>
-                        <th>Cliente</th>
-                        <th>Material</th>
-                        @* Grupo Base *@
-                        <th class="col-sep">F.Pedido</th>
-                        <th>F.Entrega</th>
-                        <th>F.Partida</th>
-                        <th style="text-align:right">P.Neto</th>
+                        @* Cols 1-8: sin cabecera de grupo (tiempo + identificación) *@
+                        <th colspan="8" class="th-grupo"></th>
+
+                        @* Col 13-15: RODETE *@
+                        <th colspan="3" class="col-sep th-grupo">RODETE</th>
+
+                        @* Cols 16-18: ENTREGA MATERIAL HILAND *@
+                        <th colspan="3" class="col-sep th-grupo">ENTREGA MATERIAL HILAND.</th>
+
+                        @* Col 19: DESPACHO MATERIAL *@
+                        <th colspan="1" class="col-sep th-grupo">DESP. MATERIAL</th>
+
+                        @* Cols 20-23: RECETA *@
+                        <th colspan="4" class="col-sep th-grupo">RECETA</th>
+
+                        @* Col 24: PROGRAMA *@
+                        <th colspan="1" class="col-sep th-grupo">PROGRAMA</th>
+
+                        @* Cols 25-28: TEÑIDO *@
+                        <th colspan="4" class="col-sep th-grupo">TEÑIDO</th>
+
+                        @* Cols 29-30: TINTORERÍA (fechas reales partida/receta) *@
+                        <th colspan="2" class="col-sep th-grupo">TINTORERÍA</th>
+
+                        @* Cols 31-34: SECADO *@
+                        <th colspan="4" class="col-sep th-grupo">SECADO</th>
+
+                        @* Cols 34-35: ENCONADO *@
+                        <th colspan="2" class="col-sep th-grupo">ENCONADO</th>
+
+                        @* Cols 36-37: REVISADO *@
+                        <th colspan="2" class="col-sep th-grupo">REVISADO</th>
+
+                        @* Cols 38-42: ALMACÉN *@
+                        <th colspan="5" class="col-sep th-grupo">ALMACÉN</th>
+
+                        @* Cols 43-46: KG *@
+                        <th colspan="4" class="col-sep th-grupo">KG</th>
+
+                        @* Cols 47-50: sin cabecera de grupo (estados + apoyo) *@
+                        <th colspan="4" class="col-sep th-grupo"></th>
+
+                        @* Cols 51-65: COLUMNAS ADICIONALES — NO EN DT EXCEL (comentadas, pendientes de activar) *@
+                        @*
+                        <th colspan="15" class="col-sep th-grupo-adicional">COLUMNAS ADICIONALES &mdash; NO EN DT EXCEL</th>
+                        *@
+                    </tr>
+
+                    @* ── Fila 2: Cabeceras individuales de columna ───────────────────────── *@
+                    <tr>
+                        @* Cols 1-4: Dimensiones (tiempo) *@
+                        <th class="fc-1">Mes</th>
+                        <th class="fc-2">Mes.Tex</th>
+                        <th class="fc-3">Año</th>
+                        <th class="fc-4">Sem</th>
+
+                        @* Cols 5-12: Identificación *@
+                        <th class="col-sep fc-5">Partida</th>
+                        <th class="fc-6">Cliente</th>
+                        <th class="fc-7">Material</th>
+                        <th class="fc-8">Est</th>
+                        <th>Ne</th>
+                        <th>Mat</th>
+                        <th>Lote</th>
+                        <th>F.Pedido</th>
+
+                        @* Cols 13-15: 1er Rodete *@
+                        <th class="col-sep">Estima.Rod</th>
+                        <th>Entreg.Rod</th>
+                        <th>D.Rod</th>
+
+                        @* Cols 16-18: Mat.Hilanderia *@
+                        <th class="col-sep">Estima.Mat</th>
+                        <th>Entreg.Mat</th>
+                        <th>D.MH</th>
+
+                        @* Col 19: F.Guia *@
+                        <th class="col-sep">F.Guía</th>
+
+                        @* Cols 20-23: Receta TT *@
+                        <th class="col-sep">Estima.Rec</th>
+                        <th>Entreg.Rec</th>
+                        <th>D.Rec</th>
+                        <th>X</th>
+
+                        @* Cols 24-28: Programa TT *@
+                        <th class="col-sep">F.Prog</th>
+                        <th>Maq</th>
+                        <th>Est.Ten</th>
+                        <th>Entr.Ten</th>
+                        <th>D.Tenido</th>
+
+                        @* Cols 29-34: Fechas reales *@
+                        <th class="col-sep">F.Partida</th>
+                        <th>F.Receta</th>
+                        <th>F.Sec.Rod</th>
+                        <th>F.Sec.Mad</th>
+                        <th>F.Aprob.Cal</th>
+                        <th>Time.Aprov</th>
+
+                        @* Cols 34-37: Acabado/Revisado *@
+                        <th class="col-sep">Tipo.Acab</th>
+                        <th>F.Encon</th>
+                        <th>F.Revis</th>
+                        <th>Ev.Encon</th>
+
+                        @* Cols 38-42: Entrega/Espera *@
+                        <th class="col-sep">F.Entrega</th>
+                        <th>Ing.AlmPT</th>
+                        <th>D.Espera</th>
+                        <th style="text-align:center">De</th>
+                        <th>De.Copia</th>
+
+                        @* Cols 43-46: Kilogramos *@
+                        <th class="col-sep">Kg.Prog</th>
+                        <th>Kg.Despa</th>
+                        <th>Gap</th>
+                        <th>%Tol.</th>
+
+                        @* Cols 47-48: Estados *@
+                        <th class="col-sep">Est.Flujo</th>
+                        <th>Est.Desp</th>
+
+                        @* Cols 49-50: Apoyo *@
+                        <th class="col-sep">Area.Resp</th>
+                        <th>Bp</th>
+
+                        @* Cols 51-65: Adicionales (comentadas, pendientes de activar) *@
+                        @*
+                        <th class="col-sep" style="text-align:right">P.Neto</th>
                         <th>RMC</th>
                         <th>Nro.RMC</th>
-                        <th>Ref.</th>
-                        <th>Proceso</th>
-                        @* Grupo Etapas producción *@
-                        <th class="col-sep">F.Teñido</th>
-                        <th>F.CC</th>
-                        <th>F.Encono</th>
-                        <th>F.Secado</th>
-                        <th>F.Receta</th>
-                        <th>F.Revisado</th>
-                        <th>F.Ing</th>
-                        @* Grupo Cantidades *@
-                        <th class="col-sep" style="text-align:right">Cant.Desp</th>
                         <th>Título</th>
-                        <th style="text-align:right">Cant.Prog</th>
-                        <th>Lote</th>
                         <th>Tit.Texto</th>
-                        <th>F.Prog</th>
+                        <th>Ref.</th>
+                        <th>Proceso.TT</th>
                         <th>P.Matiz</th>
                         <th>Est.Eval</th>
                         <th>Defecto</th>
                         <th>Resultado</th>
-                        <th style="text-align:center">Días.Atraso</th>
-                        @* Grupo Extras *@
-                        <th class="col-sep">F.Ent.Cono1</th>
-                        <th>F.Val.Rec</th>
-                        <th>F.Est.Cono1</th>
-                        <th>F.Ent.Tin</th>
-                        <th>F.Est.Tenido</th>
-                        <th>F.Progval</th>
                         <th>Lab.Val</th>
-                        <th>F.Ult.Ing.Almpi</th>
-                        <th>Maq.Prog</th>
-                        <th>Aca.Mad</th>
                         <th>F.Secado.Mad</th>
+                        <th>Aca.Mad</th>
+                        <th style="text-align:right">D.Retraso</th>
+                        *@
                     </tr>
                 </thead>
-                <tbody>
-                    @foreach (var row in items)
+                <tbody id="stTbody"></tbody>
+                <tfoot>
+                    @if (buscado && items.Count > 0)
                     {
-                        <tr class="@(row.EstaRetrasado ? "row-retraso" : "")">
-                            @* Identificación *@
-                            <td style="white-space:nowrap;font-weight:600;color:#1e3a5f;">@(row.Partida ?? "—")</td>
-                            <td>
-                                @if (!string.IsNullOrEmpty(row.EstadoProg))
-                                { <span class="eb eb-est">@row.EstadoProg</span> }
-                                else { <span style="color:#94a3b8">—</span> }
-                            </td>
-                            <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@row.Cliente">
-                                @(row.Cliente ?? "—")
-                            </td>
-                            <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@row.Material">
-                                @(row.Material ?? "—")
-                            </td>
-                            @* Base *@
-                            <td class="col-sep" style="white-space:nowrap;">
-                                @(row.FchPedido.HasValue ? row.FchPedido.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;" class="@row.SemaforoClass">
-                                @(row.FchEntrega.HasValue ? row.FchEntrega.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.FchPartida ?? "—")</td>
-                            <td style="text-align:right;white-space:nowrap;">
-                                @(row.PesoNeto.HasValue ? row.PesoNeto.Value.ToString("N2") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.Rmc ?? "—")</td>
-                            <td style="white-space:nowrap;" title="@row.NroRmc">@(row.NroRmc ?? "—")</td>
-                            <td style="white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis;" title="@row.Referencia">
-                                @(row.Referencia ?? "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (!string.IsNullOrEmpty(row.Proceso))
-                                { <span class="eb eb-proc">@row.Proceso</span> }
-                                else { <span style="color:#94a3b8">—</span> }
-                            </td>
-                            @* Etapas *@
-                            <td class="col-sep" style="white-space:nowrap;">
-                                @if (row.FechaTenido.HasValue)
-                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaTenido.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FechaCcalid.HasValue)
-                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaCcalid.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FechaEncon.HasValue)
-                                { <span class="eb eb-ok"><i class="bi bi-check-lg"></i>@row.FechaEncon.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FechaSecado.HasValue)
-                                { <span class="eb eb-ok">@row.FechaSecado.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FechaReceta.HasValue)
-                                { <span class="eb eb-ok">@row.FechaReceta.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FchRevisado.HasValue)
-                                { <span class="eb eb-ok">@row.FchRevisado.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @if (row.FechaIng.HasValue)
-                                { <span class="eb eb-ok">@row.FechaIng.Value.ToString("dd/MM/yy")</span> }
-                                else { <span class="eb eb-sin">—</span> }
-                            </td>
-                            @* Cantidades y resto *@
-                            <td class="col-sep" style="text-align:right;white-space:nowrap;">
-                                @(row.CantDesp.HasValue && row.CantDesp > 0 ? row.CantDesp.Value.ToString("N2") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.Titulo ?? "—")</td>
-                            <td style="text-align:right;white-space:nowrap;">
-                                @(row.CantProg.HasValue ? row.CantProg.Value.ToString("N2") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.Lote ?? "—")</td>
-                            <td style="white-space:nowrap;">@(row.TituloTexto ?? "—")</td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchProg.HasValue ? row.FchProg.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.PartMatiz ?? "—")</td>
-                            <td style="white-space:nowrap;">@(row.EstEvaluacion ?? "—")</td>
-                            <td style="white-space:nowrap;">@(row.Defecto ?? "—")</td>
-                            <td style="white-space:nowrap;">@(row.Resultado ?? "—")</td>
-                            <td style="text-align:center;white-space:nowrap;">
-                                @if (row.DiasRetraso.HasValue)
-                                {
-                                    <span class="@(row.EstaRetrasado ? "dias-ret" : "dias-ok")"
-                                          title="@(row.EstaRetrasado ? "Retrasado" : "En plazo")">
-                                        @row.DiasRetraso.Value.ToString("N0") d
-                                    </span>
-                                }
-                                else { <span style="color:#94a3b8">—</span> }
-                            </td>
-                            @* Extras *@
-                            <td class="col-sep" style="white-space:nowrap;">
-                                @(row.FchEntregaConoUno.HasValue ? row.FchEntregaConoUno.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchValRec.HasValue ? row.FchValRec.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchEstimaConoUno.HasValue ? row.FchEstimaConoUno.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchEntTin.HasValue ? row.FchEntTin.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchEstimaTenido.HasValue ? row.FchEstimaTenido.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchProgval.HasValue ? row.FchProgval.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.LaboVal ?? "—")</td>
-                            <td style="white-space:nowrap;">
-                                @(row.FchUltIngAlmpi.HasValue ? row.FchUltIngAlmpi.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td style="white-space:nowrap;">@(row.MaqProg ?? "—")</td>
-                            <td style="white-space:nowrap;">@(row.AcaMad ?? "—")</td>
-                            <td style="white-space:nowrap;">
-                                @(row.FechaSecadoMad.HasValue ? row.FechaSecadoMad.Value.ToString("dd/MM/yy") : "—")
-                            </td>
+                        <tr class="table-secondary fw-bold" style="font-size:.7rem;border-top:2px solid #6c757d;">
+                            @* Cols 1-8 fijas sticky *@
+                            <td class="fc-1" style="text-align:right;white-space:nowrap;font-size:.65rem;color:#6c757d;"></td>
+                            <td class="fc-2"></td>
+                            <td class="fc-3"></td>
+                            <td class="fc-4"></td>
+                            <td class="fc-5"></td>
+                            <td class="fc-6"></td>
+                            <td class="fc-7"></td>
+                            <td class="fc-8" style="text-align:right;padding-right:.5rem;white-space:nowrap;font-size:.65rem;color:#6c757d;">KPI</td>
+                            @* Cols 9-12: Ne, Mat, Lote, F.Pedido (vacío) *@
+                            <td colspan="4"></td>
+
+                            @* Col 13-14: Estima/Entreg Rod (vacío) *@
+                            <td colspan="2" class="col-sep"></td>
+                            @* Col 15: D.Rod = PROMEDIO.SI(<0) *@
+                            <td data-kpi="rod" style="text-align:right;white-space:nowrap;"></td>
+
+                            @* Col 16-17: Estima/Entreg Mat (vacío) *@
+                            <td colspan="2" class="col-sep"></td>
+                            @* Col 18: D.MH = PROMEDIO.SI(<0) *@
+                            <td data-kpi="mh" style="text-align:right;white-space:nowrap;"></td>
+
+                            @* Col 19: F.Guía (vacío) *@
+                            <td class="col-sep"></td>
+
+                            @* Col 20-21: Estima/Entreg Receta (vacío) *@
+                            <td colspan="2" class="col-sep"></td>
+                            @* Col 22: D.Rec = SUBTOTALES(1) *@
+                            <td data-kpi="rec" style="text-align:right;white-space:nowrap;"></td>
+                            @* Col 23: X (sin KPI — solo ícono en DT) *@
+                            <td></td>
+
+                            @* Col 24-27: F.Prog + Maq + Est.Ten + Entr.Ten (vacío) *@
+                            <td colspan="4" class="col-sep"></td>
+                            @* Col 28: D.Tenido = SUBTOTALES(1) *@
+                            <td data-kpi="diast" style="text-align:right;white-space:nowrap;"></td>
+
+                            @* Col 29-32: F.Partida + F.Receta + F.Secado + F.Aprob.Cal (vacío) *@
+                            <td colspan="4" class="col-sep"></td>
+                            @* Col 33: TimeAprov = KpiDiasT (idéntico por fórmula Excel) *@
+                            <td data-kpi="timeaprov" style="text-align:right;white-space:nowrap;"></td>
+
+                            @* Cols 35-51: resto vacío (18 celdas); cols 52-66 comentadas *@
+                            <td colspan="18"></td>
                         </tr>
                     }
-                </tbody>
+                </tfoot>
             </table>
         </div>
 
@@ -656,27 +1134,274 @@
 </div>@* /container-fluid *@
 
 @section Scripts {
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 // ── Toggle fecha/pedido ──────────────────────────────────────────────────────
-const stOpc = document.getElementById('stOpc');
-function toggleCampos() {
-    const esPedido = stOpc.value === 'POR PEDIDO';
-    document.getElementById('stGrpFechas').style.display    = esPedido ? 'none' : '';
-    document.getElementById('stGrpFechaFin').style.display  = esPedido ? 'none' : '';
-    document.getElementById('stGrpNumPed').style.display    = esPedido ? '' : 'none';
+// ── Datos serializados desde el servidor ──────────────────────────────────
+window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select(r => new {
+    mes        = r.Mes,
+    mesTex     = r.MesTex,
+    ano        = r.Ano,
+    sem        = r.Sem,
+    partida    = r.Partida,
+    cliente    = r.Cliente,
+    material   = r.Material,
+    est        = r.Est,
+    ne         = r.Ne,
+    mat        = r.Mat,
+    lote       = r.Lote,
+    fchPedido  = r.FchPedido.HasValue   ? r.FchPedido.Value.ToString("dd/MM/yy")    : (string?)null,
+    estimaRod  = r.EstimaRod.HasValue   ? r.EstimaRod.Value.ToString("dd/MM/yy")    : (string?)null,
+    entregRod  = r.EntregRod.HasValue   ? r.EntregRod.Value.ToString("dd/MM/yy")    : (string?)null,
+    diasRod    = r.DiasRod,
+    estimaMat  = r.EstimaMat.HasValue   ? r.EstimaMat.Value.ToString("dd/MM/yy")    : (string?)null,
+    entregMat  = r.EntregMat.HasValue   ? r.EntregMat.Value.ToString("dd/MM/yy")    : (string?)null,
+    diasMh     = r.DiasMh,
+    fchaGuia   = r.FchaGuia.HasValue    ? r.FchaGuia.Value.ToString("dd/MM/yy")     : (string?)null,
+    estimaRec  = r.EstimaReceta.HasValue  ? r.EstimaReceta.Value.ToString("dd/MM/yy")  : (string?)null,
+    entregRec  = r.EntregReceta.HasValue  ? r.EntregReceta.Value.ToString("dd/MM/yy")  : (string?)null,
+    diasRec    = r.DiasRec,
+    x          = r.X,
+    fchProg    = r.FchPrograma.HasValue   ? r.FchPrograma.Value.ToString("dd/MM/yy")   : (string?)null,
+    maqTen     = r.MaqTen,
+    estimaTen  = r.EstimaTenido.HasValue  ? r.EstimaTenido.Value.ToString("dd/MM/yy")  : (string?)null,
+    entregTen  = r.EntregTenido.HasValue  ? r.EntregTenido.Value.ToString("dd/MM/yy")  : (string?)null,
+    diasT      = r.DiasTenido,
+    fchPartida = r.FchPartida.HasValue    ? r.FchPartida.Value.ToString("dd/MM/yy")    : (string?)null,
+    fchReceta  = r.FchReceta.HasValue     ? r.FchReceta.Value.ToString("dd/MM/yy")     : (string?)null,
+    fchSecRod  = r.FchSecRodete.HasValue  ? r.FchSecRodete.Value.ToString("dd/MM/yy")  : (string?)null,
+    fchSecMad  = r.FchSecMadeja.HasValue  ? r.FchSecMadeja.Value.ToString("dd/MM/yy")  : (string?)null,
+    fchAprobCal= r.FchAprobCal.HasValue   ? r.FchAprobCal.Value.ToString("dd/MM/yy")   : (string?)null,
+    timeAprov  = r.TimeAprov,
+    tipoAc     = r.TipoAcabado,
+    fchEncon   = r.FchEnconado.HasValue   ? r.FchEnconado.Value.ToString("dd/MM/yy")   : (string?)null,
+    fchRev     = r.FchRevisado.HasValue   ? r.FchRevisado.Value.ToString("dd/MM/yy")   : (string?)null,
+    evEncon    = r.EvEncon,
+    fchEntrega = r.FchEntrega.HasValue    ? r.FchEntrega.Value.ToString("dd/MM/yy")    : (string?)null,
+    ingAlmpt   = r.IngAlmpt.HasValue      ? r.IngAlmpt.Value.ToString("dd/MM/yy")      : (string?)null,
+    diasEsp    = r.DiasEnEspera,
+    de         = r.De,
+    deCopia    = r.DeCopia,
+    kgProg     = r.KgProg,
+    kgDespa    = r.KgDespa,
+    gap        = r.Gap,
+    pctTol     = r.PctToleran,
+    estFlujo   = r.EstadoFlujo,
+    estDesp    = r.EstadoDespacho,
+    area       = r.AreaResponsable,
+    bp         = r.Bp,
+    retrasado  = r.EstaRetrasado,
+    semClass   = r.SemaforoClass,
+    conTen     = r.EntregTenido.HasValue,
+    conCc      = r.FchAprobCal.HasValue,
+    despachado = r.KgDespa.HasValue && r.KgDespa > 0,
+    indDiasRod = r.DiasRod.HasValue ? (r.DiasRod > 0 ? "ret" : "ok") : "sin",
+    indDiasMh  = r.DiasMh.HasValue  ? (r.DiasMh  > 0 ? "ret" : "ok") : "sin",
+    indDiasRec = r.DiasRec.HasValue ? (r.DiasRec > 0 ? "ret" : "ok") : "sin",
+    indDiasT   = r.DiasTenido.HasValue ? (r.DiasTenido > 0 ? "ret" : "ok") : "sin",
+    indDe      = r.De.HasValue      ? (r.De      > 0 ? "ret" : "ok") : "sin"
+})));
+</script>
+<script>
+(function () {
+'use strict';
+
+// ── Helpers de formato y color ────────────────────────────────────────────
+function d(v)   { return v != null ? v : '\u2014'; }
+function n0(v)  { return v != null ? Number(v).toLocaleString('es-PE', {maximumFractionDigits:0}) : '\u2014'; }
+function n2(v)  { return v != null ? Number(v).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '\u2014'; }
+function bgRet(v)   { return (v != null && v > 0) ? 'background-color:#FEA8B4;' : ''; }
+function bgDiasT(v) { return (v != null && v > 0) ? 'background-color:#FE9CB1;' : ''; }
+function bgDE(v)    { return (v != null && v > 0) ? 'background-color:#FEA8B4;' : ''; }
+function iconX(v) {
+    if (v == null || v === 0) return '<i class="bi bi-circle-fill text-success" title="A tiempo"></i>';
+    if (v === 1)              return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda retraso"></i>';
+    return '<i class="bi bi-circle-fill text-danger" title="Retraso cr\u00edtico"></i>';
 }
-stOpc.addEventListener('change', toggleCampos);
+function iconDE(v) {
+    if (v == null || v === 0) return '<i class="bi bi-circle-fill text-success" title="Sin espera"></i>';
+    if (v === 1)              return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda espera"></i>';
+    return '<i class="bi bi-circle-fill text-danger" title="En espera cr\u00edtica"></i>';
+}
+
+// ── HTML de una fila ──────────────────────────────────────────────────────
+function buildRow(r) {
+    var cls = r.retrasado ? 'row-retraso' : '';
+    var tenBadge = r.entregTen
+        ? '<span class="eb eb-ok"><i class="bi bi-check-lg"></i>' + r.entregTen + '</span>'
+        : '<span class="eb eb-sin">\u2014</span>';
+    return '<tr class="' + cls + '">' +
+        '<td class="fc-1" style="white-space:nowrap;text-align:center;">' + d(r.mes) + '</td>' +
+        '<td class="fc-2" style="white-space:nowrap;text-align:center;">' + d(r.mesTex) + '</td>' +
+        '<td class="fc-3" style="white-space:nowrap;text-align:center;">' + d(r.ano) + '</td>' +
+        '<td class="fc-4" style="white-space:nowrap;text-align:center;">' + d(r.sem) + '</td>' +
+        '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;color:#1e3a5f;">' + d(r.partida) + '</td>' +
+        '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.cliente||'') + '">' + d(r.cliente) + '</td>' +
+        '<td class="fc-7" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.material||'') + '">' + d(r.material) + '</td>' +
+        '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">' + d(r.est) + '</span></td>' +
+        '<td style="white-space:nowrap;">' + d(r.ne)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.mat)  + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.lote) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchPedido) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRod) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.entregRod) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasRod) + '">' + n0(r.diasRod) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaMat) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.entregMat) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasMh) + '">' + n0(r.diasMh) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchaGuia) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRec) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.entregRec) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasRec) + '">' + n0(r.diasRec) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + iconX(r.x) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchProg) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.maqTen) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.estimaTen) + '</td>' +
+        '<td style="white-space:nowrap;">' + tenBadge + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgDiasT(r.diasT) + '">' + n0(r.diasT) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchPartida)  + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchReceta)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchSecRod)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchSecMad)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchAprobCal) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.timeAprov) + '">' + n0(r.timeAprov) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.tipoAc)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchEncon) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.fchRev)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.evEncon)  + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;' + r.semClass + '">' + d(r.fchEntrega) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.ingAlmpt) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasEsp) + '">' + n0(r.diasEsp) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;' + bgDE(r.de) + '">' + n0(r.de) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;">' + iconDE(r.deCopia) + '</td>' +
+        '<td class="col-sep" style="text-align:right;white-space:nowrap;">' + n2(r.kgProg)  + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' + n2(r.kgDespa) + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' + n2(r.gap)     + '</td>' +
+        '<td style="text-align:right;white-space:nowrap;">' + n2(r.pctTol)  + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;"><span class="eb eb-estado">' + d(r.estFlujo) + '</span></td>' +
+        '<td style="white-space:nowrap;"><span class="eb ' + (r.estDesp === 'VENCIDO' ? 'eb-retaso' : 'eb-ok') + '">' + d(r.estDesp) + '</span></td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.area) + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.bp) + '</td>' +
+        '</tr>';
+}
+
+// ── Referencias DOM ───────────────────────────────────────────────────────
+var tbody    = document.getElementById('stTbody');
+var tbl      = document.getElementById('stTable');
+var cntEl    = document.getElementById('cfCount');
+var totalEl  = document.getElementById('cfTotal');
+var pgNums   = document.getElementById('pgNums');
+var pgPrev   = document.getElementById('pgPrev');
+var pgNext   = document.getElementById('pgNext');
+var pgInfo   = document.getElementById('pgInfo');
+var pgSizeEl = document.getElementById('pgSize');
+
+if (!tbody || !window.stData) return;
+
+var allData  = window.stData;
+var filtered = allData.slice();
+var pageSize = 200;
+var curPage  = 1;
+
+if (totalEl) totalEl.textContent = allData.length;
+
+function norm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+var EXACT_CF = { mes:1, ano:1, est:1, maq:1, estflujo:1, estdesp:1, area:1, tipoac:1 };
+var CF_MAP = {
+    mes:function(r){return norm(r.mes);}, ano:function(r){return norm(r.ano);},
+    partida:function(r){return norm(r.partida);}, cliente:function(r){return norm(r.cliente);},
+    material:function(r){return norm(r.material);}, est:function(r){return norm(r.est);},
+    ne:function(r){return norm(r.ne);}, mat:function(r){return norm(r.mat);},
+    lote:function(r){return norm(r.lote);}, maq:function(r){return norm(r.maqTen);},
+    estflujo:function(r){return norm(r.estFlujo);}, estdesp:function(r){return norm(r.estDesp);},
+    area:function(r){return norm(r.area);}, tipoac:function(r){return norm(r.tipoAc);}
+};
+var IND_MAP = {
+    retrasado:function(r){return r.retrasado?'1':'0';}, conten:function(r){return r.conTen?'1':'0';},
+    concc:function(r){return r.conCc?'1':'0';}, despachado:function(r){return r.despachado?'1':'0';},
+    diasrod:function(r){return r.indDiasRod;}, diasmh:function(r){return r.indDiasMh;},
+    diasrec:function(r){return r.indDiasRec;}, diast:function(r){return r.indDiasT;},
+    de:function(r){return r.indDe;}
+};
+
+var cfInputs = document.querySelectorAll('[data-cf]');
+var cfInds   = document.querySelectorAll('[data-cf-ind]');
+
+function applyFilters() {
+    var vals={}, inds={};
+    cfInputs.forEach(function(el){var v=el.value; if(v!=='') vals[el.dataset.cf]=norm(v);});
+    cfInds.forEach(function(el){var v=el.value; if(v!=='') inds[el.dataset.cfInd]=v;});
+    filtered = allData.filter(function(r){
+        for(var key in vals){var fn=CF_MAP[key]; if(!fn) continue; var cell=fn(r); if(EXACT_CF[key]){if(cell!==vals[key]) return false;} else{if(!cell.includes(vals[key])) return false;}}
+        for(var k2 in inds){var fn2=IND_MAP[k2]; if(!fn2) continue; if(fn2(r)!==inds[k2]) return false;}
+        return true;
+    });
+    if(cntEl) cntEl.textContent=filtered.length;
+    curPage=1; renderPage(); updateKpis();
+}
+
+function renderPage() {
+    var total=filtered.length, ps=pageSize<=0?total:pageSize, pages=ps>0?Math.max(1,Math.ceil(total/ps)):1;
+    if(curPage>pages) curPage=pages;
+    var start=(curPage-1)*(ps>0?ps:total), end=ps>0?Math.min(start+ps,total):total;
+    var html='';
+    for(var i=0;i<filtered.slice(start,end).length;i++) html+=buildRow(filtered.slice(start,end)[i]);
+    tbody.innerHTML=html;
+    if(pgInfo) pgInfo.textContent=total===0?'0 registros':(ps<=0?'Todos ('+total+')':(start+1)+'\u2013'+end+' de '+total);
+    if(pgPrev) pgPrev.disabled=(curPage<=1);
+    if(pgNext) pgNext.disabled=(curPage>=pages);
+    if(pgNums){
+        var nums='',maxB=7,half=Math.floor(maxB/2),s=Math.max(1,curPage-half),e=Math.min(pages,s+maxB-1);
+        if(e-s<maxB-1) s=Math.max(1,e-maxB+1);
+        if(s>1){nums+='<button class="pg-btn" data-pg="1">1</button>';if(s>2) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>';}
+        for(var p=s;p<=e;p++) nums+='<button class="pg-btn'+(p===curPage?' pg-active':'')+'" data-pg="'+p+'">'+p+'</button>';
+        if(e<pages){if(e<pages-1) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>'; nums+='<button class="pg-btn" data-pg="'+pages+'">'+pages+'</button>';}
+        pgNums.innerHTML=nums;
+        pgNums.querySelectorAll('[data-pg]').forEach(function(btn){btn.addEventListener('click',function(){curPage=parseInt(this.dataset.pg);renderPage();fixTheadRowTops();});});
+    }
+}
+
+function promedioNeg(arr){var n=arr.filter(function(v){return v!==null&&v<0;});return n.length?n.reduce(function(a,b){return a+b;},0)/n.length:null;}
+function promedio(arr){var n=arr.filter(function(v){return v!==null;});return n.length?n.reduce(function(a,b){return a+b;},0)/n.length:null;}
+function kpiFmt(v){return v!==null?v.toFixed(1):'\u2014';}
+
+function updateKpis() {
+    if(!tbl) return;
+    var kpiRod=promedioNeg(filtered.map(function(r){return r.diasRod!=null?+r.diasRod:null;}));
+    var kpiMh=promedioNeg(filtered.map(function(r){return r.diasMh!=null?+r.diasMh:null;}));
+    var kpiRec=promedio(filtered.map(function(r){return r.diasRec!=null?+r.diasRec:null;}));
+    var kpiDiasT=promedio(filtered.map(function(r){return r.diasT!=null?+r.diasT:null;}));
+    tbl.querySelectorAll('tfoot td[data-kpi]').forEach(function(td){
+        var k=td.dataset.kpi,val=null;
+        if(k==='rod'){val=kpiRod;td.style.backgroundColor=(kpiRod!=null&&kpiRod>0)?'#FEA8B4':'';}
+        if(k==='mh'){val=kpiMh;td.style.backgroundColor=(kpiMh!=null&&kpiMh>0)?'#FEA8B4':'';}
+        if(k==='rec'){val=kpiRec;td.style.backgroundColor=(kpiRec!=null&&kpiRec>0)?'#FEA8B4':'';}
+        if(k==='diast'){val=kpiDiasT;td.style.backgroundColor=(kpiDiasT!=null&&kpiDiasT>0)?'#FE9CB1':'';}
+        if(k==='timeaprov'){val=kpiDiasT;td.style.backgroundColor=(kpiDiasT!=null&&kpiDiasT>0)?'#FEA8B4':'';}
+        td.textContent=kpiFmt(val);
+    });
+}
+
+var allCtrls=Array.from(cfInputs).concat(Array.from(cfInds));
+allCtrls.forEach(function(el){el.addEventListener('input',applyFilters);el.addEventListener('change',applyFilters);});
+var resetBtn=document.getElementById('cfResetBtn');
+if(resetBtn) resetBtn.addEventListener('click',function(){allCtrls.forEach(function(el){el.value='';});applyFilters();});
+
+if(pgPrev) pgPrev.addEventListener('click',function(){if(curPage>1){curPage--;renderPage();fixTheadRowTops();}});
+if(pgNext) pgNext.addEventListener('click',function(){var ps=pageSize<=0?filtered.length:pageSize,pages=Math.max(1,Math.ceil(filtered.length/(ps||1)));if(curPage<pages){curPage++;renderPage();fixTheadRowTops();}});
+if(pgSizeEl) pgSizeEl.addEventListener('change',function(){pageSize=parseInt(this.value);curPage=1;renderPage();fixTheadRowTops();});
+
+var stOpc=document.getElementById('stOpc');
+function toggleCampos(){var ep=stOpc.value==='POR PEDIDO';document.getElementById('stGrpFechas').style.display=ep?'none':'';document.getElementById('stGrpFechaFin').style.display=ep?'none':'';document.getElementById('stGrpNumPed').style.display=ep?'':'none';}
+stOpc.addEventListener('change',toggleCampos);
 toggleCampos();
 
-// ── Select2 ─────────────────────────────────────────────────────────────────
-$(function () {
-    const s2 = { theme: 'bootstrap-5', allowClear: true, dropdownAutoWidth: true, width: 'style' };
-    $('#stCliente').select2({ ...s2, placeholder: '— Todos —' });
-    $('#stAsesor' ).select2({ ...s2, placeholder: '— Todos —' });
-    $('#stTitulo' ).select2({ ...s2, placeholder: '— Todos —' });
-    $('#stFibra'  ).select2({ ...s2, placeholder: '— Todas —' });
-    $('#stProceso').select2({ ...s2, placeholder: '— Todos —' });
-});
+function fixTheadRowTops(){if(!tbl) return;var f=tbl.querySelector('thead tr:first-child');if(!f) return;var h=f.offsetHeight||f.getBoundingClientRect().height;var w=tbl.closest('.spt-table-wrap')||tbl;w.style.setProperty('--thead-row1-h',h+'px');}
+requestAnimationFrame(function(){fixTheadRowTops();});
+window.addEventListener('resize',fixTheadRowTops);
+
+
+applyFilters();
+})();
 </script>
 }

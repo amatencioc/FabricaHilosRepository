@@ -149,6 +149,17 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             return Ok(lista);
         }
 
+        // ── API: grabar visto bueno (todos los supervisores) ───────────────────
+        [HttpPost("GrabarVisado")]
+        public async Task<IActionResult> GrabarVisado([FromBody] AuthHorasGrabarVisadoRequest req)
+        {
+            var usuario = HttpContext.Session.GetString(SessUsuario);
+            if (string.IsNullOrEmpty(usuario)) return Unauthorized();
+
+            var result = await _service.GrabarVisadoAsync(usuario, req);
+            return Ok(result);
+        }
+
         // ── API: lista de empleados ─────────────────────────────────
         [HttpGet("Empleados")]
         public async Task<IActionResult> Empleados([FromQuery] string empresa)
@@ -209,10 +220,14 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 "LaColonialConnection" => "COLONIAL",
                 _                     => "COLONIAL"
             };
-            var prefijo = $"[{empresaLabel}-{oracleUser}]";
-            req.Observaciones = string.IsNullOrWhiteSpace(req.Observaciones)
+            const int maxObs = 100;
+            var prefijo = $"[{empresaLabel}-{oracleUser}] [AQUARIUS-{usuario}]";
+            var obsCompleta = string.IsNullOrWhiteSpace(req.Observaciones)
                 ? prefijo
                 : $"{prefijo} {req.Observaciones}";
+            req.Observaciones = obsCompleta.Length > maxObs
+                ? obsCompleta[..maxObs]
+                : obsCompleta;
 
             var result = await _service.GrabarAutorizacionAsync(usuario, req);
             return Ok(result);
@@ -236,6 +251,19 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 _ => null
             };
 
+            // Largo del prefijo fijo para que el frontend calcule el maxlength disponible
+            var oracleUserSes   = HttpContext.Session.GetString("OracleUser") ?? string.Empty;
+            var connKeySes      = HttpContext.Session.GetString("EmpresaConexion") ?? string.Empty;
+            var empresaLabelSes = connKeySes switch
+            {
+                "ArbonaConnection"     => "ARBONA",
+                "SolsaConnection"      => "SOLSA",
+                "LaColonialConnection" => "COLONIAL",
+                _                     => "COLONIAL"
+            };
+            var prefijoSes    = $"[{empresaLabelSes}-{oracleUserSes}] [AQUARIUS-{usuario}] ";
+            var maxObsUsuario = Math.Max(10, 100 - prefijoSes.Length);
+
             return Ok(new
             {
                 codUsuario        = usuario,
@@ -244,6 +272,7 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
                 esAdmin           = HttpContext.Session.GetString(SessEsAdmin),
                 cntEmpresas       = HttpContext.Session.GetString(SessCntEmp),
                 codEmpresaSistema = codEmpresaSistema,
+                maxObsUsuario     = maxObsUsuario,
             });
         }
     }
