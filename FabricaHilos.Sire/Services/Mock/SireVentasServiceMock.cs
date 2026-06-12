@@ -99,4 +99,15 @@ public sealed class SireVentasServiceMock : ISireVentasService
             Contenido = Encoding.UTF8.GetBytes(text)
         });
     }
+
+    public Task<ConstanciaCierre> DescargarArchivoReporteAsync(string rutaCompleta, string nomArchivo, CancellationToken cancellationToken = default)
+    {
+        var text = $"ARCHIVO REPORTE RVIE MOCK\nArchivo: {nomArchivo}\nFecha: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+        return Task.FromResult(new ConstanciaCierre
+        {
+            NombreArchivo = nomArchivo,
+            ContentType = "application/zip",
+            Contenido = Encoding.UTF8.GetBytes(text)
+        });
+    }
 }

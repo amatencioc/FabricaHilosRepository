@@ -1,5 +1,6 @@
 using FabricaHilos.Models.Sire;
 using FabricaHilos.Services.Sire;
+using FabricaHilos.Sire.Constants;
 using FabricaHilos.Sire.Helpers;
 using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Models;
@@ -238,15 +239,21 @@ public class SireController : OracleBaseController
                 ? _ventasService.ConsultarTicketAsync(numTicket, periodo, cancellationToken)
                 : _comprasService.ConsultarTicketAsync(numTicket, periodo, cancellationToken));
 
-            _logger.LogInformation("Consulta estado: tipo={Tipo} periodo={Periodo} ticket={Ticket} estado={Estado}", 
-                tipo, periodo, numTicket, resultado.Estado);
+            _logger.LogInformation("Consulta estado: tipo={Tipo} periodo={Periodo} ticket={Ticket} estado={Estado} archivo={Archivo}", 
+                tipo, periodo, numTicket, resultado.Estado, resultado.ArchivoReporte?.NomArchivoReporte);
 
             return Json(new
             {
                 exitoso = true,
                 numTicket = resultado.NumTicket,
                 estado = resultado.Estado,
-                mensaje = resultado.Mensaje
+                codEstadoProceso = resultado.CodEstadoProceso,
+                codProceso = resultado.CodProceso,
+                perTributario = resultado.PerTributario,
+                mensaje = resultado.Mensaje,
+                nomArchivoReporte = resultado.ArchivoReporte?.NomArchivoReporte,
+                codTipoArchivoReporte = resultado.ArchivoReporte?.CodTipoArchivoReporte,
+                esFinal = resultado.EsFinal
             });
         }
         catch (Exception ex)
@@ -262,32 +269,43 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Descarga el archivo ZIP de la propuesta exportada
-    /// El nombre del archivo se obtiene del estado del ticket o se predice según estándar SUNAT
+    /// Descarga el archivo ZIP de la propuesta exportada (servicio 5.17).
+    /// Los parámetros nomArchivo, codTipoArchivo, codProceso y numTicket deben obtenerse
+    /// del resultado de ConsultarEstadoExportacion cuando el ticket llega a COMPLETADO.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> DescargarArchivoExportado(string periodo, string tipo, string? nomArchivo, CancellationToken cancellationToken)
+    public async Task<IActionResult> DescargarArchivoExportado(
+        string periodo,
+        string tipo,
+        string nomArchivo,
+        string? codTipoArchivo,
+        string? codProceso,
+        string? numTicket,
+        CancellationToken cancellationToken)
     {
         try
         {
             ValidarParametrosOperacion(periodo, tipo);
 
-            var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
-
-            // Si no se proporciona nomArchivo, predecir según estándar SUNAT
             if (string.IsNullOrWhiteSpace(nomArchivo))
-            {
-                var codLibro = esVentas ? "140000" : "080000";
-                var ruc = _sireOptions.Ruc;
-                // Patrón: PP{ruc}{periodo}{codLibro}00111110.ZIP
-                nomArchivo = $"PP{ruc}{periodo}{codLibro}00111110.ZIP";
-            }
+                return Json(new { exitoso = false, error = "El nombre del archivo no está disponible. Espere a que el ticket finalice (COMPLETADO) antes de descargar." });
+
+            var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
+            var codLibro = esVentas ? "140000" : "080000";
+
+            var url = SireEndpoints.DescargarArchivo(
+                nomArchivo,
+                codTipoArchivo,
+                codLibro,
+                periodo,
+                codProceso ?? string.Empty,
+                numTicket ?? string.Empty);
 
             var constancia = esVentas
-                ? await _ventasService.DescargarConstanciaAsync(nomArchivo, cancellationToken)
-                : await _comprasService.DescargarConstanciaAsync(nomArchivo, cancellationToken);
+                ? await _ventasService.DescargarArchivoReporteAsync(url, nomArchivo, cancellationToken)
+                : await _comprasService.DescargarArchivoReporteAsync(url, nomArchivo, cancellationToken);
 
-            _logger.LogInformation("Archivo exportado descargado: tipo={Tipo} periodo={Periodo} archivo={Archivo} bytes={Bytes}", 
+            _logger.LogInformation("Archivo exportado descargado: tipo={Tipo} periodo={Periodo} archivo={Archivo} bytes={Bytes}",
                 tipo, periodo, constancia.NombreArchivo, constancia.Contenido.Length);
 
             return File(constancia.Contenido, constancia.ContentType, constancia.NombreArchivo);
@@ -437,21 +455,26 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Descarga la constancia de cierre de un período RVIE o RCE
+    /// Descarga la constancia de cierre de un período RVIE o RCE.
+    /// El parámetro nomArchivo es OBLIGATORIO y debe obtenerse del campo archivoReporte
+    /// que devuelve ConsultarEstadoExportacion cuando el ticket llega a estado COMPLETADO.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> DescargarConstancia(string periodo, string tipo, CancellationToken cancellationToken)
+    public async Task<IActionResult> DescargarConstancia(string periodo, string tipo, string? nomArchivo, CancellationToken cancellationToken)
     {
         try
         {
             ValidarParametrosOperacion(periodo, tipo);
 
-            // Patrón: LE{ruc}{periodo}{codLibro}{estadoGrabacion}{indicadorOperacion}{contenidoLibro}.pdf
-            // Ver manual SIRE v25, página 60
+            if (string.IsNullOrWhiteSpace(nomArchivo))
+            {
+                TempData["Error"] = "No se puede descargar la constancia: el nombre del archivo no está disponible. " +
+                    "Primero use 'Exportar Propuesta' y espere a que el ticket finalice (estado COMPLETADO). " +
+                    "El nombre del archivo se obtiene automáticamente al consultar el estado del ticket.";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
             var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
-            var codLibro = esVentas ? "140000" : "080000";
-            var ruc = _sireOptions.Ruc;
-            var nomArchivo = $"LE{ruc}{periodo}{codLibro}00111112.pdf";
 
             var constancia = esVentas
                 ? await _ventasService.DescargarConstanciaAsync(nomArchivo, cancellationToken)

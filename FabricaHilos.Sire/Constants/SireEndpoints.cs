@@ -16,13 +16,17 @@ public static class SireEndpoints
     /// <summary>5.2 SIRE: periodos RVIE habilitados para el contribuyente (codLibro=140000 según manual v25 pág 24).</summary>
     public static string RviePeriodos => "/libros/rvierce/padron/web/omisos/140000/periodos";
 
-    /// <summary>5.18 SIRE: exportar propuesta RVIE (genera ticket). Según manual v25 pág 48. codLibro=140000.</summary>
+    /// <summary>5.18 SIRE: exportar propuesta RVIE (genera ticket). Según manual v25 pág 48.
+    /// Path correcto: /libros/rvie/ (NO rvierce). Sin parámetro codLibro.
+    /// </summary>
     public static string RvieExportarPropuesta(string periodo, int codTipoArchivo = 0)
-        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}&codLibro=140000";
+        => $"/libros/rvie/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}";
 
-    /// <summary>5.8 SIRE: aceptar propuesta del RVIE. Según manual v25 pág 34. codLibro=140000.</summary>
+    /// <summary>5.8 SIRE: aceptar propuesta del RVIE. Según manual v25 pág 34.
+    /// Path correcto: /libros/rvie/ (NO rvierce). Sin parámetro codLibro.
+    /// </summary>
     public static string RvieAceptar(string periodo)
-        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/aceptapropuesta?codLibro=140000";
+        => $"/libros/rvie/propuesta/web/propuesta/{periodo}/aceptapropuesta";
 
     /// <summary>5.9 SIRE: registrar preliminar RVIE. Según manual v25 pág 35.</summary>
     public static string RvieRegistrarPreliminar(string periodo)
@@ -36,21 +40,30 @@ public static class SireEndpoints
     /// <summary>5.2 SIRE: periodos RCE habilitados para el contribuyente (codLibro=080000).</summary>
     public static string RcePeriodos => "/libros/rvierce/padron/web/omisos/080000/periodos";
 
-    /// <summary>RCE: exportar propuesta RCE (genera ticket). Mismo path base que RVIE con codLibro=080000.</summary>
+    /// <summary>5.34 RCE: exportar propuesta RCE (genera ticket). Según manual Compras v22 pág 84.
+    /// Path distinto al RVIE: /libros/rce/propuesta/web/propuesta/ con acción exportacioncomprobantepropuesta.
+    /// Sin parámetro codLibro. El parámetro mínimo requerido es codTipoArchivo (0=txt, 1=csv).
+    /// </summary>
     public static string RceExportarPropuesta(string periodo, int codTipoArchivo = 0)
-        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/exportapropuesta?codTipoArchivo={codTipoArchivo}&codLibro=080000";
+        => $"/libros/rce/propuesta/web/propuesta/{periodo}/exportacioncomprobantepropuesta?codTipoArchivo={codTipoArchivo}";
 
-    /// <summary>RCE: aceptar propuesta del RCE. Mismo path base que RVIE con codLibro=080000.</summary>
+    /// <summary>5.2 RCE: aceptar propuesta del RCE. Según manual Compras v22 pág 40.
+    /// Path distinto al RVIE: /libros/rce/propuesta/web/registroslibros/ con acción aceptarpropuesta.
+    /// </summary>
     public static string RceAceptar(string periodo)
-        => $"/libros/rvierce/propuesta/web/propuesta/{periodo}/aceptapropuesta?codLibro=080000";
+        => $"/libros/rce/propuesta/web/registroslibros/{periodo}/aceptarpropuesta";
 
-    /// <summary>RCE: registrar preliminar RCE. Patrón equivalente a RVIE.</summary>
+    /// <summary>5.4 RCE: registrar preliminar RCE. Según manual Compras v22 pág 42.
+    /// Path distinto al RVIE: /libros/rce/preliminar/web/registroslibros/ con acción registrapreliminares (plural).
+    /// </summary>
     public static string RceRegistrarPreliminar(string periodo)
-        => $"/libros/rvierce/gestionlibro/web/registroslibros/{periodo}/registrapreliminar";
+        => $"/libros/rce/preliminar/web/registroslibros/{periodo}/registrapreliminares";
 
-    /// <summary>RCE: descargar constancia de recepción. Patrón equivalente a RVIE.</summary>
-    public static string RceConstancia(string nomArchivo)
-        => $"/libros/rvierce/gestionlibro/web/registroslibros/constancia/archivo?nomArchivo={Uri.EscapeDataString(nomArchivo)}";
+    /// <summary>5.49 RCE: descargar constancia de recepción. Según manual Compras v22 pág 107.
+    /// Path distinto al RVIE: sub-ruta constanciarecepcion con parámetro nomConstanciaRecepcion.
+    /// </summary>
+    public static string RceConstancia(string nomConstanciaRecepcion)
+        => $"/libros/rvierce/gestionlibro/web/registroslibros/constancia/constanciarecepcion?nomConstanciaRecepcion={Uri.EscapeDataString(nomConstanciaRecepcion)}";
 
     // ── Ticket polling y descarga (compartido RVIE/RCE) ─────────────────────
 
@@ -63,14 +76,30 @@ public static class SireEndpoints
          + $"?perIni={periodo}&perFin={periodo}&page=1&perPage=20&numTicket={ticket}";
 
     /// <summary>
-    /// 5.17 SIRE: descarga el archivo generado (ZIP de constancia, propuesta, etc.). Manual v25 pág 46.
-    /// nomArchivoReporte y codTipoArchivoReporte vienen del campo archivoReporte del servicio 5.16.
-    /// Si codTipoArchivoReporte es null en la respuesta de 5.16, pasar "null" como string.
+    /// 5.17 SIRE: descarga el archivo generado (ZIP de propuesta, constancia, etc.). Manual v25 pág 46.
+    /// Parámetros obligatorios según el manual:
+    /// - nomArchivoReporte: de registros[0].archivoReporte[0].nomArchivoReporte (servicio 5.16)
+    /// - codTipoArchivoReporte: de registros[0].archivoReporte[0].codTipoAchivoReporte; si es null, pasar "null"
+    /// - codLibro: 140000 para RVIE, 080000 para RCE
+    /// - perTributario: de registros[0].perTributario (servicio 5.16)
+    /// - codProceso: de registros[0].codProceso (servicio 5.16)
+    /// - numTicket: número de ticket
     /// </summary>
-    public static string DescargarArchivo(string nomArchivoReporte, string? codTipoArchivoReporte)
+    public static string DescargarArchivo(
+        string nomArchivoReporte,
+        string? codTipoArchivoReporte,
+        string codLibro,
+        string perTributario,
+        string codProceso,
+        string numTicket)
     {
         var cod = string.IsNullOrWhiteSpace(codTipoArchivoReporte) ? "null" : codTipoArchivoReporte;
         return $"/libros/rvierce/gestionprocesosmasivos/web/masivo/archivoreporte"
-             + $"?nomArchivoReporte={Uri.EscapeDataString(nomArchivoReporte)}&codTipoArchivoReporte={cod}";
+             + $"?nomArchivoReporte={Uri.EscapeDataString(nomArchivoReporte)}"
+             + $"&codTipoArchivoReporte={cod}"
+             + $"&codLibro={codLibro}"
+             + $"&perTributario={perTributario}"
+             + $"&codProceso={Uri.EscapeDataString(codProceso)}"
+             + $"&numTicket={Uri.EscapeDataString(numTicket)}";
     }
 }

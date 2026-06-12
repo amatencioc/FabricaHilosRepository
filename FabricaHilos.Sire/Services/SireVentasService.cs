@@ -57,11 +57,13 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     /// <summary>
     /// Exporta propuesta RVIE y obtiene un ticket para monitorear el procesamiento.
     /// Según manual v25 pág 48, servicio 5.18. Método: GET (parámetros en query string).
+    /// Ruta: /libros/rvie/propuesta/web/propuesta/{periodo}/exportapropuesta (rvie, sin codLibro).
     /// Retorna TicketEstado con el número de ticket que puede consultarse con ConsultarTicketAsync.
     /// </summary>
     public Task<TicketEstado> ExportarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.RvieExportarPropuesta(periodo), null, cancellationToken);
 
+    // Según manual v25 pág 34, servicio 5.8. Ruta: /libros/rvie/propuesta/web/propuesta/{periodo}/aceptapropuesta.
     public Task<TicketEstado> AceptarPropuestaAsync(string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieAceptar(periodo), null, cancellationToken);
 
@@ -80,8 +82,14 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     public Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default)
         => SendAsync<TicketEstado>(HttpMethod.Post, SireEndpoints.RvieRegistrarPreliminar(periodo), null, cancellationToken);
 
-    public Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
-        => SendAsync<TicketEstado>(HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);
+    public async Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
+    {
+        // El servicio 5.16 devuelve un wrapper paginado { paginacion, registros[] }.
+        // No se puede deserializar directamente a TicketEstado.
+        var respuesta = await SendAsync<TicketConsultaResponse>(
+            HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);
+        return respuesta.ToTicketEstado();
+    }
 
     /// <summary>
     /// Descarga la constancia de recepción dado el nombre del archivo.
@@ -90,4 +98,11 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     /// </summary>
     public Task<ConstanciaCierre> DescargarConstanciaAsync(string nomArchivo, CancellationToken cancellationToken = default)
         => DescargarConstanciaBaseAsync(SireEndpoints.RvieConstancia(nomArchivo), nomArchivo, cancellationToken);
+
+    /// <summary>
+    /// Descarga el archivo de reporte generado por el servicio 5.17 (archivoreporte).
+    /// La <paramref name="rutaCompleta"/> debe ser la ruta relativa construida por <see cref="SireEndpoints.DescargarArchivo"/>.
+    /// </summary>
+    public Task<ConstanciaCierre> DescargarArchivoReporteAsync(string rutaCompleta, string nomArchivo, CancellationToken cancellationToken = default)
+        => DescargarConstanciaBaseAsync(rutaCompleta, nomArchivo, cancellationToken);
 }

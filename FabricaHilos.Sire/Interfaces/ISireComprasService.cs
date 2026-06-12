@@ -12,4 +12,5 @@ public interface ISireComprasService
     Task<TicketEstado> CerrarPeriodoAsync(string periodo, CancellationToken cancellationToken = default);
     Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default);
     Task<ConstanciaCierre> DescargarConstanciaAsync(string nomArchivo, CancellationToken cancellationToken = default);
+    Task<ConstanciaCierre> DescargarArchivoReporteAsync(string rutaCompleta, string nomArchivo, CancellationToken cancellationToken = default);
 }
