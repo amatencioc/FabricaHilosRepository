@@ -1,4 +1,4 @@
-@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion>
+﻿@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnReporteProduccion>
 
 @{
     ViewData["Title"] = "Seguimiento de Programación de Tintorería";
@@ -365,8 +365,10 @@
 #stTable .col-ne  { display: none; }
 #stTable .col-mat { display: none; }
 /* Columnas De y Bp ocultas (no eliminadas) */
-#stTable .col-de  { display: none; }
-#stTable .col-bp  { display: none; }
+#stTable .col-de    { display: none; }
+#stTable .col-bp    { display: none; }
+/* Columna KG_PEDIDO visible */
+#stTable .col-kgped { /* visible — no ocultar */ }
 
 /* Fondo base para celdas fijas
 #stTable tbody tr:nth-child(even) td.fc-1,
@@ -516,6 +518,75 @@
 .pg-btn:disabled { opacity: .4; cursor: not-allowed; }
 .pg-btn.pg-active { background: #1a4971; color: #fff; border-color: #1a4971; font-weight: 700; }
 .pg-nums { display: flex; gap: .2rem; flex-wrap: wrap; }
+
+/* ── Separador vertical en cf-bar ── */
+.cf-vsep { width:1px; height:28px; background:#c7d7f9; align-self:flex-end; margin-bottom:.32rem; flex-shrink:0; }
+
+/* ── Botones de mes (estilo imagen: cuadrados numerados) ── */
+.cf-mes-btns { display:flex; gap:.18rem; flex-wrap:wrap; }
+.cf-mes-btn {
+    width: 24px; height: 24px; border-radius: 4px;
+    border: 1px solid #9cb3d0; background: #e8f0fb; color: #1a4971;
+    font-size: .65rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s, border-color .12s, color .12s;
+    padding: 0;
+}
+.cf-mes-btn:hover   { background: #cfe0f5; border-color: #1a4971; }
+.cf-mes-btn.active  { background: #1a4971; color: #fff; border-color: #0f2947; }
+.cf-mes-sf { width: auto; padding: 0 6px; font-size: .6rem; }
+
+/* ── Panel de acción (colorear seleccionados) ── */
+.st-color-bar {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    padding: .38rem 1rem; background: #fffbea;
+    border-bottom: 2px solid #fde68a; font-size: .75rem;
+    position: relative;
+}
+.st-cb-label { font-weight: 700; color: #92400e; white-space: nowrap; }
+.st-cb-btn {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: #1a4971; color: #fff; border: none;
+    border-radius: .32rem; font-size: .74rem; font-weight: 600;
+    padding: .28rem .75rem; cursor: pointer;
+    transition: background .12s;
+}
+.st-cb-btn:hover  { background: #0f2947; }
+.st-cb-clr { background: #6c757d; }
+.st-cb-clr:hover { background: #495057; }
+
+/* ── Paleta flotante ── */
+.st-paleta {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+    background: #fff; border: 1px solid #d1d9e6;
+    border-radius: .45rem; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    padding: .45rem; display: flex; gap: .35rem; flex-wrap: wrap;
+    min-width: 200px;
+}
+.st-pal-item {
+    flex: 0 0 calc(50% - .18rem);
+    border-radius: .3rem; padding: .28rem .5rem;
+    font-size: .68rem; font-weight: 700; color: #fff;
+    cursor: pointer; text-align: center; white-space: nowrap;
+    border: 2px solid transparent;
+    transition: transform .1s, border-color .1s;
+}
+.st-pal-item:hover { transform: scale(1.05); border-color: rgba(0,0,0,.3); }
+
+/* ── Checkbox col ── */
+#stTable .col-chk { width: 28px; min-width: 28px; max-width: 28px; text-align: center; padding: 0 4px; }
+#stTable .col-chk input[type=checkbox] { cursor: pointer; width: 14px; height: 14px; }
+
+/* ── Fila coloreada por etiqueta ── */
+#stTable tbody tr.row-etiqueta td { transition: background-color .2s; }
+
+/* ── Col Área Responsable ── */
+#stTable .col-area { min-width: 155px; }
+.area-input {
+    width: 100%; font-size: .7rem; border: 1px solid #bfcad8; border-radius: .25rem;
+    padding: .15rem .3rem; background: #fafafa; resize: none; height: 28px;
+}
+.area-input:focus { border-color: #3b82f6; outline: none; background: #fff; }
 </style>
 }
 
@@ -695,37 +766,61 @@
     }
     else
     {
-        @* ── Barra de filtros client-side (filtra sobre la data ya cargada) ── *@
-        <div class="cf-bar">
-            <span class="cf-badge"><i class="bi bi-funnel-fill"></i> Filtrar datos</span>
+        @* ── Barra de filtros client-side ── *@
+        <div class="cf-bar" id="cfBar">
 
-            @* ── Mes ── *@
+            @* 0. Limpiar (primero) *@
+            <button id="cfResetBtn" class="cf-reset" type="button">
+                <i class="bi bi-x-circle"></i> Limpiar
+            </button>
+
+            <div class="cf-vsep"></div>
+
+            @* 1. MES — botones numéricos estilo imagen *@
             <div class="spt-fld">
-                <label class="spt-label" for="cfMes"><i class="bi bi-calendar-month"></i>Mes</label>
-                <select class="spt-ctrl" id="cfMes" data-cf="mes" style="min-width:110px;">
-                    <option value="">— Todos —</option>
+                <label class="spt-label"><i class="bi bi-calendar-month"></i>MES</label>
+                <div class="cf-mes-btns" id="cfMesBtns">
                     @foreach (var m in cfMesesDisp) {
-                        <option value="@m">@nombresMes[m] (@m)</option>
+                        <button type="button" class="cf-mes-btn" data-mes="@m">@m</button>
                     }
+                    @if (cfMesesDisp.Any()) {
+                        <button type="button" class="cf-mes-btn cf-mes-sf" data-mes="_sf">SF</button>
+                    }
+                </div>
+            </div>
+
+            @* Etiqueta (7 colores fijos) — filtro rápido *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-palette2"></i>Etiqueta</label>
+                <select class="spt-ctrl" id="cfEtiqueta" data-cf="colorhexa" style="min-width:115px;">
+                    <option value="">Todas</option>
+                    <option value="#dc3545">🔴 Etiqueta 1 (#dc3545)</option>
+                    <option value="#fd7e14">🟠 Etiqueta 2 (#fd7e14)</option>
+                    <option value="#ffc107">🟡 Etiqueta 3 (#ffc107)</option>
+                    <option value="#198754">🟢 Etiqueta 4 (#198754)</option>
+                    <option value="#0d6efd">🔵 Etiqueta 5 (#0d6efd)</option>
+                    <option value="#6f42c1">🟣 Etiqueta 6 (#6f42c1)</option>
+                    <option value="#7b4f2e">🟤 Etiqueta 7 (#7b4f2e)</option>
+                    <option value="_none">Sin etiqueta</option>
                 </select>
             </div>
 
-            @* ── Año ── *@
+            <div class="cf-vsep"></div>
+
+            @* 2. AÑO — select, default 2026 *@
             <div class="spt-fld">
-                <label class="spt-label" for="cfAno"><i class="bi bi-calendar-check"></i>Año</label>
-                <select class="spt-ctrl" id="cfAno" data-cf="ano" style="min-width:72px;">
+                <label class="spt-label"><i class="bi bi-calendar-check"></i>Año</label>
+                <select class="spt-ctrl" id="cfAno" data-cf="ano" style="min-width:68px;">
                     <option value="">——</option>
                     @foreach (var y in cfAnosDisp) {
-                        <option value="@y">@y</option>
+                        <option value="@y" selected="@(y == 2026 ? "selected" : null)">@y</option>
                     }
                 </select>
             </div>
 
-            <div style="align-self:flex-end;padding-bottom:.32rem;">
-                <div style="width:1px;height:22px;background:#c7d7f9;"></div>
-            </div>
+            <div class="cf-vsep"></div>
 
-            @* ── Partida (datalist) ── *@
+            @* 3. Partida *@
             <div class="spt-fld">
                 <label class="spt-label"><i class="bi bi-hash"></i>Partida</label>
                 <input type="text" class="spt-ctrl" data-cf="partida" list="dlPartida"
@@ -735,17 +830,7 @@
                 </datalist>
             </div>
 
-            @* ── Cliente (datalist) ── *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-building"></i>Cliente</label>
-                <input type="text" class="spt-ctrl" data-cf="cliente" list="dlCliente"
-                       placeholder="Buscar…" style="min-width:120px;" autocomplete="off" />
-                <datalist id="dlCliente">
-                    @foreach (var v in cfClienteOpts) { <option value="@v"></option> }
-                </datalist>
-            </div>
-
-            @* ── Material (datalist) ── *@
+            @* 4. Material *@
             <div class="spt-fld">
                 <label class="spt-label"><i class="bi bi-box-seam"></i>Material</label>
                 <input type="text" class="spt-ctrl" data-cf="material" list="dlMaterial"
@@ -755,151 +840,68 @@
                 </datalist>
             </div>
 
-            @* ── Est. (select) ── *@
+            @* 5. Cliente *@
             <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-flag"></i>Est.</label>
-                <select class="spt-ctrl" data-cf="est" style="min-width:60px;">
+                <label class="spt-label"><i class="bi bi-building"></i>Cliente</label>
+                <input type="text" class="spt-ctrl" data-cf="cliente" list="dlCliente"
+                       placeholder="Buscar…" style="min-width:120px;" autocomplete="off" />
+                <datalist id="dlCliente">
+                    @foreach (var v in cfClienteOpts) { <option value="@v"></option> }
+                </datalist>
+            </div>
+
+            @* 6. Revisado (con/sin fecha revisado) *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-check2-all"></i>Revisado</label>
+                <select class="spt-ctrl" data-cf-ind="revisado" style="min-width:90px;">
                     <option value="">Todos</option>
-                    @foreach (var v in cfEstOpts) { <option value="@v">@v</option> }
+                    <option value="1">Con revisado</option>
+                    <option value="0">Sin revisado</option>
                 </select>
             </div>
 
-            @* ── Maq. (select) ── *@
+            @* 7. Procesos *@
             <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-gear"></i>Maq.</label>
-                <select class="spt-ctrl" data-cf="maq" style="min-width:65px;">
+                <label class="spt-label"><i class="bi bi-cpu"></i>Proceso</label>
+                <select class="spt-ctrl" data-cf="proceso" style="min-width:100px;">
                     <option value="">Todos</option>
-                    @foreach (var v in cfMaqOpts) { <option value="@v">@v</option> }
+                    @foreach (var v in filtroProcesos) { <option value="@v.Descripcion">@v.Descripcion</option> }
                 </select>
             </div>
 
-            @* ── Flujo (select) ── *@
+            @* 8. Despachos *@
             <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-activity"></i>Flujo</label>
-                <select class="spt-ctrl" data-cf="estflujo" style="min-width:90px;">
-                    <option value="">Todos</option>
-                    @foreach (var v in cfFlujoOpts) { <option value="@v">@v</option> }
-                </select>
-            </div>
-
-            @* ── Desp. (select) ── *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-truck"></i>Desp.</label>
+                <label class="spt-label"><i class="bi bi-truck"></i>Despachos</label>
                 <select class="spt-ctrl" data-cf="estdesp" style="min-width:90px;">
                     <option value="">Todos</option>
                     @foreach (var v in cfDespOpts) { <option value="@v">@v</option> }
                 </select>
             </div>
 
-            @* ── Área (select) ── *@
+            @* 9. Fecha Entrega *@
             <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-people"></i>Área</label>
-                <select class="spt-ctrl" data-cf="area" style="min-width:90px;">
+                <label class="spt-label"><i class="bi bi-calendar-event"></i>F.Entrega</label>
+                <input type="date" class="spt-ctrl" id="cfFchEntDes" data-cf-fch="fchent-des" style="min-width:120px;" title="Desde" />
+            </div>
+            <div class="spt-fld">
+                <label class="spt-label" style="visibility:hidden;">F.Hasta</label>
+                <input type="date" class="spt-ctrl" id="cfFchEntHas" data-cf-fch="fchent-has" style="min-width:120px;" title="Hasta" />
+            </div>
+
+            @* 10. Est. Flujo *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-activity"></i>Est.Flujo</label>
+                <select class="spt-ctrl" data-cf="estflujo" style="min-width:90px;">
                     <option value="">Todos</option>
-                    @foreach (var v in cfAreaOpts) { <option value="@v">@v</option> }
+                    @foreach (var v in cfFlujoOpts) { <option value="@v">@v</option> }
                 </select>
             </div>
 
-            @* ── Tipo Acabado (select) ── *@
-            @if (cfTipoAcOpts.Count > 0) {
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-layers"></i>Acabado</label>
-                <select class="spt-ctrl" data-cf="tipoac" style="min-width:80px;">
-                    <option value="">Todos</option>
-                    @foreach (var v in cfTipoAcOpts) { <option value="@v">@v</option> }
-                </select>
-            </div>
-            }
+            <div class="cf-vsep"></div>
 
-            <div style="align-self:flex-end;padding-bottom:.32rem;">
-                <div style="width:1px;height:22px;background:#c7d7f9;"></div>
-            </div>
-
-            @* ── Indicadores ── *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-exclamation-triangle"></i>Estado</label>
-                <select class="spt-ctrl" data-cf-ind="retrasado" style="min-width:100px;">
-                    <option value="">Todos</option>
-                    <option value="1">⚠ Retrasados</option>
-                    <option value="0">✔ En plazo</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-check2-circle"></i>Teñido</label>
-                <select class="spt-ctrl" data-cf-ind="conten" style="min-width:95px;">
-                    <option value="">Todos</option>
-                    <option value="1">Con teñido</option>
-                    <option value="0">Sin teñido</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-check2-all"></i>C.C.</label>
-                <select class="spt-ctrl" data-cf-ind="concc" style="min-width:80px;">
-                    <option value="">Todos</option>
-                    <option value="1">Con C.C.</option>
-                    <option value="0">Sin C.C.</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-box-arrow-right"></i>Despacho</label>
-                <select class="spt-ctrl" data-cf-ind="despachado" style="min-width:100px;">
-                    <option value="">Todos</option>
-                    <option value="1">Despachados</option>
-                    <option value="0">Pendientes</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-clock-history"></i>D.Rod</label>
-                <select class="spt-ctrl" data-cf-ind="diasrod" style="min-width:85px;">
-                    <option value="">Todos</option>
-                    <option value="ret">Retrasados</option>
-                    <option value="ok">En plazo</option>
-                    <option value="sin">Sin valor</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-clock-history"></i>D.MH</label>
-                <select class="spt-ctrl" data-cf-ind="diasmh" style="min-width:85px;">
-                    <option value="">Todos</option>
-                    <option value="ret">Retrasados</option>
-                    <option value="ok">En plazo</option>
-                    <option value="sin">Sin valor</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-clock-history"></i>D.Rec</label>
-                <select class="spt-ctrl" data-cf-ind="diasrec" style="min-width:85px;">
-                    <option value="">Todos</option>
-                    <option value="ret">Retrasados</option>
-                    <option value="ok">En plazo</option>
-                    <option value="sin">Sin valor</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-clock-history"></i>Días T</label>
-                <select class="spt-ctrl" data-cf-ind="diast" style="min-width:85px;">
-                    <option value="">Todos</option>
-                    <option value="ret">Retrasados</option>
-                    <option value="ok">En plazo</option>
-                    <option value="sin">Sin valor</option>
-                </select>
-            </div>
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-clock-history"></i>D.E</label>
-                <select class="spt-ctrl" data-cf-ind="de" style="min-width:85px;">
-                    <option value="">Todos</option>
-                    <option value="ret">Retrasados</option>
-                    <option value="ok">En plazo</option>
-                    <option value="sin">Sin valor</option>
-                </select>
-            </div>
-
-            <button id="cfResetBtn" class="cf-reset" type="button">
-                <i class="bi bi-x-circle"></i> Limpiar
-            </button>
+            @* Contador + paginación *@
             <span class="cf-count"><span id="cfCount">@items.Count</span> / <span id="cfTotal">@items.Count</span></span>
 
-            @* ── Paginación: selector de tamaño + navegación ── *@
             <div style="display:flex;align-items:center;gap:.35rem;margin-left:auto;flex-wrap:wrap;">
                 <label style="font-size:.68rem;color:#4a6080;font-weight:700;white-space:nowrap;">Filas/pág</label>
                 <select id="pgSize" class="pg-size">
@@ -916,16 +918,40 @@
             </div>
         </div>
 
+        @* ── Panel de acción: colorear seleccionados ── *@
+        <div id="stColorBar" class="st-color-bar" style="display:none;">
+            <span id="stColorBarCount" class="st-cb-label"></span>
+            <button type="button" class="st-cb-btn" id="btnAbrirPaleta">
+                <i class="bi bi-palette2"></i> Asignar etiqueta
+            </button>
+            <button type="button" class="st-cb-btn st-cb-clr" id="btnQuitarColor">
+                <i class="bi bi-eraser"></i> Quitar etiqueta
+            </button>
+            <div id="stPaleta" class="st-paleta" style="display:none;">
+                <div class="st-pal-item" data-color="#dc3545" style="background:#dc3545;" title="Etiqueta 1 – #dc3545">Etiqueta 1</div>
+                <div class="st-pal-item" data-color="#fd7e14" style="background:#fd7e14;" title="Etiqueta 2 – #fd7e14">Etiqueta 2</div>
+                <div class="st-pal-item" data-color="#ffc107" style="background:#ffc107;color:#212529;" title="Etiqueta 3 – #ffc107">Etiqueta 3</div>
+                <div class="st-pal-item" data-color="#198754" style="background:#198754;" title="Etiqueta 4 – #198754">Etiqueta 4</div>
+                <div class="st-pal-item" data-color="#0d6efd" style="background:#0d6efd;" title="Etiqueta 5 – #0d6efd">Etiqueta 5</div>
+                <div class="st-pal-item" data-color="#6f42c1" style="background:#6f42c1;" title="Etiqueta 6 – #6f42c1">Etiqueta 6</div>
+                <div class="st-pal-item" data-color="#7b4f2e" style="background:#7b4f2e;" title="Etiqueta 7 – #7b4f2e">Etiqueta 7</div>
+            </div>
+        </div>
+
         <div class="spt-table-wrap">
             <table id="stTable">
                 <thead>
                     @* ── Fila 1: Cabeceras de grupo ──────────────────────────────────────── *@
                     <tr>
+                        @* Col 0: Checkbox *@
+                        <th class="col-chk th-grupo" style="padding:0;">
+                            <input type="checkbox" id="chkAll" title="Seleccionar todos">
+                        </th>
                         @* Cols 1-12: sin cabecera de grupo (tiempo + identificación, incluye Ne/Mat/Lote/F.Pedido) *@
                         <th colspan="12" class="th-grupo"></th>
 
-                        @* Col 13-15: RODETE *@
-                        <th colspan="3" class="col-sep th-grupo">RODETE</th>
+                        @* Col 13-16: RODETE (+ semáforo XRod) *@
+                        <th colspan="4" class="col-sep th-grupo">RODETE</th>
 
                         @* Cols 16-18: ENTREGA MATERIAL HILAND *@
                         <th colspan="3" class="col-sep th-grupo">ENTREGA MATERIAL HILAND.</th>
@@ -939,8 +965,8 @@
                         @* Col 24: DESPACHO MATERIAL (movido después de PROGRAMA) *@
                         <th colspan="1" class="col-sep th-grupo">DESP. MATERIAL</th>
 
-                        @* Cols 25-28: TEÑIDO *@
-                        <th colspan="4" class="col-sep th-grupo">TEÑIDO</th>
+                        @* Cols 25-30: TEÑIDO (+ semáforo XTenido) *@
+                        <th colspan="5" class="col-sep th-grupo">TEÑIDO</th>
 
                         @* Cols 29-32: SECADO *@
                         <th colspan="4" class="col-sep th-grupo">SECADO</th>
@@ -948,17 +974,24 @@
                         @* REVISADO (antes de Enconado) *@
                         <th colspan="2" class="col-sep th-grupo">REVISADO</th>
 
-                        @* ENCONADO *@
-                        <th colspan="2" class="col-sep th-grupo">ENCONADO</th>
+                        @* ENCONADO (+ Acabado) *@
+                        <th colspan="3" class="col-sep th-grupo">ENCONADO</th>
 
                         @* Cols 38-42: ALMACÉN *@
                         <th colspan="5" class="col-sep th-grupo">ALMACÉN</th>
 
-                        @* Cols 43-46: KG *@
-                        <th colspan="4" class="col-sep th-grupo">KG</th>
+                        @* Cols 43-48: KG (+ KgPedido) *@
+                        <th colspan="5" class="col-sep th-grupo">KG</th>
 
                         @* Cols 47-50: sin cabecera de grupo (estados + apoyo) *@
                         <th colspan="4" class="col-sep th-grupo"></th>
+
+                        @* Col Área Responsable *@
+                        <th colspan="1" class="col-sep th-grupo" style="padding:2px 4px;">
+                            <button type="button" id="btnGuardarAreaResp" class="st-cb-btn" style="background:#1a4971;font-size:.65rem;padding:.2rem .5rem;">
+                                <i class="bi bi-save"></i> Guardar Área Resp.
+                            </button>
+                        </th>
 
                         @* Cols 51-65: COLUMNAS ADICIONALES — NO EN DT EXCEL (comentadas, pendientes de activar) *@
                         @*
@@ -968,6 +1001,9 @@
 
                     @* ── Fila 2: Cabeceras individuales de columna ───────────────────────── *@
                     <tr>
+                        @* Col 0: Checkbox *@
+                        <th class="col-chk"></th>
+
                         @* Cols 1-4: Dimensiones (tiempo) *@
                         <th class="fc-1">Mes</th>
                         <th class="fc-2">Mes.Tex</th>
@@ -984,10 +1020,11 @@
                         <th>Lote</th>
                         <th>F.Pedido</th>
 
-                        @* Cols 13-15: 1er Rodete *@
+                        @* Cols 13-16: 1er Rodete + semáforo *@
                         <th class="col-sep">Estima.Rod</th>
                         <th>Entreg.Rod</th>
                         <th>D.Rod</th>
+                        <th style="text-align:center">X.Rod</th>
 
                         @* Cols 16-18: Mat.Hilanderia *@
                         <th class="col-sep">Estima.Mat</th>
@@ -1007,8 +1044,9 @@
                         <th>Est.Ten</th>
                         <th>Entr.Ten</th>
                         <th>D.Tenido</th>
+                        <th style="text-align:center">X.Ten</th>
 
-                        @* Cols 25-28: Fechas reales (TINTORERÍA eliminada) *@
+                        @* SECADO *@
                         <th class="col-sep">F.Sec.Rod</th>
                         <th>F.Sec.Mad</th>
                         <th>F.Aprob.Cal</th>
@@ -1018,6 +1056,7 @@
                         <th class="col-sep">F.Revis</th>
                         <th>Ev.Encon</th>
                         <th class="col-sep">Tipo.Acab</th>
+                        <th>Acabado</th>
                         <th>F.Encon</th>
 
                         @* Cols 38-42: Entrega/Espera *@
@@ -1027,7 +1066,8 @@
                         <th class="col-de" style="text-align:center">De</th>
                         <th></th>
 
-                        @* Cols 43-46: Kilogramos *@
+                        @* Cols 43-48: Kilogramos *@
+                        <th class="col-sep col-kgped" title="Kg pedidos">Kg.Ped</th>
                         <th class="col-sep">Kg.Prog</th>
                         <th>Kg.Despa</th>
                         <th>Gap</th>
@@ -1039,7 +1079,7 @@
 
                         @* Cols 49-50: Apoyo *@
                         <th class="col-sep">Area.Resp</th>
-                        <th class="col-bp">Bp</th>
+                        <th class="col-sep col-bp">Bp</th>
 
                         @* Cols 51-65: Adicionales (comentadas, pendientes de activar) *@
                         @*
@@ -1062,60 +1102,11 @@
                     </tr>
                 </thead>
                 <tbody id="stTbody"></tbody>
-                <tfoot>
-                    @if (buscado && items.Count > 0)
-                    {
-                        <tr class="table-secondary fw-bold" style="font-size:.7rem;border-top:2px solid #6c757d;">
-                            @* Cols 1-8 fijas sticky *@
-                            <td class="fc-1" style="text-align:right;white-space:nowrap;font-size:.65rem;color:#6c757d;"></td>
-                            <td class="fc-2"></td>
-                            <td class="fc-3"></td>
-                            <td class="fc-4"></td>
-                            <td class="fc-5"></td>
-                            <td class="fc-6"></td>
-                            <td class="fc-7"></td>
-                            <td class="fc-8" style="text-align:right;padding-right:.5rem;white-space:nowrap;font-size:.65rem;color:#6c757d;">KPI</td>
-                            @* Cols 9-12: Ne, Mat, Lote, F.Pedido (vacío) *@
-                            <td colspan="4"></td>
-
-                            @* Col 13-14: Estima/Entreg Rod (vacío) *@
-                            <td colspan="2" class="col-sep"></td>
-                            @* Col 15: D.Rod = PROMEDIO.SI(<0) *@
-                            <td data-kpi="rod" style="text-align:right;white-space:nowrap;"></td>
-
-                            @* Col 16-17: Estima/Entreg Mat (vacío) *@
-                            <td colspan="2" class="col-sep"></td>
-                            @* Col 18: D.MH = PROMEDIO.SI(<0) *@
-                            <td data-kpi="mh" style="text-align:right;white-space:nowrap;"></td>
-
-                            @* Cols 19-20: Estima/Entreg Receta (vacío) *@
-                            <td colspan="2" class="col-sep"></td>
-                            @* Col 21: D.Rec = SUBTOTALES(1) *@
-                            <td data-kpi="rec" style="text-align:right;white-space:nowrap;"></td>
-                            @* Col 22: X (sin KPI — solo ícono en DT) *@
-                            <td></td>
-
-                            @* Col 23: F.Prog (vacío) *@
-                            <td class="col-sep"></td>
-                            @* Col 24: F.Guía/Desp.Material (movido aquí, vacío) *@
-                            <td></td>
-                            @* Col 25-27: Maq + Est.Ten + Entr.Ten (vacío) *@
-                            <td colspan="3"></td>
-                            @* Col 28: D.Tenido = SUBTOTALES(1) *@
-                            <td data-kpi="diast" style="text-align:right;white-space:nowrap;"></td>
-
-                            @* Col 29-30: F.Sec.Rod + F.Sec.Mad (vacío, TINTORERÍA eliminada) *@
-                            <td colspan="2" class="col-sep"></td>
-                            @* Col 31: TimeAprov = KpiDiasT (idéntico por fórmula Excel) *@
-                            <td data-kpi="timeaprov" style="text-align:right;white-space:nowrap;"></td>
-
-                            @* Cols 35-51: resto vacío (18 celdas); cols 52-66 comentadas *@
-                            <td colspan="18"></td>
-                        </tr>
-                    }
-                </tfoot>
+                <tfoot></tfoot>
             </table>
         </div>
+
+
 
         <div class="spt-footer">
             <div>
@@ -1139,6 +1130,7 @@
 // ── Toggle fecha/pedido ──────────────────────────────────────────────────────
 // ── Datos serializados desde el servidor ──────────────────────────────────
 window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select(r => new {
+    colorHexa  = r.ColorHexa,
     mes        = r.Mes,
     mesTex     = r.MesTex,
     ano        = r.Ano,
@@ -1154,6 +1146,7 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     estimaRod  = r.EstimaRod.HasValue   ? r.EstimaRod.Value.ToString("dd/MM/yy")    : (string?)null,
     entregRod  = r.EntregRod.HasValue   ? r.EntregRod.Value.ToString("dd/MM/yy")    : (string?)null,
     diasRod    = r.DiasRod,
+    xRod       = r.XRod,
     estimaMat  = r.EstimaMat.HasValue   ? r.EstimaMat.Value.ToString("dd/MM/yy")    : (string?)null,
     entregMat  = r.EntregMat.HasValue   ? r.EntregMat.Value.ToString("dd/MM/yy")    : (string?)null,
     diasMh     = r.DiasMh,
@@ -1167,6 +1160,7 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     estimaTen  = r.EstimaTenido.HasValue  ? r.EstimaTenido.Value.ToString("dd/MM/yy")  : (string?)null,
     entregTen  = r.EntregTenido.HasValue  ? r.EntregTenido.Value.ToString("dd/MM/yy")  : (string?)null,
     diasT      = r.DiasTenido,
+    xTenido    = r.XTenido,
     fchPartida = r.FchPartida.HasValue    ? r.FchPartida.Value.ToString("dd/MM/yy")    : (string?)null,
     fchReceta  = r.FchReceta.HasValue     ? r.FchReceta.Value.ToString("dd/MM/yy")     : (string?)null,
     fchSecRod  = r.FchSecRodete.HasValue  ? r.FchSecRodete.Value.ToString("dd/MM/yy")  : (string?)null,
@@ -1174,6 +1168,7 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     fchAprobCal= r.FchAprobCal.HasValue   ? r.FchAprobCal.Value.ToString("dd/MM/yy")   : (string?)null,
     timeAprov  = r.TimeAprov,
     tipoAc     = r.TipoAcabado,
+    acabado    = r.Acabado,
     fchEncon   = r.FchEnconado.HasValue   ? r.FchEnconado.Value.ToString("dd/MM/yy")   : (string?)null,
     fchRev     = r.FchRevisado.HasValue   ? r.FchRevisado.Value.ToString("dd/MM/yy")   : (string?)null,
     evEncon    = r.EvEncon,
@@ -1182,6 +1177,7 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     diasEsp    = r.DiasEnEspera,
     de         = r.De,
     deCopia    = r.DeCopia,
+    kgPedido   = r.KgPedido,
     kgProg     = r.KgProg,
     kgDespa    = r.KgDespa,
     gap        = r.Gap,
@@ -1199,91 +1195,109 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     indDiasMh  = r.DiasMh.HasValue  ? (r.DiasMh  > 0 ? "ret" : "ok") : "sin",
     indDiasRec = r.DiasRec.HasValue ? (r.DiasRec > 0 ? "ret" : "ok") : "sin",
     indDiasT   = r.DiasTenido.HasValue ? (r.DiasTenido > 0 ? "ret" : "ok") : "sin",
-    indDe      = r.De.HasValue      ? (r.De      > 0 ? "ret" : "ok") : "sin"
+    indDe      = r.De.HasValue      ? (r.De      > 0 ? "ret" : "ok") : "sin",
+    nroProg    = r.NroProg,
+    numPedKey  = r.NumPedKey,
+    nroKey     = r.NroKey,
+    numDetKey  = r.NumDetKey,
+    reprocesoKey = r.ReprocesoKey,
+    fchProgKey = r.FchProgKey.HasValue ? r.FchProgKey.Value.ToString("yyyy-MM-dd") : (string?)null
 })));
 </script>
 <script>
 (function () {
 'use strict';
 
-// ── Helpers de formato y color ────────────────────────────────────────────
-function d(v)   { return v != null ? v : '\u2014'; }
-function n0(v)  { return v != null ? Number(v).toLocaleString('es-PE', {maximumFractionDigits:0}) : '\u2014'; }
-function n2(v)  { return v != null ? Number(v).toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2}) : '\u2014'; }
-function bgRet(v)   { return (v != null && v > 0) ? 'background-color:#FEA8B4;' : ''; }
-function bgDiasT(v) { return (v != null && v > 0) ? 'background-color:#FE9CB1;' : ''; }
-function bgDE(v)    { return (v != null && v > 0) ? 'background-color:#FEA8B4;' : ''; }
+// ── Helpers de formato ──────────────────────────────────────────────────────
+function d(v)      { return v != null ? v : '\u2014'; }
+function n0(v)     { return v != null ? Number(v).toLocaleString('es-PE',{maximumFractionDigits:0}) : '\u2014'; }
+function n2(v)     { return v != null ? Number(v).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}) : '\u2014'; }
+function bgRet(v)  { return (v!=null&&v>0)?'background-color:#FEA8B4;':''; }
+function bgDiasT(v){ return (v!=null&&v>0)?'background-color:#FE9CB1;':''; }
+function bgDE(v)   { return (v!=null&&v>0)?'background-color:#FEA8B4;':''; }
 function iconX(v) {
-    if (v == null || v === 0) return '<i class="bi bi-circle-fill text-success" title="A tiempo"></i>';
-    if (v === 1)              return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda retraso"></i>';
+    if(v==null||v===0) return '<i class="bi bi-circle-fill text-success" title="A tiempo"></i>';
+    if(v===1)          return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda retraso"></i>';
     return '<i class="bi bi-circle-fill text-danger" title="Retraso cr\u00edtico"></i>';
 }
 function iconDE(v) {
-    if (v == null || v === 0) return '<i class="bi bi-circle-fill text-success" title="Sin espera"></i>';
-    if (v === 1)              return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda espera"></i>';
+    if(v==null||v===0) return '<i class="bi bi-circle-fill text-success" title="Sin espera"></i>';
+    if(v===1)          return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda espera"></i>';
     return '<i class="bi bi-circle-fill text-danger" title="En espera cr\u00edtica"></i>';
 }
 
-// ── HTML de una fila ──────────────────────────────────────────────────────
-function buildRow(r) {
-    var cls = r.retrasado ? 'row-retraso' : '';
+// ── buildRow ─────────────────────────────────────────────────────────────────
+function buildRow(r, idx) {
+    var rowBg  = r.colorHexa ? 'background-color:'+r.colorHexa+'20;' : '';
+    var cls    = (r.retrasado ? 'row-retraso' : '') + (r.colorHexa ? ' row-etiqueta' : '');
+    var cellHx   = r.colorHexa ? 'background-color:'+r.colorHexa+';' : '';
+    var partColor = r.colorHexa ? 'color:#fff;' : 'color:#1e3a5f;';
     var tenBadge = r.entregTen
-        ? '<span class="eb eb-ok"><i class="bi bi-check-lg"></i>' + r.entregTen + '</span>'
+        ? '<span class="eb eb-ok"><i class="bi bi-check-lg"></i>'+r.entregTen+'</span>'
         : '<span class="eb eb-sin">\u2014</span>';
-    return '<tr class="' + cls + '">' +
-        '<td class="fc-1" style="white-space:nowrap;text-align:center;">' + d(r.mes) + '</td>' +
-        '<td class="fc-2" style="white-space:nowrap;text-align:center;">' + d(r.mesTex) + '</td>' +
-        '<td class="fc-3" style="white-space:nowrap;text-align:center;">' + d(r.ano) + '</td>' +
-        '<td class="fc-4" style="white-space:nowrap;text-align:center;">' + d(r.sem) + '</td>' +
-        '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;color:#1e3a5f;">' + d(r.partida) + '</td>' +
-        '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.cliente||'') + '">' + d(r.cliente) + '</td>' +
-        '<td class="fc-7" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.material||'') + '">' + d(r.material) + '</td>' +
-        '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">' + d(r.est) + '</span></td>' +
-        '<td class="col-ne" style="white-space:nowrap;">' + d(r.ne)   + '</td>' +
-        '<td class="col-mat" style="white-space:nowrap;">' + d(r.mat)  + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.lote) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchPedido) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRod) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.entregRod) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasRod) + '">' + n0(r.diasRod) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaMat) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.entregMat) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasMh) + '">' + n0(r.diasMh) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRec) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.entregRec) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasRec) + '">' + n0(r.diasRec) + '</td>' +
-        '<td style="text-align:center;white-space:nowrap;">' + iconX(r.x) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchProg) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchaGuia) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.maqTen) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.estimaTen) + '</td>' +
-        '<td style="white-space:nowrap;">' + tenBadge + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgDiasT(r.diasT) + '">' + n0(r.diasT) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchSecRod)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchSecMad)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchAprobCal) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.timeAprov) + '">' + n0(r.timeAprov) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchRev)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.evEncon)  + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.tipoAc)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchEncon) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;' + r.semClass + '">' + d(r.fchEntrega) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.ingAlmpt) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasEsp) + '">' + n0(r.diasEsp) + '</td>' +
-        '<td class="col-de" style="text-align:center;white-space:nowrap;' + bgDE(r.de) + '">' + n0(r.de) + '</td>' +
-        '<td style="text-align:center;white-space:nowrap;">' + iconDE(r.deCopia) + '</td>' +
-        '<td class="col-sep" style="text-align:right;white-space:nowrap;">' + n2(r.kgProg)  + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;">' + n2(r.kgDespa) + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;">' + n2(r.gap)     + '</td>' +
-        '<td style="text-align:right;white-space:nowrap;">' + n2(r.pctTol)  + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;"><span class="eb eb-estado">' + d(r.estFlujo) + '</span></td>' +
-        '<td style="white-space:nowrap;"><span class="eb ' + (r.estDesp === 'VENCIDO' ? 'eb-retaso' : 'eb-ok') + '">' + d(r.estDesp) + '</span></td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.area) + '</td>' +
-        '<td class="col-bp" style="white-space:nowrap;">' + d(r.bp) + '</td>' +
+    var semCls = r.estDesp==='VENCIDO' ? 'eb-retaso' : 'eb-ok';
+    var areaVal = r._area != null ? r._area : (r.area || '');
+    return '<tr class="'+cls+'" style="'+rowBg+'" data-idx="'+idx+'">' +
+        '<td class="col-chk" style="text-align:center;padding:2px 4px;'+cellHx+'"><input type="checkbox" class="row-chk" data-idx="'+idx+'"></td>' +
+        '<td class="fc-1" style="white-space:nowrap;text-align:center;">'+d(r.mes)+'</td>' +
+        '<td class="fc-2" style="white-space:nowrap;text-align:center;">'+d(r.mesTex)+'</td>' +
+        '<td class="fc-3" style="white-space:nowrap;text-align:center;">'+d(r.ano)+'</td>' +
+        '<td class="fc-4" style="white-space:nowrap;text-align:center;">'+d(r.sem)+'</td>' +
+        '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;'+partColor+cellHx+'">'+d(r.partida)+'</td>' +
+        '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.cliente||'')+'">'+d(r.cliente)+'</td>' +
+        '<td class="fc-7" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.material||'')+'">'+d(r.material)+'</td>' +
+        '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">'+d(r.est)+'</span></td>' +
+        '<td class="col-ne" style="white-space:nowrap;">'+d(r.ne)+'</td>' +
+        '<td class="col-mat" style="white-space:nowrap;">'+d(r.mat)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.lote)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.fchPedido)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaRod)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.entregRod)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasRod)+'">'+n0(r.diasRod)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+iconX(r.xRod)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaMat)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.entregMat)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasMh)+'">'+n0(r.diasMh)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaRec)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.entregRec)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasRec)+'">'+n0(r.diasRec)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+iconX(r.x)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchProg)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchaGuia)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.maqTen)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.estimaTen)+'</td>' +
+        '<td style="white-space:nowrap;">'+tenBadge+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgDiasT(r.diasT)+'">'+n0(r.diasT)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+iconX(r.xTenido)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchSecRod)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.fchSecMad)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.fchAprobCal)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.timeAprov)+'">'+n0(r.timeAprov)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchRev)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.evEncon)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.tipoAc)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.acabado)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.fchEncon)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;'+r.semClass+'">'+d(r.fchEntrega)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.ingAlmpt)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasEsp)+'">'+n0(r.diasEsp)+'</td>' +
+        '<td class="col-de" style="text-align:center;white-space:nowrap;'+bgDE(r.de)+'">'+n0(r.de)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+iconDE(r.deCopia)+'</td>' +
+        '<td class="col-sep col-kgped" style="text-align:right;white-space:nowrap;">'+n2(r.kgPedido)+'</td>' +
+        '<td class="col-sep" style="text-align:right;white-space:nowrap;">'+n2(r.kgProg)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n2(r.kgDespa)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n2(r.gap)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n2(r.pctTol)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;"><span class="eb eb-estado">'+d(r.estFlujo)+'</span></td>' +
+        '<td style="white-space:nowrap;"><span class="eb '+semCls+'">'+d(r.estDesp)+'</span></td>' +
+        '<td class="col-sep col-area"><textarea class="area-input" data-idx="'+idx+'" rows="1" placeholder="Ingresar \u00e1rea resp.">'+escHtml(areaVal)+'</textarea></td>' +
+        '<td class="col-bp" style="white-space:nowrap;">'+d(r.bp)+'</td>' +
         '</tr>';
 }
 
-// ── Referencias DOM ───────────────────────────────────────────────────────
+function escHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Referencias DOM ───────────────────────────────────────────────────────────
 var tbody    = document.getElementById('stTbody');
 var tbl      = document.getElementById('stTable');
 var cntEl    = document.getElementById('cfCount');
@@ -1293,6 +1307,8 @@ var pgPrev   = document.getElementById('pgPrev');
 var pgNext   = document.getElementById('pgNext');
 var pgInfo   = document.getElementById('pgInfo');
 var pgSizeEl = document.getElementById('pgSize');
+var colorBar = document.getElementById('stColorBar');
+var colorBarCnt = document.getElementById('stColorBarCount');
 
 if (!tbody || !window.stData) return;
 
@@ -1301,50 +1317,89 @@ var filtered = allData.slice();
 var pageSize = 200;
 var curPage  = 1;
 
+// Inicializar _area con el valor que viene del servidor (AREA_RESPONSABLE)
+allData.forEach(function(r){ r._area = (r.area != null ? r.area : ''); });
+
 if (totalEl) totalEl.textContent = allData.length;
 
-function norm(s) { return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
-var EXACT_CF = { mes:1, ano:1, est:1, maq:1, estflujo:1, estdesp:1, area:1, tipoac:1 };
+// ── Mapas de filtros ──────────────────────────────────────────────────────────
+var EXACT_CF = { mes:1, ano:1, estflujo:1, estdesp:1, proceso:1, colorhexa:1 };
 var CF_MAP = {
-    mes:function(r){return norm(r.mes);}, ano:function(r){return norm(r.ano);},
-    partida:function(r){return norm(r.partida);}, cliente:function(r){return norm(r.cliente);},
-    material:function(r){return norm(r.material);}, est:function(r){return norm(r.est);},
-    ne:function(r){return norm(r.ne);}, mat:function(r){return norm(r.mat);},
-    lote:function(r){return norm(r.lote);}, maq:function(r){return norm(r.maqTen);},
-    estflujo:function(r){return norm(r.estFlujo);}, estdesp:function(r){return norm(r.estDesp);},
-    area:function(r){return norm(r.area);}, tipoac:function(r){return norm(r.tipoAc);}
+    mes:     function(r){ return norm(r.mes); },
+    ano:     function(r){ return norm(r.ano); },
+    partida: function(r){ return norm(r.partida); },
+    cliente: function(r){ return norm(r.cliente); },
+    material:function(r){ return norm(r.material); },
+    proceso: function(r){ return norm(r.proTt||''); },
+    estdesp: function(r){ return norm(r.estDesp); },
+    estflujo:function(r){ return norm(r.estFlujo); },
+    colorhexa:function(r){
+        // filtro especial: '_none' = sin color
+        return (r.colorHexa||'').toLowerCase();
+    }
 };
 var IND_MAP = {
-    retrasado:function(r){return r.retrasado?'1':'0';}, conten:function(r){return r.conTen?'1':'0';},
-    concc:function(r){return r.conCc?'1':'0';}, despachado:function(r){return r.despachado?'1':'0';},
-    diasrod:function(r){return r.indDiasRod;}, diasmh:function(r){return r.indDiasMh;},
-    diasrec:function(r){return r.indDiasRec;}, diast:function(r){return r.indDiasT;},
-    de:function(r){return r.indDe;}
+    revisado:  function(r){ return r.fchRev ? '1' : '0'; },
+    despachado:function(r){ return r.despachado ? '1' : '0'; }
 };
+// Filtro fecha entrega
+var cfFchEntDes = null, cfFchEntHas = null;
 
+// ── applyFilters ─────────────────────────────────────────────────────────────
 var cfInputs = document.querySelectorAll('[data-cf]');
 var cfInds   = document.querySelectorAll('[data-cf-ind]');
 
 function applyFilters() {
     var vals={}, inds={};
-    cfInputs.forEach(function(el){var v=el.value; if(v!=='') vals[el.dataset.cf]=norm(v);});
-    cfInds.forEach(function(el){var v=el.value; if(v!=='') inds[el.dataset.cfInd]=v;});
+    cfInputs.forEach(function(el){ var v=el.value; if(v!=='') vals[el.dataset.cf]=norm(v); });
+    cfInds.forEach(function(el){   var v=el.value; if(v!=='') inds[el.dataset.cfInd]=v; });
+    var fDes = cfFchEntDes ? cfFchEntDes.value : '';
+    var fHas = cfFchEntHas ? cfFchEntHas.value : '';
+
     filtered = allData.filter(function(r){
-        for(var key in vals){var fn=CF_MAP[key]; if(!fn) continue; var cell=fn(r); if(EXACT_CF[key]){if(cell!==vals[key]) return false;} else{if(!cell.includes(vals[key])) return false;}}
-        for(var k2 in inds){var fn2=IND_MAP[k2]; if(!fn2) continue; if(fn2(r)!==inds[k2]) return false;}
+        // filtros texto/select
+        for(var key in vals){
+            var fn=CF_MAP[key]; if(!fn) continue;
+            var cell=fn(r);
+            if(key==='colorhexa'){
+                var vv=vals[key];
+                if(vv==='_none'){ if(r.colorHexa) return false; }
+                else { if(cell!==vv) return false; }
+                continue;
+            }
+            if(EXACT_CF[key]){ if(cell!==vals[key]) return false; }
+            else { if(!cell.includes(vals[key])) return false; }
+        }
+        // filtros indicador
+        for(var k2 in inds){ var fn2=IND_MAP[k2]; if(!fn2) continue; if(fn2(r)!==inds[k2]) return false; }
+        // filtro fecha entrega
+        if(fDes||fHas){
+            var fe=r.fchEntrega;
+            if(!fe) return false;
+            // fe es "dd/MM/yy" -> convertir a Date comparable
+            var p=fe.split('/'); var dd=parseInt(p[0]),mm=parseInt(p[1])-1,yy=parseInt(p[2]);
+            var yr=yy<50?2000+yy:1900+yy;
+            var feD=new Date(yr,mm,dd);
+            if(fDes){ var fd=new Date(fDes); fd.setHours(0,0,0,0); if(feD<fd) return false; }
+            if(fHas){ var fh=new Date(fHas); fh.setHours(23,59,59,999); if(feD>fh) return false; }
+        }
         return true;
     });
-    if(cntEl) cntEl.textContent=filtered.length;
+    if(cntEl) cntEl.textContent = filtered.length;
     curPage=1; renderPage(); updateKpis();
 }
 
+// ── renderPage ───────────────────────────────────────────────────────────────
 function renderPage() {
-    var total=filtered.length, ps=pageSize<=0?total:pageSize, pages=ps>0?Math.max(1,Math.ceil(total/ps)):1;
+    var total=filtered.length, ps=pageSize<=0?total:pageSize;
+    var pages=ps>0?Math.max(1,Math.ceil(total/ps)):1;
     if(curPage>pages) curPage=pages;
     var start=(curPage-1)*(ps>0?ps:total), end=ps>0?Math.min(start+ps,total):total;
+    var page=filtered.slice(start,end);
     var html='';
-    for(var i=0;i<filtered.slice(start,end).length;i++) html+=buildRow(filtered.slice(start,end)[i]);
+    for(var i=0;i<page.length;i++) html+=buildRow(page[i], start+i);
     tbody.innerHTML=html;
     if(pgInfo) pgInfo.textContent=total===0?'0 registros':(ps<=0?'Todos ('+total+')':(start+1)+'\u2013'+end+' de '+total);
     if(pgPrev) pgPrev.disabled=(curPage<=1);
@@ -1354,17 +1409,22 @@ function renderPage() {
         if(e-s<maxB-1) s=Math.max(1,e-maxB+1);
         if(s>1){nums+='<button class="pg-btn" data-pg="1">1</button>';if(s>2) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>';}
         for(var p=s;p<=e;p++) nums+='<button class="pg-btn'+(p===curPage?' pg-active':'')+'" data-pg="'+p+'">'+p+'</button>';
-        if(e<pages){if(e<pages-1) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>'; nums+='<button class="pg-btn" data-pg="'+pages+'">'+pages+'</button>';}
+        if(e<pages){if(e<pages-1) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>';nums+='<button class="pg-btn" data-pg="'+pages+'">'+pages+'</button>';}
         pgNums.innerHTML=nums;
-        pgNums.querySelectorAll('[data-pg]').forEach(function(btn){btn.addEventListener('click',function(){curPage=parseInt(this.dataset.pg);renderPage();fixTheadRowTops();});});
+        pgNums.querySelectorAll('[data-pg]').forEach(function(btn){
+            btn.addEventListener('click',function(){curPage=parseInt(this.dataset.pg);renderPage();fixTheadRowTops();});
+        });
     }
+    // reconectar checkboxes y obs inputs tras render
+    bindRowEvents();
 }
 
+// ── KPIs ─────────────────────────────────────────────────────────────────────
 function promedioNeg(arr){var n=arr.filter(function(v){return v!==null&&v<0;});return n.length?n.reduce(function(a,b){return a+b;},0)/n.length:null;}
 function promedio(arr){var n=arr.filter(function(v){return v!==null;});return n.length?n.reduce(function(a,b){return a+b;},0)/n.length:null;}
 function kpiFmt(v){return v!==null?v.toFixed(1):'\u2014';}
 
-function updateKpis() {
+function updateKpis(){
     if(!tbl) return;
     var kpiRod=promedioNeg(filtered.map(function(r){return r.diasRod!=null?+r.diasRod:null;}));
     var kpiMh=promedioNeg(filtered.map(function(r){return r.diasMh!=null?+r.diasMh:null;}));
@@ -1381,25 +1441,269 @@ function updateKpis() {
     });
 }
 
-var allCtrls=Array.from(cfInputs).concat(Array.from(cfInds));
-allCtrls.forEach(function(el){el.addEventListener('input',applyFilters);el.addEventListener('change',applyFilters);});
-var resetBtn=document.getElementById('cfResetBtn');
-if(resetBtn) resetBtn.addEventListener('click',function(){allCtrls.forEach(function(el){el.value='';});applyFilters();});
+// ── Botones MES ───────────────────────────────────────────────────────────────
+var mesActivo = '';
+document.querySelectorAll('.cf-mes-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+        var m = this.dataset.mes;
+        if(mesActivo===m){ mesActivo=''; this.classList.remove('active'); }
+        else {
+            document.querySelectorAll('.cf-mes-btn').forEach(function(b){ b.classList.remove('active'); });
+            mesActivo = m; this.classList.add('active');
+        }
+        // sincronizar con data-cf="mes" oculto si existe, o usar variable directa
+        applyFilters();
+    });
+});
 
-if(pgPrev) pgPrev.addEventListener('click',function(){if(curPage>1){curPage--;renderPage();fixTheadRowTops();}});
-if(pgNext) pgNext.addEventListener('click',function(){var ps=pageSize<=0?filtered.length:pageSize,pages=Math.max(1,Math.ceil(filtered.length/(ps||1)));if(curPage<pages){curPage++;renderPage();fixTheadRowTops();}});
-if(pgSizeEl) pgSizeEl.addEventListener('change',function(){pageSize=parseInt(this.value);curPage=1;renderPage();fixTheadRowTops();});
+// Sobrescribir norm para mes (necesitamos usar mesActivo directamente en applyFilters)
+// Para el filtro de mes usamos la variable mesActivo en lugar de data-cf
+var _origApply = applyFilters;
+applyFilters = function(){
+    // inyectar filtro mes desde botón activo
+    var mesFiltro = mesActivo;
+    var cfMesEl = document.querySelector('[data-cf="mes"]');
+    // si existe el select de mes (lo hay en el nuevo HTML), lo seteamos
+    // si no, lo manejamos directo en el filter override
+    if(!cfMesEl){
+        // no hay select de mes, filtrar inline
+        var orig = filtered;
+        _origApply();
+        if(mesFiltro){
+            filtered = filtered.filter(function(r){ return norm(r.mes)===norm(mesFiltro); });
+            if(cntEl) cntEl.textContent=filtered.length;
+            renderPage(); updateKpis();
+        }
+        return;
+    }
+    // si hay select
+    if(mesFiltro) cfMesEl.value=mesFiltro; else cfMesEl.value='';
+    _origApply();
+};
+// Para botones de mes que ya están en HTML (sin select oculto) redefinimos applyFilters correctamente:
+applyFilters = function(){
+    var vals={}, inds={};
+    cfInputs.forEach(function(el){ var v=el.value; if(v!=='') vals[el.dataset.cf]=norm(v); });
+    cfInds.forEach(function(el){   var v=el.value; if(v!=='') inds[el.dataset.cfInd]=v; });
+    var fDes = cfFchEntDes ? cfFchEntDes.value : '';
+    var fHas = cfFchEntHas ? cfFchEntHas.value : '';
 
-var stOpc=document.getElementById('stOpc');
-function toggleCampos(){var ep=stOpc.value==='POR PEDIDO';document.getElementById('stGrpFechas').style.display=ep?'none':'';document.getElementById('stGrpFechaFin').style.display=ep?'none':'';document.getElementById('stGrpNumPed').style.display=ep?'':'none';}
+    filtered = allData.filter(function(r){
+        // MES via botón
+        if(mesActivo){
+            if(mesActivo==='_sf'){
+                if(r.mes && norm(r.mes)!=='') return false;
+            } else {
+                if(norm(r.mes)!==norm(mesActivo)) return false;
+            }
+        }
+        // filtros texto/select
+        for(var key in vals){
+            var fn=CF_MAP[key]; if(!fn) continue;
+            var cell=fn(r);
+            if(key==='colorhexa'){
+                var vv=vals[key];
+                if(vv==='_none'){ if(r.colorHexa) return false; }
+                else { if(cell!==vv) return false; }
+                continue;
+            }
+            if(EXACT_CF[key]){ if(cell!==vals[key]) return false; }
+            else { if(!cell.includes(vals[key])) return false; }
+        }
+        for(var k2 in inds){ var fn2=IND_MAP[k2]; if(!fn2) continue; if(fn2(r)!==inds[k2]) return false; }
+        if(fDes||fHas){
+            var fe=r.fchEntrega; if(!fe) return false;
+            var pp=fe.split('/'); var dd2=parseInt(pp[0]),mm2=parseInt(pp[1])-1,yy2=parseInt(pp[2]);
+            var yr2=yy2<50?2000+yy2:1900+yy2;
+            var feD2=new Date(yr2,mm2,dd2);
+            if(fDes){ var fd2=new Date(fDes); fd2.setHours(0,0,0,0); if(feD2<fd2) return false; }
+            if(fHas){ var fh2=new Date(fHas); fh2.setHours(23,59,59,999); if(feD2>fh2) return false; }
+        }
+        return true;
+    });
+    if(cntEl) cntEl.textContent=filtered.length;
+    curPage=1; renderPage(); updateKpis();
+};
+
+// ── Conectar controles de filtro ──────────────────────────────────────────────
+cfFchEntDes = document.getElementById('cfFchEntDes');
+cfFchEntHas = document.getElementById('cfFchEntHas');
+var allCtrls = Array.from(cfInputs).concat(Array.from(cfInds));
+if(cfFchEntDes) allCtrls.push(cfFchEntDes);
+if(cfFchEntHas) allCtrls.push(cfFchEntHas);
+allCtrls.forEach(function(el){ el.addEventListener('input',applyFilters); el.addEventListener('change',applyFilters); });
+
+var resetBtn = document.getElementById('cfResetBtn');
+if(resetBtn) resetBtn.addEventListener('click', function(){
+    allCtrls.forEach(function(el){ el.value=''; });
+    mesActivo='';
+    document.querySelectorAll('.cf-mes-btn').forEach(function(b){ b.classList.remove('active'); });
+    applyFilters();
+});
+
+// ── Paginación ────────────────────────────────────────────────────────────────
+if(pgPrev) pgPrev.addEventListener('click',function(){ if(curPage>1){curPage--;renderPage();fixTheadRowTops();} });
+if(pgNext) pgNext.addEventListener('click',function(){ var ps=pageSize<=0?filtered.length:pageSize,pages=Math.max(1,Math.ceil(filtered.length/(ps||1)));if(curPage<pages){curPage++;renderPage();fixTheadRowTops();} });
+if(pgSizeEl) pgSizeEl.addEventListener('change',function(){ pageSize=parseInt(this.value);curPage=1;renderPage();fixTheadRowTops(); });
+
+// ── toggle campos form ────────────────────────────────────────────────────────
+var stOpc = document.getElementById('stOpc');
+function toggleCampos(){ var ep=stOpc.value==='POR PEDIDO';document.getElementById('stGrpFechas').style.display=ep?'none':'';document.getElementById('stGrpFechaFin').style.display=ep?'none':'';document.getElementById('stGrpNumPed').style.display=ep?'':'none'; }
 stOpc.addEventListener('change',toggleCampos);
 toggleCampos();
 
-function fixTheadRowTops(){if(!tbl) return;var f=tbl.querySelector('thead tr:first-child');if(!f) return;var h=f.offsetHeight||f.getBoundingClientRect().height;var w=tbl.closest('.spt-table-wrap')||tbl;w.style.setProperty('--thead-row1-h',h+'px');}
-requestAnimationFrame(function(){fixTheadRowTops();});
-window.addEventListener('resize',fixTheadRowTops);
+// ── Checkbox masivo + paleta de colores ───────────────────────────────────────
+var selected = {};  // idx -> true
 
+function updateColorBar(){
+    var cnt=Object.keys(selected).length;
+    if(cnt>0){
+        colorBar.style.display='flex';
+        colorBarCnt.textContent=cnt+' fila'+(cnt>1?'s':'')+' seleccionada'+(cnt>1?'s':'');
+    } else {
+        colorBar.style.display='none';
+        document.getElementById('stPaleta').style.display='none';
+    }
+}
 
+function bindRowEvents(){
+    // checkboxes de fila
+    tbody.querySelectorAll('.row-chk').forEach(function(chk){
+        chk.addEventListener('change',function(){
+            var idx=this.dataset.idx;
+            if(this.checked) selected[idx]=true; else delete selected[idx];
+            updateColorBar();
+        });
+        // restaurar estado seleccionado tras re-render
+        if(selected[chk.dataset.idx]) chk.checked=true;
+    });
+    // area-resp inputs
+    tbody.querySelectorAll('.area-input').forEach(function(ta){
+        ta.addEventListener('input',function(){
+            var idx=this.dataset.idx;
+            filtered[idx]._area=this.value;
+        });
+    });
+}
+
+// Check-all
+var chkAll = document.getElementById('chkAll');
+if(chkAll) chkAll.addEventListener('change',function(){
+    if(this.checked){
+        var ps=pageSize<=0?filtered.length:pageSize;
+        var start=(curPage-1)*(ps>0?ps:filtered.length);
+        var end=ps>0?Math.min(start+ps,filtered.length):filtered.length;
+        filtered.slice(start,end).forEach(function(r,i){ selected[start+i]=true; });
+    } else { selected={}; }
+    tbody.querySelectorAll('.row-chk').forEach(function(c){ c.checked=chkAll.checked; });
+    updateColorBar();
+});
+
+// Paleta flotante
+var btnPaleta  = document.getElementById('btnAbrirPaleta');
+var paletaEl   = document.getElementById('stPaleta');
+var btnQuitarColor = document.getElementById('btnQuitarColor');
+
+if(btnPaleta) btnPaleta.addEventListener('click',function(e){
+    e.stopPropagation();
+    paletaEl.style.display = paletaEl.style.display==='none' ? 'flex' : 'none';
+});
+document.addEventListener('click',function(){ if(paletaEl) paletaEl.style.display='none'; });
+
+function aplicarColor(hex){
+    var idxs = Object.keys(selected);
+    if(!idxs.length) return;
+    var payload = idxs.map(function(idx){
+        var r=filtered[parseInt(idx)];
+        return { nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, colorHexa:hex||null };
+    });
+    fetch('/Planeamiento/GuardarColorHexa', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','RequestVerificationToken':document.querySelector('[name=__RequestVerificationToken]')?.value||''},
+        body:JSON.stringify(payload)
+    }).then(function(res){ return res.json(); }).then(function(j){
+        if(j.ok){
+            idxs.forEach(function(idx){
+                var i=parseInt(idx);
+                filtered[i].colorHexa=hex||null;
+                // actualizar allData
+                var orig=allData.indexOf(filtered[i]);
+                if(orig>=0) allData[orig].colorHexa=hex||null;
+            });
+            selected={};
+            paletaEl.style.display='none';
+            renderPage();
+            updateColorBar();
+            showToast(hex ? 'Etiqueta asignada.' : 'Etiqueta quitada.', hex||'#6c757d');
+        }
+    }).catch(function(){ showToast('Error al guardar etiqueta.','#dc3545'); });
+}
+
+paletaEl && paletaEl.querySelectorAll('.st-pal-item').forEach(function(item){
+    item.addEventListener('click',function(e){ e.stopPropagation(); aplicarColor(this.dataset.color); });
+});
+if(btnQuitarColor) btnQuitarColor.addEventListener('click',function(){ aplicarColor(null); });
+// -- Guardar Area Responsable -----------------------------------------------------------------
+var btnGuardarAreaResp = document.getElementById('btnGuardarAreaResp');
+if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
+    var inputs = tbody.querySelectorAll('.area-input');
+    var payload = [];
+    var idxsGuardados = [];
+    inputs.forEach(function(ta){
+        var val = ta.value.trim();
+        if(!val) return;
+        var idx=parseInt(ta.dataset.idx);
+        var r=filtered[idx];
+        payload.push({ nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, observaciones:val });
+        idxsGuardados.push({ idx:idx, val:val });
+    });
+    if(!payload.length){ showToast('Sin areas que guardar.','#6c757d'); return; }
+    fetch('/Planeamiento/GuardarObservaciones',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','RequestVerificationToken':document.querySelector('[name=__RequestVerificationToken]')?.value||''},
+        body:JSON.stringify(payload)
+    }).then(function(res){return res.json();}).then(function(j){
+        if(j.ok){
+            // Sincronizar en memoria para que al paginar no se pierda
+            idxsGuardados.forEach(function(e){
+                filtered[e.idx]._area  = e.val;
+                filtered[e.idx].area   = e.val;
+            });
+            showToast(j.n+' area(s) guardada(s).','#16a34a');
+        } else showToast('Error: '+j.msg,'#dc3545');
+    }).catch(function(){ showToast('Error de red.','#dc3545'); });
+});
+
+// ── Toast notificaciones ──────────────────────────────────────────────────────
+function showToast(msg, color){
+    var t=document.createElement('div');
+    t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:'+(color||'#1a4971')+';color:#fff;padding:.55rem 1.1rem;border-radius:.4rem;font-size:.8rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);transition:opacity .4s;';
+    t.textContent=msg;
+    document.body.appendChild(t);
+    setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove();},400);},2800);
+}
+
+// ── fixTheadRowTops ───────────────────────────────────────────────────────────
+function fixTheadRowTops(){
+    if(!tbl) return;
+    var f=tbl.querySelector('thead tr:first-child');
+    if(!f) return;
+    var h=f.offsetHeight||f.getBoundingClientRect().height;
+    var w=tbl.closest('.spt-table-wrap')||tbl;
+    w.style.setProperty('--thead-row1-h',h+'px');
+}
+requestAnimationFrame(function(){ fixTheadRowTops(); });
+window.addEventListener('resize', fixTheadRowTops);
+
+// ── Año default 2026 ──────────────────────────────────────────────────────────
+var cfAnoEl = document.getElementById('cfAno');
+if(cfAnoEl && cfAnoEl.value==='') {
+    // seleccionar 2026 si está disponible
+    var opt2026 = cfAnoEl.querySelector('option[value="2026"]');
+    if(opt2026) { cfAnoEl.value='2026'; }
+}
+
+// ── Arrancar ─────────────────────────────────────────────────────────────────
 applyFilters();
 })();
 </script>

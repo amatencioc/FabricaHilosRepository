@@ -2,13 +2,17 @@ namespace FabricaHilos.Models.Produccion.Planeamiento;
 
 /// <summary>
 /// Resultado de PKG_PLN.SP_PLN_SEG_PROG_TINTORERIA.
-/// 66 columnas en orden exacto del SP (v3.2).
+/// 70 columnas en orden exacto del SP (v3.3).
+/// Cols 0    = COLORHEXA (color de fila).
 /// Cols 1-50 = hoja DT del Excel SEGUIMIENTO_PARTIDAS_TINTORERIA_KAREN.xlsm.
-/// Cols 51-66 = columnas adicionales web (no en DT).
+/// Cols 51-70 = columnas adicionales web (no en DT).
 /// </summary>
 public class PlnReporteProduccion
 {
-    // ── Cols 1-4: Dimensiones de tiempo ───────────────────────────────────
+    // ── Col 0: Color de fila ───────────────────────────────────────────────────
+    public string?   ColorHexa       { get; set; }   // 0  COLORHEXA
+
+    // ── Cols 1-4: Dimensiones de tiempo
     public string?   Mes             { get; set; }   // 1  MES
     public string?   MesTex          { get; set; }   // 2  MES_TEX
     public string?   Ano             { get; set; }   // 3  ANO
@@ -28,6 +32,7 @@ public class PlnReporteProduccion
     public DateTime? EstimaRod       { get; set; }   // 13 ESTIMA_ROD
     public DateTime? EntregRod       { get; set; }   // 14 ENTREG_ROD
     public decimal?  DiasRod         { get; set; }   // 15 DIAS_ROD
+    public decimal?  XRod            { get; set; }   // 15b X_ROD   (semáforo rodete)
 
     // ── Cols 16-18: Material Hilandería ───────────────────────────────────
     public DateTime? EstimaMat       { get; set; }   // 16 ESTIMA_MAT
@@ -49,6 +54,7 @@ public class PlnReporteProduccion
     public DateTime? EstimaTenido    { get; set; }   // 26 ESTIMA_TENIDO
     public DateTime? EntregTenido    { get; set; }   // 27 ENTREG_TENIDO
     public decimal?  DiasTenido      { get; set; }   // 28 DIAS_TENIDO
+    public decimal?  XTenido         { get; set; }   // 28b X_TENIDO (semáforo tenido)
 
     // ── Cols 29-34: Fechas reales de producción ───────────────────────────
     public DateTime? FchPartida      { get; set; }   // 29 FCH_PARTIDA
@@ -58,8 +64,9 @@ public class PlnReporteProduccion
     public DateTime? FchAprobCal     { get; set; }   // 33 FCH_APROB_CAL
     public decimal?  TimeAprov       { get; set; }   // 34 TIME_APROV
 
-    // ── Cols 34-37: Acabado, enconado, revisado ───────────────────────────
-    public string?   TipoAcabado     { get; set; }   // 34 TIPO_ACABADO
+    // ── Cols 34-38: Acabado, enconado, revisado
+    public string?   TipoAcabado     { get; set; }   // 34  TIPO_ACABADO  (REDINA/CONERA)
+    public string?   Acabado         { get; set; }   // 34b ACABADO      (RODETE/MADEJA/null)
     public DateTime? FchEnconado     { get; set; }   // 35 FCH_ENCONADO
     public DateTime? FchRevisado     { get; set; }   // 36 FCH_REVISADO
     public string?   EvEncon         { get; set; }   // 37 EV_ENCON
@@ -71,11 +78,12 @@ public class PlnReporteProduccion
     public decimal?  De              { get; set; }   // 41 DE
     public decimal?  DeCopia         { get; set; }   // 42 DE_COPIA
 
-    // ── Cols 43-46: Kilogramos y tolerancia ──────────────────────────────
-    public decimal?  KgProg          { get; set; }   // 43 KG_PROG
-    public decimal?  KgDespa         { get; set; }   // 44 KG_DESPA
-    public decimal?  Gap             { get; set; }   // 45 GAP
-    public decimal?  PctToleran      { get; set; }   // 46 PCT_TOLERAN
+    // ── Cols 43-47: Kilogramos y tolerancia
+    public decimal?  KgPedido        { get; set; }   // 43  KG_PEDIDO (kg pedidos cliente)
+    public decimal?  KgProg          { get; set; }   // 44 KG_PROG
+    public decimal?  KgDespa         { get; set; }   // 45 KG_DESPA
+    public decimal?  Gap             { get; set; }   // 46 GAP
+    public decimal?  PctToleran      { get; set; }   // 47 PCT_TOLERAN
 
     // ── Cols 47-48: Estado del flujo ──────────────────────────────────────
     public string?   EstadoFlujo     { get; set; }   // 47 ESTADO_FLUJO
@@ -101,7 +109,18 @@ public class PlnReporteProduccion
     public string?   AcaMad          { get; set; }   // 63 ACA_MAD
     public decimal?  DiasRetraso     { get; set; }   // 64 DIAS_RETRASO
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    // ── Campos clave (edit/save)
+    public decimal?  NroProg         { get; set; }   // NROPROG_DET
+    public decimal?  NumPedKey       { get; set; }   // NUM_PED_KEY
+    public decimal?  NroKey          { get; set; }   // NRO_KEY
+    public decimal?  NumDetKey       { get; set; }   // NUM_DET_KEY
+    public string?   ReprocesoKey    { get; set; }   // REPROCESO_KEY
+    public DateTime? FchProgKey      { get; set; }   // FCH_PROG_KEY
+
+    // ── Observaciones (guardado manual por usuario, no viene del SP) ────────
+    public string?   Observaciones   { get; set; }   // campo editable en tabla
+
+    // ── Helpers
     /// <summary>Indica si el ítem está vencido según el semáforo de despacho.</summary>
     public bool EstaRetrasado => EstadoDespacho == "VENCIDO";
 

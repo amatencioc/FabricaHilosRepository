@@ -756,4 +756,24 @@ public class PlaneamientoController : OracleBaseController
         TempData["Exito"] = $"Parámetro '{codParam}' actualizado a {valorNum}.";
         return RedirectToAction(nameof(Parametros));
     }
+
+    // POST /Planeamiento/GuardarColorHexa  — AJAX JSON
+    [HttpPost]
+    public async Task<IActionResult> GuardarColorHexa([FromBody] List<PlnSaveColorDto> items)
+    {
+        if (items == null || items.Count == 0)
+            return BadRequest(new { ok = false, msg = "Sin datos." });
+        await _reporte.SaveColorHexaAsync(items, HttpContext.RequestAborted);
+        return Ok(new { ok = true, n = items.Count });
+    }
+
+    // POST /Planeamiento/GuardarObservaciones  — AJAX JSON
+    [HttpPost]
+    public async Task<IActionResult> GuardarObservaciones([FromBody] List<PlnSaveObsDto> items)
+    {
+        if (items == null || items.Count == 0)
+            return BadRequest(new { ok = false, msg = "Sin datos." });
+        await _reporte.SaveObservacionAsync(items, HttpContext.RequestAborted);
+        return Ok(new { ok = true, n = items.Count });
+    }
 }

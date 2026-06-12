@@ -37,5 +37,11 @@ public interface IPlnReporteService
 
     /// <summary>Procesos de producción usados en ítems activos para combo. SP_PLN_FILTRO_PROCESOS.</summary>
     Task<IEnumerable<PlnFiltroProceso>> GetFiltroProcesosAsync();
+
+    /// <summary>Guarda COLORHEXA en ITEMPED_DET para una lista de ítems identificados por sus llaves.</summary>
+    Task SaveColorHexaAsync(IEnumerable<PlnSaveColorDto> items, CancellationToken ct = default);
+
+    /// <summary>Guarda OBSERVACIONES en ITEMPED_DET para una lista de ítems identificados por sus llaves.</summary>
+    Task SaveObservacionAsync(IEnumerable<PlnSaveObsDto> items, CancellationToken ct = default);
 }
 

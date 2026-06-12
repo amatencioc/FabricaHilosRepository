@@ -22,29 +22,39 @@ namespace FabricaHilos.Services.Sire;
 /// </summary>
 public sealed class SireExportacionWorker : BackgroundService
 {
-    private readonly IServiceScopeFactory      _scopeFactory;
-    private readonly ISireExportacionQueue     _queue;
-    private readonly IConfiguration            _configuration;
-    private readonly ISireOracleRepository     _repo;
+    private readonly IServiceScopeFactory           _scopeFactory;
+    private readonly ISireExportacionQueue          _queue;
+    private readonly IConfiguration                 _configuration;
+    private readonly ISireOracleRepository          _repo;
     private readonly ILogger<SireExportacionWorker> _logger;
+    private readonly ILazySireInitializer           _lazySireInitializer;
 
     public SireExportacionWorker(
-        IServiceScopeFactory     scopeFactory,
-        ISireExportacionQueue    queue,
-        IConfiguration           configuration,
-        ISireOracleRepository    repo,
-        ILogger<SireExportacionWorker> logger)
+        IServiceScopeFactory            scopeFactory,
+        ISireExportacionQueue           queue,
+        IConfiguration                  configuration,
+        ISireOracleRepository           repo,
+        ILogger<SireExportacionWorker>  logger,
+        ILazySireInitializer            lazySireInitializer)
     {
-        _scopeFactory   = scopeFactory;
-        _queue          = queue;
-        _configuration  = configuration;
-        _repo           = repo;
-        _logger         = logger;
+        _scopeFactory        = scopeFactory;
+        _queue               = queue;
+        _configuration       = configuration;
+        _repo                = repo;
+        _logger              = logger;
+        _lazySireInitializer = lazySireInitializer;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("[SIRE-WORKER] Servicio de exportación asíncrona iniciado.");
+
+        // Esperar a que el usuario acceda a Contabilidad → SIRE antes de procesar jobs.
+        // Esto evita llamadas a SUNAT en startup sin intervención del usuario.
+        _logger.LogInformation("[SIRE-WORKER] Esperando inicialización lazy de SIRE (requiere acceso a Contabilidad → SIRE)...");
+        await _lazySireInitializer.WaitForInitializationAsync(stoppingToken);
+        if (stoppingToken.IsCancellationRequested) return;
+        _logger.LogInformation("[SIRE-WORKER] SIRE inicializado. Iniciando procesamiento de jobs.");
 
         // Al arrancar, reencolar jobs que quedaron en estado Pendiente o EnProceso
         await ReencolarJobsInterrumpidosAsync(stoppingToken);

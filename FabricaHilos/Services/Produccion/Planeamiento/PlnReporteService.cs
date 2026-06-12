@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using Microsoft.Extensions.Caching.Memory;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
@@ -102,6 +102,9 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
         {
             list.Add(new PlnReporteProduccion
             {
+                // Col 0: Color de fila
+                ColorHexa           = Str(Col(r, "COLORHEXA")),
+
                 // Cols 1-4: Dimensiones de tiempo
                 Mes                 = Str(r["MES"]),
                 MesTex              = Str(r["MES_TEX"]),
@@ -122,6 +125,7 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 EstimaRod           = D(r["ESTIMA_ROD"]),
                 EntregRod           = D(r["ENTREG_ROD"]),
                 DiasRod             = Dec(r["DIAS_ROD"]),
+                XRod                = Dec(Col(r, "X_ROD")),
 
                 // Cols 16-18: Material Hilandería
                 EstimaMat           = D(r["ESTIMA_MAT"]),
@@ -143,6 +147,7 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 EstimaTenido        = D(r["ESTIMA_TENIDO"]),
                 EntregTenido        = D(r["ENTREG_TENIDO"]),
                 DiasTenido          = Dec(r["DIAS_TENIDO"]),
+                XTenido             = Dec(Col(r, "X_TENIDO")),
 
                 // Cols 29-34: Fechas reales de producción
                 // Col() con fallback: SP nuevo usa FCH_SEC_RODETE/FCH_SEC_MADEJA;
@@ -154,8 +159,9 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 FchAprobCal         = D(r["FCH_APROB_CAL"]),
                 TimeAprov           = Dec(r["TIME_APROV"]),
 
-                // Cols 34-37: Acabado, enconado, revisado
+                // Cols 34-38: Acabado, enconado, revisado
                 TipoAcabado         = Str(r["TIPO_ACABADO"]),
+                Acabado             = Str(Col(r, "ACABADO")),
                 FchEnconado         = D(r["FCH_ENCONADO"]),
                 FchRevisado         = D(r["FCH_REVISADO"]),
                 EvEncon             = Str(r["EV_ENCON"]),
@@ -167,7 +173,8 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 De                  = Dec(r["DE"]),
                 DeCopia             = Dec(r["DE_COPIA"]),
 
-                // Cols 43-46: Kilogramos y tolerancia
+                // Cols 43-47: Kilogramos y tolerancia
+                KgPedido            = Dec(Col(r, "KG_PEDIDO")),
                 KgProg              = Dec(r["KG_PROG"]),
                 KgDespa             = Dec(r["KG_DESPA"]),
                 Gap                 = Dec(r["GAP"]),
@@ -196,6 +203,14 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 LaboVal             = Str(r["LABO_VAL"]),
                 AcaMad              = Str(r["ACA_MAD"]),
                 DiasRetraso         = Dec(r["DIAS_RETRASO"]),
+
+                // Campos clave (edit/save)
+                NroProg             = Dec(Col(r, "NROPROG_DET")),
+                NumPedKey           = Dec(Col(r, "NUM_PED_KEY")),
+                NroKey              = Dec(Col(r, "NRO_KEY")),
+                NumDetKey           = Dec(Col(r, "NUM_DET_KEY")),
+                ReprocesoKey        = Str(Col(r, "REPROCESO_KEY")),
+                FchProgKey          = D(Col(r, "FCH_PROG_KEY")),
             });
         }
         return list;
@@ -232,20 +247,19 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     }
 
     // ── SP_PLN_FILTRO_CLIENTES ────────────────────────────────────────────────
-    public Task<IEnumerable<PlnFiltroCliente>> GetFiltroClientesAsync() =>
-        GetCachedComboAsync(
+    public async Task<IEnumerable<PlnFiltroCliente>> GetFiltroClientesAsync() =>
+        await GetCachedComboAsync(
             CacheKey("CLIENTES"),
             "PKG_PLN.SP_PLN_FILTRO_CLIENTES",
             r => new PlnFiltroCliente
             {
                 CodCliente = Str(r["COD_CLIENTE"]),
                 Nombre     = Str(r["NOMBRE"])
-            })
-        .ContinueWith(t => (IEnumerable<PlnFiltroCliente>)t.Result);
+            });
 
     // ── SP_PLN_FILTRO_ASESORES ────────────────────────────────────────────────
-    public Task<IEnumerable<PlnFiltroAsesor>> GetFiltroAsesoresAsync() =>
-        GetCachedComboAsync(
+    public async Task<IEnumerable<PlnFiltroAsesor>> GetFiltroAsesoresAsync() =>
+        await GetCachedComboAsync(
             CacheKey("ASESORES"),
             "PKG_PLN.SP_PLN_FILTRO_ASESORES",
             r => new PlnFiltroAsesor
@@ -253,24 +267,22 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 CodVende  = Str(r["COD_VENDE"]),
                 Abreviada = Str(r["ABREVIADA"]),
                 Nombre    = Str(r["NOMBRE"])
-            })
-        .ContinueWith(t => (IEnumerable<PlnFiltroAsesor>)t.Result);
+            });
 
     // ── SP_PLN_FILTRO_TITULOS ─────────────────────────────────────────────────
-    public Task<IEnumerable<PlnFiltroTitulo>> GetFiltroTitulosAsync() =>
-        GetCachedComboAsync(
+    public async Task<IEnumerable<PlnFiltroTitulo>> GetFiltroTitulosAsync() =>
+        await GetCachedComboAsync(
             CacheKey("TITULOS"),
             "PKG_PLN.SP_PLN_FILTRO_TITULOS",
             r => new PlnFiltroTitulo
             {
                 Titulo      = Str(r["TITULO"]),
                 Descripcion = Str(r["DESCRIPCION"])
-            })
-        .ContinueWith(t => (IEnumerable<PlnFiltroTitulo>)t.Result);
+            });
 
     // ── SP_PLN_FILTRO_FIBRAS ──────────────────────────────────────────────────
-    public Task<IEnumerable<PlnFiltroFibra>> GetFiltroFibrasAsync() =>
-        GetCachedComboAsync(
+    public async Task<IEnumerable<PlnFiltroFibra>> GetFiltroFibrasAsync() =>
+        await GetCachedComboAsync(
             CacheKey("FIBRAS"),
             "PKG_PLN.SP_PLN_FILTRO_FIBRAS",
             r => new PlnFiltroFibra
@@ -278,18 +290,56 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 TipoFibra   = Str(r["TIPO_FIBRA"]),
                 Abreviado   = Str(r["ABREVIADO"]),
                 Descripcion = Str(r["DESCRIPCION"])
-            })
-        .ContinueWith(t => (IEnumerable<PlnFiltroFibra>)t.Result);
+            });
 
     // ── SP_PLN_FILTRO_PROCESOS ────────────────────────────────────────────────
-    public Task<IEnumerable<PlnFiltroProceso>> GetFiltroProcesosAsync() =>
-        GetCachedComboAsync(
+    public async Task<IEnumerable<PlnFiltroProceso>> GetFiltroProcesosAsync() =>
+        await GetCachedComboAsync(
             CacheKey("PROCESOS"),
             "PKG_PLN.SP_PLN_FILTRO_PROCESOS",
             r => new PlnFiltroProceso
             {
                 Proceso     = Str(r["PROCESO"]),
                 Descripcion = Str(r["DESCRIPCION"])
-            })
-        .ContinueWith(t => (IEnumerable<PlnFiltroProceso>)t.Result);
+            });
+
+    // -- SaveColorHexa
+    public async Task SaveColorHexaAsync(IEnumerable<PlnSaveColorDto> items, CancellationToken ct = default)
+    {
+        await using var conn = await AbrirConexionAsync();
+        foreach (var item in items)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(" +
+                ":p_nroprog,:p_numped,:p_nro,:p_det,:p_rep,:p_fchprog,NULL,:p_color,NULL); END;";
+            cmd.Parameters.Add("p_nroprog",  OracleDbType.Decimal  ).Value = (object?)item.NroProg   ?? DBNull.Value;
+            cmd.Parameters.Add("p_numped",   OracleDbType.Decimal  ).Value = (object?)item.NumPed    ?? DBNull.Value;
+            cmd.Parameters.Add("p_nro",      OracleDbType.Decimal  ).Value = (object?)item.Nro       ?? DBNull.Value;
+            cmd.Parameters.Add("p_det",      OracleDbType.Decimal  ).Value = (object?)item.NumDet    ?? DBNull.Value;
+            cmd.Parameters.Add("p_rep",      OracleDbType.Varchar2 ).Value = (object?)item.Reproceso ?? DBNull.Value;
+            cmd.Parameters.Add("p_fchprog",  OracleDbType.Date     ).Value = (object?)item.FchProg   ?? DBNull.Value;
+            cmd.Parameters.Add("p_color",    OracleDbType.Varchar2 ).Value = (object?)item.ColorHexa ?? DBNull.Value;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    // -- SaveObservacion
+    public async Task SaveObservacionAsync(IEnumerable<PlnSaveObsDto> items, CancellationToken ct = default)
+    {
+        await using var conn = await AbrirConexionAsync();
+        foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Observaciones)))
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(" +
+                ":p_nroprog,:p_numped,:p_nro,:p_det,:p_rep,:p_fchprog,:p_obs,NULL,NULL); END;";
+            cmd.Parameters.Add("p_nroprog",  OracleDbType.Decimal  ).Value = (object?)item.NroProg   ?? DBNull.Value;
+            cmd.Parameters.Add("p_numped",   OracleDbType.Decimal  ).Value = (object?)item.NumPed    ?? DBNull.Value;
+            cmd.Parameters.Add("p_nro",      OracleDbType.Decimal  ).Value = (object?)item.Nro       ?? DBNull.Value;
+            cmd.Parameters.Add("p_det",      OracleDbType.Decimal  ).Value = (object?)item.NumDet    ?? DBNull.Value;
+            cmd.Parameters.Add("p_rep",      OracleDbType.Varchar2 ).Value = (object?)item.Reproceso ?? DBNull.Value;
+            cmd.Parameters.Add("p_fchprog",  OracleDbType.Date     ).Value = (object?)item.FchProg   ?? DBNull.Value;
+            cmd.Parameters.Add("p_obs",      OracleDbType.Varchar2 ).Value = item.Observaciones;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
 }

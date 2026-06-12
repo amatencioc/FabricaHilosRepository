@@ -11,11 +11,14 @@ public interface ILazySireInitializer
     /// Inicializa los servicios SIRE de manera diferida (lazy).
     /// Esta operación es idempotente: llamarla múltiples veces es seguro.
     /// </summary>
-    /// <returns>Task completada cuando la inicialización es exitosa</returns>
     Task InitializeAsync();
 
-    /// <summary>
-    /// Verifica si los servicios SIRE ya han sido inicializados.
-    /// </summary>
+    /// <summary>Verifica si los servicios SIRE ya han sido inicializados.</summary>
     bool IsInitialized { get; }
+
+    /// <summary>
+    /// Espera de forma asíncrona hasta que InitializeAsync() haya completado.
+    /// Usado por el worker para no procesar jobs antes de que el usuario acceda a SIRE.
+    /// </summary>
+    Task WaitForInitializationAsync(CancellationToken cancellationToken = default);
 }

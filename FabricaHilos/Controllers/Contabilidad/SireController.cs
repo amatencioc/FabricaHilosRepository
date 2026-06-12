@@ -8,6 +8,7 @@ using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using System.Reflection;
@@ -60,6 +61,20 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
+    /// Garantiza que los servicios SIRE están inicializados antes de ejecutar cualquier action.
+    /// Se dispara al hacer click en Contabilidad → SIRE desde el sidebar.
+    /// </summary>
+    public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        if (!_lazySireInitializer.IsInitialized)
+        {
+            _logger.LogInformation("[SIRE] Inicializando servicios SIRE (acción: {Action})...", context.ActionDescriptor.DisplayName);
+            await _lazySireInitializer.InitializeAsync();
+        }
+        await next();
+    }
+
+    /// <summary>
     /// Dashboard principal - Resumen ejecutivo de RVIE y RCE
     /// </summary>
     [HttpGet]
@@ -67,13 +82,6 @@ public class SireController : OracleBaseController
     {
         try
         {
-            // Asegurar que SIRE está inicializado (lazy loading)
-            if (!_lazySireInitializer.IsInitialized)
-            {
-                _logger.LogInformation("[SIRE] Inicializando servicios SIRE en Index...");
-                await _lazySireInitializer.InitializeAsync();
-            }
-
             if (!_cache.TryGetValue("sire:periodos:ventas", out IReadOnlyList<PropuestaDto>? ventas))
             {
                 ventas = FiltrarAnioActual(await _ventasService.ObtenerPeriodosAsync(cancellationToken));

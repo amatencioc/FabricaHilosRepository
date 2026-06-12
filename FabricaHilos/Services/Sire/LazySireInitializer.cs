@@ -13,6 +13,7 @@ public class LazySireInitializer : ILazySireInitializer
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<LazySireInitializer> _logger;
     private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
+    private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _isInitialized = false;
 
     public bool IsInitialized => _isInitialized;
@@ -70,11 +71,23 @@ public class LazySireInitializer : ILazySireInitializer
             }
 
             _isInitialized = true;
+            // Desbloquear a todos los waiters (el worker y cualquier otro)
+            _readyTcs.TrySetResult();
             _logger.LogInformation("[SIRE-LAZY] ✓ Inicialización lazy de SIRE completada exitosamente");
         }
         finally
         {
             _initializationSemaphore.Release();
         }
+    }
+
+    /// <summary>
+    /// Espera sin polling hasta que InitializeAsync() complete.
+    /// El worker llama esto antes de procesar jobs.
+    /// </summary>
+    public Task WaitForInitializationAsync(CancellationToken cancellationToken = default)
+    {
+        if (_isInitialized) return Task.CompletedTask;
+        return _readyTcs.Task.WaitAsync(cancellationToken);
     }
 }
