@@ -9,57 +9,57 @@
     <li class="breadcrumb-item active">Diagnóstico</li>
 }
 
-<div class="d-flex align-items-center gap-2 mb-4">
-    <div class="bg-secondary rounded-3 p-2 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
-        <i class="bi bi-plug fs-4 text-white"></i>
-    </div>
-    <div>
-        <h4 class="mb-0 fw-semibold">Diagnóstico de Conexión SUNAT</h4>
-        <small class="text-muted">Verifica la autenticación y acceso a las APIs SIRE</small>
-    </div>
-    <a asp-action="Index" class="btn btn-outline-secondary btn-sm ms-auto">
-        <i class="bi bi-arrow-left me-1"></i>Volver
-    </a>
+@section Styles {
+<link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
+}
+
+@await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
+
+<div class="sire-strip">
+    <i class="bi bi-plug" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="sire-strip-title">Diagnóstico de Conexión SUNAT</span>
+    <span class="sire-strip-sep"></span>
+    @if (Model.UseMock)
+    {
+        <span class="sire-kpi"><i class="bi bi-cone-striped" style="color:#fbd38d;"></i><span style="opacity:.75">MODO MOCK</span></span>
+    }
+    else
+    {
+        <span class="sire-kpi"><i class="bi bi-wifi" style="color:#68d391;"></i><span style="opacity:.75">API REAL</span></span>
+    }
+    @if (Model.TokenOk)
+    {
+        <span class="sire-kpi"><i class="bi bi-key-fill" style="color:#68d391;"></i><span class="sire-kpi-val">Token OK</span></span>
+    }
+    else
+    {
+        <span class="sire-kpi"><i class="bi bi-key" style="color:#fc8181;"></i><span class="sire-kpi-val" style="color:#fc8181;">Sin token</span></span>
+    }
 </div>
 
 <div class="row g-3 mb-4">
     <!-- Configuración -->
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-light d-flex align-items-center gap-2">
-                <i class="bi bi-gear text-secondary"></i>
-                <strong>Configuración</strong>
+        <div class="sire-card h-100">
+            <div class="sire-card-header">
+                <i class="bi bi-gear"></i>
+                <span>Configuración</span>
                 @if (Model.UseMock)
                 {
-                    <span class="badge bg-warning text-dark ms-auto">MODO MOCK</span>
+                    <span class="ms-auto sire-badge sire-badge-warn">MODO MOCK</span>
                 }
                 else
                 {
-                    <span class="badge bg-success ms-auto">API REAL</span>
+                    <span class="ms-auto sire-badge sire-badge-ok">API REAL</span>
                 }
             </div>
-            <div class="card-body">
-                <table class="table table-sm table-borderless mb-0">
-                    <tr>
-                        <td class="text-muted fw-semibold" style="width:130px">RUC</td>
-                        <td><code>@Model.Ruc</code></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted fw-semibold">Usuario SOL</td>
-                        <td><code>@Model.UsuarioSol</code></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted fw-semibold">Client ID</td>
-                        <td><code class="small">@Model.ClientId</code></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted fw-semibold">Auth URL</td>
-                        <td><code class="small text-break">@Model.AuthUrl</code></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted fw-semibold">API Base URL</td>
-                        <td><code class="small text-break">@Model.ApiBaseUrl</code></td>
-                    </tr>
+            <div class="sire-card-body">
+                <table class="table table-sm table-borderless mb-0 small">
+                    <tr><td class="text-muted fw-semibold" style="width:130px">RUC</td><td><span class="sire-code">@Model.Ruc</span></td></tr>
+                    <tr><td class="text-muted fw-semibold">Usuario SOL</td><td><span class="sire-code">@Model.UsuarioSol</span></td></tr>
+                    <tr><td class="text-muted fw-semibold">Client ID</td><td><span class="sire-code">@Model.ClientId</span></td></tr>
+                    <tr><td class="text-muted fw-semibold">Auth URL</td><td><span class="sire-code text-break" style="font-size:.72rem;">@Model.AuthUrl</span></td></tr>
+                    <tr><td class="text-muted fw-semibold">API Base URL</td><td><span class="sire-code text-break" style="font-size:.72rem;">@Model.ApiBaseUrl</span></td></tr>
                 </table>
             </div>
         </div>
@@ -67,52 +67,40 @@
 
     <!-- Token OAuth2 -->
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm h-100 @(Model.TokenOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.TokenOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
-            <div class="card-header bg-light d-flex align-items-center gap-2">
-                <i class="bi bi-key text-secondary"></i>
-                <strong>Autenticación OAuth2 SUNAT</strong>
+        <div class="sire-card h-100" style="border-left:4px solid @(Model.TokenOk ? "var(--sire-success-dk)" : "var(--sire-danger)");">
+            <div class="sire-card-header">
+                <i class="bi bi-key"></i>
+                <span>Autenticación OAuth2 SUNAT</span>
                 @if (Model.TokenOk)
                 {
-                    <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                    <span class="ms-auto sire-badge sire-badge-ok"><i class="bi bi-check-circle"></i> OK</span>
                 }
                 else
                 {
-                    <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                    <span class="ms-auto sire-badge sire-badge-danger"><i class="bi bi-x-circle"></i> Error</span>
                 }
             </div>
-            <div class="card-body">
+            <div class="sire-card-body">
                 @if (Model.TokenOk)
                 {
-                    <table class="table table-sm table-borderless mb-0">
-                        <tr>
-                            <td class="text-muted fw-semibold" style="width:120px">Tipo</td>
-                            <td><span class="badge bg-primary">@Model.TokenTipo</span></td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted fw-semibold">Expira</td>
-                            <td>@Model.TokenExpira.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted fw-semibold">Token</td>
-                            <td><code class="small text-break">@Model.TokenFragment</code></td>
-                        </tr>
+                    <table class="table table-sm table-borderless mb-0 small">
+                        <tr><td class="text-muted fw-semibold" style="width:120px">Tipo</td><td><span class="sire-badge sire-badge-rce">@Model.TokenTipo</span></td></tr>
+                        <tr><td class="text-muted fw-semibold">Expira</td><td>@Model.TokenExpira.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td></tr>
+                        <tr><td class="text-muted fw-semibold">Token</td><td><span class="sire-code" style="font-size:.7rem;word-break:break-all;">@Model.TokenFragment</span></td></tr>
                     </table>
                 }
                 else
                 {
-                    <div class="alert alert-danger mb-0 small">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        <strong>Error:</strong> @Model.TokenError
+                    <div class="sire-alert sire-alert-danger mb-2">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <div><strong>Error:</strong> @Model.TokenError</div>
                     </div>
-                    <div class="mt-3 small text-muted">
-                        <strong>Posibles causas:</strong>
-                        <ul class="mb-0 mt-1">
-                            <li>Usuario SOL o Clave SOL incorrectos</li>
-                            <li>La aplicación no está habilitada para el RUC en el portal SUNAT</li>
-                            <li>El Client ID / Client Secret no corresponden a la empresa</li>
-                            <li>La aplicación está en entorno LOCAL_DEV (no producción)</li>
-                        </ul>
-                    </div>
+                    <ul class="small text-muted mb-0">
+                        <li>Usuario SOL o Clave SOL incorrectos</li>
+                        <li>La aplicación no está habilitada para el RUC en el portal SUNAT</li>
+                        <li>El Client ID / Client Secret no corresponden a la empresa</li>
+                        <li>La aplicación está en entorno LOCAL_DEV (no producción)</li>
+                    </ul>
                 }
             </div>
         </div>
@@ -124,36 +112,33 @@
     <div class="row g-3">
         <!-- RVIE -->
         <div class="col-md-6">
-            <div class="card border-0 shadow-sm h-100 @(Model.RvieOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.RvieOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
-                <div class="card-header bg-light d-flex align-items-center gap-2">
-                    <i class="bi bi-receipt-cutoff text-primary"></i>
-                    <strong>API RVIE — Periodos</strong>
+            <div class="sire-card h-100" style="border-left:4px solid @(Model.RvieOk ? "var(--sire-success-dk)" : "var(--sire-danger)");">
+                <div class="sire-card-header">
+                    <i class="bi bi-receipt-cutoff" style="color:var(--sire-rvie);"></i>
+                    <span>API RVIE — Períodos</span>
                     @if (Model.RvieOk)
                     {
-                        <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                        <span class="ms-auto sire-badge sire-badge-ok"><i class="bi bi-check-circle"></i> OK</span>
                     }
                     else
                     {
-                        <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                        <span class="ms-auto sire-badge sire-badge-danger"><i class="bi bi-x-circle"></i> Error</span>
                     }
                 </div>
-                <div class="card-body">
+                <div class="sire-card-body text-center">
                     @if (Model.RvieOk)
                     {
-                        <div class="text-center py-2">
-                            <div class="display-6 fw-bold text-primary">@Model.RviePeriodos</div>
-                            <div class="text-muted small">periodos disponibles</div>
-                        </div>
-                        <div class="text-center mt-2">
-                            <a asp-action="Ventas" class="btn btn-primary btn-sm">
-                                <i class="bi bi-arrow-right-circle me-1"></i>Ir a RVIE
-                            </a>
-                        </div>
+                        <div class="fw-bold" style="font-size:2.5rem;color:var(--sire-rvie);">@Model.RviePeriodos</div>
+                        <div class="text-muted small mb-3">períodos disponibles</div>
+                        <a asp-action="Ventas" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-right-circle me-1"></i>Ir a RVIE
+                        </a>
                     }
                     else
                     {
-                        <div class="alert alert-danger mb-0 small">
-                            <i class="bi bi-exclamation-triangle me-1"></i>@Model.RvieError
+                        <div class="sire-alert sire-alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <div>@Model.RvieError</div>
                         </div>
                     }
                 </div>
@@ -162,36 +147,33 @@
 
         <!-- RCE -->
         <div class="col-md-6">
-            <div class="card border-0 shadow-sm h-100 @(Model.RceOk ? "border-success" : "border-danger")" style="border-left:4px solid @(Model.RceOk ? "var(--bs-success)" : "var(--bs-danger)") !important">
-                <div class="card-header bg-light d-flex align-items-center gap-2">
-                    <i class="bi bi-cart-check text-success"></i>
-                    <strong>API RCE — Periodos</strong>
+            <div class="sire-card h-100" style="border-left:4px solid @(Model.RceOk ? "var(--sire-success-dk)" : "var(--sire-danger)");">
+                <div class="sire-card-header">
+                    <i class="bi bi-cart-check" style="color:var(--sire-rce);"></i>
+                    <span>API RCE — Períodos</span>
                     @if (Model.RceOk)
                     {
-                        <span class="badge bg-success ms-auto"><i class="bi bi-check-circle me-1"></i>OK</span>
+                        <span class="ms-auto sire-badge sire-badge-ok"><i class="bi bi-check-circle"></i> OK</span>
                     }
                     else
                     {
-                        <span class="badge bg-danger ms-auto"><i class="bi bi-x-circle me-1"></i>Error</span>
+                        <span class="ms-auto sire-badge sire-badge-danger"><i class="bi bi-x-circle"></i> Error</span>
                     }
                 </div>
-                <div class="card-body">
+                <div class="sire-card-body text-center">
                     @if (Model.RceOk)
                     {
-                        <div class="text-center py-2">
-                            <div class="display-6 fw-bold text-success">@Model.RcePeriodos</div>
-                            <div class="text-muted small">periodos disponibles</div>
-                        </div>
-                        <div class="text-center mt-2">
-                            <a asp-action="Compras" class="btn btn-success btn-sm">
-                                <i class="bi bi-arrow-right-circle me-1"></i>Ir a RCE
-                            </a>
-                        </div>
+                        <div class="fw-bold" style="font-size:2.5rem;color:var(--sire-rce);">@Model.RcePeriodos</div>
+                        <div class="text-muted small mb-3">períodos disponibles</div>
+                        <a asp-action="Compras" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-right-circle me-1"></i>Ir a RCE
+                        </a>
                     }
                     else
                     {
-                        <div class="alert alert-danger mb-0 small">
-                            <i class="bi bi-exclamation-triangle me-1"></i>@Model.RceError
+                        <div class="sire-alert sire-alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <div>@Model.RceError</div>
                         </div>
                     }
                 </div>
@@ -202,17 +184,18 @@
 
 @if (!Model.TokenOk)
 {
-    <div class="card border-0 shadow-sm mt-4">
-        <div class="card-header bg-warning bg-opacity-25">
-            <i class="bi bi-lightbulb me-2 text-warning"></i><strong>Pasos para resolver el error de autenticación</strong>
+    <div class="sire-card mt-4">
+        <div class="sire-card-header">
+            <i class="bi bi-lightbulb" style="color:var(--sire-warning);"></i>
+            <span>Pasos para resolver el error de autenticación</span>
         </div>
-        <div class="card-body">
-            <ol class="mb-0">
+        <div class="sire-card-body">
+            <ol class="mb-0 small text-muted">
                 <li class="mb-2">Ingresa al portal <strong>SUNAT SOL</strong> → <em>Empresas → Servicios en Línea → API SUNAT</em></li>
-                <li class="mb-2">Verifica que la aplicación con Client ID <code>@Model.ClientId</code> esté <strong>habilitada para producción</strong> y tenga el RUC <code>@Model.Ruc</code> como contribuyente autorizado.</li>
-                <li class="mb-2">Confirma que el usuario SOL <code>@Model.UsuarioSol</code> tenga el perfil <strong>«Acceso API SUNAT - SIRE»</strong> asignado.</li>
+                <li class="mb-2">Verifica que la aplicación con Client ID <span class="sire-code">@Model.ClientId</span> esté <strong>habilitada para producción</strong> y tenga el RUC <span class="sire-code">@Model.Ruc</span> como contribuyente autorizado.</li>
+                <li class="mb-2">Confirma que el usuario SOL <span class="sire-code">@Model.UsuarioSol</span> tenga el perfil <strong>«Acceso API SUNAT - SIRE»</strong> asignado.</li>
                 <li class="mb-2">Verifica que la Clave SOL sea correcta (puede caducar).</li>
-                <li>Si la aplicación muestra <code>X-ServiceEnvironment: LOCAL_DEV</code>, contáctese con SUNAT para migrar la app a producción.</li>
+                <li>Si la aplicación muestra <span class="sire-code">X-ServiceEnvironment: LOCAL_DEV</span>, contáctese con SUNAT para migrar la app a producción.</li>
             </ol>
         </div>
     </div>

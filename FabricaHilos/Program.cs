@@ -202,13 +202,25 @@ if (sireOptions.UseMock)
 }
 else
 {
-    builder.Services.AddHttpClient<ISireAuthService, SireAuthService>();
-    builder.Services.AddHttpClient<ISireVentasService, SireVentasService>();
-    builder.Services.AddHttpClient<ISireComprasService, SireComprasService>();
-    builder.Services.AddHttpClient<ITusUploadService, TusUploadService>();
+    builder.Services.AddHttpClient<ISireAuthService, SireAuthService>()
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+    builder.Services.AddHttpClient<ISireVentasService, SireVentasService>()
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+    builder.Services.AddHttpClient<ISireComprasService, SireComprasService>()
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+    builder.Services.AddHttpClient<ITusUploadService, TusUploadService>()
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 }
 builder.Services.AddScoped<TicketPollingHelper>();
 builder.Services.AddSingleton<ILazySireInitializer, LazySireInitializer>();
+
+// Repositorio Oracle para persistencia SIRE (reemplaza SQLite para jobs/health/logs)
+builder.Services.AddSingleton<ISireOracleRepository, SireOracleRepository>();
+
+// Cola y worker de exportación asíncrona SIRE
+builder.Services.AddSingleton<ISireExportacionQueue, SireExportacionQueue>();
+builder.Services.AddScoped<SireValidaService>();
+builder.Services.AddHostedService<SireExportacionWorker>();
 
 // NOTE: SireMonitoringService was previously registered as AddHostedService
 // It is now DEFERRED to lazy initialization - see LazySireInitializer

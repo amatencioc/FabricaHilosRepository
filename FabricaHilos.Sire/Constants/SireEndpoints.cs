@@ -42,10 +42,11 @@ public static class SireEndpoints
 
     /// <summary>5.34 RCE: exportar propuesta RCE (genera ticket). Según manual Compras v22 pág 84.
     /// Path distinto al RVIE: /libros/rce/propuesta/web/propuesta/ con acción exportacioncomprobantepropuesta.
-    /// Sin parámetro codLibro. El parámetro mínimo requerido es codTipoArchivo (0=txt, 1=csv).
+    /// Sin parámetro codLibro.
+    /// Parámetros obligatorios: codTipoArchivo (0=txt, 1=csv) y codOrigenEnvio (1=Portal Web).
     /// </summary>
-    public static string RceExportarPropuesta(string periodo, int codTipoArchivo = 0)
-        => $"/libros/rce/propuesta/web/propuesta/{periodo}/exportacioncomprobantepropuesta?codTipoArchivo={codTipoArchivo}";
+    public static string RceExportarPropuesta(string periodo, int codTipoArchivo = 0, int codOrigenEnvio = 1)
+        => $"/libros/rce/propuesta/web/propuesta/{periodo}/exportacioncomprobantepropuesta?codTipoArchivo={codTipoArchivo}&codOrigenEnvio={codOrigenEnvio}";
 
     /// <summary>5.2 RCE: aceptar propuesta del RCE. Según manual Compras v22 pág 40.
     /// Path distinto al RVIE: /libros/rce/propuesta/web/registroslibros/ con acción aceptarpropuesta.

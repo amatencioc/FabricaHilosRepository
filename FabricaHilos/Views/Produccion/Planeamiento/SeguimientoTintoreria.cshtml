@@ -5,9 +5,9 @@
 
     var items    = Model.ToList();
     var opc      = (string?)ViewBag.StOpc      ?? "POR FECHA DE ENTREGA";
-    var iniHtml  = (string?)ViewBag.StIniHtml  ?? DateTime.Today.ToString("yyyy-MM-dd");
+    var iniHtml  = (string?)ViewBag.StIniHtml  ?? new DateTime(DateTime.Today.Year, 1, 1).ToString("yyyy-MM-dd");
     var finHtml  = (string?)ViewBag.StFinHtml  ?? DateTime.Today.AddDays(30).ToString("yyyy-MM-dd");
-    var fchIni   = (string?)ViewBag.StFchIni   ?? DateTime.Today.ToString("dd/MM/yyyy");
+    var fchIni   = (string?)ViewBag.StFchIni   ?? new DateTime(DateTime.Today.Year, 1, 1).ToString("dd/MM/yyyy");
     var fchFin   = (string?)ViewBag.StFchFin   ?? DateTime.Today.AddDays(30).ToString("dd/MM/yyyy");
     long? numPed = (long?)ViewBag.StNumPed;
     var cliente  = (string?)ViewBag.StCliente;
@@ -355,13 +355,20 @@
 #stTable .fc-4  { position: sticky; left: 126px; z-index: 3; min-width:  38px; max-width:  38px; display:none; }
 #stTable .fc-5  { position: sticky; left:   0px; z-index: 3; min-width: 106px; max-width: 106px; }
 #stTable .fc-6  { position: sticky; left: 106px; z-index: 3; min-width: 130px; max-width: 130px; }
-#stTable .fc-7  { position: sticky; left: 236px; z-index: 3; min-width: 150px; max-width: 150px; }
-#stTable .fc-8  { position: sticky; left: 386px; z-index: 3; min-width:  38px; max-width:  38px; }
+#stTable .fc-7  { position: sticky; left: 236px; z-index: 3; min-width: 200px; max-width: 200px; }
+#stTable .fc-8  { position: sticky; left: 436px; z-index: 3; min-width:  38px; max-width:  38px; }
 
 /* Sombra derecha en la última columna fija para separar visualmente */
 #stTable .fc-8 { box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
 
-/* Fondo base para celdas fijas (hereda el fondo par/impar del tbody) */
+/* Columnas Ne y Mat ocultas (no eliminadas) */
+#stTable .col-ne  { display: none; }
+#stTable .col-mat { display: none; }
+/* Columnas De y Bp ocultas (no eliminadas) */
+#stTable .col-de  { display: none; }
+#stTable .col-bp  { display: none; }
+
+/* Fondo base para celdas fijas
 #stTable tbody tr:nth-child(even) td.fc-1,
 #stTable tbody tr:nth-child(even) td.fc-2,
 #stTable tbody tr:nth-child(even) td.fc-3,
@@ -426,7 +433,7 @@
 #stTable tfoot td.fc-5  { left:   0px; }
 #stTable tfoot td.fc-6  { left: 106px; }
 #stTable tfoot td.fc-7  { left: 236px; }
-#stTable tfoot td.fc-8  { left: 386px; box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
+#stTable tfoot td.fc-8  { left: 436px; box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
 
 
 /* ── Separadores de grupo en la tabla ─────────────────────── */
@@ -914,8 +921,8 @@
                 <thead>
                     @* ── Fila 1: Cabeceras de grupo ──────────────────────────────────────── *@
                     <tr>
-                        @* Cols 1-8: sin cabecera de grupo (tiempo + identificación) *@
-                        <th colspan="8" class="th-grupo"></th>
+                        @* Cols 1-12: sin cabecera de grupo (tiempo + identificación, incluye Ne/Mat/Lote/F.Pedido) *@
+                        <th colspan="12" class="th-grupo"></th>
 
                         @* Col 13-15: RODETE *@
                         <th colspan="3" class="col-sep th-grupo">RODETE</th>
@@ -923,29 +930,26 @@
                         @* Cols 16-18: ENTREGA MATERIAL HILAND *@
                         <th colspan="3" class="col-sep th-grupo">ENTREGA MATERIAL HILAND.</th>
 
-                        @* Col 19: DESPACHO MATERIAL *@
-                        <th colspan="1" class="col-sep th-grupo">DESP. MATERIAL</th>
-
-                        @* Cols 20-23: RECETA *@
+                        @* Cols 19-22: RECETA *@
                         <th colspan="4" class="col-sep th-grupo">RECETA</th>
 
-                        @* Col 24: PROGRAMA *@
+                        @* Col 23: PROGRAMA *@
                         <th colspan="1" class="col-sep th-grupo">PROGRAMA</th>
+
+                        @* Col 24: DESPACHO MATERIAL (movido después de PROGRAMA) *@
+                        <th colspan="1" class="col-sep th-grupo">DESP. MATERIAL</th>
 
                         @* Cols 25-28: TEÑIDO *@
                         <th colspan="4" class="col-sep th-grupo">TEÑIDO</th>
 
-                        @* Cols 29-30: TINTORERÍA (fechas reales partida/receta) *@
-                        <th colspan="2" class="col-sep th-grupo">TINTORERÍA</th>
-
-                        @* Cols 31-34: SECADO *@
+                        @* Cols 29-32: SECADO *@
                         <th colspan="4" class="col-sep th-grupo">SECADO</th>
 
-                        @* Cols 34-35: ENCONADO *@
-                        <th colspan="2" class="col-sep th-grupo">ENCONADO</th>
-
-                        @* Cols 36-37: REVISADO *@
+                        @* REVISADO (antes de Enconado) *@
                         <th colspan="2" class="col-sep th-grupo">REVISADO</th>
+
+                        @* ENCONADO *@
+                        <th colspan="2" class="col-sep th-grupo">ENCONADO</th>
 
                         @* Cols 38-42: ALMACÉN *@
                         <th colspan="5" class="col-sep th-grupo">ALMACÉN</th>
@@ -975,8 +979,8 @@
                         <th class="fc-6">Cliente</th>
                         <th class="fc-7">Material</th>
                         <th class="fc-8">Est</th>
-                        <th>Ne</th>
-                        <th>Mat</th>
+                        <th class="col-ne">Ne</th>
+                        <th class="col-mat">Mat</th>
                         <th>Lote</th>
                         <th>F.Pedido</th>
 
@@ -990,42 +994,38 @@
                         <th>Entreg.Mat</th>
                         <th>D.MH</th>
 
-                        @* Col 19: F.Guia *@
-                        <th class="col-sep">F.Guía</th>
-
-                        @* Cols 20-23: Receta TT *@
+                        @* Cols 19-22: Receta TT *@
                         <th class="col-sep">Estima.Rec</th>
                         <th>Entreg.Rec</th>
                         <th>D.Rec</th>
-                        <th>X</th>
+                        <th></th>
 
-                        @* Cols 24-28: Programa TT *@
+                        @* Cols 23-24: Programa TT + Desp.Material *@
                         <th class="col-sep">F.Prog</th>
+                        <th>F.Guía</th>
                         <th>Maq</th>
                         <th>Est.Ten</th>
                         <th>Entr.Ten</th>
                         <th>D.Tenido</th>
 
-                        @* Cols 29-34: Fechas reales *@
-                        <th class="col-sep">F.Partida</th>
-                        <th>F.Receta</th>
-                        <th>F.Sec.Rod</th>
+                        @* Cols 25-28: Fechas reales (TINTORERÍA eliminada) *@
+                        <th class="col-sep">F.Sec.Rod</th>
                         <th>F.Sec.Mad</th>
                         <th>F.Aprob.Cal</th>
                         <th>Time.Aprov</th>
 
-                        @* Cols 34-37: Acabado/Revisado *@
+                        @* REVISADO + ENCONADO (Revisado primero) *@
+                        <th class="col-sep">F.Revis</th>
+                        <th>Ev.Encon</th>
                         <th class="col-sep">Tipo.Acab</th>
                         <th>F.Encon</th>
-                        <th>F.Revis</th>
-                        <th>Ev.Encon</th>
 
                         @* Cols 38-42: Entrega/Espera *@
                         <th class="col-sep">F.Entrega</th>
                         <th>Ing.AlmPT</th>
                         <th>D.Espera</th>
-                        <th style="text-align:center">De</th>
-                        <th>De.Copia</th>
+                        <th class="col-de" style="text-align:center">De</th>
+                        <th></th>
 
                         @* Cols 43-46: Kilogramos *@
                         <th class="col-sep">Kg.Prog</th>
@@ -1039,7 +1039,7 @@
 
                         @* Cols 49-50: Apoyo *@
                         <th class="col-sep">Area.Resp</th>
-                        <th>Bp</th>
+                        <th class="col-bp">Bp</th>
 
                         @* Cols 51-65: Adicionales (comentadas, pendientes de activar) *@
                         @*
@@ -1088,24 +1088,25 @@
                             @* Col 18: D.MH = PROMEDIO.SI(<0) *@
                             <td data-kpi="mh" style="text-align:right;white-space:nowrap;"></td>
 
-                            @* Col 19: F.Guía (vacío) *@
-                            <td class="col-sep"></td>
-
-                            @* Col 20-21: Estima/Entreg Receta (vacío) *@
+                            @* Cols 19-20: Estima/Entreg Receta (vacío) *@
                             <td colspan="2" class="col-sep"></td>
-                            @* Col 22: D.Rec = SUBTOTALES(1) *@
+                            @* Col 21: D.Rec = SUBTOTALES(1) *@
                             <td data-kpi="rec" style="text-align:right;white-space:nowrap;"></td>
-                            @* Col 23: X (sin KPI — solo ícono en DT) *@
+                            @* Col 22: X (sin KPI — solo ícono en DT) *@
                             <td></td>
 
-                            @* Col 24-27: F.Prog + Maq + Est.Ten + Entr.Ten (vacío) *@
-                            <td colspan="4" class="col-sep"></td>
+                            @* Col 23: F.Prog (vacío) *@
+                            <td class="col-sep"></td>
+                            @* Col 24: F.Guía/Desp.Material (movido aquí, vacío) *@
+                            <td></td>
+                            @* Col 25-27: Maq + Est.Ten + Entr.Ten (vacío) *@
+                            <td colspan="3"></td>
                             @* Col 28: D.Tenido = SUBTOTALES(1) *@
                             <td data-kpi="diast" style="text-align:right;white-space:nowrap;"></td>
 
-                            @* Col 29-32: F.Partida + F.Receta + F.Secado + F.Aprob.Cal (vacío) *@
-                            <td colspan="4" class="col-sep"></td>
-                            @* Col 33: TimeAprov = KpiDiasT (idéntico por fórmula Excel) *@
+                            @* Col 29-30: F.Sec.Rod + F.Sec.Mad (vacío, TINTORERÍA eliminada) *@
+                            <td colspan="2" class="col-sep"></td>
+                            @* Col 31: TimeAprov = KpiDiasT (idéntico por fórmula Excel) *@
                             <td data-kpi="timeaprov" style="text-align:right;white-space:nowrap;"></td>
 
                             @* Cols 35-51: resto vacío (18 celdas); cols 52-66 comentadas *@
@@ -1236,10 +1237,10 @@ function buildRow(r) {
         '<td class="fc-4" style="white-space:nowrap;text-align:center;">' + d(r.sem) + '</td>' +
         '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;color:#1e3a5f;">' + d(r.partida) + '</td>' +
         '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.cliente||'') + '">' + d(r.cliente) + '</td>' +
-        '<td class="fc-7" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.material||'') + '">' + d(r.material) + '</td>' +
+        '<td class="fc-7" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (r.material||'') + '">' + d(r.material) + '</td>' +
         '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">' + d(r.est) + '</span></td>' +
-        '<td style="white-space:nowrap;">' + d(r.ne)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.mat)  + '</td>' +
+        '<td class="col-ne" style="white-space:nowrap;">' + d(r.ne)   + '</td>' +
+        '<td class="col-mat" style="white-space:nowrap;">' + d(r.mat)  + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.lote) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.fchPedido) + '</td>' +
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRod) + '</td>' +
@@ -1248,30 +1249,28 @@ function buildRow(r) {
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaMat) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.entregMat) + '</td>' +
         '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasMh) + '">' + n0(r.diasMh) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchaGuia) + '</td>' +
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.estimaRec) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.entregRec) + '</td>' +
         '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasRec) + '">' + n0(r.diasRec) + '</td>' +
         '<td style="text-align:center;white-space:nowrap;">' + iconX(r.x) + '</td>' +
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchProg) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchaGuia) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.maqTen) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.estimaTen) + '</td>' +
         '<td style="white-space:nowrap;">' + tenBadge + '</td>' +
         '<td style="text-align:right;white-space:nowrap;' + bgDiasT(r.diasT) + '">' + n0(r.diasT) + '</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchPartida)  + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchReceta)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchSecRod)   + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchSecRod)   + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.fchSecMad)   + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.fchAprobCal) + '</td>' +
         '<td style="text-align:right;white-space:nowrap;' + bgRet(r.timeAprov) + '">' + n0(r.timeAprov) + '</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">' + d(r.fchRev)   + '</td>' +
+        '<td style="white-space:nowrap;">' + d(r.evEncon)  + '</td>' +
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.tipoAc)   + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.fchEncon) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.fchRev)   + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.evEncon)  + '</td>' +
         '<td class="col-sep" style="white-space:nowrap;' + r.semClass + '">' + d(r.fchEntrega) + '</td>' +
         '<td style="white-space:nowrap;">' + d(r.ingAlmpt) + '</td>' +
         '<td style="text-align:right;white-space:nowrap;' + bgRet(r.diasEsp) + '">' + n0(r.diasEsp) + '</td>' +
-        '<td style="text-align:center;white-space:nowrap;' + bgDE(r.de) + '">' + n0(r.de) + '</td>' +
+        '<td class="col-de" style="text-align:center;white-space:nowrap;' + bgDE(r.de) + '">' + n0(r.de) + '</td>' +
         '<td style="text-align:center;white-space:nowrap;">' + iconDE(r.deCopia) + '</td>' +
         '<td class="col-sep" style="text-align:right;white-space:nowrap;">' + n2(r.kgProg)  + '</td>' +
         '<td style="text-align:right;white-space:nowrap;">' + n2(r.kgDespa) + '</td>' +
@@ -1280,7 +1279,7 @@ function buildRow(r) {
         '<td class="col-sep" style="white-space:nowrap;"><span class="eb eb-estado">' + d(r.estFlujo) + '</span></td>' +
         '<td style="white-space:nowrap;"><span class="eb ' + (r.estDesp === 'VENCIDO' ? 'eb-retaso' : 'eb-ok') + '">' + d(r.estDesp) + '</span></td>' +
         '<td class="col-sep" style="white-space:nowrap;">' + d(r.area) + '</td>' +
-        '<td style="white-space:nowrap;">' + d(r.bp) + '</td>' +
+        '<td class="col-bp" style="white-space:nowrap;">' + d(r.bp) + '</td>' +
         '</tr>';
 }
 

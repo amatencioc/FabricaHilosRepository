@@ -1,0 +1,44 @@
+@{
+    var ctrl    = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var action  = ViewContext.RouteData.Values["action"]?.ToString()     ?? "";
+
+    bool IsActive(string c, string a) =>
+        string.Equals(ctrl, c, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(action, a, StringComparison.OrdinalIgnoreCase);
+}
+
+<nav class="sire-navbar mb-3" aria-label="Navegación SIRE">
+    <ul class="sire-navbar-list">
+
+        <li class="sire-navbar-item @(IsActive("Sire","Index") ? "active" : "")">
+            <a asp-controller="Sire" asp-action="Index" class="sire-navbar-link">
+                <i class="bi bi-grid-1x2"></i> Dashboard
+            </a>
+        </li>
+
+        <li class="sire-navbar-item @(IsActive("Sire","Ventas") ? "active" : "")">
+            <a asp-controller="Sire" asp-action="Ventas" class="sire-navbar-link">
+                <i class="bi bi-receipt-cutoff"></i> RVIE — Ventas
+            </a>
+        </li>
+
+        <li class="sire-navbar-item @(IsActive("Sire","Compras") ? "active" : "")">
+            <a asp-controller="Sire" asp-action="Compras" class="sire-navbar-link">
+                <i class="bi bi-cart-check"></i> RCE — Compras
+            </a>
+        </li>
+
+        <li class="sire-navbar-item @(IsActive("Sire","Diagnostico") ? "active" : "")">
+            <a asp-controller="Sire" asp-action="Diagnostico" class="sire-navbar-link">
+                <i class="bi bi-plug"></i> Diagnóstico
+            </a>
+        </li>
+
+        <li class="sire-navbar-item @(IsActive("Sire","Monitoreo") ? "active" : "")">
+            <a asp-controller="Sire" asp-action="Monitoreo" class="sire-navbar-link">
+                <i class="bi bi-activity"></i> Monitoreo
+            </a>
+        </li>
+
+    </ul>
+</nav>

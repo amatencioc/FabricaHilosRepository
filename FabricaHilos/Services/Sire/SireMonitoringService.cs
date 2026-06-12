@@ -1,7 +1,5 @@
-using FabricaHilos.Data;
 using FabricaHilos.Models.Sire;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.EntityFrameworkCore;
 
 namespace FabricaHilos.Services.Sire;
 
@@ -15,12 +13,22 @@ public sealed class SireMonitoringService : BackgroundService
     private const int INTERVALO_ALERTA_MS = 1800000;   // 30 minutos entre alertas del mismo estado
 
     private readonly IServiceProvider _serviceProvider;
+    private readonly ISireOracleRepository _repo;
     private readonly ILogger<SireMonitoringService> _logger;
 
-    public SireMonitoringService(IServiceProvider serviceProvider, ILogger<SireMonitoringService> logger)
+    // Anti-spam en memoria: no necesita BD para evitar alertas duplicadas
+    private string?   _ultimoEstado;
+    private bool      _alertaEnviada;
+    private DateTime? _ultimaAlertaUtc;
+
+    public SireMonitoringService(
+        IServiceProvider serviceProvider,
+        ISireOracleRepository repo,
+        ILogger<SireMonitoringService> logger)
     {
         _serviceProvider = serviceProvider;
-        _logger = logger;
+        _repo            = repo;
+        _logger          = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -54,8 +62,7 @@ public sealed class SireMonitoringService : BackgroundService
     /// <summary>Ejecuta un ciclo completo de monitoreo: health check, persistencia y alertas.</summary>
     private async Task EjecutarMonitoreoAsync(CancellationToken cancellationToken)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        using var scope        = _serviceProvider.CreateScope();
         var healthCheckService = scope.ServiceProvider.GetRequiredService<HealthCheckService>();
 
         try
@@ -67,10 +74,10 @@ public sealed class SireMonitoringService : BackgroundService
             // 2. Crear registro de log
             var log = new SireHealthCheckLog
             {
-                FechaUtc = DateTime.UtcNow,
-                Status = reportSire.Status.ToString(),
-                Descripcion = reportSire.Entries.TryGetValue("sire", out var healthEntry) 
-                    ? healthEntry.Description 
+                FechaUtc    = DateTime.UtcNow,
+                Status      = reportSire.Status.ToString(),
+                Descripcion = reportSire.Entries.TryGetValue("sire", out var healthEntry)
+                    ? healthEntry.Description
                     : "Sin descripción"
             };
 
@@ -79,14 +86,12 @@ public sealed class SireMonitoringService : BackgroundService
             {
                 var data = entry.Data;
 
-                // Datos de autenticación
                 if (data.TryGetValue("auth_ok", out var authOk))
                     log.AuthOk = (bool)authOk;
 
                 if (data.TryGetValue("token_minutes_remaining", out var tokenMin))
                     log.TokenMinutosRestantes = Convert.ToDouble(tokenMin);
 
-                // Datos RVIE
                 if (data.TryGetValue("rvie_ok", out var rvieOk))
                     log.RvieOk = (bool)rvieOk;
 
@@ -96,7 +101,6 @@ public sealed class SireMonitoringService : BackgroundService
                 if (data.TryGetValue("rvie_error", out var rvieErr))
                     log.RvieError = rvieErr?.ToString();
 
-                // Datos RCE
                 if (data.TryGetValue("rce_ok", out var rceOk))
                     log.RceOk = (bool)rceOk;
 
@@ -107,15 +111,14 @@ public sealed class SireMonitoringService : BackgroundService
                     log.RceError = rceErr?.ToString();
             }
 
-            // 3. Persistir en base de datos
-            context.SireHealthCheckLogs.Add(log);
-            await context.SaveChangesAsync(cancellationToken);
+            // 3. Persistir en Oracle
+            await _repo.InsertHealthLogAsync(log, cancellationToken);
 
             _logger.LogInformation("[SIRE-MONITORING] OK Health check registrado: Status={Status} | Auth={Auth} | RVIE={Rvie} | RCE={Rce}",
                 log.Status, log.AuthOk, log.RvieOk, log.RceOk);
 
-            // 4. Evaluar si se debe enviar alerta
-            await EvaluarYEnviarAlertaAsync(context, log, cancellationToken);
+            // 4. Evaluar si se debe enviar alerta (estado en memoria)
+            await EvaluarYEnviarAlertaAsync(log, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -123,58 +126,50 @@ public sealed class SireMonitoringService : BackgroundService
         }
     }
 
-    /// <summary>Evalúa si se debe enviar alerta por email basándose en anti-spam.</summary>
+    /// <summary>
+    /// Evalúa si se debe enviar alerta usando estado en memoria (anti-spam).
+    /// No requiere BD: el BackgroundService vive mientras la app está en pie.
+    /// </summary>
     private async Task EvaluarYEnviarAlertaAsync(
-        ApplicationDbContext context,
         SireHealthCheckLog logActual,
         CancellationToken cancellationToken)
     {
-        // HEALTHY: no enviar alerta
+        // HEALTHY: resetear estado y no enviar alerta
         if (logActual.Status == HealthStatus.Healthy.ToString())
         {
+            _ultimoEstado    = logActual.Status;
+            _alertaEnviada   = false;
+            _ultimaAlertaUtc = null;
             _logger.LogDebug("[SIRE-MONITORING] Estado Healthy, no se envía alerta");
             return;
         }
 
-        // NO HEALTHY: evaluar anti-spam
-        var ultimoLog = context.SireHealthCheckLogs
-            .Where(x => x.Id != logActual.Id)
-            .OrderByDescending(x => x.FechaUtc)
-            .FirstOrDefault();
-
-        if (ultimoLog is null)
+        // Primer ciclo no-healthy o cambio de estado
+        if (_ultimoEstado is null || _ultimoEstado != logActual.Status)
         {
-            // Primer estado no-healthy, enviar alerta
-            await EnviarAlertaAsync(logActual, "primer", cancellationToken);
-            logActual.AlertaEnviada = true;
-            logActual.UltimaAlertaUtc = DateTime.UtcNow;
+            var tipo = _ultimoEstado is null ? "primer" : "cambio";
+            await EnviarAlertaAsync(logActual, tipo, cancellationToken);
+            _alertaEnviada   = true;
+            _ultimaAlertaUtc = DateTime.UtcNow;
         }
-        else if (ultimoLog.Status == logActual.Status && ultimoLog.AlertaEnviada)
+        else if (_alertaEnviada)
         {
-            // Mismo estado: evaluar si ya pasó el intervalo de alerta
-            var minutosDesdeUltimaAlerta = (DateTime.UtcNow - (ultimoLog.UltimaAlertaUtc ?? ultimoLog.FechaUtc)).TotalMinutes;
-            if (minutosDesdeUltimaAlerta >= (INTERVALO_ALERTA_MS / 60000))
+            // Mismo estado: anti-spam por intervalo
+            var minutosDesde = (DateTime.UtcNow - (_ultimaAlertaUtc ?? logActual.FechaUtc)).TotalMinutes;
+            if (minutosDesde >= (INTERVALO_ALERTA_MS / 60000))
             {
-                // Pasó tiempo suficiente, enviar alerta de "still failing"
                 await EnviarAlertaAsync(logActual, "continuo", cancellationToken);
-                logActual.AlertaEnviada = true;
-                logActual.UltimaAlertaUtc = DateTime.UtcNow;
+                _ultimaAlertaUtc = DateTime.UtcNow;
             }
             else
             {
-                _logger.LogDebug("[SIRE-MONITORING] Estado {Status} persiste pero aún en intervalo de anti-spam ({Min}min < {Max}min)",
-                    logActual.Status, Math.Round(minutosDesdeUltimaAlerta), INTERVALO_ALERTA_MS / 60000);
+                _logger.LogDebug(
+                    "[SIRE-MONITORING] Estado {Status} persiste pero aún en anti-spam ({Min}min < {Max}min)",
+                    logActual.Status, Math.Round(minutosDesde), INTERVALO_ALERTA_MS / 60000);
             }
         }
-        else if (ultimoLog.Status != logActual.Status)
-        {
-            // Cambio de estado: siempre enviar alerta
-            await EnviarAlertaAsync(logActual, "cambio", cancellationToken);
-            logActual.AlertaEnviada = true;
-            logActual.UltimaAlertaUtc = DateTime.UtcNow;
-        }
 
-        await context.SaveChangesAsync(cancellationToken);
+        _ultimoEstado = logActual.Status;
     }
 
     /// <summary>Envía alerta por email con detalles del health check.</summary>

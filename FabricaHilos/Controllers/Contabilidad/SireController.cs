@@ -8,7 +8,7 @@ using FabricaHilos.Sire.Options;
 using FabricaHilos.Sire.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using System.Reflection;
 
@@ -28,7 +28,10 @@ public class SireController : OracleBaseController
     private readonly TicketPollingHelper _ticketPolling;
     private readonly ILazySireInitializer _lazySireInitializer;
     private readonly SireOptions _sireOptions;
+    private readonly ISireExportacionQueue _exportacionQueue;
+    private readonly ISireOracleRepository _sireRepo;
     private readonly ILogger<SireController> _logger;
+    private readonly IMemoryCache _cache;
 
     public SireController(
         ISireVentasService ventasService,
@@ -38,7 +41,10 @@ public class SireController : OracleBaseController
         TicketPollingHelper ticketPolling,
         ILazySireInitializer lazySireInitializer,
         IOptions<SireOptions> sireOptions,
-        ILogger<SireController> logger)
+        ISireExportacionQueue exportacionQueue,
+        ISireOracleRepository sireRepo,
+        ILogger<SireController> logger,
+        IMemoryCache cache)
     {
         _ventasService         = ventasService;
         _comprasService        = comprasService;
@@ -47,7 +53,10 @@ public class SireController : OracleBaseController
         _ticketPolling         = ticketPolling;
         _lazySireInitializer   = lazySireInitializer;
         _sireOptions           = sireOptions.Value;
+        _exportacionQueue      = exportacionQueue;
+        _sireRepo              = sireRepo;
         _logger                = logger;
+        _cache                 = cache;
     }
 
     /// <summary>
@@ -65,8 +74,16 @@ public class SireController : OracleBaseController
                 await _lazySireInitializer.InitializeAsync();
             }
 
-            var ventas  = FiltrarAnioActual(await _ventasService.ObtenerPeriodosAsync(cancellationToken));
-            var compras = FiltrarAnioActual(await _comprasService.ObtenerPeriodosAsync(cancellationToken));
+            if (!_cache.TryGetValue("sire:periodos:ventas", out IReadOnlyList<PropuestaDto>? ventas))
+            {
+                ventas = FiltrarAnioActual(await _ventasService.ObtenerPeriodosAsync(cancellationToken));
+                _cache.Set("sire:periodos:ventas", ventas, TimeSpan.FromMinutes(5));
+            }
+            if (!_cache.TryGetValue("sire:periodos:compras", out IReadOnlyList<PropuestaDto>? compras))
+            {
+                compras = FiltrarAnioActual(await _comprasService.ObtenerPeriodosAsync(cancellationToken));
+                _cache.Set("sire:periodos:compras", compras, TimeSpan.FromMinutes(5));
+            }
             var model = ConstruirDashboard(ventas, compras);
             return View("~/Views/Contabilidad/Sire/Index.cshtml", model);
         }
@@ -87,8 +104,12 @@ public class SireController : OracleBaseController
     {
         try
         {
-            var todosLosPeriodos = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
-            var periodos = FiltrarAnioActual(todosLosPeriodos);
+            if (!_cache.TryGetValue("sire:periodos:ventas", out IReadOnlyList<PropuestaDto>? todosLosPeriodosVentas))
+            {
+                todosLosPeriodosVentas = await _ventasService.ObtenerPeriodosAsync(cancellationToken);
+                _cache.Set("sire:periodos:ventas", todosLosPeriodosVentas, TimeSpan.FromMinutes(5));
+            }
+            var periodos = FiltrarAnioActual(todosLosPeriodosVentas!);
             var periodoSeleccionado = periodo ?? periodos.FirstOrDefault()?.Periodo ?? string.Empty;
 
             // ✅ FLUJO CORRECTO: No intentar obtener registros directamente (endpoint deprecated)
@@ -132,8 +153,12 @@ public class SireController : OracleBaseController
     {
         try
         {
-            var todosLosPeriodos = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
-            var periodos = FiltrarAnioActual(todosLosPeriodos);
+            if (!_cache.TryGetValue("sire:periodos:compras", out IReadOnlyList<PropuestaDto>? todosLosPeriodosCompras))
+            {
+                todosLosPeriodosCompras = await _comprasService.ObtenerPeriodosAsync(cancellationToken);
+                _cache.Set("sire:periodos:compras", todosLosPeriodosCompras, TimeSpan.FromMinutes(5));
+            }
+            var periodos = FiltrarAnioActual(todosLosPeriodosCompras!);
             var periodoSeleccionado = periodo ?? periodos.FirstOrDefault()?.Periodo ?? string.Empty;
 
             // ✅ FLUJO CORRECTO: No intentar obtener registros directamente (endpoint deprecated)
@@ -824,31 +849,188 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Historial de ejecución de health checks del monitoreo SIRE
-    /// Muestra últimos 500 registros ordenados por fecha descendente
+    /// Vista unificada de monitoreo SIRE: Health Checks + Log de auditoría HTTP.
+    /// Acepta filtros opcionales para pre-seleccionar tab y filtrar el log.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> HealthHistory(CancellationToken cancellationToken)
+    public async Task<IActionResult> Monitoreo(
+        string? jobId       = null,
+        string? operacion   = null,
+        string  tab         = "health",
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            using var scope = HttpContext.RequestServices.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<FabricaHilos.Data.ApplicationDbContext>();
+            var taskHealth = _sireRepo.GetHealthLogsAsync(500, cancellationToken);
+            var taskApi    = _sireRepo.GetApiLogsAsync(500, jobId, operacion, cancellationToken);
+            await Task.WhenAll(taskHealth, taskApi);
+            var healthLogs = taskHealth.Result;
+            var apiLogs    = taskApi.Result;
 
-            var logs = await context.SireHealthCheckLogs
-                .OrderByDescending(x => x.FechaUtc)
-                .Take(500)
-                .ToListAsync(cancellationToken);
+            var vm = new FabricaHilos.Models.Sire.SireMonitoreoViewModel
+            {
+                HealthLogs     = healthLogs.AsReadOnly(),
+                ApiLogs        = apiLogs.AsReadOnly(),
+                FiltroJobId    = jobId,
+                FiltroOperacion = operacion,
+                TabActivo      = tab,
+            };
 
-            _logger.LogInformation("Health history: {Count} registros cargados", logs.Count);
-            return View("~/Views/Contabilidad/Sire/Monitoreo/HealthHistory.cshtml", logs.AsReadOnly());
+            _logger.LogInformation("[SIRE] Monitoreo: {H} health, {A} api-logs (tab={T})",
+                healthLogs.Count, apiLogs.Count, tab);
+
+            return View("~/Views/Contabilidad/Sire/Monitoreo/Monitoreo.cshtml", vm);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al cargar historial de health checks");
-            TempData["Error"] = "Error al cargar el historial de health checks";
-            return View("~/Views/Contabilidad/Sire/Monitoreo/HealthHistory.cshtml", new List<FabricaHilos.Models.Sire.SireHealthCheckLog>().AsReadOnly());
+            _logger.LogError(ex, "Error al cargar vista Monitoreo SIRE");
+            TempData["Error"] = "Error al cargar el monitoreo SIRE";
+            return View("~/Views/Contabilidad/Sire/Monitoreo/Monitoreo.cshtml",
+                new FabricaHilos.Models.Sire.SireMonitoreoViewModel());
         }
+    }
+
+    /// <summary>
+    /// Crea un job de exportación asíncrona y lo encola para el BackgroundService.
+    /// Si ya existe un job activo (Pendiente o EnProceso) para el mismo período y tipo,
+    /// retorna ese job en lugar de crear uno nuevo.
+    /// Retorna inmediatamente con el jobId; el front puede usar EstadoExportacion para consultar.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> IniciarExportacion([FromBody] ExportarPropuestaRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request is null || string.IsNullOrWhiteSpace(request.Periodo) || string.IsNullOrWhiteSpace(request.Tipo))
+                return Json(new { exitoso = false, error = "Parámetros inválidos" });
+
+            ValidarParametrosOperacion(request.Periodo, request.Tipo);
+
+            // Verificar si ya existe un job activo para este período y tipo
+            var tipo = request.Tipo.ToLowerInvariant();
+            var jobExistente = await _sireRepo.GetJobActivoAsync(tipo, request.Periodo, cancellationToken);
+
+            if (jobExistente is not null)
+            {
+                _logger.LogInformation("[SIRE] Job activo encontrado para {Tipo} {Periodo}: jobId={JobId} estado={Estado}",
+                    tipo, request.Periodo, jobExistente.JobId, jobExistente.Estado);
+
+                return Json(new
+                {
+                    exitoso   = true,
+                    jobId     = jobExistente.JobId,
+                    yaExiste  = true,
+                    estado    = jobExistente.Estado,
+                    numTicket = jobExistente.NumTicket,
+                    mensaje   = $"Ya existe un proceso activo para {request.Periodo} ({jobExistente.Estado}). Se reconectó al proceso en curso."
+                });
+            }
+
+            var job = new SireExportacionJob
+            {
+                TipoRegistro = tipo,
+                Periodo      = request.Periodo,
+                UsuarioId    = User.Identity?.Name ?? string.Empty,
+                Estado       = EstadoJob.Pendiente,
+            };
+
+            await _sireRepo.InsertJobAsync(job, cancellationToken);
+
+            _exportacionQueue.Encolar(job.Id);
+
+            _logger.LogInformation("[SIRE] Job encolado: jobId={JobId} tipo={Tipo} periodo={Periodo} usuario={Usuario}",
+                job.JobId, job.TipoRegistro, job.Periodo, job.UsuarioId);
+
+            return Json(new
+            {
+                exitoso  = true,
+                jobId    = job.JobId,
+                yaExiste = false,
+                mensaje  = "Exportación iniciada en segundo plano. Use 'Estado' para consultar el progreso."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al iniciar exportación asíncrona {Tipo} {Periodo}", request?.Tipo, request?.Periodo);
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Consulta el estado actual de un job de exportación asíncrona.
+    /// El front llama esto periódicamente (polling ligero, solo lee SQLite).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> EstadoExportacion(string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Json(new { exitoso = false, error = "jobId inválido" });
+
+        var job = await _sireRepo.GetJobByJobIdAsync(jobId, cancellationToken);
+
+        if (job is null)
+            return Json(new { exitoso = false, error = "Job no encontrado" });
+
+        return Json(new
+        {
+            exitoso             = true,
+            jobId               = job.JobId,
+            estado              = job.Estado,
+            tipoRegistro        = job.TipoRegistro,
+            periodo             = job.Periodo,
+            numTicket           = job.NumTicket,
+            nombreArchivo       = job.NombreArchivo,
+            rutaArchivo         = job.RutaArchivo,
+            registrosInsertados = job.RegistrosInsertados,
+            registrosDuplicados = job.RegistrosDuplicados,
+            mensajeError        = job.MensajeError,
+            fechaCreacion       = job.FechaCreacion,
+            fechaFinalizacion   = job.FechaFinalizacion,
+            esFinal             = job.Estado == EstadoJob.Completado || job.Estado == EstadoJob.Error,
+            puedeReintentar     = job.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(job.NumTicket)
+        });
+    }
+
+    /// <summary>
+    /// Reencola un job en estado Error que tiene NumTicket guardado.
+    /// Permite reanudar el polling sin volver a llamar a SUNAT para exportar.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReintentarJob([FromBody] string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Json(new { exitoso = false, error = "jobId inválido" });
+
+        var job = await _sireRepo.GetJobByJobIdAsync(jobId, cancellationToken);
+
+        if (job is null)
+            return Json(new { exitoso = false, error = "Job no encontrado" });
+
+        if (job.Estado != EstadoJob.Error)
+            return Json(new { exitoso = false, error = $"El job no está en estado Error (estado actual: {job.Estado})" });
+
+        if (string.IsNullOrWhiteSpace(job.NumTicket))
+            return Json(new { exitoso = false, error = "El job no tiene ticket SUNAT guardado. Use 'Exportar Propuesta' para iniciar desde cero." });
+
+        job.Estado             = EstadoJob.EnProceso;
+        job.MensajeError       = null;
+        job.FechaActualizacion = DateTime.UtcNow;
+        job.FechaFinalizacion  = null;
+        await _sireRepo.UpdateJobAsync(job, cancellationToken);
+
+        _exportacionQueue.Encolar(job.Id);
+
+        _logger.LogInformation("[SIRE] Job reencolado manualmente: jobId={JobId} ticket={Ticket} tipo={Tipo} periodo={Periodo}",
+            job.JobId, job.NumTicket, job.TipoRegistro, job.Periodo);
+
+        return Json(new
+        {
+            exitoso = true,
+            jobId   = job.JobId,
+            mensaje = $"Job reencolado. Retomará el polling del ticket {job.NumTicket}."
+        });
     }
 }
 

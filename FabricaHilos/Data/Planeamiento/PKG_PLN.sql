@@ -1331,6 +1331,19 @@ CREATE OR REPLACE PACKAGE PKG_PLN AS
   -- Procesos de producción usados en ítems activos
   PROCEDURE SP_PLN_FILTRO_PROCESOS   (p_cursor OUT SYS_REFCURSOR);
 
+  -- Guarda OBSERVACIONES y COLORHEXA en ITEMPED_DET desde la web (botón Guardar)
+  PROCEDURE SP_PLN_UPD_ITEM_OBS_COLOR (
+    p_nroprog       IN NUMBER   DEFAULT NULL,
+    p_num_ped       IN NUMBER   DEFAULT NULL,
+    p_nro           IN NUMBER   DEFAULT NULL,
+    p_num_det       IN NUMBER   DEFAULT NULL,
+    p_reproceso     IN VARCHAR2 DEFAULT NULL,
+    p_fch_prog      IN DATE     DEFAULT NULL,
+    p_observaciones IN VARCHAR2,
+    p_colorhexa     IN VARCHAR2,
+    p_usuario       IN VARCHAR2 DEFAULT NULL
+  );
+
 END PKG_PLN;
 /
 
@@ -2676,6 +2689,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
     OPEN p_cursor FOR
       SELECT
              -- ═══════════════════════════════════════════════════════════════
+             -- Col 0: Color hexadecimal del ítem (desde ITEMPED_DET.COLORHEXA)
+             -- ═══════════════════════════════════════════════════════════════
+             ID.COLORHEXA                                                         AS COLORHEXA,
+             -- ═══════════════════════════════════════════════════════════════
              -- Cols 1-48 en orden IDÉNTICO a hoja DT del Excel
              -- SEGUIMIENTO_PARTIDAS_TINTORERIA_KAREN.xlsm
              -- ═══════════════════════════════════════════════════════════════
@@ -2710,14 +2727,20 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              -- 12: Fecha del pedido
              J.FECHA                                                               AS FCH_PEDIDO,
              -- 13-15: 1er Rodete — fecha estimada / comprometida / días diferencia
-             -- DIAS_ROD positivo = estimada para después del compromiso (= atraso planeado)
+             -- DIAS_ROD positivo = real llegó después del estimado (= atraso); negativo = adelanto
              E.FCH_ESTIMA_CONO_UNO                                                 AS ESTIMA_ROD,
              TRUNC(E.FCH_ENTREGA_CONO_UNO)                                        AS ENTREG_ROD,
              CASE WHEN E.FCH_ENTREGA_CONO_UNO IS NULL
                     OR E.FCH_ESTIMA_CONO_UNO  IS NULL THEN 0
-                  ELSE TRUNC(E.FCH_ESTIMA_CONO_UNO)
-                       - TRUNC(E.FCH_ENTREGA_CONO_UNO)
+                  ELSE TRUNC(E.FCH_ENTREGA_CONO_UNO)
+                       - TRUNC(E.FCH_ESTIMA_CONO_UNO)
              END                                                                   AS DIAS_ROD,
+             -- semáforo RODETE: copia de DIAS_ROD (control visual tabla dinámica / web)
+             CASE WHEN E.FCH_ENTREGA_CONO_UNO IS NULL
+                    OR E.FCH_ESTIMA_CONO_UNO  IS NULL THEN 0
+                  ELSE TRUNC(E.FCH_ENTREGA_CONO_UNO)
+                       - TRUNC(E.FCH_ESTIMA_CONO_UNO)
+             END                                                                   AS X_ROD,
              -- 13-15: Material Hilandería — estimada entrada TT / real / demora en días
              -- DIAS_MH = MAX(0, real-est); si aún no llegó: MAX(0, HOY-est)
              E.FCH_ENT_TIN                                                         AS ESTIMA_MAT,
@@ -2755,6 +2778,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                     THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_ESTIMA_TENIDO))
                   ELSE GREATEST(0, TRUNC(B.FECHA) - TRUNC(E.FCH_ESTIMA_TENIDO))
              END                                                                   AS DIAS_TENIDO,
+             -- semáforo TENIDO: copia de DIAS_TENIDO (control visual tabla dinámica / web)
+             CASE WHEN E.FCH_ESTIMA_TENIDO IS NULL THEN 0
+                  WHEN B.FECHA IS NULL
+                    THEN GREATEST(0, TRUNC(SYSDATE) - TRUNC(E.FCH_ESTIMA_TENIDO))
+                  ELSE GREATEST(0, TRUNC(B.FECHA) - TRUNC(E.FCH_ESTIMA_TENIDO))
+             END                                                                   AS X_TENIDO,
              -- 26-31: Fechas reales de producción
              -- col 26 "FCH PARTIDA" en Excel = misma fuente que col 16 FCHA_GUIA (Q.FECHA)
              Q.FECHA                                                               AS FCH_PARTIDA,
@@ -2765,7 +2794,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              -- TIME_APROV = MAX(0, FCH_APROB_CAL-FCH_SEC_RODETE); 0 si alguna es NULL
              GREATEST(0, NVL(TRUNC(D.FECHA) - TRUNC(H.FECHA), 0))                AS TIME_APROV,
              -- 31-34: Acabado, enconado y evaluación CC
+             -- TIPO_ACABADO: presentación final del producto (independiente de la máquina de teñido)
+             --   ACAB_MAD='S' → REDINA (presentado en forma de madeja)
+             --   otro/NULL    → CONERA  (presentado en cono)
              DECODE(E.ACAB_MAD, 'S', 'REDINA', 'CONERA')                         AS TIPO_ACABADO,
+             -- ACABADO: secadora destino según máquina de teñido programada
+             --   R01-R19 (THIES)                        → RODETE  → S01 Sec. Thies
+             --   M01-M08 (LORIS/BRAZZOS/MEZZERA/CUBOTEX/HANK MASTER) → MADEJA → S02/S04 Sec. Madejas/Minnetti
+             --   Sin máquina asignada o tipo diferente   → NULL
+             CASE
+               WHEN E.MAQUINA LIKE 'R%' THEN 'RODETE'
+               WHEN E.MAQUINA LIKE 'M0%' THEN 'MADEJA'
+               ELSE NULL
+             END                                                                   AS ACABADO,
              Z.FECHA                                                               AS FCH_ENCONADO,
              R.FECHA                                                               AS FCH_REVISADO,
              -- EV_ENCON: NULL si sin secado; 'EN CONSULTA' si sin CC; resultado CC en otro caso
@@ -2788,16 +2829,18 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              GREATEST(0, NVL(S.FECHA_ING, TRUNC(SYSDATE))
                          - TRUNC(E.FCH_ENTREGA))                                  AS DE_COPIA,
              -- 40-43: Kilogramos y tolerancia de despacho
-             E.CANTIDAD                                                            AS KG_PROG,
+             -- KG_PEDIDO: kg pedidos por el cliente (ITEMPED_DET.CANTIDAD)
+             E.CANTIDAD                                                            AS KG_PEDIDO,
+             -- KG_PROG: kg destinados al rodete (PARTIDA.PESO_NETO = peso real del lote físico)
+             Q.NETO                                                                AS KG_PROG,
              U.CANTIDAD                                                            AS KG_DESPA,
-             -- GAP: NULL si sin despacho (Excel retorna ""); KG_DESPA-KG_PROG en otro caso
+             -- GAP: NULL si sin despacho; KG_DESPA - KG_PROG (vs peso real del lote en rodete)
              CASE WHEN U.CANTIDAD IS NULL THEN NULL
-                  ELSE U.CANTIDAD - E.CANTIDAD
+                  ELSE U.CANTIDAD - NVL(Q.NETO, E.CANTIDAD)
              END                                                                   AS GAP,
-             -- PCT_TOLERAN: porcentaje ±% respecto a KG_PROG; NULL=sin despachar
-             -- Nota: Excel retorna ratio crudo (0.05=5%); aquí x100 para claridad web (5.00)
-             CASE WHEN U.CANTIDAD IS NULL OR E.CANTIDAD = 0 THEN NULL
-                  ELSE ROUND((U.CANTIDAD / E.CANTIDAD - 1) * 100, 2)
+             -- PCT_TOLERAN: ±% vs KG_PROG (peso rodete); NULL=sin despachar; rojo si |%|>5
+             CASE WHEN U.CANTIDAD IS NULL OR NVL(Q.NETO, E.CANTIDAD) = 0 THEN NULL
+                  ELSE ROUND((U.CANTIDAD / NVL(Q.NETO, E.CANTIDAD) - 1) * 100, 2)
              END                                                                   AS PCT_TOLERAN,
              -- 47: ESTADO_FLUJO (col "PROCESO" en Excel DT) — etapa más avanzada alcanzada
              CASE
@@ -2822,8 +2865,9 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
                       - TRUNC(E.FCH_ENTREGA) > 0             THEN 'VENCIDO'
                ELSE                                               'A TIEMPO'
              END                                                                   AS ESTADO_DESPACHO,
-             -- 47-48: columnas de apoyo (solo para fórmulas de otras hojas en Excel)
-             NULL                                                                  AS AREA_RESPONSABLE,
+             -- 47-48: columnas de apoyo
+             -- AREA_RESPONSABLE = ITEMPED_DET.OBSERVACIONES (campo libre de área responsable)
+             ID.OBSERVACIONES                                                      AS AREA_RESPONSABLE,
              NULL                                                                  AS BP,
              -- ═══════════════════════════════════════════════════════════════
              -- Columnas adicionales de QUERY_PRODUCCION (no en DT, útiles en web)
@@ -2855,7 +2899,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              E.ACAB_MAD                                                            AS ACA_MAD,
              -- DIAS_RETRASO original: FCH_ENTREGA − ING_ALMPT (negativo = llegó tarde)
              -- Distinto de DE (col 38): DE usa TRUNC; DIAS_RETRASO es NUMBER exacto
-             TO_NUMBER(E.FCH_ENTREGA - NVL(S.FECHA_ING, TRUNC(SYSDATE)))         AS DIAS_RETRASO
+             TO_NUMBER(E.FCH_ENTREGA - NVL(S.FECHA_ING, TRUNC(SYSDATE)))         AS DIAS_RETRASO,
+             -- Clave de edición para guardar OBSERVACIONES y COLORHEXA desde la web:
+             -- NROPROG_DET: ITEMPED_DET.NROPROG (surrogate key cuando el ítem tiene programa).
+             -- Cuando es NULL (sin programa aún), el front-end debe usar el composite key
+             -- NUM_PED + NRO + NUM_DET + REPROCESO + FCH_PROG para llamar a SP_PLN_UPD_ITEM_OBS_COLOR.
+             -- Los campos necesarios ya están en la fila: NUM_PED (en PARTIDA), y si se necesitan
+             -- separados, se exponen junto con NROPROG_DET para que el boton Guardar los use.
+             ID.NROPROG                                                            AS NROPROG_DET,
+             F.NUM_PED                                                             AS NUM_PED_KEY,
+             F.NRO                                                                 AS NRO_KEY,
+             F.NUM_DET                                                             AS NUM_DET_KEY,
+             E.REPROCESO                                                           AS REPROCESO_KEY,
+             F.FCH_PROG                                                            AS FCH_PROG_KEY
         FROM (
                -- Dedup: por cada (NUM_PED,NRO,NUM_DET) conserva sólo el FHC_PROG más reciente
                SELECT NUM_PED, NRO, NUM_DET,
@@ -2964,7 +3020,10 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              H_TITULOS         N,
              V_STATUS_CCAL_TINTO CAL,
              L_VALIDA_RECETA   L,
-             H_TPROD           V
+             H_TPROD           V,
+             -- Columnas nuevas OBSERVACIONES y COLORHEXA de ITEMPED_DET
+             -- Join 1:1 garantizado por (NUM_PED, NRO, NUM_DET, REPROCESO, FHC_PROG)
+             ITEMPED_DET       ID
              -- OPT-1 (sesión anterior): TT_PARAMPROGTIN EE eliminado — ningún campo de EE
              --        aparecía en el SELECT; generaba un producto cartesiano innecesario
        WHERE NVL(E.ESTADO_PART,'0') NOT IN ('8','9')
@@ -3040,9 +3099,92 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
          AND L.NUMERO(+) = E.NRO_VALREC
          AND V.TABLA(+)  = '09'
          AND V.CODIGO(+) = L.C_LABORATORISTA
+         -- ── ITEMPED_DET (OBSERVACIONES, COLORHEXA) ──────────
+         AND ID.NUM_PED   = E.NUM_PED
+         AND ID.NRO       = E.NRO
+         AND ID.NUM_DET   = E.NUM_DET
+         AND ID.REPROCESO = E.REPROCESO
+         AND NVL(ID.FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY')) = F.FCH_PROG
        ORDER BY E.FCH_ENTREGA,
                 E.NUM_PED || '-' || E.NRO || '-' || E.NUM_DET || '-' || E.REPROCESO;
   END SP_PLN_SEG_PROG_TINTORERIA;
+
+
+  -- ============================================================
+  -- SP_PLN_UPD_ITEM_OBS_COLOR
+  -- Actualiza ITEMPED_DET.OBSERVACIONES y ITEMPED_DET.COLORHEXA
+  -- desde la web (botón Guardar en la tabla de seguimiento TT).
+  -- ------------------------------------------------------------
+  -- CLAVE DE IDENTIFICACIóN (usar en este orden de prioridad):
+  --   1. Si p_nroprog IS NOT NULL  → UPDATE WHERE NROPROG = p_nroprog
+  --   2. Si p_nroprog IS NULL      → UPDATE WHERE
+  --        NUM_PED=p_num_ped AND NRO=p_nro AND NUM_DET=p_num_det
+  --        AND REPROCESO=p_reproceso
+  --        AND NVL(FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY'))=
+  --            NVL(p_fch_prog, TO_DATE('31/12/2050','DD/MM/YYYY'))
+  --      (mismo predicado que usa el dedup interno del SP de consulta)
+  --
+  -- INVOCACIÓN DESDE C# (Dapper):
+  --   await conn.ExecuteAsync(
+  --     "BEGIN PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(:nroprog,:numPed,:nro,:numDet,:repro,:fchProg,:obs,:hex,:user); END;",
+  --     new { nroprog   = row.NroprogDet,          -- null si sin programa
+  --           numPed    = row.NumPedKey,
+  --           nro       = row.NroKey,
+  --           numDet    = row.NumDetKey,
+  --           repro     = row.ReprocesoPKey,
+  --           fchProg   = row.FchProgKey,           -- null si sin programa
+  --           obs       = txtObservaciones.Text,
+  --           hex       = inputColorHexa.Value,
+  --           user      = User.Identity!.Name });
+  -- ============================================================
+  PROCEDURE SP_PLN_UPD_ITEM_OBS_COLOR (
+    p_nroprog      IN NUMBER   DEFAULT NULL,
+    p_num_ped      IN NUMBER   DEFAULT NULL,
+    p_nro          IN NUMBER   DEFAULT NULL,
+    p_num_det      IN NUMBER   DEFAULT NULL,
+    p_reproceso    IN VARCHAR2 DEFAULT NULL,
+    p_fch_prog     IN DATE     DEFAULT NULL,
+    p_observaciones IN VARCHAR2,
+    p_colorhexa    IN VARCHAR2,
+    p_usuario      IN VARCHAR2 DEFAULT NULL
+  ) AS
+    v_rows  PLS_INTEGER := 0;
+  BEGIN
+    IF p_nroprog IS NOT NULL THEN
+      -- Caso 1: ítem con programa asignado — NROPROG es surrogate key único
+      UPDATE ITEMPED_DET
+      SET    OBSERVACIONES = p_observaciones,
+             COLORHEXA     = p_colorhexa,
+             A_MDUSER      = NVL(p_usuario, USER),
+             A_MDFECHA     = SYSDATE
+      WHERE  NROPROG = p_nroprog
+        AND  ESTADO  <> '9';
+    ELSE
+      -- Caso 2: ítem sin programa — composite key igual al dedup de la consulta
+      UPDATE ITEMPED_DET
+      SET    OBSERVACIONES = p_observaciones,
+             COLORHEXA     = p_colorhexa,
+             A_MDUSER      = NVL(p_usuario, USER),
+             A_MDFECHA     = SYSDATE
+      WHERE  NUM_PED   = p_num_ped
+        AND  NRO       = p_nro
+        AND  NUM_DET   = p_num_det
+        AND  REPROCESO = NVL(p_reproceso, '0')
+        AND  NVL(FHC_PROG, TO_DATE('31/12/2050','DD/MM/YYYY'))
+               = NVL(p_fch_prog, TO_DATE('31/12/2050','DD/MM/YYYY'))
+        AND  ESTADO    <> '9';
+    END IF;
+
+    v_rows := SQL%ROWCOUNT;
+    IF v_rows = 0 THEN
+      RAISE_APPLICATION_ERROR(-20101,
+        'SP_PLN_UPD_ITEM_OBS_COLOR: no se encontró el registro a actualizar.');
+    END IF;
+
+    COMMIT;
+  EXCEPTION
+    WHEN OTHERS THEN ROLLBACK; RAISE;
+  END SP_PLN_UPD_ITEM_OBS_COLOR;
 
 
   -- ============================================================

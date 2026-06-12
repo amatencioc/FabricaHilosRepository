@@ -1,4 +1,4 @@
-@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RCE (Registro de Compras)";
@@ -42,54 +42,85 @@
 }
 
 @section Styles {
-<style>
-    .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
-    .page-header-icon { width: 54px; height: 54px; background: linear-gradient(135deg, #1565C0 0%, #42a5f5 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: #fff; box-shadow: 0 4px 12px rgba(21, 101, 192, 0.15); flex-shrink: 0; }
-</style>
+<link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
 }
 
 @if (esMock)
 {
-    <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
-        <i class="bi bi-cone-striped fs-5"></i>
-        <span><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</span>
+    <div class="sire-alert sire-alert-mock" role="alert">
+        <i class="bi bi-cone-striped"></i>
+        <div><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</div>
     </div>
 }
-
 @if (TempData["Error"] is string err)
 {
-    <div class="alert alert-contab alert-contab-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>@err
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="sire-alert sire-alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i><div>@err</div>
     </div>
 }
-
 @if (TempData["Success"] is string ok)
 {
-    <div class="alert alert-contab alert-contab-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i>@ok
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="sire-alert sire-alert-success" role="alert">
+        <i class="bi bi-check-circle-fill"></i><div>@ok</div>
     </div>
 }
 
-<!-- Header Section -->
-<div class="page-header mb-4">
-    <div class="page-header-icon">
-        <i class="bi bi-cart-check"></i>
-    </div>
-    <div class="page-header-content">
-        <h3>RCE — Registro de Compras y Gastos</h3>
-        <small>Gestión de propuestas de compras electrónicas desde SUNAT</small>
-    </div>
-    <div style="margin-left: auto;">
-        <a asp-controller="Sire" asp-action="Index" class="btn btn-contab btn-contab-outline btn-sm">
-            <i class="bi bi-arrow-left me-1"></i>Volver
-        </a>
-    </div>
+@await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
+
+<div class="sire-strip">
+    <i class="bi bi-cart-check" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="sire-strip-title">RCE — Registro de Compras y Gastos</span>
+    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+    {
+        <span class="sire-strip-sep"></span>
+        <span class="sire-kpi"><i class="bi bi-calendar3"></i><span class="sire-kpi-val">@yyyyMm</span></span>
+        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:#90cdf4;"></i><span class="sire-kpi-val">@registros.Count</span><span style="opacity:.75">registros</span></span>
+        <span class="sire-kpi"><i class="bi bi-calculator" style="color:#fbd38d;"></i><span class="sire-kpi-val">S/ @totalBase.ToString("N0")</span><span style="opacity:.75">base</span></span>
+        <span class="sire-kpi"><i class="bi bi-percent" style="color:#76e4f7;"></i><span class="sire-kpi-val">S/ @totalIgv.ToString("N0")</span><span style="opacity:.75">IGV</span></span>
+        <span class="sire-kpi"><i class="bi bi-credit-card" style="color:#68d391;"></i><span class="sire-kpi-val">S/ @totalMonto.ToString("N0")</span><span style="opacity:.75">total</span></span>
+    }
 </div>
 
 <!-- Anti-forgery token para POST -->
 @Html.AntiForgeryToken()
+
+@if (string.IsNullOrWhiteSpace(periodoSeleccionado))
+{
+    <div class="sire-alert sire-alert-info">
+        <i class="bi bi-info-circle"></i>
+        <span>Seleccione un período para ver los registros de compras disponibles.</span>
+    </div>
+}
+else
+{
+    <!-- Summary KPIs -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="sire-kpi-card rce">
+                <div class="sire-kpi-card-icon rce"><i class="bi bi-file-earmark-text"></i></div>
+                <div><div class="sire-kpi-card-label">Total Registros</div><div class="sire-kpi-card-value">@registros.Count</div></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sire-kpi-card rce">
+                <div class="sire-kpi-card-icon rce"><i class="bi bi-calculator"></i></div>
+                <div><div class="sire-kpi-card-label">Base Imponible</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalBase.ToString("N0")</div></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sire-kpi-card rce">
+                <div class="sire-kpi-card-icon rce"><i class="bi bi-percent"></i></div>
+                <div><div class="sire-kpi-card-label">IGV</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalIgv.ToString("N0")</div></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="sire-kpi-card ok">
+                <div class="sire-kpi-card-icon ok"><i class="bi bi-credit-card"></i></div>
+                <div><div class="sire-kpi-card-label">Total</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalMonto.ToString("N0")</div></div>
+            </div>
+        </div>
+    </div>
+}
 
 <!-- Period Selector -->
 <div class="filter-bar">
@@ -110,78 +141,36 @@
     </div>
 </div>
 
-@if (string.IsNullOrWhiteSpace(periodoSeleccionado))
+@if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 {
-    <div class="alert alert-contab alert-contab-info d-flex align-items-center gap-2 py-3">
-        <i class="bi bi-info-circle fs-5"></i>
-        <span>Seleccione un período para ver los registros de compras disponibles.</span>
-    </div>
-}
-else
-{
-    <!-- Summary Cards (KPI) -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="kpi-card accent-blue">
-                <div class="kpi-icon" style="color: #1565C0;"><i class="bi bi-file-earmark-text"></i></div>
-                <div class="kpi-label">Total Registros</div>
-                <div class="kpi-value">@registros.Count</div>
-            </div>
+    <!-- Flujo de Exportación -->
+    <div class="sire-alert sire-alert-info mb-3">
+            <i class="bi bi-info-circle"></i>
+            <span><strong>Nuevo flujo de exportación:</strong> Haga clic en <strong>“Exportar Propuesta”</strong> para iniciar el procesamiento en SUNAT. Una vez completado podrá descargar el archivo ZIP.</span>
         </div>
-        <div class="col-md-3">
-            <div class="kpi-card accent-blue">
-                <div class="kpi-icon" style="color: #1565C0;"><i class="bi bi-calculator"></i></div>
-                <div class="kpi-label">Base Imponible</div>
-                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalBase.ToString("N0")</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="kpi-card accent-blue">
-                <div class="kpi-icon" style="color: #1565C0;"><i class="bi bi-percent"></i></div>
-                <div class="kpi-label">IGV</div>
-                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalIgv.ToString("N0")</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="kpi-card accent-blue" style="box-shadow: 0 3px 14px rgba(21, 101, 192, 0.14);">
-                <div class="kpi-icon" style="color: #1565C0;"><i class="bi bi-credit-card"></i></div>
-                <div class="kpi-label">Total</div>
-                <div class="kpi-value" style="font-size: 1.5rem;">S/ @totalMonto.ToString("N0")</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Nuevo Flujo de Exportación: Export → Poll → Download -->
-    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
-    {
-        <div class="alert alert-contab alert-contab-info d-flex align-items-center gap-2 py-3 mb-4">
-            <i class="bi bi-info-circle fs-5"></i>
-            <span>
-                <strong>Nuevo flujo de exportación:</strong> Haga clic en <strong>"Exportar Propuesta"</strong> para iniciar el procesamiento en SUNAT. 
-                Se abrirá un modal con el estado del ticket. Una vez completado, podrá descargar el archivo ZIP.
-            </span>
-        </div>
-
         <div class="mb-4 d-flex gap-2 flex-wrap">
-            <button type="button" class="btn btn-contab btn-contab-primary btn-sm" 
+            <button type="button" class="btn btn-sm btn-outline-secondary"
                     onclick="iniciarExportacion('@periodoSeleccionado', 'compras')">
                 <i class="bi bi-upload me-1"></i>Exportar Propuesta
             </button>
-            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "compras" })" 
-               class="btn btn-outline-danger btn-sm">
+            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "compras" })"
+               class="btn btn-sm btn-outline-danger">
                 <i class="bi bi-file-pdf me-1"></i>Descargar Constancia PDF
             </a>
+            <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
+               class="btn btn-sm btn-outline-info" title="Ver log de auditoría HTTP para RCE">
+                <i class="bi bi-journal-code me-1"></i>Ver Log SUNAT
+            </a>
         </div>
-    }
 
     <!-- Modal de Progreso de Exportación -->
     <div class="modal fade" id="modalExportacion" tabindex="-1" aria-labelledby="modalExportacionLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalExportacionLabel">
+                <div class="modal-header sire-modal-header-rce py-2">
+                    <h6 class="modal-title" id="modalExportacionLabel">
                         <i class="bi bi-cloud-upload me-2"></i>Exportación de Propuesta RCE
-                    </h5>
+                    </h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
@@ -194,9 +183,9 @@ else
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
-                    <button type="button" id="btnDescargarZip" class="btn btn-contab btn-contab-success btn-sm" 
+                    <button type="button" id="btnDescargarZip" class="btn btn-success btn-sm"
                             style="display: none;" onclick="descargarArchivoExportado('@periodoSeleccionado', 'compras')">
                         <i class="bi bi-download me-1"></i>Descargar ZIP
                     </button>
@@ -207,28 +196,27 @@ else
 
     @if (registros.Count == 0)
     {
-        <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-3">
-            <i class="bi bi-exclamation-circle fs-5"></i>
+        <div class="sire-alert sire-alert-warn">
+            <i class="bi bi-exclamation-circle"></i>
             <span>No hay registros de compras para el período <strong>@yyyyMm</strong>.</span>
         </div>
     }
     else
     {
-        <!-- Registros Table -->
-        <div class="chart-card">
-            <div class="card-header d-flex align-items-center gap-2 py-3">
+        <div class="sire-card">
+            <div class="sire-card-header">
                 <i class="bi bi-table"></i>
-                <h6 class="mb-0 fw-semibold">Registros de Compras — @yyyyMm</h6>
-                <span class="badge bg-secondary ms-auto">@registros.Count</span>
+                <span>Registros de Compras — @yyyyMm</span>
+                <span class="ms-auto sire-badge sire-badge-rce">@registros.Count</span>
             </div>
             <div class="table-responsive">
-                <table class="table table-contab table-sm table-hover align-middle mb-0">
+                <table class="table sire-table table-hover align-middle mb-0">
                     <thead>
                         <tr>
                             <th>Tipo</th>
                             <th>Serie</th>
                             <th>Número</th>
-                            <th>Documento Proveedor</th>
+                            <th>Doc. Proveedor</th>
                             <th>Proveedor</th>
                             <th class="text-end">Base</th>
                             <th class="text-end">IGV</th>
@@ -239,33 +227,40 @@ else
                         @foreach (var reg in registros)
                         {
                             var (tipoDesc, tipoCss) = TipoComprobante(reg.TipoComprobante);
-                            var baseRegistro = reg.BaseImponibleGravadaDestinoGravadas + 
-                                              reg.BaseImponibleGravadaDestinoMixtas + 
-                                              reg.BaseImponibleGravadaDestinoNoGravadas;
-                            var igvRegistro = reg.IgvDestinoGravadas + 
-                                             reg.IgvDestinoMixtas + 
-                                             reg.IgvDestinoNoGravadas;
+                            var badgeCls = tipoCss switch
+                            {
+                                "bg-primary"          => "sire-badge-rce",
+                                "bg-info text-dark"   => "sire-badge-info",
+                                "bg-warning text-dark"=> "sire-badge-warn",
+                                "bg-orange text-dark" => "sire-badge-warn",
+                                _                     => "sire-badge-secondary"
+                            };
+                            var baseReg = reg.BaseImponibleGravadaDestinoGravadas +
+                                          reg.BaseImponibleGravadaDestinoMixtas +
+                                          reg.BaseImponibleGravadaDestinoNoGravadas;
+                            var igvReg  = reg.IgvDestinoGravadas +
+                                          reg.IgvDestinoMixtas +
+                                          reg.IgvDestinoNoGravadas;
                             <tr>
-                                <td>
-                                    <span class="badge badge-contab @(tipoCss switch
-                                    {
-                                        "bg-primary" => "badge-contab-primary",
-                                        "bg-info text-dark" => "badge-contab-info",
-                                        "bg-warning text-dark" => "badge-contab-warning",
-                                        "bg-orange text-dark" => "badge-contab-warning",
-                                        _ => "badge-contab-secondary"
-                                    })">@tipoDesc</span>
-                                </td>
-                                <td><code style="background: rgba(21, 101, 192, 0.08); padding: 2px 6px; border-radius: 4px;">@reg.SerieComprobante</code></td>
-                                <td><code style="background: rgba(21, 101, 192, 0.08); padding: 2px 6px; border-radius: 4px;">@reg.NumeroComprobante</code></td>
-                                <td>@reg.TipoDocIdentidadProveedor @reg.NumeroDocIdentidadProveedor</td>
+                                <td><span class="sire-badge @badgeCls">@tipoDesc</span></td>
+                                <td><span class="sire-code sire-code-rce">@reg.SerieComprobante</span></td>
+                                <td><span class="sire-code sire-code-rce">@reg.NumeroComprobante</span></td>
+                                <td class="text-muted small">@reg.TipoDocIdentidadProveedor @reg.NumeroDocIdentidadProveedor</td>
                                 <td>@reg.RazonSocialProveedor</td>
-                                <td class="text-end">S/ @baseRegistro.ToString("N2")</td>
-                                <td class="text-end">S/ @igvRegistro.ToString("N2")</td>
-                                <td class="text-end fw-semibold" style="color: #1565C0;">S/ @reg.ImporteTotal.ToString("N2")</td>
+                                <td class="text-end">S/ @baseReg.ToString("N2")</td>
+                                <td class="text-end">S/ @igvReg.ToString("N2")</td>
+                                <td class="text-end fw-bold" style="color:var(--sire-rce);">S/ @reg.ImporteTotal.ToString("N2")</td>
                             </tr>
                         }
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" class="text-end text-muted small">Totales</td>
+                            <td class="text-end fw-bold">S/ @totalBase.ToString("N2")</td>
+                            <td class="text-end fw-bold">S/ @totalIgv.ToString("N2")</td>
+                            <td class="text-end fw-bold" style="color:var(--sire-rce);">S/ @totalMonto.ToString("N2")</td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
@@ -284,17 +279,24 @@ else
         location.reload();
     }
 
-    // Flujo de exportación: inicia la exportación y muestra modal de progreso
+    // Inicia la exportación en segundo plano (BackgroundService) y muestra modal de progreso
     async function iniciarExportacion(periodo, tipo) {
         const modal = new bootstrap.Modal(document.getElementById('modalExportacion'));
         modal.show();
 
+        // Mostrar spinner inicial mientras verificamos en el servidor
+        document.getElementById('estadoExportacion').innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Cargando...</span></div>
+                <p class="fw-semibold">Verificando estado...</p>
+            </div>`;
+        document.getElementById('btnDescargarZip').style.display = 'none';
+
         try {
-            // Obtener token anti-forgery del input oculto generado por @Html.AntiForgeryToken()
             const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
             const token = tokenInput ? tokenInput.value : '';
 
-            const response = await fetch('@Url.Action("ExportarPropuesta", "Sire")', {
+            const response = await fetch('@Url.Action("IniciarExportacion", "Sire")', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -306,74 +308,105 @@ else
             const result = await response.json();
 
             if (!result.exitoso) {
-                mostrarErrorExportacion(result.mensaje || result.error);
+                mostrarErrorExportacion(result.error || result.mensaje);
                 return;
             }
 
-            // Guardar numTicket en sessionStorage para uso posterior
-            sessionStorage.setItem('numTicketExportacion', result.numTicket);
+            sessionStorage.setItem('sireJobId', result.jobId);
             sessionStorage.setItem('periodoExportacion', periodo);
             sessionStorage.setItem('tipoExportacion', tipo);
 
-            // Iniciar polling del estado del ticket
-            consultarEstadoExportacion(result.numTicket, periodo, tipo);
+            if (result.yaExiste) {
+                // Reconectar al proceso ya en curso — mostrar aviso y continuar polling
+                const ticketInfo = result.numTicket ? ` (ticket: ${result.numTicket})` : '';
+                actualizarModalExportacion(
+                    result.estado || 'EnProceso',
+                    `Proceso ya en curso${ticketInfo}. Reconectando al estado actual…`,
+                    result.jobId, 0
+                );
+            } else {
+                actualizarModalExportacion('En espera', 'Solicitud enviada. El proceso corre en segundo plano…', result.jobId, 0);
+            }
+
+            consultarEstadoJob(result.jobId, periodo, tipo);
         }
         catch (error) {
             mostrarErrorExportacion('Error al iniciar exportación: ' + error.message);
         }
     }
 
-    // Consulta el estado del ticket con polling
-    async function consultarEstadoExportacion(numTicket, periodo, tipo, intentos = 0) {
-        const maxIntentos = 60; // 60 x 2s = 2 minutos
-        const intervalo = 2000; // 2 segundos
+    // Polling ligero contra EstadoExportacion (solo lee SQLite, no llama a SUNAT)
+    async function consultarEstadoJob(jobId, periodo, tipo, intentos = 0) {
+        const maxIntentos = 1440;  // 2 horas (1440 * 5s)
+        const intervalo   = 5000;
+        const segundosTranscurridos = Math.round((intentos * intervalo) / 1000);
 
         if (intentos >= maxIntentos) {
-            mostrarErrorExportacion('Tiempo de espera agotado. El procesamiento en SUNAT tardó demasiado.');
+            mostrarErrorExportacion('Tiempo de espera agotado (30 min). El proceso sigue corriendo en el servidor; recargue la página más tarde para ver el resultado.');
             return;
         }
 
         try {
             const response = await fetch(
-                `@Url.Action("ConsultarEstadoExportacion", "Sire")?numTicket=${encodeURIComponent(numTicket)}&periodo=${encodeURIComponent(periodo)}&tipo=${encodeURIComponent(tipo)}`,
+                `@Url.Action("EstadoExportacion", "Sire")?jobId=${encodeURIComponent(jobId)}`,
                 { method: 'GET' }
             );
 
             const result = await response.json();
 
             if (!result.exitoso) {
-                mostrarErrorExportacion(result.mensaje || result.error);
+                mostrarErrorExportacion(result.error || 'Error al consultar estado del job.');
                 return;
             }
 
-            // Actualizar estado en el modal
-            const estado = result.estado || 'EN_PROCESO';
-            const mensaje = result.mensaje || 'Procesando...';
-            actualizarModalExportacion(estado, mensaje, numTicket);
+            const estado  = result.estado  || 'En proceso';
+            const mensaje = estadoAMensaje(estado, result);
+            actualizarModalExportacion(estado, mensaje, jobId, segundosTranscurridos);
 
-            // Verificar si completado
-            if (estado.toUpperCase() === 'COMPLETADO' || estado.toUpperCase() === 'ACEPTADO') {
-                mostrarExitoExportacion(mensaje);
-                return; // Usuario puede descargar
-            }
-
-            if (estado.toUpperCase() === 'ERROR' || estado.toUpperCase() === 'RECHAZADO') {
-                mostrarErrorExportacion(mensaje);
+            if (result.esFinal === true) {
+                if (result.estado === 'Error') {
+                    if (result.puedeReintentar) {
+                        mostrarErrorConReintentar(result.mensajeError || 'El proceso terminó con error.', jobId, periodo, tipo);
+                    } else {
+                        mostrarErrorExportacion(result.mensajeError || 'El proceso terminó con error.');
+                    }
+                } else {
+                    sessionStorage.setItem('sireJobIdCompletado', jobId);
+                    mostrarExitoExportacion(
+                        `Propuesta lista. ${result.registrosInsertados ?? 0} registros cargados en Oracle.`,
+                        result.rutaArchivo,
+                        result.nombreArchivo
+                    );
+                }
+                sessionStorage.removeItem('sireJobId');
                 return;
             }
 
-            // Continuar polling
-            setTimeout(() => consultarEstadoExportacion(numTicket, periodo, tipo, intentos + 1), intervalo);
+            setTimeout(() => consultarEstadoJob(jobId, periodo, tipo, intentos + 1), intervalo);
         }
         catch (error) {
             mostrarErrorExportacion('Error al consultar estado: ' + error.message);
         }
     }
 
-    function actualizarModalExportacion(estado, mensaje, numTicket) {
+    function estadoAMensaje(estado, result) {
+        switch (estado) {
+            case 'Pendiente':  return 'En cola, esperando que el servidor inicie el proceso…';
+            case 'EnProceso':  return result.numTicket
+                ? `Procesando en SUNAT (ticket: ${result.numTicket})…`
+                : 'Comunicando con SUNAT…';
+            case 'Completado': return `Éxito: ${result.registrosInsertados ?? 0} registros cargados.`;
+            case 'Error':      return result.mensajeError || 'Error en el proceso.';
+            default:           return 'Procesando…';
+        }
+    }
+
+    function actualizarModalExportacion(estado, mensaje, ref, segundos = 0) {
         const estadoDiv = document.getElementById('estadoExportacion');
-        const badgeColor = estado.toUpperCase() === 'EN_PROCESO' ? 'info' : 
-                           estado.toUpperCase() === 'COMPLETADO' ? 'success' : 'warning';
+        const badgeColor = estado === 'EnProceso' || estado.toUpperCase().includes('EN PROCESO') ? 'info' :
+                           estado === 'Completado' ? 'success' :
+                           estado === 'Error'      ? 'danger'  : 'warning';
+        const tiempoTexto = segundos > 0 ? `<small class="text-muted d-block mt-1">⏱ ${segundos}s transcurridos</small>` : '';
 
         estadoDiv.innerHTML = `
             <div class="text-center">
@@ -383,14 +416,18 @@ else
                     </span>
                 </div>
                 <p class="fw-semibold mb-2">${mensaje}</p>
-                <small class="text-muted">Ticket: ${numTicket}</small>
+                ${tiempoTexto}
             </div>
         `;
     }
 
-    function mostrarExitoExportacion(mensaje) {
+    function mostrarExitoExportacion(mensaje, rutaArchivo, nombreArchivo) {
         const estadoDiv = document.getElementById('estadoExportacion');
         const btnDescargar = document.getElementById('btnDescargarZip');
+
+        const infoArchivo = rutaArchivo
+            ? `<small class="text-muted d-block mt-1"><i class="bi bi-folder2"></i> ${rutaArchivo}</small>`
+            : '';
 
         estadoDiv.innerHTML = `
             <div class="text-center">
@@ -398,10 +435,10 @@ else
                     <i class="bi bi-check-circle fs-1" style="color: #27ae60;"></i>
                 </div>
                 <p class="fw-semibold text-success">${mensaje}</p>
-                <small class="text-muted">El archivo ZIP está listo para descargar.</small>
+                ${infoArchivo}
             </div>
         `;
-        btnDescargar.style.display = '';
+        btnDescargar.style.display = rutaArchivo ? 'none' : '';
     }
 
     function mostrarErrorExportacion(error) {
@@ -418,6 +455,60 @@ else
             </div>
         `;
         btnDescargar.style.display = 'none';
+    }
+
+    function mostrarErrorConReintentar(error, jobId, periodo, tipo) {
+        const estadoDiv = document.getElementById('estadoExportacion');
+        const btnDescargar = document.getElementById('btnDescargarZip');
+
+        estadoDiv.innerHTML = `
+            <div class="text-center">
+                <div class="mb-3">
+                    <i class="bi bi-exclamation-circle fs-1" style="color: #e74c3c;"></i>
+                </div>
+                <p class="fw-semibold text-danger">Error transitorio (SUNAT 504)</p>
+                <small class="text-muted d-block mb-3">${error}</small>
+                <button type="button" class="btn btn-sm btn-warning"
+                        onclick="reintentarJob('${jobId}', '${periodo}', '${tipo}')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Reintentar polling del ticket
+                </button>
+                <small class="d-block text-muted mt-2">SUNAT tiene el ticket en proceso. Se retomará sin re-enviar la solicitud.</small>
+            </div>
+        `;
+        btnDescargar.style.display = 'none';
+    }
+
+    async function reintentarJob(jobId, periodo, tipo) {
+        const estadoDiv = document.getElementById('estadoExportacion');
+        estadoDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Cargando...</span></div>
+                <p class="fw-semibold">Reencolando job...</p>
+            </div>
+        `;
+
+        const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        const token = tokenInput ? tokenInput.value : '';
+
+        try {
+            const response = await fetch('@Url.Action("ReintentarJob", "Sire")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify(jobId)
+            });
+            const result = await response.json();
+            if (!result.exitoso) {
+                mostrarErrorExportacion(result.error || 'No se pudo reencolar el job.');
+                return;
+            }
+            actualizarModalExportacion('EnProceso', `Job reencolado. ${result.mensaje}`, jobId, 0);
+            consultarEstadoJob(jobId, periodo, tipo);
+        } catch (error) {
+            mostrarErrorExportacion('Error al reintentar: ' + error.message);
+        }
     }
 
     // Descarga el archivo ZIP cuando está listo

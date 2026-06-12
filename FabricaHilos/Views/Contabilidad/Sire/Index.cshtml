@@ -4,12 +4,10 @@
 
     string BadgeEstado(string estado) => estado switch
     {
-        "PROPUESTA_DISPONIBLE" => "badge-warning-light",
-        "CERRADO"              => "badge-success-light",
-        "EN_PROCESO"           => "badge-info-light",
-        "SIN_INFORMACION"      => "badge-secondary-light",
-        "-"                    => "badge-secondary-light",
-        _                      => "badge-secondary-light"
+        "PROPUESTA_DISPONIBLE" => "sire-badge-warn",
+        "CERRADO"              => "sire-badge-ok",
+        "EN_PROCESO"           => "sire-badge-process",
+        _                      => "sire-badge-secondary"
     };
 
     string LabelEstado(string estado) => estado switch
@@ -22,12 +20,12 @@
         _                      => estado
     };
 
-    string ColorTextEstado(string estado) => estado switch
+    string IconEstado(string estado) => estado switch
     {
-        "PROPUESTA_DISPONIBLE" => "text-warning",
-        "CERRADO"              => "text-success",
-        "EN_PROCESO"           => "text-info",
-        _                      => "text-secondary"
+        "PROPUESTA_DISPONIBLE" => "bi-exclamation-circle",
+        "CERRADO"              => "bi-check-circle",
+        "EN_PROCESO"           => "bi-arrow-repeat",
+        _                      => "bi-dash-circle"
     };
 
     int rvieDisponibles = Model.Count(x => x.EstadoRvie == "PROPUESTA_DISPONIBLE");
@@ -44,171 +42,142 @@
 }
 
 @section Styles {
-<style>
-    .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
-    .page-header-icon { width: 60px; height: 60px; background: linear-gradient(135deg, #1B4D3E 0%, #2e6b55 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; color: #fff; box-shadow: 0 4px 12px rgba(27, 77, 62, 0.15); flex-shrink: 0; }
-    .page-header-content h3 { margin: 0; font-weight: 700; color: #1a202c; font-size: 1.5rem; }
-    .page-header-content small { color: #718096; font-size: 0.9rem; }
-    .page-header-actions { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
-
-    /* Table compactness with visible borders */
-    .table-contab {
-        border-collapse: collapse;
-        font-size: 0.9rem;
-    }
-    .table-contab thead th {
-        padding: 0.5rem 0.75rem;
-        font-weight: 600;
-        background-color: #f9fafb;
-        border-bottom: 2px solid #e5e7eb;
-        border-right: 1px solid #e5e7eb;
-    }
-    .table-contab thead th:last-child {
-        border-right: none;
-    }
-    .table-contab tbody td {
-        padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid #e5e7eb;
-        border-right: 1px solid #e5e7eb;
-    }
-    .table-contab tbody td:last-child {
-        border-right: none;
-    }
-    .table-contab tbody tr:hover {
-        background-color: #f0f9ff;
-    }
-</style>
+<link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
 }
 
-<!-- Alerts -->
 @if (TempData["Error"] is string err)
 {
-    <div class="alert alert-contab alert-contab-danger alert-dismissible fade show mb-3" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Error:</strong> @err
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="sire-alert sire-alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div><strong>Error:</strong> @err</div>
     </div>
 }
-
 @if (TempData["Success"] is string ok)
 {
-    <div class="alert alert-contab alert-contab-success alert-dismissible fade show mb-3" role="alert">
-        <i class="bi bi-check-circle-fill me-2"></i>@ok
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="sire-alert sire-alert-success" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <div>@ok</div>
     </div>
 }
-
 @if (ViewBag.EsMock == true)
 {
-    <div class="alert alert-contab alert-contab-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
-        <i class="bi bi-cone-striped fs-5"></i>
-        <span><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</span>
+    <div class="sire-alert sire-alert-mock" role="alert">
+        <i class="bi bi-cone-striped"></i>
+        <div><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</div>
     </div>
 }
 
-<!-- Header -->
-<div class="page-header">
-    <div class="page-header-icon">
-        <i class="bi bi-journal-text"></i>
-    </div>
-    <div class="page-header-content">
-        <h3>SIRE</h3>
-        <small>Sistema de Llevado de Libros Electrónicos — SUNAT</small>
-    </div>
-    <div class="page-header-actions">
-        <a asp-action="Diagnostico" class="btn btn-contab btn-contab-outline btn-sm" title="Verificar conectividad">
-            <i class="bi bi-plug me-1"></i>Diagnóstico
-        </a>
-        <a asp-action="HealthHistory" class="btn btn-contab btn-contab-outline btn-sm" title="Historial de salud">
-            <i class="bi bi-graph-up me-1"></i>Monitoreo
-        </a>
-    </div>
-</div>
+@await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
 
-<!-- Operation Cards -->
-<div class="row g-3 mb-5">
-    <div class="col-lg-6">
-        <div class="card-contab accent-primary h-100">
-            <div class="card-body d-flex align-items-center gap-3" style="padding: 1.4rem;">
-                <div class="rounded-circle bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" 
-                     style="width:64px;height:64px;background: rgba(27, 77, 62, 0.1);">
-                    <i class="bi bi-receipt-cutoff fs-3" style="color: #1B4D3E;"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <h6 class="card-title mb-2 fw-semibold" style="color: #1B4D3E;">RVIE</h6>
-                    <p class="card-text text-muted small mb-3">Registro de Ventas e Ingresos — Consulta y gestiona propuestas de ventas electrónicas.</p>
-                    <a asp-controller="Sire" asp-action="Ventas" class="btn btn-contab btn-contab-primary btn-sm">
-                        <i class="bi bi-arrow-right me-1"></i>Acceder a RVIE
-                    </a>
-                </div>
-                <div class="badge badge-contab-warning fs-6 align-self-start ms-2">@rvieDisponibles</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-6">
-        <div class="card-contab accent-blue h-100">
-            <div class="card-body d-flex align-items-center gap-3" style="padding: 1.4rem;">
-                <div class="rounded-circle bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" 
-                     style="width:64px;height:64px;background: rgba(21, 101, 192, 0.1);">
-                    <i class="bi bi-cart-check fs-3" style="color: #1565C0;"></i>
-                </div>
-                <div class="flex-grow-1">
-                    <h6 class="card-title mb-2 fw-semibold" style="color: #1565C0;">RCE</h6>
-                    <p class="card-text text-muted small mb-3">Registro de Compras y Gastos — Consulta y gestiona propuestas de compras electrónicas.</p>
-                    <a asp-controller="Sire" asp-action="Compras" class="btn btn-contab btn-contab-primary btn-sm">
-                        <i class="bi bi-arrow-right me-1"></i>Acceder a RCE
-                    </a>
-                </div>
-                <div class="badge badge-contab-info fs-6 align-self-start ms-2">@rceDisponibles</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Summary Metrics (KPI Cards) -->
-<div class="row g-3 mb-5">
-    <div class="col-md-4">
-        <div class="kpi-card accent-green">
-            <div class="kpi-icon" style="color: #1B4D3E;">
-                <i class="bi bi-exclamation-circle"></i>
-            </div>
-            <div class="kpi-label">RVIE con propuesta</div>
-            <div class="kpi-value">@rvieDisponibles</div>
-            <div class="kpi-sub">Pendiente de aceptación</div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="kpi-card accent-blue">
-            <div class="kpi-icon" style="color: #1565C0;">
-                <i class="bi bi-arrow-repeat"></i>
-            </div>
-            <div class="kpi-label">En Proceso</div>
-            <div class="kpi-value">@(rvieEnProceso + rceEnProceso)</div>
-            <div class="kpi-sub">RVIE y RCE en tramite</div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="kpi-card accent-green" style="box-shadow: 0 3px 14px rgba(39, 174, 96, 0.14);">
-            <div class="kpi-icon" style="color: #27ae60;">
-                <i class="bi bi-check-circle"></i>
-            </div>
-            <div class="kpi-label">Cerrados</div>
-            <div class="kpi-value">@(rvieCerrados + rceCerrados)</div>
-            <div class="kpi-sub">RVIE y RCE completados</div>
-        </div>
-    </div>
-</div>
-
-<!-- Periods Table -->
-<div class="chart-card">
-    <div class="card-header d-flex align-items-center gap-2 py-3">
+<div class="sire-strip">
+    <i class="bi bi-journal-text" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
+    <span class="sire-strip-title">SIRE</span>
+    <span class="sire-strip-sep"></span>
+    <span class="sire-kpi" title="RVIE con propuesta disponible">
+        <i class="bi bi-receipt-cutoff" style="color:#fbd38d;"></i>
+        <span class="sire-kpi-val">@rvieDisponibles</span>
+        <span style="opacity:.75">RVIE pendientes</span>
+    </span>
+    <span class="sire-kpi" title="RCE con propuesta disponible">
+        <i class="bi bi-cart-check" style="color:#90cdf4;"></i>
+        <span class="sire-kpi-val">@rceDisponibles</span>
+        <span style="opacity:.75">RCE pendientes</span>
+    </span>
+    <span class="sire-kpi">
+        <i class="bi bi-arrow-repeat" style="color:#76e4f7;"></i>
+        <span class="sire-kpi-val">@(rvieEnProceso + rceEnProceso)</span>
+        <span style="opacity:.75">en proceso</span>
+    </span>
+    <span class="sire-kpi">
+        <i class="bi bi-check2-circle" style="color:#68d391;"></i>
+        <span class="sire-kpi-val">@(rvieCerrados + rceCerrados)</span>
+        <span style="opacity:.75">cerrados</span>
+    </span>
+    <span class="sire-kpi" style="margin-left:auto;">
         <i class="bi bi-calendar3"></i>
-        <h6 class="mb-0 fw-semibold">Períodos registrados</h6>
-        <span class="badge bg-secondary ms-auto">@Model.Count</span>
+        <span style="opacity:.75">@Model.Count período(s)</span>
+    </span>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="sire-kpi-card rvie">
+            <div class="sire-kpi-card-icon rvie"><i class="bi bi-exclamation-circle"></i></div>
+            <div>
+                <div class="sire-kpi-card-label">RVIE pendientes</div>
+                <div class="sire-kpi-card-value">@rvieDisponibles</div>
+                <div class="sire-kpi-card-sub">Propuesta disponible</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="sire-kpi-card warn">
+            <div class="sire-kpi-card-icon warn"><i class="bi bi-arrow-repeat"></i></div>
+            <div>
+                <div class="sire-kpi-card-label">En proceso</div>
+                <div class="sire-kpi-card-value">@(rvieEnProceso + rceEnProceso)</div>
+                <div class="sire-kpi-card-sub">RVIE + RCE en trámite</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="sire-kpi-card ok">
+            <div class="sire-kpi-card-icon ok"><i class="bi bi-check-circle"></i></div>
+            <div>
+                <div class="sire-kpi-card-label">Cerrados</div>
+                <div class="sire-kpi-card-value">@(rvieCerrados + rceCerrados)</div>
+                <div class="sire-kpi-card-sub">RVIE + RCE completados</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="sire-module-card h-100">
+            <div class="sire-module-card-header rvie">
+                <i class="bi bi-receipt-cutoff"></i> RVIE — Registro de Ventas e Ingresos
+                @if (rvieDisponibles > 0)
+                {
+                    <span class="ms-auto sire-badge sire-badge-warn">@rvieDisponibles pendiente(s)</span>
+                }
+            </div>
+            <div class="sire-module-card-body">
+                <p class="text-muted small mb-3">Consulta y gestiona propuestas de ventas electrónicas desde SUNAT.</p>
+                <a asp-controller="Sire" asp-action="Ventas" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-right me-1"></i>Acceder a RVIE
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="sire-module-card h-100">
+            <div class="sire-module-card-header rce">
+                <i class="bi bi-cart-check"></i> RCE — Registro de Compras y Gastos
+                @if (rceDisponibles > 0)
+                {
+                    <span class="ms-auto sire-badge sire-badge-warn">@rceDisponibles pendiente(s)</span>
+                }
+            </div>
+            <div class="sire-module-card-body">
+                <p class="text-muted small mb-3">Consulta y gestiona propuestas de compras electrónicas desde SUNAT.</p>
+                <a asp-controller="Sire" asp-action="Compras" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-right me-1"></i>Acceder a RCE
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="sire-card">
+    <div class="sire-card-header">
+        <i class="bi bi-calendar3"></i>
+        <span>Períodos registrados</span>
+        <span class="ms-auto sire-badge sire-badge-secondary">@Model.Count</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-contab table-sm table-hover align-middle mb-0">
+            <table class="table sire-table table-hover align-middle mb-0">
                 <thead>
                     <tr>
                         <th>Período</th>
@@ -233,27 +202,29 @@
                     @foreach (var item in Model)
                     {
                         var periodo = item.Periodo;
-                        var yyyyMm = periodo.Length == 6 ? $"{periodo[..4]}/{periodo[4..]}" : periodo;
+                        var yyyyMm  = periodo.Length == 6 ? $"{periodo[..4]}/{periodo[4..]}" : periodo;
                         <tr>
-                            <td><span class="badge badge-contab-primary">@yyyyMm</span></td>
-                            <td>@item.Descripcion</td>
+                            <td><span class="sire-badge sire-badge-period">@yyyyMm</span></td>
+                            <td class="text-muted small">@item.Descripcion</td>
                             <td class="text-center">
-                                <span class="badge badge-contab @(item.EstadoRvie == "PROPUESTA_DISPONIBLE" ? "badge-contab-warning" : item.EstadoRvie == "CERRADO" ? "badge-contab-success" : item.EstadoRvie == "EN_PROCESO" ? "badge-contab-info" : "badge-contab-secondary")">
+                                <span class="sire-badge @BadgeEstado(item.EstadoRvie)">
+                                    <i class="bi @IconEstado(item.EstadoRvie)"></i>
                                     @LabelEstado(item.EstadoRvie)
                                 </span>
                             </td>
                             <td class="text-center">
-                                <span class="badge badge-contab @(item.EstadoRce == "PROPUESTA_DISPONIBLE" ? "badge-contab-warning" : item.EstadoRce == "CERRADO" ? "badge-contab-success" : item.EstadoRce == "EN_PROCESO" ? "badge-contab-info" : "badge-contab-secondary")">
+                                <span class="sire-badge @BadgeEstado(item.EstadoRce)">
+                                    <i class="bi @IconEstado(item.EstadoRce)"></i>
                                     @LabelEstado(item.EstadoRce)
                                 </span>
                             </td>
                             <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <a asp-controller="Sire" asp-action="Ventas" asp-route-periodo="@periodo" 
+                                    <a asp-controller="Sire" asp-action="Ventas" asp-route-periodo="@periodo"
                                        class="btn btn-outline-secondary btn-sm" title="Ver RVIE" data-bs-toggle="tooltip">
                                         <i class="bi bi-receipt"></i>
                                     </a>
-                                    <a asp-controller="Sire" asp-action="Compras" asp-route-periodo="@periodo" 
+                                    <a asp-controller="Sire" asp-action="Compras" asp-route-periodo="@periodo"
                                        class="btn btn-outline-secondary btn-sm" title="Ver RCE" data-bs-toggle="tooltip">
                                         <i class="bi bi-cart3"></i>
                                     </a>
@@ -268,6 +239,11 @@
     </div>
 </div>
 
-<style>
-    .badge-contab-secondary { background-color: rgba(108, 117, 125, 0.15); color: #383d41; }
-</style>
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+            .forEach(el => new bootstrap.Tooltip(el));
+    });
+</script>
+}

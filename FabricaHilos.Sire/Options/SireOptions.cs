@@ -11,6 +11,6 @@ public sealed class SireOptions
     public string ApiBaseUrl { get; set; } = string.Empty;
     public string Scope { get; set; } = string.Empty;
     public int TicketPollIntervalMs { get; set; } = 5000;
-    public int TicketMaxRetries { get; set; } = 24;
+    public int TicketMaxRetries { get; set; } = 120;
     public bool UseMock { get; set; } = true;
 }

@@ -1,0 +1,375 @@
+/*
+ * sire.css — Sistema de diseño unificado
+ * Módulo: SIRE — Libros Electrónicos SUNAT
+ * Paleta: Navy fiscal (#1a365d) — igual estructura que planeamiento.css
+ *
+ * Todas las vistas de /Contabilidad/Sire/ referencian este archivo.
+ */
+
+/* ═══════════════════════════════════════════════════════
+   1. TOKENS — Variables de color y tipografía
+   ═══════════════════════════════════════════════════════ */
+:root {
+    /* Paleta naval SIRE (headers) */
+    --sire-navy:       #1a365d;
+    --sire-navy-mid:   #2a4a7f;
+    --sire-navy-light: #2c5282;
+    --sire-blue-link:  #3b6ea5;
+    --sire-blue-pale:  #eef4fc;
+
+    /* RVIE — verde fiscal */
+    --sire-rvie:       #1B4D3E;
+    --sire-rvie-mid:   #2e6b55;
+    --sire-rvie-pale:  #e8f5e9;
+    --sire-rvie-light: #c8e6c9;
+
+    /* RCE — azul corporativo */
+    --sire-rce:        #1565C0;
+    --sire-rce-mid:    #42a5f5;
+    --sire-rce-pale:   #e3f2fd;
+    --sire-rce-light:  #bbdefb;
+
+    /* Escala gris */
+    --sire-dark-deep:  #1a202c;
+    --sire-dark-bg:    #2d3748;
+    --sire-gray-700:   #4a5568;
+    --sire-gray-600:   #718096;
+    --sire-gray-500:   #a0aec0;
+    --sire-gray-300:   #cbd5e0;
+    --sire-gray-200:   #e2e8f0;
+    --sire-gray-100:   #edf2f7;
+    --sire-gray-50:    #f7fafc;
+
+    /* Texto sobre fondos oscuros */
+    --sire-light-text: #e2e8f0;
+    --sire-light-muted:#a0aec0;
+    --sire-accent-blue:#90cdf4;
+
+    /* Semáforo */
+    --sire-danger:     #e53e3e;
+    --sire-warning:    #fd7e14;
+    --sire-success-dk: #2f855a;
+    --sire-success-lt: #c6f6d5;
+
+    /* Sombras */
+    --sire-shadow-sm:  0 1px 3px rgba(0,0,0,.08);
+    --sire-shadow-md:  0 2px 6px rgba(0,0,0,.12);
+    --sire-shadow-lg:  0 3px 10px rgba(0,0,0,.16);
+}
+
+/* ═══════════════════════════════════════════════════════
+   2. BARRA DE NAVEGACIÓN SECUNDARIA  (.sire-navbar)
+   ═══════════════════════════════════════════════════════ */
+.sire-navbar {
+    background: var(--sire-dark-bg);
+    border-radius: .4rem;
+    padding: .25rem .5rem;
+    box-shadow: var(--sire-shadow-sm);
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.sire-navbar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .15rem;
+    align-items: center;
+    flex: 1 1 auto;
+}
+.sire-navbar-item { flex-shrink: 0; }
+.sire-navbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .32rem .7rem;
+    border-radius: .3rem;
+    font-size: .75rem;
+    font-weight: 600;
+    color: rgba(255,255,255,.7);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+.sire-navbar-link:hover  { background: rgba(255,255,255,.12); color: #fff; }
+.sire-navbar-item.active .sire-navbar-link {
+    background: var(--sire-blue-link);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.sire-navbar-link i { font-size: .85rem; }
+
+/* ═══════════════════════════════════════════════════════
+   3. STRIP DE CABECERA + KPIs  (.sire-strip)
+   ═══════════════════════════════════════════════════════ */
+.sire-strip {
+    background: linear-gradient(135deg, var(--sire-dark-bg) 0%, var(--sire-gray-700) 100%);
+    color: var(--sire-light-text);
+    border-radius: .5rem .5rem 0 0;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    border-bottom: 3px solid var(--sire-dark-deep);
+    box-shadow: var(--sire-shadow-md);
+    margin-bottom: 0;
+}
+.sire-strip-title {
+    font-size: .82rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #f7fafc; white-space: nowrap;
+}
+.sire-strip-sep { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.sire-kpi {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: .18rem .6rem;
+    font-size: .7rem; white-space: nowrap; color: var(--sire-light-text);
+}
+.sire-kpi-val { font-weight: 700; font-size: .82rem; }
+
+/* ═══════════════════════════════════════════════════════
+   4. PANEL DE FILTROS  (.sire-filter)
+   ═══════════════════════════════════════════════════════ */
+.sire-filter {
+    background: #f8fafc;
+    border: 1px solid var(--sire-gray-200);
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    padding: .6rem .9rem;
+    margin-bottom: .85rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   5. CABECERA DE PÁGINA  (.sire-page-header)
+   ═══════════════════════════════════════════════════════ */
+.sire-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+.sire-page-icon {
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: #fff;
+    flex-shrink: 0;
+    box-shadow: var(--sire-shadow-md);
+}
+.sire-page-icon.rvie { background: linear-gradient(135deg, var(--sire-rvie) 0%, var(--sire-rvie-mid) 100%); }
+.sire-page-icon.rce  { background: linear-gradient(135deg, var(--sire-rce)  0%, var(--sire-rce-mid)  100%); }
+.sire-page-icon.diag { background: linear-gradient(135deg, #4a5568 0%, #718096 100%); }
+.sire-page-icon.mon  { background: linear-gradient(135deg, var(--sire-navy) 0%, var(--sire-navy-mid) 100%); }
+.sire-page-icon.sire { background: linear-gradient(135deg, var(--sire-navy) 0%, var(--sire-navy-mid) 100%); }
+
+.sire-page-title  { margin: 0; font-weight: 700; color: #1a202c; font-size: 1.35rem; }
+.sire-page-sub    { color: #718096; font-size: .85rem; }
+.sire-page-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════════════════════
+   6. TARJETAS KPI  (.sire-kpi-card)
+   ═══════════════════════════════════════════════════════ */
+.sire-kpi-card {
+    background: #fff;
+    border: 1px solid var(--sire-gray-200);
+    border-radius: .5rem;
+    padding: 1rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    box-shadow: var(--sire-shadow-sm);
+    transition: box-shadow .15s;
+}
+.sire-kpi-card:hover { box-shadow: var(--sire-shadow-md); }
+.sire-kpi-card-icon {
+    width: 44px; height: 44px;
+    border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.sire-kpi-card-icon.rvie { background: rgba(27,77,62,.1);   color: var(--sire-rvie); }
+.sire-kpi-card-icon.rce  { background: rgba(21,101,192,.1); color: var(--sire-rce);  }
+.sire-kpi-card-icon.warn { background: rgba(253,126,20,.1); color: var(--sire-warning); }
+.sire-kpi-card-icon.ok   { background: rgba(39,174,96,.1);  color: #27ae60; }
+.sire-kpi-card-icon.gray { background: rgba(113,128,150,.1); color: #718096; }
+.sire-kpi-card-label { font-size: .72rem; font-weight: 600; color: var(--sire-gray-600); text-transform: uppercase; letter-spacing: .04em; }
+.sire-kpi-card-value { font-size: 1.55rem; font-weight: 800; line-height: 1.1; color: #1a202c; }
+.sire-kpi-card-sub   { font-size: .7rem; color: var(--sire-gray-500); }
+
+/* Acento lateral */
+.sire-kpi-card.rvie { border-left: 4px solid var(--sire-rvie); }
+.sire-kpi-card.rce  { border-left: 4px solid var(--sire-rce);  }
+.sire-kpi-card.warn { border-left: 4px solid var(--sire-warning); }
+.sire-kpi-card.ok   { border-left: 4px solid #27ae60; }
+
+/* ═══════════════════════════════════════════════════════
+   7. CARDS DE MÓDULO  (.sire-module-card)
+   ═══════════════════════════════════════════════════════ */
+.sire-module-card {
+    border: 1px solid var(--sire-gray-200);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--sire-shadow-sm);
+    transition: box-shadow .15s, transform .12s;
+}
+.sire-module-card:hover { box-shadow: var(--sire-shadow-lg); transform: translateY(-2px); }
+.sire-module-card-header {
+    padding: .6rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: .75rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #fff;
+}
+.sire-module-card-header.rvie { background: linear-gradient(135deg, var(--sire-rvie) 0%, var(--sire-rvie-mid) 100%); }
+.sire-module-card-header.rce  { background: linear-gradient(135deg, var(--sire-rce)  0%, var(--sire-rce-mid)  100%); }
+.sire-module-card-body { padding: 1.1rem 1.2rem; }
+
+/* ═══════════════════════════════════════════════════════
+   8. TABLA COMPACTA  (.sire-table)
+   ═══════════════════════════════════════════════════════ */
+.sire-table { font-size: .8rem; border-collapse: collapse; }
+.sire-table thead th {
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--sire-gray-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid var(--sire-gray-300);
+    padding: .32rem .55rem;
+    background: #e8edf4;
+    white-space: nowrap;
+}
+.sire-table tbody td {
+    padding: .28rem .55rem;
+    border-bottom: 1px solid var(--sire-gray-200);
+    vertical-align: middle;
+}
+.sire-table tbody tr:hover td { background: #eef4fc; }
+.sire-table tfoot td {
+    padding: .35rem .55rem;
+    font-weight: 700;
+    background: #f0f4f8;
+    border-top: 2px solid var(--sire-gray-300);
+}
+
+/* ═══════════════════════════════════════════════════════
+   9. CARD CONTENEDOR  (.sire-card)
+   ═══════════════════════════════════════════════════════ */
+.sire-card {
+    border: 1px solid var(--sire-gray-200);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--sire-shadow-sm);
+    margin-bottom: 1.25rem;
+}
+.sire-card-header {
+    padding: .55rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--sire-dark-bg);
+    background: #f0f4f8;
+    border-bottom: 1px solid var(--sire-gray-200);
+}
+.sire-card-header i { font-size: .9rem; }
+.sire-card-body { padding: .85rem 1rem; }
+
+/* ═══════════════════════════════════════════════════════
+  10. BADGES  (.sire-badge-*)
+   ═══════════════════════════════════════════════════════ */
+.sire-badge {
+    display: inline-flex; align-items: center; gap: .2rem;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.sire-badge-ok       { background: #c6f6d5; color: #22543d; }
+.sire-badge-warn     { background: #fef3c7; color: #92400e; }
+.sire-badge-danger   { background: #fee2e2; color: #991b1b; }
+.sire-badge-info     { background: #dbeafe; color: #1e40af; }
+.sire-badge-process  { background: #e0f2fe; color: #075985; }
+.sire-badge-secondary{ background: #e2e8f0; color: #4a5568; }
+.sire-badge-rvie     { background: var(--sire-rvie-pale);  color: var(--sire-rvie); }
+.sire-badge-rce      { background: var(--sire-rce-pale);   color: var(--sire-rce);  }
+.sire-badge-period   { background: var(--sire-navy); color: #fff; font-size: .72rem; padding: .18rem .55rem; border-radius: .3rem; }
+
+/* ═══════════════════════════════════════════════════════
+  11. MODALES AL ESTILO PLN
+   ═══════════════════════════════════════════════════════ */
+.sire-modal-header-rvie  { background: linear-gradient(135deg, var(--sire-rvie) 0%, var(--sire-rvie-mid) 100%); color: #fff; }
+.sire-modal-header-rce   { background: linear-gradient(135deg, var(--sire-rce)  0%, var(--sire-rce-mid)  100%); color: #fff; }
+.sire-modal-header-diag  { background: linear-gradient(135deg, #4a5568 0%, #718096 100%); color: #fff; }
+.sire-modal-header-rvie .btn-close,
+.sire-modal-header-rce  .btn-close,
+.sire-modal-header-diag .btn-close { filter: invert(1); }
+
+/* ═══════════════════════════════════════════════════════
+  12. ALERTAS ESTILO SIRE
+   ═══════════════════════════════════════════════════════ */
+.sire-alert {
+    border-radius: .4rem;
+    padding: .6rem .9rem;
+    font-size: .82rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    margin-bottom: .85rem;
+    border: 1px solid transparent;
+}
+.sire-alert i { flex-shrink: 0; font-size: 1rem; margin-top: .05rem; }
+.sire-alert-info    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.sire-alert-warn    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.sire-alert-danger  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.sire-alert-success { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+.sire-alert-mock    { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
+
+/* ═══════════════════════════════════════════════════════
+  13. CÓDIGO INLINE
+   ═══════════════════════════════════════════════════════ */
+.sire-code {
+    font-family: 'Consolas', 'SFMono-Regular', monospace;
+    font-size: .78rem;
+    background: #eef4fc;
+    color: var(--sire-rvie);
+    padding: .1rem .35rem;
+    border-radius: .25rem;
+}
+.sire-code-rce { background: var(--sire-rce-pale); color: var(--sire-rce); }
+
+/* ═══════════════════════════════════════════════════════
+  14. BARRA DE PROGRESO EXPORTACIÓN  (.sire-progress-bar)
+   ═══════════════════════════════════════════════════════ */
+.sire-status-pending  { color: #92400e; }
+.sire-status-process  { color: #075985; }
+.sire-status-done     { color: #14532d; }
+.sire-status-error    { color: #991b1b; }
+
+/* ═══════════════════════════════════════════════════════
+  15. RESPONSIVE
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .sire-strip        { flex-direction: column; align-items: flex-start; }
+    .sire-kpi          { font-size: .65rem; }
+    .sire-page-header  { flex-wrap: wrap; }
+    .sire-page-actions { margin-left: 0; }
+    .sire-table        { font-size: .73rem; }
+}
