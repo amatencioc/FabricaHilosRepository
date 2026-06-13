@@ -303,6 +303,11 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 Descripcion = Str(r["DESCRIPCION"])
             });
 
+    // Centinela que el SP interpreta como "poner NULL explícitamente".
+    // Necesario porque Oracle trata '' como NULL, por lo que no sirve como
+    // distinción entre "no envío este campo" (NULL) y "quiero borrarlo" ('').
+    private const string ClearSentinel = "__CLEAR__";
+
     // -- SaveColorHexa
     public async Task SaveColorHexaAsync(IEnumerable<PlnSaveColorDto> items, CancellationToken ct = default)
     {
@@ -318,7 +323,8 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             cmd.Parameters.Add("p_det",      OracleDbType.Decimal  ).Value = (object?)item.NumDet    ?? DBNull.Value;
             cmd.Parameters.Add("p_rep",      OracleDbType.Varchar2 ).Value = (object?)item.Reproceso ?? DBNull.Value;
             cmd.Parameters.Add("p_fchprog",  OracleDbType.Date     ).Value = (object?)item.FchProg   ?? DBNull.Value;
-            cmd.Parameters.Add("p_color",    OracleDbType.Varchar2 ).Value = (object?)item.ColorHexa ?? DBNull.Value;
+            // null = quitar etiqueta → centinela __CLEAR__ para que SP borre el campo
+            cmd.Parameters.Add("p_color",    OracleDbType.Varchar2 ).Value = item.ColorHexa ?? ClearSentinel;
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }
@@ -327,7 +333,8 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
     public async Task SaveObservacionAsync(IEnumerable<PlnSaveObsDto> items, CancellationToken ct = default)
     {
         await using var conn = await AbrirConexionAsync();
-        foreach (var item in items.Where(x => !string.IsNullOrWhiteSpace(x.Observaciones)))
+        // Sin filtro: texto vacío también se envía con centinela para borrar el campo
+        foreach (var item in items)
         {
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"BEGIN {S}PKG_PLN.SP_PLN_UPD_ITEM_OBS_COLOR(" +
@@ -338,7 +345,9 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
             cmd.Parameters.Add("p_det",      OracleDbType.Decimal  ).Value = (object?)item.NumDet    ?? DBNull.Value;
             cmd.Parameters.Add("p_rep",      OracleDbType.Varchar2 ).Value = (object?)item.Reproceso ?? DBNull.Value;
             cmd.Parameters.Add("p_fchprog",  OracleDbType.Date     ).Value = (object?)item.FchProg   ?? DBNull.Value;
-            cmd.Parameters.Add("p_obs",      OracleDbType.Varchar2 ).Value = item.Observaciones;
+            // texto vacío = borrar → centinela __CLEAR__
+            cmd.Parameters.Add("p_obs",      OracleDbType.Varchar2 ).Value =
+                string.IsNullOrWhiteSpace(item.Observaciones) ? ClearSentinel : item.Observaciones!.Trim();
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }

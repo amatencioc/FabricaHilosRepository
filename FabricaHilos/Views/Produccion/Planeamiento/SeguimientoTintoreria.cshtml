@@ -90,6 +90,8 @@
     var cfMesesDisp  = buscado ? items.Select(r => r.Mes).Where(v => int.TryParse(v, out _))
                                       .Select(v => int.Parse(v!)).Distinct().OrderBy(v => v).ToList()
                                : new List<int>();
+    // SF: ítems donde Mes = 'SF' (sin fecha de entrega)
+    bool cfHaySf    = buscado && items.Any(r => r.Mes == "SF");
     var cfAnosDisp   = buscado ? items.Select(r => r.Ano).Where(v => int.TryParse(v, out _))
                                       .Select(v => int.Parse(v!)).Distinct().OrderBy(v => v).ToList()
                                : new List<int>();
@@ -99,6 +101,7 @@
     var cfDespOpts   = buscado ? Unicos(items.Select(r => r.EstadoDespacho)).ToList(): new List<string>();
     var cfAreaOpts   = buscado ? Unicos(items.Select(r => r.AreaResponsable)).ToList(): new List<string>();
     var cfTipoAcOpts = buscado ? Unicos(items.Select(r => r.TipoAcabado)).ToList()   : new List<string>();
+    var cfEvEnconOpts= buscado ? Unicos(items.Select(r => r.EvEncon)).ToList()        : new List<string>();
 
     // Datalist para búsqueda por texto libre con sugerencias
     var cfPartidaOpts  = buscado ? Unicos(items.Select(r => r.Partida)).ToList()   : new List<string>();
@@ -783,7 +786,7 @@
                     @foreach (var m in cfMesesDisp) {
                         <button type="button" class="cf-mes-btn" data-mes="@m">@m</button>
                     }
-                    @if (cfMesesDisp.Any()) {
+                    @if (cfHaySf) {
                         <button type="button" class="cf-mes-btn cf-mes-sf" data-mes="_sf">SF</button>
                     }
                 </div>
@@ -894,6 +897,15 @@
                 <select class="spt-ctrl" data-cf="estflujo" style="min-width:90px;">
                     <option value="">Todos</option>
                     @foreach (var v in cfFlujoOpts) { <option value="@v">@v</option> }
+                </select>
+            </div>
+
+            @* 11. Ev.Encon *@
+            <div class="spt-fld">
+                <label class="spt-label"><i class="bi bi-check2-circle"></i>Ev.Encon</label>
+                <select class="spt-ctrl" data-cf="evencon" style="min-width:110px;">
+                    <option value="">Todos</option>
+                    @foreach (var v in cfEvEnconOpts) { <option value="@v">@v</option> }
                 </select>
             </div>
 
@@ -1233,7 +1245,7 @@ function buildRow(r, idx) {
     var cellHx   = r.colorHexa ? 'background-color:'+r.colorHexa+';' : '';
     var partColor = r.colorHexa ? 'color:#fff;' : 'color:#1e3a5f;';
     var tenBadge = r.entregTen
-        ? '<span class="eb eb-ok"><i class="bi bi-check-lg"></i>'+r.entregTen+'</span>'
+        ? '<span class="eb eb-ok">' + r.entregTen + '</span>'
         : '<span class="eb eb-sin">\u2014</span>';
     var semCls = r.estDesp==='VENCIDO' ? 'eb-retaso' : 'eb-ok';
     var areaVal = r._area != null ? r._area : (r.area || '');
@@ -1317,15 +1329,20 @@ var filtered = allData.slice();
 var pageSize = 200;
 var curPage  = 1;
 
-// Inicializar _area con el valor que viene del servidor (AREA_RESPONSABLE)
-allData.forEach(function(r){ r._area = (r.area != null ? r.area : ''); });
+// Inicializar _area (borrador edición) y _areaSaved (último valor guardado en servidor).
+// _area  → se actualiza en cada tecla para que al paginar se conserve lo que el usuario escribió.
+// _areaSaved → solo se actualiza tras un save exitoso; es la referencia para detectar cambios reales.
+allData.forEach(function(r){
+    r._area      = (r.area != null ? r.area : '');
+    r._areaSaved = r._area;   // igual al inicio (viene del servidor)
+});
 
 if (totalEl) totalEl.textContent = allData.length;
 
 function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
 // ── Mapas de filtros ──────────────────────────────────────────────────────────
-var EXACT_CF = { mes:1, ano:1, estflujo:1, estdesp:1, proceso:1, colorhexa:1 };
+var EXACT_CF = { mes:1, ano:1, estflujo:1, estdesp:1, proceso:1, colorhexa:1, evencon:1 };
 var CF_MAP = {
     mes:     function(r){ return norm(r.mes); },
     ano:     function(r){ return norm(r.ano); },
@@ -1335,6 +1352,7 @@ var CF_MAP = {
     proceso: function(r){ return norm(r.proTt||''); },
     estdesp: function(r){ return norm(r.estDesp); },
     estflujo:function(r){ return norm(r.estFlujo); },
+    evencon: function(r){ return norm(r.evEncon||''); },
     colorhexa:function(r){
         // filtro especial: '_none' = sin color
         return (r.colorHexa||'').toLowerCase();
@@ -1482,6 +1500,9 @@ applyFilters = function(){
 };
 // Para botones de mes que ya están en HTML (sin select oculto) redefinimos applyFilters correctamente:
 applyFilters = function(){
+    // Al re-filtrar, los índices de filtered cambian → limpiar selección para evitar
+    // que selected apunte a ítems incorrectos tras el rebuild de filtered.
+    selected = {}; updateColorBar();
     var vals={}, inds={};
     cfInputs.forEach(function(el){ var v=el.value; if(v!=='') vals[el.dataset.cf]=norm(v); });
     cfInds.forEach(function(el){   var v=el.value; if(v!=='') inds[el.dataset.cfInd]=v; });
@@ -1492,7 +1513,8 @@ applyFilters = function(){
         // MES via botón
         if(mesActivo){
             if(mesActivo==='_sf'){
-                if(r.mes && norm(r.mes)!=='') return false;
+                // SF = ítems donde el SP devuelve MES='SF' (sin FCH_ENTREGA)
+                if(r.mes !== 'SF') return false;
             } else {
                 if(norm(r.mes)!==norm(mesActivo)) return false;
             }
@@ -1577,11 +1599,11 @@ function bindRowEvents(){
         // restaurar estado seleccionado tras re-render
         if(selected[chk.dataset.idx]) chk.checked=true;
     });
-    // area-resp inputs
+    // area-resp inputs: actualiza solo el borrador (_area), no el valor guardado (_areaSaved)
     tbody.querySelectorAll('.area-input').forEach(function(ta){
         ta.addEventListener('input',function(){
-            var idx=this.dataset.idx;
-            filtered[idx]._area=this.value;
+            var idx=parseInt(this.dataset.idx);
+            filtered[idx]._area=this.value;   // borrador: conserva lo escrito al paginar
         });
     });
 }
@@ -1651,13 +1673,16 @@ if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
     var idxsGuardados = [];
     inputs.forEach(function(ta){
         var val = ta.value.trim();
-        if(!val) return;
         var idx=parseInt(ta.dataset.idx);
         var r=filtered[idx];
-        payload.push({ nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, observaciones:val });
+        // Comparar contra _areaSaved (último valor en servidor), NO contra _area
+        // (que ya fue modificado por el handler 'input' al escribir).
+        var savedVal = (r._areaSaved || '').trim();
+        if(val === savedVal) return;
+        payload.push({ nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, observaciones:val||null });
         idxsGuardados.push({ idx:idx, val:val });
     });
-    if(!payload.length){ showToast('Sin areas que guardar.','#6c757d'); return; }
+    if(!payload.length){ showToast('Sin cambios que guardar.','#6c757d'); return; }
     fetch('/Planeamiento/GuardarObservaciones',{
         method:'POST',
         headers:{'Content-Type':'application/json','RequestVerificationToken':document.querySelector('[name=__RequestVerificationToken]')?.value||''},
@@ -1666,8 +1691,9 @@ if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
         if(j.ok){
             // Sincronizar en memoria para que al paginar no se pierda
             idxsGuardados.forEach(function(e){
-                filtered[e.idx]._area  = e.val;
-                filtered[e.idx].area   = e.val;
+                filtered[e.idx]._area      = e.val;  // borrador
+                filtered[e.idx]._areaSaved = e.val;  // confirmar nuevo valor guardado
+                filtered[e.idx].area       = e.val;
             });
             showToast(j.n+' area(s) guardada(s).','#16a34a');
         } else showToast('Error: '+j.msg,'#dc3545');
