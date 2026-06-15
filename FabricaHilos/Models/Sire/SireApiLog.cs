@@ -32,4 +32,7 @@ public static class SireOperacion
     public const string Ticket    = "TICKET";
     public const string Descargar = "DESCARGAR";
     public const string Health    = "HEALTH";
+    public const string Guardar   = "GUARDAR";    // Guardar ZIP en ruta de red
+    public const string Cargar    = "CARGAR";     // Cargar propuesta en Oracle SIRE_VALIDA
+    public const string Completar = "COMPLETAR";  // Finalización del job
 }

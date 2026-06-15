@@ -239,11 +239,181 @@
     </div>
 </div>
 
+<div class="sire-card mt-3">
+    <div class="sire-card-header">
+        <i class="bi bi-activity"></i>
+        <span>Actividad reciente de exportaciones</span>
+        <button class="btn btn-xs btn-outline-secondary ms-auto py-0 px-2" onclick="cargarPanelActividad()" title="Actualizar">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <a asp-action="Monitoreo" class="btn btn-xs btn-outline-info py-0 px-2 ms-1" title="Ver log completo">
+            <i class="bi bi-journal-code me-1"></i>Log completo
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table sire-table table-hover align-middle mb-0 small">
+                <thead>
+                    <tr>
+                        <th style="width:70px">Tipo</th>
+                        <th style="width:80px">Período</th>
+                        <th>Estado</th>
+                        <th>Ticket SUNAT</th>
+                        <th>Registros</th>
+                        <th>Iniciado</th>
+                        <th style="width:60px"></th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyJobs">
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-3 small">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando actividad…
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <!-- Log del proceso activo -->
+        <div class="px-3 py-2 border-top" id="seccionLogsActivos">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-journal-text text-info"></i>
+                <span class="fw-semibold small">Log del proceso activo</span>
+            </div>
+            <div id="logsActivosContainer" style="max-height:200px;overflow-y:auto;font-size:.8rem;">
+                <p class="text-muted small mb-0">Sin proceso activo en este momento.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('[data-bs-toggle="tooltip"]')
             .forEach(el => new bootstrap.Tooltip(el));
+
+        // Cargar panel de actividad al iniciar
+        cargarPanelActividad();
     });
+
+    // ── Panel de actividad: jobs recientes + logs del job activo ──────────────
+
+    let _actividadTimer = null;
+
+    async function cargarPanelActividad() {
+        try {
+            const resp = await fetch('@Url.Action("JobsRecientes", "Sire")', { method: 'GET' });
+            const data = await resp.json();
+            if (!data.exitoso) return;
+
+            renderizarJobs(data.jobs || []);
+            renderizarLogsActivos(data.logsActivos || []);
+
+            // Si hay algún job activo, seguir actualizando cada 5s
+            const hayActivo = (data.jobs || []).some(j => j.estado === 'Pendiente' || j.estado === 'EnProceso');
+            clearTimeout(_actividadTimer);
+            if (hayActivo) {
+                _actividadTimer = setTimeout(cargarPanelActividad, 5000);
+            }
+        } catch (e) {
+            // Silencioso — el panel no es crítico
+        }
+    }
+
+    function badgeJob(estado) {
+        switch (estado) {
+            case 'Pendiente':  return '<span class="badge bg-warning text-dark">Pendiente</span>';
+            case 'EnProceso':  return '<span class="badge bg-info text-dark"><span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>En proceso</span>';
+            case 'Completado': return '<span class="badge bg-success">Completado</span>';
+            case 'Error':      return '<span class="badge bg-danger">Error</span>';
+            default:           return `<span class="badge bg-secondary">${estado}</span>`;
+        }
+    }
+
+    function renderizarJobs(jobs) {
+        const tbody = document.getElementById('tbodyJobs');
+        if (!tbody) return;
+
+        if (!jobs.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-inbox me-1"></i>Sin actividad registrada</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = jobs.map(j => {
+            const tipo   = j.tipoRegistro === 'ventas' ? 'RVIE' : 'RCE';
+            const tipoBadge = j.tipoRegistro === 'ventas'
+                ? '<span class="sire-badge sire-badge-rvie">RVIE</span>'
+                : '<span class="sire-badge sire-badge-rce">RCE</span>';
+            const perFmt = j.periodo.length === 6 ? `${j.periodo.slice(0,4)}/${j.periodo.slice(4)}` : j.periodo;
+            const regs   = j.registrosInsertados != null ? `${j.registrosInsertados} reg.` : '—';
+            const ticket = j.numTicket
+                ? `<span class="sire-code" style="font-size:.7rem">${j.numTicket.slice(0,12)}…</span>`
+                : '—';
+            const err    = j.mensajeError
+                ? `<i class="bi bi-info-circle text-danger ms-1" title="${j.mensajeError.replace(/"/g,'&quot;')}" data-bs-toggle="tooltip"></i>`
+                : '';
+            const acciones = j.puedeReintentar
+                ? `<button class="btn btn-xs btn-outline-warning py-0 px-1" onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')" title="Reintentar"><i class="bi bi-arrow-clockwise"></i></button>`
+                : (j.esFinal ? '' : `<button class="btn btn-xs btn-outline-info py-0 px-1" onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')" title="Ver progreso"><i class="bi bi-eye"></i></button>`);
+
+            return `<tr>
+                <td>${tipoBadge}</td>
+                <td class="sire-badge sire-badge-period">${perFmt}</td>
+                <td>${badgeJob(j.estado)}${err}</td>
+                <td class="text-muted small">${ticket}</td>
+                <td class="text-muted small">${regs}</td>
+                <td class="text-muted small">${j.fechaCreacion}</td>
+                <td>${acciones}</td>
+            </tr>`;
+        }).join('');
+
+        // Re-inicializar tooltips en las nuevas filas
+        tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    }
+
+    function renderizarLogsActivos(logs) {
+        const cont = document.getElementById('logsActivosContainer');
+        if (!cont) return;
+
+        if (!logs.length) {
+            cont.innerHTML = '<p class="text-muted small mb-0"><i class="bi bi-journal-text me-1"></i>Sin entradas de log para el proceso activo.</p>';
+            return;
+        }
+
+        const filas = logs.map(l => {
+            const icono = l.exito
+                ? '<i class="bi bi-check-circle text-success"></i>'
+                : '<i class="bi bi-x-circle text-danger"></i>';
+            const dur = l.duracionMs != null ? `<span class="text-muted ms-1">(${l.duracionMs}ms)</span>` : '';
+            const http = l.httpStatus != null ? `<span class="badge bg-secondary ms-1">${l.httpStatus}</span>` : '';
+            return `<div class="d-flex align-items-start gap-2 border-bottom py-1">
+                <span style="min-width:1rem">${icono}</span>
+                <div style="flex:1;min-width:0">
+                    <span class="badge bg-dark me-1" style="font-size:.65rem">${l.operacion}</span>
+                    ${http}
+                    <span class="small">${l.mensaje || ''}</span>${dur}
+                </div>
+                <span class="text-muted small text-nowrap">${l.fecha.slice(11,19)}</span>
+            </div>`;
+        }).join('');
+
+        cont.innerHTML = filas;
+    }
+
+    // Abre el modal de exportación reconectando a un job existente (desde la tabla de jobs)
+    async function reconectarJobDesdeIndex(jobId, periodo, tipo) {
+        // Navegar a la vista correcta con el modal abierto
+        const url = tipo === 'ventas'
+            ? '@Url.Action("Ventas", "Sire")?periodo=' + periodo
+            : '@Url.Action("Compras", "Sire")?periodo=' + periodo;
+
+        // Guardar jobId en sessionStorage para que la vista lo recoja
+        sessionStorage.setItem('sireJobId', jobId);
+        sessionStorage.setItem('periodoExportacion', periodo);
+        sessionStorage.setItem('tipoExportacion', tipo);
+        sessionStorage.setItem('sireReconectar', '1');
+
+        window.location.href = url;
+    }
 </script>
 }

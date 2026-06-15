@@ -279,6 +279,22 @@ else
         location.reload();
     }
 
+    // Si venimos del Index con un job a reconectar, abrimos el modal automáticamente
+    document.addEventListener('DOMContentLoaded', () => {
+        if (sessionStorage.getItem('sireReconectar') === '1') {
+            sessionStorage.removeItem('sireReconectar');
+            const jobId  = sessionStorage.getItem('sireJobId');
+            const period = sessionStorage.getItem('periodoExportacion');
+            const tipo   = sessionStorage.getItem('tipoExportacion');
+            if (jobId && period && tipo === 'compras') {
+                const modal = new bootstrap.Modal(document.getElementById('modalExportacion'));
+                modal.show();
+                actualizarModalExportacion('EnProceso', 'Reconectando al proceso en curso…', jobId, 0);
+                consultarEstadoJob(jobId, period, tipo);
+            }
+        }
+    });
+
     // Inicia la exportación en segundo plano (BackgroundService) y muestra modal de progreso
     async function iniciarExportacion(periodo, tipo) {
         const modal = new bootstrap.Modal(document.getElementById('modalExportacion'));

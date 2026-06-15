@@ -31,6 +31,12 @@ public interface ISireOracleRepository
     /// <summary>Obtiene todos los jobs en estado Pendiente o EnProceso (para reencolar al reiniciar).</summary>
     Task<List<SireExportacionJob>> GetJobsInterrumpidosAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Obtiene los N jobs más recientes (cualquier estado), ordenados por fecha creación desc.
+    /// Usado en el dashboard de Index para mostrar historial de operaciones.
+    /// </summary>
+    Task<List<SireExportacionJob>> GetJobsRecientesAsync(int top = 20, CancellationToken ct = default);
+
     // ── Health logs ───────────────────────────────────────────────────────────
 
     Task InsertHealthLogAsync(SireHealthCheckLog log, CancellationToken ct = default);

@@ -149,6 +149,26 @@ public sealed class SireOracleRepository : ISireOracleRepository
         return result;
     }
 
+    public async Task<List<SireExportacionJob>> GetJobsRecientesAsync(int top = 20, CancellationToken ct = default)
+    {
+        top = Math.Max(1, Math.Min(top, 200));
+        var sql = $@"
+            SELECT * FROM (
+                SELECT * FROM SIG.SIRE_JOB
+                ORDER BY FECHA_CREACION DESC
+            ) WHERE ROWNUM <= {top}";
+
+        await using var conn = new OracleConnection(_connStr);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var result = new List<SireExportacionJob>();
+        while (await reader.ReadAsync(ct))
+            result.Add(MapJob(reader));
+        return result;
+    }
+
     // ── Health logs ───────────────────────────────────────────────────────────
 
     public async Task InsertHealthLogAsync(SireHealthCheckLog log, CancellationToken ct = default)
@@ -219,11 +239,12 @@ public sealed class SireOracleRepository : ISireOracleRepository
             cmd.Parameters.Add(":exito",  OracleDbType.Int32   ).Value = log.Exito ? 1 : 0;
             cmd.Parameters.Add(":msg",    OracleDbType.Varchar2).Value = Trunc(log.Mensaje, 2000);
             await cmd.ExecuteNonQueryAsync(ct);
+            _logger.LogDebug("[SIRE-LOG] Inserción exitosa: {Op} - {HttpStatus}", log.Operacion, log.HttpStatus);
         }
         catch (Exception ex)
         {
             // El log no debe interrumpir el flujo principal
-            _logger.LogWarning(ex, "[SIRE-LOG] No se pudo insertar log de auditoría en Oracle.");
+            _logger.LogError(ex, "[SIRE-LOG] No se pudo insertar log de auditoría: {Op}", log.Operacion);
         }
     }
 
@@ -235,25 +256,35 @@ public sealed class SireOracleRepository : ISireOracleRepository
         string? operacion = null,
         CancellationToken ct = default)
     {
-        var where = new List<string>();
-        if (!string.IsNullOrWhiteSpace(jobId))     where.Add("JOB_ID = :jobId");
-        if (!string.IsNullOrWhiteSpace(operacion)) where.Add("OPERACION = :op");
+        top = Math.Max(1, Math.Min(top, 5000)); // Sanitize range
 
-        var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : string.Empty;
+        // Build dynamic WHERE clause with proper filtering
+        var whereConditions = new List<string>();
+        if (!string.IsNullOrWhiteSpace(jobId))     whereConditions.Add("JOB_ID = :jobId");
+        if (!string.IsNullOrWhiteSpace(operacion)) whereConditions.Add("OPERACION = :op");
+
+        var whereClause = whereConditions.Count > 0 
+            ? "WHERE " + string.Join(" AND ", whereConditions)
+            : "";
+
+        // Oracle 10g compatible: use subquery with ROWNUM inside the ORDER BY wrapper
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL,
-                       HTTP_STATUS, DURACION_MS, EXITO, MENSAJE
-                FROM SIG.SIRE_LOG
-                {whereClause}
-                ORDER BY FECHA DESC
-            ) WHERE ROWNUM <= :top";
+                SELECT * FROM (
+                    SELECT ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL,
+                           HTTP_STATUS, DURACION_MS, EXITO, MENSAJE
+                    FROM SIG.SIRE_LOG
+                    {whereClause}
+                    ORDER BY FECHA DESC
+                ) WHERE ROWNUM <= :top
+            )";
 
         var list = new List<SireApiLog>();
         await using var conn = new OracleConnection(_connStr);
         await conn.OpenAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+
         cmd.Parameters.Add(":top", OracleDbType.Int32).Value = top;
         if (!string.IsNullOrWhiteSpace(jobId))     cmd.Parameters.Add(":jobId", OracleDbType.Varchar2).Value = jobId;
         if (!string.IsNullOrWhiteSpace(operacion)) cmd.Parameters.Add(":op",    OracleDbType.Varchar2).Value = operacion;

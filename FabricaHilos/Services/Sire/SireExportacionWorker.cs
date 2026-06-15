@@ -111,23 +111,7 @@ public sealed class SireExportacionWorker : BackgroundService
 
         var esVentas = job.TipoRegistro.Equals("ventas", StringComparison.OrdinalIgnoreCase);
 
-        // Helper local: inserta un log de auditoría y devuelve el ID para actualizarlo después
-        async Task<long> LogInicioAsync(string operacion, string metodo, string? url, string? mensaje = null)
-        {
-            var entry = new SireApiLog
-            {
-                JobId      = job.JobId,
-                Operacion  = operacion,
-                MetodoHttp = metodo,
-                Url        = url,
-                Exito      = false,
-                Mensaje    = mensaje ?? $"Iniciando {operacion}...",
-                Fecha      = DateTime.UtcNow,
-            };
-            await _repo.InsertApiLogAsync(entry, stoppingToken);
-            return entry.Id;
-        }
-
+        // Helper local: inserta un log de auditoría
         async Task LogFinAsync(string operacion, long duracionMs, bool exito, string? mensaje, int? httpStatus = null)
         {
             var entry = new SireApiLog
@@ -149,6 +133,8 @@ public sealed class SireExportacionWorker : BackgroundService
             job.Estado             = EstadoJob.EnProceso;
             job.FechaActualizacion = DateTime.UtcNow;
             await _repo.UpdateJobAsync(job, stoppingToken);
+            await LogFinAsync(SireOperacion.Exportar, 0, true,
+                $"Job iniciado: tipo={job.TipoRegistro} periodo={job.Periodo} usuario={job.UsuarioId}");
 
             // ── PASO 2: Exportar propuesta → obtener ticket
             // Si el job ya tiene NumTicket (reencole tras 504/interrupción) se salta este paso.
@@ -270,22 +256,30 @@ public sealed class SireExportacionWorker : BackgroundService
             job.RutaArchivo        = Path.Combine(rutaDest, archivo.NombreArchivo);
             job.FechaActualizacion = DateTime.UtcNow;
             await _repo.UpdateJobAsync(job, stoppingToken);
+            await LogFinAsync(SireOperacion.Guardar, 0, true,
+                $"Archivo guardado: {job.RutaArchivo}");
 
             _logger.LogInformation("[SIRE-WORKER] [{JobId}] Archivo guardado en: {Ruta}", job.JobId, job.RutaArchivo);
 
             // ── PASO 6:
             _logger.LogInformation("[SIRE-WORKER] [{JobId}] Cargando propuesta en Oracle SIRE_VALIDA...", job.JobId);
+            var swCargar = System.Diagnostics.Stopwatch.StartNew();
             var resultado = await validaService.CargarDesdeZipAsync(
                 archivo.Contenido, job.TipoRegistro, job.Periodo, stoppingToken);
+            swCargar.Stop();
 
             job.RegistrosInsertados  = resultado.Insertados;
             job.RegistrosDuplicados  = resultado.Duplicados;
+            await LogFinAsync(SireOperacion.Cargar, swCargar.ElapsedMilliseconds, true,
+                $"Oracle SIRE_VALIDA actualizado: {resultado.Insertados} insertados, {resultado.Duplicados} duplicados, {resultado.Errores} errores");
 
             // ── PASO 7: Completado ────────────────────────────────────────────────
             job.Estado              = EstadoJob.Completado;
             job.FechaActualizacion  = DateTime.UtcNow;
             job.FechaFinalizacion   = DateTime.UtcNow;
             await _repo.UpdateJobAsync(job, stoppingToken);
+            await LogFinAsync(SireOperacion.Completar, 0, true,
+                $"Job completado exitosamente: {resultado.Insertados} reg. insertados, {resultado.Duplicados} duplicados");
 
             _logger.LogInformation(
                 "[SIRE-WORKER] [{JobId}] ✓ Completado: {Ins} registros insertados, {Dup} duplicados, {Err} errores.",
@@ -321,6 +315,14 @@ public sealed class SireExportacionWorker : BackgroundService
                 }
 
                 await _repo.UpdateJobAsync(jobDb, stoppingToken);
+                await _repo.InsertApiLogAsync(new SireApiLog
+                {
+                    JobId     = job.JobId,
+                    Operacion = EstadoJob.Error,
+                    Exito     = false,
+                    Mensaje   = ex.Message[..Math.Min(2000, ex.Message.Length)],
+                    Fecha     = DateTime.UtcNow,
+                }, stoppingToken);
             }
             catch (Exception dbEx)
             {

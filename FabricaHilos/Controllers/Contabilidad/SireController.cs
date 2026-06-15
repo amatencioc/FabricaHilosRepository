@@ -899,6 +899,66 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
+    /// Retorna los N jobs más recientes (cualquier estado) para el panel de actividad del Index.
+    /// Incluye logs recientes para el job activo si lo hay.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> JobsRecientes(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var jobs = await _sireRepo.GetJobsRecientesAsync(30, cancellationToken);
+
+            // Para los jobs activos, adjuntar los últimos logs de SIRE_LOG
+            var jobActivo = jobs.FirstOrDefault(j =>
+                j.Estado == EstadoJob.Pendiente || j.Estado == EstadoJob.EnProceso);
+
+            List<SireApiLog>? logsActivos = null;
+            if (jobActivo is not null)
+            {
+                logsActivos = await _sireRepo.GetApiLogsAsync(20, jobActivo.JobId, null, cancellationToken);
+            }
+
+            return Json(new
+            {
+                exitoso = true,
+                jobs = jobs.Select(j => new
+                {
+                    j.JobId,
+                    j.TipoRegistro,
+                    j.Periodo,
+                    j.Estado,
+                    j.NumTicket,
+                    j.NombreArchivo,
+                    j.RegistrosInsertados,
+                    j.RegistrosDuplicados,
+                    j.MensajeError,
+                    j.UsuarioId,
+                    FechaCreacion     = j.FechaCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
+                    FechaActualizacion = j.FechaActualizacion.ToString("dd/MM/yyyy HH:mm:ss"),
+                    FechaFinalizacion = j.FechaFinalizacion?.ToString("dd/MM/yyyy HH:mm:ss"),
+                    esFinal           = j.Estado == EstadoJob.Completado || j.Estado == EstadoJob.Error,
+                    puedeReintentar   = j.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(j.NumTicket),
+                }),
+                logsActivos = logsActivos?.Select(l => new
+                {
+                    l.Operacion,
+                    l.Exito,
+                    l.Mensaje,
+                    l.HttpStatus,
+                    l.DuracionMs,
+                    Fecha = l.Fecha.ToString("dd/MM/yyyy HH:mm:ss"),
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al obtener jobs recientes SIRE");
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Crea un job de exportación asíncrona y lo encola para el BackgroundService.
     /// Si ya existe un job activo (Pendiente o EnProceso) para el mismo período y tipo,
     /// retorna ese job en lugar de crear uno nuevo.
