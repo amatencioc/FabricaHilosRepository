@@ -2,6 +2,7 @@
 using FabricaHilos.Services.RecursosHumanos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
 {
@@ -211,6 +212,58 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
             return Json(new { ok = true, jobIds, total = jobIds.Count });
         }
 
+        // ========== DEPURAR FECHAS ESPECÍFICAS — Un job por (empleado, fecha S) ==========
+        // Recibe: fechasJson = JSON array [{personal:"001234", fechas:["2026-06-09","2026-06-11"]}, ...]
+        // Encola un job por cada (empleado, fecha), usando FechaInicio=FechaFin=fecha.
+
+        [HttpPost("DepurarFechasEspecificas")]
+        [ValidateAntiForgeryToken]
+        public IActionResult DepurarFechasEspecificas([FromForm] string fechasJson)
+        {
+            if (string.IsNullOrWhiteSpace(fechasJson))
+                return Json(new { ok = false, mensaje = "Sin datos." });
+
+            List<PersonalFechasDto>? lista;
+            try
+            {
+                lista = JsonSerializer.Deserialize<List<PersonalFechasDto>>(fechasJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                return Json(new { ok = false, mensaje = "Formato JSON inválido." });
+            }
+
+            if (lista == null || !lista.Any())
+                return Json(new { ok = false, mensaje = "No hay empleados seleccionados." });
+
+            var oracleUser = HttpContext.Session.GetString("OracleUser");
+            var oraclePass = HttpContext.Session.GetString("OraclePass");
+            string connStr = _baseConnStr;
+            if (!string.IsNullOrEmpty(oracleUser) && !string.IsNullOrEmpty(oraclePass))
+            {
+                var csb = new Oracle.ManagedDataAccess.Client.OracleConnectionStringBuilder(_baseConnStr)
+                {
+                    UserID   = oracleUser,
+                    Password = oraclePass
+                };
+                connStr = csb.ToString();
+            }
+
+            var jobIds = lista
+                .SelectMany(pf => (pf.Fechas ?? [])
+                    .Where(f => DateTime.TryParseExact(f, "yyyy-MM-dd", null,
+                                    System.Globalization.DateTimeStyles.None, out _))
+                    .Select(f =>
+                    {
+                        var dt = DateTime.ParseExact(f, "yyyy-MM-dd", null);
+                        return _depuracionJobService.Encolar(CodEmpresaAquarius, pf.Personal!, dt, dt, connStr);
+                    }))
+                .ToList();
+
+            return Json(new { ok = true, jobIds, total = jobIds.Count });
+        }
+
         // ========== CONSULTAR ESTADO DE DEPURACIÓN (polling) ==========
 
         [HttpGet("ConsultarDepuracion")]
@@ -242,3 +295,6 @@ namespace FabricaHilos.Controllers.RecursosHumanos.Aquarius
         }
     }
 }
+
+// ── DTO para DepurarFechasEspecificas ─────────────────────────────────────────
+file record PersonalFechasDto(string? Personal, List<string>? Fechas);

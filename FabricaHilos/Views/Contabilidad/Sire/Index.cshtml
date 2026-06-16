@@ -251,42 +251,85 @@
         </a>
     </div>
     <div class="card-body p-0">
+
+        <!-- ══ Estado del procesador (visible solo cuando hay jobs activos) ══ -->
+        <div id="estadoCola" style="display:none;" class="px-3 pt-3 pb-2 border-bottom">
+            <div class="d-flex align-items-center gap-1 mb-2">
+                <i class="bi bi-cpu text-secondary" style="font-size:.85rem;"></i>
+                <span class="small text-muted fw-semibold">Cola de procesamiento SUNAT</span>
+                <span class="badge bg-secondary ms-1" style="font-size:.65rem;">1 proceso a la vez</span>
+            </div>
+            <div id="estadoColaContenido" class="row g-2"></div>
+        </div>
+
+        <!-- ══ Tabla de jobs ══ -->
         <div class="table-responsive">
             <table class="table sire-table table-hover align-middle mb-0 small">
                 <thead>
                     <tr>
                         <th style="width:70px">Tipo</th>
-                        <th style="width:80px">Período</th>
+                        <th style="width:90px">Período</th>
                         <th>Estado</th>
-                        <th>Ticket SUNAT</th>
-                        <th>Registros</th>
-                        <th>Iniciado</th>
-                        <th style="width:60px"></th>
+                        <th style="width:160px">Iniciado</th>
+                        <th style="width:90px"></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyJobs">
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-3 small">
+                        <td colspan="5" class="text-center text-muted py-3 small">
                             <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando actividad…
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        <!-- Log del proceso activo -->
-        <div class="px-3 py-2 border-top" id="seccionLogsActivos">
+
+        <!-- ══ Log del proceso activo ══ -->
+        <div class="px-3 py-2 border-top" id="seccionLogsActivos" style="display:none;">
             <div class="d-flex align-items-center gap-2 mb-2">
                 <i class="bi bi-journal-text text-info"></i>
-                <span class="fw-semibold small">Log del proceso activo</span>
+                <span class="fw-semibold small">Actividad del proceso en curso</span>
             </div>
-            <div id="logsActivosContainer" style="max-height:200px;overflow-y:auto;font-size:.8rem;">
-                <p class="text-muted small mb-0">Sin proceso activo en este momento.</p>
+            <div id="logsActivosContainer" style="max-height:180px;overflow-y:auto;font-size:.8rem;"></div>
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+
+<!-- Modal: Ver proceso activo desde el Dashboard -->
+<div class="modal fade" id="modalJobActivo" tabindex="-1" aria-labelledby="modalJobActivoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2" id="modalJobActivoHeader" style="background:#0dcaf0;color:#000;">
+                <h6 class="modal-title" id="modalJobActivoLabel">
+                    <i class="bi bi-cpu me-2"></i><span id="modalJobActivoTitulo">Proceso activo</span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="modalJobActivoEstado">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-info mb-2" role="status"></div>
+                        <p class="text-muted small">Cargando estado…</p>
+                    </div>
+                </div>
+                <div id="modalJobActivoLogs"
+                     style="display:none;max-height:200px;overflow-y:auto;font-size:.8rem;
+                            border-top:1px solid #dee2e6;margin-top:.75rem;padding-top:.5rem">
+                </div>
+            </div>
+            <div class="modal-footer py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnIrVistaJob" onclick="_irAVistaJob()">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Ir a vista completa
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
 </div>
 
-@section Scripts {
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('[data-bs-toggle="tooltip"]')
@@ -306,27 +349,119 @@
             const data = await resp.json();
             if (!data.exitoso) return;
 
-            renderizarJobs(data.jobs || []);
+            const jobs = data.jobs || [];
+            renderizarEstadoCola(jobs);
+            renderizarJobs(jobs);
             renderizarLogsActivos(data.logsActivos || []);
 
-            // Si hay algún job activo, seguir actualizando cada 5s
-            const hayActivo = (data.jobs || []).some(j => j.estado === 'Pendiente' || j.estado === 'EnProceso');
+            const hayActivo = jobs.some(j => j.estado === 'Pendiente' || j.estado === 'EnProceso' || j.estado === 'EsperandoTicket');
             clearTimeout(_actividadTimer);
-            if (hayActivo) {
-                _actividadTimer = setTimeout(cargarPanelActividad, 5000);
-            }
-        } catch (e) {
-            // Silencioso — el panel no es crítico
-        }
+            if (hayActivo) _actividadTimer = setTimeout(cargarPanelActividad, 5000);
+        } catch (e) { /* silencioso */ }
     }
 
-    function badgeJob(estado) {
+    // ── Estado de la cola: tarjetas RVIE + RCE ──────────────────────────────
+    function renderizarEstadoCola(jobs) {
+        const cont      = document.getElementById('estadoCola');
+        const contenido = document.getElementById('estadoColaContenido');
+        if (!cont || !contenido) return;
+
+        const rvie = jobs.find(j => j.tipoRegistro === 'ventas'   && (j.estado === 'EnProceso' || j.estado === 'Pendiente' || j.estado === 'EsperandoTicket'));
+        const rce  = jobs.find(j => j.tipoRegistro === 'compras'  && (j.estado === 'EnProceso' || j.estado === 'Pendiente' || j.estado === 'EsperandoTicket'));
+
+        if (!rvie && !rce) { cont.style.display = 'none'; return; }
+        cont.style.display = '';
+
+        const rvieEnProceso = rvie?.estado === 'EnProceso';
+        const rceEnProceso  = rce?.estado  === 'EnProceso';
+
+        function tarjeta(tipo, job) {
+            const label = tipo === 'ventas' ? 'RVIE — Ventas' : 'RCE — Compras';
+            const jobId = job?.jobId; 
+            const per   = job ? (job.periodo.length === 6
+                ? `${job.periodo.slice(0,4)}/${job.periodo.slice(4)}`
+                : job.periodo) : '';
+
+            if (!job) {
+                return `<div class="col-sm-6">
+                    <div class="d-flex align-items-center gap-2 px-3 py-2 rounded" style="background:#f8f9fa;border:1px solid #dee2e6;">
+                        <i class="bi bi-dash-circle text-muted"></i>
+                        <span class="small text-muted">${label}: sin proceso activo</span>
+                    </div>
+                </div>`;
+            }
+
+            if (job.estado === 'EsperandoTicket') {
+                const proxima = job.proximaConsulta ? ` &mdash; Próx. consulta: <strong>${job.proximaConsulta}</strong>` : '';
+                return `<div class="col-sm-6">
+                    <div class="d-flex align-items-center gap-2 px-3 py-2 rounded" style="border:1px solid #ffc107;background:#fffde7;">
+                        <span style="font-size:1.1rem;flex-shrink:0;">⏳</span>
+                        <div style="flex:1;min-width:0;">
+                            <div><span class="badge bg-warning text-dark">${label}</span> <strong class="ms-1">${per}</strong></div>
+                            <div class="text-muted" style="font-size:.75rem;">Esperando respuesta de SUNAT${proxima}</div>
+                        </div>
+                        <button class="btn btn-xs btn-outline-warning py-0 px-2 ms-1" style="white-space:nowrap;"
+                                onclick="reconectarJobDesdeIndex('${jobId}','${job.periodo}','${job.tipoRegistro}')">
+                            <i class="bi bi-eye me-1"></i>Ver
+                        </button>
+                    </div>
+                </div>`;
+            }
+
+            if (job.estado === 'EnProceso') {
+                return `<div class="col-sm-6">
+                    <div class="d-flex align-items-center gap-2 px-3 py-2 rounded" style="border:1px solid #0dcaf0;background:#e8f7fc;">
+                        <span class="spinner-border spinner-border-sm text-info" style="width:.85rem;height:.85rem;flex-shrink:0;"></span>
+                        <div style="flex:1;min-width:0;">
+                            <div><span class="badge bg-info text-dark">${label}</span> <strong class="ms-1">${per}</strong></div>
+                            <div class="text-muted" style="font-size:.75rem;">Procesando en SUNAT…</div>
+                        </div>
+                        <button class="btn btn-xs btn-outline-info py-0 px-2 ms-1" style="white-space:nowrap;"
+                                onclick="reconectarJobDesdeIndex('${jobId}','${job.periodo}','${job.tipoRegistro}')">
+                            <i class="bi bi-eye me-1"></i>Ver
+                        </button>
+                    </div>
+                </div>`;
+            }
+
+            // Pendiente
+            const bloqueadoPor = (tipo === 'compras' && rvieEnProceso) ? 'RVIE (Ventas)'
+                               : (tipo === 'ventas'  && rceEnProceso)  ? 'RCE (Compras)'
+                               : null;
+            const nota = bloqueadoPor
+                ? `<i class="bi bi-hourglass-split text-warning me-1"></i>Esperando que termine <strong>${bloqueadoPor}</strong>. Se iniciará automáticamente.`
+                : `<i class="bi bi-hourglass me-1"></i>En cola — el servidor la procesará en breve.`;
+
+            return `<div class="col-sm-6">
+                <div class="d-flex align-items-center gap-2 px-3 py-2 rounded" style="border:1px solid #ffc107;background:#fffde7;">
+                    <i class="bi bi-hourglass-split text-warning" style="flex-shrink:0;font-size:1rem;"></i>
+                    <div style="flex:1;min-width:0;">
+                        <div><span class="badge bg-warning text-dark">${label}</span> <strong class="ms-1">${per}</strong></div>
+                        <div class="text-muted" style="font-size:.75rem;">${nota}</div>
+                    </div>
+                    <button class="btn btn-xs btn-outline-warning py-0 px-2 ms-1" style="white-space:nowrap;"
+                            onclick="reconectarJobDesdeIndex('${jobId}','${job.periodo}','${job.tipoRegistro}')">
+                        <i class="bi bi-eye me-1"></i>Ver
+                    </button>
+                </div>
+            </div>`;
+        }
+
+        contenido.innerHTML = `<div class="row g-2">${tarjeta('ventas', rvie)}${tarjeta('compras', rce)}</div>`;
+    }
+
+    // ── Tabla de jobs ────────────────────────────────────────────────────────
+    function badgeJob(estado, mensajeError) {
+        const errTip = mensajeError
+            ? ` <i class="bi bi-info-circle text-danger ms-1" title="${mensajeError.replace(/"/g,'&quot;').slice(0,200)}" data-bs-toggle="tooltip"></i>`
+            : '';
         switch (estado) {
-            case 'Pendiente':  return '<span class="badge bg-warning text-dark">Pendiente</span>';
-            case 'EnProceso':  return '<span class="badge bg-info text-dark"><span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>En proceso</span>';
-            case 'Completado': return '<span class="badge bg-success">Completado</span>';
-            case 'Error':      return '<span class="badge bg-danger">Error</span>';
-            default:           return `<span class="badge bg-secondary">${estado}</span>`;
+            case 'Pendiente':        return `<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>En cola</span>`;
+            case 'EnProceso':        return `<span class="badge bg-info text-dark"><span class="spinner-border spinner-border-sm me-1" style="width:.65rem;height:.65rem;"></span>En proceso</span>`;
+            case 'EsperandoTicket': return `<span class="badge bg-warning text-dark">⏳ Esperando SUNAT</span>`;
+            case 'Completado':       return `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Completado</span>`;
+            case 'Error':            return `<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Error</span>${errTip}`;
+            default:                 return `<span class="badge bg-secondary">${estado}</span>`;
         }
     }
 
@@ -335,85 +470,243 @@
         if (!tbody) return;
 
         if (!jobs.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3 small"><i class="bi bi-inbox me-1"></i>Sin actividad registrada</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3 small"><i class="bi bi-inbox me-1"></i>Sin actividad registrada</td></tr>';
             return;
         }
 
         tbody.innerHTML = jobs.map(j => {
-            const tipo   = j.tipoRegistro === 'ventas' ? 'RVIE' : 'RCE';
             const tipoBadge = j.tipoRegistro === 'ventas'
                 ? '<span class="sire-badge sire-badge-rvie">RVIE</span>'
                 : '<span class="sire-badge sire-badge-rce">RCE</span>';
-            const perFmt = j.periodo.length === 6 ? `${j.periodo.slice(0,4)}/${j.periodo.slice(4)}` : j.periodo;
-            const regs   = j.registrosInsertados != null ? `${j.registrosInsertados} reg.` : '—';
-            const ticket = j.numTicket
-                ? `<span class="sire-code" style="font-size:.7rem">${j.numTicket.slice(0,12)}…</span>`
-                : '—';
-            const err    = j.mensajeError
-                ? `<i class="bi bi-info-circle text-danger ms-1" title="${j.mensajeError.replace(/"/g,'&quot;')}" data-bs-toggle="tooltip"></i>`
-                : '';
-            const acciones = j.puedeReintentar
-                ? `<button class="btn btn-xs btn-outline-warning py-0 px-1" onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')" title="Reintentar"><i class="bi bi-arrow-clockwise"></i></button>`
-                : (j.esFinal ? '' : `<button class="btn btn-xs btn-outline-info py-0 px-1" onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')" title="Ver progreso"><i class="bi bi-eye"></i></button>`);
+            const perFmt = j.periodo && j.periodo.length === 6
+                ? `${j.periodo.slice(0,4)}/${j.periodo.slice(4)}`
+                : (j.periodo || '—');
+
+            let accion = '';
+            if (j.estado === 'Pendiente' || j.estado === 'EnProceso' || j.estado === 'EsperandoTicket') {
+                accion = `<button class="btn btn-xs btn-outline-info py-0 px-2"
+                    onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')">
+                    <i class="bi bi-eye me-1"></i>Ver</button>`;
+            } else if (j.puedeReintentar) {
+                accion = `<button class="btn btn-xs btn-outline-warning py-0 px-2"
+                    onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Reintentar</button>`;
+            }
+
+            const fechaCol = j.estado === 'EsperandoTicket' && j.proximaConsulta
+                ? `<span title="Próx. consulta: ${j.proximaConsulta}">${j.fechaActualizacion} ⏳</span>`
+                : j.fechaCreacion;
 
             return `<tr>
                 <td>${tipoBadge}</td>
-                <td class="sire-badge sire-badge-period">${perFmt}</td>
-                <td>${badgeJob(j.estado)}${err}</td>
-                <td class="text-muted small">${ticket}</td>
-                <td class="text-muted small">${regs}</td>
-                <td class="text-muted small">${j.fechaCreacion}</td>
-                <td>${acciones}</td>
+                <td><span class="sire-badge sire-badge-period">${perFmt}</span></td>
+                <td>${badgeJob(j.estado, j.mensajeError)}</td>
+                <td class="text-muted small">${fechaCol}</td>
+                <td class="text-end">${accion}</td>
             </tr>`;
         }).join('');
 
-        // Re-inicializar tooltips en las nuevas filas
         tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
     }
 
+    // ── Log del proceso activo ───────────────────────────────────────────────
     function renderizarLogsActivos(logs) {
-        const cont = document.getElementById('logsActivosContainer');
-        if (!cont) return;
+        const cont    = document.getElementById('logsActivosContainer');
+        const seccion = document.getElementById('seccionLogsActivos');
+        if (!cont || !seccion) return;
 
-        if (!logs.length) {
-            cont.innerHTML = '<p class="text-muted small mb-0"><i class="bi bi-journal-text me-1"></i>Sin entradas de log para el proceso activo.</p>';
-            return;
-        }
+        if (!logs || !logs.length) { seccion.style.display = 'none'; return; }
+        seccion.style.display = '';
 
-        const filas = logs.map(l => {
+        const etiquetas = {
+            AUTH:      'Autenticación con SUNAT',
+            INICIAR:   'Job iniciado',
+            EXPORTAR:  'Exportación solicitada a SUNAT',
+            TICKET:    'Verificando respuesta de SUNAT',
+            DESCARGAR: 'Descargando archivo ZIP',
+            GUARDAR:   'Guardando archivo en servidor',
+            CARGAR:    'Cargando registros en Oracle',
+            COMPLETAR: 'Proceso completado',
+            ERROR:     'Error',
+            CANCEL:    'Cancelado manualmente',
+        };
+
+        cont.innerHTML = logs.map(l => {
             const icono = l.exito
-                ? '<i class="bi bi-check-circle text-success"></i>'
-                : '<i class="bi bi-x-circle text-danger"></i>';
-            const dur = l.duracionMs != null ? `<span class="text-muted ms-1">(${l.duracionMs}ms)</span>` : '';
-            const http = l.httpStatus != null ? `<span class="badge bg-secondary ms-1">${l.httpStatus}</span>` : '';
-            return `<div class="d-flex align-items-start gap-2 border-bottom py-1">
-                <span style="min-width:1rem">${icono}</span>
-                <div style="flex:1;min-width:0">
-                    <span class="badge bg-dark me-1" style="font-size:.65rem">${l.operacion}</span>
-                    ${http}
-                    <span class="small">${l.mensaje || ''}</span>${dur}
+                ? '<i class="bi bi-check-circle-fill text-success"></i>'
+                : '<i class="bi bi-x-circle-fill text-danger"></i>';
+            const label = etiquetas[l.operacion] || l.operacion;
+            const dur   = l.duracionMs > 0 ? `<span class="text-muted ms-1">(${l.duracionMs}ms)</span>` : '';
+            const http  = l.httpStatus ? `<span class="badge bg-secondary ms-1" style="font-size:.65rem">${l.metodo || ''} ${l.httpStatus}</span>` : '';
+            const msg   = l.mensaje
+                ? `<div class="${l.exito ? 'text-muted' : 'text-danger'} mt-1" style="font-size:.75rem;">${l.mensaje.slice(0,200)}</div>`
+                : '';
+            return `<div class="d-flex align-items-start gap-2 py-1 border-bottom">
+                <span style="min-width:1rem;margin-top:2px;flex-shrink:0;">${icono}</span>
+                <div style="flex:1;min-width:0;">
+                    <span class="small">${label}</span>${dur}${http}${msg}
                 </div>
                 <span class="text-muted small text-nowrap">${l.fecha.slice(11,19)}</span>
             </div>`;
         }).join('');
-
-        cont.innerHTML = filas;
     }
 
-    // Abre el modal de exportación reconectando a un job existente (desde la tabla de jobs)
+    // ── Navegar a la vista de Compras/Ventas y reconectar al job ────────────
+    let _modalJobId   = null;
+    let _modalPeriodo = null;
+    let _modalTipo    = null;
+    let _modalTimer   = null;
+
     async function reconectarJobDesdeIndex(jobId, periodo, tipo) {
-        // Navegar a la vista correcta con el modal abierto
-        const url = tipo === 'ventas'
-            ? '@Url.Action("Ventas", "Sire")?periodo=' + periodo
-            : '@Url.Action("Compras", "Sire")?periodo=' + periodo;
+        _modalJobId   = jobId;
+        _modalPeriodo = periodo;
+        _modalTipo    = tipo;
 
-        // Guardar jobId en sessionStorage para que la vista lo recoja
-        sessionStorage.setItem('sireJobId', jobId);
-        sessionStorage.setItem('periodoExportacion', periodo);
-        sessionStorage.setItem('tipoExportacion', tipo);
-        sessionStorage.setItem('sireReconectar', '1');
+        // Título del modal según tipo
+        const titulo = tipo === 'ventas' ? 'RVIE — Ventas' : 'RCE — Compras';
+        const perFmt = periodo.length === 6
+            ? `${periodo.slice(0,4)}/${periodo.slice(4)}` : periodo;
+        document.getElementById('modalJobActivoTitulo').textContent =
+            `${titulo} · ${perFmt}`;
 
+        // Color del header según tipo
+        const header = document.getElementById('modalJobActivoHeader');
+        header.style.background = tipo === 'ventas' ? '#90cdf4' : '#0dcaf0';
+
+        // Limpiar estado anterior
+        document.getElementById('modalJobActivoEstado').innerHTML =
+            `<div class="text-center py-3">
+                <div class="spinner-border text-info mb-2" role="status"></div>
+                <p class="text-muted small">Cargando estado…</p>
+             </div>`;
+        document.getElementById('modalJobActivoLogs').style.display = 'none';
+        document.getElementById('modalJobActivoLogs').innerHTML = '';
+
+        clearTimeout(_modalTimer);
+        const modal = new bootstrap.Modal(document.getElementById('modalJobActivo'));
+        modal.show();
+
+        // Cargar estado y logs del job
+        await _actualizarModalJob(jobId, periodo, tipo);
+    }
+
+    async function _actualizarModalJob(jobId, periodo, tipo) {
+        // Detener si el modal se cerró o cambió de job
+        if (_modalJobId !== jobId) return;
+        if (!document.getElementById('modalJobActivo').classList.contains('show')) return;
+
+        try {
+            const [respEstado, respLogs] = await Promise.all([
+                fetch(`@Url.Action("EstadoExportacion", "Sire")?jobId=${encodeURIComponent(jobId)}`),
+                fetch(`@Url.Action("LogsJob", "Sire")?jobId=${encodeURIComponent(jobId)}`)
+            ]);
+            const estado = await respEstado.json();
+            const logs   = await respLogs.json();
+
+            _renderEstadoModalJob(estado, jobId, periodo, tipo);
+            _renderLogsModalJob(logs);
+
+            // Seguir actualizando si no es estado final
+            if (estado.exitoso && !estado.esFinal) {
+                _modalTimer = setTimeout(() => _actualizarModalJob(jobId, periodo, tipo), 5000);
+            }
+        } catch { /* silencioso */ }
+    }
+
+    function _renderEstadoModalJob(result, jobId, periodo, tipo) {
+        const div = document.getElementById('modalJobActivoEstado');
+        if (!result.exitoso) {
+            div.innerHTML = `<div class="alert alert-danger py-2 small">${result.error || 'Error al obtener estado.'}</div>`;
+            return;
+        }
+        const estado = result.estado || 'EnProceso';
+        const badgeColor = estado === 'EnProceso'        ? 'info'
+            : estado === 'EsperandoTicket' ? 'warning'
+            : estado === 'Completado'      ? 'success'
+            : estado === 'Error'           ? 'danger' : 'secondary';
+        const estadoLabel = {
+            Pendiente: 'En cola', EnProceso: 'En proceso',
+            EsperandoTicket: '⏳ Esperando SUNAT',
+            Completado: 'Completado', Error: 'Error'
+        }[estado] || estado;
+        const spinner = (estado === 'EnProceso' || estado === 'Pendiente' || estado === 'EsperandoTicket')
+            ? `<span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem;"></span>` : '';
+        const proximaFila = estado === 'EsperandoTicket' && result.proximaConsulta
+            ? `<tr><td class="text-muted small">Próxima consulta</td><td class="small fw-semibold">${result.proximaConsulta}</td></tr>` : '';
+        const ticketFila = result.numTicket
+            ? `<tr><td class="text-muted small">Ticket SUNAT</td><td><code class="small">${result.numTicket}</code></td></tr>` : '';
+        const errorFila = estado === 'Error' && result.mensajeError
+            ? `<tr><td colspan="2"><div class="alert alert-danger py-1 mb-0 small">${result.mensajeError}</div></td></tr>` : '';
+
+        div.innerHTML = `
+            <div class="text-center mb-3">
+                <span class="badge bg-${badgeColor} text-dark p-2" style="font-size:.9rem;">
+                    ${spinner}${estadoLabel}
+                </span>
+            </div>
+            <table class="table table-sm table-borderless mb-0" style="font-size:.84rem">
+                <tr><td class="text-muted small">Período</td><td class="small fw-semibold">${result.periodo || periodo}</td></tr>
+                <tr><td class="text-muted small">Iniciado</td><td class="small">${result.fechaCreacion || ''}</td></tr>
+                ${ticketFila}${proximaFila}${errorFila}
+            </table>`;
+    }
+
+    function _renderLogsModalJob(data) {
+        const cont = document.getElementById('modalJobActivoLogs');
+        if (!data.exitoso || !data.logs?.length) return;
+        cont.style.display = 'block';
+
+        const etiquetas = {
+            AUTH:      { icon: '🔑', label: 'Autenticación con SUNAT' },
+            INICIAR:   { icon: '▶️',  label: 'Job iniciado' },
+            EXPORTAR:  { icon: '📤', label: 'Exportación solicitada a SUNAT' },
+            TICKET:    { icon: '🔄', label: 'Verificando respuesta de SUNAT' },
+            DESCARGAR: { icon: '⬇️', label: 'Descargando archivo' },
+            GUARDAR:   { icon: '💾', label: 'Guardando archivo' },
+            CARGAR:    { icon: '📥', label: 'Cargando registros al sistema' },
+            COMPLETAR: { icon: '✅', label: 'Proceso completado' },
+            CANCEL:    { icon: '🚫', label: 'Cancelado' },
+            ERROR:     { icon: '❌', label: 'Error' },
+        };
+        cont.innerHTML = `<div class="fw-semibold mb-1 text-muted" style="font-size:.75rem">ACTIVIDAD RECIENTE</div>` +
+            data.logs.map(l => {
+                const e   = etiquetas[l.operacion] || { icon: l.exito ? '✅' : '❌', label: l.operacion };
+                const css = l.exito ? 'text-success-emphasis' : 'text-danger-emphasis';
+                const dur = l.duracionMs > 0
+                    ? `<span class="badge bg-secondary ms-1" style="font-size:.65rem;font-weight:400">${l.duracionMs}ms</span>` : '';
+                const http = l.httpStatus
+                    ? `<span class="badge ms-1" style="font-size:.65rem;font-weight:400;background:#6c757d">${l.metodo||''} ${l.httpStatus}</span>` : '';
+                const msg = l.mensaje
+                    ? `<div class="text-muted" style="font-size:.78rem;word-break:break-word">${l.mensaje}</div>` : '';
+                return `<div class="d-flex gap-2 border-bottom py-1 align-items-start">
+                    <span>${e.icon}</span>
+                    <div style="flex:1">
+                        <span class="${css} fw-semibold">${e.label}</span>${dur}${http}${msg}
+                    </div>
+                    <span class="text-muted text-nowrap" style="font-size:.75rem">${l.fecha.slice(11,19)}</span>
+                </div>`;
+            }).join('');
+        // Scroll al final (último paso)
+        cont.scrollTop = cont.scrollHeight;
+    }
+
+    function _irAVistaJob() {
+        if (!_modalJobId || !_modalPeriodo || !_modalTipo) return;
+        const url = _modalTipo === 'ventas'
+            ? '@Url.Action("Ventas", "Sire")?periodo=' + _modalPeriodo
+            : '@Url.Action("Compras", "Sire")?periodo=' + _modalPeriodo;
+        sessionStorage.setItem('sireJobId',          _modalJobId);
+        sessionStorage.setItem('periodoExportacion', _modalPeriodo);
+        sessionStorage.setItem('tipoExportacion',    _modalTipo);
+        sessionStorage.setItem('sireReconectar',     '1');
         window.location.href = url;
     }
+
+    // Limpiar timer cuando se cierra el modal
+    document.getElementById('modalJobActivo')
+        .addEventListener('hidden.bs.modal', () => {
+            clearTimeout(_modalTimer);
+            _modalJobId = null;
+        });
 </script>
 }

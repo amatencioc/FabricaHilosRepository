@@ -249,7 +249,7 @@
                     <label class="form-label small mb-1">Operación</label>
                     <select name="operacion" class="form-select form-select-sm" style="width:150px">
                         <option value="">Todas</option>
-                        @foreach (var op in new[] { "AUTH", "EXPORTAR", "TICKET", "DESCARGAR", "HEALTH" })
+                        @foreach (var op in new[] { "AUTH", "EXPORTAR", "TICKET", "DESCARGAR", "GUARDAR", "CARGAR", "COMPLETAR", "CANCEL", "ERROR" })
                         {
                             <option value="@op" selected="@(Model.FiltroOperacion == op)">@op</option>
                         }

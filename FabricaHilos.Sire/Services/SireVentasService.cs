@@ -1,7 +1,9 @@
+using System.Text.Json;
 using FabricaHilos.Sire.Constants;
 using FabricaHilos.Sire.Interfaces;
 using FabricaHilos.Sire.Models;
 using FabricaHilos.Sire.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FabricaHilos.Sire.Services;
@@ -10,8 +12,13 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
 {
     protected override string LibroNombre => "RVIE";
 
-    public SireVentasService(HttpClient httpClient, ISireAuthService authService, IOptions<SireOptions> options)
-        : base(httpClient, authService, options) { }
+    private readonly ILogger<SireVentasService> _logger;
+
+    public SireVentasService(HttpClient httpClient, ISireAuthService authService, IOptions<SireOptions> options, ILogger<SireVentasService> logger)
+        : base(httpClient, authService, options)
+    {
+        _logger = logger;
+    }
 
     public async Task<IReadOnlyList<PropuestaDto>> ObtenerPeriodosAsync(CancellationToken cancellationToken = default)
     {
@@ -85,10 +92,18 @@ public sealed class SireVentasService : SireServiceBase, ISireVentasService
     public async Task<TicketEstado> ConsultarTicketAsync(string numTicket, string periodo, CancellationToken cancellationToken = default)
     {
         // El servicio 5.16 devuelve un wrapper paginado { paginacion, registros[] }.
-        // No se puede deserializar directamente a TicketEstado.
-        var respuesta = await SendAsync<TicketConsultaResponse>(
+        // Obtenemos el raw JSON para diagnóstico antes de deserializar.
+        var rawJson = await SendAsync<string>(
             HttpMethod.Get, SireEndpoints.ConsultarTicket(numTicket, periodo), null, cancellationToken);
-        return respuesta.ToTicketEstado();
+        _logger.LogDebug("[SIRE-RVIE] Ticket {Ticket} raw: {Json}", numTicket, rawJson);
+
+        var respuesta = JsonSerializer.Deserialize<TicketConsultaResponse>(rawJson, JsonOptions) ?? new TicketConsultaResponse();
+        var estado = respuesta.ToTicketEstado();
+
+        if (estado.EsFinal && estado.ArchivoReporte?.NomArchivoReporte is null)
+            _logger.LogWarning("[SIRE-RVIE] Ticket {Ticket} finalizado ({Estado}) sin archivoReporte. Raw: {Json}", numTicket, estado.Estado, rawJson);
+
+        return estado;
     }
 
     /// <summary>

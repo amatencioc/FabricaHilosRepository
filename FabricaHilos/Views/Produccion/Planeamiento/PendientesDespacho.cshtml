@@ -151,18 +151,9 @@
                                         </small>
                                     </td>
                                     <td class="text-center text-muted">
-                                        @if ((item.CodPasoAct is "12" or "13") && item.KgProducidos == 0)
+                                        @if (item.NroRmc > 0)
                                         {
-                                            <small class="badge bg-info text-dark" style="font-size:.66rem;" title="Despacho directo desde stock – sin partida de producción propia">
-                                                Stock
-                                            </small>
-                                        }
-                                        else if (item.NroRmc > 0)
-                                        {
-                                            <span class="fw-semibold">@item.NroRmc.ToString("N0")</span><br />
-                                            <small class="badge bg-secondary" style="font-size:.66rem;">
-                                                @(item.Rmc == "R" ? "Rollo" : item.Rmc == "M" ? "Madeja" : item.Rmc)
-                                            </small>
+                                            @item.NroRmc.ToString("N0")
                                         }
                                         else { @("—") }
                                     </td>
@@ -320,10 +311,7 @@
                                     <td class="text-center text-muted">
                                         @if (item.NroRmc > 0)
                                         {
-                                            <span class="fw-semibold">@item.NroRmc.ToString("N0")</span><br />
-                                            <small class="badge bg-secondary" style="font-size:.6rem;">
-                                                @(item.Rmc == "R" ? "Rollo" : item.Rmc == "M" ? "Madeja" : item.Rmc)
-                                            </small>
+                                            @item.NroRmc.ToString("N0")
                                         }
                                         else { @("—") }
                                     </td>

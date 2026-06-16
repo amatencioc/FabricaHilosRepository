@@ -23,13 +23,20 @@ public interface ISireOracleRepository
     Task<SireExportacionJob?> GetJobByJobIdAsync(string jobId, CancellationToken ct = default);
 
     /// <summary>
-    /// Busca el job más reciente en estado Pendiente o EnProceso para el período y tipo dados.
+    /// Busca el job más reciente en estado Pendiente o EnProceso para el tipo dado.
+    /// Solo puede existir UN job activo por tipo (compras|ventas) a la vez.
     /// Usado para detectar si ya existe un proceso activo antes de crear uno nuevo.
     /// </summary>
-    Task<SireExportacionJob?> GetJobActivoAsync(string tipoRegistro, string periodo, CancellationToken ct = default);
+    Task<SireExportacionJob?> GetJobActivoAsync(string tipoRegistro, CancellationToken ct = default);
 
     /// <summary>Obtiene todos los jobs en estado Pendiente o EnProceso (para reencolar al reiniciar).</summary>
     Task<List<SireExportacionJob>> GetJobsInterrumpidosAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Obtiene todos los jobs en estado EsperandoTicket cuya PROXIMA_CONSULTA ya venció.
+    /// Usado por SireTicketWatcherWorker para consultar el estado del ticket en SUNAT.
+    /// </summary>
+    Task<List<SireExportacionJob>> GetJobsEsperandoTicketAsync(CancellationToken ct = default);
 
     /// <summary>
     /// Obtiene los N jobs más recientes (cualquier estado), ordenados por fecha creación desc.
@@ -55,5 +62,9 @@ public interface ISireOracleRepository
     /// <param name="top">Máximo de filas a retornar.</param>
     /// <param name="jobId">Filtrar por JobId específico (null = todos).</param>
     /// <param name="operacion">Filtrar por operación: AUTH|EXPORTAR|TICKET|DESCARGAR|HEALTH (null = todas).</param>
-    Task<List<SireApiLog>> GetApiLogsAsync(int top = 200, string? jobId = null, string? operacion = null, CancellationToken ct = default);
+    /// <param name="ordenAscendente">
+    /// true  = ORDER BY ID ASC  (cronológico, para el modal de progreso del job).
+    /// false = ORDER BY ID DESC (más reciente primero, para Monitoreo y actividad).
+    /// </param>
+    Task<List<SireApiLog>> GetApiLogsAsync(int top = 200, string? jobId = null, string? operacion = null, CancellationToken ct = default, bool ordenAscendente = false);
 }

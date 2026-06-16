@@ -58,10 +58,22 @@ public sealed class TicketEstado
     [JsonIgnore]
     public string Ticket => NumTicket;
 
+    /// <summary>
+    /// True cuando SUNAT ha terminado de procesar el ticket (exitoso o con error).
+    /// RVIE devuelve "COMPLETADO"; RCE devuelve "Terminado" (misma semántica, distinto literal).
+    /// Los códigos 3 y 4 son la representación numérica del estado finalizado.
+    /// </summary>
     public bool EsFinal =>
         string.Equals(Estado, "COMPLETADO", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Estado, "TERMINADO", StringComparison.OrdinalIgnoreCase)   // RCE devuelve "Terminado"
         || string.Equals(Estado, "ERROR", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Estado, "RECHAZADO", StringComparison.OrdinalIgnoreCase)
         || CodEstadoProceso == "3"
         || CodEstadoProceso == "4";
+
+    /// <summary>True cuando el ticket finalizó con éxito (archivo generado esperado).</summary>
+    public bool EsExito =>
+        string.Equals(Estado, "COMPLETADO", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Estado, "TERMINADO", StringComparison.OrdinalIgnoreCase)
+        || CodEstadoProceso == "3";
 }

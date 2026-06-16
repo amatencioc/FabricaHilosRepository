@@ -57,12 +57,25 @@ public class SireExportacionJob
 
     /// <summary>Timestamp UTC de finalización (Completado o Error).</summary>
     public DateTime? FechaFinalizacion { get; set; }
+
+    /// <summary>
+    /// Fecha/hora mínima para la próxima consulta del ticket a SUNAT.
+    /// Solo aplica cuando Estado = EsperandoTicket.
+    /// Controlada por SireTicketWatcherWorker.
+    /// </summary>
+    public DateTime? ProximaConsulta { get; set; }
 }
 
 public static class EstadoJob
 {
-    public const string Pendiente   = "Pendiente";
-    public const string EnProceso   = "EnProceso";
-    public const string Completado  = "Completado";
-    public const string Error       = "Error";
+    public const string Pendiente        = "Pendiente";
+    public const string EnProceso        = "EnProceso";
+    /// <summary>Ticket obtenido; SUNAT aún procesando. SireTicketWatcherWorker vigila cada 15 min.</summary>
+    public const string EsperandoTicket  = "EsperandoTicket";
+    public const string Completado       = "Completado";
+    public const string Error            = "Error";
+
+    /// <summary>Estados que representan un job en curso (no terminal).</summary>
+    public static readonly IReadOnlyList<string> Activos =
+        [Pendiente, EnProceso, EsperandoTicket];
 }

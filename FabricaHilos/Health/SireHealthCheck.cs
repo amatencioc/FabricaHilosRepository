@@ -65,7 +65,7 @@ public sealed class SireHealthCheck : IHealthCheck
             {
                 _logger.LogWarning(ex, "[SIRE-HEALTH] Error al consultar RVIE: {Status}", ex.StatusCode);
                 data["rvie_ok"] = false;
-                data["rvie_error"] = $"{(int)ex.StatusCode} {ex.Message}";
+                data["rvie_error"] = $"{(int)(ex.StatusCode ?? 0)} {ex.Message}";
 
                 // 401/403 indica problema de autorización (credenciales, scope, etc.)
                 if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized || 
@@ -76,7 +76,7 @@ public sealed class SireHealthCheck : IHealthCheck
                         data: data);
                 }
 
-                warnings.Add($"RVIE no disponible: {ex.StatusCode}");
+                warnings.Add($"RVIE no disponible: {ex.StatusCode ?? 0}");
             }
 
             // 3. Validar conectividad RCE
@@ -91,7 +91,7 @@ public sealed class SireHealthCheck : IHealthCheck
             {
                 _logger.LogWarning(ex, "[SIRE-HEALTH] Error al consultar RCE: {Status}", ex.StatusCode);
                 data["rce_ok"] = false;
-                data["rce_error"] = $"{(int)ex.StatusCode} {ex.Message}";
+                data["rce_error"] = $"{(int)(ex.StatusCode ?? 0)} {ex.Message}";
 
                 if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized || 
                     ex.StatusCode == System.Net.HttpStatusCode.Forbidden)

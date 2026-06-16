@@ -12,10 +12,20 @@
     bool esPendDespacho    = ctrl == "Planeamiento" && act == "PendientesDespacho";
     bool esProximosVencer  = ctrl == "Planeamiento" && act == "ProximosVencer";
     bool esSeguimTinto     = ctrl == "Planeamiento" && act == "SeguimientoTintoreria";
+    bool esPendRevisado    = ctrl == "Planeamiento" && act == "PendientesRevisado";
+    bool esPendEvalCal     = ctrl == "Planeamiento" && act == "PendientesEvalCalidad";
+    bool esPendEnconado    = ctrl == "Planeamiento" && act == "PendientesEnconado";
+    bool esPendTenido      = ctrl == "Planeamiento" && act == "PendientesTenido";
+    bool esPartidasDef     = ctrl == "Planeamiento" && act == "PartidasPorDefinir";
 
     // Auto-refresh: segundos por vista (0 = sin auto-refresh)
     int autoRefreshSeg = act switch {
         "PendientesDespacho"     => 180,
+        "PendientesRevisado"     => 180,
+        "PendientesEvalCalidad"  => 180,
+        "PartidasPorDefinir"     => 180,
+        "PendientesEnconado"     => 180,
+        "PendientesTenido"       => 180,
         "Dashboard"              => 300,
         "CargaMaquinas"          => 300,
         "Alertas"                => 300,
@@ -35,6 +45,15 @@
                 </a>
             </li>
         }
+        @if (menus.PlaneamientoSeguimientoTintoreria)
+        {
+            <li class="pln-navbar-item @(esSeguimTinto ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="SeguimientoTintoreria" class="pln-navbar-link">
+                    <i class="bi bi-table"></i>
+                    <span>Seguimiento Prog. Tintorería</span>
+                </a>
+            </li>
+        }
         @if (menus.PlaneamientoProximosVencer)
         {
             <li class="pln-navbar-item @(esProximosVencer ? "active" : "")">
@@ -44,21 +63,48 @@
                 </a>
             </li>
         }
-        @if (menus.PlaneamientoSeguimientoTintoreria)
+        @if (menus.PlaneamientoPendTenido)
         {
-            <li class="pln-navbar-item @(esSeguimTinto ? "active" : "")">
-                <a asp-controller="Planeamiento" asp-action="SeguimientoTintoreria" class="pln-navbar-link">
-                    <i class="bi bi-table"></i>
-                    <span>Seg. Prog. Tintorería</span>
+            <li class="pln-navbar-item @(esPendTenido ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesTenido" class="pln-navbar-link">
+                    <i class="bi bi-droplet-half"></i>
+                    <span>Pend. Teñido</span>
                 </a>
             </li>
         }
-        @if (menus.PlaneamientoCargaMaquinas)
+        @if (menus.PlaneamientoPendEvalCalidad)
         {
-            <li class="pln-navbar-item @(esCargaMaquinas ? "active" : "")">
-                <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="pln-navbar-link">
-                    <i class="bi bi-gear-wide-connected"></i>
-                    <span>Carga Máquinas</span>
+            <li class="pln-navbar-item @(esPendEvalCal ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="pln-navbar-link">
+                    <i class="bi bi-patch-check"></i>
+                    <span>Pend. Eval. Calidad</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoPendPartidasDef)
+        {
+            <li class="pln-navbar-item @(esPartidasDef ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="pln-navbar-link">
+                    <i class="bi bi-question-circle"></i>
+                    <span>Partidas por Definir</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoPendEnconado)
+        {
+            <li class="pln-navbar-item @(esPendEnconado ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesEnconado" class="pln-navbar-link">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span>Pend. Enconado</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoPendRevisado)
+        {
+            <li class="pln-navbar-item @(esPendRevisado ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesRevisado" class="pln-navbar-link">
+                    <i class="bi bi-clipboard2-check"></i>
+                    <span>Pend. Revisado</span>
                 </a>
             </li>
         }
@@ -71,6 +117,15 @@
                 </a>
             </li>
         }
+        @if (menus.PlaneamientoCargaMaquinas)
+        {
+            <li class="pln-navbar-item @(esCargaMaquinas ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="pln-navbar-link">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span>Carga Máquinas</span>
+                </a>
+            </li>
+        }
         @if (menus.PlaneamientoAlertas)
         {
             <li class="pln-navbar-item @(esAlertas ? "active" : "")">
@@ -80,20 +135,6 @@
                 </a>
             </li>
         }
-        <li class="pln-navbar-item disabled" title="Módulo en desarrollo">
-            <span class="pln-navbar-link" style="opacity:.5;cursor:not-allowed;">
-                <i class="bi bi-clock-history"></i>
-                <span>Historial</span>
-                <span class="badge bg-secondary ms-1" style="font-size:.58rem;vertical-align:middle;">Dev</span>
-            </span>
-        </li>
-        <li class="pln-navbar-item disabled" title="Módulo en desarrollo">
-            <span class="pln-navbar-link" style="opacity:.5;cursor:not-allowed;">
-                <i class="bi bi-sliders"></i>
-                <span>Parámetros</span>
-                <span class="badge bg-secondary ms-1" style="font-size:.58rem;vertical-align:middle;">Dev</span>
-            </span>
-        </li>
     </ul>
 
     @if (autoRefreshSeg > 0)

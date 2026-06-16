@@ -54,11 +54,13 @@ if (!string.IsNullOrEmpty(logDirectory) && !Directory.Exists(logDirectory))
     Directory.CreateDirectory(logDirectory);
 }
 
+// Eliminar providers por defecto para evitar duplicación con Serilog Console sink
+builder.Logging.ClearProviders();
+
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
     .WriteTo.File(
         path: logPath,
         rollingInterval: RollingInterval.Day,
@@ -183,6 +185,7 @@ builder.Services.AddScoped<IPlnAlertaService, PlnAlertaService>();
 builder.Services.AddScoped<IPlnKpiService, PlnKpiService>();
 builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 builder.Services.AddScoped<IPlnReporteService, PlnReporteService>();
+builder.Services.AddScoped<IPlnPendientesService, PlnPendientesService>();
 
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
@@ -221,6 +224,8 @@ builder.Services.AddSingleton<ISireOracleRepository, SireOracleRepository>();
 builder.Services.AddSingleton<ISireExportacionQueue, SireExportacionQueue>();
 builder.Services.AddScoped<SireValidaService>();
 builder.Services.AddHostedService<SireExportacionWorker>();
+// Fase 2: Watcher de tickets SUNAT (polling cada WatcherIntervalMin minutos)
+builder.Services.AddHostedService<SireTicketWatcherWorker>();
 
 // NOTE: SireMonitoringService was previously registered as AddHostedService
 // It is now DEFERRED to lazy initialization - see LazySireInitializer

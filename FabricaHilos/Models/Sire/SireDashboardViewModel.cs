@@ -10,7 +10,7 @@ public class SireDashboardViewModel
     public bool EstadoConexion { get; set; }
 
     /// <summary>Mensaje descriptivo del estado</summary>
-    public string MensajeEstado { get; set; }
+    public string MensajeEstado { get; set; } = string.Empty;
 
     /// <summary>Indica si el sistema está en modo Mock</summary>
     public bool EsMock { get; set; }
@@ -29,7 +29,7 @@ public class SireDashboardViewModel
     public int RvieCerrados { get; set; }
 
     /// <summary>Próximo período RVIE con acción pendiente</summary>
-    public string RvieProximaAccion { get; set; }
+    public string RvieProximaAccion { get; set; } = string.Empty;
 
     /// <summary>Últimos 5 períodos RVIE ordenados descendentemente (objetos anónimos)</summary>
     public List<dynamic> RvieUltimosPeriodos { get; set; } = new();
@@ -48,7 +48,7 @@ public class SireDashboardViewModel
     public int RceCerrados { get; set; }
 
     /// <summary>Próximo período RCE con acción pendiente</summary>
-    public string RceProximaAccion { get; set; }
+    public string RceProximaAccion { get; set; } = string.Empty;
 
     /// <summary>Últimos 5 períodos RCE ordenados descendentemente (objetos anónimos)</summary>
     public List<dynamic> RceUltimosPeriodos { get; set; } = new();
@@ -61,7 +61,7 @@ public class SireDashboardViewModel
     public DateTime? UltimaRevisionSalud { get; set; }
 
     /// <summary>Estado del último health check</summary>
-    public string EstadoUltimaRevision { get; set; }
+    public string EstadoUltimaRevision { get; set; } = string.Empty;
 
     /// <summary>Advertencias o problemas detectados recientemente</summary>
     public List<string> Advertencias { get; set; } = new();

@@ -1,0 +1,159 @@
+@*
+    Partial reutilizable de filtros para las 4 vistas de Partidas Pendientes.
+    Parámetros vía ViewBag:
+      FiltroTipo      → List<PlnFiltroTipo>
+      FiltroAsesores  → List<PlnFiltroAsesor>
+      FiltroClientes  → List<PlnFiltroCliente>
+      FiltroTipoSel   → string (código seleccionado)
+      FiltroAsesor    → string (código actual)
+      FiltroCliente   → string (código actual)
+    Parámetros model:
+      @model string  → nombre de la action para el atributo asp-action del form y limpiar
+*@
+@using FabricaHilos.Models.Produccion.Planeamiento
+@{
+    var filtroTipo     = (ViewBag.FiltroTipo     as List<PlnFiltroTipo>)    ?? new List<PlnFiltroTipo>();
+    var filtroAsesores = (ViewBag.FiltroAsesores as List<PlnFiltroAsesor>)  ?? new List<PlnFiltroAsesor>();
+    var filtroClientes = (ViewBag.FiltroClientes as List<PlnFiltroCliente>) ?? new List<PlnFiltroCliente>();
+    var tipoSel        = ViewBag.FiltroTipoSel as string;
+    var asesorActual   = ViewBag.FiltroAsesor  as string ?? "";
+    var clienteActual  = ViewBag.FiltroCliente as string ?? "";
+    var actionName     = Model as string ?? "";
+}
+
+<form method="get" class="row g-2 mb-3 align-items-end" id="frmFiltrosPend">
+
+    @* ── Tipo ───────────────────────────────────────────────── *@
+    <div class="col-auto">
+        <label class="form-label form-label-sm mb-0">Tipo</label>
+        <select name="tipo" class="form-select form-select-sm" style="min-width:150px;">
+            <option value="">Todos</option>
+            @foreach (var ft in filtroTipo)
+            {
+                <option value="@ft.Tipo" selected="@(tipoSel == ft.Tipo ? "selected" : null)">@ft.Descripcion</option>
+            }
+        </select>
+    </div>
+
+    @* ── Asesor (filtrable) ─────────────────────────────────── *@
+    <div class="col-auto">
+        <label class="form-label form-label-sm mb-0">Asesor</label>
+        <div class="input-group input-group-sm" style="width:210px;">
+            <input type="text"
+                   id="inputAsesorDisplay"
+                   class="form-control form-control-sm"
+                   placeholder="Buscar asesor…"
+                   autocomplete="off"
+                   value="@(filtroAsesores.FirstOrDefault(a => a.CodVende == asesorActual)?.Nombre ?? asesorActual)" />
+            <input type="hidden" name="asesor" id="hiddenAsesor" value="@asesorActual" />
+        </div>
+        <div id="dropdownAsesor" class="pln-autocomplete-dropdown" style="display:none;min-width:260px;"></div>
+    </div>
+
+    @* ── Cliente (filtrable) ────────────────────────────────── *@
+    <div class="col-auto">
+        <label class="form-label form-label-sm mb-0">Cliente</label>
+        <div class="input-group input-group-sm" style="width:230px;">
+            <input type="text"
+                   id="inputClienteDisplay"
+                   class="form-control form-control-sm"
+                   placeholder="Buscar cliente…"
+                   autocomplete="off"
+                   value="@(filtroClientes.FirstOrDefault(c => c.CodCliente == clienteActual)?.Nombre ?? clienteActual)" />
+            <input type="hidden" name="cliente" id="hiddenCliente" value="@clienteActual" />
+        </div>
+        <div id="dropdownCliente" class="pln-autocomplete-dropdown" style="display:none;min-width:300px;"></div>
+    </div>
+
+    @* ── Botones ────────────────────────────────────────────── *@
+    <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search me-1"></i>Filtrar
+        </button>
+        <a asp-action="@actionName" class="btn btn-outline-secondary btn-sm ms-1">Limpiar</a>
+    </div>
+</form>
+
+@* ── Datos JSON para el autocomplete ─────────────────────── *@
+<script>
+(function () {
+    var asesores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        filtroAsesores.Select(a => new { cod = a.CodVende, txt = (a.Abreviada ?? "") + " – " + (a.Nombre ?? "") })
+    ));
+    var clientes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        filtroClientes.Select(c => new { cod = c.CodCliente, txt = c.CodCliente + " – " + (c.Nombre ?? "") })
+    ));
+
+    function initCombo(inputId, hiddenId, dropdownId, data) {
+        var inp  = document.getElementById(inputId);
+        var hid  = document.getElementById(hiddenId);
+        var drop = document.getElementById(dropdownId);
+        if (!inp) return;
+
+        function renderItems(filter) {
+            var q = (filter || "").toLowerCase();
+            var matches = q.length === 0
+                ? data.slice(0, 50)
+                : data.filter(function(d) {
+                    return d.txt.toLowerCase().includes(q) || d.cod.toLowerCase().includes(q);
+                  }).slice(0, 50);
+
+            if (matches.length === 0) { drop.style.display = "none"; return; }
+
+            drop.innerHTML = matches.map(function(d) {
+                return '<div class="pln-autocomplete-item" data-cod="' + d.cod + '">' +
+                       '<span class="text-muted me-2" style="font-size:.75rem;">' + d.cod + '</span>' +
+                       d.txt.split(" – ").slice(1).join(" – ") +
+                       '</div>';
+            }).join("");
+            drop.style.display = "block";
+
+            drop.querySelectorAll(".pln-autocomplete-item").forEach(function(el) {
+                el.addEventListener("mousedown", function(e) {
+                    e.preventDefault();
+                    hid.value = el.dataset.cod;
+                    inp.value = el.textContent.trim();
+                    drop.style.display = "none";
+                });
+            });
+        }
+
+        inp.addEventListener("input",   function() { renderItems(inp.value); });
+        inp.addEventListener("focus",   function() { renderItems(inp.value); });
+        inp.addEventListener("blur",    function() { setTimeout(function(){ drop.style.display="none"; }, 180); });
+        inp.addEventListener("keydown", function(e) {
+            if (e.key === "Escape") { drop.style.display = "none"; }
+        });
+
+        // Si el input se borra a mano, limpiar hidden también
+        inp.addEventListener("change", function() {
+            if (inp.value.trim() === "") hid.value = "";
+        });
+    }
+
+    initCombo("inputAsesorDisplay",  "hiddenAsesor",  "dropdownAsesor",  asesores);
+    initCombo("inputClienteDisplay", "hiddenCliente", "dropdownCliente", clientes);
+})();
+</script>
+
+<style>
+.pln-autocomplete-dropdown {
+    position: absolute;
+    z-index: 1055;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: .375rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    max-height: 220px;
+    overflow-y: auto;
+}
+.pln-autocomplete-item {
+    padding: .3rem .65rem;
+    font-size: .82rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pln-autocomplete-item:hover {
+    background: #f0f4ff;
+}
+</style>

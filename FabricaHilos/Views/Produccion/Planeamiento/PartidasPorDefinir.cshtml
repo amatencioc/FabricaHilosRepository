@@ -1,0 +1,180 @@
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+}
+
+@using FabricaHilos.Models.Produccion.Planeamiento
+@model IEnumerable<PlnPendientePartidaDef>
+@{
+    ViewData["Title"] = "Partidas por Definir";
+    var lista      = Model.ToList();
+    var nVencidos  = lista.Count(x => x.EstaVencido);
+    var kgTotal    = lista.Sum(x => x.PesoNeto);
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Partidas por Definir</li>
+}
+
+@await Html.PartialAsync("_PlnNavBar")
+
+<div class="container-fluid py-3">
+
+    @* ── Encabezado ─────────────────────────────────────────────────────── *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-question-circle me-2 text-danger"></i>Partidas por Definir</h4>
+            <small class="text-muted">Partidas con evaluación de calidad pendiente de definición (resultado no aprobado) &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Karen</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            @if (nVencidos > 0)
+            {
+                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
+            }
+            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
+            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
+            </a>
+        </div>
+    </div>
+
+    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-danger text-center py-2">
+                <div class="fw-bold fs-4 text-danger">@lista.Count</div>
+                <small class="text-muted">Partidas pendientes</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
+                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
+                <small class="text-muted">Con fecha vencida</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
+                <small class="text-muted">Total kg</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4">@lista.Select(x => x.CodCliente).Distinct().Count()</div>
+                <small class="text-muted">Clientes distintos</small>
+            </div>
+        </div>
+    </div>
+
+    @* ── Tabla ───────────────────────────────────────────────────────────── *@
+    @if (!lista.Any())
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de definición en este momento.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+                    <tr>
+                        <th class="text-center">Fecha</th>
+                        <th>Partida</th>
+                        <th>Material</th>
+                        <th>Color</th>
+                        <th>Intensidad</th>
+                        <th class="text-center">RMC</th>
+                        <th class="text-end">Kg Neto</th>
+                        <th>Cliente</th>
+                        <th>Consulta</th>
+                        <th>Defecto</th>
+                        <th>Evaluación</th>
+                        <th>Observaciones</th>
+                        <th class="text-center">F. Entrega</th>
+                        <th class="text-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in lista)
+                    {
+                        var rowCss = item.EstaVencido ? "table-danger" :
+                                     item.DiasRetraso >= -2 ? "table-warning" : "";
+                        <tr class="@rowCss">
+                            <td class="text-center text-muted">
+                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
+                            <td>@item.Material</td>
+                            <td style="font-size:.78rem;">@item.Color</td>
+                            <td style="font-size:.78rem;" class="text-muted">@item.DescIntensidad</td>
+                            <td class="text-center text-muted">
+                                @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                            </td>
+                            <td class="text-end fw-semibold">@item.PesoNeto.ToString("N2")</td>
+                            <td>
+                                <span style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                      title="@item.Cliente">@item.Cliente</span>
+                            </td>
+                            <td style="font-size:.78rem;">
+                                @if (!string.IsNullOrWhiteSpace(item.Consulta))
+                                {
+                                    <span class="badge bg-warning text-dark">@item.Consulta</span>
+                                }
+                            </td>
+                            <td style="font-size:.78rem;">
+                                @if (!string.IsNullOrWhiteSpace(item.DescDefecto))
+                                {
+                                    <span class="badge bg-secondary">@item.DescDefecto</span>
+                                }
+                            </td>
+                            <td style="font-size:.78rem;">
+                                @if (!string.IsNullOrWhiteSpace(item.DescEvaluacion))
+                                {
+                                    <span class="badge @(item.DescEvaluacion == "RECHAZADO" ? "bg-danger" : "bg-info text-dark")">
+                                        @item.DescEvaluacion
+                                    </span>
+                                }
+                            </td>
+                            <td style="font-size:.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                title="@item.Observaciones">
+                                @item.Observaciones
+                            </td>
+                            <td class="text-center">
+                                @if (item.FchEntrega.HasValue)
+                                {
+                                    <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+                                        @item.FchEntrega.Value.ToString("dd/MM/yy")
+                                    </span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="text-center">
+                                @if (item.EstaVencido)
+                                {
+                                    <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
+                                }
+                                else if (item.DiasRetraso >= -2)
+                                {
+                                    <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">@(-item.DiasRetraso) d</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
+                    <tr>
+                        <td colspan="6" class="text-end text-muted">Totales:</td>
+                        <td class="text-end">@kgTotal.ToString("N2")</td>
+                        <td colspan="7"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+
+</div>

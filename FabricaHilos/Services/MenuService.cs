@@ -298,7 +298,12 @@ public class MenuService : IMenuService
                 "PlaneamientoAlertas",
                 "PlaneamientoKPIs",
                 "PlaneamientoPendientesDespacho",
-                "PlaneamientoSeguimientoTintoreria"),
+                "PlaneamientoSeguimientoTintoreria",
+                "PlaneamientoPendRevisado",
+                "PlaneamientoPendEvalCalidad",
+                "PlaneamientoPendEnconado",
+                "PlaneamientoPendTenido",
+                "PlaneamientoPendPartidasDef"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoDashboard"),
@@ -323,6 +328,21 @@ public class MenuService : IMenuService
 
             PlaneamientoPendientesDespacho = global.PlaneamientoPendientesDespacho
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendientesDespacho"),
+
+            PlaneamientoPendRevisado = global.PlaneamientoPendRevisado
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendRevisado"),
+
+            PlaneamientoPendEvalCalidad = global.PlaneamientoPendEvalCalidad
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendEvalCalidad"),
+
+            PlaneamientoPendEnconado = global.PlaneamientoPendEnconado
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendEnconado"),
+
+            PlaneamientoPendTenido = global.PlaneamientoPendTenido
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendTenido"),
+
+            PlaneamientoPendPartidasDef = global.PlaneamientoPendPartidasDef
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendPartidasDef"),
 
             // ?? Sub-m
             // Sub-padre SistemasIndicadores visible si tiene tambi�n cualquier hijo suyo

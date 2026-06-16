@@ -241,6 +241,11 @@ public class IgvDto
     public string  Codigo      { get; set; } = "";
     public string  Descripcion { get; set; } = "";
     public decimal Valor       { get; set; }
+    /// <summary>
+    /// Verdadero cuando el tipo es una retención (I.RENTA): el valor es negativo
+    /// y se resta del importe en lugar de sumarse.
+    /// </summary>
+    public bool    EsRetencion => Valor < 0;
 }
 
 public class OrdenCompraUploadModel

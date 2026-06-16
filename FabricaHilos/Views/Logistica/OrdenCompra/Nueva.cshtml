@@ -253,15 +253,19 @@
                         @{ var igvList = ViewBag.IgvList as List<FabricaHilos.Models.Logistica.IgvDto> ?? new List<FabricaHilos.Models.Logistica.IgvDto> { new() { Codigo="18", Descripcion="IGV 18%", Valor=0.18m } }; }
                         @foreach (var igvOpt in igvList)
                         {
-                            var pct = (igvOpt.Valor * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                            // Valor es negativo para retenciones (I.RENTA); mostrar porcentaje positivo en la etiqueta
+                            var pct    = (Math.Abs(igvOpt.Valor) * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
                             var valStr = igvOpt.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            var label  = igvOpt.EsRetencion
+                                ? $"{igvOpt.Descripcion} ({pct}% ret.)"
+                                : $"{igvOpt.Descripcion} ({pct}%)";
                             if (igvOpt.Valor == 0.18m)
                             {
-                                <option value="@valStr" selected="selected">@igvOpt.Descripcion (@pct%)</option>
+                                <option value="@valStr" selected="selected">@label</option>
                             }
                             else
                             {
-                                <option value="@valStr">@igvOpt.Descripcion (@pct%)</option>
+                                <option value="@valStr">@label</option>
                             }
                         }
                     </select>
@@ -754,13 +758,17 @@
         var igv = parseFloat(document.getElementById('selIgv').value) || 0;
         var vv  = 0;
         document.querySelectorAll('#tbodyItemsOc .imp-vvta').forEach(function(td) { vv += parseFloat(td.textContent)||0; });
+        // igv < 0 → retención (I.RENTA): igvAmt será negativo → total = vv - |igvAmt|
         var igvAmt = Math.round(vv * igv * 100) / 100;
         var total  = Math.round((vv + igvAmt) * 100) / 100;
         var fmt = function(n) { return n.toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); };
         document.getElementById('tdValVenta').textContent    = fmt(vv);
         document.getElementById('tdValorVenta2').textContent = fmt(vv);
-        document.getElementById('tdIgvTotal').textContent    = fmt(igvAmt);
-        document.getElementById('tdTotal').textContent       = fmt(total);
+        var tdIgv = document.getElementById('tdIgvTotal');
+        tdIgv.textContent = fmt(igvAmt);
+        // Visual: retenciones en naranja (valor negativo = se resta)
+        tdIgv.style.color = igvAmt < 0 ? '#fd7e14' : '';
+        document.getElementById('tdTotal').textContent = fmt(total);
     }
 
     document.getElementById('selIgv').addEventListener('change', recalc);

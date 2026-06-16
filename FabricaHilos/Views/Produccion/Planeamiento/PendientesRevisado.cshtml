@@ -1,0 +1,157 @@
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+}
+
+@using FabricaHilos.Models.Produccion.Planeamiento
+@model IEnumerable<PlnPendienteRevisado>
+@{
+    ViewData["Title"] = "Pendientes de Revisado";
+    var lista     = Model.ToList();
+    var nVencidos = lista.Count(x => x.EstaVencido);
+    var kgTotal   = lista.Sum(x => x.Peso);
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Pendientes de Revisado</li>
+}
+
+@await Html.PartialAsync("_PlnNavBar")
+
+<div class="container-fluid py-3">
+
+    @* ── Encabezado ─────────────────────────────────────────────────────── *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-clipboard2-check me-2 text-primary"></i>Pendientes de Revisado</h4>
+            <small class="text-muted">Partidas en programa (estado 6) sin revisado aprobado &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Martín</small>
+        </div>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            @if (nVencidos > 0)
+            {
+                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
+            }
+            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
+            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
+            </a>
+        </div>
+    </div>
+
+    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-primary text-center py-2">
+                <div class="fw-bold fs-4 text-primary">@lista.Count</div>
+                <small class="text-muted">Partidas pendientes</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
+                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
+                <small class="text-muted">Con fecha vencida</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
+                <small class="text-muted">Total kg</small>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 bg-light text-center py-2">
+                <div class="fw-bold fs-4">@lista.Select(x => x.Lote).Distinct().Count()</div>
+                <small class="text-muted">Lotes distintos</small>
+            </div>
+        </div>
+    </div>
+
+    @* ── Filtros ─────────────────────────────────────────────────────────── *@
+    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesRevisado")
+
+    @* ── Tabla ───────────────────────────────────────────────────────────── *@
+    @if (!lista.Any())
+    {
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de revisado en este momento.
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+                    <tr>
+                        <th>Partida</th>
+                        <th>Material</th>
+                        <th>Cliente</th>
+                        <th>Máquina</th>
+                        <th class="text-center">RMC</th>
+                        <th class="text-end">Kg</th>
+                        <th>Lote</th>
+                        <th>Color</th>
+                        <th class="text-center">F. Fin Prog.</th>
+                        <th class="text-center">F. Entrega</th>
+                        <th class="text-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in lista)
+                    {
+                        var rowCss = item.EstaVencido ? "table-danger" :
+                                     item.DiasRetraso >= -2 ? "table-warning" : "";
+                        <tr class="@rowCss">
+                            <td class="fw-bold">@item.Partida</td>
+                            <td>@item.Material</td>
+                            <td>
+                                <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                      title="@item.Cliente">@item.Cliente</span>
+                            </td>
+                            <td>@item.Maquina</td>
+                            <td class="text-center text-muted">
+                                @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                            </td>
+                            <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+                            <td style="font-size:.78rem;">@item.Lote</td>
+                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                            <td class="text-center text-muted">
+                                @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
+                            </td>
+                            <td class="text-center">
+                                @if (item.FchEntrega.HasValue)
+                                {
+                                    <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+                                        @item.FchEntrega.Value.ToString("dd/MM/yy")
+                                    </span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="text-center">
+                                @if (item.EstaVencido)
+                                {
+                                    <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
+                                }
+                                else if (item.DiasRetraso >= -2)
+                                {
+                                    <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">@(-item.DiasRetraso) d</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
+                    <tr>
+                        <td colspan="5" class="text-end text-muted">Totales:</td>
+                        <td class="text-end">@kgTotal.ToString("N2")</td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+
+</div>

@@ -97,18 +97,6 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
-                if (menus.PlaneamientoProximosVencer)
-                {
-                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
-                    {
-                        Nombre = "Próximos a Vencer",
-                        Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima.",
-                        Icono = "bi-calendar-event-fill",
-                        Controller = "Planeamiento",
-                        Action = "ProximosVencer"
-                    });
-                }
-
                 if (menus.PlaneamientoSeguimientoTintoreria)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
@@ -121,15 +109,73 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
-                if (menus.PlaneamientoCargaMaquinas)
+                if (menus.PlaneamientoProximosVencer)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
                     {
-                        Nombre = "Carga de Máquinas",
-                        Descripcion = "Planificación y carga por máquina",
-                        Icono = "bi-gear-wide-connected",
+                        Nombre = "Próximos a Vencer",
+                        Descripcion = "Ítems activos cuya fecha de entrega comprometida se aproxima.",
+                        Icono = "bi-calendar-event-fill",
                         Controller = "Planeamiento",
-                        Action = "CargaMaquinas"
+                        Action = "ProximosVencer"
+                    });
+                }
+
+                if (menus.PlaneamientoPendTenido)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Teñido",
+                        Descripcion = "Partidas programadas o con previo (receta IR) aún sin producción activa de teñido. Responsables: Fredy / Malena.",
+                        Icono = "bi-droplet-half",
+                        Controller = "Planeamiento",
+                        Action = "PendientesTenido"
+                    });
+                }
+
+                if (menus.PlaneamientoPendEvalCalidad)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes Eval. Calidad",
+                        Descripcion = "Partidas secadas sin evaluación de calidad tintorería registrada. Responsable: Ivon.",
+                        Icono = "bi-patch-check",
+                        Controller = "Planeamiento",
+                        Action = "PendientesEvalCalidad"
+                    });
+                }
+                if (menus.PlaneamientoPendPartidasDef)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Partidas por Definir",
+                        Descripcion = "Partidas con evaluación de calidad pendiente de definición (resultado no aprobado). Responsable: Karen.",
+                        Icono = "bi-question-circle",
+                        Controller = "Planeamiento",
+                        Action = "PartidasPorDefinir"
+                    });
+                }
+                if (menus.PlaneamientoPendEnconado)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Enconado",
+                        Descripcion = "Partidas aprobadas en CC pendientes de enconado o devanado (Tintorería + Hilandería). Responsable: Guevara.",
+                        Icono = "bi-arrow-repeat",
+                        Controller = "Planeamiento",
+                        Action = "PendientesEnconado"
+                    });
+                }
+
+                if (menus.PlaneamientoPendRevisado)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Revisado",
+                        Descripcion = "Partidas en programa estado 6 (revisado) sin revisado aprobado. Responsable: Martín.",
+                        Icono = "bi-clipboard2-check",
+                        Controller = "Planeamiento",
+                        Action = "PendientesRevisado"
                     });
                 }
 
@@ -142,6 +188,18 @@ namespace FabricaHilos.Controllers.Produccion
                         Icono = "bi-truck",
                         Controller = "Planeamiento",
                         Action = "PendientesDespacho"
+                    });
+                }
+
+                if (menus.PlaneamientoCargaMaquinas)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Carga de Máquinas",
+                        Descripcion = "Planificación y carga por máquina",
+                        Icono = "bi-gear-wide-connected",
+                        Controller = "Planeamiento",
+                        Action = "CargaMaquinas"
                     });
                 }
 

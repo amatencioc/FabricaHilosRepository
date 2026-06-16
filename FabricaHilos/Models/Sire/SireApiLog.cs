@@ -7,7 +7,7 @@ namespace FabricaHilos.Models.Sire;
 public class SireApiLog
 {
     public long      Id          { get; set; }
-    public DateTime  Fecha       { get; set; } = DateTime.UtcNow;
+    public DateTime  Fecha       { get; set; } = DateTime.Now;
 
     /// <summary>JobId del job asociado. Puede ser null si la llamada no pertenece a un job (p.ej. health check).</summary>
     public string?   JobId       { get; set; }
@@ -28,6 +28,7 @@ public class SireApiLog
 public static class SireOperacion
 {
     public const string Auth      = "AUTH";
+    public const string Iniciar   = "INICIAR";    // Inicio del job (transición a EnProceso)
     public const string Exportar  = "EXPORTAR";
     public const string Ticket    = "TICKET";
     public const string Descargar = "DESCARGAR";
@@ -35,4 +36,5 @@ public static class SireOperacion
     public const string Guardar   = "GUARDAR";    // Guardar ZIP en ruta de red
     public const string Cargar    = "CARGAR";     // Cargar propuesta en Oracle SIRE_VALIDA
     public const string Completar = "COMPLETAR";  // Finalización del job
+    public const string Cancel    = "CANCEL";     // Cancelación del job
 }

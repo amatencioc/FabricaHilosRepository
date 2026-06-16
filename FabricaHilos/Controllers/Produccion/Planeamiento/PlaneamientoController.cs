@@ -16,6 +16,7 @@ public class PlaneamientoController : OracleBaseController
     private readonly IPlnKpiService          _kpi;
     private readonly IPlnParamService        _param;
     private readonly IPlnReporteService      _reporte;
+    private readonly IPlnPendientesService   _pendientes;
 
     public PlaneamientoController(
         IMenuService           menuService,
@@ -23,7 +24,8 @@ public class PlaneamientoController : OracleBaseController
         IPlnAlertaService      alerta,
         IPlnKpiService         kpi,
         IPlnParamService       param,
-        IPlnReporteService     reporte)
+        IPlnReporteService     reporte,
+        IPlnPendientesService  pendientes)
     {
         _menuService = menuService;
         _seguimiento = seguimiento;
@@ -31,6 +33,7 @@ public class PlaneamientoController : OracleBaseController
         _kpi         = kpi;
         _param       = param;
         _reporte     = reporte;
+        _pendientes  = pendientes;
     }
 
     // GET /Planeamiento  — redirige directamente al Dashboard (Index es redundante)
@@ -56,6 +59,17 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "Dashboard"
             });
 
+        if (menus.PlaneamientoSeguimientoTintoreria)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Seguimiento Prog. Tintorería",
+                Descripcion = "Reporte de producción de tintorería por fecha de entrega, programa, teñido, pedido o aprobación.",
+                Icono       = "bi-table",
+                ColorClase  = "text-primary",
+                Controller  = "Planeamiento",
+                Action      = "SeguimientoTintoreria"
+            });
+
         if (menus.PlaneamientoProximosVencer)
             modulos.Add(new SgcModuloDto
             {
@@ -67,26 +81,59 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "ProximosVencer"
             });
 
-        if (menus.PlaneamientoSeguimientoTintoreria)
+        if (menus.PlaneamientoPendTenido)
             modulos.Add(new SgcModuloDto
             {
-                Nombre      = "Seguimiento de Programación de Tintorería",
-                Descripcion = "Reporte de producción de tintorería por fecha de entrega, programa, teñido, pedido o aprobación.",
-                Icono       = "bi-table",
-                ColorClase  = "text-primary",
+                Nombre      = "Pendientes de Teñido",
+                Descripcion = "Partidas programadas o con previo (receta IR) aún sin producción activa de teñido. Responsables: Fredy / Malena.",
+                Icono       = "bi-droplet-half",
+                ColorClase  = "text-info",
                 Controller  = "Planeamiento",
-                Action      = "SeguimientoTintoreria"
+                Action      = "PendientesTenido"
             });
 
-        if (menus.PlaneamientoCargaMaquinas)
+        if (menus.PlaneamientoPendEvalCalidad)
             modulos.Add(new SgcModuloDto
             {
-                Nombre      = "Carga de Máquinas",
-                Descripcion = "Planificación y carga por máquina",
-                Icono       = "bi-gear-wide-connected",
+                Nombre      = "Pendientes Eval. Calidad",
+                Descripcion = "Partidas secadas sin evaluación de calidad tintorería registrada. Responsable: Ivon.",
+                Icono       = "bi-patch-check",
+                ColorClase  = "text-success",
+                Controller  = "Planeamiento",
+                Action      = "PendientesEvalCalidad"
+            });
+
+        if (menus.PlaneamientoPendPartidasDef)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Partidas por Definir",
+                Descripcion = "Partidas con evaluación de calidad pendiente de definición (resultado no aprobado). Responsable: Karen.",
+                Icono       = "bi-question-circle",
+                ColorClase  = "text-danger",
+                Controller  = "Planeamiento",
+                Action      = "PartidasPorDefinir"
+            });
+
+        if (menus.PlaneamientoPendEnconado)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Pendientes de Enconado",
+                Descripcion = "Partidas aprobadas en CC pendientes de enconado o devanado (Tintorería + Hilandería). Responsable: Guevara.",
+                Icono       = "bi-arrow-repeat",
                 ColorClase  = "text-warning",
                 Controller  = "Planeamiento",
-                Action      = "CargaMaquinas"
+                Action      = "PendientesEnconado"
+            });
+
+        if (menus.PlaneamientoPendRevisado)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Pendientes de Revisado",
+                Descripcion = "Partidas en programa estado 6 (revisado) sin revisado aprobado. Responsable: Martín.",
+                Icono       = "bi-clipboard2-check",
+                ColorClase  = "text-primary",
+                Controller  = "Planeamiento",
+                Action      = "PendientesRevisado"
             });
 
         if (menus.PlaneamientoPendientesDespacho)
@@ -98,6 +145,17 @@ public class PlaneamientoController : OracleBaseController
                 ColorClase  = "text-info",
                 Controller  = "Planeamiento",
                 Action      = "PendientesDespacho"
+            });
+
+        if (menus.PlaneamientoCargaMaquinas)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Carga de Máquinas",
+                Descripcion = "Planificación y carga por máquina",
+                Icono       = "bi-gear-wide-connected",
+                ColorClase  = "text-warning",
+                Controller  = "Planeamiento",
+                Action      = "CargaMaquinas"
             });
 
         if (menus.PlaneamientoAlertas)
@@ -775,5 +833,93 @@ public class PlaneamientoController : OracleBaseController
             return BadRequest(new { ok = false, msg = "Sin datos." });
         await _reporte.SaveObservacionAsync(items, HttpContext.RequestAborted);
         return Ok(new { ok = true, n = items.Count });
+    }
+
+    // ── Partidas pendientes de revisado ─────────────────────────────────────
+    // GET /Planeamiento/PendientesRevisado
+    public async Task<IActionResult> PendientesRevisado(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var tFiltroTipo     = _pendientes.GetFiltroTipoAsync();
+        var tFiltroAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tFiltroClientes = _reporte.GetFiltroClientesAsync();
+        var tDatos          = _pendientes.GetPendientesRevisadoAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroTipoSel  = tipo;
+        ViewBag.FiltroAsesor   = asesor;
+        ViewBag.FiltroCliente  = cliente;
+        return View(tDatos.Result);
+    }
+
+    // ── Partidas pendientes de evaluación de calidad ─────────────────────────
+    // GET /Planeamiento/PendientesEvalCalidad
+    public async Task<IActionResult> PendientesEvalCalidad(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var tFiltroTipo     = _pendientes.GetFiltroTipoAsync();
+        var tFiltroAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tFiltroClientes = _reporte.GetFiltroClientesAsync();
+        var tDatos          = _pendientes.GetPendientesEvalCalidadAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroTipoSel  = tipo;
+        ViewBag.FiltroAsesor   = asesor;
+        ViewBag.FiltroCliente  = cliente;
+        return View(tDatos.Result);
+    }
+
+    // ── Partidas con evaluación de calidad pendiente de definición ───────────
+    // GET /Planeamiento/PartidasPorDefinir
+    public async Task<IActionResult> PartidasPorDefinir()
+    {
+        var datos = await _pendientes.GetPendientesPartidasDefAsync();
+        return View(datos);
+    }
+
+    // ── Partidas aprobadas pendientes de enconado/devanado ───────────────────
+    // GET /Planeamiento/PendientesEnconado
+    public async Task<IActionResult> PendientesEnconado(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var tFiltroTipo     = _pendientes.GetFiltroTipoAsync();
+        var tFiltroAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tFiltroClientes = _reporte.GetFiltroClientesAsync();
+        var tDatos          = _pendientes.GetPendientesEnconadoAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroTipoSel  = tipo;
+        ViewBag.FiltroAsesor   = asesor;
+        ViewBag.FiltroCliente  = cliente;
+        return View(tDatos.Result);
+    }
+
+    // ── Partidas pendientes de teñido ────────────────────────────────────────
+    // GET /Planeamiento/PendientesTenido
+    public async Task<IActionResult> PendientesTenido(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var tFiltroTipo     = _pendientes.GetFiltroTipoAsync();
+        var tFiltroAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tFiltroClientes = _reporte.GetFiltroClientesAsync();
+        var tDatos          = _pendientes.GetPendientesTenidoAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroTipoSel  = tipo;
+        ViewBag.FiltroAsesor   = asesor;
+        ViewBag.FiltroCliente  = cliente;
+        return View(tDatos.Result);
     }
 }

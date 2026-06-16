@@ -91,6 +91,11 @@ public class MenuOptions
     public bool PlaneamientoSeguimientoTintoreria     { get; set; } = true;
     public bool PlaneamientoKPIs                      { get; set; } = false;
     public bool PlaneamientoPendientesDespacho        { get; set; } = true;
+    public bool PlaneamientoPendRevisado              { get; set; } = true;
+    public bool PlaneamientoPendEvalCalidad           { get; set; } = true;
+    public bool PlaneamientoPendEnconado              { get; set; } = true;
+    public bool PlaneamientoPendTenido                { get; set; } = true;
+    public bool PlaneamientoPendPartidasDef           { get; set; } = true;
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -157,6 +162,11 @@ public class MenuOptions
         PlaneamientoSeguimientoTintoreria     = true,
         PlaneamientoKPIs                      = true,
         PlaneamientoPendientesDespacho        = true,
+        PlaneamientoPendRevisado              = true,
+        PlaneamientoPendEvalCalidad           = true,
+        PlaneamientoPendEnconado              = true,
+        PlaneamientoPendTenido                = true,
+        PlaneamientoPendPartidasDef           = true,
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,

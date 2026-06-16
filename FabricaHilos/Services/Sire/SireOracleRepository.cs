@@ -20,6 +20,65 @@ public sealed class SireOracleRepository : ISireOracleRepository
         _logger = logger;
     }
 
+    /// <summary>
+    /// Abre la conexión y fija la zona horaria de la sesión Oracle a Lima (UTC-5).
+    /// El servidor Oracle tiene OS en UTC → SYSDATE devuelve UTC.
+    /// Con esta sesión, CURRENT_DATE devuelve hora Lima correcta en todas las tablas SIRE.
+    /// Reintenta una vez si la conexión del pool estaba obsoleta (ORA-12570 y similares).
+    /// </summary>
+    private async Task<OracleConnection> OpenConnAsync(CancellationToken ct)
+    {
+        const int maxAttempts = 2;
+        OracleException? lastEx = null;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var conn = new OracleConnection(_connStr);
+            try
+            {
+                await conn.OpenAsync(ct);
+                // AutoCommit=true: cada DML se commitea automáticamente al ejecutarse.
+                // ODP.NET Managed tiene AutoCommit=false por defecto, lo que hace que
+                // los UPDATE/INSERT queden en transacciones implícitas sin commit hasta
+                // que la conexión se recicle, causando inconsistencia entre el log .NET
+                // y el estado real en la BD (especialmente en el WatcherWorker).
+                conn.AutoCommit = true;
+                await using var tzCmd = conn.CreateCommand();
+                tzCmd.CommandText = "ALTER SESSION SET TIME_ZONE = 'America/Lima'";
+                await tzCmd.ExecuteNonQueryAsync(ct);
+                return conn;
+            }
+            catch (OracleException ex) when (attempt < maxAttempts && IsStalePoolError(ex.Number))
+            {
+                // Conexión del pool obsoleta (servidor Oracle cortó la sesión por inactividad).
+                // Se descarta el pool completo y se reintenta con una conexión fresca.
+                _logger.LogWarning(
+                    "[SIRE-ORACLE] Conexión Oracle obsoleta (ORA-{Nr}) en intento {A}/{M}. Descartando pool...",
+                    ex.Number, attempt, maxAttempts);
+                await conn.DisposeAsync();
+                OracleConnection.ClearAllPools();
+                lastEx = ex;
+            }
+            catch
+            {
+                await conn.DisposeAsync();
+                throw;
+            }
+        }
+
+        throw lastEx!;
+    }
+
+    /// <summary>Códigos de error Oracle que indican una conexión de pool expirada o caída.</summary>
+    private static bool IsStalePoolError(int oraNumber) => oraNumber is
+        12570 or // TNS:packet reader failure — paquete inesperado (inactividad larga)
+        12571 or // TNS:packet write failure
+        12537 or // TNS:connection closed
+        12547 or // TNS:lost contact
+        3135  or // connection lost contact
+        28    or // session killed
+        1012;    // not logged on
+
     // ── Jobs ──────────────────────────────────────────────────────────────────
 
     public async Task<int> InsertJobAsync(SireExportacionJob job, CancellationToken ct = default)
@@ -30,11 +89,10 @@ public sealed class SireOracleRepository : ISireOracleRepository
                  FECHA_CREACION, FECHA_ACT)
             VALUES
                 (SEQ_SIRE_JOB.NEXTVAL, :jobId, :tipo, :periodo, :usuario, :estado,
-                 SYSDATE, SYSDATE)
+                 CURRENT_DATE, CURRENT_DATE)
             RETURNING ID INTO :newId";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":jobId",   OracleDbType.Varchar2).Value = job.JobId;
@@ -65,12 +123,12 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 REG_INSERTADOS  = :regIns,
                 REG_DUPLICADOS  = :regDup,
                 MENSAJE_ERROR   = :msgErr,
-                FECHA_ACT       = SYSDATE,
-                FECHA_FIN       = :fechaFin
+                FECHA_ACT       = CURRENT_DATE,
+                FECHA_FIN       = :fechaFin,
+                PROXIMA_CONSULTA= :proxCons
             WHERE ID = :id";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":estado",   OracleDbType.Varchar2).Value = job.Estado;
@@ -83,6 +141,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         cmd.Parameters.Add(":regDup",   OracleDbType.Int32   ).Value = (object?)job.RegistrosDuplicados  ?? DBNull.Value;
         cmd.Parameters.Add(":msgErr",   OracleDbType.Varchar2).Value = Trunc(job.MensajeError, 2000);
         cmd.Parameters.Add(":fechaFin", OracleDbType.Date    ).Value = (object?)job.FechaFinalizacion ?? DBNull.Value;
+        cmd.Parameters.Add(":proxCons", OracleDbType.Date    ).Value = (object?)job.ProximaConsulta   ?? DBNull.Value;
         cmd.Parameters.Add(":id",       OracleDbType.Int32   ).Value = job.Id;
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -90,8 +149,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
     public async Task<SireExportacionJob?> GetJobByIdAsync(int id, CancellationToken ct = default)
     {
         const string sql = "SELECT * FROM SIG.SIRE_JOB WHERE ID = :id";
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":id", OracleDbType.Int32).Value = id;
@@ -102,8 +160,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
     public async Task<SireExportacionJob?> GetJobByJobIdAsync(string jobId, CancellationToken ct = default)
     {
         const string sql = "SELECT * FROM SIG.SIRE_JOB WHERE JOB_ID = :jobId";
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":jobId", OracleDbType.Varchar2).Value = jobId;
@@ -111,35 +168,61 @@ public sealed class SireOracleRepository : ISireOracleRepository
         return await reader.ReadAsync(ct) ? MapJob(reader) : null;
     }
 
-    public async Task<SireExportacionJob?> GetJobActivoAsync(string tipoRegistro, string periodo, CancellationToken ct = default)
+    public async Task<SireExportacionJob?> GetJobActivoAsync(string tipoRegistro, CancellationToken ct = default)
     {
+        // Un job activo es cualquiera que aún no ha terminado (no terminal).
+        // Incluye EsperandoTicket para evitar crear duplicados mientras el watcher vigila.
         const string sql = @"
             SELECT * FROM (
                 SELECT * FROM SIG.SIRE_JOB
-                WHERE TIPO_REGISTRO = :tipo AND PERIODO = :periodo
-                  AND ESTADO IN ('Pendiente','EnProceso')
+                WHERE TIPO_REGISTRO = :tipo
+                  AND ESTADO IN ('Pendiente','EnProceso','EsperandoTicket')
                 ORDER BY FECHA_CREACION DESC
             ) WHERE ROWNUM <= 1";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
-        cmd.Parameters.Add(":tipo",    OracleDbType.Varchar2).Value = tipoRegistro;
-        cmd.Parameters.Add(":periodo", OracleDbType.Varchar2).Value = periodo;
+        cmd.Parameters.Add(":tipo", OracleDbType.Varchar2).Value = tipoRegistro;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? MapJob(reader) : null;
     }
 
     public async Task<List<SireExportacionJob>> GetJobsInterrumpidosAsync(CancellationToken ct = default)
     {
+        // Reencola el job más reciente por tipo que esté en estado no-terminal.
+        // EsperandoTicket: el watcher lo recoge; Pendiente/EnProceso: el worker lo procesa.
         const string sql = @"
-            SELECT * FROM SIG.SIRE_JOB
-            WHERE ESTADO IN ('Pendiente','EnProceso')
+            SELECT * FROM (
+                SELECT j.*,
+                       ROW_NUMBER() OVER (PARTITION BY TIPO_REGISTRO ORDER BY FECHA_CREACION DESC) AS rn
+                FROM SIG.SIRE_JOB j
+                WHERE ESTADO IN ('Pendiente','EnProceso','EsperandoTicket')
+            ) WHERE rn = 1
             ORDER BY FECHA_CREACION ASC";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var result = new List<SireExportacionJob>();
+        while (await reader.ReadAsync(ct))
+            result.Add(MapJob(reader));
+        return result;
+    }
+
+    public async Task<List<SireExportacionJob>> GetJobsEsperandoTicketAsync(CancellationToken ct = default)
+    {
+        // Obtiene jobs en EsperandoTicket cuya PROXIMA_CONSULTA ya venció (o es NULL).
+        // Se añade 1 minuto de margen para cubrir desfases entre el reloj .NET y Oracle.
+        // Ordenados por PROXIMA_CONSULTA para procesar primero los más viejos.
+        const string sql = @"
+            SELECT * FROM SIG.SIRE_JOB
+            WHERE ESTADO = 'EsperandoTicket'
+              AND (PROXIMA_CONSULTA IS NULL OR PROXIMA_CONSULTA <= CURRENT_DATE + 1/1440)
+            ORDER BY PROXIMA_CONSULTA ASC, FECHA_CREACION ASC";
+
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -158,8 +241,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 ORDER BY FECHA_CREACION DESC
             ) WHERE ROWNUM <= {top}";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -177,11 +259,10 @@ public sealed class SireOracleRepository : ISireOracleRepository
             INSERT INTO SIG.SIRE_HEALTH
                 (ID, FECHA, ESTADO, TOKEN_OK, RVIE_OK, RVIE_PERIODOS, RCE_OK, RCE_PERIODOS, MENSAJE_ERROR)
             VALUES
-                (SEQ_SIRE_HEALTH.NEXTVAL, SYSDATE, :estado, :tokenOk,
+                (SEQ_SIRE_HEALTH.NEXTVAL, CURRENT_DATE, :estado, :tokenOk,
                  :rvieOk, :rviePer, :rceOk, :rcePer, :msg)";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":estado",  OracleDbType.Varchar2).Value = log.Status;
@@ -202,8 +283,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 ORDER BY FECHA DESC
             ) WHERE ROWNUM <= {top}";
 
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -221,15 +301,15 @@ public sealed class SireOracleRepository : ISireOracleRepository
             INSERT INTO SIG.SIRE_LOG
                 (ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL, HTTP_STATUS, DURACION_MS, EXITO, MENSAJE)
             VALUES
-                (SEQ_SIRE_LOG.NEXTVAL, SYSDATE, :jobId, :op, :metodo,
+                (SEQ_SIRE_LOG.NEXTVAL, :fecha, :jobId, :op, :metodo,
                  :url, :status, :dur, :exito, :msg)";
 
         try
         {
-            await using var conn = new OracleConnection(_connStr);
-            await conn.OpenAsync(ct);
+            await using var conn = await OpenConnAsync(ct);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
+            cmd.Parameters.Add(":fecha",  OracleDbType.Date    ).Value = log.Fecha;  // hora Lima desde .NET
             cmd.Parameters.Add(":jobId",  OracleDbType.Varchar2).Value = (object?)log.JobId      ?? DBNull.Value;
             cmd.Parameters.Add(":op",     OracleDbType.Varchar2).Value = log.Operacion;
             cmd.Parameters.Add(":metodo", OracleDbType.Varchar2).Value = (object?)log.MetodoHttp ?? DBNull.Value;
@@ -254,7 +334,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
         int top = 200,
         string? jobId = null,
         string? operacion = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool ordenAscendente = false)
     {
         top = Math.Max(1, Math.Min(top, 5000)); // Sanitize range
 
@@ -267,25 +348,27 @@ public sealed class SireOracleRepository : ISireOracleRepository
             ? "WHERE " + string.Join(" AND ", whereConditions)
             : "";
 
-        // Oracle 10g compatible: use subquery with ROWNUM inside the ORDER BY wrapper
+        // ORDER BY ID garantiza orden de inserción correcto aunque FECHA tenga misma precisión de segundo.
+        // DESC = más reciente primero (Monitoreo, actividad general).
+        // ASC  = cronológico (modal de progreso del job).
+        var orderDir = ordenAscendente ? "ASC" : "DESC";
+
+        // Oracle 10g compatible: use simple inline view with ROWNUM
         var sql = $@"
             SELECT * FROM (
-                SELECT * FROM (
-                    SELECT ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL,
-                           HTTP_STATUS, DURACION_MS, EXITO, MENSAJE
-                    FROM SIG.SIRE_LOG
-                    {whereClause}
-                    ORDER BY FECHA DESC
-                ) WHERE ROWNUM <= :top
-            )";
+                SELECT ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL,
+                       HTTP_STATUS, DURACION_MS, EXITO, MENSAJE
+                FROM SIG.SIRE_LOG
+                {whereClause}
+                ORDER BY ID {orderDir}
+            )
+            WHERE ROWNUM <= {top}";
 
         var list = new List<SireApiLog>();
-        await using var conn = new OracleConnection(_connStr);
-        await conn.OpenAsync(ct);
+        await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
 
-        cmd.Parameters.Add(":top", OracleDbType.Int32).Value = top;
         if (!string.IsNullOrWhiteSpace(jobId))     cmd.Parameters.Add(":jobId", OracleDbType.Varchar2).Value = jobId;
         if (!string.IsNullOrWhiteSpace(operacion)) cmd.Parameters.Add(":op",    OracleDbType.Varchar2).Value = operacion;
 
@@ -316,7 +399,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         JobId               = r.GetString(r.GetOrdinal("JOB_ID")),
         TipoRegistro        = r.GetString(r.GetOrdinal("TIPO_REGISTRO")),
         Periodo             = r.GetString(r.GetOrdinal("PERIODO")),
-        UsuarioId           = NullStr(r, "USUARIO_ID"),
+        UsuarioId           = NullStr(r, "USUARIO_ID") ?? string.Empty,
         Estado              = r.GetString(r.GetOrdinal("ESTADO")),
         NumTicket           = NullStr(r, "NUM_TICKET"),
         NombreArchivo       = NullStr(r, "NOMBRE_ARCHIVO"),
@@ -329,6 +412,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         FechaCreacion       = r.GetDateTime(r.GetOrdinal("FECHA_CREACION")),
         FechaActualizacion  = r.GetDateTime(r.GetOrdinal("FECHA_ACT")),
         FechaFinalizacion   = NullDate(r, "FECHA_FIN"),
+        ProximaConsulta     = NullDate(r, "PROXIMA_CONSULTA"),
     };
 
     private static SireHealthCheckLog MapHealth(System.Data.Common.DbDataReader r) => new()

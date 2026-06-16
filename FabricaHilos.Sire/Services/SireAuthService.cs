@@ -41,11 +41,8 @@ public sealed class SireAuthService : ISireAuthService
         _clientId     = o.ClientId;
         _clientSecret = o.ClientSecret?.Trim() ?? "";
 
-        _logger.LogDebug("[SIRE-AUTH] Configuración cargada: AuthUrl={AuthUrl} | Username={Username} | Scope={Scope} | ClientId={ClientId}",
-            _authUrl, _username, _scope, _clientId);
-
         // Validación de credenciales en construcción
-        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_clientSecret) 
+        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_clientSecret)
             || string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
         {
             _logger.LogWarning("[SIRE-AUTH] ⚠️ ADVERTENCIA: Credenciales incompletas detectadas en appsettings.json");

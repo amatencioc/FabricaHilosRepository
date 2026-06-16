@@ -283,6 +283,7 @@ public class PlnAlertaService : OracleServiceBase, IPlnAlertaService
                           AND  ev.nro      = b.nro
                           AND  ev.cod_paso = b.cod_paso_act)) AS fch_ini_paso
             FROM   base b
+            WHERE  b.cod_paso_act NOT IN ('12','13','14')
             ORDER BY b.fch_entrega_comp, b.ind_urgente DESC, b.num_ped";
 
         var list = new List<PlnProximoVencer>();

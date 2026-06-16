@@ -278,71 +278,64 @@
 }
 .spt-chip-label { color: #64748b; font-weight: 500; }
 
-/* ── Tabla
+/* ── Tabla ─────────────────────────────────────────────────────────── */
 .spt-table-wrap {
     overflow-x: auto;
-    max-height: calc(100vh - 310px);
+    max-height: calc(100vh - 290px);
     overflow-y: auto;
     position: relative;
 }
-.spt-table-wrap::-webkit-scrollbar { height: 7px; width: 7px; }
+.spt-table-wrap::-webkit-scrollbar { height: 6px; width: 6px; }
 .spt-table-wrap::-webkit-scrollbar-track { background: #f1f5f9; }
 .spt-table-wrap::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
 .spt-table-wrap::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 #stTable {
-    table-layout: auto; width: 100%; min-width: 3000px;
-    border-collapse: separate; border-spacing: 0;
+    table-layout: auto; width: 100%; min-width: 3200px;
+    border-collapse: collapse; border-spacing: 0;
 }
-#stTable thead th {
-    font-size: .60rem; font-weight: 600; color: #374151;
-    text-transform: uppercase; letter-spacing: .02em;
-    background: #e8eef6; padding: .28rem .38rem;
-    border-bottom: 1px solid #bfcad8;
-    white-space: nowrap; position: sticky; z-index: 11;
-    cursor: default; user-select: none;
+
+/* ── thead: fila de grupos (azul oscuro) ──────────────────────────── */
+#stTable thead tr.thead-grupos th {
+    font-size: .60rem; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; white-space: nowrap;
+    background: #1a4971; color: #e8f0fa;
+    padding: .22rem .4rem; text-align: center;
+    border-bottom: 2px solid #f59e0b;
+    position: sticky; top: 0; z-index: 12;
     line-height: 1.3;
 }
-/* Fila 1 (grupos): fija en top:0 — z-index mayor para tapar fila 2 */
-#stTable thead tr:first-child th { top: 0; z-index: 12; }
-/* Fila 2 (columnas): debajo de fila 1 — fondo ligeramente diferente para jerarquía */
-#stTable thead tr:nth-child(2) th {
-    top: var(--thead-row1-h, 30px); z-index: 11;
-    background: #dde5f0;
-    font-size: .595rem; font-weight: 700;
-    color: #1e2d3d; letter-spacing: .03em;
-    padding: .26rem .36rem;
-    text-align: center;
-    border-bottom: 2px solid #a8bbcf;
-}
-/* Esquinas: sticky-izq + sticky-top juntos necesitan z-index máximo */
-#stTable thead tr:first-child th.fc-1,
-#stTable thead tr:first-child th.fc-2,
-#stTable thead tr:first-child th.fc-3,
-#stTable thead tr:first-child th.fc-4,
-#stTable thead tr:first-child th.fc-5,
-#stTable thead tr:first-child th.fc-6,
-#stTable thead tr:first-child th.fc-7,
-#stTable thead tr:first-child th.fc-8 { z-index: 22; }
-#stTable thead tr:nth-child(2) th.fc-1,
-#stTable thead tr:nth-child(2) th.fc-2,
-#stTable thead tr:nth-child(2) th.fc-3,
-#stTable thead tr:nth-child(2) th.fc-4,
-#stTable thead tr:nth-child(2) th.fc-5,
-#stTable thead tr:nth-child(2) th.fc-6,
-#stTable thead tr:nth-child(2) th.fc-7,
-#stTable thead tr:nth-child(2) th.fc-8 { z-index: 21; }
-#stTable thead th:hover { background: #dce4f0; }
-#stTable thead .grp-id   th { border-top: 3px solid #3b82f6; }
-#stTable thead .grp-base th { border-top: 3px solid #6366f1; }
-#stTable thead .grp-etap th { border-top: 3px solid #10b981; }
-#stTable thead .grp-qty  th { border-top: 3px solid #f59e0b; }
-#stTable thead .grp-ext  th { border-top: 3px solid #8b5cf6; }
+/* columnas fijas en fila de grupos: z-index mayor */
+#stTable thead tr.thead-grupos th.fc-5,
+#stTable thead tr.thead-grupos th.fc-6,
+#stTable thead tr.thead-grupos th.fc-7,
+#stTable thead tr.thead-grupos th.fc-8 { z-index: 22; }
 
+/* ── thead: fila de columnas individuales ─────────────────────────── */
+#stTable thead tr.thead-cols th {
+    font-size: .60rem; font-weight: 700; letter-spacing: .02em;
+    text-transform: uppercase; white-space: nowrap;
+    background: #dde5f0; color: #1e2d3d;
+    padding: .22rem .4rem; text-align: center;
+    border-bottom: 2px solid #a8bbcf;
+    position: sticky; top: var(--thead-grp-h, 28px); z-index: 11;
+    line-height: 1.3;
+}
+/* columnas fijas en fila de columnas: z-index mayor */
+#stTable thead tr.thead-cols th.fc-5,
+#stTable thead tr.thead-cols th.fc-6,
+#stTable thead tr.thead-cols th.fc-7,
+#stTable thead tr.thead-cols th.fc-8 { z-index: 21; background: #ccd7ea; }
+
+/* hover en toda la cabecera */
+#stTable thead th:hover { filter: brightness(.93); }
+
+/* ── tbody ─────────────────────────────────────────────────────────── */
 #stTable tbody td {
-    font-size: .73rem; vertical-align: middle;
-    padding: .28rem .45rem;
+    font-size: .70rem; vertical-align: middle;
+    padding: .22rem .38rem;
     border-bottom: 1px solid #edf2f7;
+    white-space: nowrap;
 }
 #stTable tbody tr:nth-child(even) td { background: #f8fafc; }
 #stTable tbody tr:nth-child(odd)  td { background: #fff; }
@@ -407,20 +400,23 @@
 #stTable tbody tr.row-retraso td.fc-7,
 #stTable tbody tr.row-retraso td.fc-8      { background: #fff5f5 !important; }
 
-/* Fondo en thead para columnas fijas */
-#stTable thead th.fc-1,
-#stTable thead th.fc-2,
-#stTable thead th.fc-3,
-#stTable thead th.fc-4,
-#stTable thead th.fc-5,
-#stTable thead th.fc-6,
-#stTable thead th.fc-7,
-#stTable thead th.fc-8  { background: #e8eef6; }
-/* Fila 2 sticky-cols: fondo más oscuro para distinguir jerarquía */
-#stTable thead tr:nth-child(2) th.fc-5,
-#stTable thead tr:nth-child(2) th.fc-6,
-#stTable thead tr:nth-child(2) th.fc-7,
-#stTable thead tr:nth-child(2) th.fc-8  { background: #d4dff0; }
+/* Fondo en thead: fila grupos = azul oscuro, fila cols = gris-azul */
+#stTable thead tr.thead-grupos th.fc-1,
+#stTable thead tr.thead-grupos th.fc-2,
+#stTable thead tr.thead-grupos th.fc-3,
+#stTable thead tr.thead-grupos th.fc-4,
+#stTable thead tr.thead-grupos th.fc-5,
+#stTable thead tr.thead-grupos th.fc-6,
+#stTable thead tr.thead-grupos th.fc-7,
+#stTable thead tr.thead-grupos th.fc-8 { background: #1a4971; z-index: 22; }
+#stTable thead tr.thead-cols th.fc-1,
+#stTable thead tr.thead-cols th.fc-2,
+#stTable thead tr.thead-cols th.fc-3,
+#stTable thead tr.thead-cols th.fc-4,
+#stTable thead tr.thead-cols th.fc-5,
+#stTable thead tr.thead-cols th.fc-6,
+#stTable thead tr.thead-cols th.fc-7,
+#stTable thead tr.thead-cols th.fc-8  { background: #ccd7ea; z-index: 21; }
 
 /* tfoot */
 #stTable tfoot td.fc-1,
@@ -590,6 +586,37 @@
     padding: .15rem .3rem; background: #fafafa; resize: none; height: 28px;
 }
 .area-input:focus { border-color: #3b82f6; outline: none; background: #fff; }
+
+/* ── Multi-select dropdown (Est.Flujo) ── */
+.cf-msel-wrap { position: relative; }
+.cf-msel-btn {
+    text-align: left !important; cursor: pointer;
+    display: flex !important; align-items: center; justify-content: space-between; gap: .3rem;
+    white-space: nowrap; overflow: hidden; min-width: 130px;
+}
+.cf-msel-panel {
+    position: absolute; top: calc(100% + 3px); left: 0; z-index: 500;
+    background: #fff; border: 1px solid #bfcad8; border-radius: .35rem;
+    box-shadow: 0 6px 16px rgba(0,0,0,.14); padding: .3rem .45rem;
+    min-width: 210px; max-height: 260px; overflow-y: auto;
+}
+.cf-msel-item {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .22rem .3rem; border-radius: .22rem; cursor: pointer;
+    font-size: .76rem; color: #1e2d3d; transition: background .1s;
+    white-space: nowrap; margin: 0; font-weight: 400;
+}
+.cf-msel-item:hover { background: #eff6ff; }
+.cf-msel-item input[type=checkbox] { cursor: pointer; width: 13px; height: 13px; flex-shrink: 0; }
+.cf-msel-footer {
+    display: flex; gap: .35rem; padding: .28rem .3rem 0; margin-top: .25rem;
+    border-top: 1px solid #e2e8f0;
+}
+.cf-msel-clr {
+    font-size: .68rem; color: #64748b; background: none; border: none;
+    cursor: pointer; padding: .1rem .3rem; border-radius: .2rem;
+}
+.cf-msel-clr:hover { color: #dc2626; }
 </style>
 }
 
@@ -677,8 +704,8 @@
                 </div>
             </div>
 
-            @* Fila 2: filtros adicionales *@
-            <div class="spt-filters-row2">
+            @* Fila 2: filtros adicionales (ocultos — se envían igual via form) *@
+            <div class="spt-filters-row2" style="display:none;">
                 <div class="spt-fld">
                     <label class="spt-label" for="stCliente"><i class="bi bi-building"></i>Cliente</label>
                     <select class="spt-ctrl" name="cliente" id="stCliente" style="min-width:260px;">
@@ -891,13 +918,25 @@
                 <input type="date" class="spt-ctrl" id="cfFchEntHas" data-cf-fch="fchent-has" style="min-width:120px;" title="Hasta" />
             </div>
 
-            @* 10. Est. Flujo *@
+            @* 10. Est. Flujo — multi-select *@
             <div class="spt-fld">
                 <label class="spt-label"><i class="bi bi-activity"></i>Est.Flujo</label>
-                <select class="spt-ctrl" data-cf="estflujo" style="min-width:90px;">
-                    <option value="">Todos</option>
-                    @foreach (var v in cfFlujoOpts) { <option value="@v">@v</option> }
-                </select>
+                <div class="cf-msel-wrap" id="cfFlujoWrap">
+                    <button type="button" class="spt-ctrl cf-msel-btn" id="cfFlujoBtn">
+                        <span id="cfFlujoBtnTxt">Todos</span>
+                        <i class="bi bi-chevron-down" style="font-size:.6rem;opacity:.7;margin-left:.2rem;"></i>
+                    </button>
+                    <div class="cf-msel-panel" id="cfFlujoPanel" style="display:none;">
+                        @foreach (var v in cfFlujoOpts) {
+                            <label class="cf-msel-item">
+                                <input type="checkbox" class="cf-flujo-chk" value="@v"> @v
+                            </label>
+                        }
+                        <div class="cf-msel-footer">
+                            <button type="button" class="cf-msel-clr" id="cfFlujoClr">Limpiar todo</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             @* 11. Ev.Encon *@
@@ -952,167 +991,103 @@
 
         <div class="spt-table-wrap">
             <table id="stTable">
-                <thead>
-                    @* ── Fila 1: Cabeceras de grupo ──────────────────────────────────────── *@
-                    <tr>
-                        @* Col 0: Checkbox *@
-                        <th class="col-chk th-grupo" style="padding:0;">
-                            <input type="checkbox" id="chkAll" title="Seleccionar todos">
-                        </th>
-                        @* Cols 1-12: sin cabecera de grupo (tiempo + identificación, incluye Ne/Mat/Lote/F.Pedido) *@
-                        <th colspan="12" class="th-grupo"></th>
-
-                        @* Col 13-16: RODETE (+ semáforo XRod) *@
-                        <th colspan="4" class="col-sep th-grupo">RODETE</th>
-
-                        @* Cols 16-18: ENTREGA MATERIAL HILAND *@
-                        <th colspan="3" class="col-sep th-grupo">ENTREGA MATERIAL HILAND.</th>
-
-                        @* Cols 19-22: RECETA *@
-                        <th colspan="4" class="col-sep th-grupo">RECETA</th>
-
-                        @* Col 23: PROGRAMA *@
-                        <th colspan="1" class="col-sep th-grupo">PROGRAMA</th>
-
-                        @* Col 24: DESPACHO MATERIAL (movido después de PROGRAMA) *@
-                        <th colspan="1" class="col-sep th-grupo">DESP. MATERIAL</th>
-
-                        @* Cols 25-30: TEÑIDO (+ semáforo XTenido) *@
-                        <th colspan="5" class="col-sep th-grupo">TEÑIDO</th>
-
-                        @* Cols 29-32: SECADO *@
-                        <th colspan="4" class="col-sep th-grupo">SECADO</th>
-
-                        @* REVISADO (antes de Enconado) *@
-                        <th colspan="2" class="col-sep th-grupo">REVISADO</th>
-
-                        @* ENCONADO (+ Acabado) *@
-                        <th colspan="3" class="col-sep th-grupo">ENCONADO</th>
-
-                        @* Cols 38-42: ALMACÉN *@
-                        <th colspan="5" class="col-sep th-grupo">ALMACÉN</th>
-
-                        @* Cols 43-48: KG (+ KgPedido) *@
-                        <th colspan="5" class="col-sep th-grupo">KG</th>
-
-                        @* Cols 47-50: sin cabecera de grupo (estados + apoyo) *@
-                        <th colspan="4" class="col-sep th-grupo"></th>
-
-                        @* Col Área Responsable *@
-                        <th colspan="1" class="col-sep th-grupo" style="padding:2px 4px;">
-                            <button type="button" id="btnGuardarAreaResp" class="st-cb-btn" style="background:#1a4971;font-size:.65rem;padding:.2rem .5rem;">
-                                <i class="bi bi-save"></i> Guardar Área Resp.
-                            </button>
-                        </th>
-
-                        @* Cols 51-65: COLUMNAS ADICIONALES — NO EN DT EXCEL (comentadas, pendientes de activar) *@
-                        @*
-                        <th colspan="15" class="col-sep th-grupo-adicional">COLUMNAS ADICIONALES &mdash; NO EN DT EXCEL</th>
-                        *@
-                    </tr>
-
-                    @* ── Fila 2: Cabeceras individuales de columna ───────────────────────── *@
-                    <tr>
-                        @* Col 0: Checkbox *@
-                        <th class="col-chk"></th>
-
-                        @* Cols 1-4: Dimensiones (tiempo) *@
-                        <th class="fc-1">Mes</th>
-                        <th class="fc-2">Mes.Tex</th>
-                        <th class="fc-3">Año</th>
-                        <th class="fc-4">Sem</th>
-
-                        @* Cols 5-12: Identificación *@
-                        <th class="col-sep fc-5">Partida</th>
-                        <th class="fc-6">Cliente</th>
-                        <th class="fc-7">Material</th>
-                        <th class="fc-8">Est</th>
-                        <th class="col-ne">Ne</th>
-                        <th class="col-mat">Mat</th>
-                        <th>Lote</th>
-                        <th>F.Pedido</th>
-
-                        @* Cols 13-16: 1er Rodete + semáforo *@
-                        <th class="col-sep">Estima.Rod</th>
-                        <th>Entreg.Rod</th>
-                        <th>D.Rod</th>
-                        <th style="text-align:center">X.Rod</th>
-
-                        @* Cols 16-18: Mat.Hilanderia *@
-                        <th class="col-sep">Estima.Mat</th>
-                        <th>Entreg.Mat</th>
-                        <th>D.MH</th>
-
-                        @* Cols 19-22: Receta TT *@
-                        <th class="col-sep">Estima.Rec</th>
-                        <th>Entreg.Rec</th>
-                        <th>D.Rec</th>
-                        <th></th>
-
-                        @* Cols 23-24: Programa TT + Desp.Material *@
-                        <th class="col-sep">F.Prog</th>
-                        <th>F.Guía</th>
-                        <th>Maq</th>
-                        <th>Est.Ten</th>
-                        <th>Entr.Ten</th>
-                        <th>D.Tenido</th>
-                        <th style="text-align:center">X.Ten</th>
-
-                        @* SECADO *@
-                        <th class="col-sep">F.Sec.Rod</th>
-                        <th>F.Sec.Mad</th>
-                        <th>F.Aprob.Cal</th>
-                        <th>Time.Aprov</th>
-
-                        @* REVISADO + ENCONADO (Revisado primero) *@
-                        <th class="col-sep">F.Revis</th>
-                        <th>Ev.Encon</th>
-                        <th class="col-sep">Tipo.Acab</th>
-                        <th>Acabado</th>
-                        <th>F.Encon</th>
-
-                        @* Cols 38-42: Entrega/Espera *@
-                        <th class="col-sep">F.Entrega</th>
-                        <th>Ing.AlmPT</th>
-                        <th>D.Espera</th>
-                        <th class="col-de" style="text-align:center">De</th>
-                        <th></th>
-
-                        @* Cols 43-48: Kilogramos *@
-                        <th class="col-sep col-kgped" title="Kg pedidos">Kg.Ped</th>
-                        <th class="col-sep">Kg.Prog</th>
-                        <th>Kg.Despa</th>
-                        <th>Gap</th>
-                        <th>%Tol.</th>
-
-                        @* Cols 47-48: Estados *@
-                        <th class="col-sep">Est.Flujo</th>
-                        <th>Est.Desp</th>
-
-                        @* Cols 49-50: Apoyo *@
-                        <th class="col-sep">Area.Resp</th>
-                        <th class="col-sep col-bp">Bp</th>
-
-                        @* Cols 51-65: Adicionales (comentadas, pendientes de activar) *@
-                        @*
-                        <th class="col-sep" style="text-align:right">P.Neto</th>
-                        <th>RMC</th>
-                        <th>Nro.RMC</th>
-                        <th>Título</th>
-                        <th>Tit.Texto</th>
-                        <th>Ref.</th>
-                        <th>Proceso.TT</th>
-                        <th>P.Matiz</th>
-                        <th>Est.Eval</th>
-                        <th>Defecto</th>
-                        <th>Resultado</th>
-                        <th>Lab.Val</th>
-                        <th>F.Secado.Mad</th>
-                        <th>Aca.Mad</th>
-                        <th style="text-align:right">D.Retraso</th>
-                        *@
-                    </tr>
-                </thead>
+				<thead>
+					@* ── Fila 1: Grupos ──────────────────────────────────────────────────── *@
+					<tr class="thead-grupos">
+						<th class="col-chk th-fix" rowspan="2" style="padding:0;vertical-align:middle;"><input type="checkbox" id="chkAll" title="Seleccionar todos"></th>
+						<th class="fc-1 th-fix" rowspan="2">Mes</th>
+						<th class="fc-2 th-fix" rowspan="2">Mes.Tex</th>
+						<th class="fc-3 th-fix" rowspan="2">Año</th>
+						<th class="fc-4 th-fix" rowspan="2">Sem</th>
+						<th class="col-sep fc-5 th-fix" rowspan="2">Partida</th>
+						<th class="fc-6 th-fix" rowspan="2">Cliente</th>
+						<th class="fc-7 th-fix" rowspan="2">Material</th>
+						<th class="fc-8 th-fix" rowspan="2">Est</th>
+						<th class="col-ne th-fix" rowspan="2">Ne</th>
+						<th class="col-mat th-fix" rowspan="2">Mat</th>
+						<th rowspan="2">Lote</th>
+						<th rowspan="2">F.Pedido</th>
+						<th class="th-grp col-sep" colspan="4">RODETE</th>
+						<th class="th-grp col-sep" colspan="3">ENT. MATERIAL HILAND.</th>
+						<th class="th-grp col-sep" colspan="3">RECETA</th>
+						<th class="th-grp col-sep" colspan="1">PROGRAMA</th>
+						<th class="th-grp col-sep" colspan="1">DESPACHO MAT.</th>
+						<th class="th-grp col-sep" colspan="5">TENIDO</th>
+						<th class="th-grp col-sep" colspan="1">TIPO ACAB.</th>
+						<th class="th-grp col-sep" colspan="5">SECADO</th>
+						<th class="th-grp col-sep" colspan="2">REVISADO</th>
+						<th class="th-grp col-sep" colspan="2">ENCONADO</th>
+						<th class="th-grp col-sep" colspan="5">ALMACEN</th>
+						<th class="th-grp col-sep" colspan="5">KG</th>
+						<th class="th-grp col-sep" colspan="2">ESTADO</th>
+						<th class="th-grp col-sep" colspan="2" style="white-space:nowrap;">
+							<button type="button" id="btnGuardarAreaResp" style="background:#f59e0b;color:#1a2c40;border:none;border-radius:.3rem;font-size:.62rem;font-weight:700;padding:.18rem .55rem;cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;letter-spacing:.03em;white-space:nowrap;">
+								<i class="bi bi-save"></i> Guardar Área Resp.
+							</button>
+						</th>
+					</tr>
+					@* ── Fila 2: Cabeceras individuales ────────────────────────────────── *@
+					<tr class="thead-cols">
+						<th class="col-sep">Estima.Rod</th>
+						<th>Entreg.Rod</th>
+						<th>D.Rod</th>
+						<th style="text-align:center">X.Rod</th>
+						<th class="col-sep">Estima.Mat</th>
+						<th>Entreg.Mat</th>
+						<th>D.MH</th>
+						<th class="col-sep">Estima.Rec</th>
+						<th>Entreg.Rec</th>
+						<th>D.Rec</th>
+						<th class="col-sep">F.Prog</th>
+						<th class="col-sep">F.Guia</th>
+						<th class="col-sep">Maq</th>
+						<th>Est.Ten</th>
+						<th>Entr.Ten</th>
+						<th>D.Tenido</th>
+						<th style="text-align:center">X.Ten</th>
+						<th class="col-sep">Tipo.Acab</th>
+						<th class="col-sep">F.Sec.Rod</th>
+						<th>F.Sec.Mad</th>
+						<th>F.Aprob.Cal</th>
+						<th>Time.Aprov</th>
+						<th style="text-align:center">Sem.Sec</th>
+						<th class="col-sep">F.Revis</th>
+						<th>Ev.Encon</th>
+						<th class="col-sep">Acabado</th>
+						<th>F.Encon</th>
+						<th class="col-sep">F.Entrega</th>
+						<th>Ing.AlmPT</th>
+						<th>D.Espera</th>
+						<th class="col-de" style="text-align:center">De</th>
+						<th></th>
+						<th class="col-sep col-kgped" title="Kg pedidos">Kg.Ped</th>
+						<th class="col-sep">Kg.Prog</th>
+						<th>Kg.Despa</th>
+						<th>Gap</th>
+						<th>%Tol.</th>
+						<th class="col-sep">Est.Flujo</th>
+						<th>Est.Desp</th>
+						<th class="col-sep">Area.Resp</th>
+						<th class="col-sep col-bp">Bp</th>
+						@*
+						<th class="col-sep" style="text-align:right">P.Neto</th>
+						<th>RMC</th>
+						<th>Nro.RMC</th>
+						<th>Titulo</th>
+						<th>Tit.Texto</th>
+						<th>Ref.</th>
+						<th>Proceso.TT</th>
+						<th>P.Matiz</th>
+						<th>Est.Eval</th>
+						<th>Defecto</th>
+						<th>Resultado</th>
+						<th>Lab.Val</th>
+						<th>F.Secado.Mad</th>
+						<th>Aca.Mad</th>
+						<th style="text-align:right">D.Retraso</th>
+						*@
+					</tr>
+				</thead>
                 <tbody id="stTbody"></tbody>
                 <tfoot></tfoot>
             </table>
@@ -1237,6 +1212,13 @@ function iconDE(v) {
     if(v===1)          return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda espera"></i>';
     return '<i class="bi bi-circle-fill text-danger" title="En espera cr\u00edtica"></i>';
 }
+function iconSec(v) {
+    // v = timeAprov: null = sin aprobación, 0 = aprobado a tiempo, >0 = días de retraso en aprobación
+    if(v==null) return '<i class="bi bi-circle-fill text-secondary" title="Sin aprobaci\u00f3n cal."></i>';
+    if(v===0)   return '<i class="bi bi-circle-fill text-success" title="Aprobado a tiempo"></i>';
+    if(v===1)   return '<i class="bi bi-circle-fill text-warning" title="1 d\u00eda retraso aprobaci\u00f3n"></i>';
+    return '<i class="bi bi-circle-fill text-danger" title="Retraso en aprobaci\u00f3n cr\u00edtico"></i>';
+}
 
 // ── buildRow ─────────────────────────────────────────────────────────────────
 function buildRow(r, idx) {
@@ -1265,36 +1247,36 @@ function buildRow(r, idx) {
         '<td style="white-space:nowrap;">'+d(r.fchPedido)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaRod)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.entregRod)+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasRod)+'">'+n0(r.diasRod)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasRod)+'</td>' +
         '<td style="text-align:center;white-space:nowrap;">'+iconX(r.xRod)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaMat)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.entregMat)+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasMh)+'">'+n0(r.diasMh)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasMh)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaRec)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.entregRec)+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasRec)+'">'+n0(r.diasRec)+'</td>' +
-        '<td style="text-align:center;white-space:nowrap;">'+iconX(r.x)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasRec)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchProg)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchaGuia)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.maqTen)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.estimaTen)+'</td>' +
         '<td style="white-space:nowrap;">'+tenBadge+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgDiasT(r.diasT)+'">'+n0(r.diasT)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasT)+'</td>' +
         '<td style="text-align:center;white-space:nowrap;">'+iconX(r.xTenido)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.tipoAc)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchSecRod)+'</td>' +
-        '<td style="white-space:nowrap;">'+d(r.fchSecMad)+'</td>' +
+        '<td style="white-space:nowrap;">'+(r.fchSecMad ? d(r.fchSecMad) : (r.acabado==='MADEJA'?'<span class="eb eb-proc" title="Secado madeja pendiente">MAD</span>':'\u2014'))+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.fchAprobCal)+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.timeAprov)+'">'+n0(r.timeAprov)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.timeAprov)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+iconSec(r.timeAprov)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchRev)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.evEncon)+'</td>' +
-        '<td class="col-sep" style="white-space:nowrap;">'+d(r.tipoAc)+'</td>' +
-        '<td style="white-space:nowrap;">'+d(r.acabado)+'</td>' +
+        '<td class="col-sep" style="white-space:nowrap;">'+d(r.acabado)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.fchEncon)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;'+r.semClass+'">'+d(r.fchEntrega)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.ingAlmpt)+'</td>' +
-        '<td style="text-align:right;white-space:nowrap;'+bgRet(r.diasEsp)+'">'+n0(r.diasEsp)+'</td>' +
-        '<td class="col-de" style="text-align:center;white-space:nowrap;'+bgDE(r.de)+'">'+n0(r.de)+'</td>' +
-        '<td style="text-align:center;white-space:nowrap;">'+iconDE(r.deCopia)+'</td>' +
+        '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasEsp)+'</td>' +
+        '<td class="col-de" style="text-align:center;white-space:nowrap;">'+n0(r.de)+'</td>' +
+        '<td style="text-align:center;white-space:nowrap;">'+(r.ingAlmpt==null?'<i class="bi bi-circle-fill text-warning" title="Sin ingreso a almac\u00e9n PT"></i>':iconDE(r.deCopia))+'</td>' +
         '<td class="col-sep col-kgped" style="text-align:right;white-space:nowrap;">'+n2(r.kgPedido)+'</td>' +
         '<td class="col-sep" style="text-align:right;white-space:nowrap;">'+n2(r.kgProg)+'</td>' +
         '<td style="text-align:right;white-space:nowrap;">'+n2(r.kgDespa)+'</td>' +
@@ -1430,7 +1412,7 @@ function renderPage() {
         if(e<pages){if(e<pages-1) nums+='<span style="align-self:center;color:#94a3b8;">\u2026</span>';nums+='<button class="pg-btn" data-pg="'+pages+'">'+pages+'</button>';}
         pgNums.innerHTML=nums;
         pgNums.querySelectorAll('[data-pg]').forEach(function(btn){
-            btn.addEventListener('click',function(){curPage=parseInt(this.dataset.pg);renderPage();fixTheadRowTops();});
+            btn.addEventListener('click',function(){curPage=parseInt(this.dataset.pg);renderPage();});
         });
     }
     // reconectar checkboxes y obs inputs tras render
@@ -1461,6 +1443,7 @@ function updateKpis(){
 
 // ── Botones MES ───────────────────────────────────────────────────────────────
 var mesActivo = '';
+var flujoSelected = [];  // valores multi-select Est.Flujo
 document.querySelectorAll('.cf-mes-btn').forEach(function(btn){
     btn.addEventListener('click', function(){
         var m = this.dataset.mes;
@@ -1519,6 +1502,11 @@ applyFilters = function(){
                 if(norm(r.mes)!==norm(mesActivo)) return false;
             }
         }
+        // Est.Flujo multi-select (OR entre los seleccionados)
+        if(flujoSelected.length>0){
+            var ef=norm(r.estFlujo||'');
+            if(!flujoSelected.some(function(v){ return norm(v)===ef; })) return false;
+        }
         // filtros texto/select
         for(var key in vals){
             var fn=CF_MAP[key]; if(!fn) continue;
@@ -1560,13 +1548,51 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
     allCtrls.forEach(function(el){ el.value=''; });
     mesActivo='';
     document.querySelectorAll('.cf-mes-btn').forEach(function(b){ b.classList.remove('active'); });
+    flujoSelected=[];
+    document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
+    var _fbt=document.getElementById('cfFlujoBtnTxt'); if(_fbt) _fbt.textContent='Todos';
     applyFilters();
 });
 
+// ── Est.Flujo multi-select ────────────────────────────────────────────────────
+(function(){
+    var btn2  =document.getElementById('cfFlujoBtn');
+    var panel2=document.getElementById('cfFlujoPanel');
+    var bTxt2 =document.getElementById('cfFlujoBtnTxt');
+    var clr2  =document.getElementById('cfFlujoClr');
+    function syncBtn(){
+        if(!bTxt2) return;
+        if(flujoSelected.length===0) bTxt2.textContent='Todos';
+        else if(flujoSelected.length===1) bTxt2.textContent=flujoSelected[0];
+        else bTxt2.textContent=flujoSelected.length+' selec.';
+    }
+    if(btn2) btn2.addEventListener('click',function(e){
+        e.stopPropagation();
+        if(panel2) panel2.style.display=panel2.style.display==='none'?'block':'none';
+    });
+    document.addEventListener('click',function(e){
+        if(panel2&&panel2.style.display!=='none'&&!panel2.contains(e.target)&&e.target!==btn2)
+            panel2.style.display='none';
+    });
+    document.querySelectorAll('.cf-flujo-chk').forEach(function(chk){
+        chk.addEventListener('change',function(){
+            var v=this.value;
+            if(this.checked){ if(!flujoSelected.includes(v)) flujoSelected.push(v); }
+            else { flujoSelected=flujoSelected.filter(function(x){ return x!==v; }); }
+            syncBtn(); applyFilters();
+        });
+    });
+    if(clr2) clr2.addEventListener('click',function(){
+        flujoSelected=[];
+        document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
+        syncBtn(); applyFilters();
+    });
+})();
+
 // ── Paginación ────────────────────────────────────────────────────────────────
-if(pgPrev) pgPrev.addEventListener('click',function(){ if(curPage>1){curPage--;renderPage();fixTheadRowTops();} });
-if(pgNext) pgNext.addEventListener('click',function(){ var ps=pageSize<=0?filtered.length:pageSize,pages=Math.max(1,Math.ceil(filtered.length/(ps||1)));if(curPage<pages){curPage++;renderPage();fixTheadRowTops();} });
-if(pgSizeEl) pgSizeEl.addEventListener('change',function(){ pageSize=parseInt(this.value);curPage=1;renderPage();fixTheadRowTops(); });
+if(pgPrev) pgPrev.addEventListener('click',function(){ if(curPage>1){curPage--;renderPage();} });
+if(pgNext) pgNext.addEventListener('click',function(){ var ps=pageSize<=0?filtered.length:pageSize,pages=Math.max(1,Math.ceil(filtered.length/(ps||1)));if(curPage<pages){curPage++;renderPage();} });
+if(pgSizeEl) pgSizeEl.addEventListener('change',function(){ pageSize=parseInt(this.value);curPage=1;renderPage(); });
 
 // ── toggle campos form ────────────────────────────────────────────────────────
 var stOpc = document.getElementById('stOpc');
@@ -1648,7 +1674,6 @@ function aplicarColor(hex){
             idxs.forEach(function(idx){
                 var i=parseInt(idx);
                 filtered[i].colorHexa=hex||null;
-                // actualizar allData
                 var orig=allData.indexOf(filtered[i]);
                 if(orig>=0) allData[orig].colorHexa=hex||null;
             });
@@ -1665,7 +1690,8 @@ paletaEl && paletaEl.querySelectorAll('.st-pal-item').forEach(function(item){
     item.addEventListener('click',function(e){ e.stopPropagation(); aplicarColor(this.dataset.color); });
 });
 if(btnQuitarColor) btnQuitarColor.addEventListener('click',function(){ aplicarColor(null); });
-// -- Guardar Area Responsable -----------------------------------------------------------------
+
+// ── Guardar Area Responsable ──────────────────────────────────────────────────
 var btnGuardarAreaResp = document.getElementById('btnGuardarAreaResp');
 if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
     var inputs = tbody.querySelectorAll('.area-input');
@@ -1675,8 +1701,6 @@ if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
         var val = ta.value.trim();
         var idx=parseInt(ta.dataset.idx);
         var r=filtered[idx];
-        // Comparar contra _areaSaved (último valor en servidor), NO contra _area
-        // (que ya fue modificado por el handler 'input' al escribir).
         var savedVal = (r._areaSaved || '').trim();
         if(val === savedVal) return;
         payload.push({ nroProg:r.nroProg||null, numPed:r.numPedKey, nro:r.nroKey, numDet:r.numDetKey, reproceso:r.reprocesoKey, fchProg:r.fchProgKey||null, observaciones:val||null });
@@ -1689,10 +1713,9 @@ if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
         body:JSON.stringify(payload)
     }).then(function(res){return res.json();}).then(function(j){
         if(j.ok){
-            // Sincronizar en memoria para que al paginar no se pierda
             idxsGuardados.forEach(function(e){
-                filtered[e.idx]._area      = e.val;  // borrador
-                filtered[e.idx]._areaSaved = e.val;  // confirmar nuevo valor guardado
+                filtered[e.idx]._area      = e.val;
+                filtered[e.idx]._areaSaved = e.val;
                 filtered[e.idx].area       = e.val;
             });
             showToast(j.n+' area(s) guardada(s).','#16a34a');
@@ -1700,7 +1723,7 @@ if(btnGuardarAreaResp) btnGuardarAreaResp.addEventListener('click', function(){
     }).catch(function(){ showToast('Error de red.','#dc3545'); });
 });
 
-// ── Toast notificaciones ──────────────────────────────────────────────────────
+// ── Toast notificaciones ─────────────────────────────────────────────────────
 function showToast(msg, color){
     var t=document.createElement('div');
     t.style.cssText='position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;background:'+(color||'#1a4971')+';color:#fff;padding:.55rem 1.1rem;border-radius:.4rem;font-size:.8rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);transition:opacity .4s;';
@@ -1709,27 +1732,26 @@ function showToast(msg, color){
     setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove();},400);},2800);
 }
 
-// ── fixTheadRowTops ───────────────────────────────────────────────────────────
+// ── Sticky: ajusta 'top' de la fila de columnas ────────────────────────────────
 function fixTheadRowTops(){
     if(!tbl) return;
-    var f=tbl.querySelector('thead tr:first-child');
-    if(!f) return;
-    var h=f.offsetHeight||f.getBoundingClientRect().height;
-    var w=tbl.closest('.spt-table-wrap')||tbl;
-    w.style.setProperty('--thead-row1-h',h+'px');
+    var gr = tbl.querySelector('thead tr.thead-grupos');
+    if(!gr) return;
+    var h = gr.getBoundingClientRect().height || gr.offsetHeight || 28;
+    var wrap = tbl.closest('.spt-table-wrap') || tbl.parentElement;
+    if(wrap) wrap.style.setProperty('--thead-grp-h', h + 'px');
 }
-requestAnimationFrame(function(){ fixTheadRowTops(); });
+requestAnimationFrame(fixTheadRowTops);
 window.addEventListener('resize', fixTheadRowTops);
 
 // ── Año default 2026 ──────────────────────────────────────────────────────────
 var cfAnoEl = document.getElementById('cfAno');
 if(cfAnoEl && cfAnoEl.value==='') {
-    // seleccionar 2026 si está disponible
     var opt2026 = cfAnoEl.querySelector('option[value="2026"]');
     if(opt2026) { cfAnoEl.value='2026'; }
 }
 
-// ── Arrancar ─────────────────────────────────────────────────────────────────
+// ── Arrancar ──────────────────────────────────────────────────────────────────
 applyFilters();
 })();
 </script>

@@ -92,7 +92,7 @@ public class SireController : OracleBaseController
                 compras = FiltrarAnioActual(await _comprasService.ObtenerPeriodosAsync(cancellationToken));
                 _cache.Set("sire:periodos:compras", compras, TimeSpan.FromMinutes(5));
             }
-            var model = ConstruirDashboard(ventas, compras);
+            var model = ConstruirDashboard(ventas ?? Array.Empty<PropuestaDto>(), compras ?? Array.Empty<PropuestaDto>());
             return View("~/Views/Contabilidad/Sire/Index.cshtml", model);
         }
         catch (SireApiException ex)
@@ -670,7 +670,7 @@ public class SireController : OracleBaseController
     {
         var resultado = new
         {
-            Timestamp = DateTime.UtcNow,
+            Timestamp = DateTime.Now,
             Configuracion = new
             {
                 Ruc = _sireOptions.Ruc,
@@ -911,7 +911,9 @@ public class SireController : OracleBaseController
 
             // Para los jobs activos, adjuntar los últimos logs de SIRE_LOG
             var jobActivo = jobs.FirstOrDefault(j =>
-                j.Estado == EstadoJob.Pendiente || j.Estado == EstadoJob.EnProceso);
+                j.Estado == EstadoJob.Pendiente ||
+                j.Estado == EstadoJob.EnProceso ||
+                j.Estado == EstadoJob.EsperandoTicket);
 
             List<SireApiLog>? logsActivos = null;
             if (jobActivo is not null)
@@ -934,11 +936,12 @@ public class SireController : OracleBaseController
                     j.RegistrosDuplicados,
                     j.MensajeError,
                     j.UsuarioId,
-                    FechaCreacion     = j.FechaCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
+                    FechaCreacion      = j.FechaCreacion.ToString("dd/MM/yyyy HH:mm:ss"),
                     FechaActualizacion = j.FechaActualizacion.ToString("dd/MM/yyyy HH:mm:ss"),
-                    FechaFinalizacion = j.FechaFinalizacion?.ToString("dd/MM/yyyy HH:mm:ss"),
-                    esFinal           = j.Estado == EstadoJob.Completado || j.Estado == EstadoJob.Error,
-                    puedeReintentar   = j.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(j.NumTicket),
+                    FechaFinalizacion  = j.FechaFinalizacion?.ToString("dd/MM/yyyy HH:mm:ss"),
+                    ProximaConsulta    = j.ProximaConsulta?.ToString("dd/MM/yyyy HH:mm:ss"),
+                    esFinal            = j.Estado == EstadoJob.Completado || j.Estado == EstadoJob.Error,
+                    puedeReintentar    = j.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(j.NumTicket),
                 }),
                 logsActivos = logsActivos?.Select(l => new
                 {
@@ -975,23 +978,59 @@ public class SireController : OracleBaseController
 
             ValidarParametrosOperacion(request.Periodo, request.Tipo);
 
-            // Verificar si ya existe un job activo para este período y tipo
+            // Solo puede existir UN job activo (Pendiente|EnProceso) por tipo.
+            // GetJobActivoAsync ya NO filtra por período — garantiza unicidad por tipo.
             var tipo = request.Tipo.ToLowerInvariant();
-            var jobExistente = await _sireRepo.GetJobActivoAsync(tipo, request.Periodo, cancellationToken);
+            var jobExistente = await _sireRepo.GetJobActivoAsync(tipo, cancellationToken);
 
             if (jobExistente is not null)
             {
-                _logger.LogInformation("[SIRE] Job activo encontrado para {Tipo} {Periodo}: jobId={JobId} estado={Estado}",
-                    tipo, request.Periodo, jobExistente.JobId, jobExistente.Estado);
+                var minutosParado = (int)(DateTime.Now - jobExistente.FechaActualizacion).TotalMinutes;
+
+                // ── Caso A: mismo período → reconectar al proceso activo ──────────────
+                if (jobExistente.Periodo == request.Periodo)
+                {
+                    // EsperandoTicket: el WatcherWorker lo gestiona — NO re-encolar en el worker principal
+                    // porque el ticket todavía no está listo. Solo reconectar el front al job.
+                    if (jobExistente.Estado != EstadoJob.EsperandoTicket)
+                        _exportacionQueue.Encolar(jobExistente.Id);
+
+                    _logger.LogInformation("[SIRE] Job activo reconectado {Tipo}/{Periodo}: jobId={JobId} estado={Estado} minutosParado={Min}",
+                        tipo, request.Periodo, jobExistente.JobId, jobExistente.Estado, minutosParado);
+
+                    return Json(new
+                    {
+                        exitoso        = true,
+                        jobId          = jobExistente.JobId,
+                        yaExiste       = true,
+                        mismoPeriodo   = true,
+                        estado         = jobExistente.Estado,
+                        numTicket      = jobExistente.NumTicket,
+                        minutosParado  = minutosParado,
+                        fechaCreacion  = jobExistente.FechaCreacion.ToString("dd/MM/yyyy HH:mm"),
+                        proximaConsulta = jobExistente.ProximaConsulta?.ToString("dd/MM/yyyy HH:mm"),
+                        mensaje        = $"Proceso existente para {request.Periodo} ({jobExistente.Estado}, {minutosParado} min). Reconectado."
+                    });
+                }
+
+                // ── Caso B: período diferente → bloquear, no crear uno nuevo ─────────
+                // Un tipo solo procesa de a un período a la vez.
+                _logger.LogWarning("[SIRE] Intento de iniciar {Tipo}/{PeriodoNuevo} bloqueado: ya existe job activo para {PeriodoActivo} ({Estado})",
+                    tipo, request.Periodo, jobExistente.Periodo, jobExistente.Estado);
 
                 return Json(new
                 {
-                    exitoso   = true,
-                    jobId     = jobExistente.JobId,
-                    yaExiste  = true,
-                    estado    = jobExistente.Estado,
-                    numTicket = jobExistente.NumTicket,
-                    mensaje   = $"Ya existe un proceso activo para {request.Periodo} ({jobExistente.Estado}). Se reconectó al proceso en curso."
+                    exitoso          = false,
+                    bloqueadoPorOtro = true,
+                    jobId            = jobExistente.JobId,
+                    estado           = jobExistente.Estado,
+                    periodoActivo    = jobExistente.Periodo,
+                    numTicket        = jobExistente.NumTicket,
+                    proximaConsulta  = jobExistente.ProximaConsulta?.ToString("dd/MM/yyyy HH:mm"),
+                    minutosParado    = minutosParado,
+                    fechaCreacion    = jobExistente.FechaCreacion.ToString("dd/MM/yyyy HH:mm"),
+                    error            = $"Hay un proceso de {tipo} activo para el período {jobExistente.Periodo} ({jobExistente.Estado}). " +
+                                       $"Espere que termine o cancélelo antes de iniciar uno nuevo."
                 });
             }
 
@@ -1040,6 +1079,48 @@ public class SireController : OracleBaseController
         if (job is null)
             return Json(new { exitoso = false, error = "Job no encontrado" });
 
+        var minutosParado = (int)(DateTime.Now - job.FechaActualizacion).TotalMinutes;
+
+        // Auto-sanar job en EsperandoTicket que quedó huérfano por shutdown del servidor:
+        // si el último log TICKET registrado dice "Terminado" (estado final de SUNAT) pero el
+        // worker fue interrumpido antes de persistir el estado Error, lo corregimos aquí.
+        if (job.Estado == EstadoJob.EsperandoTicket)
+        {
+            var logs = await _sireRepo.GetApiLogsAsync(top: 10, jobId: job.JobId, ct: cancellationToken);
+            var ultimoTicket = logs.FirstOrDefault(l => l.Operacion == SireOperacion.Ticket && l.Exito);
+            if (ultimoTicket is not null &&
+                ultimoTicket.Mensaje is not null &&
+                ultimoTicket.Mensaje.Contains("Terminado", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "[SIRE] Job {JobId} en EsperandoTicket con último log TICKET=Terminado. " +
+                    "Auto-saneando a Error (shutdown interrumpió el UpdateJob del Watcher).",
+                    job.JobId);
+                job.Estado             = EstadoJob.Error;
+                job.MensajeError       = $"SUNAT finalizó el ticket {job.NumTicket} sin archivo (Terminado). " +
+                                         "El servidor fue interrumpido antes de registrar el resultado. " +
+                                         "Puede cancelar y volver a exportar.";
+                job.ProximaConsulta    = null;
+                job.FechaActualizacion = DateTime.Now;
+                job.FechaFinalizacion  = DateTime.Now;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+            }
+        }
+
+        // Si el job está Pendiente, verificar si hay un job del otro tipo bloqueándolo
+        string? bloqueadorTipo    = null;
+        string? bloqueadorPeriodo = null;
+        if (job.Estado == EstadoJob.Pendiente)
+        {
+            var otroTipo   = job.TipoRegistro.Equals("compras", StringComparison.OrdinalIgnoreCase) ? "ventas" : "compras";
+            var bloqueador = await _sireRepo.GetJobActivoAsync(otroTipo, cancellationToken);
+            if (bloqueador?.Estado == EstadoJob.EnProceso)
+            {
+                bloqueadorTipo    = otroTipo;
+                bloqueadorPeriodo = bloqueador.Periodo;
+            }
+        }
+
         return Json(new
         {
             exitoso             = true,
@@ -1048,15 +1129,87 @@ public class SireController : OracleBaseController
             tipoRegistro        = job.TipoRegistro,
             periodo             = job.Periodo,
             numTicket           = job.NumTicket,
-            nombreArchivo       = job.NombreArchivo,
-            rutaArchivo         = job.RutaArchivo,
             registrosInsertados = job.RegistrosInsertados,
-            registrosDuplicados = job.RegistrosDuplicados,
             mensajeError        = job.MensajeError,
-            fechaCreacion       = job.FechaCreacion,
-            fechaFinalizacion   = job.FechaFinalizacion,
+            fechaCreacion       = job.FechaCreacion.ToString("dd/MM/yyyy HH:mm"),
+            fechaActualizacion  = job.FechaActualizacion.ToString("dd/MM/yyyy HH:mm"),
+            fechaFinalizacion   = job.FechaFinalizacion?.ToString("dd/MM/yyyy HH:mm"),
+            minutosParado       = minutosParado,
+            bloqueadorTipo      = bloqueadorTipo,
+            bloqueadorPeriodo   = bloqueadorPeriodo,
             esFinal             = job.Estado == EstadoJob.Completado || job.Estado == EstadoJob.Error,
-            puedeReintentar     = job.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(job.NumTicket)
+            puedeReintentar     = job.Estado == EstadoJob.Error && !string.IsNullOrWhiteSpace(job.NumTicket),
+            // Huérfano: Pendiente >2 min sin avanzar = el ítem del Channel se perdió por restart
+            posibleHuerfano     = job.Estado == EstadoJob.Pendiente && minutosParado >= 2,
+            puedeCancel         = job.Estado != EstadoJob.Completado,
+            proximaConsulta     = job.ProximaConsulta?.ToString("dd/MM/yyyy HH:mm")
+        });
+    }
+
+    /// <summary>
+    /// Cancela un job (lo marca como Error) para liberar el período y poder crear uno nuevo.
+    /// Útil cuando el job lleva mucho tiempo parado o el ticket SUNAT expiró.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelarJob([FromBody] string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Json(new { exitoso = false, error = "jobId inválido" });
+
+        var job = await _sireRepo.GetJobByJobIdAsync(jobId, cancellationToken);
+        if (job is null)
+            return Json(new { exitoso = false, error = "Job no encontrado" });
+
+        if (job.Estado == EstadoJob.Completado)
+            return Json(new { exitoso = false, error = "El job ya está completado, no se puede cancelar." });
+
+        job.Estado             = EstadoJob.Error;
+        job.MensajeError       = $"Cancelado manualmente por {User.Identity?.Name} el {DateTime.Now:dd/MM/yyyy HH:mm}";
+        job.FechaActualizacion = DateTime.Now;
+        job.FechaFinalizacion  = DateTime.Now;
+        await _sireRepo.UpdateJobAsync(job, cancellationToken);
+
+        await _sireRepo.InsertApiLogAsync(new SireApiLog
+        {
+            JobId     = job.JobId,
+            Operacion = "CANCEL",
+            Exito     = false,
+            Mensaje   = job.MensajeError,
+            Fecha     = DateTime.Now,
+        }, cancellationToken);
+
+        _logger.LogWarning("[SIRE] Job cancelado manualmente: {JobId} tipo={Tipo} periodo={Periodo} por {User}",
+            jobId, job.TipoRegistro, job.Periodo, User.Identity?.Name);
+
+        return Json(new { exitoso = true, mensaje = "Job cancelado. Puede iniciar una nueva exportación." });
+    }
+
+    /// <summary>
+    /// Retorna los últimos registros de SIRE_LOG para un job específico.
+    /// Permite al modal de progreso mostrar qué operaciones se ejecutaron.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> LogsJob(string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Json(new { exitoso = false, error = "jobId inválido" });
+
+        var logs = await _sireRepo.GetApiLogsAsync(30, jobId, null, cancellationToken, ordenAscendente: true);
+        return Json(new
+        {
+            exitoso = true,
+            logs = logs.Select(l => new
+            {
+                operacion  = l.Operacion,
+                exito      = l.Exito,
+                httpStatus = l.HttpStatus,
+                duracionMs = l.DuracionMs,
+                metodo     = l.MetodoHttp,
+                url        = l.Url,
+                mensaje    = l.Mensaje,
+                fecha      = l.Fecha.ToString("dd/MM/yyyy HH:mm:ss")
+            })
         });
     }
 
@@ -1084,7 +1237,7 @@ public class SireController : OracleBaseController
 
         job.Estado             = EstadoJob.EnProceso;
         job.MensajeError       = null;
-        job.FechaActualizacion = DateTime.UtcNow;
+        job.FechaActualizacion = DateTime.Now;
         job.FechaFinalizacion  = null;
         await _sireRepo.UpdateJobAsync(job, cancellationToken);
 
@@ -1098,6 +1251,38 @@ public class SireController : OracleBaseController
             exitoso = true,
             jobId   = job.JobId,
             mensaje = $"Job reencolado. Retomará el polling del ticket {job.NumTicket}."
+        });
+    }
+
+    /// <summary>
+    /// Reencola un job Pendiente huérfano (perdido del Channel por restart del servidor).
+    /// Solo aplica a jobs en estado Pendiente; no requiere ticket SUNAT.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReencolarJobHuerfano([FromBody] string jobId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Json(new { exitoso = false, error = "jobId inválido" });
+
+        var job = await _sireRepo.GetJobByJobIdAsync(jobId, cancellationToken);
+
+        if (job is null)
+            return Json(new { exitoso = false, error = "Job no encontrado" });
+
+        if (job.Estado != EstadoJob.Pendiente)
+            return Json(new { exitoso = false, error = $"El job no está en estado Pendiente (estado actual: {job.Estado}). Use 'Reintentar' para jobs en Error." });
+
+        _exportacionQueue.Encolar(job.Id);
+
+        _logger.LogWarning("[SIRE] Job huérfano reencolado manualmente: jobId={JobId} tipo={Tipo} periodo={Periodo} por {User}",
+            job.JobId, job.TipoRegistro, job.Periodo, User.Identity?.Name);
+
+        return Json(new
+        {
+            exitoso = true,
+            jobId   = job.JobId,
+            mensaje = "Job reencolado. El worker lo procesará en breve."
         });
     }
 }

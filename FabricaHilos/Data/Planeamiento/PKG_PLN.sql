@@ -162,6 +162,47 @@ CREATE OR REPLACE PACKAGE PKG_PLN AS
     p_usuario       IN VARCHAR2 DEFAULT NULL
   );
 
+  -- ── Partidas pendientes de revisado (Martín) ──────────────────────────────
+  PROCEDURE SP_PLN_PEND_REVISADO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  );
+
+  -- ── Partidas pendientes de evaluación de calidad tintorería (Ivon) ──────────
+  PROCEDURE SP_PLN_PEND_EVAL_CALIDAD (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  );
+
+  -- ── Partidas aprobadas pendientes de enconado/devanado (Guevara) ────────────
+  -- p_tipo: '%'→ambos | 'G'→solo tintorería | 'H'→solo hilandería
+  -- Columna ORIGEN: 'TINTORERIA' | 'HILANDERIA'
+  PROCEDURE SP_PLN_PEND_ENCONADO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  );
+
+  -- ── Partidas pendientes de teñido (Fredy/Malena) ──────────────────────────────
+  -- UNION ALL de dos fuentes: PROGRAMADO (con programa sin produccion activa)
+  --                           CON_PREVIO  (con receta 'IR' en estado '1')
+  -- Columna ORIGEN: 'PROGRAMADO' | 'CON_PREVIO'
+  PROCEDURE SP_PLN_PEND_TENIDO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  );
+
+  -- ── Filtro tipo de programa (H=Hilandería / G=Tintorería) para combos ────────
+  -- Columnas: TIPO (VARCHAR2), DESCRIPCION (VARCHAR2)
+  PROCEDURE SP_PLN_FILTRO_TIPO       (p_cursor OUT SYS_REFCURSOR);
+
 END PKG_PLN;
 /
 
@@ -1612,10 +1653,15 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              -- TIME_APROV = MAX(0, FCH_APROB_CAL-FCH_SEC_RODETE); 0 si alguna es NULL
              GREATEST(0, NVL(TRUNC(D.FECHA) - TRUNC(H.FECHA), 0))                AS TIME_APROV,
              -- 31-34: Acabado, enconado y evaluación CC
-             -- TIPO_ACABADO: presentación final del producto (independiente de la máquina de teñido)
-             --   ACAB_MAD='S' → REDINA (presentado en forma de madeja)
-             --   otro/NULL    → CONERA  (presentado en cono)
-             DECODE(E.ACAB_MAD, 'S', 'REDINA', 'CONERA')                         AS TIPO_ACABADO,
+             -- TIPO_ACABADO: presentación final del producto — la máquina de teñido manda
+             --   MAQUINA LIKE 'R%' (Thies)  → siempre CONERA (el rodete genera conos)
+             --   ACAB_MAD='S' + MAQUINA M0% → REDINA  (teñido en madeja → presentación madeja)
+             --   Resto                       → CONERA
+             CASE
+               WHEN E.MAQUINA LIKE 'R%'                        THEN 'CONERA'
+               WHEN E.ACAB_MAD = 'S' AND E.MAQUINA LIKE 'M0%' THEN 'REDINA'
+               ELSE 'CONERA'
+             END                                                                   AS TIPO_ACABADO,
              -- ACABADO: secadora destino según máquina de teñido programada
              --   R01-R19 (THIES)                        → RODETE  → S01 Sec. Thies
              --   M01-M08 (LORIS/BRAZZOS/MEZZERA/CUBOTEX/HANK MASTER) → MADEJA → S02/S04 Sec. Madejas/Minnetti
@@ -1649,16 +1695,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
              -- 40-43: Kilogramos y tolerancia de despacho
              -- KG_PEDIDO: kg pedidos por el cliente (ITEMPED_DET.CANTIDAD)
              E.CANTIDAD                                                            AS KG_PEDIDO,
-             -- KG_PROG: kg destinados al rodete (PARTIDA.PESO_NETO = peso real del lote físico)
-             Q.NETO                                                                AS KG_PROG,
+             -- KG_PROG: kg programados para el ítem (ITEMPED_DET.CANTIDAD = cantidad planificada)
+             --   Fuente original Excel col-19 "KG PROG" = E.CANTIDAD.
+             --   Q.NETO (PARTIDA.PESO_NETO) es el "peso de la guía" = peso real medido del lote;
+             --   NO es la cantidad programada — se elimina para evitar confusión operativa.
+             E.CANTIDAD                                                            AS KG_PROG,
              U.CANTIDAD                                                            AS KG_DESPA,
-             -- GAP: NULL si sin despacho; KG_DESPA - KG_PROG (vs peso real del lote en rodete)
+             -- GAP: NULL si sin despacho; KG_DESPA - KG_PROG (vs cantidad programada)
              CASE WHEN U.CANTIDAD IS NULL THEN NULL
-                  ELSE U.CANTIDAD - NVL(Q.NETO, E.CANTIDAD)
+                  ELSE U.CANTIDAD - E.CANTIDAD
              END                                                                   AS GAP,
-             -- PCT_TOLERAN: ±% vs KG_PROG (peso rodete); NULL=sin despachar; rojo si |%|>5
-             CASE WHEN U.CANTIDAD IS NULL OR NVL(Q.NETO, E.CANTIDAD) = 0 THEN NULL
-                  ELSE ROUND((U.CANTIDAD / NVL(Q.NETO, E.CANTIDAD) - 1) * 100, 2)
+             -- PCT_TOLERAN: ±% vs KG_PROG (cantidad programada); NULL=sin despachar; rojo si |%|>5
+             CASE WHEN U.CANTIDAD IS NULL OR E.CANTIDAD = 0 THEN NULL
+                  ELSE ROUND((U.CANTIDAD / E.CANTIDAD - 1) * 100, 2)
              END                                                                   AS PCT_TOLERAN,
              -- 47: ESTADO_FLUJO (col "PROCESO" en Excel DT) — etapa más avanzada alcanzada
              CASE
@@ -1993,9 +2042,22 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
       -- Caso 1: NROPROG localiza el ítem → actualizar TODOS los FHC_PROG del mismo
       -- (NUM_PED,NRO,NUM_DET,REPROCESO) para que las notas persistan si el ítem
       -- es reprogramado a una fecha diferente y el dedup apunta a la nueva fila.
+      -- SEMÁNTICA DE PARÁMETROS (color y obs):
+      --   NULL        = no se envió este campo → preservar valor existente en BD
+      --   '__CLEAR__' = borrar explícitamente → poner NULL en BD
+      --   cualquier otro valor → guardar ese valor
+      -- (Oracle trata '' como NULL, por eso se usa centinela '__CLEAR__'.)
       UPDATE ITEMPED_DET D
-      SET    D.OBSERVACIONES = p_observaciones,
-             D.COLORHEXA     = p_colorhexa,
+      SET    D.OBSERVACIONES = CASE
+                                 WHEN p_observaciones IS NULL          THEN D.OBSERVACIONES
+                                 WHEN p_observaciones = '__CLEAR__'    THEN NULL
+                                 ELSE p_observaciones
+                               END,
+             D.COLORHEXA     = CASE
+                                 WHEN p_colorhexa IS NULL              THEN D.COLORHEXA
+                                 WHEN p_colorhexa = '__CLEAR__'        THEN NULL
+                                 ELSE p_colorhexa
+                               END,
              D.A_MDUSER      = NVL(p_usuario, USER),
              D.A_MDFECHA     = SYSDATE
       WHERE  (D.NUM_PED, D.NRO, D.NUM_DET, D.REPROCESO) = (
@@ -2007,12 +2069,19 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
         AND  D.ESTADO <> '9';
     ELSE
       -- Caso 2: composite key sin NROPROG — actualizar TODOS los FHC_PROG del mismo
-      -- (NUM_PED,NRO,NUM_DET,REPROCESO). FHC_PROG excluido intencionalmente del WHERE:
-      -- las notas son del ítem, no de un programa concreto; si el ítem se reprograma
-      -- a otro mes el color/obs no se pierden porque están en todas las filas.
+      -- (NUM_PED,NRO,NUM_DET,REPROCESO). FHC_PROG excluido intencionalmente del WHERE.
+      -- SEMÁNTICA: NULL=preservar, '__CLEAR__'=borrar, otro=guardar.
       UPDATE ITEMPED_DET
-      SET    OBSERVACIONES = p_observaciones,
-             COLORHEXA     = p_colorhexa,
+      SET    OBSERVACIONES = CASE
+                               WHEN p_observaciones IS NULL          THEN OBSERVACIONES
+                               WHEN p_observaciones = '__CLEAR__'    THEN NULL
+                               ELSE p_observaciones
+                             END,
+             COLORHEXA     = CASE
+                               WHEN p_colorhexa IS NULL              THEN COLORHEXA
+                               WHEN p_colorhexa = '__CLEAR__'        THEN NULL
+                               ELSE p_colorhexa
+                             END,
              A_MDUSER      = NVL(p_usuario, USER),
              A_MDFECHA     = SYSDATE
       WHERE  NUM_PED   = p_num_ped
@@ -2145,6 +2214,401 @@ CREATE OR REPLACE PACKAGE BODY PKG_PLN AS
         AND  D.PROCESO <> '00'
       ORDER BY R.DESCRIPCION;
   END SP_PLN_FILTRO_PROCESOS;
+
+  -- ============================================================
+  -- SP_PLN_PEND_REVISADO
+  -- Partidas pendientes de revisado (estado PROGRAMA='6', ESTADO_PED='5').
+  -- Excluye las que ya tienen revisado aprobado en los últimos 36 meses.
+  -- Responsable: Martín
+  -- ============================================================
+  PROCEDURE SP_PLN_PEND_REVISADO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  ) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT P.PARTIDA                            PARTIDA_07,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI    MATERIAL_07,
+             D.FECHA_FIN                          FECHA_FIN_07,
+             C.NOMBRE                             DESC_CLIENTE_07,
+             M.DESC_MAQ                           DESC_MAQ_07,
+             P.NRO_RMC                            NRO_RMC_07,
+             P.NETO                               PESO_PARTIDA_07,
+             P.LOTE                               LOTE_07,
+             P.COLO_SER                           COLO_SER_07,
+             NVL(Y.FCH_ENTREGA, P.FCH_ENTREGA)    FCH_ENTREGA_07
+      FROM  (SELECT P2.GUIA
+             FROM   H_PROGRAMACION P2,
+                    V_PARTIDA V
+             WHERE  P2.ESTADO    = '6'
+               AND  V.ESTADO_PED = '5'
+               AND  V.GUIA       = P2.GUIA
+             GROUP BY P2.GUIA
+             MINUS
+             SELECT G.GUIA
+             FROM   REVISADO_G G,
+                    REVISADO_D D2
+             WHERE  G.A_ADFECHA >= ADD_MONTHS(SYSDATE, -36)
+               AND  D2.ESTADO   <> '9'
+               AND  D2.APROBADO  > 0
+               AND  D2.NUMERO    = G.NUMERO
+             GROUP BY G.GUIA) X,
+             H_PROGRAMACION D,
+             V_MAQUINA      M,
+             V_PARTIDA      P,
+             CLIENTES       C,
+            (SELECT GUIA, MAX(FCH_ENTREGA) FCH_ENTREGA
+             FROM   V_ITEMPEDET
+             GROUP BY GUIA) Y
+      WHERE ((p_tipo = '%') OR (p_tipo <> '%' AND D.TIPO = p_tipo))
+        AND D.GUIA          = X.GUIA
+        AND M.AREA          = '01'
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND M.COD_MAQ       = D.MAQ_PROCED
+        AND P.ESTADO_PED    = '5'
+        AND P.ESTADO        = '0'
+        AND P.GUIA          = D.GUIA
+        AND C.COD_CLIENTE   = P.COD_CLIENTE
+        AND Y.GUIA          = P.GUIA
+      ORDER BY D.FECHA_FIN, P.PARTIDA;
+  END SP_PLN_PEND_REVISADO;
+
+  -- ============================================================
+  -- SP_PLN_PEND_EVAL_CALIDAD
+  -- Partidas pendientes de evaluación de calidad tintorería.
+  -- PART 1: secadas en rodete sin acabado en madeja.
+  -- PART 2: secadas en madeja (S02/S04) con acabado madeja, sin evaluación calidad.
+  -- Responsable: Ivon
+  -- ============================================================
+  PROCEDURE SP_PLN_PEND_EVAL_CALIDAD (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  ) AS
+  BEGIN
+    OPEN p_cursor FOR
+      -- PART 1: secados en rodete sin acabado en madeja
+      SELECT S.PARTIDA                            PARTIDA_03,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI    MATERIAL_03,
+             C.NOMBRE                             DESC_CLIENTE_03,
+             S.FECHA_FIN                          FECHA_FIN_03,
+             S.COD_MAQ                            COD_MAQ_03,
+             M.DESC_MAQ                           DESC_MAQ_03,
+             P.NRO_RMC                            NRO_RMC_03,
+             P.NETO                               PESO_PARTIDA_03,
+             P.LOTE                               LOTE_03,
+             P.COLO_SER                           COLO_SER_03,
+             I.FCH_ENTREGA                        FCH_ENTREGA_03
+      FROM  (SELECT VRS.GUIA
+             FROM   V_RSECADO VRS
+             WHERE  VRS.FECHA_FIN BETWEEN ADD_MONTHS(TRUNC(VRS.FECHA_FIN), -1)
+                                      AND TRUNC(SYSDATE)
+               AND  VRS.ESTADO = '3'
+             GROUP BY VRS.GUIA
+             MINUS
+             SELECT CD.GUIA
+             FROM   CTCALIDAD_D CD
+             WHERE  CD.FECHA BETWEEN ADD_MONTHS(TRUNC(CD.FECHA), -1)
+                                 AND TRUNC(SYSDATE)
+               AND  NVL(CD.ESTADO, '0') = '0'
+             GROUP BY CD.GUIA) X,
+             V_RSECADO   S,
+             V_MAQUINA   M,
+             V_PARTIDA   P,
+             CLIENTES    C,
+             H_TPROD     T,
+             V_ITEMPEDET I
+      WHERE p_tipo IN ('%', 'G')
+        AND S.GUIA        = X.GUIA
+        AND S.ESTADO      = '3'
+        AND M.AREA        = '02'
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND M.COD_MAQ     = S.COD_MAQ
+        AND P.ESTADO_PED  = '5'
+        AND P.ESTADO      = '0'
+        AND P.GUIA        = S.GUIA
+        AND C.COD_CLIENTE = P.COD_CLIENTE
+        AND T.TABLA       = '60'
+        AND T.INDICADOR1  = 'T'
+        AND T.CODIGO      = P.COD_SERV
+        AND NVL(I.ACAB_MAD, 'N') = 'N'
+        AND I.GUIA        = X.GUIA
+      UNION
+      -- PART 2: secados en madeja (S02/S04) con acabado madeja, sin evaluación calidad
+      SELECT S.PARTIDA                            PARTIDA_03,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI    MATERIAL_03,
+             C.NOMBRE                             DESC_CLIENTE_03,
+             S.FECHA_FIN                          FECHA_FIN_03,
+             S.COD_MAQ                            COD_MAQ_03,
+             M.DESC_MAQ                           DESC_MAQ_03,
+             P.NRO_RMC                            NRO_RMC_03,
+             P.NETO                               PESO_PARTIDA_03,
+             P.LOTE                               LOTE_03,
+             P.COLO_SER                           COLO_SER_03,
+             I.FCH_ENTREGA                        FCH_ENTREGA_03
+      FROM  (SELECT VRS.GUIA
+             FROM   V_RSECADO VRS
+             WHERE  VRS.FECHA_FIN BETWEEN ADD_MONTHS(TRUNC(VRS.FECHA_FIN), -1)
+                                      AND TRUNC(SYSDATE)
+               AND  VRS.ESTADO = '3'
+             GROUP BY VRS.GUIA
+             MINUS
+             SELECT CD.GUIA
+             FROM   CTCALIDAD_D CD
+             WHERE  CD.FECHA BETWEEN ADD_MONTHS(TRUNC(CD.FECHA), -1)
+                                 AND TRUNC(SYSDATE)
+               AND  NVL(CD.ESTADO, '0') = '0'
+             GROUP BY CD.GUIA) X,
+             V_RSECADO   S,
+             V_MAQUINA   M,
+             V_PARTIDA   P,
+             CLIENTES    C,
+             H_TPROD     T,
+             V_ITEMPEDET I
+      WHERE p_tipo IN ('%', 'G')
+        AND S.GUIA        = X.GUIA
+        AND S.ESTADO      = '3'
+        AND S.COD_MAQ     IN ('S02', 'S04')
+        AND M.AREA        = '02'
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND M.COD_MAQ     = S.COD_MAQ
+        AND P.ESTADO_PED  = '5'
+        AND P.ESTADO      = '0'
+        AND P.GUIA        = S.GUIA
+        AND C.COD_CLIENTE = P.COD_CLIENTE
+        AND T.TABLA       = '60'
+        AND T.INDICADOR1  = 'T'
+        AND T.CODIGO      = P.COD_SERV
+        AND NVL(I.ACAB_MAD, 'N') = 'S'
+        AND I.GUIA        = X.GUIA
+      ORDER BY 4, 1;
+  END SP_PLN_PEND_EVAL_CALIDAD;
+
+  -- ============================================================
+  -- SP_PLN_PEND_ENCONADO
+  -- Partidas aprobadas pendientes de enconado/devanado.
+  -- UNION ALL de TINTORERIA + HILANDERIA; columna ORIGEN diferencia.
+  -- p_tipo: '%'→ambos | 'G'→solo tintorería | 'H'→solo hilandería.
+  -- Responsable: Guevara
+  -- ============================================================
+  PROCEDURE SP_PLN_PEND_ENCONADO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  ) AS
+  BEGIN
+    OPEN p_cursor FOR
+      -- PARTE TINTORERIA: aprobadas en CC, sin programa de devanado activo
+      SELECT P.PARTIDA                            PARTIDA_05,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI    MATERIAL_05,
+             C.NOMBRE                             DESC_CLIENTE_05,
+             E.FCH_CONSULTA                       FECHA_05,
+             T1.ABREVIADA                         DESC_EST_EVAL_05,
+             T2.ABREVIADA                         DESC_RESULTADO_05,
+             P.NRO_RMC                            NRO_RMC_05,
+             P.NETO                               PESO_PARTIDA_05,
+             P.LOTE                               LOTE_05,
+             P.COLO_SER                           COLO_SER_05,
+             X.FCH_ENTREGA                        FCH_ENTREGA_05,
+             'TINTORERIA'                         ORIGEN
+      FROM  (SELECT E2.GUIA
+             FROM   CTCALIDAD_D E2,
+                    V_PARTIDA   P2
+             WHERE  TRUNC(E2.FECHA) BETWEEN ADD_MONTHS(TRUNC(SYSDATE), -2)
+                                        AND TRUNC(SYSDATE)
+               AND  E2.EST_EVALUACION  = '32'
+               AND  E2.RESULTADO       IN ('01', '29')
+               AND  E2.GUIA            IS NOT NULL
+               AND  NVL(E2.ESTADO,'0') = '0'
+               AND  P2.ESTADO         = '0'
+               AND  P2.ESTADO_PED     = '5'
+               AND  P2.RMC            <> 'X'
+               AND  P2.GUIA           = E2.GUIA
+             GROUP BY E2.GUIA
+             MINUS
+             SELECT D2.GUIA
+             FROM   H_PROGRAMACION D2,
+                    V_PARTIDA      P2
+             WHERE  D2.GUIA         IS NOT NULL
+               AND  D2.ESTADO       IN ('3', '6', '9')
+               AND  P2.GUIA         = D2.GUIA
+               AND  P2.ESTADO_PED   = '5'
+             GROUP BY D2.GUIA) D,
+             CTCALIDAD_D       E,
+             V_PARTIDA         P,
+             CLIENTES          C,
+             TABLAS_AUXILIARES T1,
+             TABLAS_AUXILIARES T2,
+            (SELECT GUIA, MAX(FCH_ENTREGA) FCH_ENTREGA
+             FROM   V_ITEMPEDET
+             GROUP BY GUIA) X
+      WHERE p_tipo IN ('%', 'G')
+        AND E.GUIA             = D.GUIA
+        AND E.EST_EVALUACION   = '32'
+        AND E.RESULTADO        IN ('01', '29')
+        AND E.GUIA             IS NOT NULL
+        AND NVL(E.ESTADO, '0') = '0'
+        AND P.ESTADO           = '0'
+        AND P.ESTADO_PED       = '5'
+        AND P.GUIA             = E.GUIA
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND C.COD_CLIENTE      = P.COD_CLIENTE
+        AND T1.TIPO(+)         = 73
+        AND T1.INDICADOR1(+)   IN ('C', 'E')
+        AND T1.CODIGO(+)       = E.EST_EVALUACION
+        AND T2.TIPO(+)         = 73
+        AND T2.INDICADOR1(+)   = 'D'
+        AND T2.CODIGO(+)       = E.RESULTADO
+        AND X.GUIA             = P.GUIA
+      UNION ALL
+      -- PARTE HILANDERIA: programa estado '2' (disponible), sin última parada
+      SELECT P.PARTIDA                            PARTIDA_05,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI    MATERIAL_05,
+             C.NOMBRE                             DESC_CLIENTE_05,
+             NULL                                 FECHA_05,
+             ''                                   DESC_EST_EVAL_05,
+             ''                                   DESC_RESULTADO_05,
+             P.NRO_RMC                            NRO_RMC_05,
+             P.NETO                               PESO_PARTIDA_05,
+             P.LOTE                               LOTE_05,
+             P.COLO_SER                           COLO_SER_05,
+             P.FCH_ENTREGA                        FCH_ENTREGA_05,
+             'HILANDERIA'                         ORIGEN
+      FROM   H_PROGRAMACION D,
+             V_PARTIDA      P,
+             CLIENTES       C
+      WHERE p_tipo IN ('%', 'H')
+        AND D.TIPO                   = 'H'
+        AND D.ESTADO                 IN ('2')
+        AND NVL(D.ULTIMA_PARADA,'N') = 'N'
+        AND P.ESTADO                 = '0'
+        AND P.ESTADO_PED             = '5'
+        AND P.GUIA                   = D.GUIA
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND C.COD_CLIENTE            = P.COD_CLIENTE
+      ORDER BY 4, 1;
+  END SP_PLN_PEND_ENCONADO;
+
+  -- ============================================================
+  -- SP_PLN_PEND_TENIDO
+  -- Partidas pendientes de teñido. UNION ALL de dos fuentes:
+  --   PROGRAMADO : tienen programa (ESTADO_PROG='1'/'11') sin producción activa.
+  --   CON_PREVIO : tienen receta IR (TIPODOC='IR') en estado '1' (sin procesar).
+  -- Columna ORIGEN diferencia la fuente.
+  -- Responsables: Fredy / Malena
+  -- ============================================================
+  PROCEDURE SP_PLN_PEND_TENIDO (
+    p_tipo    IN  VARCHAR2 DEFAULT '%',
+    p_asesor  IN  VARCHAR2 DEFAULT '%',
+    p_cliente IN  VARCHAR2 DEFAULT '%',
+    p_cursor  OUT SYS_REFCURSOR
+  ) AS
+  BEGIN
+    OPEN p_cursor FOR
+      -- PARTE 1: programadas sin producción activa (teñido no iniciado)
+      SELECT V.NUM_PED||'-'||V.NRO||'-'||V.NUM_DET||'-'||V.REPROCESO  PARTIDA,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI                         MATERIAL,
+             V.DESCLIENTE                                              DESC_CLIENTE,
+             V.FHC_PROG                                                FECHA_PROG,
+             NULL                                                      COD_MAQ,
+             V.DESMAQUINA                                              DESC_MAQ,
+             NULL                                                      PROCESO,
+             V.RMC                                                     RMC,
+             V.NRO_RMC                                                 NRO_RMC,
+             V.NETO_GUIA                                               PESO,
+             P.LOTE                                                    LOTE,
+             P.COLO_SER                                                COLO_SER,
+             V.FCH_ENTREGA                                             FCH_ENTREGA,
+             'PROGRAMADO'                                              ORIGEN
+      FROM  (SELECT VI.GUIA
+             FROM   V_ITEMPEDET VI
+             WHERE  VI.ESTADO_PROG IN ('1', '11')
+               AND  VI.ESTADO_PED   = '5'
+               AND  VI.GUIA         IS NOT NULL
+               AND  VI.ESTADO_PART  = '0'
+             GROUP BY VI.GUIA
+             MINUS
+             SELECT VR.PARTIDA
+             FROM   V_RPRODUC VR
+             WHERE  VR.ESTADO IN ('1', '3')
+             GROUP BY VR.PARTIDA) B,
+             V_ITEMPEDET V,
+             V_PARTIDA   P,
+             PEDIDO      X
+      WHERE p_tipo IN ('%', 'G')
+        AND B.GUIA       = V.GUIA
+        AND P.ESTADO     = '0'
+        AND P.GUIA       = V.GUIA
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND X.COD_VENDE    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND V.COD_CLIENTE   = p_cliente))
+        AND X.SERIE      = 1
+        AND X.NUM_PED    = V.NUM_PED
+      UNION ALL
+      -- PARTE 2: con previo (receta IR) en estado '1'
+      SELECT R.NRO_PEDIDO||'-'||R.SER_PARTIDA||'-'||R.NROPART||'-'||R.REPROCESO  PARTIDA,
+             P.SOLO_MATERIAL||' '||P.COLOR_CLI                                    MATERIAL,
+             C.NOMBRE                                                             DESC_CLIENTE,
+             R.FECHA_INI                                                          FECHA_PROG,
+             R.COD_MAQ                                                            COD_MAQ,
+             M.DESC_MAQ                                                           DESC_MAQ,
+             R.PROCESO                                                            PROCESO,
+             NULL                                                                 RMC,
+             P.NRO_RMC                                                            NRO_RMC,
+             P.NETO                                                               PESO,
+             P.LOTE                                                               LOTE,
+             P.COLO_SER                                                           COLO_SER,
+             X.FCH_ENTREGA                                                        FCH_ENTREGA,
+             'CON_PREVIO'                                                         ORIGEN
+      FROM   V_RPRODUC  R,
+             V_MAQUINA  M,
+             V_PARTIDA  P,
+             CLIENTES   C,
+            (SELECT GUIA, MAX(FCH_ENTREGA) FCH_ENTREGA
+             FROM   V_ITEMPEDET
+             GROUP BY GUIA) X
+      WHERE p_tipo IN ('%', 'G')
+        AND R.TIPODOC              = 'IR'
+        AND NVL(R.ESTADO, '1')    = '1'
+        AND R.PROCESO              NOT IN ('BQM', 'PR', 'DES', 'AD', 'JA')
+        AND M.AREA                 = '02'
+        AND ((p_asesor  = '%') OR (p_asesor  <> '%' AND C.VENDEDOR    = p_asesor))
+        AND ((p_cliente = '%') OR (p_cliente <> '%' AND P.COD_CLIENTE = p_cliente))
+        AND M.COD_MAQ              = R.COD_MAQ
+        AND P.ESTADO               = '0'
+        AND P.GUIA                 = R.PARTIDA
+        AND C.COD_CLIENTE          = R.COD_CLIENTE
+        AND X.GUIA(+)              = P.GUIA
+      ORDER BY 4, 1;
+  END SP_PLN_PEND_TENIDO;
+
+  -- ============================================================
+  -- SP_PLN_FILTRO_TIPO
+  -- Devuelve los tipos de programa activos usados en los procedures
+  -- de pendientes (H=Hilandería, G=Tintorería).
+  -- Columnas: TIPO (VARCHAR2), DESCRIPCION (VARCHAR2)
+  -- ============================================================
+  PROCEDURE SP_PLN_FILTRO_TIPO (p_cursor OUT SYS_REFCURSOR) AS
+  BEGIN
+    OPEN p_cursor FOR
+      SELECT DISTINCT HP.TIPO,
+             CASE HP.TIPO
+               WHEN 'H' THEN 'Hilandería'
+               WHEN 'G' THEN 'Tintorería'
+               ELSE HP.TIPO
+             END DESCRIPCION
+      FROM   H_PROGRAMACION HP
+      WHERE  HP.TIPO IN ('H', 'G')
+      ORDER BY DESCRIPCION;
+  END SP_PLN_FILTRO_TIPO;
 
 
 END PKG_PLN;

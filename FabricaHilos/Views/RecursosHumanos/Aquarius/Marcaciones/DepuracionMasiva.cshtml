@@ -66,6 +66,9 @@
         letter-spacing: .4px; white-space: nowrap;
         padding: .45rem .6rem; border-bottom: 2px solid var(--aq-mid);
     }
+    .tbl-masiva thead th[style*="cursor:pointer"]:hover {
+        background: var(--aq-mid); color: var(--aq-dk);
+    }
     .tbl-masiva tbody td { padding: .38rem .6rem; vertical-align: middle; }
     .tbl-masiva tbody tr:hover { background: var(--aq-lt); }
 
@@ -272,6 +275,10 @@ let _pollTimer  = null;
 let _inicioMs   = 0;
 let _confirmHandler = null;  // Handler activo del modal de confirmación
 
+// ── Sort state ────────────────────────────────────────────────────────────────
+let _sortCol = 'empleado';   // 'fotocheck' | 'empleado'
+let _sortDir =  1;           // 1=asc | -1=desc
+
 // ── Helpers modales ───────────────────────────────────────────────────────────
 function showAlerta(mensaje, titulo, esError) {
     document.getElementById('modalAlertaTitulo').textContent = titulo || 'Aviso';
@@ -459,8 +466,8 @@ function renderTabla() {
     // Limpiar encabezado completamente y regenerar
     trHead.innerHTML =
         '<th style="width:34px"><input type="checkbox" id="chkAll" title="Seleccionar/deseleccionar todos" style="cursor:pointer"></th>' +
-        '<th style="min-width:80px">Fotocheck</th>' +
-        '<th style="min-width:190px">Empleado</th>';
+        `<th style="min-width:80px;cursor:pointer;user-select:none" id="thFotocheck" title="Ordenar por Fotocheck">Fotocheck ${_sortCol==='fotocheck'?(_sortDir===1?'▲':'▼'):'⇅'}</th>` +
+        `<th style="min-width:190px;cursor:pointer;user-select:none" id="thEmpleado" title="Ordenar por Empleado">Empleado ${_sortCol==='empleado'?(_sortDir===1?'▲':'▼'):'⇅'}</th>`;
     for (const fiso of _fechas) {
         const idx = diaSemana(fiso);
         const [, m, d] = fiso.split('-');
@@ -484,13 +491,26 @@ function renderTabla() {
         return;
     }
 
-    // Ordenar: primero los que tienen pendientes, luego por nombre
-    const sorted = _datos.slice().sort((a, b) => {
-        const pA = _fechas.filter(f => esDiaPendiente(a.dias[f])).length;
-        const pB = _fechas.filter(f => esDiaPendiente(b.dias[f])).length;
-        if (pB !== pA) return pB - pA;
-        return (a.empleado || '').localeCompare(b.empleado || '');
-    });
+    // Solo empleados con al menos 1 día pendiente ('S')
+    const sorted = _datos
+        .filter(emp => _fechas.some(f => esDiaPendiente(emp.dias[f])))
+        .sort((a, b) => {
+            let cmp = 0;
+            if (_sortCol === 'fotocheck') {
+                cmp = (a.fotocheck || '').localeCompare(b.fotocheck || '');
+            } else {
+                cmp = (a.empleado || '').localeCompare(b.empleado || '');
+            }
+            return cmp * _sortDir;
+        });
+
+    // Registrar click de columnas DESPUÉS de renderizar el thead
+    setTimeout(() => {
+        const thF = document.getElementById('thFotocheck');
+        const thE = document.getElementById('thEmpleado');
+        if (thF) thF.addEventListener('click', () => { toggleSort('fotocheck'); }, { once: true });
+        if (thE) thE.addEventListener('click', () => { toggleSort('empleado'); }, { once: true });
+    }, 0);
 
     tbody.innerHTML = sorted.map(emp => {
         let pendientes = 0;
@@ -554,6 +574,18 @@ document.addEventListener('change', e => {
     }
 });
 
+// ── Ordenar columnas ────────────────────────────────────────────────────────────────
+function toggleSort(col) {
+    if (_sortCol === col) {
+        _sortDir = _sortDir === 1 ? -1 : 1;
+    } else {
+        _sortCol = col;
+        _sortDir = 1;
+    }
+    renderTabla();
+    actualizarContadorSeleccionados();
+}
+
 // ── Checkbox counter ─────────────────────────────────────────────────────────
 function actualizarContadorSeleccionados() {
     const total = document.querySelectorAll('.chk-emp:checked').length;
@@ -586,9 +618,15 @@ async function depurarSeleccionados() {
         ? `TODOS los empleados (${checkeados.length})`
         : `${checkeados.length} empleado(s) seleccionado(s)`;
 
+    // Contar días S totales
+    const totalDiasS = checkeados.reduce((acc, personal) => {
+        const emp = _datos.find(e => e.codPersonal === personal);
+        return acc + (emp ? _fechas.filter(f => esDiaPendiente(emp.dias[f])).length : 0);
+    }, 0);
+
     showConfirm(
-        '¿Confirma que desea depurar las marcaciones de ' + textoEmpl +
-        ' para el período ' + desde + ' — ' + hasta + '?\n\nEsta operación puede tardar varios minutos.',
+        `¿Confirma que desea depurar ${totalDiasS} día(s) pendiente(s) de ${textoEmpl}?\n\n` +
+        `Solo se procesarán los días marcados como S (pendiente).\nEsta operación puede tardar varios minutos.`,
         () => ejecutarDepuracionSeleccionados(desde, hasta, checkeados)
     );
 }
@@ -601,7 +639,21 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
     modal.show();
     _inicioMs = Date.now();
     document.getElementById('txtTiempoMasivo').textContent = '';
-    document.getElementById('txtProgresoMasivo').textContent = `Encolando ${checkeados.length} empleado(s)…`;
+
+    // Construir lista de {personal, fechas:['S-date',...]} usando solo días con pendiente='S'
+    const payload = checkeados
+        .map(personal => {
+            const emp = _datos.find(e => e.codPersonal === personal);
+            const fechasS = emp
+                ? _fechas.filter(f => esDiaPendiente(emp.dias[f]))
+                : [];
+            return { personal, fechas: fechasS };
+        })
+        .filter(pf => pf.fechas.length > 0);
+
+    const totalJobs = payload.reduce((acc, pf) => acc + pf.fechas.length, 0);
+    document.getElementById('txtProgresoMasivo').textContent =
+        `Encolando ${totalJobs} día(s) pendientes de ${payload.length} empleado(s)…`;
 
     const cronometro = setInterval(() => {
         const sec = Math.floor((Date.now() - _inicioMs) / 1000);
@@ -611,12 +663,10 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
     try {
         const token = document.querySelector('[name="__RequestVerificationToken"]')?.value ?? '';
         const formData = new FormData();
-        formData.append('fechaInicio', desde);
-        formData.append('fechaFin',    hasta);
-        formData.append('personales',  checkeados.join(','));
+        formData.append('fechasJson', JSON.stringify(payload));
         formData.append('__RequestVerificationToken', token);
 
-        const r = await fetch('/RecursosHumanos/Aquarius/Marcaciones/DepurarSeleccionados', {
+        const r = await fetch('/RecursosHumanos/Aquarius/Marcaciones/DepurarFechasEspecificas', {
             method: 'POST',
             body:   formData
         });
@@ -630,7 +680,7 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
         }
 
         _jobIds = json.jobIds;
-        const totalJobs = _jobIds.length;
+        const totalJobsEncolados = _jobIds.length;
 
         _pollTimer = setInterval(async () => {
             try {
@@ -642,9 +692,9 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
                 );
                 const completados = estados.filter(j => j?.completado).length;
                 document.getElementById('txtProgresoMasivo').textContent =
-                    `Procesando: ${completados} de ${totalJobs} empleados completados…`;
+                    `Procesando: ${completados} de ${totalJobsEncolados} día(s) completados…`;
 
-                if (completados === totalJobs) {
+                if (completados === totalJobsEncolados) {
                     clearInterval(_pollTimer);
                     clearInterval(cronometro);
                     modal.hide();

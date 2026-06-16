@@ -111,14 +111,6 @@
                                     </a>
                                 </li>
                                 }
-                                @if (menus.PlaneamientoProximosVencer)
-                                {
-                                <li>
-                                    <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "ProximosVencer" ? "active" : "")">
-                                        <i class="bi bi-calendar-event-fill"></i> Próximos a Vencer
-                                    </a>
-                                </li>
-                                }
                                 @if (menus.PlaneamientoSeguimientoTintoreria)
                                 {
                                 <li>
@@ -127,11 +119,51 @@
                                     </a>
                                 </li>
                                 }
-                                @if (menus.PlaneamientoCargaMaquinas)
+                                @if (menus.PlaneamientoProximosVencer)
                                 {
                                 <li>
-                                    <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
-                                        <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                                    <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "ProximosVencer" ? "active" : "")">
+                                        <i class="bi bi-calendar-event-fill"></i> Próximos a Vencer
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendTenido)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PendientesTenido" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesTenido" ? "active" : "")">
+                                        <i class="bi bi-droplet-half"></i> Pend. Teñido
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendEvalCalidad)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEvalCalidad" ? "active" : "")">
+                                        <i class="bi bi-patch-check"></i> Pend. Eval. Calidad
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendPartidasDef)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PartidasPorDefinir" ? "active" : "")">
+                                        <i class="bi bi-question-circle"></i> Partidas por Definir
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendEnconado)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PendientesEnconado" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEnconado" ? "active" : "")">
+                                        <i class="bi bi-arrow-repeat"></i> Pend. Enconado
+                                    </a>
+                                </li>
+                                }
+                                @if (menus.PlaneamientoPendRevisado)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="PendientesRevisado" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesRevisado" ? "active" : "")">
+                                        <i class="bi bi-clipboard2-check"></i> Pend. Revisado
                                     </a>
                                 </li>
                                 }
@@ -143,6 +175,14 @@
                                     </a>
                                 </li>
                                 }
+                                @if (menus.PlaneamientoCargaMaquinas)
+                                {
+                                <li>
+                                    <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
+                                        <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                                    </a>
+                                </li>
+                                }
                                 @if (menus.PlaneamientoAlertas)
                                 {
                                 <li>
@@ -151,12 +191,6 @@
                                     </a>
                                 </li>
                                 }
-                                <li class="disabled" title="Módulo en desarrollo">
-                                    <span class="sidebar-link sidebar-sublink" style="opacity:.5;cursor:not-allowed;">
-                                        <i class="bi bi-sliders"></i> Parámetros
-                                        <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Dev</span>
-                                    </span>
-                                </li>
                             </ul>
                         </li>
                         }
@@ -657,7 +691,7 @@
             </main>
 
             <footer class="bg-light border-top text-center py-2">
-                <small class="text-muted">&copy; @DateTime.Now.Year @tema.TextoFooter — Sistema de Gestión Empresarial</small>
+                <small class="text-muted">&copy; @DateTime.Now.Year @tema.TextoFooter — Web Logix</small>
             </footer>
         </div>
     </div>
