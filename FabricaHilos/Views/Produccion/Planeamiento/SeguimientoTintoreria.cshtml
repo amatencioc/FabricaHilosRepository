@@ -595,7 +595,7 @@
     white-space: nowrap; overflow: hidden; min-width: 130px;
 }
 .cf-msel-panel {
-    position: absolute; top: calc(100% + 3px); left: 0; z-index: 500;
+    position: fixed; z-index: 9000;
     background: #fff; border: 1px solid #bfcad8; border-radius: .35rem;
     box-shadow: 0 6px 16px rgba(0,0,0,.14); padding: .3rem .45rem;
     min-width: 210px; max-height: 260px; overflow-y: auto;
@@ -953,6 +953,14 @@
             @* Contador + paginación *@
             <span class="cf-count"><span id="cfCount">@items.Count</span> / <span id="cfTotal">@items.Count</span></span>
 
+            @* Exportar Excel *@
+            <button type="button" id="btnExportXlsx" title="Exportar los registros filtrados a Excel"
+                    style="background:#1d6f3b;color:#fff;border:none;border-radius:.32rem;font-size:.75rem;font-weight:700;
+                           padding:.28rem .75rem;cursor:pointer;display:inline-flex;align-items:center;gap:.28rem;
+                           box-shadow:0 2px 4px rgba(0,0,0,.15);transition:background .12s,transform .1s;white-space:nowrap;">
+                <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+            </button>
+
             <div style="display:flex;align-items:center;gap:.35rem;margin-left:auto;flex-wrap:wrap;">
                 <label style="font-size:.68rem;color:#4a6080;font-weight:700;white-space:nowrap;">Filas/pág</label>
                 <select id="pgSize" class="pg-size">
@@ -1002,7 +1010,16 @@
 						<th class="col-sep fc-5 th-fix" rowspan="2">Partida</th>
 						<th class="fc-6 th-fix" rowspan="2">Cliente</th>
 						<th class="fc-7 th-fix" rowspan="2">Material</th>
-						<th class="fc-8 th-fix" rowspan="2">Est</th>
+						<th class="fc-8 th-fix" rowspan="2">
+							Est
+							<span tabindex="0" class="est-info-icon"
+								  data-bs-toggle="popover" data-bs-placement="right" data-bs-trigger="hover focus"
+								  data-bs-html="true"
+								  data-bs-title="Campo EST (Estado Programa)"
+								  data-bs-content="&lt;div style='font-size:.75rem;line-height:1.5;'&gt;&lt;p style='margin:0 0 .4rem;'&gt;Indica si el ítem tiene &lt;b&gt;programa asignado en Hilandería&lt;/b&gt;. Es independiente del Estado de Flujo de Tintorería.&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;text-align:center;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Significado&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Programado en Hilandería (lote activo)&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;4&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Tiene receta asignada al laboratorio&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;7&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Sin programa asignado aún&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;hr style='margin:.45rem 0;'&gt;&lt;p style='margin:0 0 .2rem;font-weight:700;'&gt;¿Por qué EST=1 aparece en varios Estados de Flujo?&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Estado de Flujo&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Razón&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo + receta aprobada por lab ✔&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;EN LABORATORIO&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo + receta en laboratorio, pendiente de aprobación&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;SIN RECETA&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo pero el laboratorio aún no creó ninguna receta&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;">
+								<i class="bi bi-info-circle-fill" style="font-size:.65rem;opacity:.75;cursor:pointer;vertical-align:middle;"></i>
+							</span>
+						</th>
 						<th class="col-ne th-fix" rowspan="2">Ne</th>
 						<th class="col-mat th-fix" rowspan="2">Mat</th>
 						<th rowspan="2">Lote</th>
@@ -1113,6 +1130,9 @@
 </div>@* /container-fluid *@
 
 @section Scripts {
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+        integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 // ── Toggle fecha/pedido ──────────────────────────────────────────────────────
 // ── Datos serializados desde el servidor ──────────────────────────────────
@@ -1566,14 +1586,28 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
         else if(flujoSelected.length===1) bTxt2.textContent=flujoSelected[0];
         else bTxt2.textContent=flujoSelected.length+' selec.';
     }
+    function posicionarPanel(){
+        if(!btn2||!panel2) return;
+        var r=btn2.getBoundingClientRect();
+        panel2.style.top  = (r.bottom + 3) + 'px';
+        panel2.style.left = r.left + 'px';
+    }
     if(btn2) btn2.addEventListener('click',function(e){
         e.stopPropagation();
-        if(panel2) panel2.style.display=panel2.style.display==='none'?'block':'none';
+        if(!panel2) return;
+        if(panel2.style.display==='none'){
+            posicionarPanel();
+            panel2.style.display='block';
+        } else {
+            panel2.style.display='none';
+        }
     });
     document.addEventListener('click',function(e){
         if(panel2&&panel2.style.display!=='none'&&!panel2.contains(e.target)&&e.target!==btn2)
             panel2.style.display='none';
     });
+    // Cerrar si el usuario hace scroll (el panel fixed quedaría flotando en posición incorrecta)
+    window.addEventListener('scroll',function(){ if(panel2) panel2.style.display='none'; },true);
     document.querySelectorAll('.cf-flujo-chk').forEach(function(chk){
         chk.addEventListener('change',function(){
             var v=this.value;
@@ -1744,6 +1778,78 @@ function fixTheadRowTops(){
 requestAnimationFrame(fixTheadRowTops);
 window.addEventListener('resize', fixTheadRowTops);
 
+// ── Exportar Excel ──────────────────────────────────────────────────────────
+var btnExportXlsx = document.getElementById('btnExportXlsx');
+if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
+    if(!filtered || !filtered.length){ showToast('No hay registros filtrados para exportar.','#6c757d'); return; }
+
+    // Sincronizar valores actuales de los textarea "Area Resp." del DOM antes de exportar.
+    // Garantiza que ediciones en curso (pagina actual) se reflejen aunque el evento
+    // input no haya propagado aun (p.ej. foco activo al momento de hacer clic en Exportar).
+    if(tbody){
+        tbody.querySelectorAll('.area-input').forEach(function(ta){
+            var idx = parseInt(ta.dataset.idx);
+            if(!isNaN(idx) && idx >= 0 && idx < filtered.length){
+                filtered[idx]._area = ta.value;
+            }
+        });
+    }
+
+    var headers = [
+        'Mes','Mes.Tex','Año','Sem','Partida','Cliente','Material','Est',
+        'Lote','F.Pedido',
+        'Estima.Rod','Entreg.Rod','D.Rod',
+        'Estima.Mat','Entreg.Mat','D.MH',
+        'Estima.Rec','Entreg.Rec','D.Rec',
+        'F.Prog','F.Guia','Maq',
+        'Est.Ten','Entr.Ten','D.Tenido','Time.Aprov',
+        'Tipo.Acab',
+        'F.Sec.Rod','F.Sec.Mad',
+        'CC.Aprobado',
+        'F.Revisado','Ev.Encon','Acabado','F.Enconado',
+        'F.Entrega','Ing.AlmPT','Dias.Esp',
+        'KG.Pedido','KG.Prog','KG.Despa','GAP','%Tol',
+        'Est.Flujo','Est.Desp',
+        'Área Resp.'
+    ];
+    var rows = filtered.map(function(r){
+        return [
+            r.mes, r.mesTex, r.ano, r.sem, r.partida, r.cliente, r.material, r.est,
+            r.lote, r.fchPedido,
+            r.estimaRod, r.entregRod, r.diasRod    != null ? +r.diasRod    : null,
+            r.estimaMat, r.entregMat, r.diasMh     != null ? +r.diasMh     : null,
+            r.estimaRec, r.entregRec, r.diasRec    != null ? +r.diasRec    : null,
+            r.fchProg, r.fchaGuia, r.maqTen,
+            r.estimaTen, r.entregTen,
+            r.diasT     != null ? +r.diasT     : null,
+            r.timeAprov != null ? +r.timeAprov : null,
+            r.tipoAc,
+            r.fchSecRod, r.fchSecMad,
+            r.fchAprobCal,
+            r.fchRev, r.evEncon, r.acabado, r.fchEncon,
+            r.fchEntrega, r.ingAlmpt, r.diasEsp != null ? +r.diasEsp : null,
+            r.kgPedido != null ? +r.kgPedido : null,
+            r.kgProg   != null ? +r.kgProg   : null,
+            r.kgDespa  != null ? +r.kgDespa  : null,
+            r.gap      != null ? +r.gap      : null,
+            r.pctTol   != null ? +r.pctTol   : null,
+            r.estFlujo, r.estDesp,
+            // _area refleja ediciones vivas; != null respeta strings vacios deliberados
+            r._area != null ? r._area : (r.area || '')
+        ];
+    });
+    var wsData = [headers].concat(rows);
+    if(typeof XLSX === 'undefined'){ showToast('Cargando librería, intente en un momento…','#6c757d'); return; }
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = headers.map(function(h){ return { wch: Math.max(h.length + 2, 12) }; });
+    XLSX.utils.book_append_sheet(wb, ws, 'SeguimientoTT');
+    var now = new Date();
+    var ts  = now.getFullYear()+''+String(now.getMonth()+1).padStart(2,'0')+''+String(now.getDate()).padStart(2,'0');
+    XLSX.writeFile(wb, 'SeguimientoTT_' + ts + '.xlsx');
+    showToast('Exportando ' + filtered.length + ' registros filtrados…', '#1d6f3b');
+});
+
 // ── Año default 2026 ──────────────────────────────────────────────────────────
 var cfAnoEl = document.getElementById('cfAno');
 if(cfAnoEl && cfAnoEl.value==='') {
@@ -1753,6 +1859,11 @@ if(cfAnoEl && cfAnoEl.value==='') {
 
 // ── Arrancar ──────────────────────────────────────────────────────────────────
 applyFilters();
+
+// ── Popovers Bootstrap (columna EST) ─────────────────────────────────────────
+document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function(el){
+    new bootstrap.Popover(el, { sanitize: false });
+});
 })();
 </script>
 }
