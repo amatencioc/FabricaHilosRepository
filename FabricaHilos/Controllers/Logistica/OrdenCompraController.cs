@@ -227,24 +227,6 @@ public class OrdenCompraController : OracleBaseController
         var ingresosAlmacen = await _service.ObtenerIngresosAlmacenAsync(tipoDocto, serie, numPed);
         ViewBag.IngresosAlmacen = ingresosAlmacen;
 
-        // Auto-cierre: si todos los ítems están al 100% ingresados y pendiente = 0,
-        // y la OC no está ya cerrada (6) ni anulada (9), se cierra automáticamente.
-        if (ingresosAlmacen.Count > 0
-            && orden.Estado != "6" && orden.Estado != "9"
-            && ingresosAlmacen.All(i => i.PctIngresado >= 100m && i.QtyPendiente <= 0m))
-        {
-            var errCierre = await _service.CerrarOcAsync(tipoDocto, numPed);
-            if (string.IsNullOrEmpty(errCierre))
-            {
-                orden = await _service.ObtenerOrdenAsync(tipoDocto, serie, numPed) ?? orden;
-                TempData["Success"] = $"La O/C N° {numPed} se cerró automáticamente porque todos los ítems fueron ingresados al 100%.";
-            }
-            else
-            {
-                _logger.LogWarning("Auto-cierre de OC {NumPed} falló: {Error}", numPed, errCierre);
-            }
-        }
-
         return View("~/Views/Logistica/OrdenCompra/Detalle.cshtml", (orden, items));
     }
 

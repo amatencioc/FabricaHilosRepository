@@ -16,12 +16,18 @@
 
     string BadgeOp(string? op) => op switch
     {
-        "AUTH"      => "bg-primary",
-        "EXPORTAR"  => "bg-info text-dark",
-        "TICKET"    => "bg-secondary",
-        "DESCARGAR" => "bg-warning text-dark",
-        "HEALTH"    => "bg-success",
-        _           => "bg-light text-dark border"
+        "AUTH"       => "bg-primary",
+        "EXPORTAR"   => "bg-info text-dark",
+        "TICKET"     => "bg-secondary",
+        "DESCARGAR"  => "bg-warning text-dark",
+        "HEALTH"     => "bg-success",
+        "CARGAR"     => "bg-primary bg-opacity-75",
+        "COMPLETAR"  => "bg-success",
+        "GUARDAR"    => "bg-info text-dark",
+        "INICIAR"    => "bg-secondary",
+        "REPROCESAR" => "bg-warning text-dark",
+        "CANCEL"     => "bg-danger",
+        _            => "bg-light text-dark border"
     };
 
     string BadgeHttp(int? status) => status switch
@@ -235,8 +241,15 @@
         <div class="sire-card-header border-bottom-0 pb-2">
             <i class="bi bi-journal-code"></i>
             <span>Auditoría de llamadas HTTP a SUNAT</span>
-            <span class="ms-auto sire-badge sire-badge-secondary">@Model.ApiTotal registro(s)</span>
+            <span class="ms-auto me-2 sire-badge sire-badge-rvie" title="RVIE — Ventas">
+                <i class="bi bi-receipt-cutoff me-1"></i>@Model.ApiLogsVentas.Count RVIE
+            </span>
+            <span class="sire-badge sire-badge-rce" title="RCE — Compras">
+                <i class="bi bi-cart-check me-1"></i>@Model.ApiLogsCompras.Count RCE
+            </span>
         </div>
+
+        <!-- Filtros -->
         <div class="px-3 pb-2 pt-1 border-bottom">
             <form method="get" asp-action="Monitoreo" class="row g-2 align-items-end">
                 <input type="hidden" name="tab" value="log" />
@@ -249,7 +262,7 @@
                     <label class="form-label small mb-1">Operación</label>
                     <select name="operacion" class="form-select form-select-sm" style="width:150px">
                         <option value="">Todas</option>
-                        @foreach (var op in new[] { "AUTH", "EXPORTAR", "TICKET", "DESCARGAR", "GUARDAR", "CARGAR", "COMPLETAR", "CANCEL", "ERROR" })
+                        @foreach (var op in new[] { "AUTH", "EXPORTAR", "TICKET", "DESCARGAR", "GUARDAR", "CARGAR", "COMPLETAR", "REPROCESAR", "CANCEL", "ERROR" })
                         {
                             <option value="@op" selected="@(Model.FiltroOperacion == op)">@op</option>
                         }
@@ -268,79 +281,123 @@
                 </div>
             </form>
         </div>
-        <div class="card-body p-0">
-            @if (!Model.ApiLogs.Any())
+
+        @{
+            // Helper local para renderizar una mini-tabla de logs de auditoría
+            async Task RenderLogTable(IReadOnlyList<FabricaHilos.Models.Sire.SireApiLog> logs)
             {
-                <div class="text-muted text-center py-4">
-                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>Sin registros de log HTTP aún.
-                </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table sire-table table-hover align-middle mb-0" id="tblLog">
-                        <thead>
-                            <tr>
-                                <th style="width:155px">Fecha (local)</th>
-                                <th style="width:100px">Operación</th>
-                                <th style="width:55px" class="text-center">Método</th>
-                                <th style="width:70px" class="text-center">HTTP</th>
-                                <th style="width:80px" class="text-center">Duración</th>
-                                <th style="width:70px" class="text-center">Resultado</th>
-                                <th style="width:210px">JobId</th>
-                                <th>Mensaje / Resumen</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var log in Model.ApiLogs)
-                            {
+                if (!logs.Any())
+                {
+                    <div class="text-muted text-center py-4">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>Sin registros.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+                        <table class="table sire-table table-hover align-middle mb-0 small">
+                            <thead style="position:sticky;top:0;z-index:1;background:#f8f9fa;">
                                 <tr>
-                                    <td class="text-nowrap small">@log.Fecha.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                    <td><span class="badge @BadgeOp(log.Operacion)">@log.Operacion</span></td>
-                                    <td class="text-center small">@(log.MetodoHttp ?? "—")</td>
-                                    <td class="text-center">
-                                        @if (log.HttpStatus.HasValue)
-                                        {
-                                            <span class="badge @BadgeHttp(log.HttpStatus)">@log.HttpStatus</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">—</span>
-                                        }
-                                    </td>
-                                    <td class="text-center small text-muted">
-                                        @(log.DuracionMs.HasValue ? $"{log.DuracionMs} ms" : "—")
-                                    </td>
-                                    <td class="text-center">
-                                        <i class="bi @IconLog(log.Exito)"
-                                           title="@(log.Exito ? "Exitoso" : "Fallido")"></i>
-                                    </td>
-                                    <td>
-                                        @if (!string.IsNullOrWhiteSpace(log.JobId))
-                                        {
-                                            <a asp-action="Monitoreo"
-                                               asp-route-jobId="@log.JobId"
-                                               asp-route-tab="log"
-                                               class="font-monospace small text-decoration-none"
-                                               title="Filtrar por este JobId">
-                                                @log.JobId[..Math.Min(log.JobId.Length, 12)]…
-                                            </a>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted small">—</span>
-                                        }
-                                    </td>
-                                    <td class="small text-muted"
-                                        style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                                        title="@log.Mensaje">@log.Mensaje</td>
+                                    <th style="width:140px">Fecha</th>
+                                    <th style="width:90px">Operación</th>
+                                    <th style="width:55px" class="text-center">HTTP</th>
+                                    <th style="width:70px" class="text-center">Dur.</th>
+                                    <th style="width:40px" class="text-center">OK</th>
+                                    <th>Mensaje</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var log in logs)
+                                {
+                                    <tr>
+                                        <td class="text-nowrap small text-muted">@log.Fecha.ToLocalTime().ToString("dd/MM HH:mm:ss")</td>
+                                        <td><span class="badge @BadgeOp(log.Operacion)" style="font-size:.65rem">@log.Operacion</span></td>
+                                        <td class="text-center">
+                                            @if (log.HttpStatus.HasValue)
+                                            {
+                                                <span class="badge @BadgeHttp(log.HttpStatus)" style="font-size:.65rem">@log.HttpStatus</span>
+                                            }
+                                            else { <span class="text-muted">—</span> }
+                                        </td>
+                                        <td class="text-center small text-muted">
+                                            @(log.DuracionMs.HasValue ? $"{log.DuracionMs}ms" : "—")
+                                        </td>
+                                        <td class="text-center">
+                                            <i class="bi @IconLog(log.Exito)" style="font-size:.85rem"></i>
+                                        </td>
+                                        <td class="small text-muted"
+                                            style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                                            title="@log.Mensaje">
+                                            @if (!string.IsNullOrWhiteSpace(log.JobId) && string.IsNullOrWhiteSpace(Model.FiltroJobId))
+                                            {
+                                                <a asp-action="Monitoreo" asp-route-jobId="@log.JobId" asp-route-tab="log"
+                                                   class="font-monospace text-muted text-decoration-none me-1"
+                                                   title="Filtrar por este JobId" style="font-size:.7rem">
+                                                    [@log.JobId[..Math.Min(log.JobId.Length, 8)]…]
+                                                </a>
+                                            }
+                                            @log.Mensaje
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            }
+        }
+
+        <!-- Vista split RVIE / RCE (2 columnas) o tabla única si hay filtro por JobId -->
+        @if (!string.IsNullOrWhiteSpace(Model.FiltroJobId))
+        {
+            <!-- Con filtro JobId: tabla completa unificada (ya sabes cuál job es) -->
+            <div class="card-body p-0">
+                @{ await RenderLogTable(Model.ApiLogs); }
+            </div>
+        }
+        else
+        {
+            <!-- Sin filtro: 2 columnas RVIE | RCE -->
+            <div class="row g-0">
+                <!-- Columna RVIE -->
+                <div class="col-md-6 border-end">
+                    <div class="px-3 pt-2 pb-1 border-bottom d-flex align-items-center gap-2"
+                         style="background:rgba(144,205,244,.08);">
+                        <span class="sire-badge sire-badge-rvie">
+                            <i class="bi bi-receipt-cutoff me-1"></i>RVIE — Ventas
+                        </span>
+                        <span class="ms-auto sire-badge sire-badge-secondary">@Model.ApiLogsVentas.Count</span>
+                    </div>
+                    @{ await RenderLogTable(Model.ApiLogsVentas); }
+                </div>
+                <!-- Columna RCE -->
+                <div class="col-md-6">
+                    <div class="px-3 pt-2 pb-1 border-bottom d-flex align-items-center gap-2"
+                         style="background:rgba(13,202,240,.08);">
+                        <span class="sire-badge sire-badge-rce">
+                            <i class="bi bi-cart-check me-1"></i>RCE — Compras
+                        </span>
+                        <span class="ms-auto sire-badge sire-badge-secondary">@Model.ApiLogsCompras.Count</span>
+                    </div>
+                    @{ await RenderLogTable(Model.ApiLogsCompras); }
+                </div>
+            </div>
+            <!-- Sistema (AUTH/HEALTH sin job) — fila completa debajo si hay registros -->
+            @if (Model.ApiLogsSistema.Any())
+            {
+                <div class="border-top">
+                    <div class="px-3 pt-2 pb-1 border-bottom d-flex align-items-center gap-2"
+                         style="background:rgba(100,100,100,.05);">
+                        <span class="sire-badge sire-badge-secondary">
+                            <i class="bi bi-shield-lock me-1"></i>Sistema (Auth · Health)
+                        </span>
+                        <span class="ms-auto sire-badge sire-badge-secondary">@Model.ApiLogsSistema.Count</span>
+                    </div>
+                    @{ await RenderLogTable(Model.ApiLogsSistema); }
                 </div>
             }
-        </div>
+        }
+
     </div>
 
 </div>

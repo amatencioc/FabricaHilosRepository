@@ -39,4 +39,10 @@ public sealed class SireMonitoreoViewModel
     public double? ApiDuracionPromMs => ApiLogs.Any(x => x.DuracionMs.HasValue)
         ? Math.Round(ApiLogs.Where(x => x.DuracionMs.HasValue).Average(x => x.DuracionMs!.Value), 0)
         : null;
+
+    // ── Split por tipo para vista unificada RVIE / RCE ────────────────────────
+    public IReadOnlyList<SireApiLog> ApiLogsVentas  => ApiLogs.Where(x => x.TipoRegistro == "ventas").ToList().AsReadOnly();
+    public IReadOnlyList<SireApiLog> ApiLogsCompras => ApiLogs.Where(x => x.TipoRegistro == "compras").ToList().AsReadOnly();
+    /// <summary>Logs sin job asociado: AUTH, HEALTH, llamadas sueltas.</summary>
+    public IReadOnlyList<SireApiLog> ApiLogsSistema => ApiLogs.Where(x => x.TipoRegistro == null).ToList().AsReadOnly();
 }

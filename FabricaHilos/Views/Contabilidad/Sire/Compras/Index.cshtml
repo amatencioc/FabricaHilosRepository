@@ -1,133 +1,80 @@
-﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RCE (Registro de Compras)";
 
-    var periodos = Model?.Periodos ?? Array.Empty<PropuestaDto>();
+    var periodos          = Model?.Periodos           ?? Array.Empty<PropuestaDto>();
     var periodoSeleccionado = Model?.PeriodoSeleccionado ?? string.Empty;
-    var registros = Model?.RegistrosCompras ?? Array.Empty<RegistroCompra>();
-    var esMock = Model?.EsMock ?? false;
+    var registros         = Model?.RegistrosCompras   ?? Array.Empty<RegistroCompra>();
+    var esMock            = Model?.EsMock ?? false;
+    var resumen           = Model?.PropuestasResumen  ?? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>();
+    var propuesta         = Model?.RegistrosPropuesta ?? new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
 
-    var yyyyMm = periodoSeleccionado.Length == 6 
-        ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}" 
+    var yyyyMm = periodoSeleccionado.Length == 6
+        ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}"
         : periodoSeleccionado;
-
-    decimal totalBase = registros.Sum(r => 
-        r.BaseImponibleGravadaDestinoGravadas + 
-        r.BaseImponibleGravadaDestinoMixtas + 
-        r.BaseImponibleGravadaDestinoNoGravadas);
-
-    decimal totalIgv = registros.Sum(r => 
-        r.IgvDestinoGravadas + 
-        r.IgvDestinoMixtas + 
-        r.IgvDestinoNoGravadas);
-
-    decimal totalMonto = registros.Sum(r => r.ImporteTotal);
 
     static (string Desc, string Css) TipoComprobante(string cod) => cod switch
     {
-        "01" => ("Factura", "bg-primary"),
-        "03" => ("Boleta", "bg-info text-dark"),
-        "07" => ("Nota de Crédito", "bg-warning text-dark"),
-        "08" => ("Nota de Débito", "bg-orange text-dark"),
-        "09" => ("Guía Remisión", "bg-secondary"),
-        _    => (cod, "bg-secondary")
+        "01" => ("Factura",  "sire-badge sire-badge-rce"),
+        "03" => ("Boleta",   "sire-badge sire-badge-info"),
+        "07" => ("N/C",      "sire-badge sire-badge-warn"),
+        "08" => ("N/D",      "sire-badge sire-badge-warn"),
+        "09" => ("G.Rem.",   "sire-badge sire-badge-secondary"),
+        _    => (cod,        "sire-badge sire-badge-secondary")
     };
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Contabilidad" asp-action="Index">Contabilidad</a></li>
     <li class="breadcrumb-item"><a asp-controller="Sire" asp-action="Index">SIRE</a></li>
-    <li class="breadcrumb-item active">RCE - Compras</li>
+    <li class="breadcrumb-item active">RCE — Compras</li>
 }
-
 @section Styles {
 <link rel="stylesheet" href="~/css/sire.css" asp-append-version="true" />
 }
 
+@* ── Alertas de sesión ─────────────────────────────────────────────────────── *@
 @if (esMock)
 {
-    <div class="sire-alert sire-alert-mock" role="alert">
-        <i class="bi bi-cone-striped"></i>
-        <div><strong>MODO MOCK ACTIVO</strong> — Los datos mostrados son de prueba. No se realizan llamadas reales a SUNAT.</div>
-    </div>
+    <div class="sire-alert sire-alert-mock"><i class="bi bi-cone-striped"></i><strong>MODO MOCK</strong> — Datos de prueba. No se realizan llamadas reales a SUNAT.</div>
 }
-@if (TempData["Error"] is string err)
+@if (TempData["Error"] is string errMsg)
 {
-    <div class="sire-alert sire-alert-danger" role="alert">
-        <i class="bi bi-exclamation-triangle-fill"></i><div>@err</div>
-    </div>
+    <div class="sire-alert sire-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@errMsg</div></div>
 }
-@if (TempData["Success"] is string ok)
+@if (TempData["Success"] is string okMsg)
 {
-    <div class="sire-alert sire-alert-success" role="alert">
-        <i class="bi bi-check-circle-fill"></i><div>@ok</div>
-    </div>
+    <div class="sire-alert sire-alert-success"><i class="bi bi-check-circle-fill"></i><div>@okMsg</div></div>
 }
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
 
+@* ── Cabecera strip ───────────────────────────────────────────────────────── *@
 <div class="sire-strip">
-    <i class="bi bi-cart-check" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
-    <span class="sire-strip-title">RCE — Registro de Compras y Gastos</span>
-    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+    <i class="bi bi-cart3" style="color:var(--sire-rce-mid);font-size:.9rem;flex-shrink:0;"></i>
+    <span class="sire-strip-title">RCE — Registro de Compras Electrónico</span>
+    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado) && propuesta.Count > 0)
     {
         <span class="sire-strip-sep"></span>
         <span class="sire-kpi"><i class="bi bi-calendar3"></i><span class="sire-kpi-val">@yyyyMm</span></span>
-        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:#90cdf4;"></i><span class="sire-kpi-val">@registros.Count</span><span style="opacity:.75">registros</span></span>
-        <span class="sire-kpi"><i class="bi bi-calculator" style="color:#fbd38d;"></i><span class="sire-kpi-val">S/ @totalBase.ToString("N0")</span><span style="opacity:.75">base</span></span>
-        <span class="sire-kpi"><i class="bi bi-percent" style="color:#76e4f7;"></i><span class="sire-kpi-val">S/ @totalIgv.ToString("N0")</span><span style="opacity:.75">IGV</span></span>
-        <span class="sire-kpi"><i class="bi bi-credit-card" style="color:#68d391;"></i><span class="sire-kpi-val">S/ @totalMonto.ToString("N0")</span><span style="opacity:.75">total</span></span>
+        <span class="sire-kpi"><i class="bi bi-file-earmark-text" style="color:var(--sire-rce-mid);"></i><span class="sire-kpi-val">@propuesta.Count.ToString("N0")</span><span style="opacity:.7">regs.</span></span>
+        <span class="sire-kpi"><i class="bi bi-calculator" style="color:#fbd38d;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.BiGravDg).ToString("N0")</span><span style="opacity:.7">base</span></span>
+        <span class="sire-kpi"><i class="bi bi-percent" style="color:#76e4f7;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.IgvIpmDg).ToString("N0")</span><span style="opacity:.7">IGV</span></span>
+        <span class="sire-kpi" style="background:rgba(21,101,192,.3);border-color:rgba(21,101,192,.5);"><i class="bi bi-credit-card" style="color:#90caf9;"></i><span class="sire-kpi-val">S/ @propuesta.Sum(x => x.TotalCp).ToString("N0")</span><span style="opacity:.7">total</span></span>
     }
 </div>
 
-<!-- Anti-forgery token para POST -->
 @Html.AntiForgeryToken()
 
-@if (string.IsNullOrWhiteSpace(periodoSeleccionado))
-{
-    <div class="sire-alert sire-alert-info">
-        <i class="bi bi-info-circle"></i>
-        <span>Seleccione un período para ver los registros de compras disponibles.</span>
-    </div>
-}
-else
-{
-    <!-- Summary KPIs -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="sire-kpi-card rce">
-                <div class="sire-kpi-card-icon rce"><i class="bi bi-file-earmark-text"></i></div>
-                <div><div class="sire-kpi-card-label">Total Registros</div><div class="sire-kpi-card-value">@registros.Count</div></div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="sire-kpi-card rce">
-                <div class="sire-kpi-card-icon rce"><i class="bi bi-calculator"></i></div>
-                <div><div class="sire-kpi-card-label">Base Imponible</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalBase.ToString("N0")</div></div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="sire-kpi-card rce">
-                <div class="sire-kpi-card-icon rce"><i class="bi bi-percent"></i></div>
-                <div><div class="sire-kpi-card-label">IGV</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalIgv.ToString("N0")</div></div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="sire-kpi-card ok">
-                <div class="sire-kpi-card-icon ok"><i class="bi bi-credit-card"></i></div>
-                <div><div class="sire-kpi-card-label">Total</div><div class="sire-kpi-card-value" style="font-size:1.2rem;">S/ @totalMonto.ToString("N0")</div></div>
-            </div>
-        </div>
-    </div>
-}
-
-<!-- Period Selector -->
-<div class="filter-bar">
-    <label class="form-label fw-semibold mb-2">Seleccionar Período</label>
-    <div class="input-group">
-        <select class="form-select form-select-sm" id="periodoSelect" onchange="cambiarPeriodo()">
-            <option value="">--- Seleccionar período ---</option>
+@* ── Toolbar ─────────────────────────────────────────────────────────────── *@
+<div class="sire-filter">
+    <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-calendar3 small" style="color:var(--sire-gray-600);"></i>
+        <span class="fw-semibold text-nowrap" style="font-size:.77rem;color:var(--sire-gray-700);">Período:</span>
+        <select class="form-select form-select-sm" id="periodoSelect"
+                style="width:220px;max-width:100%;" onchange="cambiarPeriodo()">
+            <option value="">— seleccionar —</option>
             @foreach (var p in periodos)
             {
                 <option value="@p.Periodo" selected="@(p.Periodo == periodoSeleccionado)">
@@ -135,163 +82,356 @@ else
                 </option>
             }
         </select>
-        <button class="btn btn-contab btn-contab-primary btn-sm" type="button" onclick="recargarPeriodo()">
-            <i class="bi bi-arrow-clockwise me-1"></i>Recargar
+        <button class="btn btn-sm btn-outline-secondary px-2" type="button" onclick="recargarPeriodo()" title="Recargar">
+            <i class="bi bi-arrow-clockwise"></i>
         </button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+    {
+        <div class="vr d-none d-lg-block mx-1" style="opacity:.2;"></div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iniciarExportacion('@periodoSeleccionado', 'compras')">
+                <i class="bi bi-cloud-download me-1"></i>Exportar Propuesta
+            </button>
+            @if (Model?.TieneZipLocal == true)
+            {
+                <button type="button" class="btn btn-sm btn-outline-warning" id="btnReprocesarCompras"
+                        data-zip-nombre="@(Model?.NombreZipLocal ?? "")"
+                        onclick="abrirModalReprocesar('@periodoSeleccionado', 'compras', this.dataset.zipNombre)"
+                        title="Re-parsear ZIP local sin contactar SUNAT">
+                    <i class="bi bi-arrow-repeat me-1"></i>Re-procesar ZIP
+                </button>
+            }
+            <div class="vr" style="opacity:.2;"></div>
+            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "compras", nomArchivo = Model?.NombreArchivoConstancia })"
+               class="btn btn-sm btn-outline-danger"
+               @(string.IsNullOrWhiteSpace(Model?.NombreArchivoConstancia) ? "title=\"Constancia no disponible: primero Exportar Propuesta (estado COMPLETADO)\"" : "title=\"Descargar constancia SUNAT\"")>
+                <i class="bi bi-file-pdf me-1"></i>Constancia
+            </a>
+            <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
+               class="btn btn-sm btn-outline-secondary" title="Log de auditoría HTTP">
+                <i class="bi bi-journal-code me-1"></i>Log
+            </a>
+        </div>
+    }
+</div>
+
+@* ── Modales ──────────────────────────────────────────────────────────────── *@
+<!-- Modal: Re-procesar ZIP local -->
+<div class="modal fade" id="modalReprocesarZip" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header sire-modal-header-rce py-2">
+                <h6 class="modal-title mb-0"><i class="bi bi-arrow-repeat me-2"></i>Re-procesar ZIP local</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.86rem;">
+                <p class="mb-2 text-muted">Se re-parsea el archivo local y se cargan los registros en Oracle <strong>sin contactar SUNAT</strong>.</p>
+                <div class="d-flex align-items-start gap-2 p-2 rounded" style="background:var(--sire-gray-50);border:1px solid var(--sire-gray-200);">
+                    <i class="bi bi-file-zip text-warning mt-1" style="font-size:1rem;flex-shrink:0;"></i>
+                    <div>
+                        <div class="sire-kpi-card-label">Archivo a procesar</div>
+                        <div class="font-monospace fw-semibold text-break" id="modalReprocesarNombreZip" style="font-size:.78rem;color:var(--sire-rce);"></div>
+                    </div>
+                </div>
+                <p class="mt-2 mb-0" style="font-size:.77rem;color:var(--sire-gray-600);"><i class="bi bi-info-circle me-1"></i>Los registros anteriores del período serán reemplazados.</p>
+            </div>
+            <div class="modal-footer py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-warning fw-semibold" id="btnConfirmarReprocesar">
+                    <i class="bi bi-arrow-repeat me-1"></i>Sí, re-procesar
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
-@if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+<!-- Modal: Progreso de Exportación -->
+<div class="modal fade" id="modalExportacion" tabindex="-1" aria-labelledby="modalExportacionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header sire-modal-header-rce py-2">
+                <h6 class="modal-title" id="modalExportacionLabel">
+                    <i class="bi bi-cloud-download me-2"></i>Exportación RCE
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="estadoExportacion">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary mb-3" role="status"><span class="visually-hidden">Cargando...</span></div>
+                        <p class="fw-semibold text-muted mb-0">Iniciando exportación…</p>
+                    </div>
+                </div>
+                <div id="logsJobContainer" style="display:none;max-height:160px;overflow-y:auto;font-size:.78rem;border-top:1px solid var(--sire-gray-200);margin-top:.75rem;padding-top:.5rem"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" id="btnDescargarZip" class="btn btn-sm btn-primary" style="display:none;"
+                        onclick="descargarArchivoExportado('@periodoSeleccionado', 'compras')">
+                    <i class="bi bi-download me-1"></i>Descargar ZIP
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Confirmación genérica -->
+<div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background:var(--sire-navy);color:#fff;">
+                <h6 class="modal-title" id="modalConfirmarTitulo"><i class="bi bi-question-circle me-1"></i>Confirmar acción</h6>
+            </div>
+            <div class="modal-body" id="modalConfirmarMensaje" style="font-size:.87rem;"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnConfirmarSi">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Panel: Propuesta Descargada de SUNAT ─────────────────────────────────────────── *@
+@if (resumen.Count > 0)
 {
-    <!-- Flujo de Exportación -->
-    <div class="sire-alert sire-alert-info mb-3">
-            <i class="bi bi-info-circle"></i>
-            <span><strong>Nuevo flujo de exportación:</strong> Haga clic en <strong>“Exportar Propuesta”</strong> para iniciar el procesamiento en SUNAT. Una vez completado podrá descargar el archivo ZIP.</span>
+    <div class="sire-card mb-3">
+        <div class="sire-card-header" style="padding:.35rem .75rem;">
+            <i class="bi bi-database-fill-check" style="color:var(--sire-rce);font-size:.82rem;"></i>
+            <span style="font-size:.79rem;">Propuesta Descargada de SUNAT</span>
+            <span class="ms-auto sire-badge sire-badge-rce" style="font-size:.65rem;">@resumen.Count período(s)</span>
         </div>
-        <div class="mb-4 d-flex gap-2 flex-wrap">
-            <button type="button" class="btn btn-sm btn-outline-secondary"
-                    onclick="iniciarExportacion('@periodoSeleccionado', 'compras')">
-                <i class="bi bi-upload me-1"></i>Exportar Propuesta
-            </button>
-            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "compras" })"
-               class="btn btn-sm btn-outline-danger">
-                <i class="bi bi-file-pdf me-1"></i>Descargar Constancia PDF
-            </a>
-            <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
-               class="btn btn-sm btn-outline-info" title="Ver log de auditoría HTTP para RCE">
-                <i class="bi bi-journal-code me-1"></i>Ver Log SUNAT
-            </a>
-        </div>
-
-    <!-- Modal de Progreso de Exportación -->
-    <div class="modal fade" id="modalExportacion" tabindex="-1" aria-labelledby="modalExportacionLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header sire-modal-header-rce py-2">
-                    <h6 class="modal-title" id="modalExportacionLabel">
-                        <i class="bi bi-cloud-upload me-2"></i>Exportación de Propuesta RCE
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="estadoExportacion">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary mb-3" role="status">
-                                <span class="visually-hidden">Cargando...</span>
-                            </div>
-                            <p class="fw-semibold">Iniciando exportación...</p>
-                        </div>
-                    </div>
-                    <!-- Log del job activo -->
-                    <div id="logsJobContainer" style="display:none;max-height:180px;overflow-y:auto;font-size:.8rem;border-top:1px solid #dee2e6;margin-top:.75rem;padding-top:.5rem">
-                    </div>
-                </div>
-                <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
-                    <button type="button" id="btnDescargarZip" class="btn btn-success btn-sm"
-                            style="display: none;" onclick="descargarArchivoExportado('@periodoSeleccionado', 'compras')">
-                        <i class="bi bi-download me-1"></i>Descargar ZIP
-                    </button>
-                </div>
-            </div>
+        <div class="table-responsive">
+            <table class="table sire-table table-hover align-middle mb-0" style="font-size:.78rem;">
+                <thead>
+                    <tr>
+                        <th style="width:75px;padding:.3rem .5rem;">Período</th>
+                        <th class="text-end" style="width:62px;padding:.3rem .5rem;">Regs.</th>
+                        <th class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">Base</th>
+                        <th class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">IGV</th>
+                        <th class="text-end" style="padding:.3rem .5rem;">Total</th>
+                        <th class="text-center" style="width:76px;padding:.3rem .5rem;">Concil.</th>
+                        <th class="text-center d-none d-lg-table-cell" style="width:86px;padding:.3rem .5rem;">Cargado</th>
+                        <th style="width:68px;padding:.3rem .5rem;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in resumen)
+                    {
+                        var esSel = r.Periodo.ToString() == periodoSeleccionado;
+                        <tr @(esSel ? "style=background:var(--sire-rce-pale);" : "")>
+                            <td style="padding:.3rem .5rem;">
+                                <a href="@Url.Action("Compras")?periodo=@r.Periodo"
+                                   class="text-decoration-none fw-semibold"
+                                   style="color:@(esSel ? "var(--sire-rce)" : "var(--sire-navy)");">
+                                    @r.PeriodoLabel
+                                </a>
+                            </td>
+                            <td class="text-end font-monospace" style="padding:.3rem .5rem;">@r.TotalRegistros.ToString("N0")</td>
+                            <td class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">@r.TotalBase.ToString("N2")</td>
+                            <td class="text-end d-none d-md-table-cell" style="padding:.3rem .5rem;">@r.TotalIgv.ToString("N2")</td>
+                            <td class="text-end fw-semibold" style="color:var(--sire-rce);padding:.3rem .5rem;">S/ @r.TotalImporte.ToString("N2")</td>
+                            <td class="text-center" style="padding:.3rem .5rem;">
+                                <span class="badge @r.ConcilBadgeCss" style="font-size:.6rem;">@r.ConcilLabel</span>
+                            </td>
+                            <td class="text-center text-muted d-none d-lg-table-cell" style="font-size:.72rem;padding:.3rem .5rem;">
+                                @(r.FchCarga?.ToString("dd/MM HH:mm") ?? "—")
+                            </td>
+                            <td class="text-center" style="padding:.25rem .4rem;">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <form method="post" asp-action="ConciliarPropuesta" id="frmConcil_@r.Periodo" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="tipo"    value="compras" />
+                                        <input type="hidden" name="periodo" value="@r.Periodo" />
+                                        <button type="button" class="btn btn-xs btn-outline-primary"
+                                                onclick="confirmarConciliar(@r.Periodo, '@r.PeriodoLabel')"
+                                                title="Conciliar contra ERP">
+                                            <i class="bi bi-arrow-left-right"></i>
+                                        </button>
+                                    </form>
+                                    <form method="post" asp-action="EliminarPropuesta" id="frmElim_@r.Periodo" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="tipo"    value="compras" />
+                                        <input type="hidden" name="periodo" value="@r.Periodo" />
+                                        <button type="button" class="btn btn-xs btn-outline-danger"
+                                                onclick="confirmarEliminar(@r.Periodo, '@r.PeriodoLabel', @r.TotalRegistros)"
+                                                title="Eliminar propuesta">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
     </div>
+}
+else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
+{
+    <div class="sire-alert sire-alert-info">
+        <i class="bi bi-info-circle"></i>
+        <span>No hay propuesta descargada para <strong>@yyyyMm</strong>. Use <strong>Exportar Propuesta</strong> para obtener los registros desde SUNAT.</span>
+    </div>
+}
 
-    <!-- Modal de Confirmación (reemplaza confirm() nativo) -->
-    <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered modal-sm">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white py-2">
-                    <h6 class="modal-title"><i class="bi bi-exclamation-triangle me-1"></i>Confirmar cancelación</h6>
-                </div>
-                <div class="modal-body" id="modalConfirmarMensaje" style="font-size:.9rem"></div>
-                <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">No, volver</button>
-                    <button type="button" class="btn btn-danger btn-sm" id="btnConfirmarSi">Sí, cancelar</button>
-                </div>
+@* ── Panel: Resumen de Conciliación ─────────────────────────────────────── *@
+@if (Model?.ConcilResumen != null)
+{
+    var cr = Model.ConcilResumen;
+    <div class="sire-card mb-3">
+        <div class="sire-card-header" style="padding:.35rem .75rem;">
+            <i class="bi bi-check2-all" style="color:@(cr.TieneProblemas ? "var(--bs-warning)" : "var(--sire-rce)");font-size:.82rem;"></i>
+            <span style="font-size:.79rem;">Supervisión de Conciliación</span>
+            <span class="text-muted fw-normal ms-1" style="font-size:.72rem;">— @yyyyMm contra ERP Logix</span>
+            @if (!cr.TieneProblemas)
+            {
+                <span class="ms-2 sire-badge sire-badge-ok" style="font-size:.65rem;"><i class="bi bi-check-circle me-1"></i>Sin diferencias</span>
+            }
+            else
+            {
+                <span class="ms-2 sire-badge sire-badge-warn" style="font-size:.65rem;"><i class="bi bi-exclamation-triangle me-1"></i>Con observaciones</span>
+            }
+        </div>
+        <div class="px-3 py-2 d-flex gap-3 flex-wrap align-items-start" style="background:var(--sire-gray-50);font-size:.8rem;">
+            <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
+                 style="border-left:3px solid var(--sire-rce);background:#fff;min-width:90px;">
+                <span class="fw-bold" style="font-size:1.25rem;color:var(--sire-rce);">@cr.TotalOk.ToString("N0")</span>
+                <span class="text-muted" style="font-size:.68rem;">Coinciden</span>
             </div>
+            <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
+                 style="border-left:3px solid var(--bs-warning);background:#fff;min-width:90px;">
+                <span class="fw-bold" style="font-size:1.25rem;color:#b45309;">@cr.TotalDifer.ToString("N0")</span>
+                <span class="text-muted" style="font-size:.68rem;">Con diferencia</span>
+            </div>
+            <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
+                 style="border-left:3px solid var(--bs-danger);background:#fff;min-width:90px;">
+                <span class="fw-bold" style="font-size:1.25rem;color:var(--bs-danger);">@cr.TotalSoloSunat.ToString("N0")</span>
+                <span class="text-muted" style="font-size:.68rem;">Solo SUNAT</span>
+            </div>
+            <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
+                 style="border-left:3px solid var(--bs-info);background:#fff;min-width:90px;">
+                <span class="fw-bold" style="font-size:1.25rem;color:var(--bs-info);">@cr.TotalSoloLeg.ToString("N0")</span>
+                <span class="text-muted" style="font-size:.68rem;">Solo Legacy</span>
+            </div>
+            @if (cr.DiffTotal != 0)
+            {
+                <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
+                     style="border-left:3px solid var(--bs-danger);background:#fff;min-width:110px;">
+                    <span class="fw-bold" style="font-size:1.1rem;color:var(--bs-danger);">S/ @cr.DiffTotal.ToString("N2")</span>
+                    <span class="text-muted" style="font-size:.68rem;">Diferencia neta</span>
+                </div>
+            }
+            <div class="ms-auto d-flex flex-column align-items-center px-3 py-1 rounded"
+                 style="border-left:3px solid var(--sire-gray-300);background:#fff;min-width:80px;">
+                <span class="fw-bold" style="font-size:1.25rem;color:var(--sire-navy);">@cr.PctOk.ToString("N1")%</span>
+                <span class="text-muted" style="font-size:.68rem;">% OK</span>
+            </div>
+        </div>
+        @if (cr.TieneProblemas)
+        {
+            <div class="px-3 pb-2 pt-1" style="font-size:.76rem;color:var(--sire-gray-700);">
+                <i class="bi bi-info-circle me-1" style="color:var(--bs-warning);"></i>
+                Los registros con diferencia o solo en SUNAT aparecen marcados en la tabla de detalle de abajo.
+                Use el filtro <strong>Diferencia</strong> y <strong>Solo SUNAT</strong> para focalizarlos.
+            </div>
+        }
+    </div>
+}
+
+@* ── Detalle: registros del período seleccionado ─────────────────────────── *@
+@if (propuesta.Count > 0)
+{
+    <div class="sire-card">
+        <div class="sire-card-header">
+            <i class="bi bi-table" style="color:var(--sire-rce);"></i>
+            <span>Propuesta SUNAT</span>
+            <span class="text-muted fw-normal" style="font-size:.76rem;margin-left:.25rem;">— @yyyyMm</span>
+            <div class="d-none d-lg-flex align-items-center gap-1" id="filtroConcilBtns">
+                <button class="btn btn-xs btn-outline-secondary active" onclick="filtrarConcil(null,this)" title="Todos"><i class="bi bi-list"></i></button>
+                <button class="btn btn-xs btn-outline-success" onclick="filtrarConcil('1',this)" title="Coinciden OK"><i class="bi bi-check-circle"></i></button>
+                <button class="btn btn-xs btn-outline-warning" onclick="filtrarConcil('2',this)" title="Con diferencia"><i class="bi bi-exclamation-circle"></i></button>
+                <button class="btn btn-xs btn-outline-danger" onclick="filtrarConcil('3',this)" title="Solo SUNAT"><i class="bi bi-cloud"></i></button>
+                <button class="btn btn-xs btn-outline-info" onclick="filtrarConcil('4',this)" title="Solo Legacy"><i class="bi bi-hdd"></i></button>
+            </div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <div class="input-group input-group-sm" style="width:220px;">
+                    <span class="input-group-text border-0" style="background:var(--sire-gray-100);padding:.2rem .4rem;">
+                        <i class="bi bi-search" style="font-size:.75rem;color:var(--sire-gray-600);"></i>
+                    </span>
+                    <input type="text" class="form-control border-0 shadow-none" style="background:var(--sire-gray-100);font-size:.78rem;"
+                           placeholder="Filtrar RUC, N°, nombre…" oninput="filtrarTablaPropuesta(this.value)">
+                </div>
+                <span class="sire-badge sire-badge-rce" id="contadorFilasPropuesta">@propuesta.Count regs.</span>
+            </div>
+        </div>
+        <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
+            <table class="table sire-table table-hover align-middle mb-0" id="tablaPropuestaDetalle">
+                <thead style="position:sticky;top:0;z-index:1;">
+                    <tr>
+                        <th style="width:48px">Tipo</th>
+                        <th style="width:62px">Serie</th>
+                        <th style="width:100px">Número</th>
+                        <th style="width:82px">Emisión</th>
+                        <th style="width:96px">RUC</th>
+                        <th>Proveedor</th>
+                        <th class="text-end" style="width:88px">Base</th>
+                        <th class="text-end" style="width:76px">IGV</th>
+                        <th class="text-end" style="width:88px">Total</th>
+                        <th style="width:50px" class="text-center">Est.</th>
+                        <th style="width:56px" class="text-center">Concil.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in propuesta)
+                    {
+                        var tc = TipoComprobante(r.Tipdoc ?? "");
+                        <tr data-concil='@(r.ConcilEstado ?? "0")'>
+                            <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
+                            <td class="font-monospace">@(r.Serie ?? "—")</td>
+                            <td class="font-monospace">@(r.Numero ?? "—")</td>
+                            <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td class="font-monospace">@(r.Ruc ?? "—")</td>
+                            <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "—")</td>
+                            <td class="text-end">@r.BiGravDg.ToString("N2")</td>
+                            <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
+                            <td class="text-end fw-semibold" style="color:var(--sire-rce);">@r.TotalCp.ToString("N2")</td>
+                            <td class="text-center"><span class="badge @r.EstCompBadge" style="font-size:.62rem;">@r.EstCompLabel</span></td>
+                            <td class="text-center"><span class="badge @r.ConcilBadge" style="font-size:.62rem;" title="@(r.ConcilDiffs ?? r.ConcilLabel)">@r.ConcilLabel</span></td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                        <td class="text-end fw-bold">@propuesta.Sum(x => x.BiGravDg).ToString("N2")</td>
+                        <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
+                        <td class="text-end fw-bold" style="color:var(--sire-rce);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
     </div>
-
-    @if (registros.Count == 0)
-    {
-        <div class="sire-alert sire-alert-warn">
-            <i class="bi bi-exclamation-circle"></i>
-            <span>No hay registros de compras para el período <strong>@yyyyMm</strong>.</span>
-        </div>
-    }
-    else
-    {
-        <div class="sire-card">
-            <div class="sire-card-header">
-                <i class="bi bi-table"></i>
-                <span>Registros de Compras — @yyyyMm</span>
-                <span class="ms-auto sire-badge sire-badge-rce">@registros.Count</span>
-            </div>
-            <div class="table-responsive">
-                <table class="table sire-table table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Tipo</th>
-                            <th>Serie</th>
-                            <th>Número</th>
-                            <th>Doc. Proveedor</th>
-                            <th>Proveedor</th>
-                            <th class="text-end">Base</th>
-                            <th class="text-end">IGV</th>
-                            <th class="text-end">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var reg in registros)
-                        {
-                            var (tipoDesc, tipoCss) = TipoComprobante(reg.TipoComprobante);
-                            var badgeCls = tipoCss switch
-                            {
-                                "bg-primary"          => "sire-badge-rce",
-                                "bg-info text-dark"   => "sire-badge-info",
-                                "bg-warning text-dark"=> "sire-badge-warn",
-                                "bg-orange text-dark" => "sire-badge-warn",
-                                _                     => "sire-badge-secondary"
-                            };
-                            var baseReg = reg.BaseImponibleGravadaDestinoGravadas +
-                                          reg.BaseImponibleGravadaDestinoMixtas +
-                                          reg.BaseImponibleGravadaDestinoNoGravadas;
-                            var igvReg  = reg.IgvDestinoGravadas +
-                                          reg.IgvDestinoMixtas +
-                                          reg.IgvDestinoNoGravadas;
-                            <tr>
-                                <td><span class="sire-badge @badgeCls">@tipoDesc</span></td>
-                                <td><span class="sire-code sire-code-rce">@reg.SerieComprobante</span></td>
-                                <td><span class="sire-code sire-code-rce">@reg.NumeroComprobante</span></td>
-                                <td class="text-muted small">@reg.TipoDocIdentidadProveedor @reg.NumeroDocIdentidadProveedor</td>
-                                <td>@reg.RazonSocialProveedor</td>
-                                <td class="text-end">S/ @baseReg.ToString("N2")</td>
-                                <td class="text-end">S/ @igvReg.ToString("N2")</td>
-                                <td class="text-end fw-bold" style="color:var(--sire-rce);">S/ @reg.ImporteTotal.ToString("N2")</td>
-                            </tr>
-                        }
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="5" class="text-end text-muted small">Totales</td>
-                            <td class="text-end fw-bold">S/ @totalBase.ToString("N2")</td>
-                            <td class="text-end fw-bold">S/ @totalIgv.ToString("N2")</td>
-                            <td class="text-end fw-bold" style="color:var(--sire-rce);">S/ @totalMonto.ToString("N2")</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    }
 }
 
 <script>
+    function confirmarConciliar(periodo, periodoLabel) {
+        confirmarAccion(
+            `¿Conciliar la propuesta ${periodoLabel} contra el ERP (Logix)? Esto actualizará SIRE_LEGACY y SIRE_CONCIL.`,
+            () => document.getElementById('frmConcil_' + periodo).submit()
+        );
+    }
+    function confirmarEliminar(periodo, periodoLabel, nroReg) {
+        confirmarAccion(
+            `¿Eliminar la propuesta ${periodoLabel}? Se borrarán ${nroReg} registros de SIRE_PROPUESTA.`,
+            () => document.getElementById('frmElim_' + periodo).submit()
+        );
+    }
     function cambiarPeriodo() {
         const periodo = document.getElementById('periodoSelect').value;
-        if (periodo) {
-            window.location.href = '@Url.Action("Compras", new { })' + '?periodo=' + periodo;
-        }
+        window.location.href = '@Url.Action("Compras", new { })' + (periodo ? '?periodo=' + periodo : '?periodo=');
     }
 
     function recargarPeriodo() {
@@ -334,6 +474,81 @@ else
     });
 
     // Inicia la exportación en segundo plano (BackgroundService) y muestra modal de progreso
+    // ── Modal re-procesar ZIP local ──────────────────────────────────────────
+    let _reprocesarPeriodo = null, _reprocesarTipo = null, _reprocesarBtnOrig = null, _reprocesarBtnEl = null;
+    function abrirModalReprocesar(periodo, tipo, nombreZip) {
+        _reprocesarPeriodo = periodo; _reprocesarTipo = tipo;
+        document.getElementById('modalReprocesarNombreZip').textContent = nombreZip || '(desconocido)';
+        const btnConf = document.getElementById('btnConfirmarReprocesar');
+        const clone = btnConf.cloneNode(true);
+        btnConf.parentNode.replaceChild(clone, btnConf);
+        clone.addEventListener('click', () => {
+            bootstrap.Modal.getInstance(document.getElementById('modalReprocesarZip'))?.hide();
+            ejecutarReprocesarZip(periodo, tipo);
+        });
+        new bootstrap.Modal(document.getElementById('modalReprocesarZip')).show();
+    }
+    async function ejecutarReprocesarZip(periodo, tipo) {
+        const btnId = tipo === 'ventas' ? 'btnReprocesarVentas' : 'btnReprocesarCompras';
+        const btn = document.getElementById(btnId);
+        if (btn) { _reprocesarBtnEl = btn; _reprocesarBtnOrig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...'; }
+        try {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+            const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                body: JSON.stringify({ tipo, periodo })
+            });
+            const data = await resp.json();
+            if (data.exitoso) {
+                mostrarToastSire(`✓ ${data.insertados} registros cargados desde ${data.archivoUsado}.`, 'success');
+                setTimeout(() => location.reload(), 1800);
+            } else {
+                mostrarToastSire(`Error: ${data.error ?? 'Ver log del servidor'}`, 'danger');
+                if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
+            }
+        } catch (e) {
+            mostrarToastSire('Error de red: ' + e.message, 'danger');
+            if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
+        }
+    }
+    function mostrarToastSire(msg, tipo) {
+        let cont = document.getElementById('sireToastContainer');
+        if (!cont) {
+            cont = document.createElement('div');
+            cont.id = 'sireToastContainer';
+            cont.style.cssText = 'position:fixed;bottom:1.2rem;right:1.2rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem;';
+            document.body.appendChild(cont);
+        }
+        const t = document.createElement('div');
+        t.className = `alert alert-${tipo} shadow py-2 px-3 mb-0`;
+        t.style.cssText = 'font-size:.85rem;min-width:260px;animation:fadeInUp .25s ease;';
+        t.textContent = msg;
+        cont.appendChild(t);
+        setTimeout(() => t.remove(), 4000);
+    }
+    let _concilFilter = null;
+    function filtrarConcil(estado, btn) {
+        _concilFilter = estado;
+        document.querySelectorAll('#filtroConcilBtns button').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        filtrarTablaPropuesta(document.querySelector('#tablaPropuestaDetalle')?.closest('.sire-card')?.querySelector('input[type=text]')?.value ?? '');
+    }
+    function filtrarTablaPropuesta(q) {
+        q = (q || '').toLowerCase();
+        const filas = document.querySelectorAll('#tablaPropuestaDetalle tbody tr');
+        let vis = 0;
+        filas.forEach(tr => {
+            const textOk = !q || tr.textContent.toLowerCase().includes(q);
+            const concilOk = !_concilFilter || tr.dataset.concil === _concilFilter;
+            const mostrar = textOk && concilOk;
+            tr.style.display = mostrar ? '' : 'none';
+            if (mostrar) vis++;
+        });
+        const cnt = document.getElementById('contadorFilasPropuesta');
+        if (cnt) cnt.textContent = vis + ' filas';
+    }
+
     async function iniciarExportacion(periodo, tipo) {
         const modal = new bootstrap.Modal(document.getElementById('modalExportacion'));
         modal.show();

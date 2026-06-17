@@ -67,4 +67,34 @@ public interface ISireOracleRepository
     /// false = ORDER BY ID DESC (más reciente primero, para Monitoreo y actividad).
     /// </param>
     Task<List<SireApiLog>> GetApiLogsAsync(int top = 200, string? jobId = null, string? operacion = null, CancellationToken ct = default, bool ordenAscendente = false);
+
+    // ── SIRE_PROPUESTA (propuestas descargadas) ───────────────────────────────
+
+    /// <summary>
+    /// Retorna los registros de propuesta SUNAT para un período almacenados en SIRE_PROPUESTA.
+    /// </summary>
+    Task<List<SireValidaRegistro>> GetRegistrosPropuestaAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retorna un resumen de todas las propuestas descargadas (agrupado por TIPO+PERIODO).
+    /// Usado en las vistas Compras/Ventas para mostrar la lista de archivos disponibles.
+    /// </summary>
+    Task<List<PropuestaPeriodoResumen>> GetPropuestasResumenAsync(string tipo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Elimina todos los registros de SIRE_PROPUESTA de un período. Devuelve filas borradas.
+    /// </summary>
+    Task<int> EliminarPropuestaAsync(string tipo, int periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ejecuta SP_SIRE_CARGA_LEGACY + SP_SIRE_CONCILIAR para el período dado.
+    /// Devuelve un mensaje de resultado.
+    /// </summary>
+    Task<string> ConciliarPropuestaAsync(string tipo, int periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lee el resumen de la última conciliación desde SIRE_CONCIL_RESUMEN.
+    /// Devuelve null si nunca se concilió el período.
+    /// </summary>
+    Task<SireConcilResumen?> GetConcilResumenAsync(string tipo, string periodo, CancellationToken ct = default);
 }

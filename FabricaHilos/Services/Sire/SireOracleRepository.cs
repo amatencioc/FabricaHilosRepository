@@ -341,8 +341,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
 
         // Build dynamic WHERE clause with proper filtering
         var whereConditions = new List<string>();
-        if (!string.IsNullOrWhiteSpace(jobId))     whereConditions.Add("JOB_ID = :jobId");
-        if (!string.IsNullOrWhiteSpace(operacion)) whereConditions.Add("OPERACION = :op");
+        if (!string.IsNullOrWhiteSpace(jobId))     whereConditions.Add("l.JOB_ID = :jobId");
+        if (!string.IsNullOrWhiteSpace(operacion)) whereConditions.Add("l.OPERACION = :op");
 
         var whereClause = whereConditions.Count > 0 
             ? "WHERE " + string.Join(" AND ", whereConditions)
@@ -356,11 +356,13 @@ public sealed class SireOracleRepository : ISireOracleRepository
         // Oracle 10g compatible: use simple inline view with ROWNUM
         var sql = $@"
             SELECT * FROM (
-                SELECT ID, FECHA, JOB_ID, OPERACION, METODO_HTTP, URL,
-                       HTTP_STATUS, DURACION_MS, EXITO, MENSAJE
-                FROM SIG.SIRE_LOG
+                SELECT l.ID, l.FECHA, l.JOB_ID, l.OPERACION, l.METODO_HTTP, l.URL,
+                       l.HTTP_STATUS, l.DURACION_MS, l.EXITO, l.MENSAJE,
+                       j.TIPO_REGISTRO
+                FROM SIG.SIRE_LOG l
+                LEFT JOIN SIG.SIRE_JOB j ON j.JOB_ID = l.JOB_ID
                 {whereClause}
-                ORDER BY ID {orderDir}
+                ORDER BY l.ID {orderDir}
             )
             WHERE ROWNUM <= {top}";
 
@@ -381,16 +383,17 @@ public sealed class SireOracleRepository : ISireOracleRepository
 
     private static SireApiLog MapApiLog(System.Data.Common.DbDataReader r) => new()
     {
-        Id         = r.GetInt64(r.GetOrdinal("ID")),
-        Fecha      = r.GetDateTime(r.GetOrdinal("FECHA")),
-        JobId      = NullStr(r, "JOB_ID"),
-        Operacion  = r.GetString(r.GetOrdinal("OPERACION")),
-        MetodoHttp = NullStr(r, "METODO_HTTP"),
-        Url        = NullStr(r, "URL"),
-        HttpStatus = NullInt(r, "HTTP_STATUS"),
-        DuracionMs = r.IsDBNull(r.GetOrdinal("DURACION_MS")) ? null : r.GetInt64(r.GetOrdinal("DURACION_MS")),
-        Exito      = r.GetInt32(r.GetOrdinal("EXITO")) == 1,
-        Mensaje    = NullStr(r, "MENSAJE"),
+        Id           = r.GetInt64(r.GetOrdinal("ID")),
+        Fecha        = r.GetDateTime(r.GetOrdinal("FECHA")),
+        JobId        = NullStr(r, "JOB_ID"),
+        Operacion    = r.GetString(r.GetOrdinal("OPERACION")),
+        MetodoHttp   = NullStr(r, "METODO_HTTP"),
+        Url          = NullStr(r, "URL"),
+        HttpStatus   = NullInt(r, "HTTP_STATUS"),
+        DuracionMs   = r.IsDBNull(r.GetOrdinal("DURACION_MS")) ? null : r.GetInt64(r.GetOrdinal("DURACION_MS")),
+        Exito        = r.GetInt32(r.GetOrdinal("EXITO")) == 1,
+        Mensaje      = NullStr(r, "MENSAJE"),
+        TipoRegistro = NullStr(r, "TIPO_REGISTRO"),
     };
 
     private static SireExportacionJob MapJob(System.Data.Common.DbDataReader r) => new()
@@ -439,6 +442,214 @@ public sealed class SireOracleRepository : ISireOracleRepository
     private static DateTime? NullDate(System.Data.Common.DbDataReader r, string col)
         => r.IsDBNull(r.GetOrdinal(col)) ? null : r.GetDateTime(r.GetOrdinal(col));
 
+    private static decimal NullDec(System.Data.Common.DbDataReader r, string col)
+        => r.IsDBNull(r.GetOrdinal(col)) ? 0m : r.GetDecimal(r.GetOrdinal(col));
+
     private static object Trunc(string? s, int max)
         => s is null ? DBNull.Value : (object)s[..Math.Min(s.Length, max)];
+
+    // ── SIRE_VALIDA ───────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<List<SireValidaRegistro>> GetRegistrosPropuestaAsync(
+        string tipo, string periodo, CancellationToken ct = default)
+    {
+        var tipoDb    = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+        var periodoNr = int.Parse(periodo);
+
+        const string sql = @"
+            SELECT ID_PROP, CAR_SUNAT, TIPO, PERIODO,
+                   F_EMISION, F_VENCTO, TIPDOC, SERIE, NUMERO, RUC, NOMBRE,
+                   NVL(BI_GRAV_DG,0) BI_GRAV_DG, NVL(IGV_IPM_DG,0) IGV_IPM_DG,
+                   NVL(TOTAL_CP,0) TOTAL_CP, MONEDA, NVL(CAMBIO,0) CAMBIO,
+                   EST_COMP, INCONSIST, CONCIL_ESTADO, CONCIL_DIFFS, FCH_CARGA
+            FROM   SIG.SIRE_PROPUESTA
+            WHERE  TIPO    = :tipo
+              AND  PERIODO = :periodo
+            ORDER  BY CAR_SUNAT";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb    });
+        cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNr });
+
+        var list = new List<SireValidaRegistro>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            list.Add(new SireValidaRegistro
+            {
+                IdProp      = rdr.GetInt64(rdr.GetOrdinal("ID_PROP")),
+                CarSunat    = rdr.GetString(rdr.GetOrdinal("CAR_SUNAT")),
+                Tipo        = rdr.GetString(rdr.GetOrdinal("TIPO")),
+                Periodo     = rdr.GetInt32(rdr.GetOrdinal("PERIODO")),
+                FEmision    = NullDate(rdr, "F_EMISION"),
+                FVencto     = NullDate(rdr, "F_VENCTO"),
+                Tipdoc      = NullStr(rdr,  "TIPDOC"),
+                Serie       = NullStr(rdr,  "SERIE"),
+                Numero      = NullStr(rdr,  "NUMERO"),
+                Ruc         = NullStr(rdr,  "RUC"),
+                Nombre      = NullStr(rdr,  "NOMBRE"),
+                BiGravDg    = NullDec(rdr,  "BI_GRAV_DG"),
+                IgvIpmDg    = NullDec(rdr,  "IGV_IPM_DG"),
+                TotalCp     = NullDec(rdr,  "TOTAL_CP"),
+                Moneda      = NullStr(rdr,  "MONEDA"),
+                Cambio      = NullDec(rdr,  "CAMBIO"),
+                EstComp     = NullStr(rdr,  "EST_COMP"),
+                Inconsist   = NullStr(rdr,  "INCONSIST"),
+                ConcilEstado = NullStr(rdr, "CONCIL_ESTADO"),
+                ConcilDiffs  = NullStr(rdr, "CONCIL_DIFFS"),
+                FchCarga    = NullDate(rdr, "FCH_CARGA"),
+            });
+        }
+        return list;
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<PropuestaPeriodoResumen>> GetPropuestasResumenAsync(
+        string tipo, CancellationToken ct = default)
+    {
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        const string sql = @"
+            SELECT TIPO, PERIODO, MAX(JOB_ID) JOB_ID,
+                   COUNT(*)                        TOTAL_REGISTROS,
+                   MAX(FCH_CARGA)                  FCH_CARGA,
+                   SUM(NVL(BI_GRAV_DG,0))          TOTAL_BASE,
+                   SUM(NVL(IGV_IPM_DG,0))          TOTAL_IGV,
+                   SUM(NVL(TOTAL_CP,0))            TOTAL_IMPORTE,
+                   MIN(CONCIL_ESTADO)              CONCIL_ESTADO
+            FROM   SIG.SIRE_PROPUESTA
+            WHERE  TIPO = :tipo
+            GROUP  BY TIPO, PERIODO
+            ORDER  BY PERIODO DESC";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo", OracleDbType.Varchar2) { Value = tipoDb });
+
+        var list = new List<PropuestaPeriodoResumen>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            list.Add(new PropuestaPeriodoResumen
+            {
+                Tipo           = rdr.GetString(rdr.GetOrdinal("TIPO")),
+                Periodo        = rdr.GetInt32(rdr.GetOrdinal("PERIODO")),
+                JobId          = NullStr(rdr, "JOB_ID"),
+                TotalRegistros = rdr.GetInt32(rdr.GetOrdinal("TOTAL_REGISTROS")),
+                FchCarga       = NullDate(rdr, "FCH_CARGA"),
+                TotalBase      = NullDec(rdr, "TOTAL_BASE"),
+                TotalIgv       = NullDec(rdr, "TOTAL_IGV"),
+                TotalImporte   = NullDec(rdr, "TOTAL_IMPORTE"),
+                ConcilEstado   = NullStr(rdr, "CONCIL_ESTADO") ?? "0",
+            });
+        }
+        return list;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> EliminarPropuestaAsync(
+        string tipo, int periodo, CancellationToken ct = default)
+    {
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        const string sql = @"
+            DELETE FROM SIG.SIRE_PROPUESTA
+            WHERE  TIPO    = :tipo
+              AND  PERIODO = :periodo";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb  });
+        cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public async Task<string> ConciliarPropuestaAsync(
+        string tipo, int periodo, CancellationToken ct = default)
+    {
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        await using var conn = await OpenConnAsync(ct);
+
+        // Paso 1: carga legacy
+        using (var cmd1 = new OracleCommand(
+            "BEGIN SIG.SP_SIRE_CARGA_LEGACY(:tipo, :periodo, :usuario); END;", conn))
+        {
+            cmd1.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb  });
+            cmd1.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
+            cmd1.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2) { Value = "WEB"   });
+            await cmd1.ExecuteNonQueryAsync(ct);
+        }
+
+        // Paso 2: conciliar
+        using (var cmd2 = new OracleCommand(
+            "BEGIN SIG.SP_SIRE_CONCILIAR(:tipo, :periodo, :usuario); END;", conn))
+        {
+            cmd2.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb  });
+            cmd2.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
+            cmd2.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2) { Value = "WEB"   });
+            await cmd2.ExecuteNonQueryAsync(ct);
+        }
+
+        // Paso 3: leer resumen
+        const string sqlRes = @"
+            SELECT TOTAL_OK, TOTAL_DIFER, TOTAL_SOLO_SUNAT, TOTAL_SOLO_LEG,
+                   ROUND(DIFF_TOTAL,2) DIFF_TOTAL
+            FROM   SIG.SIRE_CONCIL_RESUMEN
+            WHERE  TIPO = :tipo AND PERIODO = :periodo";
+
+        using var cmdRes = new OracleCommand(sqlRes, conn);
+        cmdRes.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb  });
+        cmdRes.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
+        await using var rdr = await cmdRes.ExecuteReaderAsync(ct);
+        if (await rdr.ReadAsync(ct))
+        {
+            var ok         = rdr.IsDBNull(0) ? 0 : rdr.GetInt32(0);
+            var dif        = rdr.IsDBNull(1) ? 0 : rdr.GetInt32(1);
+            var soloSunat  = rdr.IsDBNull(2) ? 0 : rdr.GetInt32(2);
+            var soloLegacy = rdr.IsDBNull(3) ? 0 : rdr.GetInt32(3);
+            var diffTotal  = rdr.IsDBNull(4) ? 0m : rdr.GetDecimal(4);
+            return $"OK:{ok} | Diferencias:{dif} | Solo SUNAT:{soloSunat} | Solo Legacy:{soloLegacy} | Diff.Total:S/{diffTotal:N2}";
+        }
+        return "Conciliación completada (sin resumen disponible).";
+    }
+
+    /// <inheritdoc/>
+    public async Task<SireConcilResumen?> GetConcilResumenAsync(
+        string tipo, string periodo, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(periodo) || !int.TryParse(periodo, out var periodoNr))
+            return null;
+
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        const string sql = @"
+            SELECT TOTAL_OK, TOTAL_DIFER, TOTAL_SOLO_SUNAT, TOTAL_SOLO_LEG,
+                   ROUND(NVL(DIFF_TOTAL,0),2) DIFF_TOTAL
+            FROM   SIG.SIRE_CONCIL_RESUMEN
+            WHERE  TIPO = :tipo AND PERIODO = :periodo";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb   });
+        cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNr });
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (await rdr.ReadAsync(ct))
+        {
+            return new SireConcilResumen
+            {
+                TotalOk        = rdr.IsDBNull(0) ? 0  : rdr.GetInt32(0),
+                TotalDifer     = rdr.IsDBNull(1) ? 0  : rdr.GetInt32(1),
+                TotalSoloSunat = rdr.IsDBNull(2) ? 0  : rdr.GetInt32(2),
+                TotalSoloLeg   = rdr.IsDBNull(3) ? 0  : rdr.GetInt32(3),
+                DiffTotal      = rdr.IsDBNull(4) ? 0m : rdr.GetDecimal(4),
+            };
+        }
+        return null;
+    }
 }
+

@@ -1,11 +1,11 @@
-using Oracle.ManagedDataAccess.Client;
+﻿using Oracle.ManagedDataAccess.Client;
 using System.IO.Compression;
 using System.Text;
 
 namespace FabricaHilos.Services.Sire;
 
 /// <summary>
-/// Resultado del proceso de carga de un TXT de propuesta SIRE a Oracle SIRE_VALIDA.
+/// Resultado del proceso de carga de un TXT de propuesta SIRE a Oracle SIRE_PROPUESTA.
 /// </summary>
 public sealed class SireValidaCargaResult
 {
@@ -19,7 +19,8 @@ public sealed class SireValidaCargaResult
 /// Servicio encargado de:
 /// 1. Extraer el archivo TXT de propuesta del ZIP de SUNAT.
 /// 2. Parsear cada línea (formato pipe-delimited según estándar SIRE).
-/// 3. Hacer UPSERT (MERGE) en Oracle SIG.SIRE_VALIDA con ORIGEN='P'.
+/// 3. Guardar en SIG.SIRE_PROPUESTA con DELETE del período + INSERT limpio.
+///    (SIG.SIRE_VALIDA queda como tabla de respaldo histórico — no se toca aquí.)
 /// </summary>
 public sealed class SireValidaService
 {
@@ -34,62 +35,45 @@ public sealed class SireValidaService
     }
 
     /// <summary>
-    /// Carga la propuesta SIRE desde el contenido del ZIP en Oracle SIRE_VALIDA.
+    /// Carga la propuesta SIRE desde el contenido del ZIP en Oracle SIRE_PROPUESTA.
+    /// Borra primero todos los registros del período (DELETE del tipo+período)
+    /// y luego inserta los del ZIP → la tabla siempre refleja exactamente lo que SUNAT envió.
     /// </summary>
     /// <param name="contenidoZip">Bytes del archivo ZIP descargado de SUNAT.</param>
     /// <param name="tipoRegistro">"ventas" (TIPO='1') o "compras" (TIPO='2').</param>
     /// <param name="periodo">Período tributario YYYYMM (ej: "202601").</param>
+    /// <param name="jobId">JobId del job que originó la descarga (para auditoría).</param>
     /// <param name="cancellationToken">Token de cancelación.</param>
     public async Task<SireValidaCargaResult> CargarDesdeZipAsync(
         byte[] contenidoZip,
         string tipoRegistro,
         string periodo,
+        string? jobId = null,
         CancellationToken cancellationToken = default)
     {
-        var tipo = tipoRegistro.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+        var tipo       = tipoRegistro.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
         var periodoNum = int.Parse(periodo);
 
         var lineas = ExtraerLineasTxt(contenidoZip, tipoRegistro);
-        _logger.LogInformation("[SIRE-VALIDA] ZIP extraído: {Lineas} líneas para tipo={Tipo} periodo={Periodo}",
+        _logger.LogInformation("[SIRE-PROP] ZIP extraído: {Lineas} líneas tipo={Tipo} periodo={Periodo}",
             lineas.Count, tipo, periodo);
 
         if (lineas.Count == 0)
             return new SireValidaCargaResult { Observaciones = { "El ZIP no contiene líneas de propuesta." } };
 
-        var insertados  = 0;
-        var duplicados  = 0;
-        var errores     = 0;
+        var insertados    = 0;
+        var duplicados    = 0;
+        var errores       = 0;
         var observaciones = new List<string>();
 
-        const string sql = @"
-MERGE INTO SIG.SIRE_VALIDA t
-USING (SELECT :tipo TIPO, :periodo PERIODO, :carSunat CAR_SUNAT FROM DUAL) s
-ON (t.TIPO = s.TIPO AND t.PERIODO = s.PERIODO AND t.CAR_SUNAT = s.CAR_SUNAT)
-WHEN MATCHED THEN UPDATE SET
-    t.F_EMISION    = :fEmision,
-    t.F_VENCTO     = :fVencto,
-    t.TIPDOC       = :tipdoc,
-    t.SERIE        = :serie,
-    t.NUMERO       = :numero,
-    t.RUC          = :ruc,
-    t.NOMBRE       = :nombre,
-    t.BI_GRAV_DG   = :biGravDg,
-    t.IGV_IPM_DG   = :igvIpmDg,
-    t.BI_GRAV_DGNG = :biGravDgng,
-    t.IGV_IPM_DGNG = :igvIpmDgng,
-    t.BI_GRAV_DNG  = :biGravDng,
-    t.IGV_IPM_DNG  = :igvIpmDng,
-    t.VAL_ADQ_NG   = :valAdqNg,
-    t.ISC          = :isc,
-    t.ICBPER       = :icbper,
-    t.OTROS_TRIB   = :otrosTrib,
-    t.TOTAL_CP     = :totalCp,
-    t.MONEDA       = :moneda,
-    t.CAMBIO       = :cambio,
-    t.EST_COMP     = :estComp,
-    t.INCONSIST    = :inconsist
-WHEN NOT MATCHED THEN INSERT (
-    TIPO, PERIODO, ORIGEN, CAR_SUNAT,
+        const string sqlDelete = @"
+DELETE FROM SIG.SIRE_PROPUESTA
+WHERE  TIPO    = :tipo
+  AND  PERIODO = :periodo";
+
+        const string sqlInsert = @"
+INSERT INTO SIG.SIRE_PROPUESTA (
+    ID_PROP, TIPO, PERIODO, CAR_SUNAT, JOB_ID,
     F_EMISION, F_VENCTO, CODIGO, TIPDOC, SERIE, NUMERO,
     ANIO_DAM, NROFIN, TDOCID, RUC, NOMBRE,
     BI_GRAV_DG, IGV_IPM_DG, BI_GRAV_DGNG, IGV_IPM_DGNG,
@@ -99,9 +83,9 @@ WHEN NOT MATCHED THEN INSERT (
     F_DOCREF, TIP_DOCREF, SER_DOCREF, NRO_DOCREF,
     COD_DAM, TIPO_BIEN, ID_PROYECTO, PORCPART, IMB,
     CAR_MOD, FLAG_DETRAC, TIPO_NOTA,
-    EST_COMP, INCONSIST, EST_LOGIX, ESTADO, OBSERVACION
+    EST_COMP, INCONSIST, FCH_CARGA, CONCIL_ESTADO
 ) VALUES (
-    :tipo, :periodo, 'P', :carSunat,
+    SIG.SEQ_SIRE_PROP.NEXTVAL, :tipo, :periodo, :carSunat, :jobId,
     :fEmision, :fVencto, :codigo, :tipdoc, :serie, :numero,
     :anioDam, :nrofin, :tdocid, :ruc, :nombre,
     :biGravDg, :igvIpmDg, :biGravDgng, :igvIpmDgng,
@@ -111,29 +95,42 @@ WHEN NOT MATCHED THEN INSERT (
     :fDocref, :tipDocref, :serDocref, :nroDocref,
     :codDam, :tipoBien, :idProyecto, :porcpart, :imb,
     :carMod, :flagDetrac, :tipoNota,
-    :estComp, :inconsist, NULL, '0', NULL
+    :estComp, :inconsist, SYSDATE, '0'
 )";
 
         using var conn = new OracleConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
+        conn.AutoCommit = true;
 
+        // ── DELETE del período anterior ────────────────────────────────────────
+        using (var delCmd = new OracleCommand(sqlDelete, conn))
+        {
+            delCmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo       });
+            delCmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum });
+            var borrados = await delCmd.ExecuteNonQueryAsync(cancellationToken);
+            _logger.LogInformation("[SIRE-PROP] DELETE {B} registros previos tipo={T} periodo={P}",
+                borrados, tipo, periodo);
+        }
+
+        // ── INSERT de cada línea del TXT ──────────────────────────────────────
         foreach (var linea in lineas)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             try
             {
                 var campos = linea.Split('|');
-                if (campos.Length < 20) continue;
+                // RVIE ventas: 40 cols con prefijo → mínimo 35. RCE compras: 80 cols → mínimo 41.
+                var minCols = tipo == "1" ? 35 : 41;
+                if (campos.Length < minCols) continue;
 
-                using var cmd = new OracleCommand(sql, conn);
-                cmd.Parameters.AddRange(ParsearLinea(campos, tipo, periodoNum));
+                using var cmd = new OracleCommand(sqlInsert, conn);
+                cmd.BindByName = true;
+                cmd.Parameters.AddRange(ParsearLinea(campos, tipo, periodoNum, jobId));
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
                 insertados++;
             }
             catch (OracleException oex) when (oex.Message.Contains("ORA-00001"))
             {
-                // Clave única duplicada (no debería pasar con MERGE, pero por seguridad)
                 duplicados++;
             }
             catch (Exception ex)
@@ -141,11 +138,11 @@ WHEN NOT MATCHED THEN INSERT (
                 errores++;
                 var detalle = $"Error en línea [{linea[..Math.Min(80, linea.Length)]}]: {ex.Message}";
                 observaciones.Add(detalle);
-                _logger.LogWarning("[SIRE-VALIDA] {Detalle}", detalle);
+                _logger.LogWarning("[SIRE-PROP] {Detalle}", detalle);
             }
         }
 
-        _logger.LogInformation("[SIRE-VALIDA] Carga completada: {Ins} insertados/actualizados, {Dup} duplicados, {Err} errores",
+        _logger.LogInformation("[SIRE-PROP] Carga completada: {Ins} insertados, {Dup} duplicados, {Err} errores",
             insertados, duplicados, errores);
 
         return new SireValidaCargaResult
@@ -200,19 +197,33 @@ WHEN NOT MATCHED THEN INSERT (
 
     /// <summary>
     /// Parsea los campos pipe-delimited de una línea del TXT de propuesta SIRE y
-    /// devuelve un array de OracleParameter listo para enlazar al OracleCommand.
-    /// Formato según Manual SIRE SUNAT (compras v22 / ventas v25).
-    /// Posiciones: [0]=CAR_SUNAT, [1]=F_EMISION, [2]=F_VENCTO, [3]=CODIGO(RUC emisor),
-    ///   [4]=TIPDOC, [5]=SERIE, [6]=NUMERO, [7]=ANIO_DAM, [8]=NROFIN,
-    ///   [9]=TDOCID, [10]=RUC, [11]=NOMBRE, [12]=BI_GRAV_DG, [13]=IGV_IPM_DG,
-    ///   [14]=BI_GRAV_DGNG, [15]=IGV_IPM_DGNG, [16]=BI_GRAV_DNG, [17]=IGV_IPM_DNG,
-    ///   [18]=VAL_ADQ_NG, [19]=ISC, [20]=ICBPER, [21]=OTROS_TRIB, [22]=TOTAL_CP,
-    ///   [23]=MONEDA, [24]=CAMBIO, [25]=F_DOCREF, [26]=TIP_DOCREF, [27]=SER_DOCREF,
-    ///   [28]=NRO_DOCREF, [29]=COD_DAM, [30]=TIPO_BIEN, [31]=ID_PROYECTO,
-    ///   [32]=PORCPART, [33]=IMB, [34]=CAR_MOD, [35]=FLAG_DETRAC, [36]=TIPO_NOTA,
-    ///   [37]=EST_COMP, [38]=INCONSIST.
+    /// devuelve un array de OracleParameter para enlazar al OracleCommand con BindByName=true.
+    ///
+    /// FORMATO SUNAT ACTUAL: 3 campos de cabecera al inicio en ambos tipos:
+    ///   [0]=RUC-emisor, [1]=RazonSocial-emisor, [2]=Periodo (YYYYMM numérico).
+    /// Se detecta si c[2] es numérico de 6 dígitos. Si no, se asume formato sin prefijo.
+    ///
+    /// RVIE (ventas, tipo="1") — 40 cols con prefijo (offset o=3):
+    ///   [o+0]=CAR_SUNAT, [o+1]=FEmision, [o+2]=FVcto, [o+3]=TipDoc, [o+4]=Serie,
+    ///   [o+5]=NumeroInicial, [o+6]=NumeroFinal, [o+7]=TipoDocId, [o+8]=RUC-cliente, [o+9]=Nombre,
+    ///   [o+10]=ValorExportacion(skip), [o+11]=BiGravada, [o+12]=DsctoBI(skip), [o+13]=IGV,
+    ///   [o+14]=DsctoIGV(skip), [o+15]=MtoExonerado(skip), [o+16]=MtoInafecto(skip), [o+17]=ISC,
+    ///   [o+18]=BiGravIVAP(skip), [o+19]=IVAP(skip), [o+20]=ICBPER, [o+21]=OtrosTrib,
+    ///   [o+22]=TotalCP, [o+23]=Moneda, [o+24]=TipoCambio, [o+25]=FDocRef, [o+26]=TipDocRef,
+    ///   [o+27]=SerDocRef, [o+28]=NroDocRef, [o+29]=IDProyecto, [o+30]=TipoNota, [o+31]=EstComp.
+    ///
+    /// RCE (compras, tipo="2") — 80 cols con prefijo (offset o=3):
+    ///   [o+0]=CAR_SUNAT, [o+1]=FEmision, [o+2]=FVcto, [o+3]=TipDoc, [o+4]=Serie,
+    ///   [o+5]=AnioDam, [o+6]=NumeroInicial, [o+7]=NumeroFinal, [o+8]=TipoDocId,
+    ///   [o+9]=RUC-proveedor, [o+10]=Nombre, [o+11]=BiGravDG, [o+12]=IgvDG,
+    ///   [o+13]=BiGravDGNG, [o+14]=IgvDGNG, [o+15]=BiGravDNG, [o+16]=IgvDNG,
+    ///   [o+17]=ValAdqNG, [o+18]=ISC, [o+19]=ICBPER, [o+20]=OtrosTrib, [o+21]=TotalCP,
+    ///   [o+22]=Moneda, [o+23]=TipoCambio, [o+24]=FDocRef, [o+25]=TipDocRef,
+    ///   [o+26]=SerDocRef, [o+27]=CodDAM, [o+28]=NroDocRef, [o+29]=TipoBien,
+    ///   [o+30]=IDProyecto, [o+31]=PorcPart, [o+32]=IMB, [o+33]=CarMod,
+    ///   [o+34]=FlagDetrac, [o+35]=TipoNota, [o+36]=EstComp, [o+37]=Inconsist.
     /// </summary>
-    private static OracleParameter[] ParsearLinea(string[] c, string tipo, int periodo)
+    private static OracleParameter[] ParsearLinea(string[] c, string tipo, int periodo, string? jobId)
     {
         static DateTime? ParseFecha(string s) =>
             DateTime.TryParseExact(s.Trim(), "dd/MM/yyyy",
@@ -224,11 +235,8 @@ WHEN NOT MATCHED THEN INSERT (
                 System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0m;
 
-        static int? ParseInt(string s) =>
-            int.TryParse(s.Trim(), out var i) ? i : null;
-
         static string Str(string[] arr, int i) =>
-            i < arr.Length ? arr[i].Trim() : string.Empty;
+            i >= 0 && i < arr.Length ? arr[i].Trim() : string.Empty;
 
         static OracleParameter Vc(string name, string? value) =>
             new(name, OracleDbType.Varchar2) { Value = (object?)value ?? DBNull.Value };
@@ -239,57 +247,70 @@ WHEN NOT MATCHED THEN INSERT (
         static OracleParameter Nm(string name, decimal value) =>
             new(name, OracleDbType.Decimal) { Value = value };
 
-        static OracleParameter NmNullable(string name, int? value) =>
-            new(name, OracleDbType.Int32) { Value = value.HasValue ? (object)value.Value : DBNull.Value };
+        // Detectar formato con prefijo: c[2] es el período YYYYMM (6 dígitos numéricos).
+        int o = c.Length >= 6 && c[2].Trim().Length == 6 && c[2].Trim().All(char.IsDigit) ? 3 : 0;
+        bool esVentas = tipo == "1";
 
-        var nombreVal = Str(c, 11);
+        string nombreVal = Str(c, o + (esVentas ? 9 : 10));
         if (nombreVal.Length > 500) nombreVal = nombreVal[..500];
 
-        var cambioVal = ParseDec(Str(c, 24));
+        decimal cambioVal = ParseDec(Str(c, o + (esVentas ? 24 : 23)));
 
         return
         [
             new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo },
             new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo },
-            Vc("carSunat",   Str(c, 0)),
-            Dt("fEmision",   ParseFecha(Str(c, 1))),
-            Dt("fVencto",    ParseFecha(Str(c, 2))),
-            Vc("codigo",     Str(c, 3)),
-            Vc("tipdoc",     Str(c, 4)),
-            Vc("serie",      Str(c, 5)),
-            Vc("numero",     Str(c, 6)),
-            NmNullable("anioDam",   ParseInt(Str(c, 7))),
-            Vc("nrofin",     Str(c, 8)),
-            Vc("tdocid",     Str(c, 9)),
-            Vc("ruc",        Str(c, 10)),
-            Vc("nombre",     nombreVal),
-            Nm("biGravDg",   ParseDec(Str(c, 12))),
-            Nm("igvIpmDg",   ParseDec(Str(c, 13))),
-            Nm("biGravDgng", ParseDec(Str(c, 14))),
-            Nm("igvIpmDgng", ParseDec(Str(c, 15))),
-            Nm("biGravDng",  ParseDec(Str(c, 16))),
-            Nm("igvIpmDng",  ParseDec(Str(c, 17))),
-            Nm("valAdqNg",   ParseDec(Str(c, 18))),
-            Nm("isc",        ParseDec(Str(c, 19))),
-            Nm("icbper",     ParseDec(Str(c, 20))),
-            Nm("otrosTrib",  ParseDec(Str(c, 21))),
-            Nm("totalCp",    ParseDec(Str(c, 22))),
-            Vc("moneda",     string.IsNullOrWhiteSpace(Str(c, 23)) ? "PEN" : Str(c, 23)),
-            Nm("cambio",     cambioVal == 0m ? 1m : cambioVal),
-            Dt("fDocref",    ParseFecha(Str(c, 25))),
-            Vc("tipDocref",  Str(c, 26)),
-            Vc("serDocref",  Str(c, 27)),
-            Vc("nroDocref",  Str(c, 28)),
-            Vc("codDam",     Str(c, 29)),
-            Vc("tipoBien",   Str(c, 30)),
-            Vc("idProyecto", Str(c, 31)),
-            Nm("porcpart",   ParseDec(Str(c, 32))),
-            Nm("imb",        ParseDec(Str(c, 33))),
-            Vc("carMod",     Str(c, 34)),
-            Vc("flagDetrac", Str(c, 35)),
-            Vc("tipoNota",   Str(c, 36)),
-            Vc("estComp",    string.IsNullOrWhiteSpace(Str(c, 37)) ? "1" : Str(c, 37)),
-            Vc("inconsist",  string.IsNullOrWhiteSpace(Str(c, 38)) ? "0" : Str(c, 38)),
+            Vc("jobId",    jobId),
+            Vc("carSunat", Str(c, o + 0)),
+            Dt("fEmision", ParseFecha(Str(c, o + 1))),
+            Dt("fVencto",  ParseFecha(Str(c, o + 2))),
+            Vc("codigo",   Str(c, 0)),            // RUC emisor — siempre índice absoluto 0
+            Vc("tipdoc",   Str(c, o + 3)),
+            Vc("serie",    Str(c, o + 4)),
+            // Ventas: [o+5]=Numero (sin AnioDam). Compras: [o+5]=AnioDam, [o+6]=Numero.
+            Vc("numero",   esVentas ? Str(c, o + 5) : Str(c, o + 6)),
+            Vc("anioDam",  esVentas ? string.Empty   : Str(c, o + 5)),
+            Vc("nrofin",   Str(c, o + (esVentas ? 6 : 7))),
+            Vc("tdocid",   Str(c, o + (esVentas ? 7 : 8))),
+            Vc("ruc",      Str(c, o + (esVentas ? 8 : 9))),
+            Vc("nombre",   nombreVal),
+            // Montos — ventas tiene columnas extra intercaladas (DsctoBI, DsctoIGV, IVAP…)
+            // Ventas:  [o+11]=BiGravada, [o+12]=DsctoBI(skip), [o+13]=IGV
+            // Compras: [o+11]=BiGravDG,  [o+12]=IgvDG,         [o+13]=BiGravDGNG
+            Nm("biGravDg",   ParseDec(Str(c, o + 11))),
+            Nm("igvIpmDg",   ParseDec(Str(c, o + (esVentas ? 13 : 12)))),
+            Nm("biGravDgng", esVentas ? 0m : ParseDec(Str(c, o + 13))),
+            Nm("igvIpmDgng", esVentas ? 0m : ParseDec(Str(c, o + 14))),
+            Nm("biGravDng",  esVentas ? 0m : ParseDec(Str(c, o + 15))),
+            Nm("igvIpmDng",  esVentas ? 0m : ParseDec(Str(c, o + 16))),
+            Nm("valAdqNg",   esVentas ? 0m : ParseDec(Str(c, o + 17))),
+            // Ventas: ISC=[o+17], ICBPER=[o+20], OtrosTrib=[o+21], TotalCP=[o+22]
+            // Compras: ISC=[o+18], ICBPER=[o+19], OtrosTrib=[o+20], TotalCP=[o+21]
+            Nm("isc",       ParseDec(Str(c, o + (esVentas ? 17 : 18)))),
+            Nm("icbper",    ParseDec(Str(c, o + (esVentas ? 20 : 19)))),
+            Nm("otrosTrib", ParseDec(Str(c, o + (esVentas ? 21 : 20)))),
+            Nm("totalCp",   ParseDec(Str(c, o + (esVentas ? 22 : 21)))),
+            Vc("moneda",    string.IsNullOrWhiteSpace(Str(c, o + (esVentas ? 23 : 22))) ? "PEN" : Str(c, o + (esVentas ? 23 : 22))),
+            Nm("cambio",    cambioVal == 0m ? 1m : cambioVal),
+            // Documentos de referencia — ventas desplazado +1 respecto a compras salvo NroDocRef
+            // Ventas: FDocRef=[o+25], TipDocRef=[o+26], SerDocRef=[o+27], NroDocRef=[o+28]
+            // Compras: FDocRef=[o+24], TipDocRef=[o+25], SerDocRef=[o+26], CodDAM=[o+27], NroDocRef=[o+28]
+            Dt("fDocref",   ParseFecha(Str(c, o + (esVentas ? 25 : 24)))),
+            Vc("tipDocref", Str(c, o + (esVentas ? 26 : 25))),
+            Vc("serDocref", Str(c, o + (esVentas ? 27 : 26))),
+            Vc("nroDocref", Str(c, o + 28)),              // [o+28] en ambos formatos
+            Vc("codDam",    esVentas ? string.Empty : Str(c, o + 27)),
+            Vc("tipoBien",  esVentas ? string.Empty : Str(c, o + 29)),
+            // IDProyecto: ventas=[o+29], compras=[o+30]
+            Vc("idProyecto", Str(c, o + (esVentas ? 29 : 30))),
+            Nm("porcpart",   esVentas ? 0m : ParseDec(Str(c, o + 31))),
+            Nm("imb",        esVentas ? 0m : ParseDec(Str(c, o + 32))),
+            Vc("carMod",     esVentas ? string.Empty : Str(c, o + 33)),
+            Vc("flagDetrac", esVentas ? string.Empty : Str(c, o + 34)),
+            // TipoNota: ventas=[o+30], compras=[o+35]. EstComp: ventas=[o+31], compras=[o+36].
+            Vc("tipoNota",  Str(c, o + (esVentas ? 30 : 35))),
+            Vc("estComp",   string.IsNullOrWhiteSpace(Str(c, o + (esVentas ? 31 : 36))) ? "1" : Str(c, o + (esVentas ? 31 : 36))),
+            Vc("inconsist", esVentas ? "0" : (string.IsNullOrWhiteSpace(Str(c, o + 37)) ? "0" : Str(c, o + 37))),
         ];
     }
 }

@@ -367,16 +367,16 @@ public sealed class SireExportacionWorker : BackgroundService
             _logger.LogInformation("[SIRE-WORKER] [{JobId}] Archivo guardado en: {Ruta}", job.JobId, job.RutaArchivo);
 
             // ── PASO 6:
-            _logger.LogInformation("[SIRE-WORKER] [{JobId}] Cargando propuesta en Oracle SIRE_VALIDA...", job.JobId);
+            _logger.LogInformation("[SIRE-WORKER] [{JobId}] Cargando propuesta en Oracle SIRE_PROPUESTA...", job.JobId);
             var swCargar = System.Diagnostics.Stopwatch.StartNew();
             var resultado = await validaService.CargarDesdeZipAsync(
-                archivo.Contenido, job.TipoRegistro, job.Periodo, stoppingToken);
+                archivo.Contenido, job.TipoRegistro, job.Periodo, job.JobId, stoppingToken);
             swCargar.Stop();
 
             job.RegistrosInsertados  = resultado.Insertados;
             job.RegistrosDuplicados  = resultado.Duplicados;
             await LogFinAsync(SireOperacion.Cargar, swCargar.ElapsedMilliseconds, true,
-                $"Oracle SIRE_VALIDA actualizado: {resultado.Insertados} insertados, {resultado.Duplicados} duplicados, {resultado.Errores} errores");
+                $"SIRE_PROPUESTA actualizado: {resultado.Insertados} insertados, {resultado.Duplicados} duplicados, {resultado.Errores} errores");
 
             // ── PASO 7: Completado ────────────────────────────────────────────────
             job.Estado              = EstadoJob.Completado;

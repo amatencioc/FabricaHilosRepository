@@ -23,18 +23,23 @@ public class SireApiLog
 
     /// <summary>Resumen del resultado o del error (máx 2000 chars).</summary>
     public string?   Mensaje     { get; set; }
+
+    /// <summary>Tipo de registro del job asociado: 'ventas' | 'compras' | null si no aplica (p.ej. AUTH, HEALTH).</summary>
+    public string?   TipoRegistro { get; set; }
 }
 
 public static class SireOperacion
 {
-    public const string Auth      = "AUTH";
-    public const string Iniciar   = "INICIAR";    // Inicio del job (transición a EnProceso)
-    public const string Exportar  = "EXPORTAR";
-    public const string Ticket    = "TICKET";
-    public const string Descargar = "DESCARGAR";
-    public const string Health    = "HEALTH";
-    public const string Guardar   = "GUARDAR";    // Guardar ZIP en ruta de red
-    public const string Cargar    = "CARGAR";     // Cargar propuesta en Oracle SIRE_VALIDA
-    public const string Completar = "COMPLETAR";  // Finalización del job
-    public const string Cancel    = "CANCEL";     // Cancelación del job
+    public const string Auth       = "AUTH";
+    public const string Iniciar    = "INICIAR";     // Inicio del job (transición a EnProceso)
+    public const string Exportar   = "EXPORTAR";
+    public const string Ticket     = "TICKET";
+    public const string Descargar  = "DESCARGAR";
+    public const string Health     = "HEALTH";
+    public const string Guardar    = "GUARDAR";     // Guardar ZIP en ruta de red
+    public const string Cargar     = "CARGAR";      // Cargar propuesta en Oracle SIRE_VALIDA
+    public const string Completar  = "COMPLETAR";   // Finalización del job
+    public const string Cancel     = "CANCEL";      // Cancelación del job
+    public const string Reprocesar = "REPROCESAR";  // Re-parsear ZIP local sin contactar SUNAT
+    public const string Error      = "Error";       // Error interno (usado por worker)
 }

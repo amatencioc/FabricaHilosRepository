@@ -169,21 +169,100 @@
     </div>
 </div>
 
+@{
+    // Años disponibles (del modelo, ordenados desc)
+    var aniosDisp = Model
+        .Where(x => x.Periodo.Length >= 4)
+        .Select(x => x.Periodo[..4])
+        .Distinct()
+        .OrderByDescending(a => a)
+        .ToList();
+    var anioActual = DateTime.Now.Year.ToString();
+}
+
 <div class="sire-card">
     <div class="sire-card-header">
         <i class="bi bi-calendar3"></i>
         <span>Períodos registrados</span>
-        <span class="ms-auto sire-badge sire-badge-secondary">@Model.Count</span>
+        @* ── Filtro de año ── *@
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <i class="bi bi-funnel small" style="opacity:.6;"></i>
+            <label for="filtroAnioTabla" class="mb-0 small text-nowrap" style="opacity:.75;">Año:</label>
+            <select id="filtroAnioTabla" class="form-select form-select-sm" style="width:90px;"
+                    onchange="filtrarTablaPeriodos(this.value)">
+                @foreach (var a in aniosDisp)
+                {
+                    <option value="@a" selected="@(a == anioActual)">@a</option>
+                }
+                @if (!aniosDisp.Any())
+                {
+                    <option value="">@anioActual</option>
+                }
+            </select>
+            <span id="contadorPeriodos" class="sire-badge sire-badge-secondary">@Model.Count</span>
+        </div>
     </div>
+
+    @* ── Leyenda de columnas ─────────────────────────────────────────────── *@
+    <div class="px-3 py-2 border-bottom" style="background:#f8f9fa;font-size:.78rem;color:#6c757d;">
+        <div class="d-flex gap-3 flex-wrap align-items-start">
+            <div>
+                <i class="bi bi-info-circle me-1 text-primary"></i>
+                <strong>¿Qué significa cada columna?</strong>
+            </div>
+            <div>
+                <span class="fw-semibold">Período:</span>
+                Mes tributario en formato AAAA/MM (ej: 2026/08 = agosto 2026).
+            </div>
+            <div>
+                <span class="fw-semibold">Descripción:</span>
+                Estado de presentación del período según SUNAT.
+                <em>"No Presentado"</em> = la declaración aún no fue enviada formalmente a SUNAT.
+                Este texto proviene directamente de la API SUNAT (campo <code>desEstado</code>).
+            </div>
+            <div>
+                <span class="fw-semibold text-primary">RVIE</span>
+                (Registro de Ventas e Ingresos Electrónico):
+                Estado de la propuesta de <strong>ventas</strong> que SUNAT tiene para ese período.
+                Si muestra "Sin información" significa que SUNAT aún no generó la propuesta.
+                Si muestra "Propuesta disponible" = hay registros listos para revisar y aceptar.
+            </div>
+            <div>
+                <span class="fw-semibold" style="color:#0dcaf0;">RCE</span>
+                (Registro de Compras y Gastos Electrónico):
+                Igual que RVIE pero para el registro de <strong>compras</strong>.
+                Los botones de acción llevan a cada módulo para gestionar la propuesta.
+            </div>
+        </div>
+    </div>
+
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table sire-table table-hover align-middle mb-0">
+            <table class="table sire-table table-hover align-middle mb-0" id="tablaPeriodos">
                 <thead>
                     <tr>
                         <th>Período</th>
-                        <th>Descripción</th>
-                        <th class="text-center">RVIE</th>
-                        <th class="text-center">RCE</th>
+                        <th>
+                            Descripción
+                            <i class="bi bi-info-circle ms-1 text-muted"
+                               style="font-size:.75rem;cursor:help;"
+                               title="Estado del período según SUNAT. Ej: 'No Presentado' = sin declaración formal."
+                               data-bs-toggle="tooltip"></i>
+                        </th>
+                        <th class="text-center">
+                            RVIE
+                            <i class="bi bi-info-circle ms-1 text-muted"
+                               style="font-size:.75rem;cursor:help;"
+                               title="Estado del Registro de Ventas e Ingresos Electrónico (propuesta de ventas en SUNAT)"
+                               data-bs-toggle="tooltip"></i>
+                        </th>
+                        <th class="text-center">
+                            RCE
+                            <i class="bi bi-info-circle ms-1 text-muted"
+                               style="font-size:.75rem;cursor:help;"
+                               title="Estado del Registro de Compras y Gastos Electrónico (propuesta de compras en SUNAT)"
+                               data-bs-toggle="tooltip"></i>
+                        </th>
                         <th class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -203,20 +282,37 @@
                     {
                         var periodo = item.Periodo;
                         var yyyyMm  = periodo.Length == 6 ? $"{periodo[..4]}/{periodo[4..]}" : periodo;
-                        <tr>
+                        var anioFila = periodo.Length >= 4 ? periodo[..4] : "";
+                        <tr data-anio="@anioFila">
                             <td><span class="sire-badge sire-badge-period">@yyyyMm</span></td>
                             <td class="text-muted small">@item.Descripcion</td>
                             <td class="text-center">
-                                <span class="sire-badge @BadgeEstado(item.EstadoRvie)">
-                                    <i class="bi @IconEstado(item.EstadoRvie)"></i>
-                                    @LabelEstado(item.EstadoRvie)
-                                </span>
+                                @if (item.EstadoRvie == "-")
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                                else
+                                {
+                                    <span class="sire-badge @BadgeEstado(item.EstadoRvie)"
+                                          title="@item.DescRvie" data-bs-toggle="tooltip">
+                                        <i class="bi @IconEstado(item.EstadoRvie)"></i>
+                                        @LabelEstado(item.EstadoRvie)
+                                    </span>
+                                }
                             </td>
                             <td class="text-center">
-                                <span class="sire-badge @BadgeEstado(item.EstadoRce)">
-                                    <i class="bi @IconEstado(item.EstadoRce)"></i>
-                                    @LabelEstado(item.EstadoRce)
-                                </span>
+                                @if (item.EstadoRce == "-")
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                                else
+                                {
+                                    <span class="sire-badge @BadgeEstado(item.EstadoRce)"
+                                          title="@item.DescRce" data-bs-toggle="tooltip">
+                                        <i class="bi @IconEstado(item.EstadoRce)"></i>
+                                        @LabelEstado(item.EstadoRce)
+                                    </span>
+                                }
                             </td>
                             <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
@@ -262,26 +358,56 @@
             <div id="estadoColaContenido" class="row g-2"></div>
         </div>
 
-        <!-- ══ Tabla de jobs ══ -->
-        <div class="table-responsive">
-            <table class="table sire-table table-hover align-middle mb-0 small">
-                <thead>
-                    <tr>
-                        <th style="width:70px">Tipo</th>
-                        <th style="width:90px">Período</th>
-                        <th>Estado</th>
-                        <th style="width:160px">Iniciado</th>
-                        <th style="width:90px"></th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyJobs">
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-3 small">
-                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando actividad…
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- ══ Dos columnas: RVIE | RCE ══ -->
+        <div class="row g-0">
+            <!-- Columna RVIE — Ventas -->
+            <div class="col-md-6 border-end">
+                <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2" style="background:#f0f7ff;">
+                    <span class="sire-badge sire-badge-rvie" style="font-size:.7rem;">RVIE</span>
+                    <span class="small fw-semibold" style="color:#2b6cb0;">Ventas e Ingresos</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table sire-table table-hover align-middle mb-0 small">
+                        <thead>
+                            <tr>
+                                <th style="width:90px">Período</th>
+                                <th>Estado</th>
+                                <th style="width:130px">Iniciado</th>
+                                <th style="width:70px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyJobsRvie">
+                            <tr><td colspan="4" class="text-center text-muted py-3 small">
+                                <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando…
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Columna RCE — Compras -->
+            <div class="col-md-6">
+                <div class="px-3 py-2 border-bottom d-flex align-items-center gap-2" style="background:#f0fcff;">
+                    <span class="sire-badge sire-badge-rce" style="font-size:.7rem;">RCE</span>
+                    <span class="small fw-semibold" style="color:#086f83;">Compras y Gastos</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table sire-table table-hover align-middle mb-0 small">
+                        <thead>
+                            <tr>
+                                <th style="width:90px">Período</th>
+                                <th>Estado</th>
+                                <th style="width:130px">Iniciado</th>
+                                <th style="width:70px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyJobsRce">
+                            <tr><td colspan="4" class="text-center text-muted py-3 small">
+                                <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando…
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- ══ Log del proceso activo ══ -->
@@ -331,7 +457,24 @@
 </div>
 
 <script>
+    // ── Filtro por año — tabla Períodos registrados ──────────────────────────
+    function filtrarTablaPeriodos(anio) {
+        const filas    = document.querySelectorAll('#tablaPeriodos tbody tr[data-anio]');
+        let visible    = 0;
+        filas.forEach(tr => {
+            const mostrar = !anio || tr.dataset.anio === anio;
+            tr.style.display = mostrar ? '' : 'none';
+            if (mostrar) visible++;
+        });
+        const contador = document.getElementById('contadorPeriodos');
+        if (contador) contador.textContent = visible;
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+        // Aplicar filtro inicial (año actual ya seleccionado en el select)
+        const sel = document.getElementById('filtroAnioTabla');
+        if (sel) filtrarTablaPeriodos(sel.value);
+
         document.querySelectorAll('[data-bs-toggle="tooltip"]')
             .forEach(el => new bootstrap.Tooltip(el));
 
@@ -352,7 +495,7 @@
             const jobs = data.jobs || [];
             renderizarEstadoCola(jobs);
             renderizarJobs(jobs);
-            renderizarLogsActivos(data.logsActivos || []);
+            renderizarLogsActivos(data.logsRvie || null, data.logsRce || null);
 
             const hayActivo = jobs.some(j => j.estado === 'Pendiente' || j.estado === 'EnProceso' || j.estado === 'EsperandoTicket');
             clearTimeout(_actividadTimer);
@@ -466,18 +609,14 @@
     }
 
     function renderizarJobs(jobs) {
-        const tbody = document.getElementById('tbodyJobs');
-        if (!tbody) return;
+        const tbodyRvie = document.getElementById('tbodyJobsRvie');
+        const tbodyRce  = document.getElementById('tbodyJobsRce');
+        if (!tbodyRvie || !tbodyRce) return;
 
-        if (!jobs.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3 small"><i class="bi bi-inbox me-1"></i>Sin actividad registrada</td></tr>';
-            return;
-        }
+        const jobsRvie = jobs.filter(j => j.tipoRegistro === 'ventas');
+        const jobsRce  = jobs.filter(j => j.tipoRegistro === 'compras');
 
-        tbody.innerHTML = jobs.map(j => {
-            const tipoBadge = j.tipoRegistro === 'ventas'
-                ? '<span class="sire-badge sire-badge-rvie">RVIE</span>'
-                : '<span class="sire-badge sire-badge-rce">RCE</span>';
+        function filaJob(j) {
             const perFmt = j.periodo && j.periodo.length === 6
                 ? `${j.periodo.slice(0,4)}/${j.periodo.slice(4)}`
                 : (j.periodo || '—');
@@ -490,7 +629,7 @@
             } else if (j.puedeReintentar) {
                 accion = `<button class="btn btn-xs btn-outline-warning py-0 px-2"
                     onclick="reconectarJobDesdeIndex('${j.jobId}','${j.periodo}','${j.tipoRegistro}')">
-                    <i class="bi bi-arrow-clockwise me-1"></i>Reintentar</button>`;
+                    <i class="bi bi-arrow-clockwise me-1"></i></button>`;
             }
 
             const fechaCol = j.estado === 'EsperandoTicket' && j.proximaConsulta
@@ -498,57 +637,83 @@
                 : j.fechaCreacion;
 
             return `<tr>
-                <td>${tipoBadge}</td>
                 <td><span class="sire-badge sire-badge-period">${perFmt}</span></td>
                 <td>${badgeJob(j.estado, j.mensajeError)}</td>
-                <td class="text-muted small">${fechaCol}</td>
+                <td class="text-muted small" style="font-size:.75rem;">${fechaCol}</td>
                 <td class="text-end">${accion}</td>
             </tr>`;
-        }).join('');
+        }
 
-        tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+        const VACÍO = (tipo) =>
+            `<tr><td colspan="4" class="text-center text-muted py-3 small">
+                <i class="bi bi-inbox me-1"></i>Sin actividad ${tipo}
+             </td></tr>`;
+
+        tbodyRvie.innerHTML = jobsRvie.length ? jobsRvie.map(filaJob).join('') : VACÍO('RVIE');
+        tbodyRce.innerHTML  = jobsRce.length  ? jobsRce.map(filaJob).join('')  : VACÍO('RCE');
+
+        [tbodyRvie, tbodyRce].forEach(t =>
+            t.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el)));
     }
 
-    // ── Log del proceso activo ───────────────────────────────────────────────
-    function renderizarLogsActivos(logs) {
+    // ── Logs de ambos procesos activos (RVIE + RCE) ─────────────────────────
+    function renderizarLogsActivos(logsRvie, logsRce) {
         const cont    = document.getElementById('logsActivosContainer');
         const seccion = document.getElementById('seccionLogsActivos');
         if (!cont || !seccion) return;
 
-        if (!logs || !logs.length) { seccion.style.display = 'none'; return; }
+        const hayLogs = (logsRvie && logsRvie.length) || (logsRce && logsRce.length);
+        if (!hayLogs) { seccion.style.display = 'none'; return; }
         seccion.style.display = '';
 
-        const etiquetas = {
-            AUTH:      'Autenticación con SUNAT',
-            INICIAR:   'Job iniciado',
-            EXPORTAR:  'Exportación solicitada a SUNAT',
-            TICKET:    'Verificando respuesta de SUNAT',
-            DESCARGAR: 'Descargando archivo ZIP',
-            GUARDAR:   'Guardando archivo en servidor',
-            CARGAR:    'Cargando registros en Oracle',
-            COMPLETAR: 'Proceso completado',
-            ERROR:     'Error',
-            CANCEL:    'Cancelado manualmente',
-        };
+        function renderPanel(logs, tipo) {
+            if (!logs || !logs.length) return '';
 
-        cont.innerHTML = logs.map(l => {
-            const icono = l.exito
-                ? '<i class="bi bi-check-circle-fill text-success"></i>'
-                : '<i class="bi bi-x-circle-fill text-danger"></i>';
-            const label = etiquetas[l.operacion] || l.operacion;
-            const dur   = l.duracionMs > 0 ? `<span class="text-muted ms-1">(${l.duracionMs}ms)</span>` : '';
-            const http  = l.httpStatus ? `<span class="badge bg-secondary ms-1" style="font-size:.65rem">${l.metodo || ''} ${l.httpStatus}</span>` : '';
-            const msg   = l.mensaje
-                ? `<div class="${l.exito ? 'text-muted' : 'text-danger'} mt-1" style="font-size:.75rem;">${l.mensaje.slice(0,200)}</div>`
-                : '';
-            return `<div class="d-flex align-items-start gap-2 py-1 border-bottom">
-                <span style="min-width:1rem;margin-top:2px;flex-shrink:0;">${icono}</span>
-                <div style="flex:1;min-width:0;">
-                    <span class="small">${label}</span>${dur}${http}${msg}
+            const label     = tipo === 'rvie' ? 'RVIE — Ventas' : 'RCE — Compras';
+            const badgeCls  = tipo === 'rvie' ? 'sire-badge-rvie' : 'sire-badge-rce';
+            const etiquetas = {
+                AUTH:      'Autenticación con SUNAT',
+                INICIAR:   'Job iniciado',
+                EXPORTAR:  'Exportación solicitada a SUNAT',
+                TICKET:    'Verificando respuesta de SUNAT',
+                DESCARGAR: 'Descargando archivo ZIP',
+                GUARDAR:   'Guardando archivo en servidor',
+                CARGAR:    'Cargando registros en Oracle',
+                COMPLETAR: 'Proceso completado',
+                ERROR:     'Error',
+                CANCEL:    'Cancelado manualmente',
+            };
+
+            const filas = logs.map(l => {
+                const icono = l.exito
+                    ? '<i class="bi bi-check-circle-fill text-success"></i>'
+                    : '<i class="bi bi-x-circle-fill text-danger"></i>';
+                const lab = etiquetas[l.operacion] || l.operacion;
+                const dur = l.duracionMs > 0 ? `<span class="text-muted ms-1">(${l.duracionMs}ms)</span>` : '';
+                const msg = l.mensaje
+                    ? `<div class="${l.exito ? 'text-muted' : 'text-danger'} mt-1" style="font-size:.75rem;">${l.mensaje.slice(0,200)}</div>` : '';
+                return `<div class="d-flex align-items-start gap-2 py-1 border-bottom">
+                    <span style="min-width:1rem;margin-top:2px;flex-shrink:0;">${icono}</span>
+                    <div style="flex:1;min-width:0;"><span class="small">${lab}</span>${dur}${msg}</div>
+                    <span class="text-muted small text-nowrap">${l.fecha.slice(11,19)}</span>
+                </div>`;
+            }).join('');
+
+            return `<div style="flex:1;min-width:0;">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="sire-badge ${badgeCls}" style="font-size:.65rem;">${label}</span>
                 </div>
-                <span class="text-muted small text-nowrap">${l.fecha.slice(11,19)}</span>
+                <div style="max-height:160px;overflow-y:auto;font-size:.8rem;">${filas}</div>
             </div>`;
-        }).join('');
+        }
+
+        const panelRvie = renderPanel(logsRvie, 'rvie');
+        const panelRce  = renderPanel(logsRce,  'rce');
+
+        const ambos = panelRvie && panelRce;
+        cont.innerHTML = ambos
+            ? `<div class="d-flex gap-3">${panelRvie}<div style="width:1px;background:#dee2e6;"></div>${panelRce}</div>`
+            : (panelRvie || panelRce);
     }
 
     // ── Navegar a la vista de Compras/Ventas y reconectar al job ────────────
@@ -583,17 +748,24 @@
         document.getElementById('modalJobActivoLogs').innerHTML = '';
 
         clearTimeout(_modalTimer);
-        const modal = new bootstrap.Modal(document.getElementById('modalJobActivo'));
-        modal.show();
+        const modalEl = document.getElementById('modalJobActivo');
+        const modal   = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-        // Cargar estado y logs del job
-        await _actualizarModalJob(jobId, periodo, tipo);
+        // Bootstrap.show() es asíncrono (transición CSS ~150ms).
+        // Si llamamos _actualizarModalJob antes de que termine la animación,
+        // classList.contains('show') devuelve false y la función aborta.
+        // Usamos el evento 'shown.bs.modal' para asegurar que el modal está visible.
+        const onShown = () => {
+            modalEl.removeEventListener('shown.bs.modal', onShown);
+            _actualizarModalJob(jobId, periodo, tipo);
+        };
+        modalEl.addEventListener('shown.bs.modal', onShown);
+        modal.show();
     }
 
     async function _actualizarModalJob(jobId, periodo, tipo) {
-        // Detener si el modal se cerró o cambió de job
+        // Detener si el job cambió (el usuario abrió otro job en otro llamado)
         if (_modalJobId !== jobId) return;
-        if (!document.getElementById('modalJobActivo').classList.contains('show')) return;
 
         try {
             const [respEstado, respLogs] = await Promise.all([
