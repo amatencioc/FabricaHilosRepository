@@ -13,9 +13,17 @@ public class SireRegistrosViewModel
     public IReadOnlyList<RegistroVenta>  RegistrosVentas  { get; set; } = Array.Empty<RegistroVenta>();
     public IReadOnlyList<RegistroCompra> RegistrosCompras { get; set; } = Array.Empty<RegistroCompra>();
 
-    /// <summary>Registros del período seleccionado almacenados en SIRE_PROPUESTA.</summary>
+    /// <summary>Registros del período seleccionado almacenados en SIRE_PROPUESTA (propuesta SUNAT).</summary>
     public IReadOnlyList<SireValidaRegistro> RegistrosPropuesta { get; set; }
         = new List<SireValidaRegistro>();
+
+    /// <summary>Registros ERP del período seleccionado almacenados en SIRE_LEGACY.</summary>
+    public IReadOnlyList<SireLegacyRegistro> RegistrosLegacy { get; set; }
+        = new List<SireLegacyRegistro>();
+
+    /// <summary>Detalle cruzado fila a fila del período almacenado en SIRE_CONCIL.</summary>
+    public IReadOnlyList<SireConcilDetalle> RegistrosConcil { get; set; }
+        = new List<SireConcilDetalle>();
 
     /// <summary>Resumen de TODOS los períodos descargados en SIRE_PROPUESTA para este tipo.</summary>
     public IReadOnlyList<PropuestaPeriodoResumen> PropuestasResumen { get; set; }

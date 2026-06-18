@@ -308,9 +308,15 @@
 .sire-badge-info     { background: #dbeafe; color: #1e40af; }
 .sire-badge-process  { background: #e0f2fe; color: #075985; }
 .sire-badge-secondary{ background: #e2e8f0; color: #4a5568; }
+.sire-badge-legacy   { background: #cffafe; color: #0e7490; }
 .sire-badge-rvie     { background: var(--sire-rvie-pale);  color: var(--sire-rvie); }
 .sire-badge-rce      { background: var(--sire-rce-pale);   color: var(--sire-rce);  }
 .sire-badge-period   { background: var(--sire-navy); color: #fff; font-size: .72rem; padding: .18rem .55rem; border-radius: .3rem; }
+
+/* Fila excluida del ERP (SIRE_EXCLUIDOS_LOGIX) */
+.sire-row-excluido   { opacity: .72; background-color: #f8f9fa !important; }
+.sire-row-excluido td { color: #6c757d !important; }
+.sire-row-excluido td:first-child { text-decoration: none; } /* botón restaurar sin tachado */
 
 /* ═══════════════════════════════════════════════════════
   11. MODALES AL ESTILO PLN

@@ -32,6 +32,7 @@ public class SireController : OracleBaseController
     private readonly ISireExportacionQueue _exportacionQueue;
     private readonly ISireOracleRepository _sireRepo;
     private readonly SireValidaService _validaService;
+    private readonly FabricaHilos.Services.Sire.SireReporteComprasService _reporteCompras;
     private readonly ILogger<SireController> _logger;
     private readonly IMemoryCache _cache;
 
@@ -46,6 +47,7 @@ public class SireController : OracleBaseController
         ISireExportacionQueue exportacionQueue,
         ISireOracleRepository sireRepo,
         SireValidaService validaService,
+        FabricaHilos.Services.Sire.SireReporteComprasService reporteCompras,
         ILogger<SireController> logger,
         IMemoryCache cache)
     {
@@ -59,6 +61,7 @@ public class SireController : OracleBaseController
         _exportacionQueue      = exportacionQueue;
         _sireRepo              = sireRepo;
         _validaService         = validaService;
+        _reporteCompras        = reporteCompras;
         _logger                = logger;
         _cache                 = cache;
     }
@@ -123,10 +126,10 @@ public class SireController : OracleBaseController
                 _cache.Set("sire:periodos:ventas", todosLosPeriodosVentas, TimeSpan.FromMinutes(5));
             }
             var periodos = FiltrarAnioActual(todosLosPeriodosVentas!);
-            // Si período es null (primer acceso) → usar el primer período disponible.
+            // Si período es null (primer acceso) → usar el último período (más reciente en ASC).
             // Si período es string.Empty (usuario eligió "— seleccionar —") → respetar vacío.
             var periodoSeleccionado = periodo is null
-                ? (periodos.FirstOrDefault()?.Periodo ?? string.Empty)
+                ? (periodos.LastOrDefault()?.Periodo ?? string.Empty)
                 : periodo;
 
             var todasPropuestas = await _sireRepo.GetPropuestasResumenAsync("ventas", cancellationToken);
@@ -135,12 +138,34 @@ public class SireController : OracleBaseController
                 ? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>()
                 : todasPropuestas.Where(r => r.Periodo.ToString() == periodoSeleccionado).ToList();
 
-            var registros = string.IsNullOrWhiteSpace(periodoSeleccionado)
-                ? new List<FabricaHilos.Models.Sire.SireValidaRegistro>()
-                : await _sireRepo.GetRegistrosPropuestaAsync("ventas", periodoSeleccionado, cancellationToken);
+            List<FabricaHilos.Models.Sire.SireValidaRegistro>   registros;
+            List<FabricaHilos.Models.Sire.SireLegacyRegistro>   registrosLegacy;
+            List<FabricaHilos.Models.Sire.SireConcilDetalle>    registrosConcil;
+            List<FabricaHilos.Models.Sire.SireExportacionJob>   todosJobs;
+            FabricaHilos.Models.Sire.SireConcilResumen?         concilResumen;
 
-            // Detectar ZIP local y constancia para el período seleccionado
-            var todosJobs = await _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
+            if (string.IsNullOrWhiteSpace(periodoSeleccionado))
+            {
+                registros       = new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
+                registrosLegacy = new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
+                registrosConcil = new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
+                todosJobs       = new List<FabricaHilos.Models.Sire.SireExportacionJob>();
+                concilResumen   = null;
+            }
+            else
+            {
+                var tPropuesta  = _sireRepo.GetRegistrosPropuestaAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tLegacy     = _sireRepo.GetLegacyAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tConcil     = _sireRepo.GetConcilDetalleAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tJobs       = _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
+                var tResumen    = _sireRepo.GetConcilResumenAsync("ventas", periodoSeleccionado, cancellationToken);
+                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen);
+                registros       = await tPropuesta;
+                registrosLegacy = await tLegacy;
+                registrosConcil = await tConcil;
+                todosJobs       = await tJobs;
+                concilResumen   = await tResumen;
+            }
             var jobsPeriodo = todosJobs
                 .Where(j => j.TipoRegistro == "ventas" && j.Periodo == periodoSeleccionado)
                 .OrderByDescending(j => j.FechaCreacion)
@@ -158,14 +183,15 @@ public class SireController : OracleBaseController
                 PeriodoSeleccionado      = periodoSeleccionado,
                 RegistrosVentas          = Array.Empty<RegistroVenta>(),
                 RegistrosPropuesta       = registros,
+                RegistrosLegacy          = registrosLegacy,
+                RegistrosConcil          = registrosConcil,
                 PropuestasResumen        = propuestasResumen,
                 EsMock                   = _sireOptions.UseMock,
                 Tipo                     = TipoRegistro.Ventas,
                 TieneZipLocal            = zipJob is not null,
                 NombreZipLocal           = zipJob is not null ? System.IO.Path.GetFileName(zipJob.RutaArchivo) : null,
                 NombreArchivoConstancia  = constanciaJob?.NombreArchivo,
-                ConcilResumen            = string.IsNullOrWhiteSpace(periodoSeleccionado) ? null
-                                           : await _sireRepo.GetConcilResumenAsync("ventas", periodoSeleccionado, cancellationToken),
+                ConcilResumen            = concilResumen,
                 MensajeInfo              = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
                     : "Use 'Exportar Propuesta' para descargar los registros desde SUNAT.",
                 Ruc = _sireOptions.Ruc
@@ -205,8 +231,10 @@ public class SireController : OracleBaseController
                 _cache.Set("sire:periodos:compras", todosLosPeriodosCompras, TimeSpan.FromMinutes(5));
             }
             var periodos = FiltrarAnioActual(todosLosPeriodosCompras!);
+            // Si período es null (primer acceso) → usar el último período (más reciente en ASC).
+            // Si período es string.Empty (usuario eligió "— seleccionar —") → respetar vacío.
             var periodoSeleccionado = periodo is null
-                ? (periodos.FirstOrDefault()?.Periodo ?? string.Empty)
+                ? (periodos.LastOrDefault()?.Periodo ?? string.Empty)
                 : periodo;
 
             var todasPropuestasC = await _sireRepo.GetPropuestasResumenAsync("compras", cancellationToken);
@@ -214,12 +242,34 @@ public class SireController : OracleBaseController
                 ? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>()
                 : todasPropuestasC.Where(r => r.Periodo.ToString() == periodoSeleccionado).ToList();
 
-            var registros = string.IsNullOrWhiteSpace(periodoSeleccionado)
-                ? new List<FabricaHilos.Models.Sire.SireValidaRegistro>()
-                : await _sireRepo.GetRegistrosPropuestaAsync("compras", periodoSeleccionado, cancellationToken);
+            List<FabricaHilos.Models.Sire.SireValidaRegistro>   registros;
+            List<FabricaHilos.Models.Sire.SireLegacyRegistro>   registrosLegacy;
+            List<FabricaHilos.Models.Sire.SireConcilDetalle>    registrosConcil;
+            List<FabricaHilos.Models.Sire.SireExportacionJob>   todosJobsC;
+            FabricaHilos.Models.Sire.SireConcilResumen?         concilResumenC;
 
-            // Detectar ZIP local y constancia para el período seleccionado
-            var todosJobsC = await _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
+            if (string.IsNullOrWhiteSpace(periodoSeleccionado))
+            {
+                registros       = new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
+                registrosLegacy = new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
+                registrosConcil = new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
+                todosJobsC      = new List<FabricaHilos.Models.Sire.SireExportacionJob>();
+                concilResumenC  = null;
+            }
+            else
+            {
+                var tPropuesta  = _sireRepo.GetRegistrosPropuestaAsync("compras", periodoSeleccionado, cancellationToken);
+                var tLegacy     = _sireRepo.GetLegacyAsync("compras", periodoSeleccionado, cancellationToken);
+                var tConcil     = _sireRepo.GetConcilDetalleAsync("compras", periodoSeleccionado, cancellationToken);
+                var tJobs       = _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
+                var tResumen    = _sireRepo.GetConcilResumenAsync("compras", periodoSeleccionado, cancellationToken);
+                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen);
+                registros       = await tPropuesta;
+                registrosLegacy = await tLegacy;
+                registrosConcil = await tConcil;
+                todosJobsC      = await tJobs;
+                concilResumenC  = await tResumen;
+            }
             var jobsPeriodoC = todosJobsC
                 .Where(j => j.TipoRegistro == "compras" && j.Periodo == periodoSeleccionado)
                 .OrderByDescending(j => j.FechaCreacion)
@@ -237,14 +287,15 @@ public class SireController : OracleBaseController
                 PeriodoSeleccionado      = periodoSeleccionado,
                 RegistrosCompras         = Array.Empty<RegistroCompra>(),
                 RegistrosPropuesta       = registros,
+                RegistrosLegacy          = registrosLegacy,
+                RegistrosConcil          = registrosConcil,
                 PropuestasResumen        = propuestasResumen,
                 EsMock                   = _sireOptions.UseMock,
                 Tipo                     = TipoRegistro.Compras,
                 TieneZipLocal            = zipJobC is not null,
                 NombreZipLocal           = zipJobC is not null ? System.IO.Path.GetFileName(zipJobC.RutaArchivo) : null,
                 NombreArchivoConstancia  = constanciaJobC?.NombreArchivo,
-                ConcilResumen            = string.IsNullOrWhiteSpace(periodoSeleccionado) ? null
-                                           : await _sireRepo.GetConcilResumenAsync("compras", periodoSeleccionado, cancellationToken),
+                ConcilResumen            = concilResumenC,
                 MensajeInfo              = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
                     : "Use 'Exportar Propuesta' para descargar los registros desde SUNAT.",
                 Ruc = _sireOptions.Ruc
@@ -291,7 +342,32 @@ public class SireController : OracleBaseController
         return RedirigirPorTipo(tipo, periodo.ToString());
     }
 
-    // ── Conciliar propuesta contra ERP ─────────────────────────────────────────
+    // ── Enviar reporte Solo SUNAT (Compras) ──────────────────────────────────
+
+    /// <summary>
+    /// Genera el Excel con los documentos "Solo SUNAT" del período y lo envía
+    /// al correo configurado en SireReporteCompras (appsettings.json).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EnviarReporteCompras(string periodo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, "compras");
+            var registros     = await _sireRepo.GetConcilDetalleAsync("compras", periodo, cancellationToken);
+            var usuarioActual = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "Sistema";
+            var (ok, mensaje) = await _reporteCompras.EnviarReporteAsync(periodo, registros, usuarioActual, cancellationToken);
+            return Json(new { ok, mensaje });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enviando reporte compras {Periodo}", periodo);
+            return Json(new { ok = false, mensaje = $"Error al enviar reporte: {ex.Message}" });
+        }
+    }
+
+    // ── Conciliar propuesta contra ERP ───────────────────────────────────────
 
     /// <summary>Ejecuta SP_SIRE_CARGA_LEGACY + SP_SIRE_CONCILIAR para el período.</summary>
     [HttpPost]
@@ -890,7 +966,7 @@ public class SireController : OracleBaseController
         var anio = DateTime.Now.Year.ToString();
         return periodos
             .Where(p => p.Periodo.Length >= 4 && p.Periodo.StartsWith(anio))
-            .OrderByDescending(p => p.Periodo)
+            .OrderBy(p => p.Periodo)
             .ToList();
     }
 
@@ -1024,35 +1100,30 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Vista unificada de monitoreo SIRE: Health Checks + Log de auditoría HTTP.
+    /// Vista de monitoreo SIRE: Log de auditoría HTTP.
     /// Acepta filtros opcionales para pre-seleccionar tab y filtrar el log.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> Monitoreo(
         string? jobId       = null,
         string? operacion   = null,
-        string  tab         = "health",
+        string  tab         = "log",
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var taskHealth = _sireRepo.GetHealthLogsAsync(500, cancellationToken);
-            var taskApi    = _sireRepo.GetApiLogsAsync(500, jobId, operacion, cancellationToken);
-            await Task.WhenAll(taskHealth, taskApi);
-            var healthLogs = taskHealth.Result;
-            var apiLogs    = taskApi.Result;
+            var apiLogs = await _sireRepo.GetApiLogsAsync(500, jobId, operacion, cancellationToken);
 
             var vm = new FabricaHilos.Models.Sire.SireMonitoreoViewModel
             {
-                HealthLogs     = healthLogs.AsReadOnly(),
-                ApiLogs        = apiLogs.AsReadOnly(),
-                FiltroJobId    = jobId,
+                ApiLogs         = apiLogs.AsReadOnly(),
+                FiltroJobId     = jobId,
                 FiltroOperacion = operacion,
-                TabActivo      = tab,
+                TabActivo       = tab,
             };
 
-            _logger.LogInformation("[SIRE] Monitoreo: {H} health, {A} api-logs (tab={T})",
-                healthLogs.Count, apiLogs.Count, tab);
+            _logger.LogInformation("[SIRE] Monitoreo: {A} api-logs (tab={T})",
+                apiLogs.Count, tab);
 
             return View("~/Views/Contabilidad/Sire/Monitoreo/Monitoreo.cshtml", vm);
         }
@@ -1478,6 +1549,21 @@ public class SireController : OracleBaseController
 
         var exitoso = resultado.Errores == 0 || resultado.Insertados > 0;
 
+        // Invalidar la conciliación previa — el cruce SUNAT vs ERP ya no es válido
+        // El usuario deberá ejecutar "Conciliar" nuevamente para regenerarlo.
+        if (exitoso && int.TryParse(request.Periodo, out var periodoNr))
+        {
+            try { await _sireRepo.InvalidarConciliacionAsync(request.Tipo, periodoNr, cancellationToken); }
+            catch (Exception exInv)
+            {
+                _logger.LogWarning(exInv, "[SIRE] No se pudo invalidar conciliación tras reprocesar: {Msg}", exInv.Message);
+            }
+        }
+
+        // Invalidar caché de períodos para que el dashboard refleje los nuevos datos
+        _cache.Remove($"sire:periodos:{request.Tipo.ToLowerInvariant()}");
+        _cache.Remove($"sire:periodos:{request.Tipo.ToLowerInvariant()}:all");
+
         // LOG: completar
         await _sireRepo.InsertApiLogAsync(new SireApiLog
         {
@@ -1577,10 +1663,79 @@ public class SireController : OracleBaseController
             mensaje = "Job reencolado. El worker lo procesará en breve."
         });
     }
+
+    // ── Exclusiones manuales ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// AJAX-POST: excluye manualmente los registros SOLO_SUNAT seleccionados.
+    /// Body JSON: { tipo, periodo, idsConcil: [long], obs? }
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExcluirManual(
+        [FromBody] ExcluirManualRequest request, CancellationToken ct)
+    {
+        if (request is null || request.IdsConcil is null || request.IdsConcil.Count == 0)
+            return Json(new { exitoso = false, error = "Sin registros seleccionados" });
+
+        try
+        {
+            ValidarParametrosOperacion(request.Periodo, request.Tipo);
+            if (!int.TryParse(request.Periodo, out var periodoNr))
+                return Json(new { exitoso = false, error = "Período inválido" });
+
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "SIG";
+            var excluidos = await _sireRepo.ExcluirManualAsync(
+                request.Tipo, periodoNr, request.IdsConcil, usuario, request.Obs, ct);
+
+            return Json(new {
+                exitoso   = true,
+                excluidos,
+                mensaje   = $"{excluidos} registro(s) excluido(s)",
+                usuario,
+                obs       = request.Obs,
+                fechaHora = DateTime.Now.ToString("dd/MM/yy HH:mm")
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE] ExcluirManual error: tipo={Tipo} periodo={Periodo}", request.Tipo, request.Periodo);
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// AJAX-POST: restaura un excluido (y su par vinculado si existe)
+    /// devolviéndolo a SOLO_SUNAT.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestaurarExcluido(
+        [FromBody] RestaurarExcluidoRequest request, CancellationToken ct)
+    {
+        if (request is null || request.IdConcil <= 0)
+            return Json(new { exitoso = false, error = "ID inválido" });
+
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "SIG";
+            await _sireRepo.RestaurarExcluidoAsync(request.IdConcil, usuario, ct);
+            return Json(new { exitoso = true, mensaje = "Registro restaurado a SOLO_SUNAT" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE] RestaurarExcluido error: idConcil={Id}", request.IdConcil);
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
 }
 
 public sealed record SirePeriodoDashboardItem(string Periodo, string Descripcion, string EstadoRvie, string EstadoRce, string DescRvie = "-", string DescRce = "-");
 public sealed record ReprocesarZipRequest(string Tipo, string Periodo);
+public sealed record ExcluirManualRequest(string Tipo, string Periodo, List<long> IdsConcil, string? Obs);
+public sealed record RestaurarExcluidoRequest(long IdConcil);
+
+
 
 public sealed class SireDiagnosticoViewModel
 {

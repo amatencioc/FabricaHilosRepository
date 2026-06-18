@@ -42,38 +42,11 @@ COMMENT ON COLUMN SIG.SIRE_JOB.JOB_ID IS 'GUID único retornado al frontend para
 COMMENT ON COLUMN SIG.SIRE_JOB.ESTADO IS 'Pendiente | EnProceso | Completado | Error';
 COMMENT ON COLUMN SIG.SIRE_JOB.NUM_TICKET IS 'Número de ticket retornado por SUNAT al exportar';
 
--- -----------------------------------------------------------------------------
--- SIRE_HEALTH: Logs de health check periódico (reemplaza SQLite)
--- -----------------------------------------------------------------------------
-CREATE TABLE SIG.SIRE_HEALTH (
-	ID              NUMBER(10,0)    NOT NULL,
-	FECHA           DATE            NOT NULL,
-	ESTADO          VARCHAR2(20)    NOT NULL,       -- Healthy | Degraded | Unhealthy
-	TOKEN_OK        NUMBER(1,0)     DEFAULT 0,      -- 1=sí, 0=no
-	RVIE_OK         NUMBER(1,0)     DEFAULT 0,
-	RVIE_PERIODOS   NUMBER(5,0),
-	RCE_OK          NUMBER(1,0)     DEFAULT 0,
-	RCE_PERIODOS    NUMBER(5,0),
-	DURACION_MS     NUMBER(10,0),
-	MENSAJE_ERROR   VARCHAR2(2000),
-	CONSTRAINT PK_SIRE_HEALTH PRIMARY KEY (ID)
-);
-
-CREATE SEQUENCE SIG.SEQ_SIRE_HEALTH
-	START WITH 1
-	INCREMENT BY 1
-	NOCACHE
-	NOCYCLE;
-
-CREATE INDEX SIG.IDX_SIRE_HEALTH_FECHA ON SIG.SIRE_HEALTH (FECHA DESC);
-
-COMMENT ON TABLE  SIG.SIRE_HEALTH IS 'Historial de health checks del servicio SIRE';
-COMMENT ON COLUMN SIG.SIRE_HEALTH.TOKEN_OK IS '1=token obtenido OK, 0=falló';
-COMMENT ON COLUMN SIG.SIRE_HEALTH.ESTADO IS 'Healthy | Degraded | Unhealthy';
+-- NOTA: SIRE_HEALTH fue eliminada (health checks OAuth2 removidos).
+-- Para limpiar la BD ejecutar: DROP TABLE SIG.SIRE_HEALTH; DROP SEQUENCE SIG.SEQ_SIRE_HEALTH;
 
 -- -----------------------------------------------------------------------------
 -- SIRE_LOG: Auditoría de cada llamada HTTP a SUNAT (nueva tabla)
--- Permite investigar qué pasó en cada operación sin necesidad de logs de consola
 -- -----------------------------------------------------------------------------
 CREATE TABLE SIG.SIRE_LOG (
 	ID              NUMBER(10,0)    NOT NULL,

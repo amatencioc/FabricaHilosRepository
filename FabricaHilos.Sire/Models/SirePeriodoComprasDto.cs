@@ -7,13 +7,13 @@ namespace FabricaHilos.Sire.Models;
 public class SirePeriodoComprasDto
 {
     /// <summary>Período en formato YYYYMM (ej: 202601 para enero 2026)</summary>
-    public string Periodo { get; set; }
+    public string Periodo { get; set; } = string.Empty;
 
     /// <summary>Estado SUNAT del período (PROPUESTA_DISPONIBLE, CERRADO, EN_PROCESO, SIN_INFORMACION)</summary>
-    public string Estado { get; set; }
+    public string Estado { get; set; } = string.Empty;
 
     /// <summary>Descripción legible del estado</summary>
-    public string EstadoDescripcion { get; set; }
+    public string EstadoDescripcion { get; set; } = string.Empty;
 
     /// <summary>Indica si hay una propuesta disponible que se puede aceptar/rechazar</summary>
     public bool TienePropuestaDisponible { get; set; }
@@ -22,7 +22,7 @@ public class SirePeriodoComprasDto
     public bool EstaCerrado { get; set; }
 
     /// <summary>Último ticket de operación (si existe)</summary>
-    public string UltimoTicket { get; set; }
+    public string UltimoTicket { get; set; } = string.Empty;
 
     /// <summary>Fecha de la última operación</summary>
     public DateTime? FechaUltimaOperacion { get; set; }
@@ -31,5 +31,5 @@ public class SirePeriodoComprasDto
     public int NumeroRegistros { get; set; }
 
     /// <summary>Observaciones o notas sobre el período</summary>
-    public string Observaciones { get; set; }
+    public string Observaciones { get; set; } = string.Empty;
 }

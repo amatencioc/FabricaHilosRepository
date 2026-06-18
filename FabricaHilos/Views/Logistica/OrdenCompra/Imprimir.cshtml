@@ -61,12 +61,12 @@
         _   => "#784212"
     };
 
-    // Prioridad: campos del DTO (vienen de la BD).
-    // Fallback a items solo cuando el campo no está grabado en cabecera (legacy).
-    // NOTA: el fallback del IGV usa siempre la tasa 18% — nunca PrecioVta como tasa.
-    decimal valVenta = oc.ValVenta  > 0 ? oc.ValVenta  : items.Sum(i => i.ImpVvta);
-    decimal impIgv   = oc.ImpIgv    > 0 ? oc.ImpIgv    : Math.Round(valVenta * 0.18m, 2);
-    decimal total    = oc.PrecioVta > 0 ? oc.PrecioVta : valVenta + impIgv;
+    // Totales desde los valores almacenados en DB — respetan el IMPSTO configurado
+    // en la O/C (IGV 18%, retención I.RENTA -8%, descuento/N.C. -10%, etc.).
+    // NO recalcular con tasa fija: cada O/C puede tener un tipo de impuesto distinto.
+    decimal valVenta = items.Sum(i => i.ImpVvta);
+    decimal impIgv   = oc.ImpIgv;
+    decimal total    = oc.PrecioVta;
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -690,7 +690,13 @@
                         : "—";
                     <tr>
                         <td class="num">@rowNum</td>
-                        <td class="art-code">@(it.CodArt != "" ? it.CodArt : "—")</td>
+                        <td class="art-code">
+                            @(it.CodArt != "" ? it.CodArt : "—")
+                            @if (!string.IsNullOrWhiteSpace(it.CodOrig))
+                            {
+                                <br /><span style="font-size:6.5pt;color:#6c7a89;font-weight:400;">Cód. Prov.: @it.CodOrig</span>
+                            }
+                        </td>
                         <td class="desc">@desc</td>
                         <td class="c" style="color:#555;">@(it.Unidad != "" ? it.Unidad : "—")</td>
                         <td class="r">@it.Cantidad.ToString("N2")</td>
@@ -727,7 +733,7 @@
                     </tr>
                 }
                 <tr>
-                    <td class="t-lbl">I.G.V.:</td>
+                    <td class="t-lbl">@(oc.ImpIgv < 0 ? "RETENCIÓN I.RENTA:" : "I.G.V.:")</td>
                     <td class="t-val">@monedaSimb @impIgv.ToString("N2")</td>
                 </tr>
                 <tr class="grand-total">

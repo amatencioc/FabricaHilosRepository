@@ -1,15 +1,11 @@
 namespace FabricaHilos.Models.Sire;
 
 /// <summary>
-/// ViewModel unificado para la vista /Sire/Monitoreo.
-/// Contiene los health checks y el log de auditoría HTTP en un único objeto
-/// para evitar dos acciones/vistas separadas.
+/// ViewModel para la vista /Sire/Monitoreo.
+/// Muestra el log de auditoría HTTP (SIRE_LOG) con filtros opcionales.
 /// </summary>
 public sealed class SireMonitoreoViewModel
 {
-    // ── Health checks ─────────────────────────────────────────────────────────
-    public IReadOnlyList<SireHealthCheckLog> HealthLogs { get; init; } = [];
-
     // ── Log de auditoría HTTP (SIRE_LOG) ──────────────────────────────────────
     public IReadOnlyList<SireApiLog> ApiLogs { get; init; } = [];
 
@@ -17,20 +13,11 @@ public sealed class SireMonitoreoViewModel
     /// <summary>JobId filtrado (puede ser null = todos).</summary>
     public string? FiltroJobId     { get; init; }
 
-    /// <summary>Operación filtrada: AUTH|EXPORTAR|TICKET|DESCARGAR|HEALTH (null = todas).</summary>
+    /// <summary>Operación filtrada: AUTH|EXPORTAR|TICKET|DESCARGAR (null = todas).</summary>
     public string? FiltroOperacion { get; init; }
 
-    /// <summary>Tab activo al cargar la página: "health" | "log".</summary>
-    public string TabActivo        { get; init; } = "health";
-
-    // ── KPIs calculados de Health ─────────────────────────────────────────────
-    public int    HealthTotal     => HealthLogs.Count;
-    public int    HealthOk        => HealthLogs.Count(x => x.Status == "Healthy");
-    public int    HealthDegraded  => HealthLogs.Count(x => x.Status == "Degraded");
-    public int    HealthError     => HealthLogs.Count(x => x.Status == "Unhealthy");
-    public double UptimePercent   => HealthTotal > 0
-        ? Math.Round((double)HealthOk / HealthTotal * 100, 1)
-        : 0;
+    /// <summary>Tab activo al cargar la página: "log" u otros futuros.</summary>
+    public string TabActivo        { get; init; } = "log";
 
     // ── KPIs calculados de Log HTTP ───────────────────────────────────────────
     public int ApiTotal    => ApiLogs.Count;
@@ -43,6 +30,6 @@ public sealed class SireMonitoreoViewModel
     // ── Split por tipo para vista unificada RVIE / RCE ────────────────────────
     public IReadOnlyList<SireApiLog> ApiLogsVentas  => ApiLogs.Where(x => x.TipoRegistro == "ventas").ToList().AsReadOnly();
     public IReadOnlyList<SireApiLog> ApiLogsCompras => ApiLogs.Where(x => x.TipoRegistro == "compras").ToList().AsReadOnly();
-    /// <summary>Logs sin job asociado: AUTH, HEALTH, llamadas sueltas.</summary>
+    /// <summary>Logs sin job asociado: AUTH, llamadas sueltas.</summary>
     public IReadOnlyList<SireApiLog> ApiLogsSistema => ApiLogs.Where(x => x.TipoRegistro == null).ToList().AsReadOnly();
 }

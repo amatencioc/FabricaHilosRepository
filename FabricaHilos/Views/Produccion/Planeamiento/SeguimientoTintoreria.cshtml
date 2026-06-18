@@ -939,13 +939,25 @@
                 </div>
             </div>
 
-            @* 11. Ev.Encon *@
+            @* 11. Ev.Encon — multi-select (mismo patrón que Est.Flujo) *@
             <div class="spt-fld">
                 <label class="spt-label"><i class="bi bi-check2-circle"></i>Ev.Encon</label>
-                <select class="spt-ctrl" data-cf="evencon" style="min-width:110px;">
-                    <option value="">Todos</option>
-                    @foreach (var v in cfEvEnconOpts) { <option value="@v">@v</option> }
-                </select>
+                <div class="cf-msel-wrap" id="cfEvEnconWrap">
+                    <button type="button" class="spt-ctrl cf-msel-btn" id="cfEvEnconBtn">
+                        <span id="cfEvEnconBtnTxt">Todos</span>
+                        <i class="bi bi-chevron-down" style="font-size:.6rem;opacity:.7;margin-left:.2rem;"></i>
+                    </button>
+                    <div class="cf-msel-panel" id="cfEvEnconPanel" style="display:none;">
+                        @foreach (var v in cfEvEnconOpts) {
+                            <label class="cf-msel-item">
+                                <input type="checkbox" class="cf-evencon-chk" value="@v"> @v
+                            </label>
+                        }
+                        <div class="cf-msel-footer">
+                            <button type="button" class="cf-msel-clr" id="cfEvEnconClr">Limpiar todo</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="cf-vsep"></div>
@@ -1016,7 +1028,7 @@
 								  data-bs-toggle="popover" data-bs-placement="right" data-bs-trigger="hover focus"
 								  data-bs-html="true"
 								  data-bs-title="Campo EST (Estado Programa)"
-								  data-bs-content="&lt;div style='font-size:.75rem;line-height:1.5;'&gt;&lt;p style='margin:0 0 .4rem;'&gt;Indica si el ítem tiene &lt;b&gt;programa asignado en Hilandería&lt;/b&gt;. Es independiente del Estado de Flujo de Tintorería.&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;text-align:center;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Significado&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Programado en Hilandería (lote activo)&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;4&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Tiene receta asignada al laboratorio&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;7&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;Sin programa asignado aún&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;hr style='margin:.45rem 0;'&gt;&lt;p style='margin:0 0 .2rem;font-weight:700;'&gt;¿Por qué EST=1 aparece en varios Estados de Flujo?&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Estado de Flujo&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Razón&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo + receta aprobada por lab ✔&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;EN LABORATORIO&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo + receta en laboratorio, pendiente de aprobación&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 4px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;SIN RECETA&lt;/td&gt;&lt;td style='padding:2px 4px;'&gt;Programa activo pero el laboratorio aún no creó ninguna receta&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;">
+								  data-bs-content="&lt;div style='font-size:.75rem;line-height:1.5;'&gt;&lt;p style='margin:0 0 .4rem;'&gt;Estado de programación del ítem en Hilandería. &lt;b&gt;Independiente&lt;/b&gt; del Estado de Flujo de Tintorería.&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;text-align:center;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Significado&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Estado de Flujo&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;PROG DIARIO&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;3&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;CON RECETA&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;EN LABORATORIO / CON RECETA&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;4&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;SIN RECETA&lt;/td&gt;&lt;td style='padding:2px 5px;color:#dc3545;'&gt;SIN RECETA&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;7&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;LABDIP&lt;/td&gt;&lt;td style='padding:2px 5px;color:#6f42c1;'&gt;LABDIP&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;11&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;PROG DIARIO&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;">
 								<i class="bi bi-info-circle-fill" style="font-size:.65rem;opacity:.75;cursor:pointer;vertical-align:middle;"></i>
 							</span>
 						</th>
@@ -1034,8 +1046,8 @@
 						<th class="th-grp col-sep" colspan="5">SECADO</th>
 						<th class="th-grp col-sep" colspan="2">REVISADO</th>
 						<th class="th-grp col-sep" colspan="2">ENCONADO</th>
-						<th class="th-grp col-sep" colspan="5">ALMACEN</th>
-						<th class="th-grp col-sep" colspan="5">KG</th>
+						<th class="th-grp col-sep" colspan="4">ALMACEN</th>
+						<th class="th-grp col-sep" colspan="5">KG.</th>
 						<th class="th-grp col-sep" colspan="2">ESTADO</th>
 						<th class="th-grp col-sep" colspan="2" style="white-space:nowrap;">
 							<button type="button" id="btnGuardarAreaResp" style="background:#f59e0b;color:#1a2c40;border:none;border-radius:.3rem;font-size:.62rem;font-weight:700;padding:.18rem .55rem;cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;letter-spacing:.03em;white-space:nowrap;">
@@ -1078,7 +1090,7 @@
 						<th class="col-de" style="text-align:center">De</th>
 						<th></th>
 						<th class="col-sep col-kgped" title="Kg pedidos">Kg.Ped</th>
-						<th class="col-sep">Kg.Prog</th>
+						<th>Kg.Prog</th>
 						<th>Kg.Despa</th>
 						<th>Gap</th>
 						<th>%Tol.</th>
@@ -1243,7 +1255,7 @@ function iconSec(v) {
 // ── buildRow ─────────────────────────────────────────────────────────────────
 function buildRow(r, idx) {
     var rowBg  = r.colorHexa ? 'background-color:'+r.colorHexa+'20;' : '';
-    var cls    = (r.retrasado ? 'row-retraso' : '') + (r.colorHexa ? ' row-etiqueta' : '');
+    var cls    = (r.colorHexa ? ' row-etiqueta' : '').trim();
     var cellHx   = r.colorHexa ? 'background-color:'+r.colorHexa+';' : '';
     var partColor = r.colorHexa ? 'color:#fff;' : 'color:#1e3a5f;';
     var tenBadge = r.entregTen
@@ -1344,7 +1356,7 @@ if (totalEl) totalEl.textContent = allData.length;
 function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 
 // ── Mapas de filtros ──────────────────────────────────────────────────────────
-var EXACT_CF = { mes:1, ano:1, estflujo:1, estdesp:1, proceso:1, colorhexa:1, evencon:1 };
+var EXACT_CF = { mes:1, ano:1, estflujo:1, estdesp:1, proceso:1, colorhexa:1 };
 var CF_MAP = {
     mes:     function(r){ return norm(r.mes); },
     ano:     function(r){ return norm(r.ano); },
@@ -1354,7 +1366,6 @@ var CF_MAP = {
     proceso: function(r){ return norm(r.proTt||''); },
     estdesp: function(r){ return norm(r.estDesp); },
     estflujo:function(r){ return norm(r.estFlujo); },
-    evencon: function(r){ return norm(r.evEncon||''); },
     colorhexa:function(r){
         // filtro especial: '_none' = sin color
         return (r.colorHexa||'').toLowerCase();
@@ -1464,6 +1475,7 @@ function updateKpis(){
 // ── Botones MES ───────────────────────────────────────────────────────────────
 var mesActivo = '';
 var flujoSelected = [];  // valores multi-select Est.Flujo
+var evEnconSelected = [];  // valores multi-select Ev.Encon
 document.querySelectorAll('.cf-mes-btn').forEach(function(btn){
     btn.addEventListener('click', function(){
         var m = this.dataset.mes;
@@ -1527,6 +1539,11 @@ applyFilters = function(){
             var ef=norm(r.estFlujo||'');
             if(!flujoSelected.some(function(v){ return norm(v)===ef; })) return false;
         }
+        // Ev.Encon multi-select (OR entre los seleccionados)
+        if(evEnconSelected.length>0){
+            var ee=norm(r.evEncon||'');
+            if(!evEnconSelected.some(function(v){ return norm(v)===ee; })) return false;
+        }
         // filtros texto/select
         for(var key in vals){
             var fn=CF_MAP[key]; if(!fn) continue;
@@ -1571,6 +1588,9 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
     flujoSelected=[];
     document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
     var _fbt=document.getElementById('cfFlujoBtnTxt'); if(_fbt) _fbt.textContent='Todos';
+    evEnconSelected=[];
+    document.querySelectorAll('.cf-evencon-chk').forEach(function(c){ c.checked=false; });
+    var _ebt=document.getElementById('cfEvEnconBtnTxt'); if(_ebt) _ebt.textContent='Todos';
     applyFilters();
 });
 
@@ -1620,6 +1640,54 @@ if(resetBtn) resetBtn.addEventListener('click', function(){
         flujoSelected=[];
         document.querySelectorAll('.cf-flujo-chk').forEach(function(c){ c.checked=false; });
         syncBtn(); applyFilters();
+    });
+})();
+
+// ── Ev.Encon multi-select ─────────────────────────────────────────────────────
+(function(){
+    var btnE  =document.getElementById('cfEvEnconBtn');
+    var panelE=document.getElementById('cfEvEnconPanel');
+    var bTxtE =document.getElementById('cfEvEnconBtnTxt');
+    var clrE  =document.getElementById('cfEvEnconClr');
+    function syncBtnE(){
+        if(!bTxtE) return;
+        if(evEnconSelected.length===0) bTxtE.textContent='Todos';
+        else if(evEnconSelected.length===1) bTxtE.textContent=evEnconSelected[0];
+        else bTxtE.textContent=evEnconSelected.length+' selec.';
+    }
+    function posicionarPanelE(){
+        if(!btnE||!panelE) return;
+        var r=btnE.getBoundingClientRect();
+        panelE.style.top  = (r.bottom + 3) + 'px';
+        panelE.style.left = r.left + 'px';
+    }
+    if(btnE) btnE.addEventListener('click',function(e){
+        e.stopPropagation();
+        if(!panelE) return;
+        if(panelE.style.display==='none'){
+            posicionarPanelE();
+            panelE.style.display='block';
+        } else {
+            panelE.style.display='none';
+        }
+    });
+    document.addEventListener('click',function(e){
+        if(panelE&&panelE.style.display!=='none'&&!panelE.contains(e.target)&&e.target!==btnE)
+            panelE.style.display='none';
+    });
+    window.addEventListener('scroll',function(){ if(panelE) panelE.style.display='none'; },true);
+    document.querySelectorAll('.cf-evencon-chk').forEach(function(chk){
+        chk.addEventListener('change',function(){
+            var v=this.value;
+            if(this.checked){ if(!evEnconSelected.includes(v)) evEnconSelected.push(v); }
+            else { evEnconSelected=evEnconSelected.filter(function(x){ return x!==v; }); }
+            syncBtnE(); applyFilters();
+        });
+    });
+    if(clrE) clrE.addEventListener('click',function(){
+        evEnconSelected=[];
+        document.querySelectorAll('.cf-evencon-chk').forEach(function(c){ c.checked=false; });
+        syncBtnE(); applyFilters();
     });
 })();
 

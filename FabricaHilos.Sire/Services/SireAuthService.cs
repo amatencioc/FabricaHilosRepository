@@ -13,7 +13,10 @@ public sealed class SireAuthService : ISireAuthService
 {
     private const string CacheKey = "SIRE_AUTH_TOKEN";
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
+    // Serializa renovaciones concurrentes: solo un hilo llama a SUNAT a la vez.
+    // Sin esto, dos threads que llegan con token expirado disparan dos peticiones
+    // simultáneas y el segundo puede pisar el token del primero en caché.
+    private readonly SemaphoreSlim _tokenSemaphore = new(1, 1);
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SireAuthService> _logger;
@@ -69,10 +72,33 @@ public sealed class SireAuthService : ISireAuthService
             return cached;
         }
 
+        // Serializar: solo un hilo renueva el token; los demás esperan y reutilizan el nuevo.
+        await _tokenSemaphore.WaitAsync(cancellationToken);
+        try
+        {
+            // Double-check: otro hilo puede haber renovado el token mientras esperábamos.
+            if (_memoryCache.TryGetValue<AuthToken>(CacheKey, out var cachedPostLock)
+                && cachedPostLock is not null
+                && cachedPostLock.ExpiraEnUtc > DateTime.UtcNow.AddMinutes(5))
+            {
+                _logger.LogDebug("[SIRE-AUTH] Token renovado por otro hilo mientras esperábamos. Reutilizando.");
+                return cachedPostLock;
+            }
+
+            return await RenovarTokenAsync(cancellationToken);
+        }
+        finally
+        {
+            _tokenSemaphore.Release();
+        }
+    }
+
+    private async Task<AuthToken> RenovarTokenAsync(CancellationToken cancellationToken)
+    {
         _logger.LogInformation("[SIRE-AUTH] Solicitando nuevo token a SUNAT (caché vacío o expirado)...");
         _logger.LogDebug("[SIRE-AUTH] POST {Url}", _authUrl);
         _logger.LogDebug("[SIRE-AUTH] Parámetros: grant_type=password | scope={Scope} | client_id={ClientId} | username={Username} | password=*** ({PwdLen} chars)",
-            _scope, _clientId, _username, _password?.Length ?? 0);
+            _scope, _clientId, _username, _password.Length);
 
         var form = new Dictionary<string, string>
         {

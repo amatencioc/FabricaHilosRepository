@@ -4,7 +4,7 @@ namespace FabricaHilos.Services.Sire;
 
 /// <summary>
 /// Repositorio Oracle para todas las operaciones de persistencia SIRE.
-/// Encapsula las tres tablas: SIRE_JOB, SIRE_HEALTH, SIRE_LOG.
+/// Encapsula las tablas: SIRE_JOB, SIRE_LOG, SIRE_PROPUESTA, SIRE_LEGACY, SIRE_CONCIL.
 /// </summary>
 public interface ISireOracleRepository
 {
@@ -43,13 +43,6 @@ public interface ISireOracleRepository
     /// Usado en el dashboard de Index para mostrar historial de operaciones.
     /// </summary>
     Task<List<SireExportacionJob>> GetJobsRecientesAsync(int top = 20, CancellationToken ct = default);
-
-    // ── Health logs ───────────────────────────────────────────────────────────
-
-    Task InsertHealthLogAsync(SireHealthCheckLog log, CancellationToken ct = default);
-
-    /// <summary>Obtiene los últimos N registros de health check, ordenados por fecha desc.</summary>
-    Task<List<SireHealthCheckLog>> GetHealthLogsAsync(int top = 50, CancellationToken ct = default);
 
     // ── API logs ──────────────────────────────────────────────────────────────
 
@@ -97,4 +90,56 @@ public interface ISireOracleRepository
     /// Devuelve null si nunca se concilió el período.
     /// </summary>
     Task<SireConcilResumen?> GetConcilResumenAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    // ── SIRE_LEGACY (datos ERP cargados por SP_SIRE_CARGA_LEGACY) ─────────
+
+    /// <summary>
+    /// Retorna los registros del ERP almacenados en SIRE_LEGACY para un período.
+    /// </summary>
+    Task<List<SireLegacyRegistro>> GetLegacyAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    // ── SIRE_CONCIL (resultado cruzado SUNAT vs Legacy) ───────────────────
+
+    /// <summary>
+    /// Retorna el detalle fila a fila de SIRE_CONCIL para un período.
+    /// Incluye registros OK, con diferencia, solo-SUNAT y solo-Legacy.
+    /// </summary>
+    Task<List<SireConcilDetalle>> GetConcilDetalleAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Invalida la conciliación de un período: borra SIRE_CONCIL y resetea
+    /// SIRE_LEGACY.ID_PROP_MATCH = NULL. Debe llamarse después de re-procesar el ZIP
+    /// para que el usuario deba volver a ejecutar Conciliar.
+    /// </summary>
+    Task InvalidarConciliacionAsync(string tipo, int periodo, CancellationToken ct = default);
+
+    // =========================================================================
+    // Exclusiones (SIRE_EXCLUIDOS_LOGIX)
+    // =========================================================================
+
+    /// <summary>
+    /// Devuelve todos los excluidos activos de un período (ESTADO='A').
+    /// </summary>
+    Task<List<SireExcluidoLogix>> GetExcluidosAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Excluye manualmente una lista de registros de SIRE_CONCIL (SOLO_SUNAT).
+    /// Inserta en SIRE_EXCLUIDOS_LOGIX con MOTIVO='MANUAL' y cambia ESTADO a 'EXCLUIDO'.
+    /// Retorna cuántos registros fueron excluidos.
+    /// </summary>
+    Task<int> ExcluirManualAsync(string tipo, int periodo, IEnumerable<long> idsConcil,
+        string usuario, string? obs, CancellationToken ct = default);
+
+    /// <summary>
+    /// Restaura un excluido por ID_CONCIL: pone ESTADO='R' en SIRE_EXCLUIDOS_LOGIX y
+    /// devuelve el registro SIRE_CONCIL a ESTADO='SOLO_SUNAT'.
+    /// Si tiene un par vinculado (ID_EXCLUIDO_REL) lo restaura también.
+    /// </summary>
+    Task RestaurarExcluidoAsync(long idConcil, string usuario, CancellationToken ct = default);
+
+    /// <summary>
+    /// Llama a SP_SIRE_AUTO_EXCLUIR_NC: busca N/C en SOLO_SUNAT, las excluye
+    /// junto a su doc. de referencia si éste también está en SOLO_SUNAT.
+    /// </summary>
+    Task AutoExcluirNcAsync(string tipo, int periodo, string usuario, CancellationToken ct = default);
 }

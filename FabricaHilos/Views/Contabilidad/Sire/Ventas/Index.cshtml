@@ -1,11 +1,13 @@
-@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RVIE (Registro de Ventas)";
     var periodos          = Model?.Periodos         ?? Array.Empty<PropuestaDto>();
     var periodoSeleccionado = Model?.PeriodoSeleccionado ?? string.Empty;
     var resumen           = Model?.PropuestasResumen  ?? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>();
-    var propuesta         = Model?.RegistrosPropuesta ?? new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
+    var propuesta           = Model?.RegistrosPropuesta ?? new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
+    var legacy              = Model?.RegistrosLegacy      ?? new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
+    var concil              = Model?.RegistrosConcil      ?? new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
     var esMock            = Model?.EsMock ?? false;
 
     var yyyyMm = periodoSeleccionado.Length == 6
@@ -14,11 +16,19 @@
 
     static (string Desc, string Css) TipoComprobante(string cod) => cod switch
     {
-        "01" => ("Factura",        "sire-badge sire-badge-rvie"),
-        "03" => ("Boleta",         "sire-badge sire-badge-info"),
-        "07" => ("N/C",            "sire-badge sire-badge-warn"),
-        "08" => ("N/D",            "sire-badge sire-badge-warn"),
-        _    => (cod,              "sire-badge sire-badge-secondary")
+        "01" => ("Factura",    "sire-badge sire-badge-rvie"),
+        "03" => ("Boleta",     "sire-badge sire-badge-info"),
+        "07" => ("N/C",        "sire-badge sire-badge-warn"),
+        "08" => ("N/D",        "sire-badge sire-badge-warn"),
+        "14" => ("Servicio",   "sire-badge sire-badge-secondary"),
+        "36" => ("Gas Nat.",   "sire-badge sire-badge-secondary"),
+        "37" => ("Rev.Tec.",   "sire-badge sire-badge-secondary"),
+        "40" => ("IVAP",       "sire-badge sire-badge-secondary"),
+        "50" => ("DUA",        "sire-badge sire-badge-info"),
+        "52" => ("Desp.Simp.", "sire-badge sire-badge-info"),
+        "53" => ("Courier",    "sire-badge sire-badge-info"),
+        "54" => ("Liq.Cobr.",  "sire-badge sire-badge-secondary"),
+        _    => (cod,          "sire-badge sire-badge-secondary")
     };
 }
 
@@ -35,14 +45,6 @@
 @if (esMock)
 {
     <div class="sire-alert sire-alert-mock"><i class="bi bi-cone-striped"></i><strong>MODO MOCK</strong> — Datos de prueba. No se realizan llamadas reales a SUNAT.</div>
-}
-@if (TempData["Error"] is string errMsg)
-{
-    <div class="sire-alert sire-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@errMsg</div></div>
-}
-@if (TempData["Success"] is string okMsg)
-{
-    <div class="sire-alert sire-alert-success"><i class="bi bi-check-circle-fill"></i><div>@okMsg</div></div>
 }
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
@@ -100,9 +102,8 @@
                 </button>
             }
             <div class="vr" style="opacity:.2;"></div>
-            <a href="@Url.Action("DescargarConstancia", "Sire", new { periodo = periodoSeleccionado, tipo = "ventas", nomArchivo = Model?.NombreArchivoConstancia })"
-               class="btn btn-sm btn-outline-danger"
-               @(string.IsNullOrWhiteSpace(Model?.NombreArchivoConstancia) ? "title=\"Constancia no disponible: primero Exportar Propuesta (estado COMPLETADO)\"" : "title=\"Descargar constancia SUNAT\"")>
+            <a href="#" class="btn btn-sm btn-outline-danger disabled" aria-disabled="true" tabindex="-1"
+               title="Constancia no disponible: use el portal SUNAT">
                 <i class="bi bi-file-pdf me-1"></i>Constancia
             </a>
             <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
@@ -173,6 +174,15 @@
     </div>
 </div>
 
+<!-- ===== OVERLAY GLOBAL DE CARGA ===== -->
+<div id="sireOverlayGlobal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(15,25,50,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+    <div style="background:#fff;border-radius:12px;padding:32px 48px;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;min-width:260px;">
+        <div class="spinner-border" style="color:#1565c0;width:2.8rem;height:2.8rem;" role="status"><span class="visually-hidden">Cargando...</span></div>
+        <div id="sireOverlayMensaje" style="margin-top:14px;font-size:.92rem;font-weight:600;color:#1c3a5e;">Procesando...</div>
+        <div id="sireOverlaySubMensaje" style="margin-top:4px;font-size:.78rem;color:#6b7280;"></div>
+    </div>
+</div>
+
 <!-- Modal: Confirmación genérica -->
 <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -187,6 +197,44 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Modal: Excluir seleccionados -->
+<div class="modal fade" id="modalExcluirSelec" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background:var(--sire-navy);color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-scissors me-2"></i>Excluir registros</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.86rem;">
+                <p class="mb-2">Se excluirán <strong id="excluirContadorModal">0</strong> registro(s) de SUNAT. <span class="text-muted">No ingresarán al ERP Logix.</span></p>
+                <label class="form-label mb-1" style="font-size:.8rem;">Observación <span class="text-muted">(opcional)</span></label>
+                <input type="text" id="excluirObsInput" class="form-control form-control-sm"
+                       placeholder="Ej: NC anulada, duplicado, no procede..." maxlength="200">
+                <p class="mt-2 mb-0 text-muted" style="font-size:.76rem;"><i class="bi bi-info-circle me-1"></i>Puede restaurarlos luego con el filtro <i class="bi bi-scissors"></i> Excluidos.</p>
+            </div>
+            <div class="modal-footer py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-warning fw-semibold" id="btnConfirmarExcluir">
+                    <i class="bi bi-scissors me-1"></i>Sí, excluir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Overlays de carga ─────────────────────────────────────────────────────────────────────── *@
+<div id="overlayReprocesar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
+    <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
+    <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Re-procesando archivo ZIP…</span>
+    <span class="text-white-50" style="font-size:.82rem;">Por favor espere, los datos se están actualizando.</span>
+</div>
+
+<div id="overlayConciliar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
+    <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
+    <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Conciliando propuesta…</span>
+    <span class="text-white-50" style="font-size:.82rem;">Por favor espere, esto puede tomar unos segundos.</span>
 </div>
 
 @* ── Panel: Propuesta Descargada de SUNAT ─────────────────────────────────────────── *@
@@ -337,97 +385,527 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     </div>
 }
 
-@* ── Detalle: registros del período seleccionado ─────────────────────────── *@
-@if (propuesta.Count > 0)
+@* -- Tabs: SUNAT / Legacy / Cruzado ---------------------------------------- *@
+@if (propuesta.Count > 0 || legacy.Count > 0 || concil.Count > 0)
 {
     <div class="sire-card">
-        <div class="sire-card-header">
-            <i class="bi bi-table" style="color:var(--sire-rvie);"></i>
-            <span>Propuesta SUNAT</span>
-            <span class="text-muted fw-normal" style="font-size:.76rem;margin-left:.25rem;">— @yyyyMm</span>
-            <div class="d-none d-lg-flex align-items-center gap-1" id="filtroConcilBtns">
-                <button class="btn btn-xs btn-outline-secondary active" onclick="filtrarConcil(null,this)" title="Todos"><i class="bi bi-list"></i></button>
-                <button class="btn btn-xs btn-outline-success" onclick="filtrarConcil('1',this)" title="Coinciden OK"><i class="bi bi-check-circle"></i></button>
-                <button class="btn btn-xs btn-outline-warning" onclick="filtrarConcil('2',this)" title="Con diferencia"><i class="bi bi-exclamation-circle"></i></button>
-                <button class="btn btn-xs btn-outline-danger" onclick="filtrarConcil('3',this)" title="Solo SUNAT"><i class="bi bi-cloud"></i></button>
-                <button class="btn btn-xs btn-outline-info" onclick="filtrarConcil('4',this)" title="Solo Legacy"><i class="bi bi-hdd"></i></button>
-            </div>
-            <div class="ms-auto d-flex align-items-center gap-2">
-                <div class="input-group input-group-sm" style="width:220px;">
-                    <span class="input-group-text border-0" style="background:var(--sire-gray-100);padding:.2rem .4rem;">
-                        <i class="bi bi-search" style="font-size:.75rem;color:var(--sire-gray-600);"></i>
-                    </span>
-                    <input type="text" class="form-control border-0 shadow-none" style="background:var(--sire-gray-100);font-size:.78rem;"
-                           placeholder="Filtrar RUC, N°, nombre…" oninput="filtrarTablaPropuesta(this.value)">
-                </div>
-                <span class="sire-badge sire-badge-rvie" id="contadorFilasPropuesta">@propuesta.Count regs.</span>
-            </div>
+        <div class="sire-card-header gap-0 p-0" style="border-bottom:1px solid var(--sire-gray-200);">
+            <ul class="nav nav-tabs border-0 flex-grow-1" id="tabsDetalle" role="tablist" style="padding:.3rem .75rem 0;">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active py-1 px-3" id="tab-sunat" data-bs-toggle="tab"
+                            data-bs-target="#panel-sunat" type="button" role="tab" style="font-size:.77rem;">
+                        <i class="bi bi-cloud-fill me-1" style="color:var(--sire-rvie);"></i>
+                        Propuesta SUNAT
+                        <span class="ms-1 badge rounded-pill" style="background:var(--sire-rvie);font-size:.6rem;">@propuesta.Count</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-3" id="tab-legacy" data-bs-toggle="tab"
+                            data-bs-target="#panel-legacy" type="button" role="tab" style="font-size:.77rem;">
+                        <i class="bi bi-hdd-fill me-1" style="color:#0891b2;"></i>
+                        Legacy (Logix)
+                        <span class="ms-1 badge rounded-pill" style="background:#0891b2;font-size:.6rem;">@legacy.Count</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-3" id="tab-concil" data-bs-toggle="tab"
+                            data-bs-target="#panel-concil" type="button" role="tab" style="font-size:.77rem;">
+                        <i class="bi bi-arrow-left-right me-1" style="color:#7c3aed;"></i>
+                        Cruzado / Diferencias
+                        <span class="ms-1 badge rounded-pill" style="background:#7c3aed;font-size:.6rem;">@concil.Count</span>
+                    </button>
+                </li>
+                <li class="ms-auto d-flex align-items-center gap-1 pe-2 pb-1" style="margin-top:auto;">
+                    <div id="filtroConcilBtns" class="d-flex gap-1 align-items-center" style="visibility:hidden;">
+                        <button class="btn btn-xs btn-outline-secondary active" onclick="filtrarConcil(null,this)" title="Todos"><i class="bi bi-list"></i></button>
+                        <button class="btn btn-xs btn-outline-success"  onclick="filtrarConcil('OK',this)" title="Sin diferencias"><i class="bi bi-check-circle"></i></button>
+                        <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('AVISO',this)" title="Diferencias informativas (base, moneda, estado...)"><i class="bi bi-exclamation-triangle"></i></button>
+                        <button class="btn btn-xs btn-outline-danger"   onclick="filtrarConcil('DIFERENCIA',this)" title="Diferencias críticas (IGV / Total)"><i class="bi bi-exclamation-circle-fill"></i></button>
+                        <button class="btn btn-xs btn-outline-primary"  onclick="filtrarConcil('SOLO_SUNAT',this)" title="Solo en SUNAT"><i class="bi bi-cloud"></i></button>
+                        <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
+                        <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
+                        <button id="btnExcluirSelec" class="btn btn-xs btn-warning ms-1" onclick="excluirSeleccionados()"
+                                style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">
+                            <i class="bi bi-scissors"></i> Excluir <span id="excluirBadge" class="badge bg-dark ms-1" style="font-size:.65rem;"></span>
+                        </button>
+                        <button id="btnRestaurarSelec" class="btn btn-xs btn-outline-secondary ms-1" onclick="restaurarSeleccionados()"
+                                style="display:none;" title="Restaurar seleccionados a SOLO_SUNAT">
+                            <i class="bi bi-arrow-counterclockwise"></i> Restaurar <span id="restaurarBadge" class="badge bg-secondary ms-1" style="font-size:.65rem;"></span>
+                        </button>
+                    </div>
+                    <div class="input-group input-group-sm ms-1" style="width:200px;">
+                        <span class="input-group-text border-0" style="background:var(--sire-gray-100);padding:.2rem .4rem;">
+                            <i class="bi bi-search" style="font-size:.75rem;color:var(--sire-gray-600);"></i>
+                        </span>
+                        <input type="text" class="form-control border-0 shadow-none" id="inputBuscadorSire"
+                               style="background:var(--sire-gray-100);font-size:.78rem;"
+                               placeholder="Filtrar RUC, No, nombre..." oninput="filtrarTablaActiva(this.value)">
+                    </div>
+                    <span class="sire-badge sire-badge-secondary ms-1" id="contadorFilasActivo" style="font-size:.65rem;"></span>
+                </li>
+            </ul>
         </div>
-        <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
-            <table class="table sire-table table-hover align-middle mb-0" id="tablaPropuestaDetalle">
-                <thead style="position:sticky;top:0;z-index:1;">
-                    <tr>
-                        <th style="width:48px">Tipo</th>
-                        <th style="width:62px">Serie</th>
-                        <th style="width:100px">Número</th>
-                        <th style="width:82px">Emisión</th>
-                        <th style="width:96px">RUC</th>
-                        <th>Cliente</th>
-                        <th class="text-end" style="width:88px">Base</th>
-                        <th class="text-end" style="width:76px">IGV</th>
-                        <th class="text-end" style="width:88px">Total</th>
-                        <th style="width:50px" class="text-center">Est.</th>
-                        <th style="width:56px" class="text-center">Concil.</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in propuesta)
-                    {
-                        var tc = TipoComprobante(r.Tipdoc ?? "");
-                        <tr data-concil='@(r.ConcilEstado ?? "0")'>
-                            <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
-                            <td class="font-monospace">@(r.Serie ?? "—")</td>
-                            <td class="font-monospace">@(r.Numero ?? "—")</td>
-                            <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "—")</td>
-                            <td class="font-monospace">@(r.Ruc ?? "—")</td>
-                            <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "—")</td>
-                            <td class="text-end">@r.BiGravDg.ToString("N2")</td>
-                            <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
-                            <td class="text-end fw-semibold" style="color:var(--sire-rvie);">@r.TotalCp.ToString("N2")</td>
-                            <td class="text-center"><span class="badge @r.EstCompBadge" style="font-size:.62rem;">@r.EstCompLabel</span></td>
-                            <td class="text-center"><span class="badge @r.ConcilBadge" style="font-size:.62rem;" title="@(r.ConcilDiffs ?? r.ConcilLabel)">@r.ConcilLabel</span></td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
-                        <td class="text-end fw-bold">@propuesta.Sum(x => x.BiGravDg).ToString("N2")</td>
-                        <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
-                        <td class="text-end fw-bold" style="color:var(--sire-rvie);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                </tfoot>
-            </table>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="panel-sunat" role="tabpanel">
+                <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
+                    <table class="table sire-table table-hover align-middle mb-0" id="tablaPropuestaDetalle">
+                        <thead style="position:sticky;top:0;z-index:1;">
+                            <tr>
+                                <th style="width:48px">Tipo</th>
+                                <th style="width:62px">Serie</th>
+                                <th style="width:100px">Numero</th>
+                                <th style="width:82px;cursor:pointer;user-select:none;" data-sort-type="date" onclick="sireOrdenarColumna(this)" title="Ordenar por Emisión">Emision <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                <th style="width:96px">RUC</th>
+                                <th style="cursor:pointer;user-select:none;" data-sort-type="text" onclick="sireOrdenarColumna(this)" title="Ordenar por Cliente">Cliente <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                <th class="text-end" style="width:88px">Base DG</th>
+                                <th class="text-end" style="width:76px">IGV</th>
+                                <th class="text-end" style="width:76px">ISC</th>
+                                <th class="text-end" style="width:88px">Total</th>
+                                <th style="width:46px" class="text-center d-none d-xl-table-cell">Mon.</th>
+                                <th style="width:40px" class="text-center d-none d-xl-table-cell">Det.</th>
+                                <th style="width:50px" class="text-center d-none d-lg-table-cell">CP</th>
+                                <th style="width:76px" class="text-center">Concil.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in propuesta)
+                            {
+                                var tc = TipoComprobante(r.Tipdoc ?? "");
+                                <tr>
+                                    <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
+                                    <td class="font-monospace">@(r.Serie ?? "-")</td>
+                                    <td class="font-monospace">@(r.Numero ?? "-")</td>
+                                    <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                    <td class="font-monospace">@(r.Ruc ?? "-")</td>
+                                    <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                    <td class="text-end">@r.BiGravDg.ToString("N2")</td>
+                                    <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
+                                    <td class="text-end text-muted">@(r.Isc != 0 ? r.Isc.ToString("N2") : "-")</td>
+                                    <td class="text-end fw-semibold" style="color:var(--sire-rvie);">@r.TotalCp.ToString("N2")</td>
+                                    <td class="text-center d-none d-xl-table-cell">
+                                        @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
+                                        {
+                                            <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                        }
+                                    </td>
+                                    <td class="text-center d-none d-xl-table-cell">
+                                        @if (r.FlagDetrac == "S")
+                                        {
+                                            <span class="sire-badge sire-badge-info" style="font-size:.62rem;" title="Con detracción">&#10003;</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size:.72rem;">-</span>
+                                        }
+                                    </td>
+                                    <td class="text-center d-none d-lg-table-cell">
+                                        <span class="badge @r.EstCompBadge" style="font-size:.6rem;" title="@r.EstCompLabel">@r.EstComp</span>
+                                    </td>
+                                    <td class="text-center"><span class="badge @r.ConcilBadge" style="font-size:.62rem;" title="@(r.FchConcil.HasValue ? $"{r.ConcilLabel} — {r.FchConcil:dd/MM HH:mm}" : r.ConcilDiffs ?? r.ConcilLabel)">@r.ConcilLabel</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                <td class="text-end fw-bold">@propuesta.Sum(x => x.BiGravDg).ToString("N2")</td>
+                                <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
+                                <td class="text-end fw-bold text-muted">@propuesta.Sum(x => x.Isc).ToString("N2")</td>
+                                <td class="text-end fw-bold" style="color:var(--sire-rvie);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
+                                <td class="d-none d-xl-table-cell"></td>
+                                <td class="d-none d-xl-table-cell"></td>
+                                <td class="d-none d-lg-table-cell"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="panel-legacy" role="tabpanel">
+                @if (legacy.Count == 0)
+                {
+                    <div class="sire-alert sire-alert-info m-3">
+                        <i class="bi bi-info-circle"></i>
+                        <span>No hay registros Legacy para <strong>@yyyyMm</strong>. Use <strong>Conciliar</strong> para cargar datos del ERP Logix.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
+                        <table class="table sire-table table-hover align-middle mb-0" id="tablaLegacyDetalle">
+                            <thead style="position:sticky;top:0;z-index:1;">
+                                <tr>
+                                    <th style="width:48px">Tipo</th>
+                                    <th style="width:62px">Serie</th>
+                                    <th style="width:100px">Numero</th>
+                                    <th style="width:82px;cursor:pointer;user-select:none;" data-sort-type="date" onclick="sireOrdenarColumna(this)" title="Ordenar por Emisión">Emision <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                    <th style="width:96px">RUC</th>
+                                    <th style="cursor:pointer;user-select:none;" data-sort-type="text" onclick="sireOrdenarColumna(this)" title="Ordenar por Cliente">Cliente <span class="sire-sort-icon" style="font-size:.7rem;opacity:.5;">↕</span></th>
+                                    <th class="text-end" style="width:88px">Base</th>
+                                    <th class="text-end" style="width:76px">IGV</th>
+                                    <th class="text-end" style="width:88px">Total</th>
+                                    <th class="d-none d-lg-table-cell" style="width:90px">Tabla</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in legacy)
+                                {
+                                    var tc = TipoComprobante(r.Tipdoc ?? "");
+                                    <tr>
+                                        <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
+                                        <td class="font-monospace">@(r.Serie ?? "-")</td>
+                                        <td class="font-monospace">@(r.Numero ?? "-")</td>
+                                        <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                        <td class="font-monospace">@(r.Ruc ?? "-")</td>
+                                        <td style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                        <td class="text-end">@r.BaseImponible.ToString("N2")</td>
+                                        <td class="text-end">@r.Igv.ToString("N2")</td>
+                                        <td class="text-end fw-semibold" style="color:#0891b2;">@r.Total.ToString("N2")</td>
+                                        <td class="text-muted d-none d-lg-table-cell" style="font-size:.72rem;">@(r.TablaOrigen ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td class="text-end fw-bold">@legacy.Sum(x => x.BaseImponible).ToString("N2")</td>
+                                    <td class="text-end fw-bold">@legacy.Sum(x => x.Igv).ToString("N2")</td>
+                                    <td class="text-end fw-bold" style="color:#0891b2;">@legacy.Sum(x => x.Total).ToString("N2")</td>
+                                    <td class="d-none d-lg-table-cell"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            <div class="tab-pane fade" id="panel-concil" role="tabpanel">
+                @if (concil.Count == 0)
+                {
+                    <div class="sire-alert sire-alert-info m-3">
+                        <i class="bi bi-info-circle"></i>
+                        <span>No hay datos cruzados para <strong>@yyyyMm</strong>. Use <strong>Conciliar</strong> para generar el cruce SUNAT vs ERP.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
+                        <table class="table sire-table table-hover align-middle mb-0" id="tablaConcilDetalle">
+                            <thead style="position:sticky;top:0;z-index:1;">
+                                <tr>
+                                    <th id="th-check-concil" style="width:32px;display:none;">
+                                        <input type="checkbox" id="chkTodosExcl" class="form-check-input" onclick="seleccionarTodosExcl(this)">
+                                    </th>
+                                    <th style="width:48px">Tipo</th>
+                                    <th style="width:62px">Serie</th>
+                                    <th style="width:100px">Numero</th>
+                                    <th style="width:82px">Emisión</th>
+                                    <th style="width:96px">RUC</th>
+                                    <th>Cliente</th>
+                                    <th class="text-end" style="width:88px" title="Base imponible gravada según SUNAT">Base SUNAT</th>
+                                    <th class="text-end" style="width:88px" title="Base imponible gravada según ERP Logix">Base ERP</th>
+                                    <th class="text-end" style="width:82px" title="Diferencia: Base SUNAT menos Base ERP">Δ Base</th>
+                                    <th class="text-end" style="width:88px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
+                                    <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
+                                    <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
+                                    <th style="width:80px" class="text-center">Estado</th>
+                                    <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    // Paleta de 8 pasteles muy suaves para grupos factura+N/C
+                                    var pasteles = new[] {
+                                        "rgba(173,216,230,.18)", // azul
+                                        "rgba(144,238,144,.18)", // verde
+                                        "rgba(255,218,185,.22)", // melocotón
+                                        "rgba(221,160,221,.18)", // violeta
+                                        "rgba(255,250,160,.22)", // amarillo
+                                        "rgba(175,238,238,.20)", // turquesa
+                                        "rgba(255,182,193,.20)", // rosa
+                                        "rgba(216,191,216,.18)", // lavanda
+                                    };
+
+                                    // Construir orden: factura seguida de sus N/C vinculadas
+                                    var esNotaC = (string? td) => td is "07" or "08";
+                                    var facturas = concil
+                                        .Where(x => !esNotaC(x.Tipdoc))
+                                        .OrderBy(x => x.FEmision)
+                                        .ThenBy(x => x.Serie)
+                                        .ThenBy(x => x.Numero)
+                                        .ToList();
+                                    var notas = concil
+                                        .Where(x => esNotaC(x.Tipdoc))
+                                        .ToList();
+                                    var concilOrdenadoRows  = new System.Collections.Generic.List<FabricaHilos.Models.Sire.SireConcilDetalle>();
+                                    var concilOrdenadoGrups = new System.Collections.Generic.List<int>();
+                                    int gi = 0;
+                                    var notasYaUsadas = new HashSet<long>();
+
+                                    foreach (var fac in facturas)
+                                    {
+                                        concilOrdenadoRows.Add(fac); concilOrdenadoGrups.Add(gi);
+                                        var hijas = notas
+                                            .Where(n => !notasYaUsadas.Contains(n.IdConcil)
+                                                && string.Equals(n.SerDocref, fac.Serie, StringComparison.OrdinalIgnoreCase)
+                                                && string.Equals(n.NroDocref, fac.Numero, StringComparison.OrdinalIgnoreCase))
+                                            .OrderBy(n => n.FEmision)
+                                            .ToList();
+                                        foreach (var h in hijas)
+                                        {
+                                            concilOrdenadoRows.Add(h); concilOrdenadoGrups.Add(gi);
+                                            notasYaUsadas.Add(h.IdConcil);
+                                        }
+                                        if (hijas.Count > 0) gi++;
+                                    }
+                                    foreach (var n in notas.Where(n => !notasYaUsadas.Contains(n.IdConcil)))
+                                    { concilOrdenadoRows.Add(n); concilOrdenadoGrups.Add(-1); }
+
+                                    var colorMap = new Dictionary<int, string>();
+                                    int ci = 0;
+                                    var conteosPorGrupo = concilOrdenadoRows
+                                        .Select((row, idx) => new { row, grp = concilOrdenadoGrups[idx] })
+                                        .Where(x => x.grp >= 0)
+                                        .GroupBy(x => x.grp)
+                                        .ToDictionary(g => g.Key, g => g.Count());
+                                    foreach (var kvp in conteosPorGrupo)
+                                    {
+                                        if (kvp.Value > 1)
+                                            colorMap[kvp.Key] = pasteles[ci++ % pasteles.Length];
+                                    }
+                                }
+                                @for (int _ci = 0; _ci < concilOrdenadoRows.Count; _ci++)
+                                {
+                                    var r        = concilOrdenadoRows[_ci];
+                                    var grupoIdx = concilOrdenadoGrups[_ci];
+                                    var tc = TipoComprobante(r.Tipdoc ?? "");
+                                    var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido" : "";
+                                    string rowBg = (r.Estado == "EXCLUIDO" && grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbg))
+                                        ? $"background:{pbg}!important;"
+                                        : "";
+                                    <tr data-concil='@r.Estado' class="@rowClass" style="@rowBg">
+                                        <td class="td-check-excl" style="display:none;">
+                                            @if (r.Estado == "SOLO_SUNAT")
+                                            {
+                                                <input type="checkbox" class="form-check-input sire-excl-check"
+                                                       data-id-concil="@r.IdConcil" value="@r.IdConcil"
+                                                       onchange="actualizarBadgeExcluir()">
+                                            }
+                                            @if (r.Estado == "EXCLUIDO")
+                                            {
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <input type="checkbox" class="form-check-input sire-excl-check"
+                                                           value="@r.IdConcil" onchange="actualizarBadgeExcluir()">
+                                                    <button class="btn btn-xs btn-outline-warning p-0 px-1"
+                                                            onclick="restaurarExcluido(@r.IdConcil)"
+                                                            title="Restaurar a SOLO_SUNAT">
+                                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td><span class="@tc.Css" style="font-size:.68rem;">@tc.Desc</span></td>
+                                        <td class="font-monospace">@(r.Serie ?? "-")</td>
+                                        <td class="font-monospace">@(r.Numero ?? "-")</td>
+                                        <td class="text-muted text-nowrap">@(r.FEmision?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                        <td class="font-monospace">@(r.Ruc ?? "-")</td>
+                                        <td style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@r.Nombre">@(r.Nombre ?? "-")</td>
+                                        <td class="text-end">@(r.SunatBase != 0 ? r.SunatBase.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(r.LegBase != 0 ? r.LegBase.ToString("N2") : "-")</td>
+                                        <td class="text-end fw-semibold @(r.DiffBase != 0 ? "text-danger" : "text-success")">@(r.DiffBase != 0 ? r.DiffBase.ToString("N2") : "0.00")</td>
+                                        <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
+                                        <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
+                                        <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
+                                        <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
+                                        <td>
+                                            @if (r.Estado == "EXCLUIDO")
+                                            {
+                                                @* Panel de exclusión: motivo, quién, cuándo, observación *@
+                                                var motivoLabel = r.ExclMotivo switch {
+                                                    "NC_AUTO" => "N/C automática",
+                                                    "MANUAL"  => "Exclusión manual",
+                                                    _         => r.ExclMotivo ?? "Excluido"
+                                                };
+                                                var motivoIcon = r.ExclMotivo == "NC_AUTO"
+                                                    ? "bi bi-scissors text-warning"
+                                                    : "bi bi-hand-index-thumb text-secondary";
+                                                var motivoBg = r.ExclMotivo == "NC_AUTO"
+                                                    ? "rgba(255,193,7,.12)"
+                                                    : "rgba(108,117,125,.10)";
+                                                var motivoBorder = r.ExclMotivo == "NC_AUTO"
+                                                    ? "#ffc107"
+                                                    : "#6c757d";
+                                                <div style="border-left:3px solid @motivoBorder;background:@motivoBg;border-radius:3px;padding:3px 7px;font-size:.7rem;max-width:320px;">
+                                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                                        <i class="@motivoIcon" style="font-size:.8rem;"></i>
+                                                        <span class="fw-semibold">@motivoLabel</span>
+                                                        @if (r.ExclFch.HasValue)
+                                                        {
+                                                            <span class="text-muted ms-auto" style="font-size:.6rem;white-space:nowrap;">@r.ExclFch.Value.ToString("dd/MM/yy HH:mm")</span>
+                                                        }
+                                                    </div>
+                                                    @if (!string.IsNullOrWhiteSpace(r.ExclUsuario))
+                                                    {
+                                                        <div style="font-size:.6rem;color:#495057;">
+                                                            <i class="bi bi-person me-1"></i>@r.ExclUsuario
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(r.ExclObs))
+                                                    {
+                                                        <div class="mt-1" style="font-size:.62rem;color:#343a40;font-style:italic;">
+                                                            <i class="bi bi-chat-left-text me-1 text-muted"></i>@r.ExclObs
+                                                        </div>
+                                                    }
+                                                    @{
+                                                        var esNcRefV = r.Tipdoc is "07" or "08";
+                                                        var tieneRefExclV = !string.IsNullOrWhiteSpace(r.SerDocref) || !string.IsNullOrWhiteSpace(r.NroDocref);
+                                                    }
+                                                    @if (esNcRefV && tieneRefExclV)
+                                                    {
+                                                        <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                                                            <span style="font-size:.6rem;color:var(--sire-gray-600);white-space:nowrap;"><i class="bi bi-link-45deg"></i> Doc. original:</span>
+                                                            @if (!string.IsNullOrWhiteSpace(r.TipDocref))
+                                                            {
+                                                                <span class="badge bg-light text-dark border" style="font-size:.58rem;">T:@r.TipDocref</span>
+                                                            }
+                                                            <span class="font-monospace fw-semibold" style="font-size:.65rem;">@r.SerDocref-@r.NroDocref</span>
+                                                            @if (r.FDocref.HasValue)
+                                                            {
+                                                                <span class="text-muted" style="font-size:.6rem;">@r.FDocref.Value.ToString("dd/MM/yyyy")</span>
+                                                            }
+                                                            @if (!string.IsNullOrWhiteSpace(r.TipoNota))
+                                                            {
+                                                                <span class="badge bg-info text-dark" style="font-size:.58rem;" title="Tipo de nota">TN:@r.TipoNota</span>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(r.DiffCampos) && r.Estado != "SOLO_SUNAT" && r.Estado != "SOLO_LEGACY")
+                                            {
+                                                var labelMap = new Dictionary<string,string>
+                                                {
+                                                    ["BIGRAVDG"]   = "Base Gravada DG",
+                                                    ["IGVIPMDG"]   = "IGV",
+                                                    ["TOTAL_CP"]   = "Total CP",
+                                                    ["VALADQNG"]   = "Val. Adq. NG",
+                                                    ["ISC"]        = "ISC",
+                                                    ["OTROSTRIB"]  = "Otros Trib.",
+                                                    ["MONEDA"]     = "Moneda",
+                                                    ["EST.COMP"]   = "Estado CP",
+                                                    ["T.CAMBIO"]   = "T. Cambio",
+                                                    ["F.EMISION"]  = "F. Emisión",
+                                                    ["T.REF"]      = "Tipo Ref.",
+                                                    ["S.REF"]      = "Serie Ref.",
+                                                    ["N.REF"]      = "Nro Ref.",
+                                                    ["F.REF"]      = "F. Ref.",
+                                                    ["DETRAC"]     = "Detrac.",
+                                                    ["ANIO.DAM"]   = "Año DAM",
+                                                    ["TIPO.NOTA"]  = "Tipo Nota",
+                                                    ["TOTAL.GRAT"] = "Total Grat.",
+                                                };
+                                                foreach (var campo in r.DiffCampos.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                                                {
+                                                    var esCritico = campo is "IGVIPMDG" or "TOTAL_CP";
+                                                    var (sv, lv) = r.ValoresCampo(campo);
+                                                    var label = labelMap.TryGetValue(campo, out var lb2) ? lb2 : campo;
+                                                    var borderColor = esCritico ? "#dc3545" : "#ffc107";
+                                                    var bgColor     = esCritico ? "rgba(220,53,69,.10)" : "rgba(255,193,7,.15)";
+                                                    var textColor   = esCritico ? "#dc3545" : "#856404";
+                                                    <div class="d-inline-flex flex-column me-2 mb-1 align-items-start"
+                                                         style="background:@bgColor;border-left:2px solid @borderColor;border-radius:3px;padding:2px 6px;font-size:.62rem;">
+                                                        <span class="fw-semibold" style="color:@textColor;white-space:nowrap;">@label</span>
+                                                        <span class="font-monospace" style="color:#495057;font-size:.58rem;">S: @sv &nbsp;➞&nbsp; E: @lv</span>
+                                                    </div>
+                                                }
+                                            }
+                                            else if (r.Estado == "SOLO_SUNAT")
+                                            {
+                                                <span class="badge bg-secondary" style="font-size:.58rem;">No existe en ERP Logix</span>
+                                            }
+                                            else if (r.Estado == "SOLO_LEGACY")
+                                            {
+                                                <span class="badge bg-secondary" style="font-size:.58rem;">No existe en SUNAT</span>
+                                            }
+                                            @{
+                                                var _esNcRefV  = r.Estado == "SOLO_SUNAT" && (r.Tipdoc is "07" or "08");
+                                                var _tieneRefV = _esNcRefV && (!string.IsNullOrWhiteSpace(r.SerDocref) || !string.IsNullOrWhiteSpace(r.NroDocref));
+                                            }
+                                            @if (_tieneRefV)
+                                            {
+                                                <div class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                                                    <span style="font-size:.6rem;color:var(--sire-gray-600);white-space:nowrap;"><i class="bi bi-link-45deg"></i> Doc. original:</span>
+                                                    @if (!string.IsNullOrWhiteSpace(r.TipDocref))
+                                                    {
+                                                        <span class="badge bg-light text-dark border" style="font-size:.58rem;">T:@r.TipDocref</span>
+                                                    }
+                                                    <span class="font-monospace fw-semibold" style="font-size:.65rem;">@r.SerDocref-@r.NroDocref</span>
+                                                    @if (r.FDocref.HasValue)
+                                                    {
+                                                        <span class="text-muted" style="font-size:.6rem;">@r.FDocref.Value.ToString("dd/MM/yyyy")</span>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(r.TipoNota))
+                                                    {
+                                                        <span class="badge bg-info text-dark" style="font-size:.58rem;" title="Tipo de nota">TN:@r.TipoNota</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot style="position:sticky;bottom:0;z-index:1;background:#fff;">
+                                <tr style="border-top:2px solid #dee2e6;">
+                                    <td class="td-check-excl" style="display:none;"></td>
+                                    <td colspan="6" class="text-end fw-semibold" style="font-size:.75rem;color:var(--sire-gray-600);">TOTALES</td>
+                                    <td class="text-end fw-bold" id="tfoot-concil-sb">@concil.Sum(x => x.SunatBase).ToString("N2")</td>
+                                    <td class="text-end fw-bold" id="tfoot-concil-lb">@concil.Sum(x => x.LegBase).ToString("N2")</td>
+                                    <td class="text-end fw-bold @(concil.Sum(x => x.DiffBase) != 0 ? "text-danger" : "")" id="tfoot-concil-db">@concil.Sum(x => x.DiffBase).ToString("N2")</td>
+                                    <td class="text-end fw-bold" id="tfoot-concil-st">@concil.Sum(x => x.SunatTotal).ToString("N2")</td>
+                                    <td class="text-end fw-bold" id="tfoot-concil-lt">@concil.Sum(x => x.LegTotal).ToString("N2")</td>
+                                    <td class="text-end fw-bold @(concil.Sum(x => x.DiffTotalCp) != 0 ? "text-danger" : "")" id="tfoot-concil-dt">@concil.Sum(x => x.DiffTotalCp).ToString("N2")</td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+
         </div>
     </div>
 }
+
 
 <script>
     function confirmarConciliar(periodo, periodoLabel) {
         confirmarAccion(
             `¿Conciliar la propuesta ${periodoLabel} contra el ERP (Logix)? Esto actualizará SIRE_LEGACY y SIRE_CONCIL.`,
-            () => document.getElementById('frmConcil_' + periodo).submit()
+            () => {
+                mostrarOverlayGlobal('Conciliando propuesta...', `Período ${periodoLabel} — puede tardar varios segundos.`);
+                document.getElementById('frmConcil_' + periodo).submit();
+            }
         );
     }
     function confirmarEliminar(periodo, periodoLabel, nroReg) {
         confirmarAccion(
             `¿Eliminar la propuesta ${periodoLabel}? Se borrarán ${nroReg} registros de SIRE_PROPUESTA.`,
-            () => document.getElementById('frmElim_' + periodo).submit()
+            () => {
+                mostrarOverlayGlobal('Eliminando propuesta...', `Período ${periodoLabel}`);
+                document.getElementById('frmElim_' + periodo).submit();
+            }
         );
     }
     function cambiarPeriodo() {
         const periodo = document.getElementById('periodoSelect').value;
+        mostrarOverlayGlobal('Cargando período...', periodo || '');
         window.location.href = '@Url.Action("Ventas", new { })' + (periodo ? '?periodo=' + periodo : '?periodo=');
     }
 
@@ -442,15 +920,24 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 
     // ── Modal de confirmación (reemplaza confirm() nativo) ────────────────────
     function confirmarAccion(mensaje, callbackSi) {
-        document.getElementById('modalConfirmarMensaje').textContent = mensaje;
+        const modalEl = document.getElementById('modalConfirmar');
+        const tituloEl = document.getElementById('modalConfirmarTitulo');
+        const mensajeEl = document.getElementById('modalConfirmarMensaje');
         const btn = document.getElementById('btnConfirmarSi');
-        const clone = btn.cloneNode(true);
+        if (!modalEl || !btn) { console.error('SIRE: modal de confirmación no encontrado'); return; }
+        if (tituloEl) tituloEl.innerHTML = '<i class="bi bi-question-circle me-1"></i>Confirmar acción';
+        if (mensajeEl) mensajeEl.textContent = mensaje;
+        // Restaurar estado base del botón antes de clonarlo
+        btn.style.display = '';
+        btn.className = 'btn btn-sm btn-primary';
+        btn.textContent = 'Confirmar';
+        const clone = btn.cloneNode(true); // elimina listeners previos
         btn.parentNode.replaceChild(clone, btn);
         clone.addEventListener('click', () => {
-            bootstrap.Modal.getInstance(document.getElementById('modalConfirmar'))?.hide();
+            bootstrap.Modal.getInstance(modalEl)?.hide();
             callbackSi();
         });
-        new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
+        new bootstrap.Modal(modalEl).show();
     }
 
     // Si venimos del Index con un job a reconectar, abrimos el modal automáticamente
@@ -487,23 +974,33 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     async function ejecutarReprocesarZip(periodo, tipo) {
         const btnId = tipo === 'ventas' ? 'btnReprocesarVentas' : 'btnReprocesarCompras';
         const btn = document.getElementById(btnId);
-        if (btn) { _reprocesarBtnEl = btn; _reprocesarBtnOrig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...'; }
+        if (btn) { _reprocesarBtnEl = btn; _reprocesarBtnOrig = btn.innerHTML; btn.disabled = true; }
+
+        // Mostrar overlay y limpiar tablas
+        const overlay = document.getElementById('overlayReprocesar');
+        if (overlay) overlay.style.display = 'flex';
+        ['tablaPropuestaDetalle','tablaLegacyDetalle','tablaConcilDetalle'].forEach(id => {
+            const tb = document.getElementById(id)?.querySelector('tbody');
+            if (tb) tb.innerHTML = '<tr><td colspan="20" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Recargando datos…</td></tr>';
+        });
+
         try {
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
-            const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
+                const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
                 body: JSON.stringify({ tipo, periodo })
             });
             const data = await resp.json();
             if (data.exitoso) {
-                mostrarToastSire(`✓ ${data.insertados} registros cargados desde ${data.archivoUsado}.`, 'success');
-                setTimeout(() => location.reload(), 1800);
+                mostrarToastSire(`✓ ${data.insertados} registros cargados. Ejecute «Conciliar» para actualizar Legacy y Cruzado.`, 'success');
+                setTimeout(() => location.reload(), 1200);
             } else {
+                if (overlay) overlay.style.display = 'none';
                 mostrarToastSire(`Error: ${data.error ?? 'Ver log del servidor'}`, 'danger');
                 if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
             }
         } catch (e) {
+            if (overlay) overlay.style.display = 'none';
             mostrarToastSire('Error de red: ' + e.message, 'danger');
             if (_reprocesarBtnEl) { _reprocesarBtnEl.disabled = false; _reprocesarBtnEl.innerHTML = _reprocesarBtnOrig; }
         }
@@ -524,26 +1021,242 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         setTimeout(() => t.remove(), 4000);
     }
     let _concilFilter = null;
+
+    function tablaActivaId() {
+        const pane = document.querySelector('#tabsDetalle .nav-link.active')?.dataset?.bsTarget;
+        if (pane === '#panel-legacy') return 'tablaLegacyDetalle';
+        if (pane === '#panel-concil') return 'tablaConcilDetalle';
+        return 'tablaPropuestaDetalle';
+    }
+
     function filtrarConcil(estado, btn) {
         _concilFilter = estado;
-        document.querySelectorAll('#filtroConcilBtns button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#filtroConcilBtns button:not(#btnExcluirSelec):not(#btnRestaurarSelec)').forEach(b => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
-        filtrarTablaPropuesta(document.querySelector('#tablaPropuestaDetalle')?.closest('.sire-card')?.querySelector('input[type=text]')?.value ?? '');
+
+        const showCheck = estado === 'SOLO_SUNAT' || estado === 'EXCLUIDO';
+        document.getElementById('th-check-concil').style.display = showCheck ? '' : 'none';
+        document.querySelectorAll('.td-check-excl').forEach(td => td.style.display = showCheck ? '' : 'none');
+
+        // Botón Enviar Reporte: solo visible en SOLO_SUNAT
+        const btnRep = document.getElementById('btnEnviarReporte');
+        if (btnRep) btnRep.style.display = estado === 'SOLO_SUNAT' ? '' : 'none';
+
+        document.querySelectorAll('.sire-excl-check').forEach(c => c.checked = false);
+        const chkTodos = document.getElementById('chkTodosExcl');
+        if (chkTodos) chkTodos.checked = false;
+        actualizarBadgeExcluir();  // controla también la visibilidad de Excluir/Restaurar
+
+        filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
     }
-    function filtrarTablaPropuesta(q) {
+
+    function actualizarBadgeExcluir() {
+        const n = document.querySelectorAll('.sire-excl-check:checked').length;
+        const bdgExcl  = document.getElementById('excluirBadge');
+        const bdgRest  = document.getElementById('restaurarBadge');
+        const btnExcl  = document.getElementById('btnExcluirSelec');
+        const btnRest  = document.getElementById('btnRestaurarSelec');
+        if (bdgExcl) bdgExcl.textContent = n > 0 ? n : '';
+        if (bdgRest) bdgRest.textContent = n > 0 ? n : '';
+        // Mostrar botón solo si hay selección Y el filtro activo lo permite
+        if (btnExcl) btnExcl.style.display  = (n > 0 && _concilFilter === 'SOLO_SUNAT') ? '' : 'none';
+        if (btnRest) btnRest.style.display   = (n > 0 && _concilFilter === 'EXCLUIDO')   ? '' : 'none';
+    }
+
+    function parseVal(s) {
+        if (!s || s.trim() === '-' || s.trim() === '') return 0;
+        return parseFloat(s.replace(/,/g, '')) || 0;
+    }
+
+    function actualizarTotalesConcil() {
+        const tbody = document.querySelector('#tablaConcilDetalle tbody');
+        if (!tbody) return;
+        const filas = Array.from(tbody.querySelectorAll('tr')).filter(tr => tr.style.display !== 'none');
+        let sb=0, lb=0, db=0, st=0, lt=0, dt=0;
+        filas.forEach(tr => {
+            const tds = tr.querySelectorAll('td');
+            // índice +1 por la columna de checkbox (td-check-excl) como primera celda
+            sb += parseVal(tds[7]?.textContent);
+            lb += parseVal(tds[8]?.textContent);
+            db += parseVal(tds[9]?.textContent);
+            st += parseVal(tds[10]?.textContent);
+            lt += parseVal(tds[11]?.textContent);
+            dt += parseVal(tds[12]?.textContent);
+        });
+        const fmt = n => n.toLocaleString('es-PE', {minimumFractionDigits:2, maximumFractionDigits:2});
+        const set = (id, val, danger) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = fmt(val);
+            el.className = `text-end fw-bold${danger && Math.abs(val) > 0.005 ? ' text-danger' : ''}`;
+        };
+        set('tfoot-concil-sb', sb, false);
+        set('tfoot-concil-lb', lb, false);
+        set('tfoot-concil-db', db, true);
+        set('tfoot-concil-st', st, false);
+        set('tfoot-concil-lt', lt, false);
+        set('tfoot-concil-dt', dt, true);
+    }
+
+    function actualizarVisibilidadFiltros() {
+        const pane = document.querySelector('#tabsDetalle .nav-link.active')?.dataset?.bsTarget;
+        const btns = document.getElementById('filtroConcilBtns');
+        if (btns) btns.style.visibility = (pane === '#panel-concil') ? 'visible' : 'hidden';
+    }
+
+    function filtrarTablaActiva(q) {
         q = (q || '').toLowerCase();
-        const filas = document.querySelectorAll('#tablaPropuestaDetalle tbody tr');
+        const id = tablaActivaId();
+        const filas = document.querySelectorAll('#' + id + ' tbody tr');
         let vis = 0;
         filas.forEach(tr => {
-            const textOk = !q || tr.textContent.toLowerCase().includes(q);
-            const concilOk = !_concilFilter || tr.dataset.concil === _concilFilter;
+            const textOk  = !q || tr.textContent.toLowerCase().includes(q);
+            const concilOk = !_concilFilter || !tr.dataset.concil || tr.dataset.concil === _concilFilter;
             const mostrar = textOk && concilOk;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) vis++;
         });
-        const cnt = document.getElementById('contadorFilasPropuesta');
+        const cnt = document.getElementById('contadorFilasActivo');
         if (cnt) cnt.textContent = vis + ' filas';
+        if (id === 'tablaConcilDetalle') actualizarTotalesConcil();
     }
+
+    // ── Exclusión manual ─────────────────────────────────────────────────────
+
+    function seleccionarTodosExcl(chk) {
+        document.querySelectorAll('#tablaConcilDetalle tbody tr:not([style*="none"]) .sire-excl-check')
+            .forEach(c => c.checked = chk.checked);
+        actualizarBadgeExcluir();
+    }
+
+    function excluirSeleccionados() {
+        const checks = Array.from(document.querySelectorAll('.sire-excl-check:checked'));
+        if (checks.length === 0) {
+            document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-info-circle me-1"></i>Sin selección';
+            document.getElementById('modalConfirmarMensaje').textContent = 'Seleccione al menos un registro para excluir.';
+            document.getElementById('btnConfirmarSi').style.display = 'none';
+            new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
+            return;
+        }
+        document.getElementById('excluirContadorModal').textContent = checks.length;
+        document.getElementById('excluirObsInput').value = '';
+        new bootstrap.Modal(document.getElementById('modalExcluirSelec')).show();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('btnConfirmarExcluir')?.addEventListener('click', async () => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalExcluirSelec'));
+            modal?.hide();
+            const ids = Array.from(document.querySelectorAll('.sire-excl-check:checked')).map(c => parseInt(c.value, 10));
+            const obs = document.getElementById('excluirObsInput')?.value?.trim() || null;
+            const periodo = document.getElementById('periodoSelect')?.value || '@periodoSeleccionado';
+            try {
+                const resp = await fetch('@Url.Action("ExcluirManual","Sire")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json',
+                               'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? '' },
+                    body: JSON.stringify({ tipo: 'ventas', periodo: periodo, idsConcil: ids, obs: obs })
+                });
+                const data = await resp.json();
+                if (data.exitoso) {
+                    mostrarToastSire(`\u2713 ${data.excluidos} registro(s) excluido(s). Aparecerán en el filtro \u2702 Excluidos.`, 'success');
+                    marcarFilasExcluidas(ids, data.usuario, data.obs, data.fechaHora);
+                } else {
+                    mostrarToastSire('Error: ' + data.error, 'danger');
+                }
+            } catch(e) { mostrarToastSire('Error de red: ' + e.message, 'danger'); }
+        });
+
+        window._restaurarIdConcil = null;
+        document.getElementById('btnConfirmarSi')?.addEventListener('click', async () => {
+            const id = window._restaurarIdConcil;
+            if (!id) return;
+            window._restaurarIdConcil = null;
+            bootstrap.Modal.getInstance(document.getElementById('modalConfirmar'))?.hide();
+            await _doRestaurar(id);
+        });
+    });
+
+    function restaurarExcluido(idConcil) {
+        window._restaurarIdConcil = idConcil;
+        document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar registro';
+        document.getElementById('modalConfirmarMensaje').innerHTML = '¿Restaurar este registro a <strong>SOLO_SUNAT</strong>? Se marcará como pendiente de revisión.';
+        const btnSi = document.getElementById('btnConfirmarSi');
+        btnSi.style.display = '';
+        btnSi.className = 'btn btn-sm btn-warning';
+        btnSi.textContent = 'Sí, restaurar';
+        new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
+    }
+
+    async function restaurarSeleccionados() {
+        const checks = Array.from(document.querySelectorAll('.sire-excl-check:checked'));
+        if (checks.length === 0) {
+            document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-info-circle me-1"></i>Sin selección';
+            document.getElementById('modalConfirmarMensaje').textContent = 'Seleccione al menos un registro para restaurar.';
+            document.getElementById('btnConfirmarSi').style.display = 'none';
+            new bootstrap.Modal(document.getElementById('modalConfirmar')).show();
+            return;
+        }
+        document.getElementById('modalConfirmarTitulo').innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar registros';
+        document.getElementById('modalConfirmarMensaje').innerHTML = `¿Restaurar <strong>${checks.length}</strong> registro(s) a <strong>SOLO_SUNAT</strong>? Quedarán pendientes de revisión.`;
+        const btnSi = document.getElementById('btnConfirmarSi');
+        btnSi.style.display = '';
+        btnSi.className = 'btn btn-sm btn-warning';
+        btnSi.textContent = 'Sí, restaurar todos';
+        window._restaurarIdConcil = null;
+        window._restaurarIds = checks.map(c => parseInt(c.value, 10));
+        const modalEl = document.getElementById('modalConfirmar');
+        const modal = new bootstrap.Modal(modalEl);
+        const handler = async () => {
+            modal.hide();
+            modalEl.removeEventListener('click', handler);
+            let ok = 0, err = 0;
+            for (const id of window._restaurarIds) {
+                const r = await _doRestaurar(id, true);
+                r ? ok++ : err++;
+            }
+            mostrarToastSire(`\u2713 ${ok} restaurado(s)${err > 0 ? `, ${err} con error` : ''}.`, err > 0 ? 'warning' : 'success');
+            if (ok > 0) marcarFilasRestauradas(window._restaurarIds || []);
+        };
+        btnSi.onclick = handler;
+        modal.show();
+    }
+
+    async function _doRestaurar(idConcil, silencioso = false) {
+        try {
+            const resp = await fetch('@Url.Action("RestaurarExcluido","Sire")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json',
+                           'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? '' },
+                body: JSON.stringify({ idConcil: idConcil })
+            });
+            const data = await resp.json();
+            if (!silencioso) {
+                if (data.exitoso) {
+                    mostrarToastSire('\u2713 Registro restaurado a SOLO_SUNAT.', 'success');
+                    marcarFilasRestauradas([idConcil]);
+                } else {
+                    mostrarToastSire('Error: ' + data.error, 'danger');
+                }
+            }
+            return data.exitoso;
+        } catch(e) {
+            if (!silencioso) mostrarToastSire('Error de red: ' + e.message, 'danger');
+            return false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('#tabsDetalle .nav-link').forEach(btn => {
+            btn.addEventListener('shown.bs.tab', () => {
+                actualizarVisibilidadFiltros();
+                filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
+            });
+        });
+        actualizarVisibilidadFiltros();
+        filtrarTablaActiva('');
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+    });
 
     // Inicia la exportación en segundo plano (BackgroundService) y muestra modal de progreso
     async function iniciarExportacion(periodo, tipo) {
@@ -598,7 +1311,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         const segundosTranscurridos = Math.round((intentos * intervalo) / 1000);
 
         if (intentos >= maxIntentos) {
-            mostrarErrorExportacion('Tiempo de espera agotado. Recargue la página más tarde.');
+            mostrarErrorExportacion('Tiempo de espera agotado. El proceso sigue corriendo en el servidor; recargue la página más tarde.');
             return;
         }
 
@@ -917,9 +1630,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         estadoDiv.innerHTML = `
             <div class="alert alert-warning py-2 mb-2" style="font-size:.85rem">
                 <i class="bi bi-clock-history me-1"></i>
-                <strong>${estadoLabel}</strong> \u2014 Sin avanzar por <strong>${minutos} min</strong>
+                <strong>${estadoLabel}</strong> — Sin avanzar por <strong>${minutos} min</strong>
             </div>
-            <p class="small text-center text-muted mb-2">El servidor est\u00e1 procesando. Si no avanza, puede cancelar y reiniciar.</p>
+            <p class="small text-center text-muted mb-2">El servidor está procesando. Si no avanza, puede cancelar y reiniciar.</p>
             <div class="d-flex gap-2 justify-content-center flex-wrap">
                 <button class="btn btn-sm btn-danger" onclick="cancelarJob('${jobId}','${periodo}','${tipo}')">
                     <i class="bi bi-x-circle me-1"></i>Cancelar y reiniciar
@@ -937,7 +1650,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             <div class="mb-2"><i class="bi bi-exclamation-triangle-fill fs-1 text-warning"></i></div>
             <p class="fw-semibold text-warning">Job en cola sin procesar</p>
             <p class="small text-muted mb-3">El proceso lleva <strong>${minutos} min</strong> en cola sin iniciar.
-            Esto ocurre cuando el servidor se reinció después de crear el job.<br>
+            Esto ocurre cuando el servidor se reinició después de crear el job.<br>
             El sistema lo recuperará automáticamente en los próximos 2 minutos.</p>
             <div class="d-flex gap-2 justify-content-center flex-wrap">
                 <button class="btn btn-sm btn-warning" onclick="forzarReencolar('${jobId}','${periodo}','${tipo}')">
@@ -1101,5 +1814,125 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         const codLibro = tipo === 'ventas' ? '140000' : '080000';
         const nomArchivo = `PP${ruc}${periodo}${codLibro}001111110.ZIP`;
         window.location.href = `@Url.Action("DescargarArchivoExportado", "Sire")?periodo=${encodeURIComponent(periodo)}&tipo=${encodeURIComponent(tipo)}&nomArchivo=${encodeURIComponent(nomArchivo)}`;
+    }
+
+    // ── Overlay global helpers ───────────────────────────────────────────────────
+    function mostrarOverlayGlobal(mensaje, subMensaje) {
+        // No mostrar si ya hay otro overlay activo (evita superposición)
+        const ovCorreo = document.getElementById('sireOverlayCorreo');
+        if (ovCorreo && ovCorreo.style.display === 'flex') return;
+        const ov  = document.getElementById('sireOverlayGlobal');
+        const msg = document.getElementById('sireOverlayMensaje');
+        const sub = document.getElementById('sireOverlaySubMensaje');
+        if (msg) msg.textContent = mensaje || 'Procesando...';
+        if (sub) sub.textContent = subMensaje || '';
+        if (ov)  ov.style.display = 'flex';
+    }
+    function ocultarOverlayGlobal() {
+        const ov = document.getElementById('sireOverlayGlobal');
+        if (ov) ov.style.display = 'none';
+    }
+
+    // ── Actualización parcial de filas (sin reload) ───────────────────────────────
+    function marcarFilasExcluidas(ids, usuario, obs, fechaHora) {
+        const idSet = new Set(ids.map(String));
+        function buildPanelManual() {
+            const ahora   = fechaHora || new Date().toLocaleString('es-PE', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'});
+            const user    = usuario   || '';
+            const obsText = obs       || '';
+            let html = '<div style="border-left:3px solid #6c757d;background:rgba(108,117,125,.10);border-radius:3px;padding:3px 7px;font-size:.7rem;max-width:320px;">'
+                     + '<div class="d-flex align-items-center gap-1 mb-1">'
+                     + '<i class="bi bi-hand-index-thumb text-secondary" style="font-size:.8rem;"></i>'
+                     + '<span class="fw-semibold">Exclusi&oacute;n manual</span>';
+            if (ahora)   html += '<span class="text-muted ms-auto" style="font-size:.6rem;white-space:nowrap;">' + ahora + '</span>';
+            html += '</div>';
+            if (user)    html += '<div style="font-size:.6rem;color:#495057;"><i class="bi bi-person me-1"></i>' + user + '</div>';
+            if (obsText) html += '<div class="mt-1" style="font-size:.62rem;color:#343a40;font-style:italic;"><i class="bi bi-chat-left-text me-1 text-muted"></i>' + obsText + '</div>';
+            return html + '</div>';
+        }
+        document.querySelectorAll('#tablaConcilDetalle tbody tr').forEach(tr => {
+            const chk = tr.querySelector('.sire-excl-check');
+            if (!chk || !idSet.has(String(chk.value))) return;
+            const idConcil = chk.value;
+            tr.dataset.concil = 'EXCLUIDO';
+            const estadoCel = tr.querySelector('td:nth-child(13)');
+            if (estadoCel) estadoCel.innerHTML = '<span class="sire-badge" style="background:#6c757d;color:#fff;font-size:.62rem;">Excluido</span>';
+            const tds = tr.querySelectorAll('td');
+            const diffTd = tds[tds.length - 1];
+            if (diffTd) diffTd.innerHTML = buildPanelManual();
+            const checkTd = tr.querySelector('.td-check-excl');
+            if (checkTd) checkTd.innerHTML =
+                '<div class="d-flex align-items-center gap-1">'
+                + '<input type="checkbox" class="form-check-input sire-excl-check" value="' + idConcil + '" onchange="actualizarBadgeExcluir()">'
+                + '<button class="btn btn-xs btn-outline-warning p-0 px-1" onclick="restaurarExcluido(' + idConcil + ')" title="Restaurar a SOLO_SUNAT">'
+                + '<i class="bi bi-arrow-counterclockwise"></i></button></div>';
+            tr.classList.add('sire-row-excluido');
+            tr.style.opacity = '';
+        });
+        actualizarBadgeExcluir();
+        filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
+    }
+    function marcarFilasRestauradas(ids) {
+        const idSet = new Set(ids.map(String));
+        document.querySelectorAll('#tablaConcilDetalle tbody tr').forEach(tr => {
+            const chk = tr.querySelector('.sire-excl-check');
+            if (!chk || !idSet.has(String(chk.value))) return;
+            const idConcil = chk.value;
+
+            // 1. Actualizar data-concil
+            tr.dataset.concil = 'SOLO_SUNAT';
+
+            // 2. Actualizar el badge de estado visual
+            const estadoCel = tr.querySelector('td:nth-child(13)');
+            if (estadoCel) {
+                estadoCel.innerHTML = '<span class="sire-badge sire-badge-warn" style="font-size:.62rem;">Solo SUNAT</span>';
+            }
+
+            // 3. Reconstruir la celda de checkbox: EXCLUIDO → SOLO_SUNAT (quitar botón restaurar)
+            const checkTd = tr.querySelector('.td-check-excl');
+            if (checkTd) {
+                checkTd.innerHTML =
+                    `<input type="checkbox" class="form-check-input sire-excl-check"
+                            data-id-concil="${idConcil}" value="${idConcil}"
+                            onchange="actualizarBadgeExcluir()">`;
+            }
+
+            // 4. Quitar estilo de excluido
+            tr.classList.remove('sire-row-excluido');
+            tr.style.opacity = '';
+        });
+        actualizarBadgeExcluir();
+        filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
+    }
+
+    function sireOrdenarColumna(th) {
+        const table = th.closest('table');
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const idx = Array.from(th.closest('tr').children).indexOf(th);
+        const tipo = th.dataset.sortType || 'text';
+        const dir  = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+        table.querySelectorAll('th[data-sort-type]').forEach(t => {
+            t.dataset.sortDir = '';
+            const ic = t.querySelector('.sire-sort-icon');
+            if (ic) { ic.textContent = '\u2195'; ic.style.opacity = '.5'; }
+        });
+        th.dataset.sortDir = dir;
+        const ic = th.querySelector('.sire-sort-icon');
+        if (ic) { ic.textContent = dir === 'asc' ? '\u2191' : '\u2193'; ic.style.opacity = '1'; }
+        function parseFecha(v) {
+            const p = (v || '').trim().split('/');
+            return p.length === 3 ? new Date(+p[2], +p[1] - 1, +p[0]).getTime() : 0;
+        }
+        const rows = Array.from(tbody.rows);
+        rows.sort((a, b) => {
+            const av = (a.cells[idx]?.textContent ?? '').trim();
+            const bv = (b.cells[idx]?.textContent ?? '').trim();
+            const cmp = tipo === 'date'
+                ? parseFecha(av) - parseFecha(bv)
+                : av.localeCompare(bv, 'es', { sensitivity: 'base' });
+            return dir === 'asc' ? cmp : -cmp;
+        });
+        rows.forEach(r => tbody.appendChild(r));
     }
 </script>

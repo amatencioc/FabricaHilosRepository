@@ -2,14 +2,6 @@
 @{
     ViewData["Title"] = "SIRE — Monitoreo";
 
-    string BadgeHealth(string s) => s switch
-    {
-        "Healthy"   => "bg-success",
-        "Degraded"  => "bg-warning text-dark",
-        "Unhealthy" => "bg-danger",
-        _           => "bg-secondary"
-    };
-
     string IconLog(bool exito) => exito
         ? "bi-check-circle-fill text-success"
         : "bi-x-circle-fill text-danger";
@@ -20,7 +12,6 @@
         "EXPORTAR"   => "bg-info text-dark",
         "TICKET"     => "bg-secondary",
         "DESCARGAR"  => "bg-warning text-dark",
-        "HEALTH"     => "bg-success",
         "CARGAR"     => "bg-primary bg-opacity-75",
         "COMPLETAR"  => "bg-success",
         "GUARDAR"    => "bg-info text-dark",
@@ -37,8 +28,6 @@
         >= 500           => "bg-danger",
         _                => "bg-secondary"
     };
-
-    var tabActivo = Model.TabActivo == "log" ? "log" : "health";
 }
 
 @section Breadcrumb {
@@ -56,24 +45,6 @@
 <div class="sire-strip">
     <i class="bi bi-activity" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
     <span class="sire-strip-title">Monitoreo SIRE</span>
-    <span class="sire-strip-sep"></span>
-    <span class="sire-kpi">
-        <i class="bi bi-check-circle-fill" style="color:#68d391;"></i>
-        <span class="sire-kpi-val">@Model.HealthOk</span><span style="opacity:.75">ok</span>
-    </span>
-    <span class="sire-kpi">
-        <i class="bi bi-exclamation-triangle-fill" style="color:#fbd38d;"></i>
-        <span class="sire-kpi-val">@Model.HealthDegraded</span><span style="opacity:.75">degradado</span>
-    </span>
-    <span class="sire-kpi">
-        <i class="bi bi-x-circle-fill" style="color:#fc8181;"></i>
-        <span class="sire-kpi-val">@Model.HealthError</span><span style="opacity:.75">error</span>
-    </span>
-    <span class="sire-kpi" title="Uptime sobre últimos @Model.HealthTotal health checks">
-        <i class="bi bi-bar-chart-fill" style="color:#90cdf4;"></i>
-        <span class="sire-kpi-val" style="@(Model.UptimePercent >= 90 ? "color:#68d391;" : Model.UptimePercent >= 70 ? "color:#fbd38d;" : "color:#fc8181;")">@Model.UptimePercent%</span>
-        <span style="opacity:.75">uptime</span>
-    </span>
     <span class="sire-strip-sep"></span>
     <span class="sire-kpi">
         <i class="bi bi-send-fill" style="color:#90cdf4;"></i>
@@ -98,27 +69,7 @@
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
-        <div class="sire-kpi-card ok">
-            <div class="sire-kpi-card-icon ok"><i class="bi bi-heart-pulse-fill"></i></div>
-            <div>
-                <div class="sire-kpi-card-label">Uptime</div>
-                <div class="sire-kpi-card-value">@Model.UptimePercent%</div>
-                <div class="sire-kpi-card-sub">@Model.HealthOk / @Model.HealthTotal ok</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="sire-kpi-card warn">
-            <div class="sire-kpi-card-icon warn"><i class="bi bi-exclamation-triangle-fill"></i></div>
-            <div>
-                <div class="sire-kpi-card-label">Degradado / Error</div>
-                <div class="sire-kpi-card-value">@(Model.HealthDegraded + Model.HealthError)</div>
-                <div class="sire-kpi-card-sub">@Model.HealthDegraded degradado · @Model.HealthError error</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="sire-kpi-card">
             <div class="sire-kpi-card-icon"><i class="bi bi-send-fill" style="color:var(--sire-accent);"></i></div>
             <div>
@@ -128,13 +79,23 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
         <div class="sire-kpi-card rce">
             <div class="sire-kpi-card-icon rce"><i class="bi bi-stopwatch-fill"></i></div>
             <div>
                 <div class="sire-kpi-card-label">Duración prom.</div>
                 <div class="sire-kpi-card-value">@(Model.ApiDuracionPromMs.HasValue ? $"{Model.ApiDuracionPromMs} ms" : "—")</div>
                 <div class="sire-kpi-card-sub">Llamadas con datos</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="sire-kpi-card @(Model.ApiFallidos > 0 ? "warn" : "ok")">
+            <div class="sire-kpi-card-icon @(Model.ApiFallidos > 0 ? "warn" : "ok")"><i class="bi bi-@(Model.ApiFallidos > 0 ? "exclamation-triangle-fill" : "check-all")"></i></div>
+            <div>
+                <div class="sire-kpi-card-label">Tasa de éxito</div>
+                <div class="sire-kpi-card-value">@(Model.ApiTotal > 0 ? $"{Math.Round((double)Model.ApiExitosos / Model.ApiTotal * 100, 1)}%" : "—")</div>
+                <div class="sire-kpi-card-sub">@Model.ApiLogsVentas.Count RVIE · @Model.ApiLogsCompras.Count RCE</div>
             </div>
         </div>
     </div>
@@ -161,16 +122,7 @@
 
 <ul class="nav nav-tabs mb-0" id="monitoreoTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link @(tabActivo == "health" ? "active" : "")"
-                id="tab-health" data-bs-toggle="tab" data-bs-target="#pane-health"
-                type="button" role="tab">
-            <i class="bi bi-heart-pulse me-1"></i>
-            Health Checks
-            <span class="badge @(Model.HealthError > 0 ? "bg-danger" : "bg-success") ms-1">@Model.HealthTotal</span>
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link @(tabActivo == "log" ? "active" : "")"
+        <button class="nav-link active"
                 id="tab-log" data-bs-toggle="tab" data-bs-target="#pane-log"
                 type="button" role="tab">
             <i class="bi bi-journal-code me-1"></i>
@@ -182,62 +134,7 @@
 
 <div class="tab-content sire-card border-top-0" style="border-radius:0 0 8px 8px;">
 
-    <div class="tab-pane fade @(tabActivo == "health" ? "show active" : "")" id="pane-health" role="tabpanel">
-        <div class="sire-card-header">
-            <i class="bi bi-clock-history"></i>
-            <span>Registro de Health Checks</span>
-            <span class="ms-auto sire-badge sire-badge-secondary">@Model.HealthTotal evento(s)</span>
-        </div>
-        <div class="card-body p-0">
-            @if (!Model.HealthLogs.Any())
-            {
-                <div class="text-muted text-center py-4">
-                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>Sin registros de health check aún.
-                </div>
-            }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table sire-table table-hover align-middle mb-0" id="tblHealth">
-                        <thead>
-                            <tr>
-                                <th style="width:165px">Timestamp (local)</th>
-                                <th style="width:110px">Estado</th>
-                                <th style="width:75px" class="text-center">Auth</th>
-                                <th style="width:75px" class="text-center">RVIE</th>
-                                <th style="width:75px" class="text-center">RCE</th>
-                                <th>Descripción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var h in Model.HealthLogs)
-                            {
-                                <tr>
-                                    <td class="text-nowrap small">@h.FechaUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                    <td><span class="badge @BadgeHealth(h.Status)">@h.Status</span></td>
-                                    <td class="text-center">
-                                        <i class="bi @(h.AuthOk ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger")"
-                                           title="@(h.AuthOk ? "Token OK" : "Sin token")"></i>
-                                    </td>
-                                    <td class="text-center">
-                                        <i class="bi @(h.RvieOk ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger")"
-                                           title="@(h.RvieOk ? $"RVIE OK — {h.RviePeriodos} períodos" : h.RvieError ?? "Error RVIE")"></i>
-                                    </td>
-                                    <td class="text-center">
-                                        <i class="bi @(h.RceOk ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger")"
-                                           title="@(h.RceOk ? $"RCE OK — {h.RcePeriodos} períodos" : h.RceError ?? "Error RCE")"></i>
-                                    </td>
-                                    <td class="small text-muted">@h.Descripcion</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </div>
-    </div>
-
-    <div class="tab-pane fade @(tabActivo == "log" ? "show active" : "")" id="pane-log" role="tabpanel">
+    <div class="tab-pane fade show active" id="pane-log" role="tabpanel">
         <div class="sire-card-header border-bottom-0 pb-2">
             <i class="bi bi-journal-code"></i>
             <span>Auditoría de llamadas HTTP a SUNAT</span>

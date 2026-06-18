@@ -846,13 +846,16 @@ public class PlaneamientoController : OracleBaseController
         var tDatos          = _pendientes.GetPendientesRevisadoAsync(
             tipo ?? "%", asesor ?? "%", cliente ?? "%");
         await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        var datosRev    = tDatos.Result.ToList();
+        var codCliRev   = datosRev.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codVendeRev = datosRev.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
-        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.Where(a => codVendeRev.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.Where(c => codCliRev.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result);
+        return View(datosRev);
     }
 
     // ── Partidas pendientes de evaluación de calidad ─────────────────────────
@@ -866,13 +869,16 @@ public class PlaneamientoController : OracleBaseController
         var tDatos          = _pendientes.GetPendientesEvalCalidadAsync(
             tipo ?? "%", asesor ?? "%", cliente ?? "%");
         await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        var datosEc     = tDatos.Result.ToList();
+        var codCliEc    = datosEc.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codVendeEc  = datosEc.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
-        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.Where(a => codVendeEc.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.Where(c => codCliEc.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result);
+        return View(datosEc);
     }
 
     // ── Partidas con evaluación de calidad pendiente de definición ───────────
@@ -894,13 +900,16 @@ public class PlaneamientoController : OracleBaseController
         var tDatos          = _pendientes.GetPendientesEnconadoAsync(
             tipo ?? "%", asesor ?? "%", cliente ?? "%");
         await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        var datosEnc     = tDatos.Result.ToList();
+        var codCliEnc    = datosEnc.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codVendeEnc  = datosEnc.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
-        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.Where(a => codVendeEnc.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.Where(c => codCliEnc.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result);
+        return View(datosEnc);
     }
 
     // ── Partidas pendientes de teñido ────────────────────────────────────────
@@ -914,12 +923,15 @@ public class PlaneamientoController : OracleBaseController
         var tDatos          = _pendientes.GetPendientesTenidoAsync(
             tipo ?? "%", asesor ?? "%", cliente ?? "%");
         await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        var datosTen     = tDatos.Result.ToList();
+        var codCliTen    = datosTen.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codVendeTen  = datosTen.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = tFiltroAsesores.Result.ToList();
-        ViewBag.FiltroClientes = tFiltroClientes.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.Where(a => codVendeTen.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.Where(c => codCliTen.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result);
+        return View(datosTen);
     }
 }

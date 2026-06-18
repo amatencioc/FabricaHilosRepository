@@ -190,11 +190,16 @@ builder.Services.AddScoped<IPlnPendientesService, PlnPendientesService>();
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
 
+// Health checks requeridos por app.MapHealthChecks("/health") y "/health/sire"
+builder.Services.AddHealthChecks();
+
 // ══════════════════════════════════════════════════════════════════════════════
 // SIRE LAZY INITIALIZATION: Defer SIRE services until Contabilidad module is accessed
 // ══════════════════════════════════════════════════════════════════════════════
 var sireOptions = builder.Configuration.GetSection("Sire").Get<SireOptions>() ?? new SireOptions();
 builder.Services.Configure<SireOptions>(builder.Configuration.GetSection("Sire"));
+builder.Services.Configure<FabricaHilos.Services.Sire.SireReporteComprasOptions>(
+    builder.Configuration.GetSection("SireReporteCompras"));
 
 if (sireOptions.UseMock)
 {
@@ -223,22 +228,12 @@ builder.Services.AddSingleton<ISireOracleRepository, SireOracleRepository>();
 // Cola y worker de exportación asíncrona SIRE
 builder.Services.AddSingleton<ISireExportacionQueue, SireExportacionQueue>();
 builder.Services.AddScoped<SireValidaService>();
+builder.Services.AddScoped<FabricaHilos.Services.Sire.SireReporteComprasService>();
 builder.Services.AddHostedService<SireExportacionWorker>();
 // Fase 2: Watcher de tickets SUNAT (polling cada WatcherIntervalMin minutos)
 builder.Services.AddHostedService<SireTicketWatcherWorker>();
 
-// NOTE: SireMonitoringService was previously registered as AddHostedService
-// It is now DEFERRED to lazy initialization - see LazySireInitializer
-// builder.Services.AddHostedService<FabricaHilos.Services.Sire.SireMonitoringService>();
-
-// ══════════════════════════════════════════════════════════════════════════════
-// HEALTH CHECKS: Monitoreo de integraciones externas (SUNAT SIRE)
-// Registrado pero sin ejecutarse automáticamente al startup
-// ══════════════════════════════════════════════════════════════════════════════
-builder.Services.AddHealthChecks()
-    .AddCheck<FabricaHilos.Health.SireHealthCheck>(
-        "sire",
-        tags: new[] { "sunat", "sire", "external" });
+// NOTE: SireMonitoringService eliminado — health checks de SUNAT removidos.
 
 // Licencia QuestPDF (Community: proyectos con ingresos < $1M USD)
 QuestPDF.Settings.License = LicenseType.Community;

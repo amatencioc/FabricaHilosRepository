@@ -8,6 +8,8 @@ public class PlnPendienteRevisado
     public string    Material     { get; set; } = "";   // MATERIAL_07
     public DateTime? FechaFin     { get; set; }         // FECHA_FIN_07
     public string    Cliente      { get; set; } = "";   // DESC_CLIENTE_07
+    public string    CodCliente   { get; set; } = "";   // COD_CLIENTE_07
+    public string    CodVende     { get; set; } = "";   // COD_VENDE_07
     public string    Maquina      { get; set; } = "";   // DESC_MAQ_07
     public decimal   NroRmc       { get; set; }         // NRO_RMC_07
     public decimal   Peso         { get; set; }         // PESO_PARTIDA_07
@@ -28,6 +30,8 @@ public class PlnPendienteEvalCalidad
     public string    Partida      { get; set; } = "";   // PARTIDA_03
     public string    Material     { get; set; } = "";   // MATERIAL_03
     public string    Cliente      { get; set; } = "";   // DESC_CLIENTE_03
+    public string    CodCliente   { get; set; } = "";   // COD_CLIENTE_03
+    public string    CodVende     { get; set; } = "";   // COD_VENDE_03
     public DateTime? FechaFin     { get; set; }         // FECHA_FIN_03
     public string    CodMaq       { get; set; } = "";   // COD_MAQ_03
     public string    Maquina      { get; set; } = "";   // DESC_MAQ_03
@@ -50,6 +54,8 @@ public class PlnPendienteEnconado
     public string    Partida       { get; set; } = "";  // PARTIDA_05
     public string    Material      { get; set; } = "";  // MATERIAL_05
     public string    Cliente       { get; set; } = "";  // DESC_CLIENTE_05
+    public string    CodCliente    { get; set; } = "";  // COD_CLIENTE_05
+    public string    CodVende      { get; set; } = "";  // COD_VENDE_05
     public DateTime? Fecha         { get; set; }        // FECHA_05 (nullable en parte Hilandería)
     public string    EstEval       { get; set; } = "";  // DESC_EST_EVAL_05
     public string    Resultado     { get; set; } = "";  // DESC_RESULTADO_05
@@ -73,6 +79,8 @@ public class PlnPendienteTenido
     public string    Partida       { get; set; } = "";  // PARTIDA
     public string    Material      { get; set; } = "";  // MATERIAL
     public string    Cliente       { get; set; } = "";  // DESC_CLIENTE
+    public string    CodCliente    { get; set; } = "";  // COD_CLIENTE
+    public string    CodVende      { get; set; } = "";  // COD_VENDE
     public DateTime? FechaProg     { get; set; }        // FECHA_PROG (nullable en PROGRAMADO)
     public string    CodMaq        { get; set; } = "";  // COD_MAQ
     public string    Maquina       { get; set; } = "";  // DESC_MAQ

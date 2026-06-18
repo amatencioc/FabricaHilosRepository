@@ -20,6 +20,9 @@ public enum TipoNotificacion
     /// <summary>Notifica al vendedor que su reclamo ha sido evaluado y completado.</summary>
     ReclamoEvaluadoVendedor,
 
+    /// <summary>Envía el reporte de documentos Solo SUNAT (SIRE RCE) al equipo de Contabilidad.</summary>
+    SireReporteCompras,
+
     // Futuros casos (agregar aquí y crear Templates/{Nombre}.html):
     // DocumentoPorVencer,
     // ErrorProcesamiento,

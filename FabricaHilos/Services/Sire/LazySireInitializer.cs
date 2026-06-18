@@ -14,7 +14,10 @@ public class LazySireInitializer : ILazySireInitializer
     private readonly ILogger<LazySireInitializer> _logger;
     private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
     private readonly TaskCompletionSource _readyTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private bool _isInitialized = false;
+    // volatile garantiza visibilidad inmediata entre hilos sin necesitar lock.
+    // Sin volatile, el JIT/CPU puede cachear el valor en un registro y otros
+    // threads leen false indefinidamente aunque ya se haya inicializado.
+    private volatile bool _isInitialized = false;
 
     public bool IsInitialized => _isInitialized;
 

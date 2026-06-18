@@ -234,7 +234,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p id="txtConfirmarMasivo" class="mb-0"></p>
+                <p id="txtConfirmarMasivo" class="mb-0" style="white-space: pre-wrap"></p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -286,12 +286,12 @@ function showAlerta(mensaje, titulo, esError) {
     const header = document.getElementById('modalAlertaHeader');
     header.style.background   = esError ? 'var(--aq-err)' : 'var(--aq)';
     header.style.color        = '#fff';
-    new bootstrap.Modal(document.getElementById('modalAlerta')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAlerta')).show();
 }
 
 function showConfirm(mensaje, onConfirm) {
     document.getElementById('txtConfirmarMasivo').textContent = mensaje;
-    const modal = new bootstrap.Modal(document.getElementById('modalConfirmarMasivo'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfirmarMasivo'));
     const btnOk = document.getElementById('btnConfirmarMasivoOk');
     // Limpiar handler previo para evitar acumulación
     if (_confirmHandler) {
@@ -349,6 +349,7 @@ async function consultar() {
     const desde = document.getElementById('dtDesde').value;
     const hasta = document.getElementById('dtHasta').value;
     if (!desde || !hasta) { showAlerta('Seleccione el período.', 'Aviso', false); return; }
+    if (desde > hasta) { showAlerta('La fecha inicial no puede ser mayor que la fecha final.', 'Aviso', false); return; }
 
     const btn = document.getElementById('btnConsultar');
     btn.disabled = true;
@@ -359,9 +360,10 @@ async function consultar() {
             `/RecursosHumanos/Aquarius/Marcaciones/ConsultarRangoMasivo?fechaInicio=${desde}&fechaFin=${hasta}`,
             { cache: 'no-store' }
         );
+        if (!r.ok) { showAlerta(`Error del servidor (${r.status}).`, 'Error', true); return; }
         const json = await r.json();
         if (!json.ok) { showAlerta('Error: ' + json.mensaje, 'Error', true); return; }
-        procesarDatos(json.data, desde, hasta);
+        procesarDatos(json.data ?? [], desde, hasta);
     } catch(e) {
         showAlerta('Error de red al consultar.', 'Error de red', true);
     } finally {
@@ -445,7 +447,6 @@ function renderKpis() {
 
 // ── Tabla ────────────────────────────────────────────────────────────────────
 const DIAS_CORTO = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
-const DIAS_FULL  = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
 function diaSemana(iso) {
     const [y, m, d] = iso.split('-').map(Number);
@@ -456,12 +457,6 @@ function diaSemana(iso) {
 function renderTabla() {
     // Cabecera dinámica
     const trHead = document.getElementById('trHead');
-    // Eliminar columnas de días previas (entre Empleado y Pendientes)
-    while (trHead.cells.length > 2) trHead.deleteCell(2);  // quitamos la última (Pendientes) también
-    // Quitar la columna Pendientes original (la última)
-    if (trHead.cells.length === 2) {
-        // Regenerar Pendientes al final después de las fechas
-    }
 
     // Limpiar encabezado completamente y regenerar
     trHead.innerHTML =
@@ -508,8 +503,8 @@ function renderTabla() {
     setTimeout(() => {
         const thF = document.getElementById('thFotocheck');
         const thE = document.getElementById('thEmpleado');
-        if (thF) thF.addEventListener('click', () => { toggleSort('fotocheck'); }, { once: true });
-        if (thE) thE.addEventListener('click', () => { toggleSort('empleado'); }, { once: true });
+        if (thF) thF.addEventListener('click', () => { toggleSort('fotocheck'); });
+        if (thE) thE.addEventListener('click', () => { toggleSort('empleado'); });
     }, 0);
 
     tbody.innerHTML = sorted.map(emp => {
@@ -546,7 +541,7 @@ function renderTabla() {
 
         return `<tr>
             <td class="text-center"><input type="checkbox" class="chk-emp" data-personal="${escHtml(emp.codPersonal)}" ${chkChecked} style="cursor:pointer"></td>
-            <td><span style="color:var(--aq-dk);font-weight:600;font-size:.8rem">${emp.fotocheck || '—'}</span></td>
+            <td><span style="color:var(--aq-dk);font-weight:600;font-size:.8rem">${escHtml(emp.fotocheck) || '—'}</span></td>
             <td style="font-size:.81rem">${escHtml(emp.empleado)}</td>
             ${daysCells}
             <td class="text-center">
@@ -574,6 +569,12 @@ document.addEventListener('change', e => {
     }
 });
 
+// Delegación de clicks de ordenamiento (evita acumulación de listeners al re-renderizar)
+document.addEventListener('click', e => {
+    if (e.target.closest('#thFotocheck')) { toggleSort('fotocheck'); }
+    else if (e.target.closest('#thEmpleado')) { toggleSort('empleado'); }
+});
+
 // ── Ordenar columnas ────────────────────────────────────────────────────────────────
 function toggleSort(col) {
     if (_sortCol === col) {
@@ -583,7 +584,6 @@ function toggleSort(col) {
         _sortDir = 1;
     }
     renderTabla();
-    actualizarContadorSeleccionados();
 }
 
 // ── Checkbox counter ─────────────────────────────────────────────────────────
@@ -608,9 +608,11 @@ async function depurarSeleccionados() {
     const desde = document.getElementById('dtDesde').value;
     const hasta = document.getElementById('dtHasta').value;
     if (!desde || !hasta) { showAlerta('Seleccione el período.', 'Aviso', false); return; }
+    if (desde > hasta) { showAlerta('La fecha inicial no puede ser mayor que la fecha final.', 'Aviso', false); return; }
 
     const checkeados = Array.from(document.querySelectorAll('.chk-emp:checked'))
-                            .map(c => c.dataset.personal);
+                            .map(c => c.dataset.personal)
+                            .filter(p => p !== undefined && p !== '');
     if (!checkeados.length) { showAlerta('Seleccione al menos un empleado.', 'Aviso', false); return; }
 
     const todos = document.querySelectorAll('.chk-emp').length;
@@ -620,7 +622,7 @@ async function depurarSeleccionados() {
 
     // Contar días S totales
     const totalDiasS = checkeados.reduce((acc, personal) => {
-        const emp = _datos.find(e => e.codPersonal === personal);
+        const emp = _datos.find(e => String(e.codPersonal) === personal);
         return acc + (emp ? _fechas.filter(f => esDiaPendiente(emp.dias[f])).length : 0);
     }, 0);
 
@@ -634,8 +636,9 @@ async function depurarSeleccionados() {
 async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
     const btn = document.getElementById('btnDepurarTodo');
     btn.disabled = true;
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
 
-    const modal = new bootstrap.Modal(document.getElementById('modalDepurando'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDepurando'));
     modal.show();
     _inicioMs = Date.now();
     document.getElementById('txtTiempoMasivo').textContent = '';
@@ -643,7 +646,7 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
     // Construir lista de {personal, fechas:['S-date',...]} usando solo días con pendiente='S'
     const payload = checkeados
         .map(personal => {
-            const emp = _datos.find(e => e.codPersonal === personal);
+            const emp = _datos.find(e => String(e.codPersonal) === personal);
             const fechasS = emp
                 ? _fechas.filter(f => esDiaPendiente(emp.dias[f]))
                 : [];
@@ -651,11 +654,18 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
         })
         .filter(pf => pf.fechas.length > 0);
 
+    if (payload.length === 0) {
+        modal.hide();
+        btn.disabled = false;
+        showAlerta('No hay días pendientes para los empleados seleccionados. Vuelva a consultar.', 'Aviso', false);
+        return;
+    }
+
     const totalJobs = payload.reduce((acc, pf) => acc + pf.fechas.length, 0);
     document.getElementById('txtProgresoMasivo').textContent =
         `Encolando ${totalJobs} día(s) pendientes de ${payload.length} empleado(s)…`;
 
-    const cronometro = setInterval(() => {
+    let cronometro = setInterval(() => {
         const sec = Math.floor((Date.now() - _inicioMs) / 1000);
         document.getElementById('txtTiempoMasivo').textContent = `Tiempo transcurrido: ${sec}s`;
     }, 1000);
@@ -670,6 +680,13 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
             method: 'POST',
             body:   formData
         });
+        if (!r.ok) {
+            clearInterval(cronometro);
+            modal.hide();
+            btn.disabled = false;
+            showAlerta(`Error del servidor (${r.status}).`, 'Error', true);
+            return;
+        }
         const json = await r.json();
         if (!json.ok) {
             clearInterval(cronometro);
@@ -679,10 +696,28 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
             return;
         }
 
-        _jobIds = json.jobIds;
+        _jobIds = json.jobIds ?? [];
+        if (_jobIds.length === 0) {
+            clearInterval(cronometro);
+            modal.hide();
+            btn.disabled = false;
+            showAlerta('El servidor no enqoló ningún trabajo. Puede que no haya días pendientes.', 'Aviso', false);
+            return;
+        }
         const totalJobsEncolados = _jobIds.length;
 
+        let _pollCount = 0;
+        const MAX_POLL  = 150;  // 5 min a 2s/ciclo
         _pollTimer = setInterval(async () => {
+            _pollCount++;
+            if (_pollCount > MAX_POLL) {
+                clearInterval(_pollTimer); _pollTimer = null;
+                clearInterval(cronometro);
+                modal.hide();
+                btn.disabled = false;
+                showAlerta('La depuración tardó demasiado tiempo. Verifique el resultado manualmente.', 'Tiempo agotado', true);
+                return;
+            }
             try {
                 const estados = await Promise.all(
                     _jobIds.map(id =>
@@ -695,7 +730,7 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
                     `Procesando: ${completados} de ${totalJobsEncolados} día(s) completados…`;
 
                 if (completados === totalJobsEncolados) {
-                    clearInterval(_pollTimer);
+                    clearInterval(_pollTimer); _pollTimer = null;
                     clearInterval(cronometro);
                     modal.hide();
                     btn.disabled = false;
@@ -704,12 +739,18 @@ async function ejecutarDepuracionSeleccionados(desde, hasta, checkeados) {
                     const durSeg   = Math.floor((Date.now() - _inicioMs) / 1000);
                     mostrarResultado(errores === 0,
                         errores === 0
-                            ? `Depuración completada: ${totalJobs} empleado(s) procesados. (${durSeg}s)`
-                            : `Completado con ${errores} error(es) de ${totalJobs} empleados. (${durSeg}s)`,
+                            ? `Depuración completada: ${payload.length} empleado(s), ${totalJobs} día(s) procesados. (${durSeg}s)`
+                            : `Completado con ${errores} error(es) en ${payload.length} empleado(s). (${durSeg}s)`,
                         durSeg);
                     await consultar();
                 }
-            } catch(e) { /* ignorar error de polling */ }
+            } catch(e) {
+                clearInterval(_pollTimer); _pollTimer = null;
+                clearInterval(cronometro);
+                modal.hide();
+                btn.disabled = false;
+                showAlerta('Error inesperado al verificar el estado de la depuración.', 'Error', true);
+            }
         }, 2000);
     } catch(e) {
         clearInterval(cronometro);
@@ -739,8 +780,8 @@ function mostrarResultado(ok, mensaje, durSeg) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 }

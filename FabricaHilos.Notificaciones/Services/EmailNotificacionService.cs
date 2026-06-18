@@ -66,6 +66,21 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 mensaje.Cc.Add(new MailboxAddress(reclamoPayload.NombreVendedor, reclamoPayload.CorreoCopia));
             }
 
+            // CC múltiple y adjunto Excel para el reporte SIRE Compras
+            if (payload is FabricaHilos.Notificaciones.Models.Payloads.SireReporteComprasPayload sirePayload)
+            {
+                if (sirePayload.CorreosCopia is { Count: > 0 })
+                    foreach (var cc in sirePayload.CorreosCopia)
+                        if (!string.IsNullOrWhiteSpace(cc))
+                            mensaje.Cc.Add(new MailboxAddress(cc, cc));
+
+                if (sirePayload.ArchivoExcel is { Length: > 0 } xlsBytes)
+                    builder.Attachments.Add(
+                        sirePayload.NombreArchivo,
+                        xlsBytes,
+                        new MimeKit.ContentType("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+            }
+
             mensaje.Body = builder.ToMessageBody();
 
             // 3. Enviar con MailKit
@@ -110,6 +125,8 @@ public sealed class EmailNotificacionService : IEmailNotificacionService
                 "🔍 Reclamo recibido para análisis de calidad",
             TipoNotificacion.ReclamoEvaluadoVendedor =>
                 "✅ Su reclamo ha sido evaluado — Acción requerida",
+            TipoNotificacion.SireReporteCompras =>
+                $"📊 SIRE RCE — Documentos Solo SUNAT período {(payload as FabricaHilos.Notificaciones.Models.Payloads.SireReporteComprasPayload)?.Periodo ?? string.Empty}",
             _ => "Notificación del Sistema — La Colonial Fábrica de Hilos"
         };
 }

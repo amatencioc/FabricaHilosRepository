@@ -97,7 +97,8 @@ public sealed class SireExportacionWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[SIRE-WORKER] Error inesperado en el loop principal del worker.");
-                await Task.Delay(5000, stoppingToken);
+                try { await Task.Delay(5000, stoppingToken); }
+                catch (OperationCanceledException) { break; }
             }
         }
 
@@ -125,11 +126,14 @@ public sealed class SireExportacionWorker : BackgroundService
         try
         {
             var jobs = await _repo.GetJobsInterrumpidosAsync(cancellationToken);
+            var yaReencolados = new HashSet<int>();
             foreach (var job in jobs)
             {
                 // Solo reencola jobs Pendiente/EnProceso con más de 2 min de antigüedad
                 // EsperandoTicket lo gestiona el WatcherWorker, no este watchdog
                 if (job.Estado == EstadoJob.EsperandoTicket) continue;
+                // Evitar reencolado doble si el mismo job aparece dos veces en la consulta
+                if (!yaReencolados.Add(job.Id)) continue;
 
                 var minutosParado = (DateTime.Now - job.FechaActualizacion).TotalMinutes;
                 if (minutosParado >= 2)
@@ -285,9 +289,9 @@ public sealed class SireExportacionWorker : BackgroundService
                 throw;
             }
 
-            job.CodProceso         = ticketFinal.CodProceso;
-            job.NombreArchivo      = ticketFinal.ArchivoReporte?.NomArchivoReporte;
-            job.CodTipoArchivo     = ticketFinal.ArchivoReporte?.CodTipoArchivoReporte;
+            job.CodProceso         = ticketFinal.CodProceso     ?? job.CodProceso;
+            job.NombreArchivo      = ticketFinal.ArchivoReporte?.NomArchivoReporte ?? job.NombreArchivo;
+            job.CodTipoArchivo     = ticketFinal.ArchivoReporte?.CodTipoArchivoReporte ?? job.CodTipoArchivo;
             job.FechaActualizacion = DateTime.Now;
             await _repo.UpdateJobAsync(job, stoppingToken);
 
@@ -328,7 +332,7 @@ public sealed class SireExportacionWorker : BackgroundService
                 codTipoArchivo,
                 codLibro,
                 ticketFinal.PerTributario.Length > 0 ? ticketFinal.PerTributario : job.Periodo,
-                ticketFinal.CodProceso,
+                ticketFinal.CodProceso ?? string.Empty,
                 job.NumTicket!);
 
             var swDescarga = System.Diagnostics.Stopwatch.StartNew();

@@ -16,10 +16,21 @@ public sealed class SireValidaCargaResult
 }
 
 /// <summary>
+/// Resultado de la re-vinculación de exclusiones manuales post-carga.
+/// </summary>
+internal sealed record ExcluidoManualSnapshot(
+    long   IdExcluido,
+    string Tipdoc,
+    string? Serie,
+    string? Numero);
+
+/// <summary>
 /// Servicio encargado de:
 /// 1. Extraer el archivo TXT de propuesta del ZIP de SUNAT.
 /// 2. Parsear cada línea (formato pipe-delimited según estándar SIRE).
 /// 3. Guardar en SIG.SIRE_PROPUESTA con DELETE del período + INSERT limpio.
+///    Las exclusiones MANUALES se re-vinculan automáticamente tras el INSERT
+///    para que el usuario no pierda el trabajo de exclusión manual previo.
 ///    (SIG.SIRE_VALIDA queda como tabla de respaldo histórico — no se toca aquí.)
 /// </summary>
 public sealed class SireValidaService
@@ -52,7 +63,8 @@ public sealed class SireValidaService
         CancellationToken cancellationToken = default)
     {
         var tipo       = tipoRegistro.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
-        var periodoNum = int.Parse(periodo);
+        if (!int.TryParse(periodo, out var periodoNum))
+            throw new ArgumentException($"Período '{periodo}' no es un número YYYYMM válido.", nameof(periodo));
 
         var lineas = ExtraerLineasTxt(contenidoZip, tipoRegistro);
         _logger.LogInformation("[SIRE-PROP] ZIP extraído: {Lineas} líneas tipo={Tipo} periodo={Periodo}",
@@ -95,51 +107,179 @@ INSERT INTO SIG.SIRE_PROPUESTA (
     :fDocref, :tipDocref, :serDocref, :nroDocref,
     :codDam, :tipoBien, :idProyecto, :porcpart, :imb,
     :carMod, :flagDetrac, :tipoNota,
-    :estComp, :inconsist, SYSDATE, '0'
+    :estComp, :inconsist, CURRENT_DATE, '0'
 )";
 
-        using var conn = new OracleConnection(_connectionString);
+        await using var conn = new OracleConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
-        conn.AutoCommit = true;
+        // AutoCommit deshabilitado: DELETE+INSERT son atómicos.
+        // Si algo falla a mitad de los INSERTs, ROLLBACK restaura los registros previos del período.
+        conn.AutoCommit = false;
 
-        // ── DELETE del período anterior ────────────────────────────────────────
-        using (var delCmd = new OracleCommand(sqlDelete, conn))
+        // Configurar zona horaria Lima para que CURRENT_DATE devuelva hora local.
+        await using (var tzCmd = conn.CreateCommand())
         {
-            delCmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo       });
-            delCmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum });
-            var borrados = await delCmd.ExecuteNonQueryAsync(cancellationToken);
-            _logger.LogInformation("[SIRE-PROP] DELETE {B} registros previos tipo={T} periodo={P}",
-                borrados, tipo, periodo);
+            tzCmd.CommandText = "ALTER SESSION SET TIME_ZONE = 'America/Lima'";
+            await tzCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // ── INSERT de cada línea del TXT ──────────────────────────────────────
-        foreach (var linea in lineas)
+        // ── Capturar exclusiones manuales ANTES del DELETE ──────────────────────
+        // Se identifican por clave natural (TIPDOC+SERIE+NUMERO) para re-vincularlas
+        // con los nuevos ID_PROP que generará el INSERT masivo a continuación.
+        var excluidosManuales = new List<ExcluidoManualSnapshot>();
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+            const string sqlLeerExcl = @"
+                SELECT ID_EXCLUIDO, TIPDOC, SERIE, NUMERO
+                FROM   SIG.SIRE_EXCLUIDOS_LOGIX
+                WHERE  TIPO    = :tipo
+                  AND  PERIODO = :periodo
+                  AND  MOTIVO  = 'MANUAL'
+                  AND  ESTADO  = 'A'";
+            using var cmdExcl = new OracleCommand(sqlLeerExcl, conn);
+            cmdExcl.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo       });
+            cmdExcl.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum });
+            await using var rdrExcl = await cmdExcl.ExecuteReaderAsync(cancellationToken);
+            while (await rdrExcl.ReadAsync(cancellationToken))
             {
-                var campos = linea.Split('|');
-                // RVIE ventas: 40 cols con prefijo → mínimo 35. RCE compras: 80 cols → mínimo 41.
-                var minCols = tipo == "1" ? 35 : 41;
-                if (campos.Length < minCols) continue;
+                excluidosManuales.Add(new ExcluidoManualSnapshot(
+                    Convert.ToInt64(rdrExcl["ID_EXCLUIDO"]),
+                    rdrExcl.GetString(rdrExcl.GetOrdinal("TIPDOC")),
+                    rdrExcl.IsDBNull(rdrExcl.GetOrdinal("SERIE"))  ? null : rdrExcl.GetString(rdrExcl.GetOrdinal("SERIE")),
+                    rdrExcl.IsDBNull(rdrExcl.GetOrdinal("NUMERO")) ? null : rdrExcl.GetString(rdrExcl.GetOrdinal("NUMERO"))
+                ));
+            }
+            _logger.LogInformation("[SIRE-PROP] Exclusiones manuales previas capturadas: {N} tipo={T} periodo={P}",
+                excluidosManuales.Count, tipo, periodoNum);
+        }
+        catch (OracleException exExcl) when (exExcl.Number == 942)
+        {
+            // Tabla aún no creada — se omite sin interrumpir la operación
+        }
 
-                using var cmd = new OracleCommand(sqlInsert, conn);
-                cmd.BindByName = true;
-                cmd.Parameters.AddRange(ParsearLinea(campos, tipo, periodoNum, jobId));
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-                insertados++;
-            }
-            catch (OracleException oex) when (oex.Message.Contains("ORA-00001"))
+        await using var tx = conn.BeginTransaction();
+        try
+        {
+            // ── DELETE del período anterior ──────────────────────────────────────
+            using (var delCmd = new OracleCommand(sqlDelete, conn))
             {
-                duplicados++;
+                delCmd.Transaction = tx;
+                delCmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo       });
+                delCmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum });
+                var borrados = await delCmd.ExecuteNonQueryAsync(cancellationToken);
+                _logger.LogInformation("[SIRE-PROP] DELETE {B} registros previos tipo={T} periodo={P}",
+                    borrados, tipo, periodo);
             }
-            catch (Exception ex)
+
+            // ── INSERT de cada línea del TXT ─────────────────────────────────────
+            foreach (var linea in lineas)
             {
-                errores++;
-                var detalle = $"Error en línea [{linea[..Math.Min(80, linea.Length)]}]: {ex.Message}";
-                observaciones.Add(detalle);
-                _logger.LogWarning("[SIRE-PROP] {Detalle}", detalle);
+                // La cancelación debe propagarse fuera del try para no contarse como "error".
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    var campos = linea.Split('|');
+                    var minCols = tipo == "1" ? 35 : 41;
+                    if (campos.Length < minCols) continue;
+
+                    using var cmd = new OracleCommand(sqlInsert, conn);
+                    cmd.Transaction = tx;
+                    cmd.BindByName = true;
+                    cmd.Parameters.AddRange(ParsearLinea(campos, tipo, periodoNum, jobId));
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
+                    insertados++;
+                }
+                catch (OracleException oex) when (oex.Message.Contains("ORA-00001"))
+                {
+                    duplicados++;
+                }
+                catch (Exception ex)
+                {
+                    errores++;
+                    var detalle = $"Error en línea [{linea[..Math.Min(80, linea.Length)]}]: {ex.Message}";
+                    observaciones.Add(detalle);
+                    _logger.LogWarning("[SIRE-PROP] {Detalle}", detalle);
+                }
             }
+
+            tx.Commit();
+        }
+        catch
+        {
+            try { tx.Rollback(); } catch { /* no interrumpir la excepción original */ }
+            throw;
+        }        finally
+        {
+            // Restaurar AutoCommit=true para que los UPDATEs de re-vinculación
+            // que siguen a continuación se commiteen automáticamente.
+            // Sin esto Oracle hace ROLLBACK de los re-vinculos al cerrar la conexión.
+            conn.AutoCommit = true;
+        }
+        // ── Re-vincular exclusiones manuales con los nuevos ID_PROP ─────────────
+        // Fuera de la transacción principal (el INSERT ya está comiteado).
+        // Por cada exclusión manual previa, buscamos el nuevo ID_PROP en SIRE_PROPUESTA
+        // por clave natural (TIPDOC+SERIE+NUMERO). ID_CONCIL se deja NULL porque
+        // aún no corrió el SP de conciliación; ConciliarPropuestaAsync lo re-vinculará.
+        if (excluidosManuales.Count > 0)
+        {
+            var revinculados = 0;
+            foreach (var excl in excluidosManuales)
+            {
+                try
+                {
+                    const string sqlBuscarProp = @"
+                        SELECT ID_PROP FROM SIG.SIRE_PROPUESTA
+                        WHERE  TIPO    = :tipo
+                          AND  PERIODO = :periodo
+                          AND  TIPDOC  = :tipdoc
+                          AND  NVL(SERIE,  '-') = NVL(:serie,  '-')
+                          AND  NVL(NUMERO, '-') = NVL(:numero, '-')
+                          AND  ROWNUM = 1";
+
+                    long? nuevoIdProp = null;
+                    using (var cmdBuscar = new OracleCommand(sqlBuscarProp, conn))
+                    {
+                        cmdBuscar.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipo                               });
+                        cmdBuscar.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNum                         });
+                        cmdBuscar.Parameters.Add(new OracleParameter("tipdoc",  OracleDbType.Varchar2) { Value = excl.Tipdoc                        });
+                        cmdBuscar.Parameters.Add(new OracleParameter("serie",   OracleDbType.Varchar2) { Value = (object?)excl.Serie  ?? DBNull.Value });
+                        cmdBuscar.Parameters.Add(new OracleParameter("numero",  OracleDbType.Varchar2) { Value = (object?)excl.Numero ?? DBNull.Value });
+                        var scalar = await cmdBuscar.ExecuteScalarAsync(cancellationToken);
+                        if (scalar != null && scalar != DBNull.Value)
+                            nuevoIdProp = Convert.ToInt64(scalar);
+                    }
+
+                    if (nuevoIdProp is null)
+                    {
+                        // El documento ya no existe en la nueva propuesta (SUNAT lo quitó).
+                        // Marcar la exclusión manual como inactiva para no mostrarla como fantasma.
+                        using var cmdInact = new OracleCommand(
+                            "UPDATE SIG.SIRE_EXCLUIDOS_LOGIX SET ESTADO='I', ID_PROP=NULL, ID_CONCIL=NULL WHERE ID_EXCLUIDO=:id",
+                            conn);
+                        cmdInact.Parameters.Add(new OracleParameter("id", OracleDbType.Int64) { Value = excl.IdExcluido });
+                        await cmdInact.ExecuteNonQueryAsync(cancellationToken);
+                        _logger.LogInformation("[SIRE-PROP] Exclusión manual {Id} ({T}/{S}/{N}) inactivada: doc ya no en propuesta.",
+                            excl.IdExcluido, excl.Tipdoc, excl.Serie, excl.Numero);
+                        continue;
+                    }
+
+                    // Actualizar con el nuevo ID_PROP; ID_CONCIL se actualizará post-conciliación.
+                    using var cmdUpd = new OracleCommand(
+                        "UPDATE SIG.SIRE_EXCLUIDOS_LOGIX SET ID_PROP=:idProp, ID_CONCIL=NULL WHERE ID_EXCLUIDO=:id",
+                        conn);
+                    cmdUpd.Parameters.Add(new OracleParameter("idProp", OracleDbType.Int64) { Value = nuevoIdProp.Value });
+                    cmdUpd.Parameters.Add(new OracleParameter("id",     OracleDbType.Int64) { Value = excl.IdExcluido   });
+                    await cmdUpd.ExecuteNonQueryAsync(cancellationToken);
+                    revinculados++;
+                }
+                catch (Exception exRev)
+                {
+                    _logger.LogWarning("[SIRE-PROP] No se pudo re-vincular exclusión manual {Id}: {Msg}",
+                        excl.IdExcluido, exRev.Message);
+                }
+            }
+            _logger.LogInformation("[SIRE-PROP] Exclusiones manuales re-vinculadas: {R}/{T} tipo={Tipo} periodo={Periodo}",
+                revinculados, excluidosManuales.Count, tipo, periodoNum);
         }
 
         _logger.LogInformation("[SIRE-PROP] Carga completada: {Ins} insertados, {Dup} duplicados, {Err} errores",
@@ -167,8 +307,7 @@ INSERT INTO SIG.SIRE_PROPUESTA (
 
         // El ZIP de SUNAT puede tener múltiples entradas; tomamos el TXT de mayor tamaño
         var entradaTxt = zip.Entries
-            .Where(e => e.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-                     || e.Name.EndsWith(".TXT", StringComparison.OrdinalIgnoreCase))
+            .Where(e => e.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(e => e.Length)
             .FirstOrDefault();
 

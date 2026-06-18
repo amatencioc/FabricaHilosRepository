@@ -7,19 +7,19 @@ namespace FabricaHilos.Sire.Models;
 public class SirePropuestaComprasDto
 {
     /// <summary>Período de la propuesta (YYYYMM)</summary>
-    public string Periodo { get; set; }
+    public string Periodo { get; set; } = string.Empty;
 
     /// <summary>Estado actual de la propuesta</summary>
-    public string Estado { get; set; }
+    public string Estado { get; set; } = string.Empty;
 
     /// <summary>Descripción del estado</summary>
-    public string EstadoDescripcion { get; set; }
+    public string EstadoDescripcion { get; set; } = string.Empty;
 
     /// <summary>Ticket identificador de la propuesta</summary>
-    public string Ticket { get; set; }
+    public string Ticket { get; set; } = string.Empty;
 
     /// <summary>Hash de validación de la propuesta</summary>
-    public string Hash { get; set; }
+    public string Hash { get; set; } = string.Empty;
 
     /// <summary>Fecha de generación de la propuesta</summary>
     public DateTime FechaGeneracion { get; set; }
@@ -37,5 +37,5 @@ public class SirePropuestaComprasDto
     public List<string> Advertencias { get; set; } = new();
 
     /// <summary>Detalle de líneas/registros (si aplica)</summary>
-    public string DetalleJSON { get; set; }
+    public string DetalleJSON { get; set; } = string.Empty;
 }
