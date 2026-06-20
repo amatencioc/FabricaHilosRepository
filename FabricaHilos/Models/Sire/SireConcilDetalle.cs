@@ -71,6 +71,55 @@ public sealed class SireConcilDetalle
     public string    Revisado     { get; init; } = "N";
     public string?   ObsManual    { get; init; }
 
+    // Validez de comprobante (API Consulta Integrada SUNAT)
+    public string?   ValidezCp    { get; init; }   // 0=NO EXISTE 1=ACEPTADO 2=ANULADO 3=AUTORIZADO 4=NO AUTORIZADO
+    public string?   ValidezRuc   { get; init; }   // 00=ACTIVO 01=BAJA PROVISIONAL 10=BAJA DEFINITIVA ...
+    public string?   ValidezDom   { get; init; }   // 00=HABIDO 09=PENDIENTE 12=NO HABIDO ...
+    public DateTime? FchValidez   { get; init; }   // Fecha última validación
+
+    // Tipo de cambio para conversión a PEN al llamar a SUNAT (SunatMoneda ya existe arriba)
+    public decimal   CambioMoneda { get; init; } = 1m;  // Tipo de cambio a PEN (1 si ya es PEN)
+
+    /// <summary>Badge Bootstrap para el estadoCp de SUNAT.</summary>
+    public string ValidezCpBadge => ValidezCp switch
+    {
+        "1" => "bg-success",
+        "2" => "bg-danger",
+        "0" => "bg-warning text-dark",
+        "3" => "bg-info text-dark",
+        "4" => "bg-danger",
+        _   => "bg-secondary"
+    };
+    public string ValidezCpLabel => ValidezCp switch
+    {
+        "1" => "ACEPTADO",
+        "2" => "ANULADO",
+        "0" => "NO EXISTE",
+        "3" => "AUTORIZADO",
+        "4" => "NO AUTOR.",
+        _   => ValidezCp != null ? $"CP:{ValidezCp}" : "-"
+    };
+    public string ValidezRucLabel => ValidezRuc switch
+    {
+        "00" => "ACTIVO",
+        "01" => "BAJA PROV.",
+        "02" => "BAJA OFICIO",
+        "03" => "SUSPENSO",
+        "10" => "BAJA DEFIN.",
+        "11" => "BAJA OFICIO",
+        "22" => "INHABILITADO",
+        _   => ValidezRuc ?? "-"
+    };
+    public string ValidezDomLabel => ValidezDom switch
+    {
+        "00" => "HABIDO",
+        "09" => "PENDIENTE",
+        "11" => "POR VERIF.",
+        "12" => "NO HABIDO",
+        "20" => "NO HALLADO",
+        _   => ValidezDom ?? "-"
+    };
+
     // ── Helpers de display ──────────────────────────────────────────────────
     public string EstadoLabel => Estado switch
     {

@@ -142,4 +142,26 @@ public interface ISireOracleRepository
     /// junto a su doc. de referencia si éste también está en SOLO_SUNAT.
     /// </summary>
     Task AutoExcluirNcAsync(string tipo, int periodo, string usuario, CancellationToken ct = default);
+
+    // =========================================================================
+    // Validez de comprobante (API Consulta Integrada SUNAT)
+    // =========================================================================
+
+    /// <summary>
+    /// Devuelve los registros SIRE_CONCIL pendientes de validar (VALIDEZ_CP IS NULL o '0')
+    /// del tipo y período indicados, incluyendo los campos necesarios para llamar a la API.
+    /// </summary>
+    Task<List<SireConcilDetalle>> GetConcilPendientesValidezAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve los datos de una sola fila de SIRE_CONCIL para validarla contra SUNAT.
+    /// Incluye SUNAT_MONEDA y CAMBIO para conversión de moneda cuando corresponda.
+    /// </summary>
+    Task<SireConcilDetalle?> GetConcilFilaParaValidezAsync(long idConcil, CancellationToken ct = default);
+
+    /// <summary>
+    /// Guarda el resultado de la validación SUNAT en SIRE_CONCIL
+    /// (VALIDEZ_CP, VALIDEZ_RUC, VALIDEZ_DOM, FCH_VALIDEZ = SYSDATE).
+    /// </summary>
+    Task GuardarValidezAsync(long idConcil, string estadoCp, string estadoRuc, string condDomiRuc, CancellationToken ct = default);
 }

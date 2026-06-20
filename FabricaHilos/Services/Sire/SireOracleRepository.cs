@@ -578,13 +578,12 @@ public sealed class SireOracleRepository : ISireOracleRepository
             cmd1.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
             await cmd1.ExecuteNonQueryAsync(ct);
 
-            // 1b. Excluidos NO manuales (NC_AUTO y similares generados por el sistema).
-            //     Los excluidos MANUALES se preservan para no perder el trabajo del usuario.
-            //     Si la tabla no existe o hay un error de estructura, se ignora (no bloquea la eliminación).
+            // 1b. Todos los excluidos del período: NC_AUTO, MANUAL y cualquier otro motivo.
+            //     EliminarPropuesta = limpieza total. No se preserva nada.
             try
             {
                 await using var cmdExcl = new OracleCommand(
-                    "DELETE FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE TIPO = :tipo AND PERIODO = :periodo AND MOTIVO <> 'MANUAL'", conn);
+                    "DELETE FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE TIPO = :tipo AND PERIODO = :periodo", conn);
                 cmdExcl.Transaction = tx;
                 cmdExcl.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb  });
                 cmdExcl.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodo });
@@ -1057,7 +1056,9 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    EX.MOTIVO        EXCL_MOTIVO,
                    EX.OBS           EXCL_OBS,
                    EX.USUARIO       EXCL_USUARIO,
-                   EX.FCH_EXCLUSION EXCL_FCH
+                   EX.FCH_EXCLUSION EXCL_FCH,
+                   C.VALIDEZ_CP,    C.VALIDEZ_RUC,
+                   C.VALIDEZ_DOM,   C.FCH_VALIDEZ
             FROM   SIG.SIRE_CONCIL C
             LEFT JOIN SIG.SIRE_LEGACY          L  ON L.ID_LEGACY = C.ID_LEGACY
             LEFT JOIN SIG.SIRE_PROPUESTA       P  ON P.ID_PROP   = C.ID_PROP
@@ -1128,6 +1129,10 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 ExclObs      = NullStr(rdr, "EXCL_OBS"),
                 ExclUsuario  = NullStr(rdr, "EXCL_USUARIO"),
                 ExclFch      = NullDate(rdr, "EXCL_FCH"),
+                ValidezCp    = NullStr(rdr, "VALIDEZ_CP"),
+                ValidezRuc   = NullStr(rdr, "VALIDEZ_RUC"),
+                ValidezDom   = NullStr(rdr, "VALIDEZ_DOM"),
+                FchValidez   = NullDate(rdr, "FCH_VALIDEZ"),
             });
         }
         return list;
@@ -1294,7 +1299,39 @@ public sealed class SireOracleRepository : ISireOracleRepository
             var nroRef   = NullStr(rdr, "NRO_DOCREF");
             await rdr.DisposeAsync();
 
-            // Obtener siguiente ID de secuencia
+            // UPSERT: si ya existe una exclusión MANUAL activa para este ID_CONCIL,
+            // actualizarla en lugar de insertar un duplicado.
+            long? existingId = null;
+            using (var cmdChk = new OracleCommand(
+                "SELECT ID_EXCLUIDO FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE ID_CONCIL = :idConcil AND MOTIVO = 'MANUAL' AND ESTADO = 'A' AND ROWNUM = 1",
+                conn))
+            {
+                cmdChk.Transaction = tx;
+                cmdChk.Parameters.Add(new OracleParameter("idConcil", OracleDbType.Int64) { Value = idConcil });
+                var scalar = await cmdChk.ExecuteScalarAsync(ct);
+                if (scalar != null && scalar != DBNull.Value)
+                    existingId = Convert.ToInt64(scalar);
+            }
+
+            if (existingId.HasValue)
+            {
+                // Ya existe — actualizar los campos dinámicos sin generar duplicado
+                using var cmdUpdExcl = new OracleCommand(
+                    @"UPDATE SIG.SIRE_EXCLUIDOS_LOGIX
+                         SET ID_PROP = :idProp, FCH_EXCLUSION = SYSDATE,
+                             USUARIO = :usuario, OBS = :obs
+                       WHERE ID_EXCLUIDO = :id",
+                    conn);
+                cmdUpdExcl.Transaction = tx;
+                cmdUpdExcl.Parameters.Add(new OracleParameter("idProp",  OracleDbType.Int64)   { Value = idProp   });
+                cmdUpdExcl.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2) { Value = (object?)usuario ?? DBNull.Value });
+                cmdUpdExcl.Parameters.Add(new OracleParameter("obs",     OracleDbType.Varchar2) { Value = (object?)(obs ?? "Excluido manualmente") ?? DBNull.Value });
+                cmdUpdExcl.Parameters.Add(new OracleParameter("id",      OracleDbType.Int64)   { Value = existingId.Value });
+                await cmdUpdExcl.ExecuteNonQueryAsync(ct);
+            }
+            else
+            {
+            // Obtener siguiente ID de secuencia solo cuando se va a insertar
             long idExcluido;
             using (var cmdSeq = new OracleCommand("SELECT SIG.SEQ_SIRE_EXCL.NEXTVAL FROM DUAL", conn))
                 idExcluido = Convert.ToInt64(await cmdSeq.ExecuteScalarAsync(ct));
@@ -1335,6 +1372,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
             cmdIns.Parameters.Add(new OracleParameter("usuario",  OracleDbType.Varchar2){ Value = (object?)usuario  ?? DBNull.Value });
             cmdIns.Parameters.Add(new OracleParameter("obs",      OracleDbType.Varchar2){ Value = (object?)(obs ?? "Excluido manualmente") ?? DBNull.Value });
             await cmdIns.ExecuteNonQueryAsync(ct);
+            } // end else (INSERT nuevo)
 
             using var cmdUpd = new OracleCommand(
                 "UPDATE SIG.SIRE_CONCIL SET ESTADO='EXCLUIDO', DIFF_CAMPOS='MANUAL' WHERE ID_CONCIL=:id", conn);
@@ -1483,6 +1521,117 @@ public sealed class SireOracleRepository : ISireOracleRepository
         cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Char)    { Value = tipoDb  });
         cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)   { Value = periodo });
         cmd.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2){ Value = usuario });
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Validez de comprobante (API Consulta Integrada SUNAT)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<List<SireConcilDetalle>> GetConcilPendientesValidezAsync(
+        string tipo, string periodo, CancellationToken ct = default)
+    {
+        if (!int.TryParse(periodo, out var periodoNr)) return [];
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        // Incluye filas sin validar (VALIDEZ_CP IS NULL) y las que ya tienen '0' (NO EXISTE)
+        // para permitir re-validación cuando el resultado previo pudo ser incorrecto.
+        // Se trae SUNAT_MONEDA y CAMBIO de SIRE_PROPUESTA para convertir el monto a PEN
+        // cuando el comprobante está en moneda extranjera (SUNAT exige el monto en soles).
+        const string sql = @"
+            SELECT C.ID_CONCIL, C.TIPO, C.PERIODO,
+                   C.TIPDOC, C.SERIE, C.NUMERO, C.F_EMISION, C.RUC, C.NOMBRE,
+                   C.ESTADO, NVL(C.SUNAT_TOTAL,0) SUNAT_TOTAL,
+                   NVL(C.SUNAT_MONEDA,'PEN') SUNAT_MONEDA,
+                   NVL(P.CAMBIO,1)           CAMBIO
+            FROM   SIG.SIRE_CONCIL C
+            LEFT JOIN SIG.SIRE_PROPUESTA P ON P.ID_PROP = C.ID_PROP
+            WHERE  C.TIPO    = :tipo
+              AND  C.PERIODO = :periodo
+              AND  C.ESTADO NOT IN ('EXCLUIDO','SOLO_LEGACY')
+              AND  (C.VALIDEZ_CP IS NULL OR C.VALIDEZ_CP = '0')
+            ORDER BY C.TIPDOC, C.SERIE, C.NUMERO";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb });
+        cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNr });
+
+        var list = new List<SireConcilDetalle>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            list.Add(new SireConcilDetalle
+            {
+                IdConcil     = Convert.ToInt64(rdr["ID_CONCIL"]),
+                Tipo         = rdr.GetString(rdr.GetOrdinal("TIPO")),
+                Periodo      = rdr.GetInt32(rdr.GetOrdinal("PERIODO")),
+                Tipdoc       = NullStr(rdr, "TIPDOC"),
+                Serie        = NullStr(rdr, "SERIE"),
+                Numero       = NullStr(rdr, "NUMERO"),
+                FEmision     = NullDate(rdr, "F_EMISION"),
+                Ruc          = NullStr(rdr, "RUC"),
+                Nombre       = FixStr(rdr,  "NOMBRE"),
+                Estado       = NullStr(rdr, "ESTADO") ?? "",
+                SunatTotal   = NullDec(rdr, "SUNAT_TOTAL"),
+                SunatMoneda  = NullStr(rdr, "SUNAT_MONEDA") ?? "PEN",
+                CambioMoneda = NullDec(rdr, "CAMBIO") is decimal c && c > 0 ? c : 1m,
+            });
+        }
+        return list;
+    }
+
+    public async Task<SireConcilDetalle?> GetConcilFilaParaValidezAsync(
+        long idConcil, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT C.ID_CONCIL, C.TIPO, C.PERIODO,
+                   C.TIPDOC, C.SERIE, C.NUMERO, C.F_EMISION, C.RUC, C.NOMBRE,
+                   C.ESTADO, NVL(C.SUNAT_TOTAL,0) SUNAT_TOTAL,
+                   NVL(C.SUNAT_MONEDA,'PEN') SUNAT_MONEDA,
+                   NVL(P.CAMBIO,1)           CAMBIO
+            FROM   SIG.SIRE_CONCIL C
+            LEFT JOIN SIG.SIRE_PROPUESTA P ON P.ID_PROP = C.ID_PROP
+            WHERE  C.ID_CONCIL = :id";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("id", OracleDbType.Int64) { Value = idConcil });
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct)) return null;
+
+        return new SireConcilDetalle
+        {
+            IdConcil     = Convert.ToInt64(rdr["ID_CONCIL"]),
+            Tipo         = rdr.GetString(rdr.GetOrdinal("TIPO")),
+            Periodo      = rdr.GetInt32(rdr.GetOrdinal("PERIODO")),
+            Tipdoc       = NullStr(rdr, "TIPDOC"),
+            Serie        = NullStr(rdr, "SERIE"),
+            Numero       = NullStr(rdr, "NUMERO"),
+            FEmision     = NullDate(rdr, "F_EMISION"),
+            Ruc          = NullStr(rdr, "RUC"),
+            Nombre       = FixStr(rdr,  "NOMBRE"),
+            Estado       = NullStr(rdr, "ESTADO") ?? "",
+            SunatTotal   = NullDec(rdr, "SUNAT_TOTAL"),
+            SunatMoneda  = NullStr(rdr, "SUNAT_MONEDA") ?? "PEN",
+            CambioMoneda = NullDec(rdr, "CAMBIO") is decimal c && c > 0 ? c : 1m,
+        };
+    }
+
+    public async Task GuardarValidezAsync(
+        long idConcil, string estadoCp, string estadoRuc, string condDomiRuc,
+        CancellationToken ct = default)
+    {
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(
+            "UPDATE SIG.SIRE_CONCIL " +
+            "SET VALIDEZ_CP=:cp, VALIDEZ_RUC=:ruc, VALIDEZ_DOM=:dom, FCH_VALIDEZ=SYSDATE " +
+            "WHERE ID_CONCIL=:id", conn);
+        cmd.Parameters.Add(new OracleParameter("cp",  OracleDbType.Varchar2, 2) { Value = estadoCp });
+        cmd.Parameters.Add(new OracleParameter("ruc", OracleDbType.Varchar2, 2) { Value = estadoRuc });
+        cmd.Parameters.Add(new OracleParameter("dom", OracleDbType.Varchar2, 2) { Value = condDomiRuc });
+        cmd.Parameters.Add(new OracleParameter("id",  OracleDbType.Int64)       { Value = idConcil });
         await cmd.ExecuteNonQueryAsync(ct);
     }
 }

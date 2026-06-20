@@ -229,6 +229,9 @@ builder.Services.AddSingleton<ISireOracleRepository, SireOracleRepository>();
 builder.Services.AddSingleton<ISireExportacionQueue, SireExportacionQueue>();
 builder.Services.AddScoped<SireValidaService>();
 builder.Services.AddScoped<FabricaHilos.Services.Sire.SireReporteComprasService>();
+// Validez de comprobantes (API Consulta Integrada SUNAT — clientesextranet)
+builder.Services.AddSingleton<IConsultaValidezService, ConsultaValidezService>();
+builder.Services.AddHttpClient("sunat-validez");
 builder.Services.AddHostedService<SireExportacionWorker>();
 // Fase 2: Watcher de tickets SUNAT (polling cada WatcherIntervalMin minutos)
 builder.Services.AddHostedService<SireTicketWatcherWorker>();

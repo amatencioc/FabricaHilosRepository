@@ -1,4 +1,4 @@
-using FabricaHilos.Models.Sire;
+﻿using FabricaHilos.Models.Sire;
 using FabricaHilos.Services.Sire;
 using FabricaHilos.Sire.Constants;
 using FabricaHilos.Sire.Helpers;
@@ -33,6 +33,7 @@ public class SireController : OracleBaseController
     private readonly ISireOracleRepository _sireRepo;
     private readonly SireValidaService _validaService;
     private readonly FabricaHilos.Services.Sire.SireReporteComprasService _reporteCompras;
+    private readonly IConsultaValidezService _consultaValidez;
     private readonly ILogger<SireController> _logger;
     private readonly IMemoryCache _cache;
 
@@ -48,6 +49,7 @@ public class SireController : OracleBaseController
         ISireOracleRepository sireRepo,
         SireValidaService validaService,
         FabricaHilos.Services.Sire.SireReporteComprasService reporteCompras,
+        IConsultaValidezService consultaValidez,
         ILogger<SireController> logger,
         IMemoryCache cache)
     {
@@ -62,6 +64,7 @@ public class SireController : OracleBaseController
         _sireRepo              = sireRepo;
         _validaService         = validaService;
         _reporteCompras        = reporteCompras;
+        _consultaValidez       = consultaValidez;
         _logger                = logger;
         _cache                 = cache;
     }
@@ -331,6 +334,7 @@ public class SireController : OracleBaseController
         {
             ValidarParametrosOperacion(periodo.ToString(), tipo);
             var borrados = await _sireRepo.EliminarPropuestaAsync(tipo, periodo, cancellationToken);
+            _cache.Remove($"sire:periodos:{tipo}:all");
             _cache.Remove($"sire:periodos:{tipo}");
             TempData["Success"] = $"Propuesta {periodo} eliminada ({borrados} registros borrados).";
         }
@@ -367,6 +371,146 @@ public class SireController : OracleBaseController
         }
     }
 
+    // ── Validación de comprobantes (API Consulta Integrada SUNAT) ─────────────
+
+    /// <summary>
+    /// Valida todos los comprobantes del período contra la API Consulta Integrada de SUNAT.
+    /// Procesa en paralelo (hasta 4 concurrentes) con delay entre requests para evitar throttling.
+    /// Retorna JSON: { total, validados, errores, resultados: [{idConcil, ruc, serie, numero, estadoCp, estadoRuc, condDomiRuc}] }
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ValidarCpeBatch(
+        [FromBody] ValidarCpeBatchRequest req, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(req.Periodo, req.Tipo);
+
+            var pendientes = await _sireRepo.GetConcilPendientesValidezAsync(
+                req.Tipo, req.Periodo, cancellationToken);
+
+            if (pendientes.Count == 0)
+            {
+                _logger.LogInformation("[ValidarCpe] {Tipo} {Periodo}: sin comprobantes pendientes de validar.", req.Tipo, req.Periodo);
+                return Json(new { total = 0, validados = 0, errores = 0, resultados = Array.Empty<object>() });
+            }
+
+            var resultados = new List<object>();
+            var validados  = 0;
+            var errores    = 0;
+
+            // Procesar secuencialmente con delay para respetar rate limit de SUNAT
+            foreach (var doc in pendientes)
+            {
+                if (cancellationToken.IsCancellationRequested) break;
+                if (doc.FEmision is null || doc.Ruc is null || doc.Tipdoc is null) { errores++; continue; }
+
+                // SUNAT requiere el monto en soles (PEN). Si el comprobante está en moneda
+                // extranjera se multiplica por el tipo de cambio registrado en SIRE_PROPUESTA.
+                var montoSoles = (doc.SunatMoneda is not null &&
+                                  !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
+                                  doc.CambioMoneda > 0)
+                    ? Math.Round(doc.SunatTotal * doc.CambioMoneda, 2)
+                    : doc.SunatTotal;
+
+                var result = await _consultaValidez.ValidarAsync(
+                    doc.Ruc, doc.Tipdoc, doc.Serie ?? "", doc.Numero ?? "",
+                    doc.FEmision.Value, montoSoles, cancellationToken);
+
+                if (result is not null)
+                {
+                    await _sireRepo.GuardarValidezAsync(
+                        doc.IdConcil, result.EstadoCp, result.EstadoRuc, result.CondDomiRuc,
+                        cancellationToken);
+
+                    resultados.Add(new {
+                        idConcil   = doc.IdConcil,
+                        ruc        = doc.Ruc,
+                        serie      = doc.Serie,
+                        numero     = doc.Numero,
+                        estadoCp   = result.EstadoCp,
+                        estadoRuc  = result.EstadoRuc,
+                        condDomiRuc= result.CondDomiRuc,
+                    });
+                    validados++;
+                }
+                else { errores++; }
+
+                await Task.Delay(200, cancellationToken); // 200 ms entre requests
+            }
+
+            _logger.LogInformation("[ValidarCpe] {Tipo} {Periodo}: {V} validados, {E} errores de {T} pendientes.",
+                req.Tipo, req.Periodo, validados, errores, pendientes.Count);
+
+            return Json(new { total = pendientes.Count, validados, errores, resultados = resultados.ToArray() });
+        }
+        catch (OperationCanceledException) { return Json(new { cancelado = true }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ValidarCpe] Error batch {Tipo} {Periodo}", req.Tipo, req.Periodo);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Valida un único comprobante (fila de SIRE_CONCIL) contra la API de SUNAT.
+    /// Llamado desde el botón de re-validación por fila en la tabla de conciliación.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ValidarFilaSunat(long idConcil, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var doc = await _sireRepo.GetConcilFilaParaValidezAsync(idConcil, cancellationToken);
+            if (doc is null)
+                return NotFound(new { error = "Fila no encontrada." });
+
+            if (doc.FEmision is null || doc.Ruc is null || doc.Tipdoc is null)
+                return BadRequest(new { error = "Datos incompletos para validar (fecha, RUC o tipo de comprobante nulos)." });
+
+            var montoSoles = (doc.SunatMoneda is not null &&
+                              !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
+                              doc.CambioMoneda > 0)
+                ? Math.Round(doc.SunatTotal * doc.CambioMoneda, 2)
+                : doc.SunatTotal;
+
+            var result = await _consultaValidez.ValidarAsync(
+                doc.Ruc, doc.Tipdoc, doc.Serie ?? "", doc.Numero ?? "",
+                doc.FEmision.Value, montoSoles, cancellationToken);
+
+            if (result is null)
+            {
+                _logger.LogWarning("[ValidarFilaSunat] Sin respuesta de SUNAT para idConcil={Id}", idConcil);
+                return Json(new { ok = false, error = "Sin respuesta de SUNAT." });
+            }
+
+            await _sireRepo.GuardarValidezAsync(
+                doc.IdConcil, result.EstadoCp, result.EstadoRuc, result.CondDomiRuc,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "[ValidarFilaSunat] idConcil={Id} {Serie}/{Num} → CP={Cp} RUC={Ruc} DOM={Dom}",
+                idConcil, doc.Serie, doc.Numero, result.EstadoCp, result.EstadoRuc, result.CondDomiRuc);
+
+            return Json(new
+            {
+                ok          = true,
+                idConcil    = doc.IdConcil,
+                estadoCp    = result.EstadoCp,
+                estadoRuc   = result.EstadoRuc,
+                condDomiRuc = result.CondDomiRuc,
+            });
+        }
+        catch (OperationCanceledException) { return Json(new { cancelado = true }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ValidarFilaSunat] Error idConcil={Id}", idConcil);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     // ── Conciliar propuesta contra ERP ───────────────────────────────────────
 
     /// <summary>Ejecuta SP_SIRE_CARGA_LEGACY + SP_SIRE_CONCILIAR para el período.</summary>
@@ -378,6 +522,8 @@ public class SireController : OracleBaseController
         {
             ValidarParametrosOperacion(periodo.ToString(), tipo);
             var resultado = await _sireRepo.ConciliarPropuestaAsync(tipo, periodo, cancellationToken);
+            _cache.Remove($"sire:periodos:{tipo}:all");
+            _cache.Remove($"sire:periodos:{tipo}");
             TempData["Success"] = $"Conciliación {periodo} completada — {resultado}";
         }
         catch (Exception ex)
@@ -1038,6 +1184,8 @@ public class SireController : OracleBaseController
 
         return map.Values.OrderByDescending(x => x.Periodo).ToList();
     }
+
+
 
     /// <summary>Valida que período y tipo sean válidos</summary>
     private static void ValidarParametrosOperacion(string periodo, string tipo)
@@ -1766,4 +1914,11 @@ public class ExportarPropuestaRequest
 {
     public string Periodo { get; set; } = string.Empty;
     public string Tipo { get; set; } = string.Empty;
+}
+
+// DTO para validación masiva contra API Consulta Integrada SUNAT
+public class ValidarCpeBatchRequest
+{
+    public string Tipo    { get; set; } = string.Empty;
+    public string Periodo { get; set; } = string.Empty;
 }
