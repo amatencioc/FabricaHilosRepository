@@ -97,6 +97,18 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
+                if (menus.PlaneamientoRegistroPedidos)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Registro de Pedidos",
+                        Descripcion = "Registro diario de ítems por procesar: título, proceso, cantidad y fechas de compromiso.",
+                        Icono = "bi-journal-text",
+                        Controller = "Planeamiento",
+                        Action = "Index"
+                    });
+                }
+
                 if (menus.PlaneamientoSeguimientoTintoreria)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
@@ -133,6 +145,28 @@ namespace FabricaHilos.Controllers.Produccion
                     });
                 }
 
+                if (menus.PlaneamientoPendSecado)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Secado",
+                        Descripcion = "Partidas terminadas en tintorería pendientes de ingresar a secado. Responsables: Freddy / Malena.",
+                        Icono = "bi-thermometer-half",
+                        Controller = "Planeamiento",
+                        Action = "PendientesSecado"
+                    });
+                }
+                if (menus.PlaneamientoPendMadeja)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Acabado Madeja",
+                        Descripcion = "Partidas programadas con producción pendiente de acabado de madeja.",
+                        Icono = "bi-wind",
+                        Controller = "Planeamiento",
+                        Action = "PendientesMadeja"
+                    });
+                }
                 if (menus.PlaneamientoPendEvalCalidad)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
@@ -153,17 +187,6 @@ namespace FabricaHilos.Controllers.Produccion
                         Icono = "bi-question-circle",
                         Controller = "Planeamiento",
                         Action = "PartidasPorDefinir"
-                    });
-                }
-                if (menus.PlaneamientoPendSecado)
-                {
-                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
-                    {
-                        Nombre = "Pendientes de Secado",
-                        Descripcion = "Partidas terminadas en tintorería pendientes de ingresar a secado. Responsables: Freddy / Malena.",
-                        Icono = "bi-thermometer-half",
-                        Controller = "Planeamiento",
-                        Action = "PendientesSecado"
                     });
                 }
                 if (menus.PlaneamientoPendEnconado)

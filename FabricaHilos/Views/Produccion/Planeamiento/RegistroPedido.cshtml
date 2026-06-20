@@ -1,0 +1,824 @@
+﻿@model FabricaHilos.Models.Produccion.Planeamiento.RegistroPedidosViewModel
+@using FabricaHilos.Models.Produccion.Planeamiento
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = "Registro de Pedidos";
+
+    // Serializar items a JSON para manipulación 100% client-side
+    var jsonItems = JsonSerializer.Serialize(Model.Items.Select(x => new {
+        serie        = x.Serie,
+        numPed       = x.NumPed,
+        fchPedido    = x.FchPedido.ToString("yyyy-MM-dd"),
+        fchPedidoDisp = x.FchPedido.ToString("dd/MM/yyyy"),
+        fchAprobacion = x.FchAprobacion?.ToString("dd/MM/yyyy") ?? "",
+        estadoPed    = x.EstadoPedTexto,
+        codCliente   = x.CodCliente,
+        nombreCliente = x.NombreCliente,
+        codVende     = x.CodVende,
+        giro         = x.Giro,
+        nro          = x.Nro,
+        codArt       = x.CodArt,
+        descArt      = x.DescArt,
+        titulo       = x.Titulo,
+        tipoFibra    = x.TipoFibra,
+        proceso      = x.Proceso,
+        nombreProceso = x.NombreProceso,
+        codServ      = x.CodServ,
+        areaServicio = x.AreaServicio,
+        areaBadge    = x.AreaBadgeClass,
+        cantidad     = x.Cantidad,
+        precio       = x.Precio,
+        color        = x.Color,
+        colorDet     = x.ColorDet,
+        intensidad   = x.Intensidad,
+        presentacion = x.Presentacion,
+        estadoItem   = x.EstadoItem,
+        fMaxPed      = x.FMaxPed?.ToString("dd/MM/yyyy") ?? "",
+        fMaxPedIso   = x.FMaxPed?.ToString("yyyy-MM-dd") ?? "",
+        soloDespacho = x.SoloDespacho,
+        detalle      = x.Detalle,
+        codFam       = x.CodFam,
+        codLin       = x.CodLin,
+        descFamilia  = x.DescFamilia,
+        descLinea    = x.DescLinea,
+        esVencido    = x.EsVencido,
+    }));
+
+    // Combos dinámicos únicos
+    var servicios  = Model.Items.Select(x => x.CodServ).Distinct().OrderBy(x => x).ToList();
+    var procesos   = Model.Items.Select(x => x.Proceso).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
+    var familias   = Model.Items.Select(x => new { cod = x.CodFam, desc = x.DescFamilia }).Where(x => !string.IsNullOrEmpty(x.cod)).DistinctBy(x => x.cod).OrderBy(x => x.cod).ToList();
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
+<style>
+/* ── Registro de Pedidos — estilos exclusivos ─────────────────────── */
+
+/* KPI strip principal */
+.reg-strip {
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    color: #f7fafc;
+    border-radius: .5rem .5rem 0 0;
+    padding: .6rem 1rem;
+    display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
+    border-bottom: 3px solid #0d6efd;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.reg-strip-title {
+    font-size: .83rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; white-space: nowrap; margin-right: .3rem;
+}
+.reg-kpi {
+    display: inline-flex; align-items: center; gap: .22rem;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: .18rem .65rem;
+    font-size: .7rem; white-space: nowrap;
+}
+.reg-kpi-val { font-weight: 700; font-size: .84rem; }
+.reg-kpi-hil  { border-color: #0dcaf0 !important; color: #0dcaf0; }
+.reg-kpi-tint { border-color: #6f42c1 !important; color: #b794f4; }
+.reg-kpi-warn { border-color: #ffc107 !important; color: #ffc107; }
+
+/* Toolbar de controles */
+.reg-toolbar {
+    background: #f8fafc;
+    border: 1px solid #dee2e6; border-top: none;
+    border-radius: 0 0 .35rem .35rem;
+    padding: .5rem .85rem;
+    margin-bottom: .9rem;
+    display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.reg-toolbar-sep {
+    width: 1px; height: 1.5rem;
+    background: #dee2e6; flex-shrink: 0;
+    align-self: center; margin: 0 .15rem;
+}
+
+/* Selector de modo de agrupamiento — Bootstrap estándar */
+#groupBtns .btn { font-size: .72rem; padding: .22rem .65rem; white-space: nowrap; }
+
+/* Tabla de ítems */
+.reg-table-wrap {
+    overflow-x: auto;
+    border-radius: .4rem;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.reg-table {
+    font-size: .775rem; border-collapse: collapse; width: 100%; min-width: 900px;
+}
+.reg-table thead th {
+    background: #e9ecef; font-size: .68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: #495057; padding: .35rem .5rem;
+    border-bottom: 2px solid #ced4da; white-space: nowrap;
+    cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1;
+}
+.reg-table thead th:hover { background: #d0d6dd; }
+.reg-table thead th .sort-icon { font-size: .65rem; opacity: .5; }
+.reg-table tbody td { padding: .28rem .5rem; border-bottom: 1px solid #edf2f7; }
+.reg-table tbody tr:hover td { background: #eef3ff; }
+
+/* Tarjeta de grupo — estilo Dashboard */
+.reg-grp-card {
+    border: 1px solid #e2e8f0;
+    border-radius: .4rem;
+    margin-bottom: .4rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    overflow: hidden;
+    background: #fff;
+}
+.reg-grp-head {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .42rem .75rem; cursor: pointer; user-select: none;
+    background: #fafbfd; transition: background .12s;
+}
+.reg-grp-head:hover { background: #edf2ff; }
+.reg-grp-num  { font-weight: 700; font-size: .84rem; color: #2d3748; white-space: nowrap; }
+.reg-grp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .4rem; margin-left: auto; }
+.reg-grp-meta-item { font-size: .72rem; color: #718096; white-space: nowrap; }
+.reg-grp-meta-kg   { font-weight: 700; color: #38a169; }
+
+/* Sub-tabla de ítems dentro de la tarjeta */
+.reg-subtbl { font-size: .775rem; background: #eef1f6; }
+.reg-subtbl thead th {
+    background: #e2e7f0; font-size: .68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: #495057; padding: .3rem .5rem;
+    border-bottom: 2px solid #cdd4e0; white-space: nowrap;
+    cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1;
+}
+.reg-subtbl thead th:hover { background: #d0d6dd; }
+.reg-subtbl thead th .sort-icon { font-size: .65rem; opacity: .5; }
+.reg-subtbl tbody td { padding: .27rem .5rem; border-bottom: 1px solid #dde3ed; vertical-align: middle; }
+.reg-subtbl tbody tr:hover td { background: #dde4f0; }
+
+/* Badges de estado, servicio, etc. */
+.badge-serv {
+    font-size: .65rem; padding: .15rem .45rem; border-radius: .25rem;
+    font-weight: 700; white-space: nowrap;
+}
+.bg-purple { background-color: #6f42c1 !important; }
+
+/* Columna oculta via toggle */
+.col-hidden { display: none !important; }
+
+/* Celda de kg */
+.td-kg { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* Celda de fecha vencida */
+.date-venc { color: #e53e3e; font-weight: 600; }
+
+/* Resaltar búsqueda */
+.search-hl { background: #fff3cd; border-radius: 2px; }
+
+/* Panel sin resultados */
+.reg-empty {
+    text-align: center; padding: 3rem 1rem;
+    color: #a0aec0; font-size: .9rem;
+}
+
+/* Spinner overlay */
+#regLoadingOverlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(26,32,44,.7);
+    display: flex; align-items: center; justify-content: center;
+}
+</style>
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
+    <li class="breadcrumb-item active">Registro de Pedidos</li>
+}
+
+@await Html.PartialAsync("_PlnNavBar")
+
+@* ── Spinner de carga ───────────────────────────────────────────────── *@
+<div id="regLoadingOverlay" style="display:none;">
+    <div class="text-center text-white">
+        <div class="spinner-border text-light mb-2" style="width:2.5rem;height:2.5rem;"></div>
+        <div class="fw-bold">Cargando pedidos…</div>
+    </div>
+</div>
+
+@* ── STRIP KPIs ─────────────────────────────────────────────────────── *@
+<div class="reg-strip">
+    <span class="reg-strip-title"><i class="bi bi-journal-text me-1"></i>Registro de Pedidos</span>
+    <span class="reg-strip-sep" style="width:1px;height:1.2rem;background:rgba(255,255,255,.25);flex-shrink:0;"></span>
+    <span class="reg-kpi"><i class="bi bi-box-seam-fill"></i><span class="reg-kpi-val" id="kpiPedidos">@Model.TotalPedidos</span>&nbsp;ped.</span>
+    <span class="reg-kpi"><i class="bi bi-list-ul"></i><span class="reg-kpi-val" id="kpiItems">@Model.TotalItems</span>&nbsp;ítems</span>
+    <span class="reg-kpi"><i class="bi bi-bag-fill"></i><span class="reg-kpi-val" id="kpiKg">@Model.TotalKg.ToString("N0")</span>&nbsp;kg</span>
+    <span class="reg-kpi reg-kpi-hil"><i class="bi bi-wind"></i><span class="reg-kpi-val" id="kpiHil">@Model.KgHilanderia.ToString("N0")</span>&nbsp;kg Hil.</span>
+    <span class="reg-kpi reg-kpi-tint"><i class="bi bi-droplet-half"></i><span class="reg-kpi-val" id="kpiTint">@Model.KgTintoreria.ToString("N0")</span>&nbsp;kg Tint.</span>
+    @if (Model.ItemsConVencido > 0)
+    {
+    <span class="reg-kpi reg-kpi-warn"><i class="bi bi-exclamation-triangle-fill"></i><span class="reg-kpi-val">@Model.ItemsConVencido</span>&nbsp;vencidos</span>
+    }
+    <span class="ms-auto" style="font-size:.68rem;color:#a0aec0;">@Model.FchDesde.ToString("dd/MM/yy") – @Model.FchHasta.ToString("dd/MM/yy") &nbsp;|&nbsp; <a asp-action="Dashboard" style="color:#90cdf4;">→ Seguimiento de Pedidos</a></span>
+</div>
+
+@* ── TOOLBAR ────────────────────────────────────────────────────────── *@
+<form method="get" asp-action="RegistroPedido" id="regForm">
+<div class="reg-toolbar">
+
+    @* Fechas *@
+    <div class="d-flex align-items-center gap-1" style="flex-wrap:nowrap;">
+        <label class="text-muted" style="font-size:.72rem;white-space:nowrap;">Desde</label>
+        <input type="date" name="fchDesde" id="inpDesde"
+               value="@Model.FchDesde.ToString("yyyy-MM-dd")"
+               class="form-control form-control-sm" style="width:130px;font-size:.77rem;" />
+        <label class="text-muted" style="font-size:.72rem;white-space:nowrap;">Hasta</label>
+        <input type="date" name="fchHasta" id="inpHasta"
+               value="@Model.FchHasta.ToString("yyyy-MM-dd")"
+               class="form-control form-control-sm" style="width:130px;font-size:.77rem;" />
+    </div>
+
+    <div class="reg-toolbar-sep"></div>
+
+    @* Servicio *@
+    <select name="cod_serv" class="form-select form-select-sm" style="width:170px;font-size:.77rem;"
+            title="Filtrar por tipo de servicio">
+        <option value="">— Todos los servicios —</option>
+        @foreach (var svc in new[] {
+                      ("C",   "C — Hilandería"),
+                      ("CT",  "CT — Hil. + Tintorería"),
+                      ("ST",  "ST — Solo Tintorería"),
+                      ("RT",  "RT — Retorcedora") }
+                  .Concat(servicios.Where(x => x != "C" && x != "CT" && x != "ST" && x != "RT" && x != "Z").Select(x => (x, x))))
+        {
+            if (Model.FiltroServ == svc.Item1)
+            { <option value="@svc.Item1" selected>@svc.Item2</option> }
+            else
+            { <option value="@svc.Item1">@svc.Item2</option> }
+        }
+    </select>
+
+    @* Proceso *@
+    <select name="proceso" class="form-select form-select-sm" style="width:155px;font-size:.77rem;"
+            title="Filtrar por proceso productivo">
+        <option value="">— Todos los procesos —</option>
+        @foreach (var pr in new[] { ("01","01 — Cardado"), ("20","20 — Peinado"), ("24","24 — Peinado Gaseado") })
+        {
+            if (Model.FiltroProceso == pr.Item1)
+            { <option value="@pr.Item1" selected>@pr.Item2</option> }
+            else
+            { <option value="@pr.Item1">@pr.Item2</option> }
+        }
+    </select>
+
+    @* Estado pedido *@
+    <select name="estado" class="form-select form-select-sm" style="width:145px;font-size:.77rem;"
+            title="Estado del pedido">
+        <option value="">— Todos los estados —</option>
+        @foreach (var est in new[] { ("0","Sin Aprobar"), ("5","Aprobado"), ("9","Cerrado") })
+        {
+            if (Model.FiltroEstado == est.Item1)
+            { <option value="@est.Item1" selected>@est.Item2</option> }
+            else
+            { <option value="@est.Item1">@est.Item2</option> }
+        }
+    </select>
+
+    <button type="submit" class="btn btn-sm btn-primary" style="font-size:.77rem;">
+        <i class="bi bi-funnel-fill me-1"></i>Filtrar
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetForm()" style="font-size:.77rem;" title="Limpiar filtros y reiniciar">
+        <i class="bi bi-x-circle me-1"></i>Limpiar
+    </button>
+
+    <div class="reg-toolbar-sep"></div>
+
+    @* Atajos de rango rápido *@
+    <div class="d-flex gap-1">
+        <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem;" onclick="setRango(0)">Hoy</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem;" onclick="setRango(7)">7 d</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem;" onclick="setRango(30)">30 d</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem;" onclick="setRango(90)">3 m</button>
+    </div>
+
+    <div class="reg-toolbar-sep"></div>
+
+    @* Buscador live *@
+    <input type="text" id="regSearch" placeholder="&#128269; Buscar…"
+           class="form-control form-control-sm" style="width:180px;font-size:.77rem;"
+           autocomplete="off" />
+
+    <div class="ms-auto d-flex gap-1 flex-wrap align-items-center">
+
+        @* Agrupamiento *@
+        <div class="btn-group btn-group-sm" id="groupBtns" role="group" aria-label="Agrupar por">
+            <button type="button" class="btn btn-primary" data-group="dia">📅 Día</button>
+            <button type="button" class="btn btn-outline-primary" data-group="servicio">🏭 Servicio</button>
+            <button type="button" class="btn btn-outline-primary" data-group="familia">🧵 Línea</button>
+            <button type="button" class="btn btn-outline-primary" data-group="cliente">👤 Cliente</button>
+            <button type="button" class="btn btn-outline-primary" data-group="proceso">⚙️ Proceso</button>
+            <button type="button" class="btn btn-outline-primary" data-group="none">📋 Plano</button>
+        </div>
+
+        <div class="reg-toolbar-sep"></div>
+
+        @* Toggle columnas *@
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" style="font-size:.72rem;">
+                <i class="bi bi-layout-three-columns"></i> Cols
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:180px;font-size:.78rem;" id="colToggleMenu">
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFibra"  checked> Fibra / Título</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colColor"  checked> Color</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colLinea"  checked> Línea / Familia</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colVende"         > Vendedor / Giro</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFechAprob"     > F. Aprobación</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colDetalle"       > Observación</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colPresentacion"  > Presentación</label></li>
+            </ul>
+        </div>
+
+        <div class="reg-toolbar-sep"></div>
+
+        @* Colapsar / Expandir todo *@
+        <button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary" onclick="collapseAll()" style="font-size:.72rem;" title="Colapsar todos los grupos">
+            <i class="bi bi-arrows-collapse"></i>
+        </button>
+        <button type="button" id="btnExpandAll"   class="btn btn-sm btn-outline-secondary" onclick="expandAll()"  style="font-size:.72rem;" title="Expandir todos los grupos">
+            <i class="bi bi-arrows-expand"></i>
+        </button>
+
+        <div class="reg-toolbar-sep"></div>
+
+        @* Exportar CSV *@
+        <button type="button" class="btn btn-sm btn-outline-success" onclick="exportCSV()" style="font-size:.72rem;">
+            <i class="bi bi-download me-1"></i>CSV
+        </button>
+    </div>
+</div>
+</form>
+
+@* ── TABLA DINÁMICA ─────────────────────────────────────────────────── *@
+<div id="regTableContainer">
+
+@* Modo agrupado: tarjetas estilo Dashboard *@
+<div id="regGrpContainer"></div>
+
+@* Modo plano: tabla sin agrupamiento *@
+<div class="reg-table-wrap" id="regPlanoWrap" style="display:none;">
+<table class="reg-table" id="regTable">
+    <thead>
+        <tr>
+            <th data-sort="numPed" style="min-width:90px;">N°&nbsp;Ped <span class="sort-icon">⇅</span></th>
+            <th data-sort="fchPedido" class="colFecha" style="min-width:82px;">Fecha <span class="sort-icon">⇅</span></th>
+            <th data-sort="nombreCliente" style="min-width:160px;">Cliente <span class="sort-icon">⇅</span></th>
+            <th data-sort="nro" style="width:38px;">Ítem</th>
+            <th data-sort="descArt" style="min-width:140px;">Artículo <span class="sort-icon">⇅</span></th>
+            <th data-sort="titulo" class="colFibra" style="min-width:60px;">Título</th>
+            <th data-sort="tipoFibra" class="colFibra" style="min-width:70px;">Fibra <span class="sort-icon">⇅</span></th>
+            <th data-sort="nombreProceso" style="min-width:90px;">Proceso <span class="sort-icon">⇅</span></th>
+            <th data-sort="areaServicio" style="min-width:110px;">Servicio <span class="sort-icon">⇅</span></th>
+            <th data-sort="cantidad" class="td-kg" style="min-width:70px;">Kg <span class="sort-icon">⇅</span></th>
+            <th data-sort="color" class="colColor" style="min-width:70px;">Color <span class="sort-icon">⇅</span></th>
+            <th data-sort="intensidad" class="colColor" style="min-width:55px;">Intens.</th>
+            <th data-sort="descFamilia" class="colLinea" style="min-width:100px;">Familia <span class="sort-icon">⇅</span></th>
+            <th data-sort="descLinea" class="colLinea" style="min-width:100px;">Línea <span class="sort-icon">⇅</span></th>
+            <th data-sort="fMaxPed" style="min-width:80px;">F.Entrega <span class="sort-icon">⇅</span></th>
+            <th data-sort="estadoPed" style="min-width:80px;">Estado</th>
+            <th class="colVende" style="min-width:70px;">Vendedor</th>
+            <th class="colVende" style="min-width:60px;">Giro</th>
+            <th class="colFechAprob" style="min-width:85px;">F.Aprobac.</th>
+            <th class="colPresentacion" style="min-width:80px;">Present.</th>
+            <th class="colDetalle" style="min-width:150px;">Observación</th>
+        </tr>
+    </thead>
+    <tbody id="regTbody">
+        @* Relleno inicial server-side (fallback sin JS) *@
+        @foreach (var item in Model.Items)
+        {
+        <tr>
+            <td><a asp-action="PedidoGantt" asp-route-numPed="@item.NumPed" asp-route-serie="@item.Serie"
+                   class="fw-bold text-primary text-decoration-none">@item.NumPed</a></td>
+            <td class="colFecha">@item.FchPedido.ToString("dd/MM/yy")</td>
+            <td title="@item.CodCliente">@(item.NombreCliente.Length > 28 ? item.NombreCliente[..28]+"…" : item.NombreCliente)</td>
+            <td>@item.Nro</td>
+            <td title="@item.CodArt">@(item.DescArt.Length > 24 ? item.DescArt[..24]+"…" : item.DescArt)</td>
+            <td class="colFibra">@item.Titulo</td>
+            <td class="colFibra">@item.TipoFibra</td>
+            <td><span class="badge bg-secondary">@item.NombreProceso</span></td>
+            <td><span class="badge-serv @item.AreaBadgeClass">@item.CodServ</span>&nbsp;<small class="text-muted">@item.AreaServicio</small></td>
+            <td class="td-kg fw-bold">@item.Cantidad.ToString("N2")</td>
+            <td class="colColor">@item.Color @(string.IsNullOrEmpty(item.ColorDet) ? "" : "/ " + item.ColorDet)</td>
+            <td class="colColor">@item.Intensidad</td>
+            <td class="colLinea">@item.DescFamilia</td>
+            <td class="colLinea">@item.DescLinea</td>
+            <td class="@(item.EsVencido ? "date-venc" : "")">
+                @(item.FMaxPed.HasValue ? item.FMaxPed.Value.ToString("dd/MM/yy") : "")
+                @if (item.EsVencido) { <i class="bi bi-exclamation-circle-fill text-danger ms-1" title="Vencido"></i> }
+            </td>
+            <td><span class="badge @(item.EstadoPed=="0"?"bg-warning text-dark":item.EstadoPed=="5"?"bg-success":"bg-secondary")">@item.EstadoPedTexto</span></td>
+            <td class="colVende">@item.CodVende</td>
+            <td class="colVende">@item.Giro</td>
+            <td class="colFechAprob">@(item.FchAprobacion.HasValue ? item.FchAprobacion.Value.ToString("dd/MM/yy") : "")</td>
+            <td class="colPresentacion">@item.Presentacion</td>
+            <td class="colDetalle" title="@item.Detalle" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@item.Detalle</td>
+        </tr>
+        }
+    </tbody>
+</table>
+</div>@* /regPlanoWrap *@
+<div id="regEmpty" class="reg-empty" style="display:none;">
+    <i class="bi bi-inbox display-5 d-block mb-2"></i>
+    Sin resultados para los filtros seleccionados.
+</div>
+<div class="mt-2 d-flex justify-content-between align-items-center" style="font-size:.72rem;color:#718096;">
+    <span id="regCount">@Model.TotalItems ítems | @Model.TotalPedidos pedidos | @Model.TotalKg.ToString("N0") kg</span>
+    <span>Fábrica Hilos &nbsp;·&nbsp; Registro de Pedidos</span>
+</div>
+</div>
+
+@section Scripts {
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// REGISTRO DE PEDIDOS — motor client-side completo
+// ═══════════════════════════════════════════════════════════════════════
+
+const ALL_ITEMS = @Html.Raw(jsonItems);
+
+// ── Estado ──────────────────────────────────────────────────────────────
+let activeGroup  = 'dia';
+let sortField    = 'fchPedido';
+let sortAsc      = false;
+let searchTerm   = '';
+
+// ── Columnas opcionales ────────────────────────────────────────────────
+function applyColVisibility() {
+    document.querySelectorAll('.col-chk').forEach(chk => {
+        const cls = chk.dataset.col;
+        const show = chk.checked;
+        document.querySelectorAll('.' + cls).forEach(el => {
+            el.classList.toggle('col-hidden', !show);
+        });
+    });
+}
+
+// ── Filtrado live (búsqueda) ───────────────────────────────────────────
+function filterItems(items) {
+    if (!searchTerm) return items;
+    const q = searchTerm.toLowerCase();
+    return items.filter(r =>
+        (r.numPed + '').includes(q) ||
+        r.nombreCliente.toLowerCase().includes(q) ||
+        r.codArt.toLowerCase().includes(q) ||
+        r.descArt.toLowerCase().includes(q) ||
+        r.titulo.toLowerCase().includes(q) ||
+        r.tipoFibra.toLowerCase().includes(q) ||
+        r.color.toLowerCase().includes(q) ||
+        r.colorDet.toLowerCase().includes(q) ||
+        r.areaServicio.toLowerCase().includes(q) ||
+        r.codServ.toLowerCase().includes(q) ||
+        r.nombreProceso.toLowerCase().includes(q) ||
+        r.descFamilia.toLowerCase().includes(q) ||
+        r.descLinea.toLowerCase().includes(q) ||
+        r.detalle.toLowerCase().includes(q)
+    );
+}
+
+// ── Agrupamiento ───────────────────────────────────────────────────────
+function getGroupKey(r) {
+    switch (activeGroup) {
+        case 'dia':      return r.fchPedido;
+        case 'servicio': return r.codServ + ' — ' + r.areaServicio;
+        case 'familia':  return r.codFam  + ' — ' + (r.descFamilia || r.codFam || '—');
+        case 'cliente':  return r.codCliente + ' — ' + r.nombreCliente;
+        case 'proceso':  return r.proceso + ' — ' + r.nombreProceso;
+        default:         return '__all__';
+    }
+}
+
+function getGroupLabel(key) {
+    if (activeGroup === 'dia') {
+        const [y,m,d] = key.split('-');
+        const dt = new Date(+y, +m-1, +d);
+        const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+        return `${dias[dt.getDay()]}  ${d}/${m}/${y}`;
+    }
+    return key;
+}
+
+// ── Ordenamiento ───────────────────────────────────────────────────────
+function sortItems(items) {
+    return [...items].sort((a, b) => {
+        let va = a[sortField], vb = b[sortField];
+        if (typeof va === 'number' && typeof vb === 'number') {
+            return sortAsc ? va - vb : vb - va;
+        }
+        va = (va ?? '').toString().toLowerCase();
+        vb = (vb ?? '').toString().toLowerCase();
+        return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+}
+
+// ── Formatear número ───────────────────────────────────────────────────
+function fmtN(n, dec=2) {
+    return (+n).toLocaleString('es-PE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+// ── Renderizar badge servicio ──────────────────────────────────────────
+function badgeServ(r) {
+    return `<span class="badge-serv ${r.areaBadge}" title="${r.areaServicio}">${r.codServ}</span>`;
+}
+
+// ── Renderizar fila de ítem ────────────────────────────────────────────
+function renderRow(r) {
+    const ganttUrl = `/Planeamiento/PedidoGantt?numPed=${r.numPed}&serie=${r.serie}`;
+    const venc     = r.esVencido ? ' date-venc' : '';
+    const vencIco  = r.esVencido ? ' <i class="bi bi-exclamation-circle-fill text-danger" title="Vencido"></i>' : '';
+    const estadoBadge = r.estadoPed === 'Sin Aprobar'
+        ? '<span class="badge bg-warning text-dark">Sin Aprobar</span>'
+        : r.estadoPed === 'Aprobado'
+        ? '<span class="badge bg-success">Aprobado</span>'
+        : `<span class="badge bg-secondary">${r.estadoPed}</span>`;
+    return `<tr>
+  <td><a href="${ganttUrl}" class="fw-bold text-primary text-decoration-none">${r.numPed}</a></td>
+  <td class="colFecha">${r.fchPedidoDisp}</td>
+  <td title="${r.codCliente}: ${r.nombreCliente}">${r.nombreCliente.length>28 ? r.nombreCliente.slice(0,28)+'…' : r.nombreCliente}</td>
+  <td>${r.nro}</td>
+  <td title="${r.codArt}">${r.descArt.length>26?r.descArt.slice(0,26)+'…':r.descArt}</td>
+  <td class="colFibra">${r.titulo}</td>
+  <td class="colFibra">${r.tipoFibra}</td>
+  <td><span class="badge bg-secondary">${r.nombreProceso||r.proceso}</span></td>
+  <td>${badgeServ(r)} <small class="text-muted">${r.areaServicio}</small></td>
+  <td class="td-kg fw-bold">${fmtN(r.cantidad)}</td>
+  <td class="colColor">${r.color}${r.colorDet?' / '+r.colorDet:''}</td>
+  <td class="colColor">${r.intensidad}</td>
+  <td class="colLinea">${r.descFamilia}</td>
+  <td class="colLinea">${r.descLinea}</td>
+  <td class="${venc}">${r.fMaxPed}${vencIco}</td>
+  <td>${estadoBadge}</td>
+  <td class="colVende">${r.codVende}</td>
+  <td class="colVende">${r.giro}</td>
+  <td class="colFechAprob">${r.fchAprobacion}</td>
+  <td class="colPresentacion">${r.presentacion}</td>
+  <td class="colDetalle" title="${r.detalle}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.detalle}</td>
+</tr>`;
+}
+
+/// ── Render principal ──────────────────────────────────────────────
+function render() {
+    const items   = sortItems(filterItems(ALL_ITEMS));
+    const grpCont = document.getElementById('regGrpContainer');
+    const plano   = document.getElementById('regPlanoWrap');
+    const tbody   = document.getElementById('regTbody');
+    const empty   = document.getElementById('regEmpty');
+    const countEl = document.getElementById('regCount');
+
+    if (items.length === 0) {
+        grpCont.innerHTML = '';
+        if (tbody) tbody.innerHTML = '';
+        plano.style.display = 'none';
+        empty.style.display = '';
+        countEl.textContent = '0 ítems';
+        updateKpis([]);
+        return;
+    }
+    empty.style.display = 'none';
+
+    // ── Modo plano (sin agrupamiento) ────────────────────────────
+    if (activeGroup === 'none') {
+        grpCont.innerHTML = '';
+        plano.style.display = '';
+        if (tbody) tbody.innerHTML = items.map(renderRow).join('');
+        updateKpis(items);
+        countEl.textContent = `${items.length} ítems | ${new Set(items.map(x=>x.numPed)).size} pedidos | ${fmtN(items.reduce((s,x)=>s+x.cantidad,0))} kg`;
+        applyColVisibility();
+        return;
+    }
+
+    // ── Modo agrupado: tarjetas estilo Dashboard ─────────────────
+    plano.style.display = 'none';
+
+    const groups = {};
+    items.forEach(r => {
+        if (activeGroup === 'servicio' && r.codServ === 'Z') return;
+        if (activeGroup === 'familia'  && r.codFam  === 'ZVA') return;
+        const k = getGroupKey(r);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(r);
+    });
+
+    const totalKg   = items.reduce((s,x) => s+x.cantidad, 0);
+    const subThead  = buildSubThead();
+    let   html      = '';
+
+    Object.entries(groups).sort((a,b) => {
+        if (activeGroup === 'dia') return b[0].localeCompare(a[0]);
+        return a[0].localeCompare(b[0]);
+    }).forEach(([key, gItems]) => {
+        const grpId = 'grp_' + key.split('').reduce((h,c) => (Math.imul(31,h) + c.charCodeAt(0)) | 0, 0).toString(16).replace('-','m');
+        const gKg   = gItems.reduce((s,x) => s+x.cantidad, 0);
+        const gPed  = new Set(gItems.map(x=>x.numPed)).size;
+        const rows  = gItems.map(renderRow).join('');
+
+        html += `
+<div class="reg-grp-card">
+  <div class="reg-grp-head" data-collapse-target="${grpId}"
+       onclick="toggleGrpCard(event,'${grpId}')">
+    <i class="bi bi-chevron-right toggle-icon" style="font-size:.75rem;flex-shrink:0;color:#718096;"></i>
+    <span class="reg-grp-num">${getGroupLabel(key)}</span>
+    <span class="reg-grp-meta ms-auto">
+      <span class="reg-grp-meta-item reg-grp-meta-kg">
+        <i class="bi bi-box2 me-1 text-secondary"></i>${fmtN(gKg,0)} kg
+      </span>
+      <span class="reg-grp-meta-item">
+        <i class="bi bi-list-ul me-1 text-secondary"></i>${gItems.length} ítems
+      </span>
+      <span class="reg-grp-meta-item">
+        <i class="bi bi-file-earmark me-1 text-secondary"></i>${gPed} ped.
+      </span>
+    </span>
+  </div>
+  <div class="collapse" id="${grpId}">
+    <div style="overflow-x:auto;">
+      ${subThead}
+        ${rows}
+      </tbody></table>
+    </div>
+  </div>
+</div>`;
+    });
+
+    grpCont.innerHTML = html;
+
+    // Registrar eventos Bootstrap Collapse para rotar chevron
+    grpCont.querySelectorAll('.collapse').forEach(el => {
+        el.addEventListener('show.bs.collapse', function() {
+            const head = document.querySelector(`[data-collapse-target="${this.id}"]`);
+            if (head) head.querySelector('.toggle-icon')?.classList.add('rotated');
+        });
+        el.addEventListener('hide.bs.collapse', function() {
+            const head = document.querySelector(`[data-collapse-target="${this.id}"]`);
+            if (head) head.querySelector('.toggle-icon')?.classList.remove('rotated');
+        });
+    });
+
+    updateKpis(items);
+    countEl.textContent = `${items.length} ítems | ${new Set(items.map(x=>x.numPed)).size} pedidos | ${fmtN(totalKg)} kg`;
+    applyColVisibility();
+}
+
+// ── Thead reutilizable para sub-tablas ────────────────────────────
+function buildSubThead() {
+    return `<table class="reg-subtbl" style="width:100%;border-collapse:collapse;">
+  <thead><tr>
+    <th style="min-width:90px;">N° Ped</th>
+    <th style="min-width:82px;">Fecha</th>
+    <th style="min-width:160px;">Cliente</th>
+    <th style="width:38px;">Ítem</th>
+    <th style="min-width:140px;">Artículo</th>
+    <th class="colFibra" style="min-width:60px;">Título</th>
+    <th class="colFibra" style="min-width:70px;">Fibra</th>
+    <th style="min-width:90px;">Proceso</th>
+    <th style="min-width:110px;">Servicio</th>
+    <th style="min-width:70px;">Kg</th>
+    <th class="colColor" style="min-width:70px;">Color</th>
+    <th class="colColor" style="min-width:55px;">Intens.</th>
+    <th class="colLinea" style="min-width:100px;">Familia</th>
+    <th class="colLinea" style="min-width:100px;">Línea</th>
+    <th style="min-width:80px;">F.Entrega</th>
+    <th style="min-width:80px;">Estado</th>
+    <th class="colVende" style="min-width:70px;">Vendedor</th>
+    <th class="colVende" style="min-width:60px;">Giro</th>
+    <th class="colFechAprob" style="min-width:85px;">F.Aprobac.</th>
+    <th class="colPresentacion" style="min-width:80px;">Present.</th>
+    <th class="colDetalle" style="min-width:150px;">Observación</th>
+  </tr></thead>
+  <tbody>`;
+}
+
+// ── Toggle individual de tarjeta ──────────────────────────────────
+function toggleGrpCard(event, grpId) {
+    if (event.target.closest('a, button')) return;
+    const el = document.getElementById(grpId);
+    if (el) bootstrap.Collapse.getOrCreateInstance(el).toggle();
+}
+
+function collapseAll() {
+    document.querySelectorAll('#regGrpContainer .collapse').forEach(el => {
+        bootstrap.Collapse.getOrCreateInstance(el).hide();
+    });
+}
+
+function expandAll() {
+    document.querySelectorAll('#regGrpContainer .collapse').forEach(el => {
+        bootstrap.Collapse.getOrCreateInstance(el).show();
+    });
+}
+
+
+// ── KPIs dinámicos
+function updateKpis(items) {
+    const ped  = new Set(items.map(x=>x.numPed)).size;
+    const kg   = items.reduce((s,x) => s+x.cantidad, 0);
+    const khil = items.filter(x => x.codServ==='C'||x.codServ==='CT').reduce((s,x)=>s+x.cantidad,0);
+    const ktnt = items.filter(x => x.codServ==='CT'||x.codServ==='ST'||x.codServ==='STD'||x.codServ==='STR'||x.codServ==='SRT').reduce((s,x)=>s+x.cantidad,0);
+    document.getElementById('kpiPedidos').textContent = ped;
+    document.getElementById('kpiItems').textContent   = items.length;
+    document.getElementById('kpiKg').textContent      = Math.round(kg).toLocaleString('es-PE');
+    document.getElementById('kpiHil').textContent     = Math.round(khil).toLocaleString('es-PE');
+    document.getElementById('kpiTint').textContent    = Math.round(ktnt).toLocaleString('es-PE');
+}
+
+// ── Limpiar / Reset completo ─────────────────────────────────────────────────
+function resetForm() {
+    const hoy   = new Date();
+    const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 30);
+    document.getElementById('inpDesde').value = desde.toISOString().slice(0,10);
+    document.getElementById('inpHasta').value = hoy.toISOString().slice(0,10);
+    document.querySelectorAll('#regForm select').forEach(s => s.value = '');
+    document.getElementById('regSearch').value = '';
+    searchTerm = '';
+    document.querySelectorAll('#groupBtns .btn').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary'); });
+    const btnDia = document.querySelector('#groupBtns [data-group="dia"]');
+    if (btnDia) { btnDia.classList.remove('btn-outline-primary'); btnDia.classList.add('btn-primary'); }
+    activeGroup = 'dia';
+    document.getElementById('btnCollapseAll').style.display = '';
+    document.getElementById('btnExpandAll').style.display   = '';
+    document.getElementById('regLoadingOverlay').style.display = '';
+    document.getElementById('regForm').submit();
+}
+
+// ── Atajos de rango ────────────────────────────────────────────────────
+function setRango(dias) {
+    const hoy   = new Date();
+    const desde = dias === 0 ? hoy : new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - dias);
+    document.getElementById('inpDesde').value = desde.toISOString().slice(0,10);
+    document.getElementById('inpHasta').value = hoy.toISOString().slice(0,10);
+    document.getElementById('regLoadingOverlay').style.display = '';
+    document.getElementById('regForm').submit();
+}
+
+// ── Export CSV ─────────────────────────────────────────────────────────
+function exportCSV() {
+    const items = sortItems(filterItems(ALL_ITEMS));
+    const header = ['NumPed','Serie','FchPedido','Cliente','NroItem','CodArt','Articulo','Titulo','Fibra','Proceso','Servicio','Area','Kg','Color','Intensidad','Familia','Linea','FEntrega','EstadoPed','Vendedor','Giro','FAprobacion','Presentacion','Observacion'];
+    const rows   = items.map(r => [
+        r.numPed, r.serie, r.fchPedidoDisp, r.nombreCliente, r.nro,
+        r.codArt, r.descArt, r.titulo, r.tipoFibra, r.nombreProceso,
+        r.codServ, r.areaServicio, r.cantidad.toFixed(2),
+        r.color, r.intensidad, r.descFamilia, r.descLinea,
+        r.fMaxPed, r.estadoPed, r.codVende, r.giro,
+        r.fchAprobacion, r.presentacion, r.detalle
+    ].map(v => `"${(v??'').toString().replace(/"/g,'""')}"`).join(','));
+    const csv = [header.join(','), ...rows].join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' }));
+    link.download = `registro_pedidos_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+}
+
+// ── Ordenamiento por columna ───────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    // Columnas sortables
+    document.querySelectorAll('#regTable thead th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const f = th.dataset.sort;
+            if (sortField === f) sortAsc = !sortAsc;
+            else { sortField = f; sortAsc = true; }
+            document.querySelectorAll('.sort-icon').forEach(ic => ic.textContent = '⇅');
+            th.querySelector('.sort-icon').textContent = sortAsc ? '↑' : '↓';
+            render();
+        });
+    });
+
+    // Agrupamiento
+    document.querySelectorAll('#groupBtns .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#groupBtns .btn').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary'); });
+            btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-primary');
+            activeGroup = btn.dataset.group;
+            // Ocultar botones colapsar/expandir en modo Plano
+            const showCollapseCtrl = activeGroup !== 'none';
+            document.getElementById('btnCollapseAll').style.display = showCollapseCtrl ? '' : 'none';
+            document.getElementById('btnExpandAll').style.display   = showCollapseCtrl ? '' : 'none';
+            render();
+        });
+    });
+
+    // Búsqueda live
+    document.getElementById('regSearch').addEventListener('input', e => {
+        searchTerm = e.target.value.trim();
+        render();
+    });
+
+    // Toggle de columnas
+    document.querySelectorAll('.col-chk').forEach(chk => {
+        chk.addEventListener('change', applyColVisibility);
+    });
+
+    // Render inicial
+    render();
+});
+</script>
+}
+

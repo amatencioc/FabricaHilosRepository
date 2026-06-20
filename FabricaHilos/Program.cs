@@ -180,6 +180,7 @@ builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 builder.Services.AddScoped<AcuerdoCompHeDocxService>();
 
 // Planeamiento
+builder.Services.AddScoped<IPlnRegistroService, PlnRegistroService>();
 builder.Services.AddScoped<IPlnSeguimientoService, PlnSeguimientoService>();
 builder.Services.AddScoped<IPlnAlertaService, PlnAlertaService>();
 builder.Services.AddScoped<IPlnKpiService, PlnKpiService>();

@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using Oracle.ManagedDataAccess.Client;
 using FabricaHilos.Models.Produccion.Planeamiento;
 
@@ -188,38 +188,65 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
         await using var cmd  = BuildSpCmd(conn, "SP_PLN_PEND_SECADO", tipo, asesor, cliente);
 
         var list = new List<PlnPendienteSecado>();
-        try
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            list.Add(new PlnPendienteSecado
+            {
+                Partida    = Str(r["PARTIDA_01"]),
+                Material   = Str(r["MATERIAL_01"]),
+                Cliente    = Str(r["DESC_CLIENTE_01"]),
+                CodCliente = Str(r["COD_CLIENTE_01"]),
+                CodVende   = Str(r["COD_VENDE_01"]),
+                Fecha      = Dat(r["FECHA_01"]),
+                CodMaq     = Str(r["COD_MAQ_01"]),
+                Maquina    = Str(r["DESC_MAQ_01"]),
+                Proceso    = Str(r["PROCESO_01"]),
+                NroRmc     = Dec(r["NRO_RMC_01"]),
+                Peso       = Dec(r["PESO_PARTIDA_01"]),
+                Lote       = Str(r["LOTE_01"]),
+                ColoSer    = Str(r["COLO_SER_01"]),
+                FchEntrega = Dat(r["FCH_ENTREGA_01"]),
+            });
+        return list;
+    }
+
+    // ── SP_PLN_PEND_MADEJA ────────────────────────────────────────────────────────────────
+    public async Task<IEnumerable<PlnPendienteMadeja>> GetPendientesMadejaAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%")
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = BuildSpCmd(conn, "SP_PLN_PEND_MADEJA", tipo, asesor, cliente);
+
+        var list = new List<PlnPendienteMadeja>();
+        await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+
+        // ── DIAGNÓSTICO: volcar nombres reales de columna ────────────────────
+        var colNames = Enumerable.Range(0, r.FieldCount).Select(i => $"{i}:{r.GetName(i)}").ToArray();
+        System.Console.WriteLine("[SP_PLN_PEND_MADEJA] Columnas reales: " + string.Join(" | ", colNames));
+        // ────────────────────────────────────────────────────────────────────
+
+        // Índices seguros basados en posición hasta confirmar nombres reales
+        bool HasCol(string name) { try { r.GetOrdinal(name); return true; } catch { return false; } }
+
+        while (await r.ReadAsync())
         {
-            await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
-            // Detectar columnas opcionales que el SP puede o no exponer
-            var cols = Enumerable.Range(0, r.FieldCount)
-                                 .Select(i => r.GetName(i))
-                                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            bool hasCodCliente = cols.Contains("COD_CLIENTE_01");
-            bool hasCodVende   = cols.Contains("COD_VENDE_01");
-            while (await r.ReadAsync())
-                list.Add(new PlnPendienteSecado
-                {
-                    Partida    = Str(r["PARTIDA_01"]),
-                    Material   = Str(r["MATERIAL_01"]),
-                    Cliente    = Str(r["DESC_CLIENTE_01"]),
-                    CodCliente = hasCodCliente ? Str(r["COD_CLIENTE_01"]) : "",
-                    CodVende   = hasCodVende   ? Str(r["COD_VENDE_01"])   : "",
-                    Fecha      = Dat(r["FECHA_01"]),
-                    CodMaq     = Str(r["COD_MAQ_01"]),
-                    Maquina    = Str(r["DESC_MAQ_01"]),
-                    Proceso    = Str(r["PROCESO_01"]),
-                    NroRmc     = Dec(r["NRO_RMC_01"]),
-                    Peso       = Dec(r["PESO_PARTIDA_01"]),
-                    Lote       = Str(r["LOTE_01"]),
-                    ColoSer    = Str(r["COLO_SER_01"]),
-                    FchEntrega = Dat(r["FCH_ENTREGA_01"]),
-                });
-        }
-        catch (OracleException ex) when (ex.Number == 6550)
-        {
-            // SP_PLN_PEND_SECADO aún no está declarado en PKG_PLN — devuelve lista vacía
-            return list;
+            // Detectar nombres reales en primera fila
+            list.Add(new PlnPendienteMadeja
+            {
+                Partida    = HasCol("PARTIDA_000")       ? Str(r["PARTIDA_000"])       : Str(r[0]),
+                Material   = HasCol("MATERIAL_000")      ? Str(r["MATERIAL_000"])      : (r.FieldCount > 1  ? Str(r[1])  : ""),
+                Cliente    = HasCol("DESC_CLIENTE_000")  ? Str(r["DESC_CLIENTE_000"])  : (r.FieldCount > 2  ? Str(r[2])  : ""),
+                CodCliente = HasCol("COD_CLIENTE_000")   ? Str(r["COD_CLIENTE_000"])   : (r.FieldCount > 3  ? Str(r[3])  : ""),
+                CodVende   = HasCol("COD_VENDE_000")     ? Str(r["COD_VENDE_000"])     : (r.FieldCount > 4  ? Str(r[4])  : ""),
+                FchProg    = HasCol("FCH_PROG_000")      ? Dat(r["FCH_PROG_000"])      : (r.FieldCount > 5  ? Dat(r[5])  : null),
+                CodMaq     = HasCol("COD_MAQUINA_000")   ? Str(r["COD_MAQUINA_000"])   : (r.FieldCount > 6  ? Str(r[6])  : ""),
+                Maquina    = HasCol("DESC_MAQUINA_000")  ? Str(r["DESC_MAQUINA_000"])  : (r.FieldCount > 7  ? Str(r[7])  : ""),
+                NroRmc     = HasCol("NRO_RMC_000")       ? Dec(r["NRO_RMC_000"])       : (r.FieldCount > 8  ? Dec(r[8])  : 0m),
+                Peso       = HasCol("NETO_GUIA_000")     ? Dec(r["NETO_GUIA_000"])     : (r.FieldCount > 9  ? Dec(r[9])  : 0m),
+                Lote       = HasCol("LOTE_000")          ? Str(r["LOTE_000"])          : (r.FieldCount > 10 ? Str(r[10]) : ""),
+                ColoSer    = HasCol("COLO_SER_000")      ? Str(r["COLO_SER_000"])      : (r.FieldCount > 11 ? Str(r[11]) : ""),
+                FchEntrega = HasCol("FCH_ENTREGA_000")   ? Dat(r["FCH_ENTREGA_000"])   : (r.FieldCount > 12 ? Dat(r[12]) : null),
+            });
         }
         return list;
     }

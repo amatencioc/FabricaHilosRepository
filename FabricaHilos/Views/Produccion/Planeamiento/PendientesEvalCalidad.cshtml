@@ -129,7 +129,11 @@
                                 else { <span class="text-muted">—</span> }
                             </td>
                             <td class="text-center">
-                                @if (item.EstaVencido)
+                                @if (!item.FchEntrega.HasValue)
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else if (item.EstaVencido)
                                 {
                                     <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
                                 }

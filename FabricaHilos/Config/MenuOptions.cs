@@ -82,8 +82,9 @@ public class MenuOptions
     public bool SistemasRequerimientosAnularDocumento       { get; set; } = true;
 
     // ── Menús: Planeamiento ──────────────────────────────────────────────
-    public bool Planeamiento              { get; set; } = false;
-    public bool PlaneamientoDashboard     { get; set; } = true;
+    public bool Planeamiento                { get; set; } = false;
+    public bool PlaneamientoRegistroPedidos { get; set; } = true;
+    public bool PlaneamientoDashboard       { get; set; } = true;
     public bool PlaneamientoPedido        { get; set; } = true;
     public bool PlaneamientoCargaMaquinas { get; set; } = true;
     public bool PlaneamientoAlertas                  { get; set; } = true;
@@ -96,6 +97,7 @@ public class MenuOptions
     public bool PlaneamientoPendEnconado              { get; set; } = true;
     public bool PlaneamientoPendTenido                { get; set; } = true;
     public bool PlaneamientoPendSecado                { get; set; } = true;
+    public bool PlaneamientoPendMadeja                { get; set; } = true;
     public bool PlaneamientoPendPartidasDef           { get; set; } = true;
 
     /// <summary>
@@ -154,8 +156,9 @@ public class MenuOptions
         Contabilidad     = true,
         ContabilidadSire = true,
 
-        Planeamiento              = true,
-        PlaneamientoDashboard     = true,
+        Planeamiento                = true,
+        PlaneamientoRegistroPedidos = true,
+        PlaneamientoDashboard       = true,
         PlaneamientoPedido        = true,
         PlaneamientoCargaMaquinas = true,
         PlaneamientoAlertas                  = true,
@@ -168,6 +171,7 @@ public class MenuOptions
         PlaneamientoPendEnconado              = true,
         PlaneamientoPendTenido                = true,
         PlaneamientoPendSecado                = true,
+        PlaneamientoPendMadeja                = true,
         PlaneamientoPendPartidasDef           = true,
 
         Sistemas                              = true,

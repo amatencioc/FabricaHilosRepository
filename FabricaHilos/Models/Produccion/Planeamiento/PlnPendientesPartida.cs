@@ -124,6 +124,30 @@ public class PlnPendienteSecado
     public bool EstaVencido => DiasRetraso > 0;
 }
 
+// ── SP_PLN_PEND_MADEJA ───────────────────────────────────────────────────────────
+/// <summary>Partida programada pendiente de acabado de madeja.</summary>
+public class PlnPendienteMadeja
+{
+    public string    Partida    { get; set; } = "";  // PARTIDA_000
+    public string    Material   { get; set; } = "";  // MATERIAL_000
+    public string    Cliente    { get; set; } = "";  // DESC_CLIENTE_000
+    public string    CodCliente { get; set; } = "";  // COD_CLIENTE_000
+    public string    CodVende   { get; set; } = "";  // COD_VENDE_000
+    public DateTime? FchProg    { get; set; }        // FCH_PROG_000
+    public string    CodMaq     { get; set; } = "";  // RMC_000
+    public string    Maquina    { get; set; } = "";  // DESC_MAQUINA_000
+    public decimal   NroRmc     { get; set; }        // NRO_RMC_000
+    public decimal   Peso       { get; set; }        // NETO_GUIA_000
+    public string    Lote       { get; set; } = "";  // LOTE_000
+    public string    ColoSer    { get; set; } = "";  // COLO_SER_000
+    public DateTime? FchEntrega { get; set; }        // FCH_ENTREGA_000
+
+    public int DiasRetraso => FchEntrega.HasValue
+        ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
+        : 0;
+    public bool EstaVencido => DiasRetraso > 0;
+}
+
 // ── SP_PLN_PEND_PARTIDAS_DEF ────────────────────────────────────────────────
 /// <summary>Partida con evaluación de calidad pendiente de definición (Karen).</summary>
 public class PlnPendientePartidaDef

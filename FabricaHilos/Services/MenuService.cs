@@ -292,6 +292,7 @@ public class MenuService : IMenuService
             Planeamiento = TieneAlguno(
                 "Produccion",
                 "Planeamiento",
+                "PlaneamientoRegistroPedidos",
                 "PlaneamientoDashboard",
                 "PlaneamientoPedido",
                 "PlaneamientoCargaMaquinas",
@@ -304,7 +305,11 @@ public class MenuService : IMenuService
                 "PlaneamientoPendEnconado",
                 "PlaneamientoPendTenido",
                 "PlaneamientoPendSecado",
+                "PlaneamientoPendMadeja",
                 "PlaneamientoPendPartidasDef"),
+
+            PlaneamientoRegistroPedidos = global.PlaneamientoRegistroPedidos
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoRegistroPedidos"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoDashboard"),
@@ -344,6 +349,9 @@ public class MenuService : IMenuService
 
             PlaneamientoPendSecado = global.PlaneamientoPendSecado
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendSecado"),
+
+            PlaneamientoPendMadeja = global.PlaneamientoPendMadeja
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendMadeja"),
 
             PlaneamientoPendPartidasDef = global.PlaneamientoPendPartidasDef
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendPartidasDef"),
@@ -390,7 +398,7 @@ public class MenuService : IMenuService
         if (menus.Logistica)    return ("Logistica",        "Index", null, null);
         if (menus.CreditosCobranza) return ("CreditosCobranza", "Index", null, null);
         if (menus.Contabilidad)     return ("Contabilidad",     "Index", null, null);
-        if (menus.Planeamiento)  return ("Planeamiento",     "Index", null, null);
+        if (menus.Planeamiento)  return ("Planeamiento",     "Dashboard", null, null);
         if (menus.Sistemas)         return ("Sistemas",          "Index", null, null);
         // Sin m�dulos asignados o AccesoWeb vac�o: redirigir a login para evitar
         // aterrizar en un m�dulo al que el usuario no tiene acceso.
