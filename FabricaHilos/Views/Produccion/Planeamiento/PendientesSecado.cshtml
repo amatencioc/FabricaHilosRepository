@@ -3,25 +3,17 @@
 }
 
 @using FabricaHilos.Models.Produccion.Planeamiento
-@model IEnumerable<PlnPendientePartidaDef>
+@model IEnumerable<PlnPendienteSecado>
 @{
-    ViewData["Title"] = "Partidas por Definir";
+    ViewData["Title"] = "Pendientes de Secado";
     var lista      = Model.ToList();
     var nVencidos  = lista.Count(x => x.EstaVencido);
-    var kgTotal    = lista.Sum(x => x.PesoNeto);
-    var estEvalSel = ViewBag.FiltroEstEval as string ?? "";
-    // Opciones de tipo de evaluación: siempre la lista completa (sin filtro)
-    // para que el dropdown no pierda opciones al filtrar
-    var tiposEval = (ViewBag.TiposEvalAll as List<string>)
-        ?? lista
-            .Where(x => !string.IsNullOrWhiteSpace(x.DescEvaluacion))
-            .Select(x => x.DescEvaluacion!)
-            .Distinct().OrderBy(e => e).ToList();
+    var kgTotal    = lista.Sum(x => x.Peso);
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item active">Partidas por Definir</li>
+    <li class="breadcrumb-item active">Pendientes de Secado</li>
 }
 
 @await Html.PartialAsync("_PlnNavBar")
@@ -31,8 +23,8 @@
     @* ── Encabezado ─────────────────────────────────────────────────────── *@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h4 class="mb-0"><i class="bi bi-question-circle me-2 text-danger"></i>Partidas por Definir</h4>
-            <small class="text-muted">Partidas con evaluación de calidad pendiente de definición (resultado no aprobado) &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Karen</small>
+            <h4 class="mb-0"><i class="bi bi-thermometer-half me-2 text-warning"></i>Pendientes de Secado</h4>
+            <small class="text-muted">Partidas terminadas en tintorería aún sin secado ni evaluación de calidad registrada &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsables: Freddy / Malena</small>
         </div>
         <div class="d-flex gap-2 align-items-center flex-wrap">
             @if (nVencidos > 0)
@@ -49,8 +41,8 @@
     @* ── KPI Cards ───────────────────────────────────────────────────────── *@
     <div class="row g-2 mb-3">
         <div class="col-6 col-md-3">
-            <div class="card border-danger text-center py-2">
-                <div class="fw-bold fs-4 text-danger">@lista.Count</div>
+            <div class="card border-warning text-center py-2">
+                <div class="fw-bold fs-4 text-warning">@lista.Count</div>
                 <small class="text-muted">Partidas pendientes</small>
             </div>
         </div>
@@ -68,37 +60,20 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@lista.Select(x => x.CodCliente).Distinct().Count()</div>
-                <small class="text-muted">Clientes distintos</small>
+                <div class="fw-bold fs-4">@lista.Select(x => x.CodMaq).Distinct().Count()</div>
+                <small class="text-muted">Máquinas distintas</small>
             </div>
         </div>
     </div>
 
-    @* ── Filtro tipo de evaluación ─────────────────────────────────────── *@
-    <form method="get" class="row g-2 mb-3 align-items-end" id="frmFiltrosPartDef">
-        <div class="col-auto">
-            <label class="form-label form-label-sm mb-0">Tipo de Evaluación</label>
-            <select name="estEval" class="form-select form-select-sm" style="min-width:180px;">
-                <option value="">Todas</option>
-                @foreach (var ev in tiposEval)
-                {
-                    <option value="@ev" selected="@(estEvalSel == ev ? "selected" : null)">@ev</option>
-                }
-            </select>
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">
-                <i class="bi bi-search me-1"></i>Filtrar
-            </button>
-            <a asp-action="PartidasPorDefinir" class="btn btn-outline-secondary btn-sm ms-1">Limpiar</a>
-        </div>
-    </form>
+    @* ── Filtros ─────────────────────────────────────────────────────────── *@
+    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesSecado")
 
     @* ── Tabla ───────────────────────────────────────────────────────────── *@
     @if (!lista.Any())
     {
         <div class="alert alert-success">
-            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de definición en este momento.
+            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de secado en este momento.
         </div>
     }
     else
@@ -107,18 +82,17 @@
             <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
                 <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
                     <tr>
-                        <th class="text-center">Fecha</th>
                         <th>Partida</th>
                         <th>Material</th>
-                        <th>Color</th>
-                        <th>Intensidad</th>
-                        <th class="text-center">RMC</th>
-                        <th class="text-end">Kg Neto</th>
                         <th>Cliente</th>
-                        <th>Consulta</th>
-                        <th>Defecto</th>
-                        <th>Evaluación</th>
-                        <th>Observaciones</th>
+                        <th>Cód. Maq.</th>
+                        <th>Máquina</th>
+                        <th>Proceso</th>
+                        <th class="text-center">RMC</th>
+                        <th class="text-end">Kg</th>
+                        <th>Lote</th>
+                        <th>Color</th>
+                        <th class="text-center">F. Fin TT</th>
                         <th class="text-center">F. Entrega</th>
                         <th class="text-center">Estado</th>
                     </tr>
@@ -129,44 +103,23 @@
                         var rowCss = item.EstaVencido ? "table-danger" :
                                      item.DiasRetraso >= -2 ? "table-warning" : "";
                         <tr class="@rowCss">
-                            <td class="text-center text-muted">
-                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
-                            </td>
                             <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
                             <td>@item.Material</td>
-                            <td style="font-size:.78rem;">@item.Color</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.DescIntensidad</td>
+                            <td>
+                                <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                      title="@item.Cliente">@item.Cliente</span>
+                            </td>
+                            <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
+                            <td style="font-size:.78rem;">@item.Maquina</td>
+                            <td style="font-size:.75rem;" class="text-muted">@item.Proceso</td>
                             <td class="text-center text-muted">
                                 @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
                             </td>
-                            <td class="text-end fw-semibold">@item.PesoNeto.ToString("N2")</td>
-                            <td>
-                                <span style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                      title="@item.Cliente">@item.Cliente</span>
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.Consulta))
-                                {
-                                    <span class="badge bg-warning text-dark">@item.Consulta</span>
-                                }
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.DescDefecto))
-                                {
-                                    <span class="badge bg-secondary">@item.DescDefecto</span>
-                                }
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.DescEvaluacion))
-                                {
-                                    <span class="badge @(item.DescEvaluacion == "RECHAZADO" ? "bg-danger" : "bg-info text-dark")">
-                                        @item.DescEvaluacion
-                                    </span>
-                                }
-                            </td>
-                            <td style="font-size:.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                title="@item.Observaciones">
-                                @item.Observaciones
+                            <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+                            <td style="font-size:.78rem;">@item.Lote</td>
+                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                            <td class="text-center text-muted">
+                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
                             </td>
                             <td class="text-center">
                                 @if (item.FchEntrega.HasValue)
@@ -196,9 +149,9 @@
                 </tbody>
                 <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
                     <tr>
-                        <td colspan="6" class="text-end text-muted">Totales:</td>
+                        <td colspan="7" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="7"></td>
+                        <td colspan="5"></td>
                     </tr>
                 </tfoot>
             </table>

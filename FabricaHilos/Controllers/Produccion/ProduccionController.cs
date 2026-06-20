@@ -155,6 +155,17 @@ namespace FabricaHilos.Controllers.Produccion
                         Action = "PartidasPorDefinir"
                     });
                 }
+                if (menus.PlaneamientoPendSecado)
+                {
+                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
+                    {
+                        Nombre = "Pendientes de Secado",
+                        Descripcion = "Partidas terminadas en tintorería pendientes de ingresar a secado. Responsables: Freddy / Malena.",
+                        Icono = "bi-thermometer-half",
+                        Controller = "Planeamiento",
+                        Action = "PendientesSecado"
+                    });
+                }
                 if (menus.PlaneamientoPendEnconado)
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto

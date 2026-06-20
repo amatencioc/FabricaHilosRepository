@@ -17,6 +17,7 @@
     bool esPendEnconado    = ctrl == "Planeamiento" && act == "PendientesEnconado";
     bool esPendTenido      = ctrl == "Planeamiento" && act == "PendientesTenido";
     bool esPartidasDef     = ctrl == "Planeamiento" && act == "PartidasPorDefinir";
+    bool esPendSecado      = ctrl == "Planeamiento" && act == "PendientesSecado";
 
     // Auto-refresh: segundos por vista (0 = sin auto-refresh)
     int autoRefreshSeg = act switch {
@@ -24,6 +25,7 @@
         "PendientesRevisado"     => 180,
         "PendientesEvalCalidad"  => 180,
         "PartidasPorDefinir"     => 180,
+        "PendientesSecado"       => 180,
         "PendientesEnconado"     => 180,
         "PendientesTenido"       => 180,
         "Dashboard"              => 300,
@@ -87,6 +89,15 @@
                 <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="pln-navbar-link">
                     <i class="bi bi-question-circle"></i>
                     <span>Partidas por Definir</span>
+                </a>
+            </li>
+        }
+        @if (menus.PlaneamientoPendSecado)
+        {
+            <li class="pln-navbar-item @(esPendSecado ? "active" : "")">
+                <a asp-controller="Planeamiento" asp-action="PendientesSecado" class="pln-navbar-link">
+                    <i class="bi bi-thermometer-half"></i>
+                    <span>Pend. Secado</span>
                 </a>
             </li>
         }

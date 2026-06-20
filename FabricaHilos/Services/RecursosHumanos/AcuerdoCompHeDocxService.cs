@@ -100,8 +100,31 @@ public class AcuerdoCompHeDocxService
             .Select(f => f!.Value)
             .ToList();
 
-        var semanaHe  = fechasHe.Any()  ? System.Globalization.ISOWeek.GetWeekOfYear(fechasHe.Min()).ToString()  : "";
-        var semanaDdc = fechasDdc.Any() ? System.Globalization.ISOWeek.GetWeekOfYear(fechasDdc.Min()).ToString() : "";
+        var semanaHe  = fechasHe.Any()
+            ? string.Join(", ", fechasHe.Select(f  => System.Globalization.ISOWeek.GetWeekOfYear(f)).Distinct().OrderBy(w => w))
+            : "";
+        var semanaDdc = fechasDdc.Any()
+            ? string.Join(", ", fechasDdc.Select(f => System.Globalization.ISOWeek.GetWeekOfYear(f)).Distinct().OrderBy(w => w))
+            : "";
+
+        // Calcular el rango completo de semanas ISO de las HE
+        // (lunes de la primera semana → domingo de la última semana)
+        string rangoDocDesde, rangoDocHasta;
+        if (fechasHe.Any())
+        {
+            static DateTime IsoLunes(DateTime d) =>
+                System.Globalization.ISOWeek.ToDateTime(
+                    System.Globalization.ISOWeek.GetYear(d),
+                    System.Globalization.ISOWeek.GetWeekOfYear(d),
+                    DayOfWeek.Monday);
+            rangoDocDesde = IsoLunes(fechasHe.Min()).ToString("dd/MM/yyyy");
+            rangoDocHasta = IsoLunes(fechasHe.Max()).AddDays(6).ToString("dd/MM/yyyy");
+        }
+        else
+        {
+            rangoDocDesde = fechaInicio;
+            rangoDocHasta = fechaFin;
+        }
 
         // ── Corregir ortografía y acentuación de la plantilla ─────────────────
         xml = CorregirTextos(xml);
@@ -113,9 +136,9 @@ public class AcuerdoCompHeDocxService
         xml = ReemplazarWt(xml, "____________",   "");
         // _________       → SEMANA N° (semana de las horas extras)
         xml = ReemplazarWt(xml, "_________",      semanaHe);
-        // DEL___________AL___________ → rango de búsqueda (Desde/Hasta del historial)
+        // DEL___________AL___________ → rango completo de la(s) semana(s) ISO de las HE
         // El run en la plantilla tiene un espacio inicial: " DEL___________AL___________"
-        xml = ReemplazarWt(xml, " DEL___________AL___________", $" DEL {fechaInicio} AL {fechaFin}");
+        xml = ReemplazarWt(xml, " DEL___________AL___________", $" DEL {rangoDocDesde} AL {rangoDocHasta}");
 
         // ── Párrafo 2: sustituir los dos N°… con los números de semana ────────
         // Primer  N°… = semana del día inasistido (FechaDestinoStr)

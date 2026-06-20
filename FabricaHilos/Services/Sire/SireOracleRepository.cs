@@ -1581,6 +1581,56 @@ public sealed class SireOracleRepository : ISireOracleRepository
         return list;
     }
 
+    public async Task<List<SireConcilDetalle>> GetConcilTodosParaValidarAsync(
+        string tipo, string periodo, CancellationToken ct = default)
+    {
+        if (!int.TryParse(periodo, out var periodoNr)) return [];
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+
+        // Igual que GetConcilPendientesValidezAsync pero SIN filtro VALIDEZ_CP
+        // y SIN excluir SOLO_LEGACY (también se valida).
+        const string sql = @"
+            SELECT C.ID_CONCIL, C.TIPO, C.PERIODO,
+                   C.TIPDOC, C.SERIE, C.NUMERO, C.F_EMISION, C.RUC, C.NOMBRE,
+                   C.ESTADO, NVL(C.SUNAT_TOTAL,0) SUNAT_TOTAL,
+                   NVL(C.SUNAT_MONEDA,'PEN') SUNAT_MONEDA,
+                   NVL(P.CAMBIO,1)           CAMBIO
+            FROM   SIG.SIRE_CONCIL C
+            LEFT JOIN SIG.SIRE_PROPUESTA P ON P.ID_PROP = C.ID_PROP
+            WHERE  C.TIPO    = :tipo
+              AND  C.PERIODO = :periodo
+              AND  C.ESTADO != 'EXCLUIDO'
+            ORDER BY C.TIPDOC, C.SERIE, C.NUMERO";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        cmd.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Varchar2) { Value = tipoDb });
+        cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)    { Value = periodoNr });
+
+        var list = new List<SireConcilDetalle>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            list.Add(new SireConcilDetalle
+            {
+                IdConcil     = Convert.ToInt64(rdr["ID_CONCIL"]),
+                Tipo         = rdr.GetString(rdr.GetOrdinal("TIPO")),
+                Periodo      = rdr.GetInt32(rdr.GetOrdinal("PERIODO")),
+                Tipdoc       = NullStr(rdr, "TIPDOC"),
+                Serie        = NullStr(rdr, "SERIE"),
+                Numero       = NullStr(rdr, "NUMERO"),
+                FEmision     = NullDate(rdr, "F_EMISION"),
+                Ruc          = NullStr(rdr, "RUC"),
+                Nombre       = FixStr(rdr,  "NOMBRE"),
+                Estado       = NullStr(rdr, "ESTADO") ?? "",
+                SunatTotal   = NullDec(rdr, "SUNAT_TOTAL"),
+                SunatMoneda  = NullStr(rdr, "SUNAT_MONEDA") ?? "PEN",
+                CambioMoneda = NullDec(rdr, "CAMBIO") is decimal c && c > 0 ? c : 1m,
+            });
+        }
+        return list;
+    }
+
     public async Task<SireConcilDetalle?> GetConcilFilaParaValidezAsync(
         long idConcil, CancellationToken ct = default)
     {

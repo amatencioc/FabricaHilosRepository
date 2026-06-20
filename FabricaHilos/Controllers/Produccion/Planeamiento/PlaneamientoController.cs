@@ -114,6 +114,17 @@ public class PlaneamientoController : OracleBaseController
                 Action      = "PartidasPorDefinir"
             });
 
+        if (menus.PlaneamientoPendSecado)
+            modulos.Add(new SgcModuloDto
+            {
+                Nombre      = "Pendientes de Secado",
+                Descripcion = "Partidas terminadas en tintorería pendientes de ingresar a secado. Responsables: Freddy / Malena.",
+                Icono       = "bi-thermometer-half",
+                ColorClase  = "text-warning",
+                Controller  = "Planeamiento",
+                Action      = "PendientesSecado"
+            });
+
         if (menus.PlaneamientoPendEnconado)
             modulos.Add(new SgcModuloDto
             {
@@ -883,10 +894,45 @@ public class PlaneamientoController : OracleBaseController
 
     // ── Partidas con evaluación de calidad pendiente de definición ───────────
     // GET /Planeamiento/PartidasPorDefinir
-    public async Task<IActionResult> PartidasPorDefinir()
+    public async Task<IActionResult> PartidasPorDefinir(string? estEval = null)
     {
-        var datos = await _pendientes.GetPendientesPartidasDefAsync();
+        // Carga TODOS los datos (sin filtro en SP) para que el dropdown de tipos
+        // siempre muestre todas las opciones disponibles, independientemente del filtro activo.
+        var todos = (await _pendientes.GetPendientesPartidasDefAsync("%")).ToList();
+        var tiposEval = todos
+            .Where(x => !string.IsNullOrWhiteSpace(x.DescEvaluacion))
+            .Select(x => x.DescEvaluacion!)
+            .Distinct().OrderBy(e => e).ToList();
+        // Filtro aplicado en C# sobre la descripción devuelta por el SP
+        var datos = string.IsNullOrEmpty(estEval)
+            ? todos
+            : todos.Where(x => x.DescEvaluacion == estEval).ToList();
+        ViewBag.FiltroEstEval = estEval;
+        ViewBag.TiposEvalAll  = tiposEval;
         return View(datos);
+    }
+
+    // ── Partidas terminadas en tintorería pendientes de secado ───────────────
+    // GET /Planeamiento/PendientesSecado
+    public async Task<IActionResult> PendientesSecado(
+        string? tipo = null, string? asesor = null, string? cliente = null)
+    {
+        var tFiltroTipo     = _pendientes.GetFiltroTipoAsync();
+        var tFiltroAsesores = _reporte.GetFiltroAsesoresAsync();
+        var tFiltroClientes = _reporte.GetFiltroClientesAsync();
+        var tDatos          = _pendientes.GetPendientesSecadoAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%");
+        await Task.WhenAll(tFiltroTipo, tFiltroAsesores, tFiltroClientes, tDatos);
+        var datosSec     = tDatos.Result.ToList();
+        var codCliSec    = datosSec.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codVendeSec  = datosSec.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroAsesores = tFiltroAsesores.Result.Where(a => codVendeSec.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tFiltroClientes.Result.Where(c => codCliSec.Contains(c.CodCliente ?? "")).ToList();
+        ViewBag.FiltroTipoSel  = tipo;
+        ViewBag.FiltroAsesor   = asesor;
+        ViewBag.FiltroCliente  = cliente;
+        return View(datosSec);
     }
 
     // ── Partidas aprobadas pendientes de enconado/devanado ───────────────────

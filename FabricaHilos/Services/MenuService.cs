@@ -303,6 +303,7 @@ public class MenuService : IMenuService
                 "PlaneamientoPendEvalCalidad",
                 "PlaneamientoPendEnconado",
                 "PlaneamientoPendTenido",
+                "PlaneamientoPendSecado",
                 "PlaneamientoPendPartidasDef"),
 
             PlaneamientoDashboard = global.PlaneamientoDashboard
@@ -340,6 +341,9 @@ public class MenuService : IMenuService
 
             PlaneamientoPendTenido = global.PlaneamientoPendTenido
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendTenido"),
+
+            PlaneamientoPendSecado = global.PlaneamientoPendSecado
+                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendSecado"),
 
             PlaneamientoPendPartidasDef = global.PlaneamientoPendPartidasDef
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendPartidasDef"),

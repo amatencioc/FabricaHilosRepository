@@ -23,6 +23,11 @@ public interface IPlnPendientesService
     Task<IEnumerable<PlnPendienteTenido>> GetPendientesTenidoAsync(
         string tipo = "%", string asesor = "%", string cliente = "%");
 
+    /// <summary>SP_PLN_PEND_SECADO: partidas terminadas en tintorería pendientes de secado (Freddy/Malena).</summary>
+    Task<IEnumerable<PlnPendienteSecado>> GetPendientesSecadoAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%");
+
     /// <summary>SP_PLN_PEND_PARTIDAS_DEF: partidas con evaluación de calidad pendiente de definición (Karen).</summary>
-    Task<IEnumerable<PlnPendientePartidaDef>> GetPendientesPartidasDefAsync();
+    Task<IEnumerable<PlnPendientePartidaDef>> GetPendientesPartidasDefAsync(
+        string estEval = "%");
 }

@@ -197,6 +197,106 @@
                     </ul>
                 </li>
                 }
+                @* ── Planeamiento standalone: solo para usuarios SIN token Produccion ─────── *@
+                @if (!menus.Produccion && menus.Planeamiento)
+                {
+                <li class="sidebar-section">PLANEAMIENTO</li>
+                <li>
+                    <a class="sidebar-link @(ctrl == "Planeamiento" ? "active" : "")" data-bs-toggle="collapse" href="#submenuPlaneamiento" role="button" aria-expanded="@(ctrl == "Planeamiento" ? "true" : "false")" aria-controls="submenuPlaneamiento">
+                        <i class="bi bi-kanban"></i> Planeamiento
+                    </a>
+                    <ul class="collapse @(ctrl == "Planeamiento" ? "show" : "") list-unstyled ps-3" id="submenuPlaneamiento">
+                        @if (menus.PlaneamientoDashboard)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="Dashboard" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Dashboard" ? "active" : "")">
+                                <i class="bi bi-kanban"></i> Seguimiento de Pedidos
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoSeguimientoTintoreria)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="SeguimientoTintoreria" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "SeguimientoTintoreria" ? "active" : "")">
+                                <i class="bi bi-table"></i> Seg. Programación Tintorería
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoProximosVencer)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="ProximosVencer" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "ProximosVencer" ? "active" : "")">
+                                <i class="bi bi-calendar-event-fill"></i> Próximos a Vencer
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendTenido)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PendientesTenido" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesTenido" ? "active" : "")">
+                                <i class="bi bi-droplet-half"></i> Pend. Teñido
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendEvalCalidad)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEvalCalidad" ? "active" : "")">
+                                <i class="bi bi-patch-check"></i> Pend. Eval. Calidad
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendPartidasDef)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PartidasPorDefinir" ? "active" : "")">
+                                <i class="bi bi-question-circle"></i> Partidas por Definir
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendEnconado)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PendientesEnconado" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEnconado" ? "active" : "")">
+                                <i class="bi bi-arrow-repeat"></i> Pend. Enconado
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendRevisado)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PendientesRevisado" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesRevisado" ? "active" : "")">
+                                <i class="bi bi-clipboard2-check"></i> Pend. Revisado
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoPendientesDespacho)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="PendientesDespacho" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesDespacho" ? "active" : "")">
+                                <i class="bi bi-truck"></i> Pendientes de Despacho
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoCargaMaquinas)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="CargaMaquinas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "CargaMaquinas" ? "active" : "")">
+                                <i class="bi bi-gear-wide-connected"></i> Carga de Máquinas
+                            </a>
+                        </li>
+                        }
+                        @if (menus.PlaneamientoAlertas)
+                        {
+                        <li>
+                            <a asp-controller="Planeamiento" asp-action="Alertas" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "Alertas" ? "active" : "")">
+                                <i class="bi bi-bell"></i> Alertas
+                            </a>
+                        </li>
+                        }
+                    </ul>
+                </li>
+                }
                 @if (menus.Sgc)
                 {
                 <li class="sidebar-section">GESTIÓN DE CALIDAD</li>

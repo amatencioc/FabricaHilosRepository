@@ -154,6 +154,13 @@ public interface ISireOracleRepository
     Task<List<SireConcilDetalle>> GetConcilPendientesValidezAsync(string tipo, string periodo, CancellationToken ct = default);
 
     /// <summary>
+    /// Devuelve TODOS los registros SIRE_CONCIL del tipo y período indicados
+    /// que pueden validarse contra SUNAT (excluye EXCLUIDO y SOLO_LEGACY).
+    /// No filtra por VALIDEZ_CP: permite revalidar registros ya validados.
+    /// </summary>
+    Task<List<SireConcilDetalle>> GetConcilTodosParaValidarAsync(string tipo, string periodo, CancellationToken ct = default);
+
+    /// <summary>
     /// Devuelve los datos de una sola fila de SIRE_CONCIL para validarla contra SUNAT.
     /// Incluye SUNAT_MONEDA y CAMBIO para conversión de moneda cuando corresponda.
     /// </summary>

@@ -233,7 +233,9 @@ const GlobalLoading = {
             // Solo activar overlay para peticiones que modifican datos (POST/PUT/DELETE/PATCH).
             // Las peticiones GET son carga de datos de componentes (ApexCharts, etc.) y
             // no deben disparar el overlay para evitar parpadeos en la carga de página.
-            const activateOverlay = !options.noLoading && method !== 'GET';
+            const sireOv = document.getElementById('sireOverlayGlobal');
+            const enModoValidacion = sireOv && sireOv.dataset && sireOv.dataset.modo === 'validacion';
+            const activateOverlay = !options.noLoading && method !== 'GET' && !enModoValidacion;
 
             if (activateOverlay) {
                 let message = 'Cargando datos...';

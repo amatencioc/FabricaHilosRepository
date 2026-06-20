@@ -95,6 +95,7 @@ public class MenuOptions
     public bool PlaneamientoPendEvalCalidad           { get; set; } = true;
     public bool PlaneamientoPendEnconado              { get; set; } = true;
     public bool PlaneamientoPendTenido                { get; set; } = true;
+    public bool PlaneamientoPendSecado                { get; set; } = true;
     public bool PlaneamientoPendPartidasDef           { get; set; } = true;
 
     /// <summary>
@@ -166,6 +167,7 @@ public class MenuOptions
         PlaneamientoPendEvalCalidad           = true,
         PlaneamientoPendEnconado              = true,
         PlaneamientoPendTenido                = true,
+        PlaneamientoPendSecado                = true,
         PlaneamientoPendPartidasDef           = true,
 
         Sistemas                              = true,

@@ -1,4 +1,4 @@
-﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RVIE (Registro de Ventas)";
@@ -175,13 +175,27 @@
 </div>
 
 <!-- ===== OVERLAY GLOBAL DE CARGA ===== -->
-<div id="sireOverlayGlobal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(15,25,50,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:16px;">
-    <div style="background:#fff;border-radius:12px;padding:32px 48px;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;min-width:260px;">
-        <div class="spinner-border" style="color:#1565c0;width:2.8rem;height:2.8rem;" role="status"><span class="visually-hidden">Cargando...</span></div>
-        <div id="sireOverlayMensaje" style="margin-top:14px;font-size:.92rem;font-weight:600;color:#1c3a5e;">Procesando...</div>
+<div id="sireOverlayGlobal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(10,18,40,.60);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:32px 40px 28px;box-shadow:0 24px 64px rgba(0,0,0,.35);text-align:center;min-width:320px;max-width:420px;width:92vw;">
+        <div id="sireOvSpinnerWrap" style="margin:0 auto 18px;width:52px;height:52px;position:relative;">
+            <svg viewBox="0 0 52 52" style="width:52px;height:52px;animation:sireGlobalSpin 1s linear infinite;">
+                <circle cx="26" cy="26" r="22" fill="none" stroke="#e9ecef" stroke-width="5"/>
+                <circle cx="26" cy="26" r="22" fill="none" stroke="#1565c0" stroke-width="5"
+                        stroke-dasharray="80 60" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div id="sireOverlayMensaje"    style="font-size:.95rem;font-weight:700;color:#1c3a5e;">Procesando...</div>
         <div id="sireOverlaySubMensaje" style="margin-top:4px;font-size:.78rem;color:#6b7280;"></div>
+        <div id="sireOvMsg"             style="font-size:.88rem;font-weight:700;color:#1c3a5e;display:none;"></div>
+        <div id="sireOvDetalle"         style="font-size:.73rem;color:#6c757d;margin-top:3px;display:none;line-height:1.35;"></div>
+        <div id="sireOvBarraWrap"       style="display:none;margin-top:10px;height:7px;background:#e9ecef;border-radius:4px;overflow:hidden;">
+            <div id="sireOvBarra"       style="height:100%;width:0%;background:#1565c0;transition:width .2s;border-radius:4px;"></div>
+        </div>
+        <div id="sireOvPct"             style="font-size:.68rem;color:#6c757d;margin-top:4px;display:none;"></div>
+        <div style="margin-top:14px;font-size:.73rem;color:#9ca3af;">No cierre esta ventana. Puede minimizarla.</div>
     </div>
 </div>
+<style>@@keyframes sireGlobalSpin{to{transform:rotate(360deg)}}</style>
 
 <!-- Modal: Confirmación genérica -->
 <div class="modal fade" id="modalConfirmar" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -417,6 +431,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 </li>
                 <li class="ms-auto d-flex align-items-center gap-1 pe-2 pb-1" style="margin-top:auto;">
                     <div id="filtroConcilBtns" class="d-flex gap-1 align-items-center" style="visibility:hidden;">
+                        <button id="btnValidarSunat" class="btn btn-xs btn-outline-success me-1" onclick="validarCpeSunat(this)"
+                                title="Validar comprobantes contra la API Consulta Integrada de SUNAT (estadoCp, estadoRuc, domicilio)">
+                            <i class="bi bi-patch-check me-1"></i>Validar CPE <span id="validarBadge" class="badge bg-success ms-1" style="font-size:.65rem;display:none;"></span>
+                        </button>
                         <button class="btn btn-xs btn-outline-secondary active" onclick="filtrarConcil(null,this)" title="Todos"><i class="bi bi-list"></i></button>
                         <button class="btn btn-xs btn-outline-success"  onclick="filtrarConcil('OK',this)" title="Sin diferencias"><i class="bi bi-check-circle"></i></button>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('AVISO',this)" title="Diferencias informativas (base, moneda, estado...)"><i class="bi bi-exclamation-triangle"></i></button>
@@ -424,7 +442,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <button class="btn btn-xs btn-outline-primary"  onclick="filtrarConcil('SOLO_SUNAT',this)" title="Solo en SUNAT"><i class="bi bi-cloud"></i></button>
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
                         <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
-                        <button id="btnExcluirSelec" class="btn btn-xs btn-warning ms-1" onclick="excluirSeleccionados()"
+                        <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
+                        <button id="btnExcluirSelec"
                                 style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">
                             <i class="bi bi-scissors"></i> Excluir <span id="excluirBadge" class="badge bg-dark ms-1" style="font-size:.65rem;"></span>
                         </button>
@@ -615,6 +634,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
                                     <th style="width:80px" class="text-center">Estado</th>
+                                    <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
                                 </tr>
                             </thead>
@@ -689,7 +709,11 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     string rowBg = (r.Estado == "EXCLUIDO" && grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbg))
                                         ? $"background:{pbg}!important;"
                                         : "";
-                                    <tr data-concil='@r.Estado' class="@rowClass" style="@rowBg">
+                                    var _tieneCpeError = r.ValidezCp != null
+                                        && (   (r.ValidezCp is not "1" and not "3")
+                                            || (r.ValidezRuc != null && r.ValidezRuc != "00")
+                                            || (r.ValidezDom != null && r.ValidezDom != "00") );
+                                    <tr data-concil='@r.Estado' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
                                         <td class="td-check-excl" style="display:none;">
                                             @if (r.Estado == "SOLO_SUNAT")
                                             {
@@ -723,6 +747,27 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
                                         <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
+                                        <td class="text-center td-validez-sunat" style="font-size:.6rem;" data-id="@r.IdConcil">
+                                            @if (r.ValidezCp != null)
+                                            {
+                                                <div class="d-flex flex-column align-items-center gap-1" title="Validado: @(r.FchValidez?.ToString("dd/MM/yyyy HH:mm") ?? "-")">
+                                                    <span class="badge @r.ValidezCpBadge" style="font-size:.58rem;min-width:72px;">CP: @r.ValidezCpLabel</span>
+                                                    <span class="badge @(r.ValidezRuc == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">RUC: @r.ValidezRucLabel</span>
+                                                    <span class="badge @(r.ValidezDom == "00" ? "bg-success" : "bg-warning text-dark")" style="font-size:.58rem;min-width:72px;">Dom: @r.ValidezDomLabel</span>
+                                                </div>
+                                                <button class="btn btn-revalidar-fila p-0 mt-1" data-id="@r.IdConcil"
+                                                        title="Re-validar contra SUNAT" style="font-size:.6rem;line-height:1;background:none;border:none;color:#6c757d;">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            }
+                                            else if (r.Estado != "EXCLUIDO" && r.Estado != "SOLO_LEGACY")
+                                            {
+                                                <button class="btn btn-revalidar-fila p-0" data-id="@r.IdConcil"
+                                                        title="Validar este comprobante contra SUNAT" style="font-size:.6rem;line-height:1;background:none;border:none;color:#adb5bd;">
+                                                    <i class="bi bi-patch-question"></i>
+                                                </button>
+                                            }
+                                        </td>
                                         <td>
                                             @if (r.Estado == "EXCLUIDO")
                                             {
@@ -985,7 +1030,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         });
 
         try {
-                const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+            const resp = await fetch('@Url.Action("ReprocesarZipLocal", "Sire")', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
                 body: JSON.stringify({ tipo, periodo })
@@ -1019,6 +1065,46 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         t.textContent = msg;
         cont.appendChild(t);
         setTimeout(() => t.remove(), 4000);
+    }
+
+    function mostrarOverlaySire(msg) {
+        const ov      = document.getElementById('sireOverlayGlobal');
+        const elMsg   = document.getElementById('sireOvMsg');
+        const elMens  = document.getElementById('sireOverlayMensaje');
+        const elSub   = document.getElementById('sireOverlaySubMensaje');
+        const elDet   = document.getElementById('sireOvDetalle');
+        const elBWrap = document.getElementById('sireOvBarraWrap');
+        const elPct   = document.getElementById('sireOvPct');
+        if (elMens)  { elMens.style.display  = 'none'; }
+        if (elSub)   { elSub.style.display   = 'none'; }
+        if (elMsg)   { elMsg.style.display   = 'block'; elMsg.textContent = msg ?? 'Validando comprobantes…'; }
+        if (elDet)   { elDet.style.display   = 'block'; elDet.textContent = ''; }
+        if (elBWrap) { elBWrap.style.display = 'block'; }
+        if (elPct)   { elPct.style.display   = 'block'; elPct.textContent  = ''; }
+        const barra = document.getElementById('sireOvBarra');
+        if (barra)   barra.style.width = '0%';
+        if (ov) {
+            ov.dataset.modo = 'validacion';   // <-- marca: mostrarOverlayGlobal no debe interferir
+            ov.style.display = 'flex'; ov.style.flexDirection = 'column';
+            ov.style.alignItems = 'center'; ov.style.justifyContent = 'center';
+        }
+    }
+
+    function ocultarOverlaySire() {
+        const ov      = document.getElementById('sireOverlayGlobal');
+        const elMsg   = document.getElementById('sireOvMsg');
+        const elMens  = document.getElementById('sireOverlayMensaje');
+        const elSub   = document.getElementById('sireOverlaySubMensaje');
+        const elDet   = document.getElementById('sireOvDetalle');
+        const elBWrap = document.getElementById('sireOvBarraWrap');
+        const elPct   = document.getElementById('sireOvPct');
+        if (ov) { ov.style.display = 'none'; delete ov.dataset.modo; }   // <-- quita la marca
+        if (elMsg)   { elMsg.style.display   = 'none'; }
+        if (elDet)   { elDet.style.display   = 'none'; }
+        if (elBWrap) { elBWrap.style.display = 'none'; }
+        if (elPct)   { elPct.style.display   = 'none'; }
+        if (elMens)  { elMens.style.display  = 'block'; }
+        if (elSub)   { elSub.style.display   = 'block'; }
     }
     let _concilFilter = null;
 
@@ -1111,7 +1197,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         let vis = 0;
         filas.forEach(tr => {
             const textOk  = !q || tr.textContent.toLowerCase().includes(q);
-            const concilOk = !_concilFilter || !tr.dataset.concil || tr.dataset.concil === _concilFilter;
+            const concilOk = !_concilFilter
+                || (_concilFilter === 'CP_NO_EXISTE'
+                    ? tr.dataset.cpeError === '1'
+                    : (!tr.dataset.concil || tr.dataset.concil === _concilFilter));
             const mostrar = textOk && concilOk;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) vis++;
@@ -1121,7 +1210,112 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         if (id === 'tablaConcilDetalle') actualizarTotalesConcil();
     }
 
-    // ── Exclusión manual ─────────────────────────────────────────────────────
+    // -- Validacion de comprobantes contra API Consulta Integrada SUNAT ------
+
+    async function validarCpeSunat(btn) {
+        const periodo = document.getElementById('periodoSeleccionado')?.value
+                     ?? document.querySelector('[name="periodoSeleccionado"]')?.value
+                     ?? '@periodoSeleccionado';
+        if (!periodo) { mostrarToastSire('Seleccione un periodo antes de validar.', 'warning'); return; }
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        btn.disabled = true;
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validando...';
+        mostrarOverlaySire('Obteniendo lista de comprobantes...');
+        let validados = 0, errores = 0;
+        try {
+            const listResp = await fetch('@Url.Action("GetIdsParaValidar","Sire")?tipo=ventas&periodo=' + periodo, { credentials: 'include' });
+            if (!listResp.ok) { mostrarToastSire('Error al obtener lista: ' + listResp.status, 'danger'); return; }
+            const list = await listResp.json();
+            if (!list.total) { mostrarToastSire('No hay comprobantes para validar.', 'info'); return; }
+            const items = list.items;
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const pct  = Math.round(((i + 1) / items.length) * 100);
+                const elMsg   = document.getElementById('sireOvMsg');
+                const elDet   = document.getElementById('sireOvDetalle');
+                const elBarra = document.getElementById('sireOvBarra');
+                const elPct   = document.getElementById('sireOvPct');
+                if (elMsg)   elMsg.textContent   = 'Validando ' + (i + 1) + ' de ' + items.length + '...';
+                if (elDet)   elDet.innerHTML     = '<span style="font-weight:600;">' + (item.serie ?? '') + '-' + (item.numero ?? '') + '</span>' +
+                                                   ' &middot; ' + (item.ruc ?? '') +
+                                                   '<br><span style="color:#9ca3af">' + (item.nombre ?? '') + '</span>';
+                if (elBarra) elBarra.style.width = pct + '%';
+                if (elPct)   elPct.textContent   = pct + '%  ✓ ' + validados + '  ✗ ' + errores;
+                try {
+                    const r = await fetch('@Url.Action("ValidarFilaSunat","Sire")?idConcil=' + item.idConcil, {
+                        method: 'POST', credentials: 'include', headers: { 'RequestVerificationToken': token }
+                    });
+                    if (r.ok) { const res = await r.json(); actualizarCeldaValidez(item.idConcil, res); validados++; }
+                    else { errores++; }
+                } catch { errores++; }
+            }
+            mostrarToastSire('Validados: ' + validados + ' — Errores: ' + errores, errores > 0 ? 'warning' : 'success');
+        } catch (e) {
+            mostrarToastSire('Error de red: ' + e.message, 'danger');
+        } finally {
+            ocultarOverlaySire();
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    }
+
+    function actualizarCeldaValidez(idConcil, res) {
+        const td = document.querySelector('.td-validez-sunat[data-id="' + idConcil + '"]');
+        if (!td) return;
+        const cpLbl  = res.estadoCpLabel  ?? res.estadoCp  ?? '-';
+        const rucLbl = res.estadoRucLabel ?? res.estadoRuc ?? '-';
+        const domLbl = res.condDomiLabel  ?? res.condDomiRuc ?? '-';
+        const cpCss  = res.badgeCss ?? 'badge bg-secondary';
+        const rucOk  = res.estadoRuc   === '00';
+        const domOk  = res.condDomiRuc === '00';
+        const rucCss = rucOk  ? 'badge bg-success' : 'badge bg-warning text-dark';
+        const domCss = domOk  ? 'badge bg-success' : 'badge bg-warning text-dark';
+        const BSTYLE = 'font-size:.6rem;min-width:78px;text-align:center;padding:2px 5px;border-radius:4px;display:block;letter-spacing:.01em;';
+        td.innerHTML =
+            '<div class="d-flex flex-column align-items-center gap-1" style="min-width:82px;">' +
+                '<span class="' + cpCss  + '" style="' + BSTYLE + '">CP: '  + cpLbl  + '</span>' +
+                '<span class="' + rucCss + '" style="' + BSTYLE + '">RUC: ' + rucLbl + '</span>' +
+                '<span class="' + domCss + '" style="' + BSTYLE + '">Dom: ' + domLbl + '</span>' +
+            '</div>' +
+            '<button class="btn btn-revalidar-fila p-0 mt-1" data-id="' + idConcil + '" title="Re-validar contra SUNAT" ' +
+            'style="font-size:.62rem;line-height:1;background:none;border:none;color:#adb5bd;" >' +
+            '<i class="bi bi-arrow-repeat"></i></button>';
+        const cpOk   = res.estadoCp    === '1' || res.estadoCp    === '3';
+        const rucErr = res.estadoRuc   != null  && res.estadoRuc   !== '00';
+        const domErr = res.condDomiRuc != null  && res.condDomiRuc !== '00';
+        const tr     = td.closest('tr');
+        if (tr) {
+            tr.dataset.validezCp = res.estadoCp ?? '';
+            tr.dataset.cpeError  = (!cpOk || rucErr || domErr) ? '1' : '0';
+        }
+    }
+
+    async function validarFilaSunat(idConcil, tdEl) {
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+        const tdDom = tdEl ?? document.querySelector('.td-validez-sunat[data-id="' + idConcil + '"]');
+        const btnR  = tdDom?.querySelector('.btn-revalidar-fila');
+        if (btnR) { btnR.disabled = true; btnR.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem;"></span>'; }
+        try {
+            const resp = await fetch('@Url.Action("ValidarFilaSunat","Sire")?idConcil=' + idConcil, {
+                method: 'POST', credentials: 'include', headers: { 'RequestVerificationToken': token }
+            });
+            if (!resp.ok) {
+                let msg = 'Error ' + resp.status;
+                try { const j = await resp.json(); msg = j.error || msg; } catch {}
+                mostrarToastSire('Advertencia: ' + msg, 'danger');
+                if (btnR) { btnR.disabled = false; btnR.innerHTML = '<i class="bi bi-arrow-repeat"></i>'; }
+                return;
+            }
+            const res = await resp.json();
+            actualizarCeldaValidez(idConcil, res);
+        } catch (e) {
+            mostrarToastSire('Error de red: ' + e.message, 'danger');
+            if (btnR) { btnR.disabled = false; btnR.innerHTML = '<i class="bi bi-arrow-repeat"></i>'; }
+        }
+    }
+
+    // -- Exclusion manual -------------------------------------------------------------------
 
     function seleccionarTodosExcl(chk) {
         document.querySelectorAll('#tablaConcilDetalle tbody tr:not([style*="none"]) .sire-excl-check')
@@ -1144,6 +1338,15 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Delegación click para re-validar fila individual
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-revalidar-fila');
+            if (!btn) return;
+            const td = btn.closest('td');
+            const id = parseInt(btn.dataset.id, 10);
+            if (!td || !id) return;
+            validarFilaSunat(id, td);
+        });
         document.getElementById('btnConfirmarExcluir')?.addEventListener('click', async () => {
             const modal = bootstrap.Modal.getInstance(document.getElementById('modalExcluirSelec'));
             modal?.hide();
@@ -1822,6 +2025,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         const ovCorreo = document.getElementById('sireOverlayCorreo');
         if (ovCorreo && ovCorreo.style.display === 'flex') return;
         const ov  = document.getElementById('sireOverlayGlobal');
+        // No interferir si el overlay ya está en modo validacion (btnValidarSunat)
+        if (ov && ov.dataset.modo === 'validacion') return;
         const msg = document.getElementById('sireOverlayMensaje');
         const sub = document.getElementById('sireOverlaySubMensaje');
         if (msg) msg.textContent = mensaje || 'Procesando...';

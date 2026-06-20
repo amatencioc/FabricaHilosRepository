@@ -180,8 +180,53 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
         return list;
     }
 
-    // ── SP_PLN_PEND_PARTIDAS_DEF ─────────────────────────────────────────────
-    public async Task<IEnumerable<PlnPendientePartidaDef>> GetPendientesPartidasDefAsync()
+    // ── SP_PLN_PEND_SECADO ────────────────────────────────────────────────────────────────
+    public async Task<IEnumerable<PlnPendienteSecado>> GetPendientesSecadoAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%")
+    {
+        await using var conn = await AbrirConexionAsync();
+        await using var cmd  = BuildSpCmd(conn, "SP_PLN_PEND_SECADO", tipo, asesor, cliente);
+
+        var list = new List<PlnPendienteSecado>();
+        try
+        {
+            await using var r = (OracleDataReader)await cmd.ExecuteReaderAsync();
+            // Detectar columnas opcionales que el SP puede o no exponer
+            var cols = Enumerable.Range(0, r.FieldCount)
+                                 .Select(i => r.GetName(i))
+                                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            bool hasCodCliente = cols.Contains("COD_CLIENTE_01");
+            bool hasCodVende   = cols.Contains("COD_VENDE_01");
+            while (await r.ReadAsync())
+                list.Add(new PlnPendienteSecado
+                {
+                    Partida    = Str(r["PARTIDA_01"]),
+                    Material   = Str(r["MATERIAL_01"]),
+                    Cliente    = Str(r["DESC_CLIENTE_01"]),
+                    CodCliente = hasCodCliente ? Str(r["COD_CLIENTE_01"]) : "",
+                    CodVende   = hasCodVende   ? Str(r["COD_VENDE_01"])   : "",
+                    Fecha      = Dat(r["FECHA_01"]),
+                    CodMaq     = Str(r["COD_MAQ_01"]),
+                    Maquina    = Str(r["DESC_MAQ_01"]),
+                    Proceso    = Str(r["PROCESO_01"]),
+                    NroRmc     = Dec(r["NRO_RMC_01"]),
+                    Peso       = Dec(r["PESO_PARTIDA_01"]),
+                    Lote       = Str(r["LOTE_01"]),
+                    ColoSer    = Str(r["COLO_SER_01"]),
+                    FchEntrega = Dat(r["FCH_ENTREGA_01"]),
+                });
+        }
+        catch (OracleException ex) when (ex.Number == 6550)
+        {
+            // SP_PLN_PEND_SECADO aún no está declarado en PKG_PLN — devuelve lista vacía
+            return list;
+        }
+        return list;
+    }
+
+    // ── SP_PLN_PEND_PARTIDAS_DEF ──────────────────────────────────────────────────────────────
+    public async Task<IEnumerable<PlnPendientePartidaDef>> GetPendientesPartidasDefAsync(
+        string estEval = "%")
     {
         await using var conn = await AbrirConexionAsync();
         await using var cmd  = conn.CreateCommand();
@@ -189,6 +234,8 @@ public class PlnPendientesService : OracleServiceBase, IPlnPendientesService
         cmd.CommandType    = CommandType.StoredProcedure;
         cmd.BindByName     = true;
         cmd.CommandTimeout = TimeoutSeconds;
+        cmd.Parameters.Add("p_est_eval", OracleDbType.Varchar2).Value =
+            string.IsNullOrWhiteSpace(estEval) ? "%" : estEval;
         var pCursor = cmd.Parameters.Add("p_cursor", OracleDbType.RefCursor);
         pCursor.Direction = ParameterDirection.Output;
 

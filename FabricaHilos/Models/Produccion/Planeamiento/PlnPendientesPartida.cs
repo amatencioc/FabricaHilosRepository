@@ -99,6 +99,31 @@ public class PlnPendienteTenido
     public bool EstaVencido => DiasRetraso > 0;
 }
 
+// ── SP_PLN_PEND_SECADO ──────────────────────────────────────────────────────
+/// <summary>Partida terminada en tintorería pendiente de secado (Freddy/Malena).</summary>
+public class PlnPendienteSecado
+{
+    public string    Partida     { get; set; } = "";  // PARTIDA_01
+    public string    Material    { get; set; } = "";  // MATERIAL_01
+    public string    Cliente     { get; set; } = "";  // DESC_CLIENTE_01
+    public string    CodCliente  { get; set; } = "";  // COD_CLIENTE_01
+    public string    CodVende    { get; set; } = "";  // COD_VENDE_01
+    public DateTime? Fecha       { get; set; }        // FECHA_01 (FECHA_FIN tintorería)
+    public string    CodMaq      { get; set; } = "";  // COD_MAQ_01
+    public string    Maquina     { get; set; } = "";  // DESC_MAQ_01
+    public string    Proceso     { get; set; } = "";  // PROCESO_01
+    public decimal   NroRmc      { get; set; }        // NRO_RMC_01
+    public decimal   Peso        { get; set; }        // PESO_PARTIDA_01
+    public string    Lote        { get; set; } = "";  // LOTE_01
+    public string    ColoSer     { get; set; } = "";  // COLO_SER_01
+    public DateTime? FchEntrega  { get; set; }        // FCH_ENTREGA_01
+
+    public int DiasRetraso => FchEntrega.HasValue
+        ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
+        : 0;
+    public bool EstaVencido => DiasRetraso > 0;
+}
+
 // ── SP_PLN_PEND_PARTIDAS_DEF ────────────────────────────────────────────────
 /// <summary>Partida con evaluación de calidad pendiente de definición (Karen).</summary>
 public class PlnPendientePartidaDef

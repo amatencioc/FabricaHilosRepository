@@ -375,6 +375,41 @@ public class SireController : OracleBaseController
 
     /// <summary>
     /// Valida todos los comprobantes del período contra la API Consulta Integrada de SUNAT.
+    // ── Obtener lista de IDs a validar (para progreso fila a fila desde el cliente) ──────────
+    /// <summary>
+    /// Devuelve la lista de {idConcil, serie, numero, ruc, nombre} de todos los registros
+    /// del período/tipo que pueden validarse contra SUNAT. El cliente los procesa uno a uno
+    /// llamando a ValidarFilaSunat para mostrar progreso en tiempo real.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetIdsParaValidar(string tipo, string periodo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, tipo);
+            var todos = await _sireRepo.GetConcilTodosParaValidarAsync(tipo, periodo, cancellationToken);
+            return Json(new
+            {
+                total = todos.Count,
+                items = todos.Select(d => new
+                {
+                    idConcil = d.IdConcil,
+                    serie    = d.Serie,
+                    numero   = d.Numero,
+                    ruc      = d.Ruc,
+                    nombre   = d.Nombre != null && d.Nombre.Length > 30
+                                   ? d.Nombre[..30] + "…"
+                                   : d.Nombre,
+                }).ToArray()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GetIdsParaValidar] tipo={Tipo} periodo={Periodo}", tipo, periodo);
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
     /// Procesa en paralelo (hasta 4 concurrentes) con delay entre requests para evitar throttling.
     /// Retorna JSON: { total, validados, errores, resultados: [{idConcil, ruc, serie, numero, estadoCp, estadoRuc, condDomiRuc}] }
     /// </summary>
@@ -406,17 +441,18 @@ public class SireController : OracleBaseController
                 if (cancellationToken.IsCancellationRequested) break;
                 if (doc.FEmision is null || doc.Ruc is null || doc.Tipdoc is null) { errores++; continue; }
 
-                // SUNAT requiere el monto en soles (PEN). Si el comprobante está en moneda
-                // extranjera se multiplica por el tipo de cambio registrado en SIRE_PROPUESTA.
-                var montoSoles = (doc.SunatMoneda is not null &&
-                                  !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
-                                  doc.CambioMoneda > 0)
-                    ? Math.Round(doc.SunatTotal * doc.CambioMoneda, 2)
+                // SIRE_PROPUESTA almacena TOTAL_CP siempre en soles (PEN), incluso para facturas
+                // en moneda extranjera. La API SUNAT validarcomprobante exige el monto en la
+                // moneda original del comprobante → para ME dividir entre CAMBIO.
+                var montoApi = (doc.SunatMoneda is not null &&
+                                !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
+                                doc.CambioMoneda > 0)
+                    ? Math.Round(doc.SunatTotal / doc.CambioMoneda, 2)
                     : doc.SunatTotal;
 
                 var result = await _consultaValidez.ValidarAsync(
                     doc.Ruc, doc.Tipdoc, doc.Serie ?? "", doc.Numero ?? "",
-                    doc.FEmision.Value, montoSoles, cancellationToken);
+                    doc.FEmision.Value, montoApi, cancellationToken);
 
                 if (result is not null)
                 {
@@ -425,13 +461,52 @@ public class SireController : OracleBaseController
                         cancellationToken);
 
                     resultados.Add(new {
-                        idConcil   = doc.IdConcil,
-                        ruc        = doc.Ruc,
-                        serie      = doc.Serie,
-                        numero     = doc.Numero,
-                        estadoCp   = result.EstadoCp,
-                        estadoRuc  = result.EstadoRuc,
-                        condDomiRuc= result.CondDomiRuc,
+                        idConcil    = doc.IdConcil,
+                        ruc         = doc.Ruc,
+                        serie       = doc.Serie,
+                        numero      = doc.Numero,
+                        estadoCp    = result.EstadoCp,
+                        estadoRuc   = result.EstadoRuc,
+                        condDomiRuc = result.CondDomiRuc,
+                        badgeCss    = result.EstadoCp switch
+                        {
+                            "1" => "badge bg-success",
+                            "2" => "badge bg-danger",
+                            "0" => "badge bg-warning text-dark",
+                            "3" => "badge bg-info text-dark",
+                            "4" => "badge bg-danger",
+                            _   => "badge bg-secondary"
+                        },
+                        estadoCpLabel = result.EstadoCp switch
+                        {
+                            "1" => "ACEPTADO",
+                            "2" => "ANULADO",
+                            "0" => "NO EXISTE",
+                            "3" => "AUTORIZADO",
+                            "4" => "NO AUTOR.",
+                            _   => $"CP:{result.EstadoCp}"
+                        },
+                        estadoRucLabel = result.EstadoRuc switch
+                        {
+                            "00" => "ACTIVO",
+                            "01" => "BAJA PROV.",
+                            "02" => "BAJA DEFI.",
+                            "03" => "BAJA MULT.",
+                            "10" => "BAJA OFIC.",
+                            "15" => "SUSPENSION",
+                            "16" => "BAJA VOLUN.",
+                            _    => result.EstadoRuc ?? "-"
+                        },
+                        condDomiLabel = result.CondDomiRuc switch
+                        {
+                            "00" => "HABIDO",
+                            "09" => "PENDIENTE",
+                            "11" => "NO HALLADO",
+                            "12" => "NO HALLADO",
+                            "20" => "NO HABIDO",
+                            "21" => "NO HABIDO",
+                            _    => result.CondDomiRuc ?? "-"
+                        },
                     });
                     validados++;
                 }
@@ -470,15 +545,18 @@ public class SireController : OracleBaseController
             if (doc.FEmision is null || doc.Ruc is null || doc.Tipdoc is null)
                 return BadRequest(new { error = "Datos incompletos para validar (fecha, RUC o tipo de comprobante nulos)." });
 
-            var montoSoles = (doc.SunatMoneda is not null &&
-                              !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
-                              doc.CambioMoneda > 0)
-                ? Math.Round(doc.SunatTotal * doc.CambioMoneda, 2)
+            // SIRE_PROPUESTA almacena TOTAL_CP siempre en soles (PEN), incluso para facturas
+            // en moneda extranjera. La API SUNAT validarcomprobante exige el monto en la
+            // moneda original del comprobante → para ME dividir entre CAMBIO.
+            var montoApi = (doc.SunatMoneda is not null &&
+                            !doc.SunatMoneda.Equals("PEN", StringComparison.OrdinalIgnoreCase) &&
+                            doc.CambioMoneda > 0)
+                ? Math.Round(doc.SunatTotal / doc.CambioMoneda, 2)
                 : doc.SunatTotal;
 
             var result = await _consultaValidez.ValidarAsync(
                 doc.Ruc, doc.Tipdoc, doc.Serie ?? "", doc.Numero ?? "",
-                doc.FEmision.Value, montoSoles, cancellationToken);
+                doc.FEmision.Value, montoApi, cancellationToken);
 
             if (result is null)
             {
@@ -501,6 +579,45 @@ public class SireController : OracleBaseController
                 estadoCp    = result.EstadoCp,
                 estadoRuc   = result.EstadoRuc,
                 condDomiRuc = result.CondDomiRuc,
+                badgeCss    = result.EstadoCp switch
+                {
+                    "1" => "badge bg-success",
+                    "2" => "badge bg-danger",
+                    "0" => "badge bg-warning text-dark",
+                    "3" => "badge bg-info text-dark",
+                    "4" => "badge bg-danger",
+                    _   => "badge bg-secondary"
+                },
+                estadoCpLabel = result.EstadoCp switch
+                {
+                    "1" => "ACEPTADO",
+                    "2" => "ANULADO",
+                    "0" => "NO EXISTE",
+                    "3" => "AUTORIZADO",
+                    "4" => "NO AUTOR.",
+                    _   => $"CP:{result.EstadoCp}"
+                },
+                estadoRucLabel = result.EstadoRuc switch
+                {
+                    "00" => "ACTIVO",
+                    "01" => "BAJA PROV.",
+                    "02" => "BAJA DEFI.",
+                    "03" => "BAJA MULT.",
+                    "10" => "BAJA OFIC.",
+                    "15" => "SUSPENSION",
+                    "16" => "BAJA VOLUN.",
+                    _    => result.EstadoRuc ?? "-"
+                },
+                condDomiLabel = result.CondDomiRuc switch
+                {
+                    "00" => "HABIDO",
+                    "09" => "PENDIENTE",
+                    "11" => "NO HALLADO",
+                    "12" => "NO HALLADO",
+                    "20" => "NO HABIDO",
+                    "21" => "NO HABIDO",
+                    _    => result.CondDomiRuc ?? "-"
+                },
             });
         }
         catch (OperationCanceledException) { return Json(new { cancelado = true }); }
