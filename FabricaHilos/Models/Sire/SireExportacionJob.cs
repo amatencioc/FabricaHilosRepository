@@ -40,6 +40,24 @@ public class SireExportacionJob
     /// <summary>Código de proceso devuelto por SUNAT (requerido para descarga 5.17).</summary>
     public string? CodProceso { get; set; }
 
+    /// <summary>
+    /// Tipo de operación SUNAT que originó el job.
+    /// Usar las constantes <see cref="TipoOp"/>.
+    /// </summary>
+    public string TipoOperacion { get; set; } = TipoOp.Exportar;
+
+    /// <summary>
+    /// Solo para <see cref="TipoOp.Reemplazar"/>: ruta UNC del TXT/ZIP que se subió a SUNAT via TUS.
+    /// Para las demás operaciones es <c>null</c>.
+    /// </summary>
+    public string? RutaArchivoOrigen { get; set; }
+
+    /// <summary>
+    /// URL del servicio 5.17 usada para descargar <see cref="RutaArchivo"/> desde SUNAT.
+    /// Permite re-descarga sin repetir la operación. <c>null</c> en EXPORTAR.
+    /// </summary>
+    public string? UrlDescarga { get; set; }
+
     /// <summary>Número de registros del TXT parseados e insertados en Oracle SIRE_VALIDA.</summary>
     public int? RegistrosInsertados { get; set; }
 
@@ -64,6 +82,19 @@ public class SireExportacionJob
     /// Controlada por SireTicketWatcherWorker.
     /// </summary>
     public DateTime? ProximaConsulta { get; set; }
+}
+
+/// <summary>Constantes para <see cref="SireExportacionJob.TipoOperacion"/>.</summary>
+public static class TipoOp
+{
+    /// <summary>Descarga asíncrona de propuesta desde SUNAT (flujo original del worker).</summary>
+    public const string Exportar   = "EXPORTAR";
+    /// <summary>Acepta la propuesta SUNAT tal como fue generada (sin cambios).</summary>
+    public const string Aceptar    = "ACEPTAR";
+    /// <summary>Cierra el período (registra preliminar) en SUNAT. Irreversible.</summary>
+    public const string Cerrar     = "CERRAR";
+    /// <summary>Reemplaza la propuesta SUNAT con datos propios subidos via TUS.</summary>
+    public const string Reemplazar = "REEMPLAZAR";
 }
 
 public static class EstadoJob

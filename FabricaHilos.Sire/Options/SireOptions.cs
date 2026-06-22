@@ -17,4 +17,6 @@ public sealed class SireOptions
     /// <summary>Intervalo en minutos del SireTicketWatcherWorker (Fase 2). Default: 15 min.</summary>
     public int WatcherIntervalMin { get; set; } = 15;
     public bool UseMock { get; set; } = true;
+    /// <summary>URL de la página pública SUNAT donde se publica el padrón SSCO (.xlsx).</summary>
+    public string SscoPageUrl { get; set; } = "https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html";
 }

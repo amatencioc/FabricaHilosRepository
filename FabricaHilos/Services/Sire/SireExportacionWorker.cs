@@ -359,7 +359,8 @@ public sealed class SireExportacionWorker : BackgroundService
             var rutaBase   = _configuration["RutaSireExportacion"]
                 ?? @"\\10.0.7.14\FabricaHilos\Contabilidad\Sire";
             var subcarpeta = esVentas ? "Ventas" : "Compras";
-            var rutaDest   = Path.Combine(rutaBase, subcarpeta);
+            // Incluir subcarpeta de período para separar archivos por mes y evitar acumulación
+            var rutaDest   = Path.Combine(rutaBase, subcarpeta, job.Periodo);
 
             await GuardarEnRedAsync(rutaDest, archivo.NombreArchivo, archivo.Contenido, stoppingToken);
             job.RutaArchivo        = Path.Combine(rutaDest, archivo.NombreArchivo);

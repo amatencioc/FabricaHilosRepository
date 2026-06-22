@@ -1,4 +1,4 @@
-@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RVIE (Registro de Ventas)";
@@ -101,15 +101,6 @@
                     <i class="bi bi-arrow-repeat me-1"></i>Re-procesar ZIP
                 </button>
             }
-            <div class="vr" style="opacity:.2;"></div>
-            <a href="#" class="btn btn-sm btn-outline-danger disabled" aria-disabled="true" tabindex="-1"
-               title="Constancia no disponible: use el portal SUNAT">
-                <i class="bi bi-file-pdf me-1"></i>Constancia
-            </a>
-            <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
-               class="btn btn-sm btn-outline-secondary" title="Log de auditoría HTTP">
-                <i class="bi bi-journal-code me-1"></i>Log
-            </a>
         </div>
     }
 </div>
@@ -271,7 +262,7 @@
                         <th class="text-end" style="padding:.3rem .5rem;">Total</th>
                         <th class="text-center" style="width:76px;padding:.3rem .5rem;">Concil.</th>
                         <th class="text-center d-none d-lg-table-cell" style="width:86px;padding:.3rem .5rem;">Cargado</th>
-                        <th style="width:68px;padding:.3rem .5rem;"></th>
+                        <th style="width:100px;padding:.3rem .5rem;"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -308,6 +299,29 @@
                                             <i class="bi bi-arrow-left-right"></i>
                                         </button>
                                     </form>
+                                    @if (r.ConcilEstado != "0")
+                                    {
+                                        <form method="post" asp-action="AceptarPropuesta" id="frmAceptar_@r.Periodo" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="tipo"    value="ventas" />
+                                            <input type="hidden" name="periodo" value="@r.Periodo" />
+                                            <button type="button" class="btn btn-xs btn-outline-success"
+                                                    onclick="confirmarAceptar(@r.Periodo, '@r.PeriodoLabel')"
+                                                    title="Aceptar propuesta en SUNAT">
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                        </form>
+                                        <form method="post" asp-action="CerrarPeriodo" id="frmCerrar_@r.Periodo" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="tipo"    value="ventas" />
+                                            <input type="hidden" name="periodo" value="@r.Periodo" />
+                                            <button type="button" class="btn btn-xs btn-outline-danger"
+                                                    onclick="confirmarCerrar(@r.Periodo, '@r.PeriodoLabel')"
+                                                    title="Cerrar período (preliminar) — irreversible">
+                                                <i class="bi bi-lock"></i>
+                                            </button>
+                                        </form>
+                                    }
                                     <form method="post" asp-action="EliminarPropuesta" id="frmElim_@r.Periodo" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="tipo"    value="ventas" />
@@ -336,6 +350,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 }
 
 @* ── Panel: Resumen de Conciliación ─────────────────────────────────────── *@
+@*
 @if (Model?.ConcilResumen != null)
 {
     var cr = Model.ConcilResumen;
@@ -379,7 +394,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
                      style="border-left:3px solid var(--bs-danger);background:#fff;min-width:110px;">
                     <span class="fw-bold" style="font-size:1.1rem;color:var(--bs-danger);">S/ @cr.DiffTotal.ToString("N2")</span>
-                    <span class="text-muted" style="font-size:.68rem;">Diferencia neta</span>
+                    <span class="text-muted" style="font-size:.68rem;">Diferencia neta
+                        <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                           title="Diferencia Neta = Total SUNAT − Total ERP (Logix), acumulada sobre todos los registros cruzados del período. Representa el importe neto no conciliado entre ambas fuentes."></i>
+                    </span>
                 </div>
             }
             <div class="ms-auto d-flex flex-column align-items-center px-3 py-1 rounded"
@@ -398,6 +416,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         }
     </div>
 }
+*@
 
 @* -- Tabs: SUNAT / Legacy / Cruzado ---------------------------------------- *@
 @if (propuesta.Count > 0 || legacy.Count > 0 || concil.Count > 0)
@@ -443,7 +462,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
                         <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
-                        <button id="btnExcluirSelec"
+                        <button id="btnExcluirSelec" class="btn btn-xs btn-outline-warning ms-1" onclick="excluirSeleccionados()"
                                 style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">
                             <i class="bi bi-scissors"></i> Excluir <span id="excluirBadge" class="badge bg-dark ms-1" style="font-size:.65rem;"></span>
                         </button>
@@ -481,7 +500,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <th class="text-end" style="width:76px">IGV</th>
                                 <th class="text-end" style="width:76px">ISC</th>
                                 <th class="text-end" style="width:88px">Total</th>
-                                <th style="width:46px" class="text-center d-none d-xl-table-cell">Mon.</th>
+                                <th style="width:46px" class="text-center">Mon.</th>
                                 <th style="width:40px" class="text-center d-none d-xl-table-cell">Det.</th>
                                 <th style="width:50px" class="text-center d-none d-lg-table-cell">CP</th>
                                 <th style="width:76px" class="text-center">Concil.</th>
@@ -502,7 +521,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
                                     <td class="text-end text-muted">@(r.Isc != 0 ? r.Isc.ToString("N2") : "-")</td>
                                     <td class="text-end fw-semibold" style="color:var(--sire-rvie);">@r.TotalCp.ToString("N2")</td>
-                                    <td class="text-center d-none d-xl-table-cell">
+                                    <td class="text-center">
                                         @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
                                         {
                                             <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
@@ -536,7 +555,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
                                 <td class="text-end fw-bold text-muted">@propuesta.Sum(x => x.Isc).ToString("N2")</td>
                                 <td class="text-end fw-bold" style="color:var(--sire-rvie);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
-                                <td class="d-none d-xl-table-cell"></td>
+                                <td></td>
                                 <td class="d-none d-xl-table-cell"></td>
                                 <td class="d-none d-lg-table-cell"></td>
                                 <td></td>
@@ -569,6 +588,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px">Base</th>
                                     <th class="text-end" style="width:76px">IGV</th>
                                     <th class="text-end" style="width:88px">Total</th>
+                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th class="d-none d-lg-table-cell" style="width:90px">Tabla</th>
                                 </tr>
                             </thead>
@@ -586,6 +606,16 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-end">@r.BaseImponible.ToString("N2")</td>
                                         <td class="text-end">@r.Igv.ToString("N2")</td>
                                         <td class="text-end fw-semibold" style="color:#0891b2;">@r.Total.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
+                                            {
+                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                            }
+                                        </td>
                                         <td class="text-muted d-none d-lg-table-cell" style="font-size:.72rem;">@(r.TablaOrigen ?? "-")</td>
                                     </tr>
                                 }
@@ -596,6 +626,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.BaseImponible).ToString("N2")</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.Igv).ToString("N2")</td>
                                     <td class="text-end fw-bold" style="color:#0891b2;">@legacy.Sum(x => x.Total).ToString("N2")</td>
+                                    <td></td>
                                     <td class="d-none d-lg-table-cell"></td>
                                 </tr>
                             </tfoot>
@@ -633,6 +664,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
+                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th style="width:80px" class="text-center">Estado</th>
                                     <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
@@ -705,7 +737,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     var r        = concilOrdenadoRows[_ci];
                                     var grupoIdx = concilOrdenadoGrups[_ci];
                                     var tc = TipoComprobante(r.Tipdoc ?? "");
-                                    var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido" : "";
+                                    var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido"
+                                                 : (r.Estado != "EXCLUIDO" && r.ValidezCp == "0") ? "sire-row-cp-noexiste"
+                                                 : "";
                                     string rowBg = (r.Estado == "EXCLUIDO" && grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbg))
                                         ? $"background:{pbg}!important;"
                                         : "";
@@ -746,6 +780,19 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
                                         <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
                                         <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
+                                        <td class="text-center">
+                                            @{
+                                                var monConcilV = r.SunatMoneda ?? r.LegMoneda;
+                                            }
+                                            @if (!string.IsNullOrEmpty(monConcilV) && monConcilV != "PEN")
+                                            {
+                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="SUNAT:@(r.SunatCambio?.ToString("N4") ?? "-") / ERP:@(r.LegCambio?.ToString("N4") ?? "-")">@monConcilV</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                            }
+                                        </td>
                                         <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
                                         <td class="text-center td-validez-sunat" style="font-size:.6rem;" data-id="@r.IdConcil">
                                             @if (r.ValidezCp != null)
@@ -917,6 +964,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffTotalCp) != 0 ? "text-danger" : "")" id="tfoot-concil-dt">@concil.Sum(x => x.DiffTotalCp).ToString("N2")</td>
                                     <td></td>
                                     <td></td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -930,6 +978,30 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 
 
 <script>
+    function confirmarAceptar(periodo, periodoLabel) {
+        const modal = document.getElementById('modalConfirmar');
+        const titulo = document.getElementById('modalConfirmarTitulo');
+        if (titulo) titulo.innerHTML = '<i class="bi bi-check-circle me-1"></i>Aceptar Propuesta SUNAT';
+        confirmarAccion(
+            `¿Aceptar la propuesta ${periodoLabel} en SUNAT? SUNAT procesará el archivo y devolverá una constancia.`,
+            () => {
+                mostrarOverlayGlobal('Aceptando propuesta en SUNAT...', `Período ${periodoLabel} — el polling puede tardar varios segundos.`);
+                document.getElementById('frmAceptar_' + periodo).submit();
+            }
+        );
+    }
+    function confirmarCerrar(periodo, periodoLabel) {
+        const modal = document.getElementById('modalConfirmar');
+        const titulo = document.getElementById('modalConfirmarTitulo');
+        if (titulo) titulo.innerHTML = '<i class="bi bi-lock me-1 text-danger"></i>Cerrar Período — Acción Irreversible';
+        confirmarAccion(
+            `⚠️ ¿Cerrar definitivamente el período ${periodoLabel}? Esta acción registra el preliminar en SUNAT y NO SE PUEDE DESHACER.`,
+            () => {
+                mostrarOverlayGlobal('Cerrando período en SUNAT...', `Período ${periodoLabel} — registrando preliminar, por favor espere.`);
+                document.getElementById('frmCerrar_' + periodo).submit();
+            }
+        );
+    }
     function confirmarConciliar(periodo, periodoLabel) {
         confirmarAccion(
             `¿Conciliar la propuesta ${periodoLabel} contra el ERP (Logix)? Esto actualizará SIRE_LEGACY y SIRE_CONCIL.`,
@@ -1134,6 +1206,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         actualizarBadgeExcluir();  // controla también la visibilidad de Excluir/Restaurar
 
         filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
+        // Re-aplicar el ordenamiento activo para que persista al cambiar de opción
+        const thActivo = document.querySelector('#tablaConcilDetalle th[data-sort-dir="asc"], #tablaConcilDetalle th[data-sort-dir="desc"]');
+        if (thActivo) sireOrdenarColumnaAplicar(thActivo);
     }
 
     function actualizarBadgeExcluir() {
@@ -1251,6 +1326,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 } catch { errores++; }
             }
             mostrarToastSire('Validados: ' + validados + ' — Errores: ' + errores, errores > 0 ? 'warning' : 'success');
+            // Re-aplicar el filtro activo para que las filas con CP: NO EXISTE se muestren/oculten correctamente
+            filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
         } catch (e) {
             mostrarToastSire('Error de red: ' + e.message, 'danger');
         } finally {
@@ -1288,6 +1365,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         if (tr) {
             tr.dataset.validezCp = res.estadoCp ?? '';
             tr.dataset.cpeError  = (!cpOk || rucErr || domErr) ? '1' : '0';
+            // Pintar fila rojo si CP: NO EXISTE (estadoCp === '0'), quitar si ya no aplica
+            if (res.estadoCp === '0') {
+                tr.classList.add('sire-row-cp-noexiste');
+            } else {
+                tr.classList.remove('sire-row-cp-noexiste');
+            }
         }
     }
 
@@ -2111,13 +2194,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     }
 
     function sireOrdenarColumna(th) {
-        const table = th.closest('table');
-        const tbody = table.querySelector('tbody');
-        if (!tbody) return;
-        const idx = Array.from(th.closest('tr').children).indexOf(th);
-        const tipo = th.dataset.sortType || 'text';
-        const dir  = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
-        table.querySelectorAll('th[data-sort-type]').forEach(t => {
+        const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+        th.closest('table').querySelectorAll('th[data-sort-type]').forEach(t => {
             t.dataset.sortDir = '';
             const ic = t.querySelector('.sire-sort-icon');
             if (ic) { ic.textContent = '\u2195'; ic.style.opacity = '.5'; }
@@ -2125,6 +2203,17 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         th.dataset.sortDir = dir;
         const ic = th.querySelector('.sire-sort-icon');
         if (ic) { ic.textContent = dir === 'asc' ? '\u2191' : '\u2193'; ic.style.opacity = '1'; }
+        sireOrdenarColumnaAplicar(th);
+    }
+
+    // Aplica el ordenamiento del th activo sin cambiar la dirección (para re-aplicar al filtrar)
+    function sireOrdenarColumnaAplicar(th) {
+        const table = th.closest('table');
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const idx  = Array.from(th.closest('tr').children).indexOf(th);
+        const tipo = th.dataset.sortType || 'text';
+        const dir  = th.dataset.sortDir || 'asc';
         function parseFecha(v) {
             const p = (v || '').trim().split('/');
             return p.length === 3 ? new Date(+p[2], +p[1] - 1, +p[0]).getTime() : 0;

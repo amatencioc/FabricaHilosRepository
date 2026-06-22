@@ -42,6 +42,26 @@ public class SireRegistrosViewModel
     public string? NombreArchivoConstancia { get; set; }
     /// <summary>Resumen de última conciliación ejecutada para el período seleccionado. Null si nunca se concilió.</summary>
     public SireConcilResumen? ConcilResumen { get; set; }
+
+    // ── SSCO ─────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Set de RUCs presentes en SSCO_LISTA (Sujetos Sin Capacidad Operativa).
+    /// Vacío si la tabla no tiene datos o la carga aún no se ha realizado.
+    /// </summary>
+    public HashSet<string> RucsEnSsco { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Fecha de la última carga del padrón SSCO. Null si nunca se cargó.</summary>
+    public DateTime? SscoFchUltimaCarga { get; set; }
+    /// <summary>Período YYYYMM de la última carga del padrón SSCO.</summary>
+    public int? SscoPeriodoCarga { get; set; }
+    /// <summary>
+    /// Número de registros Legacy del período cuyo RUC figura en la lista SSCO.
+    /// Calculado en el controller para evitar el scan LINQ en la vista.
+    /// </summary>
+    public int SscoHits { get; set; }
+    /// <summary>
+    /// Lista completa del padrón SSCO_LISTA (todas las columnas del Excel de SUNAT).
+    /// </summary>
+    public List<FabricaHilos.Models.Sire.SscoListaEntry> SscoLista { get; set; } = new();
 }
 
 public enum TipoRegistro

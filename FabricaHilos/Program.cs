@@ -233,6 +233,13 @@ builder.Services.AddScoped<FabricaHilos.Services.Sire.SireReporteComprasService>
 // Validez de comprobantes (API Consulta Integrada SUNAT — clientesextranet)
 builder.Services.AddSingleton<IConsultaValidezService, ConsultaValidezService>();
 builder.Services.AddHttpClient("sunat-validez");
+// Descarga automática del padrón SSCO desde el portal público de SUNAT
+builder.Services.AddHttpClient("sunat-ssco", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(3);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36");
+});
 builder.Services.AddHostedService<SireExportacionWorker>();
 // Fase 2: Watcher de tickets SUNAT (polling cada WatcherIntervalMin minutos)
 builder.Services.AddHostedService<SireTicketWatcherWorker>();

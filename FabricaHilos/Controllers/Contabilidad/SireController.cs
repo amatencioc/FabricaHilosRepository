@@ -36,6 +36,8 @@ public class SireController : OracleBaseController
     private readonly IConsultaValidezService _consultaValidez;
     private readonly ILogger<SireController> _logger;
     private readonly IMemoryCache _cache;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
     public SireController(
         ISireVentasService ventasService,
@@ -51,7 +53,9 @@ public class SireController : OracleBaseController
         FabricaHilos.Services.Sire.SireReporteComprasService reporteCompras,
         IConsultaValidezService consultaValidez,
         ILogger<SireController> logger,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
         _ventasService         = ventasService;
         _comprasService        = comprasService;
@@ -67,6 +71,8 @@ public class SireController : OracleBaseController
         _consultaValidez       = consultaValidez;
         _logger                = logger;
         _cache                 = cache;
+        _httpClientFactory     = httpClientFactory;
+        _configuration         = configuration;
     }
 
     /// <summary>
@@ -135,67 +141,98 @@ public class SireController : OracleBaseController
                 ? (periodos.LastOrDefault()?.Periodo ?? string.Empty)
                 : periodo;
 
-            var todasPropuestas = await _sireRepo.GetPropuestasResumenAsync("ventas", cancellationToken);
-            // Filtrar resumen al período seleccionado; si no hay período, lista vacía.
-            var propuestasResumen = string.IsNullOrWhiteSpace(periodoSeleccionado)
-                ? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>()
-                : todasPropuestas.Where(r => r.Periodo.ToString() == periodoSeleccionado).ToList();
-
-            List<FabricaHilos.Models.Sire.SireValidaRegistro>   registros;
-            List<FabricaHilos.Models.Sire.SireLegacyRegistro>   registrosLegacy;
-            List<FabricaHilos.Models.Sire.SireConcilDetalle>    registrosConcil;
-            List<FabricaHilos.Models.Sire.SireExportacionJob>   todosJobs;
-            FabricaHilos.Models.Sire.SireConcilResumen?         concilResumen;
+            List<FabricaHilos.Models.Sire.SireValidaRegistro>  registros;
+            List<FabricaHilos.Models.Sire.SireLegacyRegistro>  registrosLegacy;
+            List<FabricaHilos.Models.Sire.SireConcilDetalle>   registrosConcil;
+            List<FabricaHilos.Models.Sire.SireExportacionJob>  jobsPeriodo;
+            List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen> propuestasResumen;
+            FabricaHilos.Models.Sire.SireConcilResumen?        concilResumen;
 
             if (string.IsNullOrWhiteSpace(periodoSeleccionado))
             {
-                registros       = new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
-                registrosLegacy = new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
-                registrosConcil = new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
-                todosJobs       = new List<FabricaHilos.Models.Sire.SireExportacionJob>();
-                concilResumen   = null;
+                registros         = [];
+                registrosLegacy   = [];
+                registrosConcil   = [];
+                jobsPeriodo       = [];
+                propuestasResumen = [];
+                concilResumen     = null;
             }
             else
             {
-                var tPropuesta  = _sireRepo.GetRegistrosPropuestaAsync("ventas", periodoSeleccionado, cancellationToken);
-                var tLegacy     = _sireRepo.GetLegacyAsync("ventas", periodoSeleccionado, cancellationToken);
-                var tConcil     = _sireRepo.GetConcilDetalleAsync("ventas", periodoSeleccionado, cancellationToken);
-                var tJobs       = _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
-                var tResumen    = _sireRepo.GetConcilResumenAsync("ventas", periodoSeleccionado, cancellationToken);
-                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen);
-                registros       = await tPropuesta;
-                registrosLegacy = await tLegacy;
-                registrosConcil = await tConcil;
-                todosJobs       = await tJobs;
-                concilResumen   = await tResumen;
+                // Clave de caché para el resumen de propuestas (se invalida al cargar/reprocesar)
+                var cacheKeyResumen = $"sire:propuestas:resumen:ventas:{periodoSeleccionado}";
+
+                var tPropuesta = _sireRepo.GetRegistrosPropuestaAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tLegacy    = _sireRepo.GetLegacyAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tConcil    = _sireRepo.GetConcilDetalleAsync("ventas", periodoSeleccionado, cancellationToken);
+                // Usar query filtrada por tipo+período en lugar de los 100 más recientes generales
+                var tJobs      = _sireRepo.GetJobsPorTipoPeriodoAsync("ventas", periodoSeleccionado, cancellationToken);
+                var tResumen   = _sireRepo.GetConcilResumenAsync("ventas", periodoSeleccionado, cancellationToken);
+
+                // GetPropuestasResumenAsync se cachea por período para evitar round-trip en cada request
+                Task<IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>> tPropResumen;
+                if (!_cache.TryGetValue(cacheKeyResumen, out IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>? resumenCached))
+                    tPropResumen = _sireRepo.GetPropuestasResumenAsync("ventas", cancellationToken)
+                        .ContinueWith<IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>>(t => t.Result, TaskContinuationOptions.OnlyOnRanToCompletion);
+                else
+                    tPropResumen = Task.FromResult(resumenCached!);
+
+                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen, tPropResumen);
+
+                registros       = tPropuesta.Result;
+                registrosLegacy = tLegacy.Result;
+                registrosConcil = tConcil.Result;
+                jobsPeriodo     = tJobs.Result
+                    .OrderByDescending(j => j.FechaCreacion)
+                    .ToList();
+                concilResumen   = tResumen.Result;
+
+                // Cachear resumen si fue recién consultado
+                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully)
+                    _cache.Set(cacheKeyResumen, tPropResumen.Result, TimeSpan.FromMinutes(2));
+
+                var todasPropuestas = tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : [];
+                propuestasResumen   = todasPropuestas
+                    .Where(r => r.Periodo.ToString() == periodoSeleccionado)
+                    .ToList();
             }
-            var jobsPeriodo = todosJobs
-                .Where(j => j.TipoRegistro == "ventas" && j.Periodo == periodoSeleccionado)
-                .OrderByDescending(j => j.FechaCreacion)
-                .ToList();
-            var zipJob = jobsPeriodo
-                .FirstOrDefault(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)
-                                     && System.IO.File.Exists(j.RutaArchivo));
+
+            // Buscar el ZIP local más reciente con archivo físicamente existente.
+            // File.Exists sobre ruta UNC puede fallar si la red no responde: se trata como "sin ZIP" para no romper la página.
+            FabricaHilos.Models.Sire.SireExportacionJob? zipJob = null;
+            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)))
+            {
+                try
+                {
+                    if (System.IO.File.Exists(j.RutaArchivo)) { zipJob = j; break; }
+                }
+                catch (Exception exFs)
+                {
+                    _logger.LogWarning(exFs, "[SIRE] Ventas: no se pudo verificar existencia de ZIP {Ruta}", j.RutaArchivo);
+                    break;
+                }
+            }
+
             var constanciaJob = jobsPeriodo
                 .FirstOrDefault(j => j.Estado == EstadoJob.Completado
-                                     && !string.IsNullOrWhiteSpace(j.NombreArchivo));
+                                  && !string.IsNullOrWhiteSpace(j.NombreArchivo));
 
             var model = new SireRegistrosViewModel
             {
-                Periodos                 = periodos,
-                PeriodoSeleccionado      = periodoSeleccionado,
-                RegistrosVentas          = Array.Empty<RegistroVenta>(),
-                RegistrosPropuesta       = registros,
-                RegistrosLegacy          = registrosLegacy,
-                RegistrosConcil          = registrosConcil,
-                PropuestasResumen        = propuestasResumen,
-                EsMock                   = _sireOptions.UseMock,
-                Tipo                     = TipoRegistro.Ventas,
-                TieneZipLocal            = zipJob is not null,
-                NombreZipLocal           = zipJob is not null ? System.IO.Path.GetFileName(zipJob.RutaArchivo) : null,
-                NombreArchivoConstancia  = constanciaJob?.NombreArchivo,
-                ConcilResumen            = concilResumen,
-                MensajeInfo              = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
+                Periodos                = periodos,
+                PeriodoSeleccionado     = periodoSeleccionado,
+                RegistrosVentas         = Array.Empty<RegistroVenta>(),
+                RegistrosPropuesta      = registros,
+                RegistrosLegacy         = registrosLegacy,
+                RegistrosConcil         = registrosConcil,
+                PropuestasResumen       = propuestasResumen,
+                EsMock                  = _sireOptions.UseMock,
+                Tipo                    = TipoRegistro.Ventas,
+                TieneZipLocal           = zipJob is not null,
+                NombreZipLocal          = zipJob is not null ? System.IO.Path.GetFileName(zipJob.RutaArchivo) : null,
+                NombreArchivoConstancia = constanciaJob?.NombreArchivo,
+                ConcilResumen           = concilResumen,
+                MensajeInfo             = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
                     : "Use 'Exportar Propuesta' para descargar los registros desde SUNAT.",
                 Ruc = _sireOptions.Ruc
             };
@@ -240,68 +277,114 @@ public class SireController : OracleBaseController
                 ? (periodos.LastOrDefault()?.Periodo ?? string.Empty)
                 : periodo;
 
-            var todasPropuestasC = await _sireRepo.GetPropuestasResumenAsync("compras", cancellationToken);
-            var propuestasResumen = string.IsNullOrWhiteSpace(periodoSeleccionado)
-                ? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>()
-                : todasPropuestasC.Where(r => r.Periodo.ToString() == periodoSeleccionado).ToList();
-
-            List<FabricaHilos.Models.Sire.SireValidaRegistro>   registros;
-            List<FabricaHilos.Models.Sire.SireLegacyRegistro>   registrosLegacy;
-            List<FabricaHilos.Models.Sire.SireConcilDetalle>    registrosConcil;
-            List<FabricaHilos.Models.Sire.SireExportacionJob>   todosJobsC;
-            FabricaHilos.Models.Sire.SireConcilResumen?         concilResumenC;
+            List<FabricaHilos.Models.Sire.SireValidaRegistro>  registros;
+            List<FabricaHilos.Models.Sire.SireLegacyRegistro>  registrosLegacy;
+            List<FabricaHilos.Models.Sire.SireConcilDetalle>   registrosConcil;
+            List<FabricaHilos.Models.Sire.SireExportacionJob>  jobsPeriodo;
+            List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen> propuestasResumen;
+            FabricaHilos.Models.Sire.SireConcilResumen?        concilResumenC;
+            (HashSet<string> Rucs, DateTime? FchCarga, int? Periodo) sscoData = (new HashSet<string>(StringComparer.OrdinalIgnoreCase), null, null);
+            List<FabricaHilos.Models.Sire.SscoListaEntry> sscoLista = [];
 
             if (string.IsNullOrWhiteSpace(periodoSeleccionado))
             {
-                registros       = new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
-                registrosLegacy = new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
-                registrosConcil = new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
-                todosJobsC      = new List<FabricaHilos.Models.Sire.SireExportacionJob>();
-                concilResumenC  = null;
+                registros         = [];
+                registrosLegacy   = [];
+                registrosConcil   = [];
+                jobsPeriodo       = [];
+                propuestasResumen = [];
+                concilResumenC    = null;
             }
             else
             {
-                var tPropuesta  = _sireRepo.GetRegistrosPropuestaAsync("compras", periodoSeleccionado, cancellationToken);
-                var tLegacy     = _sireRepo.GetLegacyAsync("compras", periodoSeleccionado, cancellationToken);
-                var tConcil     = _sireRepo.GetConcilDetalleAsync("compras", periodoSeleccionado, cancellationToken);
-                var tJobs       = _sireRepo.GetJobsRecientesAsync(100, cancellationToken);
-                var tResumen    = _sireRepo.GetConcilResumenAsync("compras", periodoSeleccionado, cancellationToken);
-                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen);
-                registros       = await tPropuesta;
-                registrosLegacy = await tLegacy;
-                registrosConcil = await tConcil;
-                todosJobsC      = await tJobs;
-                concilResumenC  = await tResumen;
+                // Clave de caché para el resumen de propuestas (se invalida al cargar/reprocesar)
+                var cacheKeyResumen = $"sire:propuestas:resumen:compras:{periodoSeleccionado}";
+
+                var tPropuesta = _sireRepo.GetRegistrosPropuestaAsync("compras", periodoSeleccionado, cancellationToken);
+                var tLegacy    = _sireRepo.GetLegacyAsync("compras", periodoSeleccionado, cancellationToken);
+                var tConcil    = _sireRepo.GetConcilDetalleAsync("compras", periodoSeleccionado, cancellationToken);
+                // Usar query filtrada por tipo+período en lugar de los 100 más recientes generales
+                var tJobs      = _sireRepo.GetJobsPorTipoPeriodoAsync("compras", periodoSeleccionado, cancellationToken);
+                var tResumen   = _sireRepo.GetConcilResumenAsync("compras", periodoSeleccionado, cancellationToken);
+                var tSsco      = _sireRepo.GetSscoDataAsync(cancellationToken);
+                var tSscoLista = _sireRepo.GetSscoListaAsync(cancellationToken);
+
+                // GetPropuestasResumenAsync se cachea por período para evitar round-trip en cada request
+                Task<IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>> tPropResumen;
+                if (!_cache.TryGetValue(cacheKeyResumen, out IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>? resumenCached))
+                    tPropResumen = _sireRepo.GetPropuestasResumenAsync("compras", cancellationToken)
+                        .ContinueWith<IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>>(t => t.Result, TaskContinuationOptions.OnlyOnRanToCompletion);
+                else
+                    tPropResumen = Task.FromResult(resumenCached!);
+
+                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen, tSsco, tSscoLista, tPropResumen);
+
+                registros       = tPropuesta.Result;
+                registrosLegacy = tLegacy.Result;
+                registrosConcil = tConcil.Result;
+                jobsPeriodo     = tJobs.Result
+                    .OrderByDescending(j => j.FechaCreacion)
+                    .ToList();
+                concilResumenC  = tResumen.Result;
+                var (sscoRucs, sscoFch, sscoPer) = tSsco.Result;
+                sscoData  = (sscoRucs, sscoFch, sscoPer);
+                sscoLista = tSscoLista.Result;
+
+                // Cachear resumen si fue recién consultado
+                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully)
+                    _cache.Set(cacheKeyResumen, tPropResumen.Result, TimeSpan.FromMinutes(2));
+
+                var todasPropuestasC = tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : (IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>)[];
+                propuestasResumen    = todasPropuestasC
+                    .Where(r => r.Periodo.ToString() == periodoSeleccionado)
+                    .ToList();
             }
-            var jobsPeriodoC = todosJobsC
-                .Where(j => j.TipoRegistro == "compras" && j.Periodo == periodoSeleccionado)
-                .OrderByDescending(j => j.FechaCreacion)
-                .ToList();
-            var zipJobC = jobsPeriodoC
-                .FirstOrDefault(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)
-                                     && System.IO.File.Exists(j.RutaArchivo));
-            var constanciaJobC = jobsPeriodoC
+
+            // Buscar el ZIP local más reciente con archivo físicamente existente.
+            // File.Exists sobre ruta UNC puede fallar si la red no responde: se trata como "sin ZIP" para no romper la página.
+            FabricaHilos.Models.Sire.SireExportacionJob? zipJobC = null;
+            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)))
+            {
+                try
+                {
+                    if (System.IO.File.Exists(j.RutaArchivo)) { zipJobC = j; break; }
+                }
+                catch (Exception exFs)
+                {
+                    _logger.LogWarning(exFs, "[SIRE] Compras: no se pudo verificar existencia de ZIP {Ruta}", j.RutaArchivo);
+                    break;
+                }
+            }
+
+            var constanciaJobC = jobsPeriodo
                 .FirstOrDefault(j => j.Estado == EstadoJob.Completado
-                                     && !string.IsNullOrWhiteSpace(j.NombreArchivo));
+                                  && !string.IsNullOrWhiteSpace(j.NombreArchivo));
 
             var model = new SireRegistrosViewModel
             {
-                Periodos                 = periodos,
-                PeriodoSeleccionado      = periodoSeleccionado,
-                RegistrosCompras         = Array.Empty<RegistroCompra>(),
-                RegistrosPropuesta       = registros,
-                RegistrosLegacy          = registrosLegacy,
-                RegistrosConcil          = registrosConcil,
-                PropuestasResumen        = propuestasResumen,
-                EsMock                   = _sireOptions.UseMock,
-                Tipo                     = TipoRegistro.Compras,
-                TieneZipLocal            = zipJobC is not null,
-                NombreZipLocal           = zipJobC is not null ? System.IO.Path.GetFileName(zipJobC.RutaArchivo) : null,
-                NombreArchivoConstancia  = constanciaJobC?.NombreArchivo,
-                ConcilResumen            = concilResumenC,
-                MensajeInfo              = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
+                Periodos                = periodos,
+                PeriodoSeleccionado     = periodoSeleccionado,
+                RegistrosCompras        = Array.Empty<RegistroCompra>(),
+                RegistrosPropuesta      = registros,
+                RegistrosLegacy         = registrosLegacy,
+                RegistrosConcil         = registrosConcil,
+                PropuestasResumen       = propuestasResumen,
+                EsMock                  = _sireOptions.UseMock,
+                Tipo                    = TipoRegistro.Compras,
+                TieneZipLocal           = zipJobC is not null,
+                NombreZipLocal          = zipJobC is not null ? System.IO.Path.GetFileName(zipJobC.RutaArchivo) : null,
+                NombreArchivoConstancia = constanciaJobC?.NombreArchivo,
+                ConcilResumen           = concilResumenC,
+                MensajeInfo             = (registros.Count > 0 || propuestasResumen.Count > 0) ? null
                     : "Use 'Exportar Propuesta' para descargar los registros desde SUNAT.",
-                Ruc = _sireOptions.Ruc
+                Ruc = _sireOptions.Ruc,
+                RucsEnSsco           = sscoData.Rucs,
+                SscoFchUltimaCarga   = sscoData.FchCarga,
+                SscoPeriodoCarga     = sscoData.Periodo,
+                SscoHits             = sscoData.Rucs.Count > 0
+                    ? registrosLegacy.Count(r => sscoData.Rucs.Contains(r.Ruc ?? ""))
+                    : 0,
+                SscoLista            = sscoLista,
             };
 
             return View("~/Views/Contabilidad/Sire/Compras/Index.cshtml", model);
@@ -336,6 +419,7 @@ public class SireController : OracleBaseController
             var borrados = await _sireRepo.EliminarPropuestaAsync(tipo, periodo, cancellationToken);
             _cache.Remove($"sire:periodos:{tipo}:all");
             _cache.Remove($"sire:periodos:{tipo}");
+            _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
             TempData["Success"] = $"Propuesta {periodo} eliminada ({borrados} registros borrados).";
         }
         catch (Exception ex)
@@ -641,6 +725,7 @@ public class SireController : OracleBaseController
             var resultado = await _sireRepo.ConciliarPropuestaAsync(tipo, periodo, cancellationToken);
             _cache.Remove($"sire:periodos:{tipo}:all");
             _cache.Remove($"sire:periodos:{tipo}");
+            _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
             TempData["Success"] = $"Conciliación {periodo} completada — {resultado}";
         }
         catch (Exception ex)
@@ -802,7 +887,8 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Acepta una propuesta RVIE o RCE
+    /// Acepta una propuesta RVIE o RCE tal como fue generada por SUNAT.
+    /// Flujo: POST aceptarpropuesta → polling ticket → descarga ZIP resultado → guarda en red.
     /// </summary>
     /// <param name="periodo">Período YYYYMM</param>
     /// <param name="tipo">Tipo de registro: 'ventas' (RVIE) o 'compras' (RCE)</param>
@@ -810,23 +896,206 @@ public class SireController : OracleBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AceptarPropuesta(string periodo, string tipo, CancellationToken cancellationToken)
     {
+        SireExportacionJob? job = null;
         try
         {
             ValidarParametrosOperacion(periodo, tipo);
+            var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
 
-            var resultado = await EjecutarOperacionTicketAsync(periodo, tipo,
-                (p, ct) => tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
-                    ? _ventasService.AceptarPropuestaAsync(p, ct)
-                    : _comprasService.AceptarPropuestaAsync(p, ct), cancellationToken);
+            job = new SireExportacionJob
+            {
+                TipoRegistro  = tipo,
+                Periodo       = periodo,
+                UsuarioId     = User.Identity?.Name ?? "?",
+                TipoOperacion = TipoOp.Aceptar,
+                Estado        = EstadoJob.EnProceso,
+            };
+            await _sireRepo.InsertJobAsync(job, cancellationToken);
 
-            TempData["Success"] = $"Propuesta aceptada. Ticket: {resultado.Ticket}";
-            _logger.LogInformation("Propuesta aceptada: tipo={Tipo} periodo={Periodo} ticket={Ticket}", 
-                tipo, periodo, resultado.Ticket);
+            // ═══════════════════════════════════════════════════════════════════
+            // #region STUB TEST — comentar bloque real y usar datos simulados
+            // Para volver al real: borrar el bloque STUB y descomentar el bloque REAL
+            // ═══════════════════════════════════════════════════════════════════
+
+            // ── REAL (comentado para pruebas) ────────────────────────────────
+            // // 1. Llamar API SUNAT → obtener ticket inicial
+            // var ticketInicial = esVentas
+            //     ? await _ventasService.AceptarPropuestaAsync(periodo, cancellationToken)
+            //     : await _comprasService.AceptarPropuestaAsync(periodo, cancellationToken);
+            // ────────────────────────────────────────────────────────────────
+
+            // ── STUB: simular ticket inicial de SUNAT ────────────────────────
+            var ticketSimulado = $"STUB-ACEPTAR-{tipo.ToUpper()}-{periodo}-{DateTime.Now:HHmmss}";
+            var ticketInicial  = new FabricaHilos.Sire.Models.TicketEstado
+            {
+                NumTicket = ticketSimulado,
+                Estado    = "EN_PROCESO",
+                Mensaje   = "[STUB] Ticket simulado — sin llamada real a SUNAT"
+            };
+            _logger.LogWarning("[STUB] AceptarPropuesta: ticket simulado {Ticket} para tipo={Tipo} periodo={Periodo}",
+                ticketInicial.NumTicket, tipo, periodo);
+            // ────────────────────────────────────────────────────────────────
+            // #endregion STUB TEST
+            // ═══════════════════════════════════════════════════════════════════
+
+            _logger.LogInformation("Propuesta aceptada (ticket inicial): tipo={Tipo} periodo={Periodo} ticket={Ticket}",
+                tipo, periodo, ticketInicial.NumTicket);
+
+            if (string.IsNullOrWhiteSpace(ticketInicial.NumTicket))
+            {
+                if (job?.Id > 0)
+                {
+                    job.Estado            = EstadoJob.Completado;
+                    job.FechaFinalizacion = DateTime.UtcNow;
+                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                }
+                TempData["Success"] = "Propuesta aceptada. Sin ticket de seguimiento.";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            // #region STUB TEST — simular polling de ticket hasta estado COMPLETADO
+            // ═══════════════════════════════════════════════════════════════════
+
+            // ── REAL (comentado para pruebas) ────────────────────────────────
+            // // 2. Polling hasta estado final
+            // var ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
+            //     ct => esVentas
+            //         ? _ventasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct)
+            //         : _comprasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct),
+            //     cancellationToken);
+            // ────────────────────────────────────────────────────────────────
+
+            // ── STUB: simular ticket final COMPLETADO ────────────────────────
+            var nomArchivoSim = $"PP{(esVentas ? "140000" : "080000")}{periodo}STUB{DateTime.Now:HHmmss}.ZIP";
+            var ticketFinal = new FabricaHilos.Sire.Models.TicketEstado
+            {
+                NumTicket         = ticketInicial.NumTicket,
+                Estado            = "COMPLETADO",
+                CodEstadoProceso  = "3",
+                CodProceso        = "STUB",
+                PerTributario     = periodo,
+                Mensaje           = "[STUB] Aceptación simulada completada",
+                ArchivoReporte    = new FabricaHilos.Sire.Models.ArchivoReporteDto
+                {
+                    NomArchivoReporte      = nomArchivoSim,
+                    CodTipoArchivoReporte  = "ZIP"
+                }
+            };
+            _logger.LogWarning("[STUB] TicketFinal simulado: Estado={Estado} Archivo={Archivo}",
+                ticketFinal.Estado, nomArchivoSim);
+            // ────────────────────────────────────────────────────────────────
+            // #endregion STUB TEST
+            // ═══════════════════════════════════════════════════════════════════
+
+            if (ticketFinal.Estado.Equals("ERROR",    StringComparison.OrdinalIgnoreCase)
+             || ticketFinal.Estado.Equals("RECHAZADO", StringComparison.OrdinalIgnoreCase))
+            {
+                if (job?.Id > 0)
+                {
+                    job.NumTicket         = ticketInicial.NumTicket;
+                    job.Estado            = EstadoJob.Error;
+                    job.MensajeError      = ticketFinal.Mensaje;
+                    job.FechaFinalizacion = DateTime.UtcNow;
+                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                }
+                TempData["Error"] = $"SUNAT rechazó la aceptación: {ticketFinal.Mensaje}";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            // 3. Si SUNAT generó archivo de resultado → descargar y guardar en red
+            if (ticketFinal.ArchivoReporte?.NomArchivoReporte is { Length: > 0 } nomArchivo)
+            {
+                var urlDescarga = SireEndpoints.DescargarArchivo(
+                    nomArchivo,
+                    ticketFinal.ArchivoReporte.CodTipoArchivoReporte ?? string.Empty,
+                    esVentas ? "140000" : "080000",
+                    ticketFinal.PerTributario.Length > 0 ? ticketFinal.PerTributario : periodo,
+                    ticketFinal.CodProceso ?? string.Empty,
+                    ticketInicial.NumTicket);
+
+                // ═══════════════════════════════════════════════════════════════
+                // #region STUB TEST — generar ZIP mínimo en memoria en lugar de descargar de SUNAT
+                // ═══════════════════════════════════════════════════════════════
+
+                // ── REAL (comentado para pruebas) ────────────────────────────
+                // var archivo = esVentas
+                //     ? await _ventasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken)
+                //     : await _comprasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken);
+                // ────────────────────────────────────────────────────────────
+
+                // ── STUB: ZIP mínimo válido con un archivo de texto dentro ────
+                var contenidoStubZip = GenerarZipStub(nomArchivo, periodo, tipo, ticketInicial.NumTicket);
+                var archivo = new FabricaHilos.Sire.Models.ConstanciaCierre
+                {
+                    NombreArchivo = nomArchivo,
+                    ContentType   = "application/zip",
+                    Contenido     = contenidoStubZip
+                };
+                _logger.LogWarning("[STUB] ZIP simulado generado: {Nombre} ({Bytes} bytes)", nomArchivo, contenidoStubZip.Length);
+                // ────────────────────────────────────────────────────────────
+                // #endregion STUB TEST
+                // ═══════════════════════════════════════════════════════════════
+
+                var rutaGuardada = await GuardarZipEnRedAsync(archivo.Contenido, tipo, periodo, archivo.NombreArchivo, cancellationToken);
+                _logger.LogInformation("Archivo aceptar guardado en red: tipo={Tipo} periodo={Periodo} archivo={Archivo}",
+                    tipo, periodo, archivo.NombreArchivo);
+
+                // Cargar registros del ZIP en Oracle SIRE_PROPUESTA (igual que el worker)
+                var resultadoCarga = await _validaService.CargarDesdeZipAsync(
+                    archivo.Contenido, tipo, periodo, job?.JobId ?? "ACEPTAR", cancellationToken);
+                _logger.LogInformation("[SIRE] AceptarPropuesta: SIRE_PROPUESTA actualizado — {Ins} insertados, {Dup} dup, {Err} errores",
+                    resultadoCarga.Insertados, resultadoCarga.Duplicados, resultadoCarga.Errores);
+
+                if (job?.Id > 0)
+                {
+                    job.NumTicket         = ticketInicial.NumTicket;
+                    job.UrlDescarga       = urlDescarga;
+                    job.NombreArchivo     = archivo.NombreArchivo;
+                    job.RutaArchivo       = rutaGuardada;
+                    job.CodTipoArchivo    = ticketFinal.ArchivoReporte.CodTipoArchivoReporte;
+                    job.CodProceso        = ticketFinal.CodProceso;
+                    job.RegistrosInsertados = resultadoCarga.Insertados;
+                    job.RegistrosDuplicados = resultadoCarga.Duplicados;
+                    job.Estado            = EstadoJob.Completado;
+                    job.FechaFinalizacion = DateTime.UtcNow;
+                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                }
+
+                // Invalidar conciliación previa — el cruce SUNAT vs ERP debe regenerarse
+                if (int.TryParse(periodo, out var periodoNr))
+                {
+                    try { await _sireRepo.InvalidarConciliacionAsync(tipo, periodoNr, cancellationToken); }
+                    catch (Exception exInv) { _logger.LogWarning(exInv, "[SIRE] No se pudo invalidar conciliación tras aceptar: {Msg}", exInv.Message); }
+                }
+
+                // Invalidar caché de períodos y resumen de propuestas para reflejar el nuevo estado
+                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}");
+                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}:all");
+                _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
+            }
+            else if (job?.Id > 0)
+            {
+                // Ticket completado pero SUNAT no generó archivo descargable
+                job.NumTicket         = ticketInicial.NumTicket;
+                job.Estado            = EstadoJob.Completado;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+            }
+
+            TempData["Success"] = $"Propuesta aceptada. Ticket: {ticketInicial.NumTicket}";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al aceptar propuesta SIRE {Tipo} {Periodo}", tipo, periodo);
             TempData["Error"] = ex.Message;
+            if (job?.Id > 0)
+            {
+                job.Estado            = EstadoJob.Error;
+                job.MensajeError      = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                try { await _sireRepo.UpdateJobAsync(job, CancellationToken.None); } catch { /* no propagar */ }
+            }
         }
 
         return RedirigirPorTipo(tipo, periodo);
@@ -907,7 +1176,9 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Cierra un período RVIE o RCE en SUNAT
+    /// Registra el preliminar (cierra el período) RVIE o RCE en SUNAT.
+    /// Flujo: POST registrapreliminares → polling ticket → descarga constancia → guarda en red.
+    /// ⚠️ Irreversible: una vez cerrado el período no se puede reemplazar la propuesta.
     /// </summary>
     /// <param name="periodo">Período YYYYMM</param>
     /// <param name="tipo">Tipo: 'ventas' (RVIE) o 'compras' (RCE)</param>
@@ -915,23 +1186,189 @@ public class SireController : OracleBaseController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CerrarPeriodo(string periodo, string tipo, CancellationToken cancellationToken)
     {
+        SireExportacionJob? job = null;
         try
         {
             ValidarParametrosOperacion(periodo, tipo);
+            var esVentas = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
 
-            var resultado = await EjecutarOperacionTicketAsync(periodo, tipo,
-                (p, ct) => tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase)
-                    ? _ventasService.CerrarPeriodoAsync(p, ct)
-                    : _comprasService.CerrarPeriodoAsync(p, ct), cancellationToken);
+            job = new SireExportacionJob
+            {
+                TipoRegistro  = tipo,
+                Periodo       = periodo,
+                UsuarioId     = User.Identity?.Name ?? "?",
+                TipoOperacion = TipoOp.Cerrar,
+                Estado        = EstadoJob.EnProceso,
+            };
+            await _sireRepo.InsertJobAsync(job, cancellationToken);
 
-            TempData["Success"] = $"Período cerrado. Ticket: {resultado.Ticket}";
-            _logger.LogInformation("Período cerrado: tipo={Tipo} periodo={Periodo} ticket={Ticket}", 
-                tipo, periodo, resultado.Ticket);
+            // ═══════════════════════════════════════════════════════════════════
+            // #region STUB TEST — comentar bloque real y usar datos simulados
+            // Para volver al real: borrar el bloque STUB y descomentar el bloque REAL
+            // ═══════════════════════════════════════════════════════════════════
+
+            // ── REAL (comentado para pruebas) ────────────────────────────────
+            // // 1. Registrar preliminar → obtener ticket inicial
+            // var ticketInicial = esVentas
+            //     ? await _ventasService.CerrarPeriodoAsync(periodo, cancellationToken)
+            //     : await _comprasService.CerrarPeriodoAsync(periodo, cancellationToken);
+            // ────────────────────────────────────────────────────────────────
+
+            // ── STUB: simular ticket inicial de SUNAT ────────────────────────
+            var ticketSimuladoCierre = $"STUB-CERRAR-{tipo.ToUpper()}-{periodo}-{DateTime.Now:HHmmss}";
+            var ticketInicial = new FabricaHilos.Sire.Models.TicketEstado
+            {
+                NumTicket = ticketSimuladoCierre,
+                Estado    = "EN_PROCESO",
+                Mensaje   = "[STUB] Ticket de cierre simulado — sin llamada real a SUNAT"
+            };
+            _logger.LogWarning("[STUB] CerrarPeriodo: ticket simulado {Ticket} para tipo={Tipo} periodo={Periodo}",
+                ticketInicial.NumTicket, tipo, periodo);
+            // ────────────────────────────────────────────────────────────────
+            // #endregion STUB TEST
+            // ═══════════════════════════════════════════════════════════════════
+
+            _logger.LogInformation("Período cerrado (ticket inicial): tipo={Tipo} periodo={Periodo} ticket={Ticket}",
+                tipo, periodo, ticketInicial.NumTicket);
+
+            if (string.IsNullOrWhiteSpace(ticketInicial.NumTicket))
+            {
+                job.Estado            = EstadoJob.Completado;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                TempData["Success"] = "Período cerrado. Sin ticket de seguimiento.";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            // #region STUB TEST — simular polling de ticket hasta estado COMPLETADO
+            // ═══════════════════════════════════════════════════════════════════
+
+            // ── REAL (comentado para pruebas) ────────────────────────────────
+            // // 2. Polling hasta estado final
+            // var ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
+            //     ct => esVentas
+            //         ? _ventasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct)
+            //         : _comprasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct),
+            //     cancellationToken);
+            // ────────────────────────────────────────────────────────────────
+
+            // ── STUB: simular ticket final COMPLETADO ────────────────────────
+            var nomArchivoSimCierre = $"CC{(esVentas ? "140000" : "080000")}{periodo}STUB{DateTime.Now:HHmmss}.ZIP";
+            var ticketFinal = new FabricaHilos.Sire.Models.TicketEstado
+            {
+                NumTicket        = ticketInicial.NumTicket,
+                Estado           = "COMPLETADO",
+                CodEstadoProceso = "3",
+                CodProceso       = "STUB",
+                PerTributario    = periodo,
+                Mensaje          = "[STUB] Cierre simulado completado",
+                ArchivoReporte   = new FabricaHilos.Sire.Models.ArchivoReporteDto
+                {
+                    NomArchivoReporte     = nomArchivoSimCierre,
+                    CodTipoArchivoReporte = "ZIP"
+                }
+            };
+            _logger.LogWarning("[STUB] TicketFinal cierre simulado: Estado={Estado} Archivo={Archivo}",
+                ticketFinal.Estado, nomArchivoSimCierre);
+            // ────────────────────────────────────────────────────────────────
+            // #endregion STUB TEST
+            // ═══════════════════════════════════════════════════════════════════
+
+            if (ticketFinal.Estado.Equals("ERROR",    StringComparison.OrdinalIgnoreCase)
+             || ticketFinal.Estado.Equals("RECHAZADO", StringComparison.OrdinalIgnoreCase))
+            {
+                job.NumTicket         = ticketInicial.NumTicket;
+                job.Estado            = EstadoJob.Error;
+                job.MensajeError      = ticketFinal.Mensaje;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                TempData["Error"] = $"SUNAT rechazó el cierre: {ticketFinal.Mensaje}";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            // 3. Descargar constancia de cierre y guardar en red
+            if (ticketFinal.ArchivoReporte?.NomArchivoReporte is { Length: > 0 } nomArchivo)
+            {
+                var urlDescarga = SireEndpoints.DescargarArchivo(
+                    nomArchivo,
+                    ticketFinal.ArchivoReporte.CodTipoArchivoReporte ?? string.Empty,
+                    esVentas ? "140000" : "080000",
+                    ticketFinal.PerTributario.Length > 0 ? ticketFinal.PerTributario : periodo,
+                    ticketFinal.CodProceso ?? string.Empty,
+                    ticketInicial.NumTicket);
+
+                // ═══════════════════════════════════════════════════════════════════
+                // #region STUB TEST — generar constancia mínima en lugar de descargar de SUNAT
+                // ═══════════════════════════════════════════════════════════════════
+
+                // ── REAL (comentado para pruebas) ────────────────────────────────
+                // var constancia = esVentas
+                //     ? await _ventasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken)
+                //     : await _comprasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken);
+                // ────────────────────────────────────────────────────────────────
+
+                // ── STUB: ZIP mínimo válido con TXT pipe-delimited ────────────────
+                var contenidoStubCierre = GenerarZipStub(nomArchivo, periodo, tipo, ticketInicial.NumTicket);
+                var constancia = new FabricaHilos.Sire.Models.ConstanciaCierre
+                {
+                    NombreArchivo = nomArchivo,
+                    ContentType   = "application/zip",
+                    Contenido     = contenidoStubCierre
+                };
+                _logger.LogWarning("[STUB] Constancia ZIP simulada generada: {Nombre} ({Bytes} bytes)",
+                    nomArchivo, contenidoStubCierre.Length);
+                // ────────────────────────────────────────────────────────────────
+                // #endregion STUB TEST
+                // ═══════════════════════════════════════════════════════════════════
+
+                var rutaGuardada = await GuardarZipEnRedAsync(constancia.Contenido, tipo, periodo, constancia.NombreArchivo, cancellationToken);
+                _logger.LogInformation("Constancia cierre guardada en red: tipo={Tipo} periodo={Periodo} archivo={Archivo}",
+                    tipo, periodo, constancia.NombreArchivo);
+
+                job.NumTicket         = ticketInicial.NumTicket;
+                job.UrlDescarga       = urlDescarga;
+                job.NombreArchivo     = constancia.NombreArchivo;
+                job.RutaArchivo       = rutaGuardada;
+                job.CodTipoArchivo    = ticketFinal.ArchivoReporte.CodTipoArchivoReporte;
+                job.CodProceso        = ticketFinal.CodProceso;
+                job.Estado            = EstadoJob.Completado;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+
+                // El cierre cambia el estado del período — invalidar conciliación y caché
+                if (int.TryParse(periodo, out var periodoNr))
+                {
+                    try { await _sireRepo.InvalidarConciliacionAsync(tipo, periodoNr, cancellationToken); }
+                    catch (Exception exInv) { _logger.LogWarning(exInv, "[SIRE] No se pudo invalidar conciliación tras cerrar: {Msg}", exInv.Message); }
+                }
+
+                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}");
+                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}:all");
+                _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
+            }
+            else
+            {
+                // Ticket completado pero SUNAT no generó constancia descargable
+                job.NumTicket         = ticketInicial.NumTicket;
+                job.Estado            = EstadoJob.Completado;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+            }
+
+            TempData["Success"] = $"Período cerrado. Ticket: {ticketInicial.NumTicket}";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al cerrar periodo SIRE {Tipo} {Periodo}", tipo, periodo);
             TempData["Error"] = ex.Message;
+            if (job?.Id > 0)
+            {
+                job.Estado            = EstadoJob.Error;
+                job.MensajeError      = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                job.FechaFinalizacion = DateTime.UtcNow;
+                try { await _sireRepo.UpdateJobAsync(job, CancellationToken.None); } catch { /* no propagar */ }
+            }
         }
 
         return RedirigirPorTipo(tipo, periodo);
@@ -952,11 +1389,9 @@ public class SireController : OracleBaseController
             // Si nomArchivo no viene en la URL, buscarlo en el job completado más reciente
             if (string.IsNullOrWhiteSpace(nomArchivo))
             {
-                var jobs = await _sireRepo.GetJobsRecientesAsync(50, cancellationToken);
+                var jobs = await _sireRepo.GetJobsPorTipoPeriodoAsync(tipo, periodo, cancellationToken);
                 nomArchivo = jobs
-                    .Where(j => j.TipoRegistro.Equals(tipo, StringComparison.OrdinalIgnoreCase)
-                             && j.Periodo == periodo
-                             && j.Estado == EstadoJob.Completado
+                    .Where(j => j.Estado == EstadoJob.Completado
                              && !string.IsNullOrWhiteSpace(j.NombreArchivo))
                     .OrderByDescending(j => j.FechaCreacion)
                     .Select(j => j.NombreArchivo)
@@ -1304,9 +1739,116 @@ public class SireController : OracleBaseController
 
 
 
-    /// <summary>Valida que período y tipo sean válidos</summary>
-    private static void ValidarParametrosOperacion(string periodo, string tipo)
+    /// <summary>
+    /// Guarda un archivo en la ruta de red UNC configurada.
+    /// Ruta final: {RutaSireExportacion}\{tipo}\{periodo}\{nombreArchivo}
+    /// Ej: \\10.0.7.14\FabricaHilos\Contabilidad\Sire\Compras\202501\LE20100096260202501.zip
+    /// </summary>
+    /// <summary>
+    /// [STUB TEST] Genera un ZIP con un TXT en formato pipe-delimited SIRE real (con prefijo RUC|Razón|Periodo).
+    /// El TXT contiene 2 registros de prueba con datos ficticios pero parseables por CargarDesdeZipAsync.
+    /// Eliminar junto con los bloques STUB de AceptarPropuesta cuando se active el flujo real.
+    /// </summary>
+    private static byte[] GenerarZipStub(string nomArchivo, string periodo, string tipo, string numTicket)
     {
+        var esVentas   = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase);
+        var nombreTxt  = $"{Path.GetFileNameWithoutExtension(nomArchivo)}.txt";
+        var fechaHoy   = DateTime.Now.ToString("dd/MM/yyyy");
+        var rucEmisor  = "20100096260";
+        var razonSoc   = "FABRICA DE HILOS SA";
+
+        // Prefijo común: RUC-emisor|RazonSocial|Periodo (3 campos que el parser detecta por c[2]=6 dígitos)
+        var prefijo = $"{rucEmisor}|{razonSoc}|{periodo}";
+
+        string[] lineas;
+        if (esVentas)
+        {
+            // RVIE: prefijo(3) + 32 campos de datos = 35 pipes por línea
+            // [o+0]=CAR_SUNAT [o+1]=FEmision [o+2]=FVcto [o+3]=TipDoc [o+4]=Serie
+            // [o+5]=Numero [o+6]=NumFin [o+7]=TipoDocId [o+8]=RUC [o+9]=Nombre
+            // [o+10]=ValExport [o+11]=BiGrav [o+12]=DsctoBI [o+13]=IGV [o+14]=DsctoIGV
+            // [o+15]=Exonerado [o+16]=Inafecto [o+17]=ISC [o+18]=BiIVAP [o+19]=IVAP
+            // [o+20]=ICBPER [o+21]=OtrosTrib [o+22]=TotalCP [o+23]=Moneda [o+24]=TipoCambio
+            // [o+25]=FDocRef [o+26]=TipDocRef [o+27]=SerDocRef [o+28]=NroDocRef
+            // [o+29]=IDProyecto [o+30]=TipoNota [o+31]=EstComp
+            lineas =
+            [
+                $"{prefijo}|1|{fechaHoy}||01|F001|00000001||6|20521234567|CLIENTE STUB SA|0.00|100.00|0.00|18.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|118.00|PEN|1.000|||||||1",
+                $"{prefijo}|1|{fechaHoy}||01|F001|00000002||6|20521234568|CLIENTE STUB SRL|0.00|200.00|0.00|36.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|236.00|PEN|1.000|||||||1",
+            ];
+        }
+        else
+        {
+            // RCE: prefijo(3) + 38 campos de datos = 41 pipes por línea
+            // [o+0]=CAR_SUNAT [o+1]=FEmision [o+2]=FVcto [o+3]=TipDoc [o+4]=Serie
+            // [o+5]=AnioDam [o+6]=Numero [o+7]=NumFin [o+8]=TipoDocId [o+9]=RUC [o+10]=Nombre
+            // [o+11]=BiGravDG [o+12]=IgvDG [o+13]=BiGravDGNG [o+14]=IgvDGNG [o+15]=BiGravDNG
+            // [o+16]=IgvDNG [o+17]=ValAdqNG [o+18]=ISC [o+19]=ICBPER [o+20]=OtrosTrib [o+21]=TotalCP
+            // [o+22]=Moneda [o+23]=TipoCambio [o+24]=FDocRef [o+25]=TipDocRef [o+26]=SerDocRef
+            // [o+27]=CodDAM [o+28]=NroDocRef [o+29]=TipoBien [o+30]=IDProyecto [o+31]=PorcPart
+            // [o+32]=IMB [o+33]=CarMod [o+34]=FlagDetrac [o+35]=TipoNota [o+36]=EstComp [o+37]=Inconsist
+            lineas =
+            [
+                $"{prefijo}|1|{fechaHoy}||01|F001||00000001||6|20521234567|PROVEEDOR STUB SA|100.00|18.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|118.00|PEN|1.000|||||||||0||1|0",
+                $"{prefijo}|1|{fechaHoy}||01|F001||00000002||6|20521234568|PROVEEDOR STUB SRL|200.00|36.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|0.00|236.00|PEN|1.000|||||||||0||1|0",
+            ];
+        }
+
+        using var ms = new System.IO.MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            // Entrada 1: TXT con datos parseables en formato pipe-delimited SIRE
+            var entradaTxt = zip.CreateEntry(nombreTxt);
+            using (var sw = new System.IO.StreamWriter(entradaTxt.Open(), System.Text.Encoding.Latin1))
+            {
+                foreach (var linea in lineas)
+                    sw.WriteLine(linea);
+            }
+
+            // Entrada 2: README de stub para identificación visual
+            var entradaInfo = zip.CreateEntry("STUB_INFO.txt");
+            using var swInfo = new System.IO.StreamWriter(entradaInfo.Open());
+            swInfo.WriteLine("=== STUB DE PRUEBA — NO GENERADO POR SUNAT ===");
+            swInfo.WriteLine($"Tipo     : {tipo}");
+            swInfo.WriteLine($"Periodo  : {periodo}");
+            swInfo.WriteLine($"Ticket   : {numTicket}");
+            swInfo.WriteLine($"Generado : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            swInfo.WriteLine($"Registros: {lineas.Length} (ficticios)");
+        }
+        return ms.ToArray();
+    }
+
+    private async Task<string> GuardarZipEnRedAsync(
+        byte[] contenido,
+        string tipo,
+        string periodo,
+        string nombreArchivo,
+        CancellationToken cancellationToken)
+    {
+        var rutaBase   = _configuration["RutaSireExportacion"]
+                         ?? @"\\10.0.7.14\FabricaHilos\Contabilidad\Sire";
+        var subcarpeta = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "Ventas" : "Compras";
+        var rutaDest   = Path.Combine(rutaBase, subcarpeta, periodo);
+
+        var username = _configuration["NetworkShare:Username"];
+        var password = _configuration["NetworkShare:Password"];
+        var domain   = _configuration["NetworkShare:Domain"];
+
+        if (OperatingSystem.IsWindows() && !string.IsNullOrEmpty(username))
+            Helpers.NetworkShareHelper.Connect(rutaDest, username, password, domain);
+
+        if (!Directory.Exists(rutaDest))
+            Directory.CreateDirectory(rutaDest);
+
+        var rutaCompleta = Path.Combine(rutaDest, nombreArchivo);
+        await System.IO.File.WriteAllBytesAsync(rutaCompleta, contenido, cancellationToken);
+
+        _logger.LogInformation("[SIRE] Archivo guardado: {Ruta} ({Bytes} bytes)", rutaCompleta, contenido.Length);
+        return rutaCompleta;
+    }
+
+    /// <summary>Valida que período y tipo sean válidos</summary>
+    private static void ValidarParametrosOperacion(string periodo, string tipo)    {
         if (string.IsNullOrWhiteSpace(periodo))
             throw new ArgumentException("Período no puede estar vacío.", nameof(periodo));
 
@@ -1733,12 +2275,12 @@ public class SireController : OracleBaseController
         if (string.IsNullOrWhiteSpace(request.Tipo) || string.IsNullOrWhiteSpace(request.Periodo))
             return Json(new { exitoso = false, error = "Tipo y Periodo son obligatorios" });
 
-        // Buscar el job más reciente con RUTA_ARCHIVO para ese tipo+período
-        var jobs = await _sireRepo.GetJobsRecientesAsync(50, cancellationToken);
+        // Buscar el job más reciente con RUTA_ARCHIVO para ese tipo+período.
+        // Se usa GetJobsPorTipoPeriodoAsync en lugar de GetJobsRecientesAsync(50) para
+        // evitar que jobs de otros períodos/tipos agoten el límite arbitrario de filas.
+        var jobs = await _sireRepo.GetJobsPorTipoPeriodoAsync(request.Tipo, request.Periodo, cancellationToken);
         var job = jobs
-            .Where(j => j.TipoRegistro == request.Tipo
-                     && j.Periodo == request.Periodo
-                     && !string.IsNullOrWhiteSpace(j.RutaArchivo)
+            .Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)
                      && System.IO.File.Exists(j.RutaArchivo))
             .OrderByDescending(j => j.FechaCreacion)
             .FirstOrDefault();
@@ -1825,9 +2367,10 @@ public class SireController : OracleBaseController
             }
         }
 
-        // Invalidar caché de períodos para que el dashboard refleje los nuevos datos
+        // Invalidar caché de períodos y resumen de propuestas para que el dashboard refleje los nuevos datos
         _cache.Remove($"sire:periodos:{request.Tipo.ToLowerInvariant()}");
         _cache.Remove($"sire:periodos:{request.Tipo.ToLowerInvariant()}:all");
+        _cache.Remove($"sire:propuestas:resumen:{request.Tipo.ToLowerInvariant()}:{request.Periodo}");
 
         // LOG: completar
         await _sireRepo.InsertApiLogAsync(new SireApiLog
@@ -1991,6 +2534,251 @@ public class SireController : OracleBaseController
         {
             _logger.LogError(ex, "[SIRE] RestaurarExcluido error: idConcil={Id}", request.IdConcil);
             return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
+    // ── Carga manual del padrón SSCO (IFormFile) ─────────────────────────────────
+
+    /// <summary>
+    /// Procesa el Excel SSCO subido manualmente y persiste los registros en SIG.SSCO_LISTA.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SscoCargar(IFormFile? archivo, string? periodo, CancellationToken cancellationToken)
+    {
+        if (archivo is null || archivo.Length == 0)
+            return Json(new { ok = false, mensaje = "No se recibió ningún archivo." });
+
+        try
+        {
+            await using var stream = archivo.OpenReadStream();
+            var entries = ParseSscoStream(stream);
+
+            if (entries.Count == 0)
+                return Json(new { ok = false, mensaje = "El archivo no contiene registros válidos. Verifique que sea el padrón SSCO de SUNAT." });
+
+            var periodoCarga = int.TryParse(DateTime.Today.ToString("yyyyMM"), out var pc) ? pc : 0;
+            var usuario = User.Identity?.Name ?? "SIG";
+            var afectadas = await _sireRepo.CargarSscoLoteAsync(entries, periodoCarga, usuario, cancellationToken);
+
+            _logger.LogInformation("[SIRE-SSCO] Padrón cargado por {Usuario}: {N} sujetos, {Af} filas afectadas.",
+                usuario, entries.Count, afectadas);
+
+            return Json(new
+            {
+                ok      = true,
+                mensaje = $"Padrón SSCO cargado: {entries.Count:N0} sujetos insertados/actualizados.",
+                sujetos = entries.Count,
+                filas   = afectadas
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE-SSCO] Error procesando archivo SSCO");
+            return Json(new { ok = false, mensaje = $"Error procesando el archivo: {ex.Message}" });
+        }
+    }
+
+    // ── Parser compartido (manual y automático) ───────────────────────────────────
+
+    private static List<FabricaHilos.Models.Sire.SscoListaEntry> ParseSscoStream(Stream stream)
+    {
+        static string? Str(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+        // Trunca a maxLen caracteres y retorna null si vacío (evita ORA-12899)
+        static string? TruncStr(string? s, int maxLen) => string.IsNullOrWhiteSpace(s) ? null : s.Length > maxLen ? s[..maxLen] : s;
+
+        // El Excel de SUNAT almacena RUCs y fechas como valores numéricos (t=num).
+        // RUC: número de 11 dígitos → leer como long para evitar notación científica.
+        // Fechas: número OLE (días desde 1900-01-00) → convertir con DateTime.FromOADate.
+        static string GetRuc(ClosedXML.Excel.IXLCell cell)
+        {
+            if (cell.DataType == ClosedXML.Excel.XLDataType.Number)
+                return ((long)cell.GetDouble()).ToString();
+            return cell.GetString().Trim();
+        }
+
+        static DateTime? ParseFechaSunat(ClosedXML.Excel.IXLCell cell)
+        {
+            // Intento 1: celda con tipo DateTime explícito
+            try
+            {
+                if (cell.DataType == ClosedXML.Excel.XLDataType.DateTime)
+                    return cell.GetDateTime();
+            }
+            catch { }
+
+            // Intento 2: celda numérica → número OLE (formato más común en el padrón SUNAT)
+            try
+            {
+                if (cell.DataType == ClosedXML.Excel.XLDataType.Number)
+                {
+                    var ole = cell.GetDouble();
+                    if (ole > 1 && ole < 2958466)
+                    {
+                        var d = DateTime.FromOADate(ole);
+                        if (d.Year >= 1900 && d.Year <= 2100) return d;
+                    }
+                }
+            }
+            catch { }
+
+            // Intento 3: valor como string (número OLE en texto o formatos de fecha)
+            var s = cell.GetString().Trim();
+            if (string.IsNullOrWhiteSpace(s)) return null;
+
+            if (double.TryParse(s, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var oleStr)
+                && oleStr > 1 && oleStr < 2958466)
+            {
+                try
+                {
+                    var d = DateTime.FromOADate(oleStr);
+                    if (d.Year >= 1900 && d.Year <= 2100) return d;
+                }
+                catch { }
+            }
+
+            return DateTime.TryParseExact(s,
+                new[] { "d/M/yyyy", "dd/MM/yyyy", "M/d/yyyy", "dd-MM-yyyy", "yyyy-MM-dd" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var dt) ? dt : null;
+        }
+
+        var entries = new List<FabricaHilos.Models.Sire.SscoListaEntry>();
+        using var wb = new ClosedXML.Excel.XLWorkbook(stream);
+        var ws = wb.Worksheet(1);
+
+        // Fila 1 = encabezados; datos desde fila 2.
+        // Columnas SUNAT: A=RUC(num), B=Razón Social, C=Domicilio(skip),
+        //   D=Resolución, E=F.Emisión(num OLE), F=F.Quedó Firme(num OLE),
+        //   G=Doc Rep.Legal(num), H=Apellidos y Nombres Rep.Legal, I=F.Publicación(num OLE)
+        foreach (var row in ws.RowsUsed().Skip(1))
+        {
+            var ruc = GetRuc(row.Cell(1));
+            if (ruc.Length != 11) continue;
+
+            var fchFirme = ParseFechaSunat(row.Cell(6));
+            if (fchFirme is null) continue;   // FCH_QUEDO_FIRME es obligatoria
+
+            entries.Add(new FabricaHilos.Models.Sire.SscoListaEntry
+            {
+                Ruc             = ruc,
+                RazonSocial     = Str(row.Cell(2).GetString()),
+                ResolucionAtrib = Str(row.Cell(4).GetString()),
+                FchResolucion   = ParseFechaSunat(row.Cell(5)),
+                FchQuedoFirme   = fchFirme.Value,
+                DocRepLegal     = TruncStr(GetRuc(row.Cell(7)), 20),
+                NomRepLegal     = Str(row.Cell(8).GetString()),
+                FchPublicacion  = ParseFechaSunat(row.Cell(9)),
+            });
+        }
+        return entries;
+    }
+
+    // ── Descarga automática del padrón SSCO desde portal SUNAT ───────────────
+
+    /// <summary>
+    /// Descarga automáticamente el padrón SSCO desde el portal público de SUNAT,
+    /// lo parsea e inserta en SIG.SSCO_LISTA. Devuelve JSON para consumo AJAX.
+    /// La URL de la página SUNAT se lee de Sire:SscoPageUrl (appsettings.json).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SscoDescargarAuto([FromForm] string? periodo, CancellationToken cancellationToken)
+    {
+        var sscoPageUrl = _sireOptions.SscoPageUrl;
+        try
+        {
+            var http = _httpClientFactory.CreateClient("sunat-ssco");
+
+            // ── Paso 1: obtener la página y extraer el href del .xlsx ─────────
+            var html = await http.GetStringAsync(sscoPageUrl, cancellationToken);
+
+            // Busca el primer href que apunte a un .xlsx (puede ser relativo o absoluto)
+            var match = System.Text.RegularExpressions.Regex.Match(
+                html,
+                @"href=[""']([^""']*sujesincapacidadOperativa[^""']*\.xlsx)[""']",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (!match.Success)
+            {
+                // Segundo intento: cualquier .xlsx en la página
+                match = System.Text.RegularExpressions.Regex.Match(
+                    html,
+                    @"href=[""']([^""']+\.xlsx)[""']",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+
+            if (!match.Success)
+                return Json(new { ok = false, mensaje = "No se encontró el enlace de descarga del padrón SSCO en la página de SUNAT. Es posible que la estructura de la página haya cambiado." });
+
+            var href = match.Groups[1].Value;
+            var xlsxUrl = href.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                ? href
+                : new Uri(new Uri(sscoPageUrl), href).ToString();
+
+            _logger.LogInformation("[SIRE-SSCO-AUTO] Descargando padrón SSCO desde {Url}", xlsxUrl);
+
+            // ── Paso 2: descargar el Excel ────────────────────────────────────
+            using var xlsxResponse = await http.GetAsync(xlsxUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            xlsxResponse.EnsureSuccessStatusCode();
+
+            var contentType = xlsxResponse.Content.Headers.ContentType?.MediaType ?? "";
+            if (contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+                return Json(new { ok = false, mensaje = "SUNAT devolvió HTML en vez del archivo Excel. Intente más tarde o use la carga manual." });
+
+            await using var xlsxStream = await xlsxResponse.Content.ReadAsStreamAsync(cancellationToken);
+
+            // ── Paso 3: parsear e insertar ────────────────────────────────────
+            var entries = ParseSscoStream(xlsxStream);
+
+            if (entries.Count == 0)
+                return Json(new { ok = false, mensaje = "El archivo descargado no contiene registros válidos. Verifique que SUNAT haya publicado el padrón actualizado." });
+
+            var periodoCarga = int.TryParse(DateTime.Today.ToString("yyyyMM"), out var pc) ? pc : 0;
+            var usuario = User.Identity?.Name ?? "SIRE";
+            var afectadas = await _sireRepo.CargarSscoLoteAsync(entries, periodoCarga, usuario, cancellationToken);
+
+            _logger.LogInformation("[SIRE-SSCO-AUTO] Padrón SSCO descargado por {Usuario}: {N} sujetos, {Af} filas afectadas.",
+                usuario, entries.Count, afectadas);
+
+            // Leer estado actualizado para que el JS pueda actualizar el DOM sin recargar
+            var (sscoRucs, sscoFch, sscoPer) = await _sireRepo.GetSscoDataAsync(cancellationToken);
+
+            // Calcular hits y obtener solo los RUCs que cruzan con Legacy del período
+            // (no se devuelve el padrón completo — solo el subconjunto de coincidencias)
+            var rucsHit = new List<string>();
+            if (!string.IsNullOrWhiteSpace(periodo) && sscoRucs.Count > 0)
+            {
+                var legacyPeriodo = await _sireRepo.GetLegacyAsync("compras", periodo, cancellationToken);
+                rucsHit = legacyPeriodo
+                    .Where(r => sscoRucs.Contains(r.Ruc ?? ""))
+                    .Select(r => r.Ruc!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            return Json(new
+            {
+                ok          = true,
+                mensaje     = $"Padrón SSCO actualizado correctamente: {entries.Count:N0} sujetos descargados e insertados.",
+                sujetos     = entries.Count,
+                filas       = afectadas,
+                sscoFchCarga= sscoFch?.ToString("dd/MM/yyyy HH:mm"),
+                sscoPeriodo = sscoPer,
+                sscoHits    = rucsHit.Count,
+                sscoRucsHit = rucsHit        // solo los RUCs con coincidencia en Legacy
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "[SIRE-SSCO-AUTO] Error HTTP descargando padrón SSCO");
+            return Json(new { ok = false, mensaje = $"Error de conexión con SUNAT: {ex.Message}. Use la carga manual como alternativa." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE-SSCO-AUTO] Error inesperado descargando padrón SSCO");
+            return Json(new { ok = false, mensaje = $"Error inesperado: {ex.Message}" });
         }
     }
 }

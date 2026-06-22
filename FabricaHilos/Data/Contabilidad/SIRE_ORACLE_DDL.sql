@@ -78,7 +78,33 @@ COMMENT ON COLUMN SIG.SIRE_LOG.JOB_ID IS 'FK lógica a SIRE_JOB.JOB_ID (puede se
 COMMENT ON COLUMN SIG.SIRE_LOG.MENSAJE IS 'Resumen del resultado: ticket obtenido, estado SUNAT, mensaje de error, etc.';
 
 -- =============================================================================
--- Fin del script. Verificar con:
+-- Fin del script inicial. Verificar con:
 --   SELECT TABLE_NAME FROM USER_TABLES WHERE TABLE_NAME LIKE 'SIRE_%';
 --   SELECT SEQUENCE_NAME FROM USER_SEQUENCES WHERE SEQUENCE_NAME LIKE 'SEQ_SIRE_%';
+-- =============================================================================
+
+-- =============================================================================
+-- PATCH v2 — Extender SIRE_JOB para trazabilidad de todas las operaciones SUNAT
+-- Ejecutar UNA SOLA VEZ sobre la BD existente.
+-- =============================================================================
+ALTER TABLE SIG.SIRE_JOB ADD (
+    TIPO_OPERACION      VARCHAR2(15)  DEFAULT 'EXPORTAR' NOT NULL,
+    -- EXPORTAR | ACEPTAR | CERRAR | REEMPLAZAR
+    RUTA_ARCHIVO_ORIGEN VARCHAR2(500),
+    -- Solo para REEMPLAZAR: ruta local del TXT/ZIP subido a SUNAT via TUS.
+    -- NULL en EXPORTAR / ACEPTAR / CERRAR.
+    URL_DESCARGA        VARCHAR2(1000)
+    -- URL del servicio 5.17 usada para descargar el archivo resultado (RUTA_ARCHIVO).
+    -- NULL en EXPORTAR (la URL la gestiona internamente el worker).
+);
+
+COMMENT ON COLUMN SIG.SIRE_JOB.TIPO_OPERACION      IS 'EXPORTAR | ACEPTAR | CERRAR | REEMPLAZAR';
+COMMENT ON COLUMN SIG.SIRE_JOB.RUTA_ARCHIVO_ORIGEN IS 'REEMPLAZAR: ruta local del archivo subido a SUNAT via TUS';
+COMMENT ON COLUMN SIG.SIRE_JOB.URL_DESCARGA        IS 'URL servicio 5.17 para re-descargar el resultado de SUNAT';
+
+CREATE INDEX SIG.IDX_SIRE_JOB_OP_PER
+    ON SIG.SIRE_JOB (TIPO_OPERACION, TIPO_REGISTRO, PERIODO);
+
+-- =============================================================================
+-- Fin PATCH v2.
 -- =============================================================================

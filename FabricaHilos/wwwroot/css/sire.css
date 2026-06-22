@@ -318,6 +318,9 @@
 .sire-row-excluido td { color: #6c757d !important; }
 .sire-row-excluido td:first-child { text-decoration: none; } /* botón restaurar sin tachado */
 
+/* Fila con CP: NO EXISTE según validación CPE SUNAT */
+.sire-row-cp-noexiste { background-color: rgba(220,53,69,.10) !important; }
+
 /* ═══════════════════════════════════════════════════════
   11. MODALES AL ESTILO PLN
    ═══════════════════════════════════════════════════════ */

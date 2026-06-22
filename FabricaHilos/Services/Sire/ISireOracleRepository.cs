@@ -44,6 +44,12 @@ public interface ISireOracleRepository
     /// </summary>
     Task<List<SireExportacionJob>> GetJobsRecientesAsync(int top = 20, CancellationToken ct = default);
 
+    /// <summary>
+    /// Obtiene todos los jobs para un tipo+período específico, ordenados por fecha creación desc.
+    /// Garantiza encontrar el job correcto sin límite arbitrario de filas.
+    /// </summary>
+    Task<List<SireExportacionJob>> GetJobsPorTipoPeriodoAsync(string tipo, string periodo, CancellationToken ct = default);
+
     // ── API logs ──────────────────────────────────────────────────────────────
 
     /// <summary>Inserta un registro de auditoría de llamada HTTP. Fire-and-forget seguro.</summary>
@@ -171,4 +177,26 @@ public interface ISireOracleRepository
     /// (VALIDEZ_CP, VALIDEZ_RUC, VALIDEZ_DOM, FCH_VALIDEZ = SYSDATE).
     /// </summary>
     Task GuardarValidezAsync(long idConcil, string estadoCp, string estadoRuc, string condDomiRuc, CancellationToken ct = default);
+
+    // =========================================================================
+    // SSCO — Sujetos Sin Capacidad Operativa
+    // =========================================================================
+
+    /// <summary>
+    /// Devuelve en una sola query todos los RUCs de SIG.SSCO_LISTA más los metadatos
+    /// de la última carga (fecha y período YYYYMM). Reemplaza GetSscoRucsAsync + GetSscoMetaAsync.
+    /// </summary>
+    Task<(HashSet<string> Rucs, DateTime? FchCarga, int? Periodo)> GetSscoDataAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve el padrón completo de SIG.SSCO_LISTA ordenado por RUC.
+    /// </summary>
+    Task<List<SscoListaEntry>> GetSscoListaAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Carga (MERGE) el padrón SSCO recibido en SIG.SSCO_LISTA.
+    /// Actualiza las filas existentes y añade las nuevas. No borra RUCs que ya no estén en la lista.
+    /// Devuelve el número de filas afectadas (INSERT + UPDATE).
+    /// </summary>
+    Task<int> CargarSscoLoteAsync(IEnumerable<SscoListaEntry> entries, int periodoCarga, string usuario, CancellationToken ct = default);
 }

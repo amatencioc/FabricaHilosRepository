@@ -86,10 +86,10 @@ public sealed class SireOracleRepository : ISireOracleRepository
         const string sql = @"
             INSERT INTO SIG.SIRE_JOB
                 (ID, JOB_ID, TIPO_REGISTRO, PERIODO, USUARIO_ID, ESTADO,
-                 FECHA_CREACION, FECHA_ACT)
+                 TIPO_OPERACION, FECHA_CREACION, FECHA_ACT)
             VALUES
                 (SEQ_SIRE_JOB.NEXTVAL, :jobId, :tipo, :periodo, :usuario, :estado,
-                 CURRENT_DATE, CURRENT_DATE)
+                 :tipoOp, CURRENT_DATE, CURRENT_DATE)
             RETURNING ID INTO :newId";
 
         await using var conn = await OpenConnAsync(ct);
@@ -100,6 +100,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         cmd.Parameters.Add(":periodo", OracleDbType.Varchar2).Value = job.Periodo;
         cmd.Parameters.Add(":usuario", OracleDbType.Varchar2).Value = (object?)job.UsuarioId ?? DBNull.Value;
         cmd.Parameters.Add(":estado",  OracleDbType.Varchar2).Value = job.Estado;
+        cmd.Parameters.Add(":tipoOp",  OracleDbType.Varchar2).Value = job.TipoOperacion;
         var outId = new OracleParameter(":newId", OracleDbType.Int32)
             { Direction = System.Data.ParameterDirection.Output };
         cmd.Parameters.Add(outId);
@@ -114,34 +115,38 @@ public sealed class SireOracleRepository : ISireOracleRepository
     {
         const string sql = @"
             UPDATE SIG.SIRE_JOB SET
-                ESTADO          = :estado,
-                NUM_TICKET      = :ticket,
-                NOMBRE_ARCHIVO  = :nomArch,
-                RUTA_ARCHIVO    = :rutaArch,
-                COD_TIPO_ARCHIVO= :codTipo,
-                COD_PROCESO     = :codProc,
-                REG_INSERTADOS  = :regIns,
-                REG_DUPLICADOS  = :regDup,
-                MENSAJE_ERROR   = :msgErr,
-                FECHA_ACT       = CURRENT_DATE,
-                FECHA_FIN       = :fechaFin,
-                PROXIMA_CONSULTA= :proxCons
+                ESTADO               = :estado,
+                NUM_TICKET           = :ticket,
+                NOMBRE_ARCHIVO       = :nomArch,
+                RUTA_ARCHIVO         = :rutaArch,
+                RUTA_ARCHIVO_ORIGEN  = :rutaOrig,
+                URL_DESCARGA         = :urlDesc,
+                COD_TIPO_ARCHIVO     = :codTipo,
+                COD_PROCESO          = :codProc,
+                REG_INSERTADOS       = :regIns,
+                REG_DUPLICADOS       = :regDup,
+                MENSAJE_ERROR        = :msgErr,
+                FECHA_ACT            = CURRENT_DATE,
+                FECHA_FIN            = :fechaFin,
+                PROXIMA_CONSULTA     = :proxCons
             WHERE ID = :id";
 
         await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.Add(":estado",   OracleDbType.Varchar2).Value = job.Estado;
-        cmd.Parameters.Add(":ticket",   OracleDbType.Varchar2).Value = (object?)job.NumTicket        ?? DBNull.Value;
-        cmd.Parameters.Add(":nomArch",  OracleDbType.Varchar2).Value = (object?)job.NombreArchivo    ?? DBNull.Value;
-        cmd.Parameters.Add(":rutaArch", OracleDbType.Varchar2).Value = (object?)job.RutaArchivo      ?? DBNull.Value;
-        cmd.Parameters.Add(":codTipo",  OracleDbType.Varchar2).Value = (object?)job.CodTipoArchivo   ?? DBNull.Value;
-        cmd.Parameters.Add(":codProc",  OracleDbType.Varchar2).Value = (object?)job.CodProceso       ?? DBNull.Value;
+        cmd.Parameters.Add(":ticket",   OracleDbType.Varchar2).Value = (object?)job.NumTicket            ?? DBNull.Value;
+        cmd.Parameters.Add(":nomArch",  OracleDbType.Varchar2).Value = (object?)job.NombreArchivo        ?? DBNull.Value;
+        cmd.Parameters.Add(":rutaArch", OracleDbType.Varchar2).Value = (object?)job.RutaArchivo          ?? DBNull.Value;
+        cmd.Parameters.Add(":rutaOrig", OracleDbType.Varchar2).Value = (object?)job.RutaArchivoOrigen    ?? DBNull.Value;
+        cmd.Parameters.Add(":urlDesc",  OracleDbType.Varchar2).Value = (object?)job.UrlDescarga          ?? DBNull.Value;
+        cmd.Parameters.Add(":codTipo",  OracleDbType.Varchar2).Value = (object?)job.CodTipoArchivo       ?? DBNull.Value;
+        cmd.Parameters.Add(":codProc",  OracleDbType.Varchar2).Value = (object?)job.CodProceso           ?? DBNull.Value;
         cmd.Parameters.Add(":regIns",   OracleDbType.Int32   ).Value = (object?)job.RegistrosInsertados  ?? DBNull.Value;
         cmd.Parameters.Add(":regDup",   OracleDbType.Int32   ).Value = (object?)job.RegistrosDuplicados  ?? DBNull.Value;
         cmd.Parameters.Add(":msgErr",   OracleDbType.Varchar2).Value = Trunc(job.MensajeError, 2000);
-        cmd.Parameters.Add(":fechaFin", OracleDbType.Date    ).Value = (object?)job.FechaFinalizacion ?? DBNull.Value;
-        cmd.Parameters.Add(":proxCons", OracleDbType.Date    ).Value = (object?)job.ProximaConsulta   ?? DBNull.Value;
+        cmd.Parameters.Add(":fechaFin", OracleDbType.Date    ).Value = (object?)job.FechaFinalizacion    ?? DBNull.Value;
+        cmd.Parameters.Add(":proxCons", OracleDbType.Date    ).Value = (object?)job.ProximaConsulta      ?? DBNull.Value;
         cmd.Parameters.Add(":id",       OracleDbType.Int32   ).Value = job.Id;
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -244,6 +249,26 @@ public sealed class SireOracleRepository : ISireOracleRepository
         await using var conn = await OpenConnAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        var result = new List<SireExportacionJob>();
+        while (await reader.ReadAsync(ct))
+            result.Add(MapJob(reader));
+        return result;
+    }
+
+    public async Task<List<SireExportacionJob>> GetJobsPorTipoPeriodoAsync(string tipo, string periodo, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT * FROM SIG.SIRE_JOB
+            WHERE TIPO_REGISTRO = :tipo
+              AND PERIODO        = :periodo
+            ORDER BY FECHA_CREACION DESC";
+
+        await using var conn = await OpenConnAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.Add(":tipo",    OracleDbType.Varchar2).Value = tipo;
+        cmd.Parameters.Add(":periodo", OracleDbType.Varchar2).Value = periodo;
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         var result = new List<SireExportacionJob>();
         while (await reader.ReadAsync(ct))
@@ -362,9 +387,12 @@ public sealed class SireOracleRepository : ISireOracleRepository
         Periodo             = r.GetString(r.GetOrdinal("PERIODO")),
         UsuarioId           = NullStr(r, "USUARIO_ID") ?? string.Empty,
         Estado              = r.GetString(r.GetOrdinal("ESTADO")),
+        TipoOperacion       = NullStr(r, "TIPO_OPERACION") ?? TipoOp.Exportar,
         NumTicket           = NullStr(r, "NUM_TICKET"),
         NombreArchivo       = NullStr(r, "NOMBRE_ARCHIVO"),
         RutaArchivo         = NullStr(r, "RUTA_ARCHIVO"),
+        RutaArchivoOrigen   = NullStr(r, "RUTA_ARCHIVO_ORIGEN"),
+        UrlDescarga         = NullStr(r, "URL_DESCARGA"),
         CodTipoArchivo      = NullStr(r, "COD_TIPO_ARCHIVO"),
         CodProceso          = NullStr(r, "COD_PROCESO"),
         RegistrosInsertados = NullInt(r, "REG_INSERTADOS"),
@@ -1684,5 +1712,152 @@ public sealed class SireOracleRepository : ISireOracleRepository
         cmd.Parameters.Add(new OracleParameter("id",  OracleDbType.Int64)       { Value = idConcil });
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    // =========================================================================
+    // SSCO — Sujetos Sin Capacidad Operativa
+    // =========================================================================
+
+    /// <summary>
+    /// Una sola query devuelve los RUCs + metadatos de carga de SIG.SSCO_LISTA.
+    /// Evita los dos roundtrips separados que tenían GetSscoRucsAsync y GetSscoMetaAsync.
+    /// </summary>
+    public async Task<(HashSet<string> Rucs, DateTime? FchCarga, int? Periodo)> GetSscoDataAsync(CancellationToken ct = default)
+    {
+        const string sql =
+            "SELECT RUC, MAX(FCH_CARGA) OVER () AS MAX_FCH, MAX(PERIODO_CARGA) OVER () AS MAX_PER " +
+            "FROM SIG.SSCO_LISTA";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        var rucs      = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        DateTime? fch = null;
+        int? periodo  = null;
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rucs.Add(reader.GetString(0));
+            if (fch is null && !reader.IsDBNull(1))
+                fch = reader.GetDateTime(1);
+            if (periodo is null && !reader.IsDBNull(2))
+                periodo = reader.GetInt32(2);
+        }
+        return (rucs, fch, periodo);
+    }
+
+    public async Task<List<SscoListaEntry>> GetSscoListaAsync(CancellationToken ct = default)
+    {
+        const string sql =
+            "SELECT RUC, RAZON_SOCIAL, RESOLUCION_ATRIB, FCH_RESOLUCION, " +
+            "FCH_QUEDO_FIRME, FCH_PUBLICACION, DOC_REP_LEGAL, NOM_REP_LEGAL, " +
+            "FCH_CARGA, PERIODO_CARGA " +
+            "FROM SIG.SSCO_LISTA ORDER BY FCH_PUBLICACION DESC NULLS LAST, RUC";
+
+        await using var conn = await OpenConnAsync(ct);
+        using var cmd = new OracleCommand(sql, conn);
+        var lista = new List<SscoListaEntry>();
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            lista.Add(new SscoListaEntry
+            {
+                Ruc             = reader.IsDBNull(0)  ? string.Empty   : reader.GetString(0),
+                RazonSocial     = reader.IsDBNull(1)  ? null           : reader.GetString(1),
+                ResolucionAtrib = reader.IsDBNull(2)  ? null           : reader.GetString(2),
+                FchResolucion   = reader.IsDBNull(3)  ? null           : reader.GetDateTime(3),
+                FchQuedoFirme   = reader.IsDBNull(4)  ? default        : reader.GetDateTime(4),
+                FchPublicacion  = reader.IsDBNull(5)  ? null           : reader.GetDateTime(5),
+                DocRepLegal     = reader.IsDBNull(6)  ? null           : reader.GetString(6),
+                NomRepLegal     = reader.IsDBNull(7)  ? null           : reader.GetString(7),
+                FchCarga        = reader.IsDBNull(8)  ? null           : reader.GetDateTime(8),
+                PeriodoCarga    = reader.IsDBNull(9)  ? null           : reader.GetInt32(9),
+            });
+        }
+        return lista;
+    }
+
+    public async Task<int> CargarSscoLoteAsync(
+        IEnumerable<SscoListaEntry> entries, int periodoCarga, string usuario,
+        CancellationToken ct = default)
+    {
+        var list = entries.ToList();
+        if (list.Count == 0) return 0;
+
+        // El padrón SUNAT es un snapshot completo: lo que no viene en el Excel ya no está sancionado.
+        // Estrategia: DELETE total + INSERT por lotes dentro de una sola transacción.
+        // Si el INSERT falla, el rollback deja la tabla exactamente como estaba.
+        const string deleteSql = "DELETE FROM SIG.SSCO_LISTA";
+        const string insertSql =
+            "INSERT INTO SIG.SSCO_LISTA " +
+            "  (RUC,RAZON_SOCIAL,RESOLUCION_ATRIB,FCH_RESOLUCION,FCH_QUEDO_FIRME, " +
+            "   FCH_PUBLICACION,DOC_REP_LEGAL,NOM_REP_LEGAL,FCH_CARGA,PERIODO_CARGA,CARGADO_POR) " +
+            "VALUES " +
+            "  (:ruc,:razon,:resol," +
+            "   TO_DATE(:fch_res,'DD/MM/YYYY'),TO_DATE(:fch_firm,'DD/MM/YYYY')," +
+            "   TO_DATE(:fch_pub,'DD/MM/YYYY'),:doc_rep,:nom_rep,SYSDATE,:periodo,:usuario)";
+
+        const int chunkSize = 500;
+        await using var conn = await OpenConnAsync(ct);
+        conn.AutoCommit = false;
+        await using var tx = (OracleTransaction)await conn.BeginTransactionAsync(ct);
+
+        // Paso 1: vaciar el padrón anterior
+        using (var delCmd = new OracleCommand(deleteSql, conn) { Transaction = tx })
+            await delCmd.ExecuteNonQueryAsync(ct);
+
+        // Paso 2: insertar el nuevo padrón en lotes usando ODP.NET ArrayBind
+        // (un solo roundtrip por lote en vez de N roundtrips individuales)
+        int total = 0;
+        for (int offset = 0; offset < list.Count; offset += chunkSize)
+        {
+            var chunk = list.GetRange(offset, Math.Min(chunkSize, list.Count - offset));
+            int n = chunk.Count;
+
+            var pRuc    = new string[n];
+            var pRazon  = new object[n];
+            var pResol  = new object[n];
+            var pFchRes = new object[n];
+            var pFchFir = new string[n];
+            var pFchPub = new object[n];
+            var pDocRep = new object[n];
+            var pNomRep = new object[n];
+            var pPer    = new int[n];
+            var pUsr    = new string[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                var e = chunk[i];
+                pRuc[i]    = e.Ruc;
+                pRazon[i]  = (object?)e.RazonSocial     ?? DBNull.Value;
+                pResol[i]  = (object?)e.ResolucionAtrib  ?? DBNull.Value;
+                pFchRes[i] = e.FchResolucion?.ToString("dd/MM/yyyy") ?? (object)DBNull.Value;
+                pFchFir[i] = e.FchQuedoFirme.ToString("dd/MM/yyyy");
+                pFchPub[i] = e.FchPublicacion?.ToString("dd/MM/yyyy") ?? (object)DBNull.Value;
+                pDocRep[i] = (object?)e.DocRepLegal     ?? DBNull.Value;
+                pNomRep[i] = (object?)e.NomRepLegal     ?? DBNull.Value;
+                pPer[i]    = periodoCarga;
+                pUsr[i]    = usuario;
+            }
+
+            using var cmd = new OracleCommand(insertSql, conn) { Transaction = tx, ArrayBindCount = n };
+            cmd.Parameters.Add(new OracleParameter("ruc",      OracleDbType.Varchar2, 11)  { Value = pRuc });
+            cmd.Parameters.Add(new OracleParameter("razon",    OracleDbType.Varchar2, 200) { Value = pRazon });
+            cmd.Parameters.Add(new OracleParameter("resol",    OracleDbType.Varchar2, 100) { Value = pResol });
+            cmd.Parameters.Add(new OracleParameter("fch_res",  OracleDbType.Varchar2, 10)  { Value = pFchRes });
+            cmd.Parameters.Add(new OracleParameter("fch_firm", OracleDbType.Varchar2, 10)  { Value = pFchFir });
+            cmd.Parameters.Add(new OracleParameter("fch_pub",  OracleDbType.Varchar2, 10)  { Value = pFchPub });
+            cmd.Parameters.Add(new OracleParameter("doc_rep",  OracleDbType.Varchar2, 20)  { Value = pDocRep });
+            cmd.Parameters.Add(new OracleParameter("nom_rep",  OracleDbType.Varchar2, 200) { Value = pNomRep });
+            cmd.Parameters.Add(new OracleParameter("periodo",  OracleDbType.Int32)         { Value = pPer });
+            cmd.Parameters.Add(new OracleParameter("usuario",  OracleDbType.Varchar2, 50)  { Value = pUsr });
+            total += await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return total;
+    }
 }
+
+
 

@@ -12,6 +12,13 @@
     var legacy              = Model?.RegistrosLegacy      ?? new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
     var concil              = Model?.RegistrosConcil      ?? new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
 
+    // ── SSCO ──────────────────────────────────────────────────────────────────
+    var rucsEnSsco        = Model?.RucsEnSsco       ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var sscoFchCarga      = Model?.SscoFchUltimaCarga;
+    var sscoPeriodoCarga  = Model?.SscoPeriodoCarga;
+    int sscoHits          = Model?.SscoHits ?? 0;   // calculado en el controller, no en la vista
+    // ─────────────────────────────────────────────────────────────────────────
+
     var yyyyMm = periodoSeleccionado.Length == 6
         ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}"
         : periodoSeleccionado;
@@ -104,15 +111,18 @@
                     <i class="bi bi-arrow-repeat me-1"></i>Re-procesar ZIP
                 </button>
             }
-            <div class="vr" style="opacity:.2;"></div>
-            <a href="#" class="btn btn-sm btn-outline-danger disabled" aria-disabled="true" tabindex="-1"
-               title="Constancia no disponible: use el portal SUNAT">
-                <i class="bi bi-file-pdf me-1"></i>Constancia
-            </a>
-            <a asp-action="Monitoreo" asp-route-operacion="EXPORTAR" asp-route-tab="log"
-               class="btn btn-sm btn-outline-secondary" title="Log de auditoría HTTP">
-                <i class="bi bi-journal-code me-1"></i>Log
-            </a>
+            @if (Model?.ConcilResumen != null)
+            {
+                <button type="button" class="btn btn-sm btn-outline-danger px-2" id="btnSsco"
+                        onclick="iniciarSscoAuto('@periodoSeleccionado')"
+                        title="Actualizar padrón SSCO desde SUNAT automáticamente">
+                    <i class="bi bi-shield-exclamation me-1"></i>SSCO
+                    @if (sscoFchCarga.HasValue)
+                    {
+                        <span class="badge bg-danger ms-1" style="font-size:.6rem;">@sscoFchCarga.Value.ToString("MM/yyyy")</span>
+                    }
+                </button>
+            }
         </div>
     }
 </div>
@@ -122,6 +132,30 @@
     <div class="spinner-border text-light" style="width:3.2rem;height:3.2rem;" role="status"><span class="visually-hidden">Procesando...</span></div>
     <span class="text-white fw-semibold" style="font-size:1.05rem;letter-spacing:.03em;">Conciliando propuesta…</span>
     <span class="text-white-50" style="font-size:.82rem;">Por favor espere, esto puede tomar unos segundos.</span>
+</div>
+
+@* ── Overlay: Descarga automática SSCO ─────────────────────────────────────── *@
+<div id="overlaySscoAuto" style="display:none;position:fixed;inset:0;z-index:9200;background:rgba(10,18,40,.72);align-items:center;justify-content:center;">
+    <div style="background:#1e293b;border-radius:14px;padding:2rem 2.5rem;min-width:340px;max-width:440px;box-shadow:0 24px 64px rgba(0,0,0,.5);">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="spinner-border text-danger flex-shrink-0" style="width:2rem;height:2rem;" role="status"></div>
+            <span class="text-white fw-semibold" style="font-size:.97rem;">Actualizando padrón SSCO…</span>
+        </div>
+        <div class="d-flex flex-column gap-2" id="sscoPasos">
+            <div class="d-flex align-items-center gap-2" id="sscoPaso1">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Conectando con portal SUNAT y descargando archivo…</span>
+            </div>
+            <div class="d-flex align-items-center gap-2" id="sscoPaso2">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Leyendo y validando registros del padrón…</span>
+            </div>
+            <div class="d-flex align-items-center gap-2" id="sscoPaso3">
+                <i class="bi bi-circle" style="color:#64748b;font-size:.85rem;"></i>
+                <span style="color:#94a3b8;font-size:.82rem;">Insertando sujetos en base de datos…</span>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="overlayReprocesar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,20,40,.62);z-index:9100;align-items:center;justify-content:center;flex-direction:column;gap:1.2rem;">
@@ -299,6 +333,62 @@
     <input type="hidden" name="periodo" id="frmEnviarReportePeriodo" value="@periodoSeleccionado" />
 </form>
 
+@* ── Modal: Cargar padrón SSCO (Bootstrap modal) ────────────────────────────────────────────── *@
+<div class="modal fade" id="modalSscoCargar" tabindex="-1" aria-labelledby="modalSscoLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2" style="background:#7f1d1d;color:#fff;">
+                <h6 class="modal-title mb-0" id="modalSscoLabel">
+                    <i class="bi bi-shield-exclamation me-2"></i>Cargar padrón SSCO
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" style="font-size:.85rem;">
+                <div id="sscoAutoError" class="alert alert-danger d-flex align-items-start gap-2 py-2 mb-2 d-none" style="font-size:.78rem;" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+                    <span></span>
+                </div>
+                <p class="mb-2 text-muted" style="font-size:.83rem;">
+                    La descarga automática falló. Descargue manualmente el archivo
+                    <a href="https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html"
+                       target="_blank" rel="noopener" class="fw-semibold">sujesincapacidadOperativa.xlsx</a>
+                    desde SUNAT y cárguelo aquí.
+                </p>
+                @if (sscoFchCarga.HasValue)
+                {
+                    <div class="d-flex align-items-start gap-2 p-2 rounded mb-2" style="background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.2);font-size:.75rem;color:#7f1d1d;">
+                        <i class="bi bi-clock-history mt-1 flex-shrink-0"></i>
+                        <span>
+                            Carga anterior: <strong>@sscoFchCarga.Value.ToString("dd/MM/yyyy HH:mm")</strong>
+                            @if (sscoPeriodoCarga.HasValue)
+                            {
+                                <span> — período @sscoPeriodoCarga.Value.ToString().Substring(0,4)/@sscoPeriodoCarga.Value.ToString().Substring(4,2)</span>
+                            }
+                            — <strong>@rucsEnSsco.Count</strong> sujetos en lista.
+                        </span>
+                    </div>
+                }
+                <form method="post" asp-action="SscoCargar" enctype="multipart/form-data" id="frmSscoCargar">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="periodo" value="@periodoSeleccionado" />
+                    <div class="mb-2">
+                        <label class="form-label" style="font-size:.78rem;font-weight:600;">Archivo Excel SUNAT:</label>
+                        <input type="file" name="archivo" accept=".xlsx,.xls" required
+                               class="form-control form-control-sm" style="font-size:.78rem;" />
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" form="frmSscoCargar" class="btn btn-sm fw-semibold"
+                        style="background:#dc2626;color:#fff;border-color:#dc2626;">
+                    <i class="bi bi-upload me-1"></i>Cargar padrón
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @* ── Panel: Propuesta Descargada de SUNAT ─────────────────────────────────────────── *@
 @if (resumen.Count > 0)
 {
@@ -319,7 +409,7 @@
                         <th class="text-end" style="padding:.3rem .5rem;">Total</th>
                         <th class="text-center" style="width:76px;padding:.3rem .5rem;">Concil.</th>
                         <th class="text-center d-none d-lg-table-cell" style="width:86px;padding:.3rem .5rem;">Cargado</th>
-                        <th style="width:68px;padding:.3rem .5rem;"></th>
+                        <th style="width:100px;padding:.3rem .5rem;"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -356,6 +446,29 @@
                                             <i class="bi bi-arrow-left-right"></i>
                                         </button>
                                     </form>
+                                    @if (r.ConcilEstado != "0")
+                                    {
+                                        <form method="post" asp-action="AceptarPropuesta" id="frmAceptar_@r.Periodo" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="tipo"    value="compras" />
+                                            <input type="hidden" name="periodo" value="@r.Periodo" />
+                                            <button type="button" class="btn btn-xs btn-outline-success"
+                                                    onclick="confirmarAceptar(@r.Periodo, '@r.PeriodoLabel')"
+                                                    title="Aceptar propuesta en SUNAT">
+                                                <i class="bi bi-check-circle"></i>
+                                            </button>
+                                        </form>
+                                        <form method="post" asp-action="CerrarPeriodo" id="frmCerrar_@r.Periodo" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="tipo"    value="compras" />
+                                            <input type="hidden" name="periodo" value="@r.Periodo" />
+                                            <button type="button" class="btn btn-xs btn-outline-danger"
+                                                    onclick="confirmarCerrar(@r.Periodo, '@r.PeriodoLabel')"
+                                                    title="Cerrar período (preliminar) — irreversible">
+                                                <i class="bi bi-lock"></i>
+                                            </button>
+                                        </form>
+                                    }
                                     <form method="post" asp-action="EliminarPropuesta" id="frmElim_@r.Periodo" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <input type="hidden" name="tipo"    value="compras" />
@@ -384,6 +497,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
 }
 
 @* ── Panel: Resumen de Conciliación ─────────────────────────────────────── *@
+@*
 @if (Model?.ConcilResumen != null)
 {
     var cr = Model.ConcilResumen;
@@ -427,7 +541,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 <div class="d-flex flex-column align-items-center px-3 py-1 rounded"
                      style="border-left:3px solid var(--bs-danger);background:#fff;min-width:110px;">
                     <span class="fw-bold" style="font-size:1.1rem;color:var(--bs-danger);">S/ @cr.DiffTotal.ToString("N2")</span>
-                    <span class="text-muted" style="font-size:.68rem;">Diferencia neta</span>
+                    <span class="text-muted" style="font-size:.68rem;">Diferencia neta
+                        <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                           title="Diferencia Neta = Total SUNAT − Total ERP (Logix), acumulada sobre todos los registros cruzados del período. Representa el importe neto no conciliado entre ambas fuentes."></i>
+                    </span>
                 </div>
             }
             <div class="ms-auto d-flex flex-column align-items-center px-3 py-1 rounded"
@@ -446,6 +563,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         }
     </div>
 }
+*@
 @* ── Tabs: SUNAT / Legacy / Cruzado ─────────────────────────────────────── *@
 @if (propuesta.Count > 0 || legacy.Count > 0 || concil.Count > 0)
 {
@@ -466,6 +584,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <i class="bi bi-hdd-fill me-1" style="color:#0891b2;"></i>
                         Legacy (Logix)
                         <span class="ms-1 badge rounded-pill" style="background:#0891b2;font-size:.6rem;">@legacy.Count</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-3" id="tab-ssco" data-bs-toggle="tab"
+                            data-bs-target="#panel-ssco" type="button" role="tab" style="font-size:.77rem;"
+                            onclick="mostrarFiltrosSsco(false)">
+                        <i class="bi bi-shield-exclamation me-1" style="color:#dc2626;"></i>
+                        SSCO
+                        @{
+                            int sscoTotal = Model?.SscoLista?.Count ?? 0;
+                        }
+                        @if (sscoTotal > 0)
+                        {
+                            <span class="ms-1 badge rounded-pill bg-secondary" style="font-size:.6rem;" title="@sscoTotal registros en el padrón SSCO">@sscoTotal.ToString("N0")</span>
+                        }
+                        @if (sscoHits > 0)
+                        {
+                            <span class="ms-1 badge rounded-pill" style="background:#dc2626;font-size:.6rem;" title="@sscoHits comprobante(s) con proveedor SSCO">@sscoHits</span>
+                        }
+                        else if (sscoTotal > 0)
+                        {
+                            <span class="ms-1 badge rounded-pill bg-success" style="font-size:.6rem;" title="Sin coincidencias SSCO en este período">0</span>
+                        }
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -493,7 +634,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                         <button class="btn btn-xs btn-outline-info"     onclick="filtrarConcil('SOLO_LEGACY',this)" title="Solo en ERP"><i class="bi bi-hdd"></i></button>
                         <button class="btn btn-xs btn-outline-dark"     onclick="filtrarConcil('EXCLUIDO',this)" title="Excluidos del ERP (N/C automáticas y manuales)"><i class="bi bi-scissors"></i></button>
                         <button class="btn btn-xs btn-outline-warning"  onclick="filtrarConcil('CP_NO_EXISTE',this)" title="Validación CPE: documentos con errores en SUNAT (CP, RUC o domicilio)"><i class="bi bi-x-circle-fill"></i></button>
-                        <button id="btnExcluirSelec"
+                        <button id="btnExcluirSelec" class="btn btn-xs btn-outline-warning ms-1" onclick="excluirSeleccionados()"
                                 style="display:none;" title="Excluir documentos seleccionados (no ingresarán al ERP)">
                             <i class="bi bi-scissors"></i> Excluir <span id="excluirBadge" class="badge bg-dark ms-1" style="font-size:.65rem;"></span>
                         </button>
@@ -534,7 +675,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <th class="text-end" style="width:76px">IGV</th>
                                 <th class="text-end d-none d-xl-table-cell" style="width:64px">ISC</th>
                                 <th class="text-end" style="width:88px">Total</th>
-                                <th style="width:46px" class="text-center d-none d-xl-table-cell">Mon.</th>
+                                <th style="width:46px" class="text-center">Mon.</th>
                                 <th style="width:50px" class="text-center d-none d-lg-table-cell">CP</th>
                                 <th style="width:76px" class="text-center">Concil.</th>
                             </tr>
@@ -557,7 +698,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end">@r.IgvIpmDg.ToString("N2")</td>
                                     <td class="text-end text-muted d-none d-xl-table-cell">@(r.Isc != 0 ? r.Isc.ToString("N2") : "-")</td>
                                     <td class="text-end fw-semibold" style="color:var(--sire-rce);">@r.TotalCp.ToString("N2")</td>
-                                    <td class="text-center d-none d-xl-table-cell">
+                                    <td class="text-center">
                                         @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
                                         {
                                             <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
@@ -584,7 +725,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <td class="text-end fw-bold">@propuesta.Sum(x => x.IgvIpmDg).ToString("N2")</td>
                                 <td class="text-end fw-bold text-muted d-none d-xl-table-cell">@propuesta.Sum(x => x.Isc).ToString("N2")</td>
                                 <td class="text-end fw-bold" style="color:var(--sire-rce);">@propuesta.Sum(x => x.TotalCp).ToString("N2")</td>
-                                <td class="d-none d-xl-table-cell"></td>
+                                <td></td>
                                 <td class="d-none d-lg-table-cell"></td>
                                 <td></td>
                             </tr>
@@ -616,6 +757,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px">Base</th>
                                     <th class="text-end" style="width:76px">IGV</th>
                                     <th class="text-end" style="width:88px">Total</th>
+                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th class="d-none d-lg-table-cell" style="width:90px">Tabla</th>
                                 </tr>
                             </thead>
@@ -633,6 +775,16 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         <td class="text-end">@r.BaseImponible.ToString("N2")</td>
                                         <td class="text-end">@r.Igv.ToString("N2")</td>
                                         <td class="text-end fw-semibold" style="color:#0891b2;">@r.Total.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(r.Moneda) && r.Moneda != "PEN")
+                                            {
+                                                <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="TC: @r.Cambio.ToString("N4")">@r.Moneda</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                            }
+                                        </td>
                                         <td class="text-muted d-none d-lg-table-cell" style="font-size:.72rem;">@(r.TablaOrigen ?? "-")</td>
                                     </tr>
                                 }
@@ -643,7 +795,90 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.BaseImponible).ToString("N2")</td>
                                     <td class="text-end fw-bold">@legacy.Sum(x => x.Igv).ToString("N2")</td>
                                     <td class="text-end fw-bold" style="color:#0891b2;">@legacy.Sum(x => x.Total).ToString("N2")</td>
+                                    <td></td>
                                     <td class="d-none d-lg-table-cell"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            @* ── Panel: SSCO ───────────────────────────────────────────────── *@
+            <div class="tab-pane fade" id="panel-ssco" role="tabpanel">
+                @{
+                    var sscoLista = Model?.SscoLista ?? new List<FabricaHilos.Models.Sire.SscoListaEntry>();
+                    // RUCs de Legacy del período actual (para detectar coincidencias con el padrón SSCO)
+                    var rucsEnLegacy = new HashSet<string>(
+                        legacy.Select(r => r.Ruc ?? "").Where(r => r.Length > 0),
+                        StringComparer.OrdinalIgnoreCase);
+                    // Sujetos SSCO que tienen comprobantes en Legacy primero, luego fecha de publicación desc
+                    var sscoListaOrdenada = sscoLista
+                        .OrderByDescending(s => rucsEnLegacy.Contains(s.Ruc) ? 1 : 0)
+                        .ThenByDescending(s => s.FchPublicacion)
+                        .ToList();
+                }
+                @if (rucsEnSsco.Count == 0)
+                {
+                    <div class="m-3">
+                        <div class="sire-alert sire-alert-info">
+                            <i class="bi bi-shield-slash"></i>
+                            <span>Padrón SSCO no cargado. Use el botón <strong>SSCO</strong> de la barra para cargar el archivo <em>sujesincapacidadOperativa.xlsx</em> de SUNAT.</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @* Contenedor vacío — el JS rellena sscoBanner solo tras ejecutar el botón SSCO *@
+                    <div id="sscoBanner"></div>
+                    @* Tabla del padrón completo (columnas del Excel SUNAT) *@
+                    <div class="table-responsive mt-2" style="max-height:460px;overflow-y:auto;">
+                        <table class="table sire-table table-hover align-middle mb-0" id="tablaSscoDetalle">
+                            <thead style="position:sticky;top:0;z-index:1;">
+                                <tr>
+                                    <th style="width:110px;">RUC</th>
+                                    <th>Razón Social</th>
+                                    <th style="width:160px;">Resolución</th>
+                                    <th style="width:88px;" class="text-center">Fch. Resol.</th>
+                                    <th style="width:88px;" class="text-center">Quedó Firme</th>
+                                    <th style="width:88px;" class="text-center">Publicación ↓</th>
+                                    <th style="width:110px;">Doc. Rep. Legal</th>
+                                    <th>Nom. Rep. Legal</th>
+                                    <th style="width:80px;" class="text-center">En Legacy</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in sscoListaOrdenada)
+                                {
+                                    bool enLegacy = rucsEnLegacy.Contains(s.Ruc);
+                                    <tr style="@(enLegacy ? "background:rgba(220,38,38,.09);border-left:3px solid #dc2626;" : "")">
+                                        <td class="font-monospace @(enLegacy ? "fw-bold" : "")" style="@(enLegacy ? "color:#b91c1c;" : "")">@s.Ruc</td>
+                                        <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@s.RazonSocial">@(s.RazonSocial ?? "-")</td>
+                                        <td class="text-muted" style="font-size:.75rem;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@s.ResolucionAtrib">@(s.ResolucionAtrib ?? "-")</td>
+                                        <td class="text-center text-muted" style="font-size:.75rem;">@(s.FchResolucion?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                        <td class="text-center fw-semibold" style="font-size:.75rem;color:@(enLegacy ? "#b91c1c" : "inherit");">@s.FchQuedoFirme.ToString("dd/MM/yyyy")</td>
+                                        <td class="text-center text-muted" style="font-size:.75rem;">@(s.FchPublicacion?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                        <td class="font-monospace" style="font-size:.75rem;">@(s.DocRepLegal ?? "-")</td>
+                                        <td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.75rem;" title="@s.NomRepLegal">@(s.NomRepLegal ?? "-")</td>
+                                        <td class="text-center">
+                                            @if (enLegacy)
+                                            {
+                                                <span class="badge" style="background:#dc2626;font-size:.6rem;" title="Tiene comprobantes en Legacy este período"><i class="bi bi-exclamation-triangle-fill me-1"></i>SÍ</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted" style="font-size:.7rem;">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="9" class="text-muted" style="font-size:.72rem;">
+                                        Total: <strong>@sscoLista.Count.ToString("N0")</strong> sujetos en padrón SSCO
+                                        @if (sscoHits > 0){ <span class="ms-3 text-danger fw-semibold">⚠ @sscoHits con comprobantes en Legacy</span> }
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -680,6 +915,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según SUNAT">Total SUNAT</th>
                                     <th class="text-end" style="width:88px" title="Total del comprobante de pago según ERP Logix">Total ERP</th>
                                     <th class="text-end" style="width:82px" title="Diferencia: Total SUNAT menos Total ERP">Δ Total</th>
+                                    <th style="width:46px" class="text-center">Mon.</th>
                                     <th style="width:80px" class="text-center">Estado</th>
                                     <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
@@ -775,7 +1011,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                         var r        = concilOrdenadoRows[_ci];
                                         var grupoIdx = concilOrdenadoGrups[_ci];
                                         var tc       = TipoComprobante(r.Tipdoc ?? "");
-                                        var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido" : "";
+                                        var rowClass = r.Estado == "EXCLUIDO" ? "sire-row-excluido"
+                                                     : (r.Estado != "EXCLUIDO" && r.ValidezCp == "0") ? "sire-row-cp-noexiste"
+                                                     : "";
                                         string rowBg = (r.Estado == "EXCLUIDO" && grupoIdx >= 0 && colorMap.TryGetValue(grupoIdx, out var pbg))
                                             ? $"background:{pbg}!important;"
                                             : "";
@@ -819,6 +1057,19 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             <td class="text-end">@(r.SunatTotal != 0 ? r.SunatTotal.ToString("N2") : "-")</td>
                                             <td class="text-end">@(r.LegTotal != 0 ? r.LegTotal.ToString("N2") : "-")</td>
                                             <td class="text-end fw-semibold @(r.DiffTotalCp != 0 ? "text-danger" : "text-success")">@(r.DiffTotalCp != 0 ? r.DiffTotalCp.ToString("N2") : "0.00")</td>
+                                            <td class="text-center">
+                                                @{
+                                                    var monConcil = r.SunatMoneda ?? r.LegMoneda;
+                                                }
+                                                @if (!string.IsNullOrEmpty(monConcil) && monConcil != "PEN")
+                                                {
+                                                    <span class="sire-badge sire-badge-warn" style="font-size:.62rem;" title="SUNAT:@(r.SunatCambio?.ToString("N4") ?? "-") / ERP:@(r.LegCambio?.ToString("N4") ?? "-")">@monConcil</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted" style="font-size:.72rem;">S/</span>
+                                                }
+                                            </td>
                                             <td class="text-center"><span class="@r.EstadoBadgeCss" style="font-size:.62rem;" title="@(r.DiffCampos ?? r.EstadoLabel)">@r.EstadoLabel</span></td>
                                             <td class="text-center td-validez-sunat" style="font-size:.6rem;" data-id="@r.IdConcil">
                                                 @if (r.ValidezCp != null)
@@ -955,6 +1206,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td class="text-end fw-bold @(concil.Sum(x => x.DiffTotalCp) != 0 ? "text-danger" : "")" id="tfoot-concil-dt">@concil.Sum(x => x.DiffTotalCp).ToString("N2")</td>
                                     <td></td>
                                     <td></td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1009,6 +1261,28 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         });
     });
 
+    function confirmarAceptar(periodo, periodoLabel) {
+        const titulo = document.getElementById('modalConfirmarTitulo');
+        if (titulo) titulo.innerHTML = '<i class="bi bi-check-circle me-1"></i>Aceptar Propuesta SUNAT';
+        confirmarAccion(
+            `¿Aceptar la propuesta ${periodoLabel} en SUNAT? SUNAT procesará el archivo y devolverá una constancia.`,
+            () => {
+                mostrarOverlayGlobal('Aceptando propuesta en SUNAT...', `Período ${periodoLabel} — el polling puede tardar varios segundos.`);
+                document.getElementById('frmAceptar_' + periodo).submit();
+            }
+        );
+    }
+    function confirmarCerrar(periodo, periodoLabel) {
+        const titulo = document.getElementById('modalConfirmarTitulo');
+        if (titulo) titulo.innerHTML = '<i class="bi bi-lock me-1 text-danger"></i>Cerrar Período — Acción Irreversible';
+        confirmarAccion(
+            `⚠️ ¿Cerrar definitivamente el período ${periodoLabel}? Esta acción registra el preliminar en SUNAT y NO SE PUEDE DESHACER.`,
+            () => {
+                mostrarOverlayGlobal('Cerrando período en SUNAT...', `Período ${periodoLabel} — registrando preliminar, por favor espere.`);
+                document.getElementById('frmCerrar_' + periodo).submit();
+            }
+        );
+    }
     function confirmarConciliar(periodo, periodoLabel) {
         confirmarAccion(
             `¿Conciliar la propuesta ${periodoLabel} contra el ERP (Logix)? Esto actualizará SIRE_LEGACY y SIRE_CONCIL.`,
@@ -1194,6 +1468,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         const pane = document.querySelector('#tabsDetalle .nav-link.active')?.dataset?.bsTarget;
         if (pane === '#panel-legacy') return 'tablaLegacyDetalle';
         if (pane === '#panel-concil') return 'tablaConcilDetalle';
+        if (pane === '#panel-ssco')   return 'tablaSscoDetalle';
         return 'tablaPropuestaDetalle';
     }
 
@@ -1218,6 +1493,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         actualizarBadgeExcluir();  // esto controla también la visibilidad de Excluir/Restaurar
 
         filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
+        // Re-aplicar el ordenamiento activo para que persista al cambiar de opción
+        const thActivo = document.querySelector('#tablaConcilDetalle th[data-sort-dir="asc"], #tablaConcilDetalle th[data-sort-dir="desc"]');
+        if (thActivo) sireOrdenarColumnaAplicar(thActivo);
     }
 
     function actualizarBadgeExcluir() {
@@ -1335,6 +1613,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 } catch { errores++; }
             }
             mostrarToastSire('Validados: ' + validados + ' — Errores: ' + errores, errores > 0 ? 'warning' : 'success');
+            // Re-aplicar el filtro activo para que las filas con CP: NO EXISTE se muestren/oculten correctamente
+            filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
         } catch (e) {
             mostrarToastSire('Error de red: ' + e.message, 'danger');
         } finally {
@@ -1374,6 +1654,12 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                 if (tr) {
                     tr.dataset.validezCp = res.estadoCp ?? '';
                     tr.dataset.cpeError  = (!cpOk || rucErr || domErr) ? '1' : '0';
+                    // Pintar fila rojo si CP: NO EXISTE (estadoCp === '0'), quitar si ya no aplica
+                    if (res.estadoCp === '0') {
+                        tr.classList.add('sire-row-cp-noexiste');
+                    } else {
+                        tr.classList.remove('sire-row-cp-noexiste');
+                    }
                 }
             }
 
@@ -1539,7 +1825,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     }
 
     // Al cambiar de tab: actualiza filtros visibles, contador y totales
-    document.addEventListener('DOMContentLoaded', () => {        document.querySelectorAll('#tabsDetalle .nav-link').forEach(btn => {
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('#tabsDetalle .nav-link').forEach(btn => {
             btn.addEventListener('shown.bs.tab', () => {
                 actualizarVisibilidadFiltros();
                 filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
@@ -2228,13 +2515,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
     }
     function sireOrdenarColumna(th) {
-        const table = th.closest('table');
-        const tbody = table.querySelector('tbody');
-        if (!tbody) return;
-        const idx = Array.from(th.closest('tr').children).indexOf(th);
-        const tipo = th.dataset.sortType || 'text';
-        const dir  = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
-        table.querySelectorAll('th[data-sort-type]').forEach(t => {
+        const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+        th.closest('table').querySelectorAll('th[data-sort-type]').forEach(t => {
             t.dataset.sortDir = '';
             const ic = t.querySelector('.sire-sort-icon');
             if (ic) { ic.textContent = '\u2195'; ic.style.opacity = '.5'; }
@@ -2242,6 +2524,17 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         th.dataset.sortDir = dir;
         const ic = th.querySelector('.sire-sort-icon');
         if (ic) { ic.textContent = dir === 'asc' ? '\u2191' : '\u2193'; ic.style.opacity = '1'; }
+        sireOrdenarColumnaAplicar(th);
+    }
+
+    // Aplica el ordenamiento del th activo sin cambiar la dirección (para re-aplicar al filtrar)
+    function sireOrdenarColumnaAplicar(th) {
+        const table = th.closest('table');
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const idx  = Array.from(th.closest('tr').children).indexOf(th);
+        const tipo = th.dataset.sortType || 'text';
+        const dir  = th.dataset.sortDir || 'asc';
         function parseFecha(v) {
             const p = (v || '').trim().split('/');
             return p.length === 3 ? new Date(+p[2], +p[1] - 1, +p[0]).getTime() : 0;
@@ -2257,4 +2550,249 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         });
         rows.forEach(r => tbody.appendChild(r));
     }
+
+    // ── SSCO: descarga automática desde portal SUNAT ──────────────────────────
+    async function iniciarSscoAuto(periodo) {
+        const overlay  = document.getElementById('overlaySscoAuto');
+        const paso1    = document.getElementById('sscoPaso1');
+        const paso2    = document.getElementById('sscoPaso2');
+        const paso3    = document.getElementById('sscoPaso3');
+
+        function setPaso(el, estado) {
+            // estado: 'pending' | 'active' | 'ok' | 'error'
+            const icon = el.querySelector('i');
+            const text = el.querySelector('span');
+            const estilos = {
+                pending : { cls: 'bi-circle',             color: '#64748b', tc: '#94a3b8' },
+                active  : { cls: 'bi-arrow-repeat spin',  color: '#fbbf24', tc: '#fde68a' },
+                ok      : { cls: 'bi-check-circle-fill',  color: '#22c55e', tc: '#bbf7d0' },
+                error   : { cls: 'bi-x-circle-fill',      color: '#ef4444', tc: '#fca5a5' },
+            };
+            const s = estilos[estado] ?? estilos.pending;
+            icon.className = `bi ${s.cls}`;
+            icon.style.color = s.color;
+            text.style.color = s.tc;
+        }
+
+        // Mostrar overlay, resetear pasos
+        [paso1, paso2, paso3].forEach(p => setPaso(p, 'pending'));
+        overlay.style.display = 'flex';
+
+        try {
+            // Paso 1 activo: descargando
+            setPaso(paso1, 'active');
+
+            const token = document.querySelector('[name=__RequestVerificationToken]')?.value ?? '';
+            const fd = new FormData();
+            fd.append('periodo', periodo);
+            fd.append('__RequestVerificationToken', token);
+
+            // Los pasos 1 y 2 ocurren en el servidor de forma continua;
+            // animamos los iconos con un pequeño delay para que el usuario vea el progreso.
+            const pasoTimer = setTimeout(() => {
+                setPaso(paso1, 'ok');
+                setPaso(paso2, 'active');
+            }, 2500);
+
+            const res  = await fetch('@Url.Action("SscoDescargarAuto", "Sire")', {
+                method: 'POST',
+                body: fd
+            });
+
+            clearTimeout(pasoTimer);
+            const data = await res.json();
+
+            if (!data.ok) {
+                // Fallo: marcar paso activo como error, ocultar overlay y ofrecer carga manual
+                setPaso(paso1, 'error');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    // Abrir modal de carga manual como fallback
+                    const modalEl = document.getElementById('modalSscoCargar');
+                    if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    // Mostrar mensaje de error en el modal
+                    const errDiv = document.getElementById('sscoAutoError');
+                    if (errDiv) {
+                        errDiv.querySelector('span').textContent = data.mensaje;
+                        errDiv.classList.remove('d-none');
+                    }
+                }, 1200);
+                return;
+            }
+
+            // Éxito: completar pasos
+            setPaso(paso1, 'ok');
+            setPaso(paso2, 'ok');
+            setPaso(paso3, 'active');
+            await new Promise(r => setTimeout(r, 600));
+            setPaso(paso3, 'ok');
+            await new Promise(r => setTimeout(r, 700));
+
+            overlay.style.display = 'none';
+
+            // ── Actualizar DOM sin recargar la página ───────────────────────────
+            // ── Actualizar DOM sin recargar la página ───────────────────────────────────────────────────────────────
+            // sscoRucsHit: solo los RUCs que tienen comprobantes en Legacy del período
+            const rucsHitSet = new Set((data.sscoRucsHit || []).map(r => r.toString()));
+
+            // 1. Actualizar tabla SSCO (pestaña SSCo)
+            _sscoActualizarPanelSsco(rucsHitSet, data);
+
+            // 2. Marcar/desmarcar filas de la tabla Legacy (solo las que coinciden con SSCO)
+            _sscoMarcarFilasLegacy(rucsHitSet);
+
+            // 3. Actualizar badge del tab SSCO
+            _sscoActualizarBadgeTab(data.sscoHits, rucsHitSet.size);
+
+            // 4. Actualizar badge del botón SSCO en la toolbar
+            _sscoActualizarBadgeToolbar(data.sscoFchCarga);
+
+            // 5. Mostrar resumen inline en la pestaña SSCO
+            _sscoActualizarBanner(data.sscoHits, data.sscoFchCarga, data.sscoPeriodo, data.sujetos);
+
+            // 6. Activar la pestaña SSCO
+            const tabSsco = document.getElementById('tab-ssco');
+            if (tabSsco) bootstrap.Tab.getOrCreateInstance(tabSsco).show();
+
+        } catch (err) {
+            setPaso(paso1, 'error');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                const modalEl = document.getElementById('modalSscoCargar');
+                if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                const errDiv = document.getElementById('sscoAutoError');
+                if (errDiv) {
+                    errDiv.querySelector('span').textContent = 'Error de red: ' + err.message;
+                    errDiv.classList.remove('d-none');
+                }
+            }, 1200);
+        }
+    }
+
+    // ── Helpers de actualización DOM SSCO ────────────────────────────────────
+
+    function _sscoActualizarPanelSsco(rucsSet, data) {
+        const panel = document.getElementById('panel-ssco');
+        if (!panel) return;
+        // Quitar el mensaje de "no cargado" si existe
+        const alertVacio = panel.querySelector('.sire-alert-info');
+        if (alertVacio) alertVacio.closest('.m-3')?.remove();
+    }
+
+    function _sscoMarcarFilasLegacy(rucsSet) {
+        // Opera sobre las dos tablas que renderizan registros legacy con RUC
+        ['tablaSscoDetalle', 'tablaLegacyDetalle'].forEach(tablaId => {
+            const tabla = document.getElementById(tablaId);
+            if (!tabla) return;
+            tabla.querySelectorAll('tbody tr').forEach(tr => {
+                // La columna RUC es la 5ª (índice 4) en ambas tablas
+                const rucCell = tr.cells[4];
+                if (!rucCell) return;
+                const ruc = rucCell.textContent.trim();
+                const esHit = rucsSet.has(ruc);
+
+                // Fila
+                tr.style.background    = esHit ? 'rgba(220,38,38,.09)' : '';
+                tr.style.borderLeft    = esHit ? '3px solid #dc2626' : '';
+
+                // Celda RUC
+                rucCell.style.color      = esHit ? '#b91c1c' : '';
+                rucCell.style.fontWeight = esHit ? '700' : '';
+
+                // Columna SSCO (última celda) si existe en tablaSscoDetalle
+                if (tablaId === 'tablaSscoDetalle') {
+                    const sscoCell = tr.cells[tr.cells.length - 1];
+                    if (sscoCell) {
+                        if (esHit) {
+                            sscoCell.innerHTML = '<span class="badge" style="background:#dc2626;font-size:.6rem;" title="Proveedor en lista SSCO de SUNAT"><i class="bi bi-shield-fill-exclamation me-1"></i>SSCO</span>';
+                        } else {
+                            sscoCell.innerHTML = '<span class="text-muted" style="font-size:.7rem;">—</span>';
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    function _sscoActualizarBadgeTab(hits, totalRucs) {
+        const tabBtn = document.getElementById('tab-ssco');
+        if (!tabBtn) return;
+        // Eliminar badge anterior
+        tabBtn.querySelectorAll('.badge').forEach(b => b.remove());
+        if (hits > 0) {
+            const b = document.createElement('span');
+            b.className = 'ms-1 badge rounded-pill';
+            b.style.cssText = 'background:#dc2626;font-size:.6rem;';
+            b.title = `${hits} comprobante(s) con proveedor SSCO`;
+            b.textContent = hits;
+            tabBtn.appendChild(b);
+        } else if (totalRucs > 0) {
+            const b = document.createElement('span');
+            b.className = 'ms-1 badge rounded-pill bg-success';
+            b.style.fontSize = '.6rem';
+            b.title = 'Sin coincidencias SSCO en este período';
+            b.textContent = '0';
+            tabBtn.appendChild(b);
+        }
+    }
+
+    function _sscoActualizarBadgeToolbar(fchCarga) {
+        const btn = document.getElementById('btnSsco');
+        if (!btn) return;
+        btn.querySelectorAll('.badge').forEach(b => b.remove());
+        if (fchCarga) {
+            // Mostrar sólo MM/yyyy del string "dd/MM/yyyy HH:mm"
+            const partes = fchCarga.split('/');
+            const mmyyyy = partes.length >= 2 ? `${partes[1].substring(0,2)}/${partes[2]?.substring(0,4) ?? ''}` : fchCarga;
+            const b = document.createElement('span');
+            b.className = 'badge bg-danger ms-1';
+            b.style.fontSize = '.6rem';
+            b.textContent = mmyyyy;
+            btn.appendChild(b);
+        }
+    }
+
+    function _sscoActualizarBanner(hits, fchCarga, periodo, sujetos) {
+        // Buscar el banner por id fijo — lo reemplaza en su lugar sin duplicar
+        const existing = document.getElementById('sscoBanner');
+        const panel    = document.getElementById('panel-ssco');
+        if (!panel) return;
+
+        const div = document.createElement('div');
+        div.id = 'sscoBanner';
+
+        if (hits > 0) {
+            div.style.cssText = 'margin:.5rem .75rem 0;padding:.4rem .75rem;background:rgba(220,38,38,.08);border-left:4px solid #dc2626;border-radius:4px;font-size:.8rem;display:flex;align-items:center;gap:.5rem;';
+            div.innerHTML = `<i class="bi bi-exclamation-triangle-fill" style="color:#dc2626;font-size:.95rem;flex-shrink:0;"></i>
+                <span><strong style="color:#b91c1c;">${hits} comprobante${hits !== 1 ? 's' : ''} de Legacy con proveedor SSCO</strong>
+                — el proveedor figura en la lista SUNAT de Sujetos Sin Capacidad Operativa.
+                ${fchCarga ? `<span class="text-muted ms-2" style="font-size:.72rem;">Padrón: ${fchCarga} — ${sujetos?.toLocaleString() ?? '?'} sujetos</span>` : ''}
+                </span>`;
+        } else {
+            div.style.cssText = 'margin:.5rem .75rem 0;padding:.35rem .75rem;background:rgba(21,128,61,.07);border-left:4px solid #16a34a;border-radius:4px;font-size:.78rem;display:flex;align-items:center;gap:.5rem;';
+            div.innerHTML = `<i class="bi bi-shield-check" style="color:#16a34a;font-size:.9rem;"></i>
+                <span style="color:#15803d;"><strong>Sin coincidencias</strong> — ningún proveedor del período aparece en el padrón SSCO.
+                ${fchCarga ? `<span class="text-muted ms-auto" style="font-size:.7rem;">Padrón: ${fchCarga} — ${sujetos?.toLocaleString() ?? '?'} sujetos</span>` : ''}
+                </span>`;
+        }
+
+        if (existing) {
+            // Reemplazar in-place
+            existing.replaceWith(div);
+        } else {
+            // Insertar antes de la tabla (primera vez después de descarga sin recarga)
+            const tabla = panel.querySelector('.table-responsive');
+            if (tabla) panel.insertBefore(div, tabla);
+            else panel.appendChild(div);
+        }
+    }
+
+    // Animación spin para el icono de carga del paso activo
+    (function() {
+        if (document.getElementById('sscoSpinStyle')) return;
+        const st = document.createElement('style');
+        st.id = 'sscoSpinStyle';
+        st.textContent = '@@keyframes sscoSpin{to{transform:rotate(360deg)}} .spin{display:inline-block;animation:sscoSpin .8s linear infinite;}';
+        document.head.appendChild(st);
+    })();
 </script>
