@@ -1,0 +1,229 @@
+@model IReadOnlyList<FabricaHilos.Models.SaludOcupacional.SoInspeccion>
+@{
+    ViewData["Title"] = "Historial de Inspecciones — Comedor y Cocina";
+
+    var comedores  = ViewBag.Comedores as IReadOnlyList<FabricaHilos.Models.SaludOcupacional.SoComedor>
+                     ?? Array.Empty<FabricaHilos.Models.SaludOcupacional.SoComedor>();
+    int? filtroIdCom = ViewBag.FiltroIdCom as int?;
+    string? filtroEst = ViewBag.FiltroEst as string;
+
+    string CalifCss(string? c) => c switch
+    {
+        "ACEPTABLE"       => "so-semaforo-ok",
+        "CON OBSERVACION" => "so-semaforo-warn",
+        "NO ACEPTABLE"    => "so-semaforo-danger",
+        _                 => ""
+    };
+    string EstadoBadge(string e) => e switch
+    {
+        "B" => "so-badge-proc", "C" => "so-badge-ok",
+        "A" => "so-badge-danger", _ => "so-badge-secondary"
+    };
+    string EstadoLabel(string e) => e switch
+    {
+        "B" => "Borrador", "C" => "Cerrada", "A" => "Anulada", _ => e
+    };
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">
+        <a asp-controller="InspeccionCom" asp-action="Dashboard">Inspección Comedor</a>
+    </li>
+    <li class="breadcrumb-item active">Historial</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="so-alert so-alert-success"><i class="bi bi-check-circle-fill"></i><div>@ok</div></div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="so-alert so-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@err</div></div>
+}
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+@* ── Strip ──────────────────────────────────────────────────────────────────── *@
+<div class="so-strip">
+    <i class="bi bi-journal-text" style="color:var(--so-accent-green);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">Historial de Inspecciones</span>
+    <span class="so-strip-sep"></span>
+    <span class="so-kpi">
+        <i class="bi bi-list-check" style="color:#fbd38d;"></i>
+        <span class="so-kpi-val">@Model.Count</span>
+        <span style="opacity:.75">registros</span>
+    </span>
+    @{ var cerradas = Model.Count(x => x.Estado == "C"); }
+    <span class="so-kpi">
+        <i class="bi bi-check-circle" style="color:var(--so-accent-green);"></i>
+        <span class="so-kpi-val">@cerradas</span>
+        <span style="opacity:.75">cerradas</span>
+    </span>
+    @{ var borradores = Model.Count(x => x.Estado == "B"); }
+    @if (borradores > 0)
+    {
+        <span class="so-kpi" style="background:rgba(13,110,253,.2);border-color:rgba(13,110,253,.3);">
+            <i class="bi bi-pencil-square" style="color:#90c2ff;"></i>
+            <span class="so-kpi-val" style="color:#90c2ff;">@borradores</span>
+            <span style="opacity:.8">borradores</span>
+        </span>
+    }
+    <span class="ms-auto">
+        <a asp-controller="InspeccionCom" asp-action="Nueva"
+           class="btn btn-sm" style="background:var(--so-teal);color:#fff;font-size:.75rem;font-weight:600;">
+            <i class="bi bi-plus-circle"></i> Nueva Inspección
+        </a>
+    </span>
+</div>
+
+@* ── Filtros ─────────────────────────────────────────────────────────────────── *@
+<form asp-controller="InspeccionCom" asp-action="Historial" method="get">
+    <div class="so-filter">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <i class="bi bi-funnel small" style="color:var(--so-gray-600);"></i>
+            <span class="fw-semibold text-nowrap" style="font-size:.77rem;color:var(--so-gray-700);">Filtros:</span>
+
+            <select name="idCom" class="form-select form-select-sm" style="width:200px;"
+                    onchange="this.form.submit()">
+                <option value="">Todos los comedores</option>
+                @foreach (var c in comedores)
+                {
+                    <option value="@c.IdCom" selected="@(filtroIdCom == c.IdCom ? "selected" : null)">
+                        @c.Nombre
+                    </option>
+                }
+            </select>
+
+            <select name="estado" class="form-select form-select-sm" style="width:140px;"
+                    onchange="this.form.submit()">
+                <option value="">Todos los estados</option>
+                <option value="B" selected="@(filtroEst == "B" ? "selected" : null)">Borrador</option>
+                <option value="C" selected="@(filtroEst == "C" ? "selected" : null)">Cerrada</option>
+                <option value="A" selected="@(filtroEst == "A" ? "selected" : null)">Anulada</option>
+            </select>
+
+            @if (filtroIdCom.HasValue || !string.IsNullOrEmpty(filtroEst))
+            {
+                <a asp-controller="InspeccionCom" asp-action="Historial"
+                   class="btn btn-sm btn-outline-secondary" style="font-size:.75rem;">
+                    <i class="bi bi-x-circle"></i> Limpiar
+                </a>
+            }
+        </div>
+    </div>
+</form>
+
+@* ── Tabla de historial ──────────────────────────────────────────────────────── *@
+<div class="so-card">
+    <div class="so-card-header">
+        <i class="bi bi-journal-text" style="color:var(--so-teal-mid);"></i>
+        <span>Inspecciones registradas</span>
+    </div>
+    <div class="so-card-body p-0">
+        @if (!Model.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-journal-x fs-3 d-block mb-2"></i>
+                <div style="font-size:.85rem;">No hay inspecciones con los filtros aplicados.</div>
+                <a asp-controller="InspeccionCom" asp-action="Nueva" class="btn btn-sm mt-2"
+                   style="background:var(--so-teal);color:#fff;font-size:.8rem;">
+                    <i class="bi bi-plus-circle"></i> Registrar primera inspección
+                </a>
+            </div>
+        }
+        else
+        {
+            <table class="so-table w-100">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Fecha</th>
+                        <th>Comedor</th>
+                        <th>Concesionaria</th>
+                        <th>Inspector</th>
+                        <th class="text-center">Puntaje</th>
+                        <th class="text-center">Calificación</th>
+                        <th class="text-center">Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var insp in Model)
+                    {
+                        <tr>
+                            <td class="text-muted" style="font-size:.72rem;">@insp.IdInsp</td>
+                            <td class="text-nowrap fw-semibold">@insp.FechaInsp.ToString("dd/MM/yyyy")</td>
+                            <td>
+                                <div style="font-size:.8rem;">@insp.NombreComedor</div>
+                            </td>
+                            <td style="font-size:.78rem;color:var(--so-gray-600);">
+                                @(insp.NombreConc ?? "—")
+                            </td>
+                            <td style="font-size:.78rem;">@insp.Inspector</td>
+                            <td class="text-center">
+                                @if (insp.PtsMaximo.HasValue && insp.PtsMaximo > 0)
+                                {
+                                    <span style="font-size:.78rem;font-weight:600;">
+                                        @insp.PtsObtenidos.ToString("0") / @insp.PtsMaximo.Value.ToString("0")
+                                    </span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="text-center">
+                                @if (!string.IsNullOrEmpty(insp.Calificacion))
+                                {
+                                    <span class="so-semaforo @CalifCss(insp.Calificacion)" style="font-size:.68rem;padding:.18rem .45rem;">
+                                        @insp.PctCumpl?.ToString("0.0")%
+                                    </span>
+                                }
+                                else { <span class="text-muted" style="font-size:.75rem;">—</span> }
+                            </td>
+                            <td class="text-center">
+                                <span class="so-badge @EstadoBadge(insp.Estado)">
+                                    @EstadoLabel(insp.Estado)
+                                </span>
+                            </td>
+                            <td class="text-end pe-2">
+                                <div class="d-flex gap-1 justify-content-end">
+                                    @if (insp.EsBorrador)
+                                    {
+                                        <a asp-controller="InspeccionCom" asp-action="Editar"
+                                           asp-route-id="@insp.IdInsp"
+                                           class="btn btn-sm btn-outline-primary" style="font-size:.72rem;padding:.2rem .5rem;"
+                                           title="Continuar llenado">
+                                            <i class="bi bi-pencil-fill"></i>
+                                        </a>
+                                        <form asp-controller="InspeccionCom" asp-action="Anular"
+                                              method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@insp.IdInsp" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    style="font-size:.72rem;padding:.2rem .5rem;"
+                                                    title="Anular borrador"
+                                                    onclick="return confirm('¿Anular este borrador?')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                           asp-route-id="@insp.IdInsp"
+                                           class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;padding:.2rem .5rem;"
+                                           title="Ver detalle">
+                                            <i class="bi bi-eye-fill"></i>
+                                        </a>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>

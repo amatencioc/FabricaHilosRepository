@@ -1,0 +1,41 @@
+@{
+    var ctrl   = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var action = ViewContext.RouteData.Values["action"]?.ToString()     ?? "";
+
+    bool IsActive(string a) =>
+        string.Equals(ctrl, "InspeccionCom", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(action, a, StringComparison.OrdinalIgnoreCase);
+
+    // Detalle y Editar comparten la pestaña Historial
+    bool IsHistorial = IsActive("Historial") || IsActive("Detalle") || IsActive("Editar");
+}
+
+<nav class="so-navbar mb-3" aria-label="Navegación Salud Ocupacional — Inspección">
+    <ul class="so-navbar-list">
+
+        <li class="so-navbar-item @(IsActive("Dashboard") ? "active" : "")">
+            <a asp-controller="InspeccionCom" asp-action="Dashboard" class="so-navbar-link">
+                <i class="bi bi-grid-1x2"></i> Dashboard
+            </a>
+        </li>
+
+        <li class="so-navbar-item @(IsActive("Nueva") ? "active" : "")">
+            <a asp-controller="InspeccionCom" asp-action="Nueva" class="so-navbar-link">
+                <i class="bi bi-plus-circle"></i> Nueva Inspección
+            </a>
+        </li>
+
+        <li class="so-navbar-item @(IsHistorial ? "active" : "")">
+            <a asp-controller="InspeccionCom" asp-action="Historial" class="so-navbar-link">
+                <i class="bi bi-journal-text"></i> Historial
+            </a>
+        </li>
+
+        <li class="so-navbar-item @(IsActive("Acciones") ? "active" : "")">
+            <a asp-controller="InspeccionCom" asp-action="Acciones" class="so-navbar-link">
+                <i class="bi bi-clipboard-check"></i> Acciones Correctivas
+            </a>
+        </li>
+
+    </ul>
+</nav>

@@ -200,7 +200,23 @@ public sealed class SirePropuestaZipService
         string tipo, string periodo, string ruc, string razonSocial, CancellationToken ct = default)
     {
         var registros = await _repo.GetLegacyAsync(tipo, periodo, ct);
-        registros = registros.Where(r => r.Anulado != "S").ToList();
+        registros = registros
+            .Where(r => r.Anulado != "S")
+            // Excluir ENTEL SS02/218735290: proveedor dado de baja por SUNAT (error 347)
+            .Where(r => !(r.IdPropMatch == null && r.Tipdoc == "14"
+                          && r.Serie == "SS02" && r.Numero == "218735290"))
+            .ToList();
+
+        // Obtener registros SOLO_SUNAT (CONCIL_ESTADO='3') + EXCLUIDO (CONCIL_ESTADO='5')
+        // de SIRE_PROPUESTA para incluirlos en el reemplazo (resolución del error 341).
+        var todasPropuesta   = await _repo.GetRegistrosPropuestaAsync(tipo, periodo, ct);
+        var propuestaExtra   = todasPropuesta
+            .Where(r => r.ConcilEstado == "3" || r.ConcilEstado == "5")
+            .OrderBy(r => r.Tipdoc).ThenBy(r => r.Serie).ThenBy(r => r.Numero)
+            .ToList();
+        _logger.LogInformation(
+            "[SIRE-ZIP-LEGACY] Registros propuesta extra (SOLO_SUNAT/EXCLUIDO): {N} tipo={T} periodo={P}",
+            propuestaExtra.Count, tipo, periodo);
 
         _logger.LogInformation("[SIRE-ZIP-LEGACY] tipo={Tipo} periodo={Periodo} ruc={Ruc} registros={N}",
             tipo, periodo, ruc, registros.Count);
@@ -234,7 +250,7 @@ public sealed class SirePropuestaZipService
         // Nombre ZIP: mismo nombre base que el TXT, solo extensión .zip
         var nombreZip = Path.ChangeExtension(nombreTxt, ".zip");
 
-        var txtBytes = GenerarTxtDesdeLegacy(registros, esVentas, ruc, razonSocial, periodo);
+        var txtBytes = GenerarTxtDesdeLegacy(registros, propuestaExtra, esVentas, ruc, razonSocial, periodo);
 
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
@@ -335,7 +351,9 @@ public sealed class SirePropuestaZipService
     ///   Fechas   : "dd/MM/yyyy", vacio si null
     /// </summary>
     private static byte[] GenerarTxtDesdeLegacy(
-        List<SireLegacyRegistro> registros, bool esVentas,
+        List<SireLegacyRegistro> registros,
+        IReadOnlyList<SireValidaRegistro> propuestaExtra,
+        bool esVentas,
         string ruc, string razonSocial, string periodo)
     {
         static string F(string? s)   => s ?? string.Empty;
@@ -359,9 +377,12 @@ public sealed class SirePropuestaZipService
         // NRO_DOCREF: para tipos 07/08/87/88 SUNAT exige el número de referencia (campo 32 error 402+428)
         static string NroRef(string? nro) =>
             string.IsNullOrEmpty(nro) ? string.Empty : nro.Trim();
-        // Es nota de crédito/débito: tipos 07,08,87,88 -> campos 21-24 deben ser negativos (error 425)
+        // EsNota: nota cualquiera (07/08/87/88) — para campos IMB, etc.
         static bool EsNota(string? tip) =>
             tip == "07" || tip == "08" || tip == "87" || tip == "88";
+        // EsNc: SOLO notas de crédito (07/87) — importes negativos.
+        // ND (08/88) son débitos y sus importes deben ser POSITIVOS (error 425 si se niegan).
+        static bool EsNc(string? tip) => tip is "07" or "87";
 
         // Prefijo: sanitizar razon social (eliminar pipes y control chars que rompen el delimitador)
         var razonSan = new string(razonSocial?.Where(c => c != '|' && c >= ' ').ToArray() ?? []);
@@ -380,7 +401,8 @@ public sealed class SirePropuestaZipService
             {
                 // RCE: 38 campos de datos (SUNAT exige 0.00 en importes, nunca vacio)
                 var tipoBien = string.IsNullOrWhiteSpace(r.TipoBien) ? "1" : F(r.TipoBien);
-                var esNota   = EsNota(r.Tipdoc);
+                var esNota   = EsNota(r.Tipdoc);  // para IMB
+                var esNc     = EsNc(r.Tipdoc);    // para negación de importes (solo NC 07/87)
 
                 // F_VENCTO (campo 6 error 414): para servicios (tipo 14) y DUA (tipo 50/52)
                 // SUNAT requiere fecha de vencimiento; si no la tiene, usar F_EMISION como fallback.
@@ -396,11 +418,11 @@ public sealed class SirePropuestaZipService
                     && r.FEmision.HasValue)
                     anioDam = r.FEmision.Value.Year.ToString();
 
-                // Valores para notas de crédito/débito (campos 21-24 error 425):
-                // SUNAT exige que VAL_ADQ_NG, ISC, ICBPER y OTROS_TRIB sean negativos en NC/ND.
-                var valAdqNg  = esNota ? -Math.Abs(r.ValAdqNg)  : r.ValAdqNg;
-                var isc       = esNota ? -Math.Abs(r.Isc)        : r.Isc;
-                var otros     = esNota ? -Math.Abs(r.Otros)      : r.Otros;
+                // Valores para notas de crédito (campos 21-24 error 425):
+                // NC (07/87): importes NEGATIVOS. ND (08/88): importes POSITIVOS (no negar).
+                var valAdqNg  = esNc ? -Math.Abs(r.ValAdqNg)  : r.ValAdqNg;
+                var isc       = esNc ? -Math.Abs(r.Isc)        : r.Isc;
+                var otros     = esNc ? -Math.Abs(r.Otros)      : r.Otros;
 
                 datos = string.Join("|",
                     car,                    // [o+0]  CAR_SUNAT
@@ -427,17 +449,19 @@ public sealed class SirePropuestaZipService
                     NR(r.Total),            // [o+21] TOTAL_CP
                     F(r.Moneda),            // [o+22] MONEDA
                     TC(r.Moneda, r.Cambio), // [o+23] TIPO_CAMBIO
-                    D(r.FDocref),           // [o+24] F_DOCREF
+                    // F_DOCREF (campo 28): vacío para DUAs (50/52/53/54) y servicios (14) — error 429
+                    (r.Tipdoc == "50" || r.Tipdoc == "52" || r.Tipdoc == "53" || r.Tipdoc == "54" || r.Tipdoc == "14")
+                        ? string.Empty : D(r.FDocref),  // [o+24] F_DOCREF
                     F(r.TipDocref),         // [o+25] TIP_DOCREF
                     F(r.SerDocref),         // [o+26] SER_DOCREF
                     string.Empty,           // [o+27] COD_DAM      (vacio siempre)
                     NroRef(r.NroDocref),    // [o+28] NRO_DOCREF  (trimmed; obligatorio en 07/08)
                     tipoBien,               // [o+29] TIPO_BIEN
-                    esNota ? "0" : string.Empty, // [o+30] ID_PROYECTO (SUNAT exige "0" en 07/08/87/88)
+                    string.Empty,           // [o+30] ID_PROYECTO  (vacío; "0" genera error 434)
                     string.Empty,           // [o+31] PORCPART
-                    esNota ? "0" : string.Empty, // [o+32] IMB         (SUNAT exige "0" en 07/08/87/88)
+                    esNota ? "0" : string.Empty, // [o+32] IMB
                     string.Empty,           // [o+33] CAR_MOD
-                    F(r.FlagDetrac),        // [o+34] FLAG_DETRAC  ("D" o vacio)
+                    string.Empty,           // [o+34] FLAG_DETRAC  (vacío en reemplazo — error 404)
                     string.Empty,           // [o+35] TIPO_NOTA    (no aplica compras)
                     string.Empty,           // [o+36] EST_COMP     (vacio en reemplazo)
                     string.Empty            // [o+37] INCONSIST    (vacio en reemplazo)
@@ -446,9 +470,10 @@ public sealed class SirePropuestaZipService
             else
             {
                 // RVIE: 32 campos de datos
-                var esNotaV = EsNota(r.Tipdoc);
-                var iscV    = esNotaV ? -Math.Abs(r.Isc)   : r.Isc;
-                var otrosV  = esNotaV ? -Math.Abs(r.Otros) : r.Otros;
+                // Solo NC (07/87) tienen importes negativos; ND (08/88) son positivos.
+                var esNcV   = EsNc(r.Tipdoc);
+                var iscV    = esNcV ? -Math.Abs(r.Isc)   : r.Isc;
+                var otrosV  = esNcV ? -Math.Abs(r.Otros) : r.Otros;
                 datos = string.Join("|",
                     car,                    // [o+0]  CAR_SUNAT
                     D(r.FEmision),          // [o+1]  F_EMISION
@@ -486,6 +511,85 @@ public sealed class SirePropuestaZipService
             }
 
             sb.Append(prefijo).Append('|').Append(datos).Append("\r\n");
+        }
+
+        // ── Registros SOLO_SUNAT (estado '3') + EXCLUIDO (estado '5') de SIRE_PROPUESTA ────
+        // Se incluyen en el reemplazo con los valores SUNAT para resolver el error 341
+        // (registros esperados por SUNAT que no aparecen en el archivo del contribuyente).
+        if (!esVentas)
+        {
+            foreach (var p in propuestaExtra)
+            {
+                correlativo++;
+                var carP     = correlativo.ToString().PadLeft(10, '0');
+
+                // F_VENCTO: fallback para servicios tipo 14 y DUAs
+                var fVencP = p.FVencto.HasValue
+                    ? p.FVencto.Value.ToString("dd/MM/yyyy")
+                    : (p.Tipdoc == "14" || p.Tipdoc == "50" || p.Tipdoc == "52")
+                        ? (p.FEmision.HasValue ? p.FEmision.Value.ToString("dd/MM/yyyy") : string.Empty)
+                        : string.Empty;
+
+                // ANIO_DAM: obligatorio para DUAs
+                var anioDamP = p.AnioDam ?? string.Empty;
+                if (string.IsNullOrEmpty(anioDamP) && (p.Tipdoc == "50" || p.Tipdoc == "52") && p.FEmision.HasValue)
+                    anioDamP = p.FEmision.Value.Year.ToString();
+
+                var tipoBienP = string.IsNullOrWhiteSpace(p.TipoBien) ? "1" : p.TipoBien!;
+
+                // RUC: vacío → "0" (proveedor extranjero sin RUC) — evita error 401 campo 13
+                var rucP    = string.IsNullOrWhiteSpace(p.Ruc) ? "0" : p.Ruc!;
+                // NOMBRE: vacío → fallback legible — evita error 422 campo 14
+                var nombreP = N100(p.Nombre);
+                if (nombreP.Length == 0) nombreP = "SIN NOMBRE";
+
+                // F_DOCREF: vacío para DUAs y servicios tipo 14 (error 429)
+                var fDocrefP = (p.Tipdoc == "50" || p.Tipdoc == "52" || p.Tipdoc == "53" || p.Tipdoc == "54" || p.Tipdoc == "14")
+                    ? string.Empty
+                    : (p.FDocref.HasValue ? p.FDocref.Value.ToString("dd/MM/yyyy") : string.Empty);
+
+                var datosP = string.Join("|",
+                    carP,                                                    // [o+0]  CAR_SUNAT
+                    p.FEmision.HasValue ? p.FEmision.Value.ToString("dd/MM/yyyy") : string.Empty, // [o+1]
+                    fVencP,                                                  // [o+2]  F_VENCTO
+                    p.Tipdoc    ?? string.Empty,                             // [o+3]  TIPDOC
+                    p.Serie     ?? string.Empty,                             // [o+4]  SERIE
+                    anioDamP,                                                // [o+5]  ANIO_DAM
+                    (p.Numero   ?? string.Empty).Trim(),                     // [o+6]  NUMERO
+                    string.Empty,                                            // [o+7]  NRO_FINAL
+                    p.Tdocid    ?? string.Empty,                             // [o+8]  TDOCID
+                    rucP,                                                    // [o+9]  RUC (default "0" si vacío)
+                    nombreP,                                                 // [o+10] NOMBRE (default "SIN NOMBRE" si vacío)
+                    NR(p.BiGravDg),                                          // [o+11] BI_GRAV_DG
+                    NR(p.IgvIpmDg),                                          // [o+12] IGV_DG
+                    NR(p.BiGravDgng),                                        // [o+13] BI_GRAV_DGNG
+                    NR(p.IgvIpmDgng),                                        // [o+14] IGV_DGNG
+                    NR(p.BiGravDng),                                         // [o+15] BI_GRAV_DNG
+                    NR(p.IgvIpmDng),                                         // [o+16] IGV_DNG
+                    NR(p.ValAdqNg),                                          // [o+17] VAL_ADQ_NG
+                    NR(p.Isc),                                               // [o+18] ISC
+                    NR(p.Icbper),                                            // [o+19] ICBPER
+                    NR(p.OtrosTrib),                                         // [o+20] OTROS_TRIB
+                    NR(p.TotalCp),                                           // [o+21] TOTAL_CP
+                    p.Moneda    ?? string.Empty,                             // [o+22] MONEDA
+                    TC(p.Moneda, p.Cambio),                                  // [o+23] TIPO_CAMBIO
+                    fDocrefP,                                                // [o+24] F_DOCREF
+                    p.TipDocref ?? string.Empty,                             // [o+25] TIP_DOCREF
+                    p.SerDocref ?? string.Empty,                             // [o+26] SER_DOCREF
+                    string.Empty,                                            // [o+27] COD_DAM
+                    (p.NroDocref ?? string.Empty).Trim(),                    // [o+28] NRO_DOCREF
+                    tipoBienP,                                               // [o+29] TIPO_BIEN
+                    string.Empty,                                            // [o+30] ID_PROYECTO
+                    string.Empty,                                            // [o+31] PORCPART
+                    string.Empty,                                            // [o+32] IMB
+                    string.Empty,                                            // [o+33] CAR_MOD
+                    string.Empty,                                            // [o+34] FLAG_DETRAC
+                    string.Empty,                                            // [o+35] TIPO_NOTA
+                    string.Empty,                                            // [o+36] EST_COMP
+                    string.Empty                                             // [o+37] INCONSIST
+                );
+                sb.Append(prefijo).Append('|').Append(datosP).Append("\r\n");
+            }
         }
 
         return Encoding.UTF8.GetBytes(sb.ToString());

@@ -1,0 +1,280 @@
+@model FabricaHilos.Models.SaludOcupacional.SoAccionesViewModel
+@{
+    ViewData["Title"] = "Acciones Correctivas — Inspección Comedor";
+
+    string EstadoBadge(string e) => e switch
+    {
+        "P" => "so-badge-secondary", "E" => "so-badge-proc",
+        "R" => "so-badge-ok",        _ => "so-badge-secondary"
+    };
+    string EstadoLabel(string e) => e switch
+    {
+        "P" => "Pendiente", "E" => "En Proceso",
+        "R" => "Resuelta",  _ => e
+    };
+
+    string filtroAct = Model.FiltroEstado;
+
+    var pendientes = Model.TotalPendientes;
+    var enProc     = Model.TotalEnProceso;
+    var vencidas   = Model.TotalVencidas;
+    var resueltas  = Model.TotalResueltas;
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Acciones Correctivas</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="so-alert so-alert-success"><i class="bi bi-check-circle-fill"></i><div>@ok</div></div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="so-alert so-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@err</div></div>
+}
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+@* ── Strip ──────────────────────────────────────────────────────────────────── *@
+<div class="so-strip">
+    <i class="bi bi-tools" style="color:var(--so-accent-yellow);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">Acciones Correctivas</span>
+    <span class="so-strip-sep"></span>
+    <span class="so-kpi">
+        <i class="bi bi-hourglass-split" style="color:#fbd38d;"></i>
+        <span class="so-kpi-val">@pendientes</span>
+        <span style="opacity:.75">pendientes</span>
+    </span>
+    <span class="so-kpi" style="background:rgba(13,110,253,.18);border-color:rgba(13,110,253,.3);">
+        <i class="bi bi-arrow-repeat" style="color:#90c2ff;"></i>
+        <span class="so-kpi-val" style="color:#90c2ff;">@enProc</span>
+        <span style="opacity:.8">en proceso</span>
+    </span>
+    @if (vencidas > 0)
+    {
+        <span class="so-kpi" style="background:rgba(220,53,69,.22);border-color:rgba(220,53,69,.4);">
+            <i class="bi bi-alarm-fill" style="color:#ff8fa3;"></i>
+            <span class="so-kpi-val" style="color:#ff8fa3;">@vencidas</span>
+            <span style="opacity:.8">vencidas</span>
+        </span>
+    }
+    <span class="so-kpi" style="background:rgba(25,135,84,.18);border-color:rgba(25,135,84,.3);">
+        <i class="bi bi-check2-all" style="color:var(--so-accent-green);"></i>
+        <span class="so-kpi-val" style="color:var(--so-accent-green);">@resueltas</span>
+        <span style="opacity:.8">resueltas</span>
+    </span>
+</div>
+
+@* ── Pestañas de filtro ─────────────────────────────────────────────────────── *@
+<div class="so-filter" style="padding:.35rem .85rem;">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        @{
+            var tabs = new[] {
+                ("",  "Todas",      "bi-list-ul"),
+                ("P", "Pendientes", "bi-hourglass-split"),
+                ("E", "En proceso", "bi-arrow-repeat"),
+                ("V", "Vencidas",   "bi-alarm-fill"),
+                ("R", "Resueltas",  "bi-check2-all"),
+            };
+        }
+        @foreach (var (est, label, icon) in tabs)
+        {
+            bool active = filtroAct == est || (string.IsNullOrEmpty(est) && filtroAct == "PR");
+            <a asp-controller="InspeccionCom" asp-action="Acciones"
+               asp-route-filtro="@(string.IsNullOrEmpty(est) ? "PR" : est)"
+               class="btn btn-sm @(active ? "" : "btn-outline-secondary")"
+               style="font-size:.73rem;@(active ? "background:var(--so-teal);color:#fff;border-color:var(--so-teal);" : "")">
+                <i class="bi @icon"></i> @label
+            </a>
+        }
+    </div>
+</div>
+
+@* ── Tabla de acciones ──────────────────────────────────────────────────────── *@
+<div class="so-card">
+    <div class="so-card-header">
+        <i class="bi bi-card-checklist" style="color:var(--so-teal-mid);"></i>
+        <span>@Model.Acciones.Count acciones @(filtroAct == "PR" ? "abiertas" : EstadoLabel(filtroAct))</span>
+    </div>
+    <div class="so-card-body p-0">
+        @if (!Model.Acciones.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                <div style="font-size:.85rem;">No hay acciones con el filtro seleccionado.</div>
+            </div>
+        }
+        else
+        {
+            <table class="so-table w-100">
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        <th>Hallazgo</th>
+                        <th>Inspección</th>
+                        <th>Responsable</th>
+                        <th class="text-center">Plazo</th>
+                        <th class="text-center">Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ac in Model.Acciones)
+                    {
+                        <tr class="@(ac.EsVencida ? "so-row-danger" : "")">
+                            <td style="font-size:.78rem;max-width:220px;">
+                                @ac.Descripcion
+                            </td>
+                            <td style="font-size:.73rem;color:var(--so-gray-600);max-width:180px;">
+                                @(ac.DescItem ?? "—")
+                            </td>
+                            <td class="text-nowrap" style="font-size:.73rem;">
+                                <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                   asp-route-id="@ac.IdInsp"
+                                   class="text-decoration-none"
+                                   style="color:var(--so-teal-mid);">
+                                    #@ac.IdInsp — @ac.FechaInsp?.ToString("dd/MM/yyyy")
+                                </a>
+                                @if (!string.IsNullOrEmpty(ac.NombreComedor))
+                                {
+                                    <div class="text-muted" style="font-size:.68rem;">@ac.NombreComedor</div>
+                                }
+                            </td>
+                            <td style="font-size:.75rem;">@(ac.Responsable ?? "—")</td>
+                            <td class="text-center text-nowrap" style="font-size:.75rem;">
+                                @if (ac.FchLimite.HasValue)
+                                {
+                                    <span class="@(ac.EsVencida ? "text-danger fw-bold" : "")">
+                                        @ac.FchLimite.Value.ToString("dd/MM/yyyy")
+                                    </span>
+                                    @if (ac.EsVencida)
+                                    {
+                                        var dias = (DateTime.Today - ac.FchLimite.Value).Days;
+                                        <div class="text-danger" style="font-size:.65rem;">
+                                            @dias d. vencida
+                                        </div>
+                                    }
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                            <td class="text-center">
+                                <span class="so-badge @EstadoBadge(ac.Estado)" id="badge-@ac.IdAccion">
+                                    @EstadoLabel(ac.Estado)
+                                </span>
+                            </td>
+                            <td class="text-end pe-2">
+                                @if (ac.Estado != "R")
+                                {
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            style="font-size:.7rem;padding:.2rem .5rem;"
+                                            title="Actualizar estado"
+                                            data-id="@ac.IdAccion"
+                                            data-estado="@ac.Estado"
+                                            data-obs="@ac.Observacion"
+                                            onclick="abrirModalAccion(this)">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@* ── Modal actualizar acción ─────────────────────────────────────────────────── *@
+<div class="modal fade" id="modalAccion" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
+            <div class="modal-header" style="border-color:var(--so-border);padding:.6rem 1rem;">
+                <h6 class="modal-title mb-0" style="font-size:.85rem;color:var(--so-text-primary);">
+                    <i class="bi bi-tools me-1" style="color:var(--so-accent-yellow);"></i>
+                    Actualizar acción correctiva
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalIdAccion" />
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:.77rem;color:var(--so-text-secondary);">
+                        Nuevo estado
+                    </label>
+                    <select id="modalEstado" class="form-select form-select-sm">
+                        <option value="P">Pendiente</option>
+                        <option value="E">En proceso</option>
+                        <option value="R">Resuelta</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" style="font-size:.77rem;color:var(--so-text-secondary);">
+                        Observación (opcional)
+                    </label>
+                    <textarea id="modalObs" class="form-control form-control-sm"
+                              rows="3" maxlength="500"
+                              style="background:var(--so-bg-input);color:var(--so-text-primary);
+                                     border-color:var(--so-border);font-size:.8rem;resize:none;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-color:var(--so-border);padding:.5rem 1rem;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"
+                        style="font-size:.75rem;">Cancelar</button>
+                <button type="button" class="btn btn-sm" id="btnGuardarAc"
+                        style="background:var(--so-teal);color:#fff;font-size:.75rem;font-weight:600;">
+                    <i class="bi bi-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const modal = new bootstrap.Modal(document.getElementById('modalAccion'));
+
+    window.abrirModalAccion = function (btn) {
+        document.getElementById('modalIdAccion').value = btn.dataset.id;
+        document.getElementById('modalEstado').value   = btn.dataset.estado ?? 'P';
+        document.getElementById('modalObs').value      = btn.dataset.obs ?? '';
+        modal.show();
+    };
+
+    document.getElementById('btnGuardarAc').addEventListener('click', async function () {
+        const idAccion  = document.getElementById('modalIdAccion').value;
+        const estado    = document.getElementById('modalEstado').value;
+        const obs       = document.getElementById('modalObs').value.trim();
+        const token     = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+
+        try {
+            const res = await fetch('@Url.Action("ActualizarAccion", "InspeccionCom")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token ?? '' },
+                body: JSON.stringify({ idAccion: parseInt(idAccion), estado, observacion: obs })
+            });
+            const json = await res.json();
+            if (json.ok) {
+                modal.hide();
+                window.location.reload();
+            } else {
+                alert(json.error ?? 'Error al guardar.');
+            }
+        } catch (e) {
+            alert('Error de conexión.');
+        } finally {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-save me-1"></i>Guardar';
+        }
+    });
+})();
+</script>
+}

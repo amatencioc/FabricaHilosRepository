@@ -138,6 +138,10 @@ builder.Services.Configure<FabricaHilos.Config.EmpresaTemaOptions>(
     builder.Configuration.GetSection(FabricaHilos.Config.EmpresaTemaOptions.SectionName));
 builder.Services.AddScoped<IEmpresaTemaService, EmpresaTemaService>();
 
+// Registrar opciones de acceso por red (soporta hot-reload vía IOptionsMonitor)
+builder.Services.Configure<FabricaHilos.Config.RedInternaOptions>(
+    builder.Configuration.GetSection(FabricaHilos.Config.RedInternaOptions.SectionName));
+
 // Registrar servicios de negocio
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 builder.Services.AddScoped<IParoService, ParoService>();
@@ -178,6 +182,12 @@ builder.Services.AddSingleton<ISalidaInternaPdfService, SalidaInternaPdfService>
 builder.Services.AddSingleton<IReclamoPdfService, ReclamoPdfService>();
 builder.Services.AddSingleton<INavTokenService, NavTokenService>();
 builder.Services.AddScoped<AcuerdoCompHeDocxService>();
+
+// Salud Ocupacional
+builder.Services.AddScoped<FabricaHilos.Services.SaludOcupacional.ISoInspeccionComService,
+                           FabricaHilos.Services.SaludOcupacional.SoInspeccionComService>();
+builder.Services.AddScoped<FabricaHilos.Services.SaludOcupacional.ISoInspeccionPdfService,
+                           FabricaHilos.Services.SaludOcupacional.SoInspeccionPdfService>();
 
 // Planeamiento
 builder.Services.AddScoped<IPlnRegistroService, PlnRegistroService>();

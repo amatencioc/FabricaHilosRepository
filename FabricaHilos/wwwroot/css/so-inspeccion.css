@@ -1,0 +1,562 @@
+/*
+ * so-inspeccion.css — Sistema de diseño unificado
+ * Módulo: SO — Salud Ocupacional · Inspección de Comedor y Cocina
+ * Paleta: Teal sanitario (#0f5132) — misma estructura que sire.css / planeamiento.css
+ *
+ * Todas las vistas de /SaludOcupacional/InspeccionCom/ referencian este archivo.
+ */
+
+/* ═══════════════════════════════════════════════════════
+   1. TOKENS — Variables de color y tipografía
+   ═══════════════════════════════════════════════════════ */
+:root {
+    /* Paleta teal SO (salud / higiene) */
+    --so-teal:          #0f5132;
+    --so-teal-mid:      #198754;
+    --so-teal-light:    #20c997;
+    --so-teal-pale:     #d1e7dd;
+    --so-teal-xpale:    #f0faf5;
+
+    /* Semáforo inspección */
+    --so-ok:            #198754;    /* Aceptable  ≥75% */
+    --so-ok-pale:       #d1e7dd;
+    --so-warn:          #856404;    /* Con Obs    51-74% */
+    --so-warn-pale:     #fff3cd;
+    --so-warn-mid:      #ffc107;
+    --so-danger:        #842029;    /* No Aceptable <50% */
+    --so-danger-pale:   #f8d7da;
+    --so-danger-mid:    #dc3545;
+
+    /* Escala gris (igual a sire.css) */
+    --so-dark-deep:     #1a202c;
+    --so-dark-bg:       #2d3748;
+    --so-gray-700:      #4a5568;
+    --so-gray-600:      #718096;
+    --so-gray-500:      #a0aec0;
+    --so-gray-300:      #cbd5e0;
+    --so-gray-200:      #e2e8f0;
+    --so-gray-100:      #edf2f7;
+    --so-gray-50:       #f7fafc;
+
+    /* Texto sobre fondos oscuros */
+    --so-light-text:    #e2e8f0;
+    --so-light-muted:   #a0aec0;
+    --so-accent-green:  #6ee7b7;
+
+    /* Sombras */
+    --so-shadow-sm:     0 1px 3px rgba(0,0,0,.08);
+    --so-shadow-md:     0 2px 6px rgba(0,0,0,.12);
+    --so-shadow-lg:     0 3px 10px rgba(0,0,0,.16);
+
+    /* Puntaje checklist */
+    --so-pts-4:         #198754;   /* ítem de 4 puntos */
+    --so-pts-2:         #0d6efd;   /* ítem de 2 puntos */
+    --so-pts-0:         #dc3545;   /* ítem sin puntaje  */
+
+    /* Acciones correctivas */
+    --so-ac-pend:       #856404;
+    --so-ac-proc:       #084298;
+    --so-ac-done:       #0f5132;
+}
+
+/* ═══════════════════════════════════════════════════════
+   2. BARRA DE NAVEGACIÓN SECUNDARIA  (.so-navbar)
+   ═══════════════════════════════════════════════════════ */
+.so-navbar {
+    background: var(--so-dark-bg);
+    border-radius: .4rem;
+    padding: .25rem .5rem;
+    box-shadow: var(--so-shadow-sm);
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.so-navbar-list {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex; flex-wrap: wrap;
+    gap: .15rem; align-items: center;
+    flex: 1 1 auto;
+}
+.so-navbar-item { flex-shrink: 0; }
+.so-navbar-link {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .32rem .7rem;
+    border-radius: .3rem;
+    font-size: .75rem; font-weight: 600;
+    color: rgba(255,255,255,.7);
+    text-decoration: none; white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+.so-navbar-link:hover { background: rgba(255,255,255,.12); color: #fff; }
+.so-navbar-item.active .so-navbar-link {
+    background: var(--so-teal);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+.so-navbar-link i { font-size: .85rem; }
+
+/* ═══════════════════════════════════════════════════════
+   3. STRIP DE CABECERA + KPIs  (.so-strip)
+   ═══════════════════════════════════════════════════════ */
+.so-strip {
+    background: linear-gradient(135deg, var(--so-dark-bg) 0%, var(--so-gray-700) 100%);
+    color: var(--so-light-text);
+    border-radius: .5rem .5rem 0 0;
+    padding: .55rem 1rem;
+    display: flex; align-items: center;
+    flex-wrap: wrap; gap: .5rem;
+    border-bottom: 3px solid var(--so-teal);
+    box-shadow: var(--so-shadow-md);
+    margin-bottom: 0;
+}
+.so-strip-title {
+    font-size: .82rem; font-weight: 800;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: #f7fafc; white-space: nowrap;
+}
+.so-strip-sep { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.so-kpi {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: .18rem .6rem;
+    font-size: .7rem; white-space: nowrap; color: var(--so-light-text);
+}
+.so-kpi-val { font-weight: 700; font-size: .82rem; }
+
+/* ═══════════════════════════════════════════════════════
+   4. PANEL DE FILTROS  (.so-filter)
+   ═══════════════════════════════════════════════════════ */
+.so-filter {
+    background: #f8faf9;
+    border: 1px solid var(--so-gray-200);
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    padding: .6rem .9rem;
+    margin-bottom: .85rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+    display: flex; align-items: center;
+    flex-wrap: wrap; gap: .5rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   5. CABECERA DE PÁGINA  (.so-page-header)
+   ═══════════════════════════════════════════════════════ */
+.so-page-header {
+    display: flex; align-items: center;
+    gap: 1rem; margin-bottom: 1.25rem;
+}
+.so-page-icon {
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: #fff;
+    flex-shrink: 0; box-shadow: var(--so-shadow-md);
+}
+.so-page-icon.dashboard { background: linear-gradient(135deg, var(--so-teal)    0%, var(--so-teal-mid)   100%); }
+.so-page-icon.nueva     { background: linear-gradient(135deg, #0d6efd           0%, #0a58ca              100%); }
+.so-page-icon.historial { background: linear-gradient(135deg, var(--so-gray-700) 0%, var(--so-gray-600)  100%); }
+.so-page-icon.acciones  { background: linear-gradient(135deg, #856404           0%, #ffc107              100%); }
+.so-page-icon.kpis      { background: linear-gradient(135deg, #495057           0%, #6c757d              100%); }
+
+.so-page-title  { margin: 0; font-weight: 700; color: #1a202c; font-size: 1.35rem; }
+.so-page-sub    { color: #718096; font-size: .85rem; }
+.so-page-actions { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════════════════════
+   6. TARJETAS KPI  (.so-kpi-card)
+   ═══════════════════════════════════════════════════════ */
+.so-kpi-card {
+    background: #fff;
+    border: 1px solid var(--so-gray-200);
+    border-radius: .5rem;
+    padding: 1rem 1.2rem;
+    display: flex; align-items: center; gap: .85rem;
+    box-shadow: var(--so-shadow-sm);
+    transition: box-shadow .15s;
+}
+.so-kpi-card:hover { box-shadow: var(--so-shadow-md); }
+.so-kpi-card-icon {
+    width: 44px; height: 44px;
+    border-radius: .4rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem; flex-shrink: 0;
+}
+.so-kpi-card-icon.ok      { background: rgba(25,135,84,.1);  color: var(--so-ok);     }
+.so-kpi-card-icon.warn    { background: rgba(255,193,7,.15); color: var(--so-warn-mid); }
+.so-kpi-card-icon.danger  { background: rgba(220,53,69,.1);  color: var(--so-danger-mid); }
+.so-kpi-card-icon.info    { background: rgba(13,110,253,.1); color: #0d6efd;           }
+.so-kpi-card-icon.gray    { background: rgba(113,128,150,.1); color: #718096;          }
+.so-kpi-card-label { font-size: .72rem; font-weight: 600; color: var(--so-gray-600); text-transform: uppercase; letter-spacing: .04em; }
+.so-kpi-card-value { font-size: 1.55rem; font-weight: 800; line-height: 1.1; color: #1a202c; }
+.so-kpi-card-sub   { font-size: .7rem; color: var(--so-gray-500); }
+
+/* Acento lateral */
+.so-kpi-card.ok     { border-left: 4px solid var(--so-ok);        }
+.so-kpi-card.warn   { border-left: 4px solid var(--so-warn-mid);  }
+.so-kpi-card.danger { border-left: 4px solid var(--so-danger-mid);}
+.so-kpi-card.info   { border-left: 4px solid #0d6efd;             }
+
+/* ═══════════════════════════════════════════════════════
+   7. CARD CONTENEDOR  (.so-card)
+   ═══════════════════════════════════════════════════════ */
+.so-card {
+    border: 1px solid var(--so-gray-200);
+    border-radius: .5rem;
+    overflow: hidden; background: #fff;
+    box-shadow: var(--so-shadow-sm);
+    margin-bottom: 1.25rem;
+}
+.so-card-header {
+    padding: .55rem .9rem;
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .78rem; font-weight: 700;
+    color: var(--so-dark-bg);
+    background: #f0f7f4;
+    border-bottom: 1px solid var(--so-gray-200);
+}
+.so-card-header i { font-size: .9rem; }
+.so-card-body { padding: .85rem 1rem; }
+
+/* ═══════════════════════════════════════════════════════
+   8. TABLA COMPACTA  (.so-table)
+   ═══════════════════════════════════════════════════════ */
+.so-table { font-size: .8rem; border-collapse: collapse; }
+.so-table thead th {
+    font-size: .7rem; font-weight: 700;
+    color: var(--so-gray-600); text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid var(--so-gray-300);
+    padding: .32rem .55rem;
+    background: #e8f5ee;
+    white-space: nowrap;
+}
+.so-table tbody td {
+    padding: .28rem .55rem;
+    border-bottom: 1px solid var(--so-gray-200);
+    vertical-align: middle;
+}
+.so-table tbody tr:hover td { background: #f0faf5; }
+.so-table tfoot td {
+    padding: .35rem .55rem; font-weight: 700;
+    background: #e8f5ee;
+    border-top: 2px solid var(--so-gray-300);
+}
+
+/* ═══════════════════════════════════════════════════════
+   9. BADGES  (.so-badge-*)
+   ═══════════════════════════════════════════════════════ */
+.so-badge {
+    display: inline-flex; align-items: center; gap: .2rem;
+    padding: .2rem .5rem;
+    border-radius: 999px;
+    font-size: .68rem; font-weight: 700;
+    white-space: nowrap;
+}
+.so-badge-ok       { background: #d1e7dd; color: #0f5132; }
+.so-badge-warn     { background: #fff3cd; color: #664d03; }
+.so-badge-danger   { background: #f8d7da; color: #58151c; }
+.so-badge-info     { background: #cfe2ff; color: #084298; }
+.so-badge-pend     { background: #fff3cd; color: #664d03; }
+.so-badge-proc     { background: #cfe2ff; color: #084298; }
+.so-badge-done     { background: #d1e7dd; color: #0f5132; }
+.so-badge-secondary{ background: #e2e8f0; color: #4a5568; }
+
+/* ═══════════════════════════════════════════════════════
+  10. SEMÁFORO DE CALIFICACIÓN  (.so-semaforo-*)
+   ═══════════════════════════════════════════════════════ */
+.so-semaforo {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .3rem .7rem;
+    border-radius: 999px;
+    font-size: .75rem; font-weight: 700;
+}
+.so-semaforo-ok      { background: var(--so-ok-pale);     color: var(--so-ok);          border: 1px solid #a3cfbb; }
+.so-semaforo-warn    { background: var(--so-warn-pale);   color: var(--so-warn);        border: 1px solid #ffe08a; }
+.so-semaforo-danger  { background: var(--so-danger-pale); color: var(--so-danger);      border: 1px solid #f1aeb5; }
+
+/* Circulito indicador */
+.so-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%; flex-shrink: 0; display: inline-block;
+}
+.so-dot-ok     { background: var(--so-ok);         }
+.so-dot-warn   { background: var(--so-warn-mid);   }
+.so-dot-danger { background: var(--so-danger-mid); }
+
+/* ═══════════════════════════════════════════════════════
+  11. CHECKLIST — FILA DE ÍTEM  (.so-cl-row)
+   ═══════════════════════════════════════════════════════ */
+.so-cl-section {
+    background: linear-gradient(135deg, var(--so-teal) 0%, var(--so-teal-mid) 100%);
+    color: #fff;
+    padding: .4rem .75rem;
+    font-size: .76rem; font-weight: 800;
+    letter-spacing: .06em; text-transform: uppercase;
+    border-radius: .3rem;
+    margin-top: .75rem; margin-bottom: .35rem;
+    display: flex; align-items: center; gap: .5rem;
+}
+.so-cl-row {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 7rem 1fr;
+    gap: .5rem;
+    align-items: start;
+    padding: .4rem .6rem;
+    border: 1px solid var(--so-gray-200);
+    border-radius: .3rem;
+    margin-bottom: .3rem;
+    background: #fff;
+    transition: background .1s;
+}
+.so-cl-row:hover { background: var(--so-teal-xpale); }
+.so-cl-row.so-cl-row-noncompliant { background: #fff8f8; border-left: 3px solid var(--so-danger-mid); }
+.so-cl-num {
+    font-size: .72rem; font-weight: 700;
+    color: var(--so-gray-600);
+    padding-top: .15rem;
+}
+.so-cl-desc { font-size: .8rem; color: #1a202c; }
+.so-cl-desc small { font-size: .7rem; color: var(--so-gray-500); }
+
+/* Botones de puntaje 0 / 2 / 4 */
+.so-pts-group {
+    display: flex; gap: .25rem;
+    flex-wrap: nowrap; align-items: center;
+}
+.so-pts-btn {
+    width: 36px; height: 28px;
+    border: 1.5px solid var(--so-gray-300);
+    border-radius: .25rem;
+    background: var(--so-gray-100);
+    color: var(--so-gray-600);
+    font-size: .75rem; font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .12s;
+    flex-shrink: 0;
+}
+.so-pts-btn:hover { background: var(--so-gray-200); border-color: var(--so-gray-500); }
+.so-pts-btn.selected-0  { background: #f8d7da; border-color: var(--so-danger-mid); color: var(--so-danger);   }
+.so-pts-btn.selected-2  { background: #cfe2ff; border-color: #0d6efd;              color: #084298;            }
+.so-pts-btn.selected-4  { background: #d1e7dd; border-color: var(--so-ok);         color: var(--so-teal);     }
+
+/* Barra de porcentaje del checklist */
+.so-pct-bar-wrap {
+    height: 6px; background: var(--so-gray-200);
+    border-radius: 999px; overflow: hidden;
+}
+.so-pct-bar {
+    height: 100%; border-radius: 999px;
+    transition: width .4s ease;
+}
+.so-pct-bar.ok     { background: var(--so-ok);         }
+.so-pct-bar.warn   { background: var(--so-warn-mid);   }
+.so-pct-bar.danger { background: var(--so-danger-mid); }
+
+/* ═══════════════════════════════════════════════════════
+  12. ALERTAS  (.so-alert-*)
+   ═══════════════════════════════════════════════════════ */
+.so-alert {
+    border-radius: .4rem;
+    padding: .6rem .9rem;
+    font-size: .82rem;
+    display: flex; align-items: flex-start; gap: .6rem;
+    margin-bottom: .85rem;
+    border: 1px solid transparent;
+}
+.so-alert i { flex-shrink: 0; font-size: 1rem; margin-top: .05rem; }
+.so-alert-info    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.so-alert-warn    { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.so-alert-danger  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.so-alert-success { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+
+/* ═══════════════════════════════════════════════════════
+  13. TARJETA COMEDOR (dashboard)  (.so-comedor-card)
+   ═══════════════════════════════════════════════════════ */
+.so-comedor-card {
+    border: 1px solid var(--so-gray-200);
+    border-radius: .5rem;
+    overflow: hidden; background: #fff;
+    box-shadow: var(--so-shadow-sm);
+    transition: box-shadow .15s, transform .12s;
+}
+.so-comedor-card:hover { box-shadow: var(--so-shadow-lg); transform: translateY(-2px); }
+.so-comedor-card-header {
+    padding: .7rem 1rem;
+    display: flex; align-items: center; gap: .6rem;
+    font-size: .8rem; font-weight: 800;
+    letter-spacing: .04em; text-transform: uppercase;
+    color: #fff;
+    background: linear-gradient(135deg, var(--so-teal) 0%, var(--so-teal-mid) 100%);
+}
+.so-comedor-card-body { padding: 1rem 1.1rem; }
+
+/* ═══════════════════════════════════════════════════════
+  14. SECCIÓN DE FOTOS/EVIDENCIAS  (.so-evidencia)
+   ═══════════════════════════════════════════════════════ */
+.so-evidencia-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: .5rem;
+}
+.so-evidencia-thumb {
+    aspect-ratio: 1;
+    border-radius: .35rem;
+    overflow: hidden;
+    border: 2px solid var(--so-gray-200);
+    cursor: pointer;
+    transition: border-color .12s, transform .12s;
+}
+.so-evidencia-thumb:hover { border-color: var(--so-teal-mid); transform: scale(1.03); }
+.so-evidencia-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.so-evidencia-add {
+    aspect-ratio: 1;
+    border-radius: .35rem;
+    border: 2px dashed var(--so-gray-300);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: .25rem;
+    color: var(--so-gray-500);
+    font-size: .7rem; cursor: pointer;
+    transition: border-color .12s, color .12s;
+}
+.so-evidencia-add:hover { border-color: var(--so-teal-mid); color: var(--so-teal-mid); }
+
+/* ═══════════════════════════════════════════════════════
+  15. RESPONSIVE
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .so-strip      { flex-direction: column; align-items: flex-start; }
+    .so-kpi        { font-size: .65rem; }
+    .so-cl-row     { grid-template-columns: 2rem 1fr 6rem; }
+    .so-cl-row > :last-child { grid-column: 1 / -1; }
+    .so-page-header { flex-wrap: wrap; }
+    .so-page-actions { margin-left: 0; }
+    .so-table      { font-size: .73rem; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   16. PUNTAJE DISPLAY (solo lectura en Detalle)
+   ═══════════════════════════════════════════════════════ */
+.so-pts-display {
+    display: inline-block;
+    min-width: 1.8rem;
+    padding: .18rem .4rem;
+    font-size: .75rem;
+    font-weight: 700;
+    border-radius: .3rem;
+    text-align: center;
+}
+.so-pts-ok     { background: rgba(25,135,84,.18);  color: #0f5132; }
+.so-pts-warn   { background: rgba(255,193,7,.22);  color: #664d03; }
+.so-pts-ko     { background: rgba(220,53,69,.18);  color: #842029; }
+
+/* ═══════════════════════════════════════════════════════
+   17. FILAS PELIGRO / VENCIDAS en tablas
+   ═══════════════════════════════════════════════════════ */
+.so-row-danger td {
+    background: rgba(220,53,69,.07) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   18. MINIATURAS DE EVIDENCIAS (Detalle)
+   ═══════════════════════════════════════════════════════ */
+.so-evidencias-thumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .3rem;
+}
+.so-ev-thumb-link {
+    display: block;
+    border-radius: .3rem;
+    overflow: hidden;
+    border: 1.5px solid var(--so-border);
+    transition: border-color .15s;
+}
+.so-ev-thumb-link:hover { border-color: var(--so-teal-mid); }
+.so-ev-thumb {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    display: block;
+}
+
+/* ═══════════════════════════════════════════════════════
+   19. BADGE SECONDARY (faltante)
+   ═══════════════════════════════════════════════════════ */
+.so-badge-secondary {
+    background: rgba(108,117,125,.15);
+    color: #495057;
+    border-color: rgba(108,117,125,.3);
+}
+
+/* ═══════════════════════════════════════════════════════
+   20. ACCORDION DE RUBROS (Nueva Inspección)
+   ═══════════════════════════════════════════════════════ */
+.so-rubros-accordion { display: flex; flex-direction: column; gap: .4rem; }
+
+.so-accordion-item {
+    border: 1px solid var(--so-gray-200);
+    border-radius: .4rem !important;
+    overflow: hidden;
+    box-shadow: var(--so-shadow-sm);
+}
+
+/* Cabecera del accordion — hereda el gradiente de so-cl-section */
+.so-accordion-btn {
+    background: linear-gradient(135deg, var(--so-teal) 0%, var(--so-teal-mid) 100%) !important;
+    color: #fff !important;
+    font-size: .76rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    padding: .45rem .75rem;
+    border-radius: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    box-shadow: none !important;
+}
+.so-accordion-btn:focus { box-shadow: none !important; }
+/* Flecha Bootstrap — forzar blanco */
+.so-accordion-btn::after {
+    filter: brightness(10);
+}
+/* Estado colapsado: fondo más oscuro para diferenciar */
+.so-accordion-btn.collapsed {
+    background: linear-gradient(135deg, #1a5e52 0%, #236d5e 100%) !important;
+    opacity: .92;
+}
+.so-accordion-btn.collapsed:hover { opacity: 1; }
+
+.so-acc-cod  { opacity: .75; }
+.so-acc-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.so-acc-meta { flex-shrink: 0; }
+.so-acc-bar  { background: rgba(255,255,255,.25) !important; }
+.so-acc-pts  { color: rgba(255,255,255,.9); }
+
+/* Badge de no-cumplen dentro del header */
+.so-badge-nc {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    font-size: .68rem;
+    font-weight: 700;
+    padding: .15rem .4rem;
+    border-radius: .25rem;
+    background: rgba(220,53,69,.35);
+    color: #fde8ea;
+    border: 1px solid rgba(220,53,69,.5);
+    white-space: nowrap;
+}
+
+/* Cuerpo del accordion — quita padding propio de Bootstrap */
+.so-accordion-item .accordion-body { padding: .35rem .5rem .5rem; }
+
+@media (max-width: 768px) {
+    .so-acc-nombre { max-width: 120px; }
+    .so-acc-bar    { display: none; }
+}

@@ -57,6 +57,10 @@ public class MenuOptions
     public bool RhIndicadoresCostoSalarialHorasExtras      { get; set; } = true;
     public bool RhIndicadoresComparativoCostoLaboral       { get; set; } = true;
 
+    // ── Menús: Salud Ocupacional ─────────────────────────────────────────
+    public bool SaludOcupacional               { get; set; } = false;
+    public bool SoInspeccionComedor            { get; set; } = true;
+
     // ── Menús: Logística
     public bool Logistica                { get; set; } = false;
     public bool LogisticaRequerimiento   { get; set; } = true;
@@ -112,7 +116,9 @@ public class MenuOptions
         Facturacion      = true,
         SireFlag         = true,
         Ventas           = true,
-        Seguridad        = true,
+        Seguridad            = true,
+        SaludOcupacional     = true,
+        SoInspeccionComedor  = true,
 
         ProduccionRegistroPreparatoria = true,
         ProduccionAutoconer            = true,

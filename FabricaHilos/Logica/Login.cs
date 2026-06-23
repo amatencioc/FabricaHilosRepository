@@ -79,7 +79,8 @@ namespace FabricaHilos.Logica
                         FROM (
                             SELECT c_user, c_codigo, c_nombre, c_costo, acceso_web
                             FROM {tabla}
-                            WHERE c_user = :puser AND TRIM(psw_sig) = :ppsw
+                            WHERE ESTADO <> '9'
+                            AND c_user = :puser AND TRIM(psw_sig) = :ppsw
                             ORDER BY acceso_web DESC
                         )
                         WHERE ROWNUM = 1";

@@ -865,7 +865,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             <tbody>
                                 @foreach (var s in sscoListaOrdenada)
                                 {
-                                    bool enLegacy   = rucsEnLegacy.Contains(s.Ruc);
+                                    bool enLegacy   = rucsEnLegacy.Contains(s.Ruc ?? "");
                                     bool excluido   = rucsExclSsco.Contains(s.Ruc ?? "");
                                     <tr style="@(enLegacy ? "background:rgba(220,38,38,.09);border-left:3px solid #dc2626;" : "")">
                                         <td class="font-monospace @(enLegacy ? "fw-bold" : "")" style="@(enLegacy ? "color:#b91c1c;" : "")">@s.Ruc</td>

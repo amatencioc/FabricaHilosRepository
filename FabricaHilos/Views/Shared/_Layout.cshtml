@@ -510,6 +510,35 @@
                     </li>
                 }
 
+                @if (menus.SaludOcupacional)
+                {
+                    <!-- SALUD OCUPACIONAL -->
+                    <li class="sidebar-section">SALUD OCUPACIONAL</li>
+                    <li>
+                        <a asp-controller="InspeccionCom" asp-action="Dashboard"
+                           class="sidebar-link @(ctrl == "InspeccionCom" ? "active" : "")">
+                            <i class="bi bi-heart-pulse"></i> Salud Ocupacional
+                        </a>
+                        <ul class="list-unstyled ps-3">
+                            @if (menus.SoInspeccionComedor)
+                            {
+                            <li>
+                                <a asp-controller="InspeccionCom" asp-action="Dashboard"
+                                   class="sidebar-link sidebar-sublink @(ctrl == "InspeccionCom" && (act == "Dashboard" || act == "Historial") ? "active" : "")">
+                                    <i class="bi bi-clipboard2-check"></i> Inspección Comedor
+                                </a>
+                            </li>
+                            <li>
+                                <a asp-controller="InspeccionCom" asp-action="Acciones"
+                                   class="sidebar-link sidebar-sublink @(ctrl == "InspeccionCom" && act == "Acciones" ? "active" : "")">
+                                    <i class="bi bi-clipboard-x"></i> Acc. Correctivas
+                                </a>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
+
                 @if (menus.RecursosHumanos)
                 {
                     <!-- RECURSOS HUMANOS -->

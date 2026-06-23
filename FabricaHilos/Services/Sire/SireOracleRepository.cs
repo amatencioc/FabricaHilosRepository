@@ -1,4 +1,4 @@
-﻿using FabricaHilos.Models.Sire;
+using FabricaHilos.Models.Sire;
 using Oracle.ManagedDataAccess.Client;
 
 namespace FabricaHilos.Services.Sire;
@@ -1594,6 +1594,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
         int excluidos = 0;
 
         await using var conn = await OpenConnAsync(ct);
+        conn.AutoCommit = false;
         await using var tx   = conn.BeginTransaction();
         try
         {
@@ -1637,7 +1638,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
 
             foreach (var r in rows)
             {
-                // Si ya existe una entrada activa para este comprobante, actualizarla (OBS='SSCO')
+                // Si ya existe una entrada activa SSCO para este comprobante, actualizarla en lugar de insertar un duplicado
                 long? existingId = null;
                 using (var cmdChk = new OracleCommand(
                     "SELECT ID_EXCLUIDO FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE ID_CONCIL=:idConcil AND MOTIVO='SSCO' AND ESTADO='A' AND ROWNUM=1",
@@ -1742,9 +1743,13 @@ public sealed class SireOracleRepository : ISireOracleRepository
             try { tx.Rollback(); } catch { }
             throw;
         }
+        finally
+        {
+            conn.AutoCommit = true;
+        }
     }
 
-            public async Task<int> RestaurarPorRucAsync(
+    public async Task<int> RestaurarPorRucAsync(
         string tipo, int periodo, string ruc,
         string usuario, CancellationToken ct = default)
     {

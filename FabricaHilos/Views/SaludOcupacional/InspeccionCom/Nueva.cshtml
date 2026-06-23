@@ -1,0 +1,471 @@
+@model FabricaHilos.Models.SaludOcupacional.SoNuevaInspeccionViewModel
+@using FabricaHilos.Models.SaludOcupacional
+@{
+    bool esEdicion = Model.Inspeccion.IdInsp > 0;
+    ViewData["Title"] = esEdicion ? $"Inspección #{Model.Inspeccion.IdInsp} — Borrador" : "Nueva Inspección de Comedor";
+
+    decimal ptsObt = Model.Rubros.Sum(r => r.PtsObtenidosRubro);
+    decimal ptsMx  = Model.Rubros.Sum(r => r.PtsMaximoRubro);
+    decimal pct    = ptsMx > 0 ? Math.Round(ptsObt / ptsMx * 100, 1) : 0;
+    string pctBarCss = pct >= 75 ? "ok" : pct >= 51 ? "warn" : "danger";
+    string pctLabel  = pct >= 75 ? "ACEPTABLE" : pct >= 51 ? "CON OBSERVACIÓN" : pct == 0 ? "—" : "NO ACEPTABLE";
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">
+        <a asp-controller="InspeccionCom" asp-action="Dashboard">Inspección Comedor</a>
+    </li>
+    <li class="breadcrumb-item active">@(esEdicion ? $"Borrador #{Model.Inspeccion.IdInsp}" : "Nueva")</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@if (TempData["Error"] is string err)
+{
+    <div class="so-alert so-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@err</div></div>
+}
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+@* ── Strip de cabecera ─────────────────────────────────────────────────────── *@
+<div class="so-strip">
+    <i class="bi bi-clipboard2-pulse" style="color:var(--so-accent-green);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">@(esEdicion ? $"Inspección #{Model.Inspeccion.IdInsp}" : "Nueva Inspección")</span>
+    <span class="so-strip-sep"></span>
+    <span class="so-kpi">
+        <i class="bi bi-star-half" style="color:#fbd38d;"></i>
+        <span class="so-kpi-val">@ptsObt / @ptsMx</span>
+        <span style="opacity:.75">pts</span>
+    </span>
+    <span class="so-kpi">
+        <i class="bi bi-percent" style="color:var(--so-accent-green);"></i>
+        <span class="so-kpi-val">@pct.ToString("0.0")%</span>
+        <span style="opacity:.75">@pctLabel</span>
+    </span>
+    @{
+        int nHallazgos = Model.Rubros.Sum(r => r.Items.Count(i => i.NoCumple));
+    }
+    @if (nHallazgos > 0)
+    {
+        <span class="so-kpi" style="background:rgba(220,53,69,.25);border-color:rgba(220,53,69,.4);">
+            <i class="bi bi-exclamation-triangle-fill" style="color:#fc8181;"></i>
+            <span class="so-kpi-val" style="color:#fc8181;">@nHallazgos</span>
+            <span style="opacity:.8">hallazgos</span>
+        </span>
+    }
+</div>
+<div class="so-filter mb-3">
+    <div class="so-pct-bar-wrap flex-grow-1" style="max-width:300px;">
+        <div class="so-pct-bar @pctBarCss" style="width:@(pct)%;"></div>
+    </div>
+    <small class="text-muted ms-2" style="font-size:.72rem;">Progreso del checklist</small>
+</div>
+
+@Html.AntiForgeryToken()
+
+<form asp-controller="InspeccionCom" asp-action="GuardarInspeccion" method="post" id="frmInspeccion">
+    <input type="hidden" name="Inspeccion.IdInsp" value="@Model.Inspeccion.IdInsp" />
+
+    @* ── Sección: Encabezado ────────────────────────────────────────────────── *@
+    <div class="so-card mb-3">
+        <div class="so-card-header">
+            <i class="bi bi-info-circle" style="color:var(--so-teal-mid);"></i>
+            <span>Datos de la Inspección</span>
+        </div>
+        <div class="so-card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">
+                        Comedor <span class="text-danger">*</span>
+                    </label>
+                    <select name="Inspeccion.IdCom" class="form-select form-select-sm" required>
+                        <option value="">— Seleccionar —</option>
+                        @foreach (var c in Model.Comedores)
+                        {
+                            <option value="@c.IdCom"
+                                    selected="@(Model.Inspeccion.IdCom == c.IdCom ? "selected" : null)">
+                                @c.Nombre
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">
+                        Fecha <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" name="Inspeccion.FechaInsp"
+                           class="form-control form-control-sm flatpickr"
+                           value="@Model.Inspeccion.FechaInsp.ToString("dd/MM/yyyy")"
+                           placeholder="dd/mm/aaaa" required />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Hora</label>
+                    <input type="text" name="Inspeccion.HoraInsp"
+                           class="form-control form-control-sm"
+                           value="@Model.Inspeccion.HoraInsp"
+                           placeholder="09:00 AM" maxlength="10" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">
+                        Encargada de Cocina
+                    </label>
+                    <input type="text" name="Inspeccion.Encargada"
+                           class="form-control form-control-sm"
+                           value="@Model.Inspeccion.Encargada"
+                           placeholder="Nombre de la encargada" maxlength="100" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Inspector</label>
+                    <input type="text" name="Inspeccion.Inspector"
+                           class="form-control form-control-sm"
+                           value="@Model.Inspeccion.Inspector"
+                           placeholder="Lic. Nombre Apellido" maxlength="100" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Médico Supervisor</label>
+                    <input type="text" name="Inspeccion.Medico"
+                           class="form-control form-control-sm"
+                           value="@Model.Inspeccion.Medico"
+                           placeholder="Dr. Nombre Apellido" maxlength="100" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" name="accion" value="guardar"
+                            class="btn btn-sm w-100"
+                            style="background:var(--so-teal);color:#fff;font-size:.78rem;">
+                        <i class="bi bi-floppy"></i> Guardar encabezado
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@* ── Nota metodológica ─────────────────────────────────────────────────────── *@
+<div class="so-alert so-alert-info mb-3">
+    <i class="bi bi-info-circle-fill"></i>
+    <div style="font-size:.8rem;">
+        <strong>Criterio de calificación:</strong>
+        Puntaje <strong>2 o 4</strong> si cumple el requisito · <strong>0</strong> si no cumple.
+        No hay puntajes intermedios. |
+        <span class="so-semaforo so-semaforo-ok" style="font-size:.7rem;padding:.15rem .45rem;">≥75% Aceptable</span>
+        <span class="so-semaforo so-semaforo-warn" style="font-size:.7rem;padding:.15rem .45rem;margin:0 .3rem;">51-74% Con Observación</span>
+        <span class="so-semaforo so-semaforo-danger" style="font-size:.7rem;padding:.15rem .45rem;">&lt;50% No Aceptable</span>
+    </div>
+</div>
+
+@* ── Controles globales accordion ─────────────────────────────────────────── *@
+<div class="d-flex align-items-center gap-2 mb-2">
+    <span style="font-size:.78rem;color:var(--so-text-muted,#aaa);">
+        <i class="bi bi-list-nested me-1"></i>@Model.Rubros.Count rubros
+    </span>
+    <div class="ms-auto d-flex gap-1">
+        <button type="button" id="btnExpandAll" class="btn btn-sm btn-outline-secondary"
+                style="font-size:.75rem;padding:.2rem .55rem;">
+            <i class="bi bi-arrows-expand"></i> Expandir todo
+        </button>
+        <button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary"
+                style="font-size:.75rem;padding:.2rem .55rem;">
+            <i class="bi bi-arrows-collapse"></i> Colapsar todo
+        </button>
+    </div>
+</div>
+
+@* ── Checklist por rubros (accordion) ─────────────────────────────────────── *@
+<div class="accordion so-rubros-accordion" id="accordionRubros">
+@{int rubroIdx = 0;}
+@foreach (var rubro in Model.Rubros)
+{
+    string collapseId = $"rubroCollapse_{rubroIdx}";
+    string headerId   = $"rubroHeader_{rubroIdx}";
+    rubroIdx++;
+
+    int nNoCumple = rubro.Items.Count(i => i.NoCumple);
+
+    <div class="accordion-item so-accordion-item mb-2" id="rubroItem_@(rubroIdx)">
+        <h2 class="accordion-header" id="@headerId">
+            <button class="accordion-button so-accordion-btn collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#@collapseId"
+                    aria-expanded="false"
+                    aria-controls="@collapseId">
+
+                <i class="bi @(rubro.Rubro.IconoBi ?? "bi-list-check") me-2"
+                   style="font-size:.9rem;flex-shrink:0;"></i>
+
+                <span class="so-acc-cod me-1">@rubro.Rubro.CodRubro.</span>
+                <span class="so-acc-nombre flex-grow-1">@rubro.Rubro.Nombre</span>
+
+                <span class="so-acc-meta d-flex align-items-center gap-2 ms-3 me-2" data-rubro-id="@rubro.Rubro.CodRubro">
+                    @if (nNoCumple > 0)
+                    {
+                        <span class="badge so-badge-nc" title="Ítems sin cumplir">
+                            <i class="bi bi-exclamation-triangle-fill"></i> @nNoCumple
+                        </span>
+                    }
+                    <div class="so-pct-bar-wrap so-acc-bar" style="width:70px;">
+                        <div class="so-pct-bar @rubro.PctBarCss so-rubro-bar"
+                             style="width:@rubro.PctRubro%;"
+                             data-obt="@rubro.PtsObtenidosRubro"
+                             data-max="@rubro.PtsMaximoRubro"></div>
+                    </div>
+                    <span class="so-acc-pts" style="font-size:.7rem;opacity:.85;white-space:nowrap;">
+                        @rubro.PtsObtenidosRubro / @rubro.PtsMaximoRubro pts
+                    </span>
+                </span>
+            </button>
+        </h2>
+
+        <div id="@collapseId"
+             class="accordion-collapse collapse"
+             aria-labelledby="@headerId"
+             data-bs-parent="">
+
+            <div class="accordion-body p-0">
+                @foreach (var item in rubro.Items)
+                {
+                    <div class="so-cl-row @(item.NoCumple && item.TieneHallazgo ? "so-cl-row-noncompliant" : "")"
+                         data-item-id="@item.IdItem"
+                         data-detalle-id="@item.IdDetalle"
+                         data-pts-max="@item.PtsMax">
+
+                        <div class="so-cl-num">@item.CodItem</div>
+
+                        <div class="so-cl-desc">
+                            @item.Descripcion
+                            <small class="d-block">máx. @item.PtsMax pts</small>
+                        </div>
+
+                        <div class="so-pts-group" title="Seleccionar puntaje">
+                            <button type="button"
+                                    class="so-pts-btn @item.PuntajeBtnCss0 btn-pts"
+                                    data-pts="0" data-detalle="@item.IdDetalle">0</button>
+                            <button type="button"
+                                    class="so-pts-btn @item.PuntajeBtnCss2 btn-pts"
+                                    data-pts="2" data-detalle="@item.IdDetalle">2</button>
+                            @if (item.PtsMax == 4)
+                            {
+                                <button type="button"
+                                        class="so-pts-btn @item.PuntajeBtnCss4 btn-pts"
+                                        data-pts="4" data-detalle="@item.IdDetalle">4</button>
+                            }
+                        </div>
+
+                        <div>
+                            <input type="text"
+                                   class="form-control form-control-sm inp-hallazgo"
+                                   data-detalle="@item.IdDetalle"
+                                   value="@item.Hallazgo"
+                                   placeholder="Hallazgo (opcional, si puntaje = 0)"
+                                   maxlength="500"
+                                   style="font-size:.77rem;" />
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+</div>
+
+@* ── Botones de cierre ─────────────────────────────────────────────────────── *@
+@if (esEdicion)
+{
+    <div class="d-flex gap-2 justify-content-end mt-4 mb-3">
+        <a asp-controller="InspeccionCom" asp-action="Dashboard"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        <form asp-controller="InspeccionCom" asp-action="GuardarInspeccion"
+              method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Inspeccion.IdInsp" value="@Model.Inspeccion.IdInsp" />
+            <button type="submit" name="accion" value="cerrar"
+                    class="btn btn-sm"
+                    style="background:var(--so-ok);color:#fff;font-weight:600;"
+                    onclick="return confirm('¿Cerrar esta inspección? Esta acción es irreversible.')">
+                <i class="bi bi-check2-circle"></i> Cerrar Inspección
+            </button>
+        </form>
+    </div>
+}
+
+@section Scripts {
+<script>
+(function() {
+    const token = document.querySelector('meta[name="__RequestVerificationToken"]')?.content
+               || document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+    // Si la inspección aún no existe en BD (IdInsp == 0), los puntajes
+    // no se persisten vía AJAX: el usuario debe guardar el encabezado primero.
+    const inspeccionCreada = @(Model.Inspeccion.IdInsp > 0 ? "true" : "false");
+
+    function puedeGuardarAjax(detalleId) {
+        if (!inspeccionCreada) {
+            console.info('[SO] Inspección no guardada aún — puntaje se aplicará al guardar encabezado.');
+            return false;
+        }
+        if (!detalleId || detalleId === 0) {
+            console.warn('[SO] IdDetalle = 0, skip GuardarPuntaje.');
+            return false;
+        }
+        return true;
+    }
+
+    // ── Guardar puntaje vía AJAX al hacer click en 0/2/4 ─────────────────
+    document.querySelectorAll('.btn-pts').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const detalleId = parseInt(this.dataset.detalle);
+            const pts       = parseInt(this.dataset.pts);
+            const row       = this.closest('.so-cl-row');
+
+            // Actualizar UI inmediatamente
+            row.querySelectorAll('.btn-pts').forEach(b => {
+                b.classList.remove('selected-0','selected-2','selected-4');
+            });
+            this.classList.add(`selected-${pts}`);
+
+            // Mostrar/ocultar campo de hallazgo
+            const inpHallazgo = row.querySelector('.inp-hallazgo');
+            if (pts === 0) {
+                inpHallazgo.placeholder = 'Hallazgo requerido para puntaje 0';
+                row.classList.add('so-cl-row-noncompliant');
+            } else {
+                inpHallazgo.placeholder = 'Hallazgo (opcional)';
+                row.classList.remove('so-cl-row-noncompliant');
+            }
+
+            actualizarBarraRubro(row);
+            actualizarBarraProgreso();
+
+            // Solo persistir si la inspección ya existe en BD
+            if (!puedeGuardarAjax(detalleId)) return;
+
+            try {
+                const r = await fetch('/SaludOcupacional/InspeccionCom/GuardarPuntaje', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        idDetalle: detalleId,
+                        puntaje: pts,
+                        hallazgo: inpHallazgo.value || null,
+                        responsable: null
+                    })
+                });
+                if (!r.ok) console.warn('[SO] Error guardando puntaje:', await r.text());
+            } catch(e) {
+                console.error('[SO] Error fetch GuardarPuntaje:', e);
+            }
+        });
+    });
+
+    // ── Guardar hallazgo al perder foco ───────────────────────────────────
+    document.querySelectorAll('.inp-hallazgo').forEach(inp => {
+        inp.addEventListener('blur', async function() {
+            const detalleId = parseInt(this.dataset.detalle);
+            if (!puedeGuardarAjax(detalleId)) return;
+
+            const row    = this.closest('.so-cl-row');
+            const ptsBtn = row.querySelector('.btn-pts.selected-0, .btn-pts.selected-2, .btn-pts.selected-4');
+            const pts    = ptsBtn ? parseInt(ptsBtn.dataset.pts) : 0;
+
+            try {
+                await fetch('/SaludOcupacional/InspeccionCom/GuardarPuntaje', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        idDetalle: detalleId,
+                        puntaje: pts,
+                        hallazgo: this.value || null,
+                        responsable: null
+                    })
+                });
+            } catch(e) { /* silencioso */ }
+        });
+    });
+
+    // ── Actualizar barra de un rubro concreto ─────────────────────────────
+    function actualizarBarraRubro(rowOrItem) {
+        const collapseEl = rowOrItem.closest('.accordion-collapse');
+        if (!collapseEl) return;
+
+        let obt = 0, max = 0;
+        collapseEl.querySelectorAll('.so-cl-row').forEach(row => {
+            max += parseInt(row.dataset.ptsMax || 0);
+            const sel = row.querySelector('.btn-pts.selected-0, .btn-pts.selected-2, .btn-pts.selected-4');
+            obt += sel ? parseInt(sel.dataset.pts) : 0;
+        });
+
+        const pct = max > 0 ? Math.round(obt / max * 100 * 10) / 10 : 0;
+        const css = pct >= 75 ? 'ok' : pct >= 51 ? 'warn' : 'danger';
+
+        const barEl = collapseEl.closest('.accordion-item').querySelector('.so-rubro-bar');
+        const ptsEl = collapseEl.closest('.accordion-item').querySelector('.so-acc-pts');
+        const ncEl  = collapseEl.closest('.accordion-item').querySelector('.so-badge-nc');
+
+        if (barEl) {
+            barEl.style.width = pct + '%';
+            barEl.className = `so-pct-bar ${css} so-rubro-bar`;
+        }
+        if (ptsEl) ptsEl.textContent = `${obt} / ${max} pts`;
+
+        const nNc = collapseEl.querySelectorAll('.so-cl-row-noncompliant').length;
+        if (ncEl) {
+            ncEl.style.display = nNc > 0 ? '' : 'none';
+            const icon = ncEl.querySelector('i');
+            ncEl.textContent = '';
+            if (icon) ncEl.appendChild(icon);
+            ncEl.append(` ${nNc}`);
+        }
+    }
+
+    // ── Actualizar barra de progreso global ───────────────────────────────
+    function actualizarBarraProgreso() {
+        let obt = 0, max = 0;
+        document.querySelectorAll('.so-cl-row').forEach(row => {
+            max += parseInt(row.dataset.ptsMax || 0);
+            const sel = row.querySelector('.btn-pts.selected-0, .btn-pts.selected-2, .btn-pts.selected-4');
+            obt += sel ? parseInt(sel.dataset.pts) : 0;
+        });
+        const pct = max > 0 ? Math.round(obt / max * 100 * 10) / 10 : 0;
+        const css = pct >= 75 ? 'ok' : pct >= 51 ? 'warn' : 'danger';
+
+        document.querySelectorAll('.so-pct-bar').forEach(b => {
+            if (!b.closest('.accordion-item') && !b.closest('.so-cl-section')) {
+                b.style.width = pct + '%';
+                b.className = 'so-pct-bar ' + css;
+            }
+        });
+    }
+
+    // ── Expandir / Colapsar todo ──────────────────────────────────────────
+    document.getElementById('btnExpandAll')?.addEventListener('click', function() {
+        document.querySelectorAll('#accordionRubros .accordion-collapse').forEach(el => {
+            bootstrap.Collapse.getOrCreateInstance(el).show();
+        });
+    });
+
+    document.getElementById('btnCollapseAll')?.addEventListener('click', function() {
+        document.querySelectorAll('#accordionRubros .accordion-collapse').forEach(el => {
+            bootstrap.Collapse.getOrCreateInstance(el).hide();
+        });
+    });
+
+    // Inicializar flatpickr para fecha
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr('.flatpickr', {
+            dateFormat: 'd/m/Y',
+            locale: 'es'
+        });
+    }
+})();
+</script>
+}

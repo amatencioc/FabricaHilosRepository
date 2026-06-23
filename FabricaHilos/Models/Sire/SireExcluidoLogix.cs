@@ -9,7 +9,7 @@ public class SireExcluidoLogix
     public long     IdExcluido    { get; init; }
     public string   Tipo          { get; init; } = "";   // '1'=Ventas '2'=Compras
     public int      Periodo       { get; init; }
-    public string   Motivo        { get; init; } = "";   // 'NC_AUTO' | 'MANUAL'
+    public string   Motivo        { get; init; } = "";   // 'NC_AUTO' | 'MANUAL' | 'SSCO'
 
     // Snapshot del documento
     public long?    IdProp        { get; init; }

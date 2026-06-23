@@ -1,0 +1,292 @@
+@model FabricaHilos.Models.SaludOcupacional.SoDashboardViewModel
+@{
+    ViewData["Title"] = "SO — Inspección de Comedor y Cocina";
+
+    string CalifCss(string? c) => c switch
+    {
+        "ACEPTABLE"       => "so-semaforo-ok",
+        "CON OBSERVACION" => "so-semaforo-warn",
+        "NO ACEPTABLE"    => "so-semaforo-danger",
+        _                 => ""
+    };
+    string CalifIcon(string? c) => c switch
+    {
+        "ACEPTABLE"       => "bi-check-circle-fill",
+        "CON OBSERVACION" => "bi-exclamation-circle-fill",
+        "NO ACEPTABLE"    => "bi-x-circle-fill",
+        _                 => "bi-dash-circle"
+    };
+    string EstadoBadge(string e) => e switch
+    {
+        "B" => "so-badge-proc",
+        "C" => "so-badge-ok",
+        "A" => "so-badge-danger",
+        _   => "so-badge-secondary"
+    };
+    string EstadoLabel(string e) => e switch
+    {
+        "B" => "Borrador", "C" => "Cerrada", "A" => "Anulada", _ => e
+    };
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item active">Salud Ocupacional</li>
+    <li class="breadcrumb-item active">Inspección Comedor</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@if (TempData["Error"] is string err)
+{
+    <div class="so-alert so-alert-danger"><i class="bi bi-exclamation-triangle-fill"></i><div>@err</div></div>
+}
+@if (TempData["Success"] is string ok)
+{
+    <div class="so-alert so-alert-success"><i class="bi bi-check-circle-fill"></i><div>@ok</div></div>
+}
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+@* ── Strip de cabecera ─────────────────────────────────────────────────────── *@
+<div class="so-strip">
+    <i class="bi bi-heart-pulse" style="color:var(--so-accent-green);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">Inspección de Comedor y Cocina</span>
+    <span class="so-strip-sep"></span>
+    <span class="so-kpi" title="Inspecciones este año">
+        <i class="bi bi-calendar3" style="color:#fbd38d;"></i>
+        <span class="so-kpi-val">@Model.InspeccionesEsteAno</span>
+        <span style="opacity:.75">insp. @DateTime.Today.Year</span>
+    </span>
+    <span class="so-kpi" title="Acciones correctivas pendientes">
+        <i class="bi bi-clipboard-x" style="color:#fc8181;"></i>
+        <span class="so-kpi-val">@Model.AccionesPend</span>
+        <span style="opacity:.75">acc. pendientes</span>
+    </span>
+    @if (Model.AccionesVencidas > 0)
+    {
+        <span class="so-kpi" style="background:rgba(220,53,69,.25);border-color:rgba(220,53,69,.4);">
+            <i class="bi bi-alarm-fill" style="color:#fc8181;"></i>
+            <span class="so-kpi-val" style="color:#fc8181;">@Model.AccionesVencidas</span>
+            <span style="opacity:.8">vencidas</span>
+        </span>
+    }
+    @if (Model.UltimoPctCumpl.HasValue)
+    {
+        <span class="so-kpi" title="Última inspección cerrada">
+            <i class="bi bi-percent" style="color:var(--so-accent-green);"></i>
+            <span class="so-kpi-val">@Model.UltimoPctCumpl.Value.ToString("0.0")%</span>
+            <span style="opacity:.75">última insp.</span>
+        </span>
+    }
+    <span class="ms-auto">
+        <a asp-controller="InspeccionCom" asp-action="Nueva"
+           class="btn btn-sm" style="background:var(--so-teal);color:#fff;font-size:.75rem;font-weight:600;">
+            <i class="bi bi-plus-circle"></i> Nueva Inspección
+        </a>
+    </span>
+</div>
+
+@* ── Filtro ─────────────────────────────────────────────────────────────────── *@
+<div class="so-filter">
+    <a asp-controller="InspeccionCom" asp-action="Historial"
+       class="btn btn-sm btn-outline-secondary" style="font-size:.75rem;">
+        <i class="bi bi-journal-text"></i> Ver historial completo
+    </a>
+    <a asp-controller="InspeccionCom" asp-action="Acciones"
+       class="btn btn-sm btn-outline-warning" style="font-size:.75rem;">
+        <i class="bi bi-clipboard-check"></i> Bandeja acciones correctivas
+    </a>
+</div>
+
+@* ── KPI Cards ────────────────────────────────────────────────────────────────── *@
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="so-kpi-card ok">
+            <div class="so-kpi-card-icon ok"><i class="bi bi-journal-check"></i></div>
+            <div>
+                <div class="so-kpi-card-label">Total inspecciones</div>
+                <div class="so-kpi-card-value">@Model.TotalInspecciones</div>
+                <div class="so-kpi-card-sub">@Model.InspeccionesEsteAno este año</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="so-kpi-card @(Model.AccionesPend > 0 ? "warn" : "ok")">
+            <div class="so-kpi-card-icon @(Model.AccionesPend > 0 ? "warn" : "ok")">
+                <i class="bi bi-clipboard-x"></i>
+            </div>
+            <div>
+                <div class="so-kpi-card-label">Acc. pendientes</div>
+                <div class="so-kpi-card-value">@Model.AccionesPend</div>
+                <div class="so-kpi-card-sub">@Model.AccionesVencidas vencidas</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="so-kpi-card @(!Model.UltimoPctCumpl.HasValue ? "" : Model.UltimoPctCumpl >= 75 ? "ok" : Model.UltimoPctCumpl >= 51 ? "warn" : "danger")">
+            <div class="so-kpi-card-icon @(!Model.UltimoPctCumpl.HasValue ? "" : Model.UltimoPctCumpl >= 75 ? "ok" : Model.UltimoPctCumpl >= 51 ? "warn" : "danger")">
+                <i class="bi bi-percent"></i>
+            </div>
+            <div>
+                <div class="so-kpi-card-label">Última calificación</div>
+                <div class="so-kpi-card-value">
+                    @(Model.UltimoPctCumpl.HasValue ? $"{Model.UltimoPctCumpl:0.0}%" : "—")
+                </div>
+                <div class="so-kpi-card-sub">@(Model.UltimaCalificacion ?? "Sin datos")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="so-kpi-card info">
+            <div class="so-kpi-card-icon info"><i class="bi bi-building"></i></div>
+            <div>
+                <div class="so-kpi-card-label">Comedores activos</div>
+                <div class="so-kpi-card-value">@Model.Comedores.Count</div>
+                <div class="so-kpi-card-sub">bajo supervisión</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    @* ── Últimas inspecciones ─────────────────────────────────────────────── *@
+    <div class="col-12 col-lg-7">
+        <div class="so-card">
+            <div class="so-card-header">
+                <i class="bi bi-journal-text" style="color:var(--so-teal-mid);"></i>
+                <span>Últimas inspecciones</span>
+                <a asp-controller="InspeccionCom" asp-action="Historial"
+                   class="ms-auto" style="font-size:.72rem;color:var(--so-teal-mid);">
+                    Ver todas <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="so-card-body p-0">
+                @if (!Model.UltimasInspecciones.Any())
+                {
+                    <div class="text-center py-4 text-muted" style="font-size:.82rem;">
+                        <i class="bi bi-journal-x fs-4 d-block mb-2"></i>
+                        No hay inspecciones registradas
+                    </div>
+                }
+                else
+                {
+                    <table class="so-table w-100">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Comedor</th>
+                                <th>Inspector</th>
+                                <th>Resultado</th>
+                                <th>Estado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var insp in Model.UltimasInspecciones)
+                            {
+                                <tr>
+                                    <td class="text-nowrap">@insp.FechaInsp.ToString("dd/MM/yyyy")</td>
+                                    <td>@insp.NombreComedor</td>
+                                    <td class="text-nowrap">@insp.Inspector</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(insp.Calificacion))
+                                        {
+                                            <span class="so-semaforo @CalifCss(insp.Calificacion)" style="font-size:.68rem;">
+                                                <i class="bi @CalifIcon(insp.Calificacion)"></i>
+                                                @insp.PctCumpl?.ToString("0.0")%
+                                            </span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
+                                    </td>
+                                    <td>
+                                        <span class="so-badge @EstadoBadge(insp.Estado)">
+                                            @EstadoLabel(insp.Estado)
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (insp.EsBorrador)
+                                        {
+                                            <a asp-controller="InspeccionCom" asp-action="Editar"
+                                               asp-route-id="@insp.IdInsp"
+                                               class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:.15rem .4rem;">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                               asp-route-id="@insp.IdInsp"
+                                               class="btn btn-xs btn-outline-secondary" style="font-size:.7rem;padding:.15rem .4rem;">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ── Acciones correctivas pendientes ──────────────────────────────────── *@
+    <div class="col-12 col-lg-5">
+        <div class="so-card">
+            <div class="so-card-header">
+                <i class="bi bi-clipboard-x" style="color:var(--so-warn-mid);"></i>
+                <span>Acciones correctivas abiertas</span>
+                <a asp-controller="InspeccionCom" asp-action="Acciones"
+                   class="ms-auto" style="font-size:.72rem;color:var(--so-warn-mid);">
+                    Ver todas <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="so-card-body p-0">
+                @if (!Model.AccionesPendientes.Any())
+                {
+                    <div class="text-center py-4 text-muted" style="font-size:.82rem;">
+                        <i class="bi bi-check2-all fs-4 d-block mb-2" style="color:var(--so-ok);"></i>
+                        Sin acciones correctivas abiertas
+                    </div>
+                }
+                else
+                {
+                    <div class="list-group list-group-flush" style="font-size:.78rem;">
+                        @foreach (var ac in Model.AccionesPendientes.Take(8))
+                        {
+                            <div class="list-group-item py-2 px-3 @(ac.EsVencida ? "list-group-item-danger" : "")">
+                                <div class="d-flex align-items-start gap-2">
+                                    <span class="so-badge @ac.EstadoBadgeCss" style="flex-shrink:0;margin-top:.1rem;">
+                                        @ac.EstadoLabel
+                                    </span>
+                                    <div class="flex-grow-1 min-width-0">
+                                        <div class="fw-semibold text-truncate">@ac.Descripcion</div>
+                                        <div class="text-muted" style="font-size:.7rem;">
+                                            <i class="bi bi-building"></i> @ac.NombreComedor
+                                            @if (ac.FchLimite.HasValue)
+                                            {
+                                                <span class="ms-2 @(ac.EsVencida ? "text-danger fw-bold" : "")">
+                                                    <i class="bi bi-calendar-x"></i>
+                                                    límite: @ac.FchLimite.Value.ToString("dd/MM/yy")
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (Model.AccionesPendientes.Count > 8)
+                    {
+                        <div class="text-center py-2" style="font-size:.73rem;color:var(--so-gray-500);">
+                            + @(Model.AccionesPendientes.Count - 8) más —
+                            <a asp-controller="InspeccionCom" asp-action="Acciones">ver todas</a>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
