@@ -149,6 +149,20 @@ public interface ISireOracleRepository
     /// </summary>
     Task AutoExcluirNcAsync(string tipo, int periodo, string usuario, CancellationToken ct = default);
 
+    /// <summary>
+    /// Excluye todos los comprobantes de un RUC en el período dado
+    /// (todos los estados salvo ya EXCLUIDO) insertando/actualizando SIRE_EXCLUIDOS_LOGIX
+    /// con MOTIVO='MANUAL' y OBS='SSCO'. Retorna el total de registros excluidos.
+    /// </summary>
+    Task<int> ExcluirPorRucAsync(string tipo, int periodo, string ruc,
+        string usuario, CancellationToken ct = default);
+
+    /// <summary>
+    /// Restaura todos los excluidos activos (ESTADO='A') de un RUC para el período dado.
+    /// </summary>
+    Task<int> RestaurarPorRucAsync(string tipo, int periodo, string ruc,
+        string usuario, CancellationToken ct = default);
+
     // =========================================================================
     // Validez de comprobante (API Consulta Integrada SUNAT)
     // =========================================================================

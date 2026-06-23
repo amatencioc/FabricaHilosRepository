@@ -350,6 +350,7 @@
 .sire-alert-danger  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
 .sire-alert-success { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
 .sire-alert-mock    { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
+.sire-alert-stub    { background: #fdf4ff; border-color: #d8b4fe; color: #6b21a8; }
 
 /* ═══════════════════════════════════════════════════════
   13. CÓDIGO INLINE

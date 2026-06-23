@@ -229,6 +229,7 @@ builder.Services.AddSingleton<ISireOracleRepository, SireOracleRepository>();
 // Cola y worker de exportación asíncrona SIRE
 builder.Services.AddSingleton<ISireExportacionQueue, SireExportacionQueue>();
 builder.Services.AddScoped<SireValidaService>();
+builder.Services.AddScoped<SirePropuestaZipService>();
 builder.Services.AddScoped<FabricaHilos.Services.Sire.SireReporteComprasService>();
 // Validez de comprobantes (API Consulta Integrada SUNAT — clientesextranet)
 builder.Services.AddSingleton<IConsultaValidezService, ConsultaValidezService>();

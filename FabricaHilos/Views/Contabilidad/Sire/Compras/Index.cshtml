@@ -1,4 +1,4 @@
-﻿@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
+@model FabricaHilos.Controllers.Contabilidad.SireRegistrosViewModel
 @using FabricaHilos.Sire.Models
 @{
     ViewData["Title"] = "SIRE - RCE (Registro de Compras)";
@@ -7,6 +7,7 @@
     var periodoSeleccionado = Model?.PeriodoSeleccionado  ?? string.Empty;
     var registros           = Model?.RegistrosCompras     ?? Array.Empty<RegistroCompra>();
     var esMock              = Model?.EsMock ?? false;
+    var esStub              = Model?.EsStub ?? false;
     var resumen             = Model?.PropuestasResumen    ?? new List<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>();
     var propuesta           = Model?.RegistrosPropuesta   ?? new List<FabricaHilos.Models.Sire.SireValidaRegistro>();
     var legacy              = Model?.RegistrosLegacy      ?? new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
@@ -18,6 +19,7 @@
     var sscoPeriodoCarga  = Model?.SscoPeriodoCarga;
     int sscoHits          = Model?.SscoHits ?? 0;   // calculado en el controller, no en la vista
     // ─────────────────────────────────────────────────────────────────────────
+    var rucsExclSsco      = Model?.RucsExcluidosPorSsco ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     var yyyyMm = periodoSeleccionado.Length == 6
         ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}"
@@ -56,8 +58,21 @@
 {
     <div class="sire-alert sire-alert-mock"><i class="bi bi-cone-striped"></i><strong>MODO MOCK</strong> — Datos de prueba. No se realizan llamadas reales a SUNAT.</div>
 }
+@if (esStub)
+{
+    <div class="sire-alert sire-alert-stub"><i class="bi bi-exclamation-triangle-fill"></i><strong>MODO PRUEBA (STUB)</strong> — Las acciones <em>Aceptar Propuesta</em> y <em>Cerrar Período</em> simulan el envío a SUNAT sin hacer llamadas reales. Los datos Oracle y los registros locales sí se procesan.</div>
+}
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
+
+@if (TempData["Error"] is string errCarga)
+{
+    <div class="alert alert-danger alert-dismissible d-flex align-items-start gap-2 py-2 mb-2" role="alert" style="font-size:.82rem;">
+        <i class="bi bi-database-exclamation fs-5 flex-shrink-0"></i>
+        <div><strong>Error al cargar datos:</strong> @errCarga</div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
 
 @* ── Cabecera strip ───────────────────────────────────────────────────────── *@
 <div class="sire-strip">
@@ -100,9 +115,9 @@
         <div class="vr d-none d-lg-block mx-1" style="opacity:.2;"></div>
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="iniciarExportacion('@periodoSeleccionado', 'compras')">
-                <i class="bi bi-cloud-download me-1"></i>Exportar Propuesta
-            </button>
-            @if (Model?.TieneZipLocal == true)
+                    <i class="bi bi-cloud-download me-1"></i>Exportar Propuesta
+                </button>
+                @if (Model?.TieneZipLocal == true)
             {
                 <button type="button" class="btn btn-sm btn-outline-warning" id="btnReprocesarCompras"
                         data-zip-nombre="@(Model?.NombreZipLocal ?? "")"
@@ -850,7 +865,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                             <tbody>
                                 @foreach (var s in sscoListaOrdenada)
                                 {
-                                    bool enLegacy = rucsEnLegacy.Contains(s.Ruc);
+                                    bool enLegacy   = rucsEnLegacy.Contains(s.Ruc);
+                                    bool excluido   = rucsExclSsco.Contains(s.Ruc ?? "");
                                     <tr style="@(enLegacy ? "background:rgba(220,38,38,.09);border-left:3px solid #dc2626;" : "")">
                                         <td class="font-monospace @(enLegacy ? "fw-bold" : "")" style="@(enLegacy ? "color:#b91c1c;" : "")">@s.Ruc</td>
                                         <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="@s.RazonSocial">@(s.RazonSocial ?? "-")</td>
@@ -877,7 +893,8 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                 <tr>
                                     <td colspan="9" class="text-muted" style="font-size:.72rem;">
                                         Total: <strong>@sscoLista.Count.ToString("N0")</strong> sujetos en padrón SSCO
-                                        @if (sscoHits > 0){ <span class="ms-3 text-danger fw-semibold">⚠ @sscoHits con comprobantes en Legacy</span> }
+                                        @if (sscoHits > 0){ <span class="ms-3 text-danger fw-semibold">&#9888; @sscoHits con comprobantes en Legacy</span> }
+                                        @if (rucsExclSsco.Count > 0){ <span class="ms-3 fw-semibold" style="color:#16a34a;">&#x2713; @rucsExclSsco.Count RUC(s) excluido(s)</span> }
                                     </td>
                                 </tr>
                             </tfoot>
@@ -919,6 +936,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <th style="width:80px" class="text-center">Estado</th>
                                     <th style="width:130px" class="text-center" id="th-validez-sunat" title="Validación SUNAT: estado CP, RUC y domicilio fiscal">Validez SUNAT</th>
                                     <th title="Campos con diferencia entre SUNAT y ERP. Hover para ver los valores.">Diferencias detalladas</th>
+                                    <th style="width:100px;" class="text-center" title="Proveedor en el padrón SSCO de SUNAT">SSCO</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1024,7 +1042,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                             && (   (r.ValidezCp is not "1" and not "3")
                                                 || (r.ValidezRuc != null && r.ValidezRuc != "00")
                                                 || (r.ValidezDom != null && r.ValidezDom != "00") );
-                                        <tr data-concil='@r.Estado' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
+                                        // AVISO = fila OK con diferencias solo informativas (DiffCampos no vacío pero sin IGVIPMDG ni TOTAL_CP)
+                                        var _tieneAviso = r.Estado == "OK"
+                                            && !string.IsNullOrWhiteSpace(r.DiffCampos);
+                                        <tr data-concil='@r.Estado' data-diff-info='@(_tieneAviso ? "1" : "")' data-validez-cp='@(r.ValidezCp ?? "")' data-cpe-error='@(_tieneCpeError ? "1" : "")' class="@rowClass" style="@rowBg">
                                             <td class="td-check-excl" style="display:none;">
                                                 @if (r.Estado == "SOLO_SUNAT")
                                                 {
@@ -1190,6 +1211,36 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                                     </div>
                                                 }
                                             </td>
+                                            <td class="text-center">
+                                                @if (r.EsSsco && r.Estado == "SOLO_LEGACY")
+                                                {
+                                                    <button type="button" class="btn btn-sm py-0 px-1"
+                                                        style="font-size:.65rem;background:#dc2626;color:#fff;border:none;"
+                                                        title="Excluir del reemplazo SUNAT: proveedor en padrón SSCO"
+                                                        onclick="sscoExcluir(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(r.Ruc ?? "")))">
+                                                        <i class="bi bi-shield-slash me-1"></i>Excluir SSCO
+                                                    </button>
+                                                }
+                                                else if (r.EsSsco && r.Estado == "EXCLUIDO")
+                                                {
+                                                    <button type="button" class="btn btn-sm py-0 px-1"
+                                                        style="font-size:.65rem;background:#16a34a;color:#fff;border:none;"
+                                                        title="Restaurar comprobantes excluidos por SSCO"
+                                                        onclick="sscoRestaurar(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(r.Ruc ?? "")))">
+                                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar
+                                                    </button>
+                                                }
+                                                else if (r.EsSsco)
+                                                {
+                                                    <span class="badge" style="background:#dc2626;font-size:.58rem;" title="Proveedor en padrón SSCO">
+                                                        <i class="bi bi-shield-exclamation me-1"></i>SSCO
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted" style="font-size:.7rem;">—</span>
+                                                }
+                                            </td>
                                         </tr>
                                     }
                                 }
@@ -1207,6 +1258,7 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
                                     <td></td>
                                     <td></td>
                                     <td></td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1218,6 +1270,34 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     </div>
 }
 
+
+@* ── Modal: Resultado Aceptar Propuesta ─────────────────────────────────────────── *@
+<div class="modal fade" id="modalResultadoAceptar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:12px;overflow:hidden;">
+            <div class="modal-header py-2" id="modalResultadoAceptarHeader" style="background:var(--sire-rce);color:#fff;">
+                <h6 class="modal-title fw-semibold">
+                    <i class="bi bi-check-circle-fill me-2"></i><span id="rAcepTituloTxt">Propuesta aceptada</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" style="font-size:.875rem;">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th style="width:130px;font-weight:600;">Tipo</th><td id="rAcepTipo">—</td></tr>
+                        <tr><th>Período</th><td id="rAcepPeriodo">—</td></tr>
+                        <tr><th>Ticket SUNAT</th><td id="rAcepTicket" class="font-monospace small"></td></tr>
+                        <tr><th>Estado</th><td id="rAcepEstado">—</td></tr>
+                        <tr><th>Archivo</th><td id="rAcepArchivo" style="word-break:break-all;">—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
     // ── Enviar Reporte Solo SUNAT ─────────────────────────────────────────────
@@ -1259,6 +1339,29 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             });
             bootstrap.Modal.getInstance(modalEl)?.hide();
         });
+
+        // ── Fix badge SSCO: interceptar el form con AJAX y recargar la página al terminar ──
+        document.getElementById('frmSscoCargar')?.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const btn = this.querySelector('[type=submit]');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando…'; }
+            try {
+                const resp = await fetch(this.action, { method: 'POST', body: new FormData(this) });
+                const data = await resp.json();
+                if (data.ok) {
+                    mostrarToastSire('\u2713 ' + data.mensaje, 'success');
+                    // Cerrar modal y recargar para que el badge SSCO refleje el nuevo padrón
+                    bootstrap.Modal.getInstance(document.getElementById('modalSscoCargar'))?.hide();
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    mostrarToastSire('\u26a0 ' + data.mensaje, 'danger');
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Cargar padrón'; }
+                }
+            } catch (err) {
+                mostrarToastSire('Error de red: ' + err.message, 'danger');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Cargar padrón'; }
+            }
+        });
     });
 
     function confirmarAceptar(periodo, periodoLabel) {
@@ -1266,9 +1369,36 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         if (titulo) titulo.innerHTML = '<i class="bi bi-check-circle me-1"></i>Aceptar Propuesta SUNAT';
         confirmarAccion(
             `¿Aceptar la propuesta ${periodoLabel} en SUNAT? SUNAT procesará el archivo y devolverá una constancia.`,
-            () => {
+            async () => {
                 mostrarOverlayGlobal('Aceptando propuesta en SUNAT...', `Período ${periodoLabel} — el polling puede tardar varios segundos.`);
-                document.getElementById('frmAceptar_' + periodo).submit();
+                const frm   = document.getElementById('frmAceptar_' + periodo);
+                const token = frm?.querySelector('[name=__RequestVerificationToken]')?.value
+                           ?? document.querySelector('[name=__RequestVerificationToken]')?.value ?? '';
+                try {
+                    const resp = await fetch(frm.action, {
+                        method : 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+                                   'RequestVerificationToken': token,
+                                   'X-Requested-With': 'XMLHttpRequest' },
+                        body   : `periodo=${encodeURIComponent(periodo)}&tipo=compras`
+                    });
+                    const data = await resp.json();
+                    ocultarOverlayGlobal();
+                    // Rellenar y mostrar modal de resultado
+                    document.getElementById('rAcepTituloTxt').textContent = data.ok ? 'Propuesta aceptada' : 'Error al aceptar';
+                    document.getElementById('modalResultadoAceptarHeader').style.background = data.ok ? 'var(--sire-rce)' : '#dc2626';
+                    document.getElementById('rAcepTipo').textContent    = data.tipo    ?? '—';
+                    document.getElementById('rAcepPeriodo').textContent = data.periodo ?? '—';
+                    document.getElementById('rAcepTicket').textContent  = data.ticket  ?? '—';
+                    document.getElementById('rAcepEstado').textContent  = data.estado  ?? '—';
+                    document.getElementById('rAcepArchivo').textContent = data.archivo ?? '—';
+                    const modalEl = document.getElementById('modalResultadoAceptar');
+                    modalEl.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
+                    new bootstrap.Modal(modalEl).show();
+                } catch (err) {
+                    ocultarOverlayGlobal();
+                    mostrarToastSire('Error de red: ' + err.message, 'danger');
+                }
             }
         );
     }
@@ -1315,6 +1445,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
     // Solo un poll puede estar activo a la vez. Al iniciar nuevo job o cancelar,
     // se cambia _pollingJobId y el loop anterior se auto-detiene.
     let _pollingJobId = null;
+
+    // Filtro activo en la pestana Cruzado/Diferencias (null = todos)
+    let _concilFilter = null;
 
     // ── Modal de confirmación (reemplaza confirm() nativo) ────────────────────
     function confirmarAccion(mensaje, callbackSi) {
@@ -1552,6 +1685,13 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         if (btns) btns.style.visibility = (pane === '#panel-concil') ? 'visible' : 'hidden';
     }
 
+    // Oculta los botones de filtro del concil cuando el tab SSCO está activo.
+    // Se llama desde onclick del tab SSCO: mostrarFiltrosSsco(false)
+    function mostrarFiltrosSsco(visible) {
+        const btns = document.getElementById('filtroConcilBtns');
+        if (btns) btns.style.visibility = visible ? 'visible' : 'hidden';
+    }
+
     function filtrarTablaActiva(q) {
         q = (q || '').toLowerCase();
         const id = tablaActivaId();
@@ -1562,7 +1702,9 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             const concilOk = !_concilFilter
                 || (_concilFilter === 'CP_NO_EXISTE'
                     ? tr.dataset.cpeError === '1'
-                    : (!tr.dataset.concil || tr.dataset.concil === _concilFilter));
+                    : _concilFilter === 'AVISO'
+                        ? tr.dataset.diffInfo === '1'
+                        : (!tr.dataset.concil || tr.dataset.concil === _concilFilter));
             const mostrar = textOk && concilOk;
             tr.style.display = mostrar ? '' : 'none';
             if (mostrar) vis++;
@@ -1824,10 +1966,101 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
         }
     }
 
+    // ── SSCO: Excluir / Restaurar por RUC ──────────────────────────────────────
+    function _sscoModal(titulo, mensaje, cssBtnClass, btnTexto, onConfirmar) {
+        document.getElementById('modalConfirmarTitulo').innerHTML = titulo;
+        document.getElementById('modalConfirmarMensaje').innerHTML = mensaje;
+
+        // Clonar el botón para eliminar TODOS los listeners previos (previene acumulación)
+        const btnViejo = document.getElementById('btnConfirmarSi');
+        const btnNuevo = btnViejo.cloneNode(true);
+        btnViejo.parentNode.replaceChild(btnNuevo, btnViejo);
+
+        btnNuevo.style.display = '';
+        btnNuevo.className     = `btn btn-sm ${cssBtnClass}`;
+        btnNuevo.textContent   = btnTexto;
+
+        const modalEl = document.getElementById('modalConfirmar');
+        const modal   = bootstrap.Modal.getOrCreateInstance(modalEl);
+        btnNuevo.addEventListener('click', async () => {
+            modal.hide();
+            await onConfirmar();
+        }, { once: true });   // once: elimina el listener automáticamente tras el primer click
+        modal.show();
+    }
+
+    async function sscoExcluir(ruc) {
+        _sscoModal(
+            '<i class="bi bi-slash-circle me-1"></i>Excluir por SSCO',
+            `<b>${ruc}</b> — ¿Excluir todos sus comprobantes del período por estar en el padrón SSCO?`,
+            'btn-danger', 'Sí, excluir',
+            async () => {
+                try {
+                    const resp = await fetch('@Url.Action("ExcluirSscoRuc","Sire")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? ''
+                        },
+                        body: JSON.stringify({
+                            tipo:    '@(Model?.Tipo == FabricaHilos.Controllers.Contabilidad.TipoRegistro.Ventas ? "ventas" : "compras")',
+                            periodo: '@periodoSeleccionado',
+                            ruc:     ruc
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.exitoso) {
+                        mostrarToastSire(`\u2713 ${data.mensaje}`, 'success');
+                        setTimeout(() => location.reload(), 1200);
+                    } else {
+                        mostrarToastSire('Error: ' + data.error, 'danger');
+                    }
+                } catch (e) { mostrarToastSire('Error de red: ' + e.message, 'danger'); }
+            }
+        );
+    }
+
+    async function sscoRestaurar(ruc) {
+        _sscoModal(
+            '<i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar exclusión SSCO',
+            `<b>${ruc}</b> — ¿Restaurar todos los comprobantes excluidos de este RUC?`,
+            'btn-warning', 'Sí, restaurar',
+            async () => {
+                try {
+                    const resp = await fetch('@Url.Action("RestaurarSscoRuc","Sire")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? ''
+                        },
+                        body: JSON.stringify({
+                            tipo:    '@(Model?.Tipo == FabricaHilos.Controllers.Contabilidad.TipoRegistro.Ventas ? "ventas" : "compras")',
+                            periodo: '@periodoSeleccionado',
+                            ruc:     ruc
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.exitoso) {
+                        mostrarToastSire(`\u2713 ${data.mensaje}`, 'success');
+                        setTimeout(() => location.reload(), 1200);
+                    } else {
+                        mostrarToastSire('Error: ' + data.error, 'danger');
+                    }
+                } catch (e) { mostrarToastSire('Error de red: ' + e.message, 'danger'); }
+            }
+        );
+    }
+
     // Al cambiar de tab: actualiza filtros visibles, contador y totales
     document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('#tabsDetalle .nav-link').forEach(btn => {
             btn.addEventListener('shown.bs.tab', () => {
+                // Resetear filtro concil al cambiar de tab para que siempre muestre "Todos"
+                _concilFilter = null;
+                document.querySelectorAll('#filtroConcilBtns button:not(#btnExcluirSelec):not(#btnRestaurarSelec)')
+                    .forEach(b => b.classList.remove('active'));
+                const btnTodos = document.querySelector('#filtroConcilBtns button[onclick*="null"]');
+                if (btnTodos) btnTodos.classList.add('active');
                 actualizarVisibilidadFiltros();
                 filtrarTablaActiva(document.getElementById('inputBuscadorSire')?.value ?? '');
             });
@@ -2298,6 +2531,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             </div>`;
         // Mostrar botón ZIP solo si el archivo NO fue guardado en servidor
         btnDescargar.style.display = rutaArchivo ? 'none' : '';
+
+        // Al cerrar el modal (botón Cerrar, X o clic fuera) recargar la página para reflejar los nuevos datos
+        const modalEl = document.getElementById('modalExportacion');
+        modalEl.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
     }
 
     function mostrarErrorExportacion(error) {
@@ -2624,9 +2861,23 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             setPaso(paso1, 'ok');
             setPaso(paso2, 'ok');
             setPaso(paso3, 'active');
+
+            // Actualizar texto del paso 3 con el resultado de la exclusión automática
+            const paso3Text = paso3.querySelector('span');
+            if (paso3Text) {
+                const excl = data.comprobantesExcluidos ?? 0;
+                const hits = data.sscoHits ?? 0;
+                if (excl > 0)
+                    paso3Text.textContent = `Exclusión automática: ${hits} RUC(s) → ${excl} comprobante(s) excluidos por SSCO.`;
+                else if (hits > 0)
+                    paso3Text.textContent = `${hits} RUC(s) con match en Legacy — sin comprobantes nuevos que excluir.`;
+                else
+                    paso3Text.textContent = 'Sin coincidencias con el padrón SSCO para el período.';
+            }
+
             await new Promise(r => setTimeout(r, 600));
             setPaso(paso3, 'ok');
-            await new Promise(r => setTimeout(r, 700));
+            await new Promise(r => setTimeout(r, 900));
 
             overlay.style.display = 'none';
 
@@ -2653,6 +2904,23 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             // 6. Activar la pestaña SSCO
             const tabSsco = document.getElementById('tab-ssco');
             if (tabSsco) bootstrap.Tab.getOrCreateInstance(tabSsco).show();
+
+            // 7. Toast con el resumen de exclusión automática
+            const excl = data.comprobantesExcluidos ?? 0;
+            const hits = data.sscoHits ?? 0;
+            if (excl > 0) {
+                mostrarToastSire(
+                    `✓ SSCO: ${hits} RUC(s) excluidos automáticamente — ${excl} comprobante(s) movidos a Excluidos.`,
+                    'warning');
+                // Recargar la página para reflejar los nuevos excluidos en la tabla Cruzados
+                setTimeout(() => location.reload(), 2500);
+            } else if (hits > 0) {
+                mostrarToastSire(
+                    `✓ SSCO actualizado: ${hits} RUC(s) con match en Legacy, sin comprobantes nuevos que excluir.`,
+                    'success');
+            } else {
+                mostrarToastSire('✓ Padrón SSCO actualizado. Sin coincidencias para el período.', 'success');
+            }
 
         } catch (err) {
             setPaso(paso1, 'error');

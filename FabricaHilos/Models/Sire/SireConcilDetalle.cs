@@ -61,6 +61,9 @@ public sealed class SireConcilDetalle
     public DateTime? FDocref      { get; init; }   // F_DOCREF
     public string?   TipoNota     { get; init; }   // TIPO_NOTA
 
+    /// <summary>True si el RUC del comprobante aparece en el padrón SSCO de SUNAT.</summary>
+    public bool      EsSsco       { get; init; }
+
     // Auditoría de exclusión (de SIRE_EXCLUIDOS_LOGIX — solo cuando ESTADO='EXCLUIDO')
     public string?   ExclMotivo   { get; init; }   // NC_AUTO | MANUAL
     public string?   ExclObs      { get; init; }   // Observación del usuario

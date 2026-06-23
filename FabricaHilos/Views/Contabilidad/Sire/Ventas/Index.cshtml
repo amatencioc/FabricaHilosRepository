@@ -9,6 +9,7 @@
     var legacy              = Model?.RegistrosLegacy      ?? new List<FabricaHilos.Models.Sire.SireLegacyRegistro>();
     var concil              = Model?.RegistrosConcil      ?? new List<FabricaHilos.Models.Sire.SireConcilDetalle>();
     var esMock            = Model?.EsMock ?? false;
+    var esStub            = Model?.EsStub ?? false;
 
     var yyyyMm = periodoSeleccionado.Length == 6
         ? $"{periodoSeleccionado[..4]}/{periodoSeleccionado[4..]}"
@@ -45,6 +46,10 @@
 @if (esMock)
 {
     <div class="sire-alert sire-alert-mock"><i class="bi bi-cone-striped"></i><strong>MODO MOCK</strong> — Datos de prueba. No se realizan llamadas reales a SUNAT.</div>
+}
+@if (esStub)
+{
+    <div class="sire-alert sire-alert-stub"><i class="bi bi-exclamation-triangle-fill"></i><strong>MODO PRUEBA (STUB)</strong> — Las acciones <em>Aceptar Propuesta</em> y <em>Cerrar Período</em> simulan el envío a SUNAT sin hacer llamadas reales. Los datos Oracle y los registros locales sí se procesan.</div>
 }
 
 @await Html.PartialAsync("~/Views/Contabilidad/Sire/_SireNavBar.cshtml")
@@ -1977,6 +1982,10 @@ else if (!string.IsNullOrWhiteSpace(periodoSeleccionado))
             <p class="fw-semibold text-success">${mensaje}</p>${infoArchivo}</div>`;
         // Mostrar botón ZIP solo si el archivo NO fue guardado en servidor
         document.getElementById('btnDescargarZip').style.display = rutaArchivo ? 'none' : '';
+
+        // Al cerrar el modal (botón Cerrar, X o clic fuera) recargar la página para reflejar los nuevos datos
+        const modalEl = document.getElementById('modalExportacion');
+        modalEl.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
     }
 
     function mostrarErrorExportacion(error) {

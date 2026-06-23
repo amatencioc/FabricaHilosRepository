@@ -477,7 +477,9 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    NVL(TOTAL_CP,0)      TOTAL_CP,
                    MONEDA, NVL(CAMBIO,0) CAMBIO,
                    F_DOCREF, TIP_DOCREF, SER_DOCREF, NRO_DOCREF,
-                   FLAG_DETRAC, TIPO_NOTA,
+                   COD_DAM, TIPO_BIEN, ID_PROYECTO,
+                   NVL(PORCPART,0) PORCPART, NVL(IMB,0) IMB,
+                   CAR_MOD, FLAG_DETRAC, TIPO_NOTA,
                    EST_COMP, INCONSIST,
                    CONCIL_ESTADO, CONCIL_DIFFS,
                    FCH_CARGA, FCH_CONCIL
@@ -528,6 +530,12 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 TipDocref    = NullStr(rdr,  "TIP_DOCREF"),
                 SerDocref    = NullStr(rdr,  "SER_DOCREF"),
                 NroDocref    = NullStr(rdr,  "NRO_DOCREF"),
+                CodDam       = NullStr(rdr,  "COD_DAM"),
+                TipoBien     = NullStr(rdr,  "TIPO_BIEN"),
+                IdProyecto   = NullStr(rdr,  "ID_PROYECTO"),
+                Porcpart     = NullDec(rdr,  "PORCPART"),
+                Imb          = NullDec(rdr,  "IMB"),
+                CarMod       = NullStr(rdr,  "CAR_MOD"),
                 FlagDetrac   = NullStr(rdr,  "FLAG_DETRAC"),
                 TipoNota     = NullStr(rdr,  "TIPO_NOTA"),
                 EstComp      = NullStr(rdr,  "EST_COMP"),
@@ -940,6 +948,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
         var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
 
         // SELECT completo (incluye columnas del patch 04_SIRE_PATCH_LEGACY_CAMPOS.sql)
+        // Excluye registros cuyo ID_PROP_MATCH esté en SIRE_EXCLUIDOS_LOGIX con ESTADO='A'
+        // (excluidos MANUAL o NC_AUTO activos — no deben ir en el archivo de reemplazo SUNAT)
         const string sqlCompleto = @"
             SELECT ID_LEGACY, TIPO, PERIODO, TABLA_ORIGEN, ID_ORIGEN,
                    F_EMISION, F_VENCTO, TIPDOC, SERIE, NUMERO, TDOCID,
@@ -954,12 +964,23 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    TIPO_NOTA, FLAG_DETRAC, ANIO_DAM,
                    TIP_DOCREF, SER_DOCREF, NRO_DOCREF, F_DOCREF,
                    MONEDA, NVL(CAMBIO,1) CAMBIO,
-                   DOC_REF, EST_ERP, ANULADO, ID_PROP_MATCH
-            FROM   SIG.SIRE_LEGACY
-            WHERE  TIPO = :tipo AND PERIODO = :periodo
-            ORDER  BY TIPDOC, SERIE, NUMERO";
+                   DOC_REF, EST_ERP, ANULADO, ID_PROP_MATCH,
+                   TIPO_BIEN
+            FROM   SIG.SIRE_LEGACY L
+            WHERE  L.TIPO    = :tipo
+              AND  L.PERIODO = :periodo
+              AND  NOT EXISTS (
+                       SELECT 1
+                       FROM   SIG.SIRE_EXCLUIDOS_LOGIX E
+                       WHERE  E.ID_PROP = L.ID_PROP_MATCH
+                         AND  E.TIPO    = L.TIPO
+                         AND  E.PERIODO = L.PERIODO
+                         AND  E.ESTADO  = 'A'
+                   )
+            ORDER  BY L.TIPDOC, L.SERIE, L.NUMERO";
 
         // SELECT reducido para BD sin patch (sin columnas del ALTER TABLE)
+        // También excluye los registros excluidos activos de SIRE_EXCLUIDOS_LOGIX
         const string sqlBase = @"
             SELECT ID_LEGACY, TIPO, PERIODO, TABLA_ORIGEN, ID_ORIGEN,
                    F_EMISION, F_VENCTO, TIPDOC, SERIE, NUMERO, TDOCID,
@@ -970,9 +991,18 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    NVL(TOTAL,0)          TOTAL,
                    MONEDA, NVL(CAMBIO,1) CAMBIO,
                    DOC_REF, EST_ERP, ANULADO, ID_PROP_MATCH
-            FROM   SIG.SIRE_LEGACY
-            WHERE  TIPO = :tipo AND PERIODO = :periodo
-            ORDER  BY TIPDOC, SERIE, NUMERO";
+            FROM   SIG.SIRE_LEGACY L
+            WHERE  L.TIPO    = :tipo
+              AND  L.PERIODO = :periodo
+              AND  NOT EXISTS (
+                       SELECT 1
+                       FROM   SIG.SIRE_EXCLUIDOS_LOGIX E
+                       WHERE  E.ID_PROP = L.ID_PROP_MATCH
+                         AND  E.TIPO    = L.TIPO
+                         AND  E.PERIODO = L.PERIODO
+                         AND  E.ESTADO  = 'A'
+                   )
+            ORDER  BY L.TIPDOC, L.SERIE, L.NUMERO";
 
         await using var conn = await OpenConnAsync(ct);
 
@@ -1028,6 +1058,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 TipoNota      = patchAplicado ? NullStr(rdr, "TIPO_NOTA")    : null,
                 FlagDetrac    = patchAplicado ? NullStr(rdr, "FLAG_DETRAC")  : null,
                 AnioDam       = patchAplicado ? NullStr(rdr, "ANIO_DAM")     : null,
+                TipoBien      = patchAplicado ? NullStr(rdr, "TIPO_BIEN")    : null,
                 TipDocref     = patchAplicado ? NullStr(rdr, "TIP_DOCREF")   : null,
                 SerDocref     = patchAplicado ? NullStr(rdr, "SER_DOCREF")   : null,
                 NroDocref     = patchAplicado ? NullStr(rdr, "NRO_DOCREF")   : null,
@@ -1086,7 +1117,8 @@ public sealed class SireOracleRepository : ISireOracleRepository
                    EX.USUARIO       EXCL_USUARIO,
                    EX.FCH_EXCLUSION EXCL_FCH,
                    C.VALIDEZ_CP,    C.VALIDEZ_RUC,
-                   C.VALIDEZ_DOM,   C.FCH_VALIDEZ
+                   C.VALIDEZ_DOM,   C.FCH_VALIDEZ,
+                   CASE WHEN SS.RUC IS NOT NULL THEN 1 ELSE 0 END ES_SSCO
             FROM   SIG.SIRE_CONCIL C
             LEFT JOIN SIG.SIRE_LEGACY          L  ON L.ID_LEGACY = C.ID_LEGACY
             LEFT JOIN SIG.SIRE_PROPUESTA       P  ON P.ID_PROP   = C.ID_PROP
@@ -1097,6 +1129,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 FROM   SIG.SIRE_EXCLUIDOS_LOGIX
                 WHERE  ESTADO = 'A'
             ) EX ON EX.ID_CONCIL = C.ID_CONCIL
+            LEFT JOIN SIG.SSCO_LISTA           SS ON SS.RUC = C.RUC
             WHERE  C.TIPO = :tipo AND C.PERIODO = :periodo
             ORDER  BY C.ESTADO, C.TIPDOC, C.SERIE, C.NUMERO";
 
@@ -1161,6 +1194,7 @@ public sealed class SireOracleRepository : ISireOracleRepository
                 ValidezRuc   = NullStr(rdr, "VALIDEZ_RUC"),
                 ValidezDom   = NullStr(rdr, "VALIDEZ_DOM"),
                 FchValidez   = NullDate(rdr, "FCH_VALIDEZ"),
+                EsSsco       = !rdr.IsDBNull(rdr.GetOrdinal("ES_SSCO")) && Convert.ToInt32(rdr["ES_SSCO"]) == 1,
             });
         }
         return list;
@@ -1550,6 +1584,247 @@ public sealed class SireOracleRepository : ISireOracleRepository
         cmd.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)   { Value = periodo });
         cmd.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2){ Value = usuario });
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<int> ExcluirPorRucAsync(
+        string tipo, int periodo, string ruc,
+        string usuario, CancellationToken ct = default)
+    {
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+        int excluidos = 0;
+
+        await using var conn = await OpenConnAsync(ct);
+        await using var tx   = conn.BeginTransaction();
+        try
+        {
+            // LEFT JOIN para capturar también filas sin propuesta SUNAT (solo en Logix/Legacy)
+            // NVL para los campos de referencia que pueden ser NULL cuando no hay propuesta
+            const string sqlLeer = @"
+                SELECT C.ID_CONCIL, C.ID_PROP, C.TIPDOC, C.SERIE, C.NUMERO,
+                       C.F_EMISION, C.RUC, C.NOMBRE,
+                       NVL(C.SUNAT_TOTAL, 0)     AS TOTAL_CP,
+                       C.SUNAT_MONEDA,
+                       P.TIP_DOCREF, P.SER_DOCREF, P.NRO_DOCREF
+                FROM   SIG.SIRE_CONCIL    C
+                LEFT JOIN SIG.SIRE_PROPUESTA P ON P.ID_PROP = C.ID_PROP
+                WHERE  C.TIPO    = :tipo
+                  AND  C.PERIODO = :periodo
+                  AND  C.RUC     = :ruc
+                  AND  C.ESTADO <> 'EXCLUIDO'";
+
+            var rows = new List<(long idConcil, long idProp, string? tipdoc, string? serie,
+                string? numero, DateTime? fem, string? ruc2, string? nombre,
+                decimal total, string? moneda, string? tipRef, string? serRef, string? nroRef)>();
+
+            using (var cmdLeer = new OracleCommand(sqlLeer, conn))
+            {
+                cmdLeer.Transaction = tx;
+                cmdLeer.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Char)    { Value = tipoDb  });
+                cmdLeer.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)   { Value = periodo });
+                cmdLeer.Parameters.Add(new OracleParameter("ruc",     OracleDbType.Varchar2){ Value = ruc     });
+                await using var rdr = await cmdLeer.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    rows.Add((
+                        Convert.ToInt64(rdr["ID_CONCIL"]),
+                        Convert.ToInt64(rdr["ID_PROP"]),
+                        NullStr(rdr, "TIPDOC"),   NullStr(rdr, "SERIE"),  NullStr(rdr, "NUMERO"),
+                        NullDate(rdr, "F_EMISION"), NullStr(rdr, "RUC"),  NullStr(rdr, "NOMBRE"),
+                        NullDec(rdr, "TOTAL_CP"),   NullStr(rdr, "SUNAT_MONEDA"),
+                        NullStr(rdr, "TIP_DOCREF"), NullStr(rdr, "SER_DOCREF"), NullStr(rdr, "NRO_DOCREF")));
+                }
+            }
+
+            foreach (var r in rows)
+            {
+                // Si ya existe una entrada activa para este comprobante, actualizarla (OBS='SSCO')
+                long? existingId = null;
+                using (var cmdChk = new OracleCommand(
+                    "SELECT ID_EXCLUIDO FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE ID_CONCIL=:idConcil AND MOTIVO='SSCO' AND ESTADO='A' AND ROWNUM=1",
+                    conn))
+                {
+                    cmdChk.Transaction = tx;
+                    cmdChk.Parameters.Add(new OracleParameter("idConcil", OracleDbType.Int64) { Value = r.idConcil });
+                    var scalar = await cmdChk.ExecuteScalarAsync(ct);
+                    if (scalar is not null and not DBNull)
+                        existingId = Convert.ToInt64(scalar);
+                }
+
+                if (existingId.HasValue)
+                {
+                    using var cmdUpd = new OracleCommand(
+                        @"UPDATE SIG.SIRE_EXCLUIDOS_LOGIX
+                             SET FCH_EXCLUSION = SYSDATE,
+                                 USUARIO       = :usuario,
+                                 OBS           = 'Excluido por padrón SSCO'
+                           WHERE ID_EXCLUIDO   = :id",
+                        conn);
+                    cmdUpd.Transaction = tx;
+                    cmdUpd.Parameters.Add(new OracleParameter("usuario", OracleDbType.Varchar2) { Value = (object?)usuario ?? DBNull.Value });
+                    cmdUpd.Parameters.Add(new OracleParameter("id",      OracleDbType.Int64)   { Value = existingId.Value });
+                    await cmdUpd.ExecuteNonQueryAsync(ct);
+                }
+                else
+                {
+                    long idExcluido;
+                    using (var cmdSeq = new OracleCommand("SELECT SIG.SEQ_SIRE_EXCL.NEXTVAL FROM DUAL", conn))
+                    {
+                        cmdSeq.Transaction = tx;
+                        idExcluido = Convert.ToInt64(await cmdSeq.ExecuteScalarAsync(ct));
+                    }
+
+                    const string sqlIns = @"
+                        INSERT INTO SIG.SIRE_EXCLUIDOS_LOGIX (
+                            ID_EXCLUIDO, TIPO, PERIODO, MOTIVO,
+                            ID_PROP, ID_CONCIL, TIPDOC, SERIE, NUMERO, F_EMISION,
+                            RUC, NOMBRE, TOTAL_CP, MONEDA,
+                            TIP_DOCREF, SER_DOCREF, NRO_DOCREF,
+                            USUARIO, FCH_EXCLUSION, OBS, ESTADO
+                        ) VALUES (
+                            :id, :tipo, :periodo, 'SSCO',
+                            :idProp, :idConcil, :tipdoc, :serie, :numero, :fem,
+                            :ruc, :nombre, :total, :moneda,
+                            :tipRef, :serRef, :nroRef,
+                            :usuario, SYSDATE, 'Excluido por padrón SSCO', 'A'
+                        )";
+
+                    using var cmdIns = new OracleCommand(sqlIns, conn);
+                    cmdIns.Transaction = tx;
+                    cmdIns.Parameters.Add(new OracleParameter("id",       OracleDbType.Int64)   { Value = idExcluido });
+                    cmdIns.Parameters.Add(new OracleParameter("tipo",     OracleDbType.Char)    { Value = tipoDb     });
+                    cmdIns.Parameters.Add(new OracleParameter("periodo",  OracleDbType.Int32)   { Value = periodo    });
+                    cmdIns.Parameters.Add(new OracleParameter("idProp",   OracleDbType.Int64)   { Value = r.idProp   });
+                    cmdIns.Parameters.Add(new OracleParameter("idConcil", OracleDbType.Int64)   { Value = r.idConcil });
+                    cmdIns.Parameters.Add(new OracleParameter("tipdoc",   OracleDbType.Varchar2){ Value = (object?)r.tipdoc  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("serie",    OracleDbType.Varchar2){ Value = (object?)r.serie   ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("numero",   OracleDbType.Varchar2){ Value = (object?)r.numero  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("fem",      OracleDbType.Date)    { Value = (object?)r.fem     ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("ruc",      OracleDbType.Varchar2){ Value = (object?)r.ruc2    ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("nombre",   OracleDbType.Varchar2){ Value = (object?)r.nombre  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("total",    OracleDbType.Decimal) { Value = r.total    });
+                    cmdIns.Parameters.Add(new OracleParameter("moneda",   OracleDbType.Varchar2){ Value = (object?)r.moneda  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("tipRef",   OracleDbType.Varchar2){ Value = (object?)r.tipRef  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("serRef",   OracleDbType.Varchar2){ Value = (object?)r.serRef  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("nroRef",   OracleDbType.Varchar2){ Value = (object?)r.nroRef  ?? DBNull.Value });
+                    cmdIns.Parameters.Add(new OracleParameter("usuario",  OracleDbType.Varchar2){ Value = (object?)usuario   ?? DBNull.Value });
+                    await cmdIns.ExecuteNonQueryAsync(ct);
+                }
+
+                // DIFF_CAMPOS=NULL: la exclusión SSCO anula el cruce anterior; no pisa con texto arbitrario
+                using var cmdConcil = new OracleCommand(
+                    "UPDATE SIG.SIRE_CONCIL SET ESTADO='EXCLUIDO', DIFF_CAMPOS=NULL WHERE ID_CONCIL=:id", conn);
+                cmdConcil.Transaction = tx;
+                cmdConcil.Parameters.Add(new OracleParameter("id", OracleDbType.Int64) { Value = r.idConcil });
+                await cmdConcil.ExecuteNonQueryAsync(ct);
+                excluidos++;
+            }
+
+            if (excluidos > 0)
+            {
+                using var cmdRes = new OracleCommand(
+                    @"UPDATE SIG.SIRE_CONCIL_RESUMEN
+                      SET    TOTAL_EXCL = (SELECT COUNT(*) FROM SIG.SIRE_CONCIL
+                                           WHERE TIPO=:tipo AND PERIODO=:periodo AND ESTADO='EXCLUIDO')
+                      WHERE  TIPO=:tipo2 AND PERIODO=:periodo2", conn);
+                cmdRes.Transaction = tx;
+                cmdRes.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Char)  { Value = tipoDb  });
+                cmdRes.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32) { Value = periodo });
+                cmdRes.Parameters.Add(new OracleParameter("tipo2",   OracleDbType.Char)  { Value = tipoDb  });
+                cmdRes.Parameters.Add(new OracleParameter("periodo2",OracleDbType.Int32) { Value = periodo });
+                await cmdRes.ExecuteNonQueryAsync(ct);
+            }
+
+            tx.Commit();
+            return excluidos;
+        }
+        catch
+        {
+            try { tx.Rollback(); } catch { }
+            throw;
+        }
+    }
+
+            public async Task<int> RestaurarPorRucAsync(
+        string tipo, int periodo, string ruc,
+        string usuario, CancellationToken ct = default)
+    {
+        var tipoDb = tipo.Equals("ventas", StringComparison.OrdinalIgnoreCase) ? "1" : "2";
+        int restaurados = 0;
+
+        await using var conn = await OpenConnAsync(ct);
+        await using var tx   = conn.BeginTransaction();   // lectura y escritura bajo la misma transacción
+        try
+        {
+            // Leer todos los excluidos activos del RUC para este período (dentro de la transacción)
+            var excluidos = new List<(long idExcluido, long? idConcil, long? idRel)>();
+            using (var cmdLeer = new OracleCommand(
+                @"SELECT ID_EXCLUIDO, ID_CONCIL, ID_EXCLUIDO_REL
+                  FROM   SIG.SIRE_EXCLUIDOS_LOGIX
+                  WHERE  TIPO=:tipo AND PERIODO=:periodo AND RUC=:ruc AND ESTADO='A'",
+                conn))
+            {
+                cmdLeer.Transaction = tx;
+                cmdLeer.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Char)    { Value = tipoDb  });
+                cmdLeer.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32)   { Value = periodo });
+                cmdLeer.Parameters.Add(new OracleParameter("ruc",     OracleDbType.Varchar2){ Value = ruc     });
+                await using var rdr = await cmdLeer.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                    excluidos.Add((
+                        Convert.ToInt64(rdr[0]),
+                        rdr.IsDBNull(1) ? null : Convert.ToInt64(rdr[1]),
+                        rdr.IsDBNull(2) ? null : Convert.ToInt64(rdr[2])));
+            }
+
+            if (excluidos.Count == 0)
+            {
+                tx.Rollback();
+                return 0;
+            }
+
+            foreach (var (idExcluido, idConcil, idRel) in excluidos)
+            {
+                await RestaurarUnExcluidoAsync(conn, tx, idExcluido, idConcil, usuario, ct);
+
+                // Si tiene par vinculado (ej: N/C ↔ doc. original), restaurarlo también
+                if (idRel.HasValue)
+                {
+                    long? idConcilRel = null;
+                    using (var cmd2 = new OracleCommand(
+                        "SELECT ID_CONCIL FROM SIG.SIRE_EXCLUIDOS_LOGIX WHERE ID_EXCLUIDO=:id AND ESTADO='A'",
+                        conn))
+                    {
+                        cmd2.Transaction = tx;   // misma transacción para lectura consistente
+                        cmd2.Parameters.Add(new OracleParameter("id", OracleDbType.Int64) { Value = idRel.Value });
+                        var res = await cmd2.ExecuteScalarAsync(ct);
+                        if (res is not null and not DBNull) idConcilRel = Convert.ToInt64(res);
+                    }
+                    await RestaurarUnExcluidoAsync(conn, tx, idRel.Value, idConcilRel, usuario, ct);
+                }
+                restaurados++;
+            }
+
+            using (var cmdRes = new OracleCommand(
+                @"UPDATE SIG.SIRE_CONCIL_RESUMEN
+                  SET    TOTAL_EXCL = (SELECT COUNT(*) FROM SIG.SIRE_CONCIL
+                                       WHERE TIPO=:tipo AND PERIODO=:periodo AND ESTADO='EXCLUIDO')
+                  WHERE  TIPO=:tipo2 AND PERIODO=:periodo2", conn))
+            {
+                cmdRes.Transaction = tx;
+                cmdRes.Parameters.Add(new OracleParameter("tipo",    OracleDbType.Char)  { Value = tipoDb  });
+                cmdRes.Parameters.Add(new OracleParameter("periodo", OracleDbType.Int32) { Value = periodo });
+                cmdRes.Parameters.Add(new OracleParameter("tipo2",   OracleDbType.Char)  { Value = tipoDb  });
+                cmdRes.Parameters.Add(new OracleParameter("periodo2",OracleDbType.Int32) { Value = periodo });
+                await cmdRes.ExecuteNonQueryAsync(ct);
+            }
+
+            tx.Commit();
+            return restaurados;
+        }
+        catch
+        {
+            try { tx.Rollback(); } catch { }
+            throw;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -105,7 +105,7 @@ namespace FabricaHilos.Controllers.Produccion
                         Descripcion = "Registro diario de ítems por procesar: título, proceso, cantidad y fechas de compromiso.",
                         Icono = "bi-journal-text",
                         Controller = "Planeamiento",
-                        Action = "Index"
+                        Action = "RegistroPedido"
                     });
                 }
 

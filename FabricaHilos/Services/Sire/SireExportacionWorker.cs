@@ -1,4 +1,4 @@
-using FabricaHilos.Models.Sire;
+﻿using FabricaHilos.Models.Sire;
 using FabricaHilos.Sire.Constants;
 using FabricaHilos.Sire.Helpers;
 using FabricaHilos.Sire.Interfaces;
@@ -354,6 +354,13 @@ public sealed class SireExportacionWorker : BackgroundService
             }
 
             _logger.LogInformation("[SIRE-WORKER] [{JobId}] ZIP descargado: {Bytes} bytes", job.JobId, archivo.Contenido.Length);
+
+            // Renombrar con patrón legible: {RUC}-{yyyyMMdd}-{HHmmss}-propuesta.zip
+            var ts = DateTime.Now;
+            var nombreArchivoLocal = $"{_sireOptions.Ruc}-{ts:yyyyMMdd}-{ts:HHmmss}-propuesta.zip";
+            archivo.NombreArchivo = nombreArchivoLocal;
+            job.NombreArchivo = nombreArchivoLocal;
+            await _repo.UpdateJobAsync(job, stoppingToken);
 
             // ── PASO 5: Guardar en ruta de red ────────────────────────────────────
             var rutaBase   = _configuration["RutaSireExportacion"]

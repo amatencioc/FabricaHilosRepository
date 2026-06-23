@@ -32,6 +32,7 @@ public class SireController : OracleBaseController
     private readonly ISireExportacionQueue _exportacionQueue;
     private readonly ISireOracleRepository _sireRepo;
     private readonly SireValidaService _validaService;
+    private readonly SirePropuestaZipService _propuestaZipService;
     private readonly FabricaHilos.Services.Sire.SireReporteComprasService _reporteCompras;
     private readonly IConsultaValidezService _consultaValidez;
     private readonly ILogger<SireController> _logger;
@@ -50,6 +51,7 @@ public class SireController : OracleBaseController
         ISireExportacionQueue exportacionQueue,
         ISireOracleRepository sireRepo,
         SireValidaService validaService,
+        SirePropuestaZipService propuestaZipService,
         FabricaHilos.Services.Sire.SireReporteComprasService reporteCompras,
         IConsultaValidezService consultaValidez,
         ILogger<SireController> logger,
@@ -67,6 +69,7 @@ public class SireController : OracleBaseController
         _exportacionQueue      = exportacionQueue;
         _sireRepo              = sireRepo;
         _validaService         = validaService;
+        _propuestaZipService   = propuestaZipService;
         _reporteCompras        = reporteCompras;
         _consultaValidez       = consultaValidez;
         _logger                = logger;
@@ -187,20 +190,34 @@ public class SireController : OracleBaseController
                     .ToList();
                 concilResumen   = tResumen.Result;
 
-                // Cachear resumen si fue recién consultado
-                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully)
+                // Si hay un job de exportación completado recientemente, invalidar la caché del resumen
+                // para que la UI muestre el panel de acciones sin esperar los 2 minutos de TTL.
+                var hayExportCompleto = jobsPeriodo.Any(j =>
+                    j.TipoOperacion == TipoOp.Exportar &&
+                    j.Estado        == EstadoJob.Completado);
+                if (hayExportCompleto)
+                    _cache.Remove(cacheKeyResumen);
+
+                // Cachear resumen si fue recién consultado (y no se acaba de invalidar)
+                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully && !hayExportCompleto)
                     _cache.Set(cacheKeyResumen, tPropResumen.Result, TimeSpan.FromMinutes(2));
 
-                var todasPropuestas = tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : [];
+                // Si se invalidó, consultar de nuevo sin caché
+                var todasPropuestas = hayExportCompleto
+                    ? await _sireRepo.GetPropuestasResumenAsync("ventas", cancellationToken)
+                    : (tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : (IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>)[]);
                 propuestasResumen   = todasPropuestas
                     .Where(r => r.Periodo.ToString() == periodoSeleccionado)
                     .ToList();
             }
 
             // Buscar el ZIP local más reciente con archivo físicamente existente.
+            // Solo se consideran jobs de tipo EXPORTAR: los de ACEPTAR/CERRAR son constancias SUNAT
+            // (o ZIPs stub en modo prueba) y no son reprocesables como propuesta.
             // File.Exists sobre ruta UNC puede fallar si la red no responde: se trata como "sin ZIP" para no romper la página.
             FabricaHilos.Models.Sire.SireExportacionJob? zipJob = null;
-            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)))
+            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)
+                                                   && j.TipoOperacion == TipoOp.Exportar))
             {
                 try
                 {
@@ -209,7 +226,7 @@ public class SireController : OracleBaseController
                 catch (Exception exFs)
                 {
                     _logger.LogWarning(exFs, "[SIRE] Ventas: no se pudo verificar existencia de ZIP {Ruta}", j.RutaArchivo);
-                    break;
+                    continue;
                 }
             }
 
@@ -227,6 +244,7 @@ public class SireController : OracleBaseController
                 RegistrosConcil         = registrosConcil,
                 PropuestasResumen       = propuestasResumen,
                 EsMock                  = _sireOptions.UseMock,
+                EsStub                  = _sireOptions.UsarStub,
                 Tipo                    = TipoRegistro.Ventas,
                 TieneZipLocal           = zipJob is not null,
                 NombreZipLocal          = zipJob is not null ? System.IO.Path.GetFileName(zipJob.RutaArchivo) : null,
@@ -250,6 +268,7 @@ public class SireController : OracleBaseController
                 PeriodoSeleccionado = periodo ?? string.Empty,
                 RegistrosVentas = Array.Empty<RegistroVenta>(),
                 EsMock = _sireOptions.UseMock,
+                EsStub = _sireOptions.UsarStub,
                 Tipo = TipoRegistro.Ventas,
                 Ruc = _sireOptions.Ruc
             });
@@ -257,7 +276,7 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Listado de períodos RCE (Registro de Compras y Gastos)
+    /// Listado de períodos RCE
     /// Muestra tabla con períodos disponibles, estado y acciones
     /// </summary>
     [HttpGet]
@@ -285,6 +304,7 @@ public class SireController : OracleBaseController
             FabricaHilos.Models.Sire.SireConcilResumen?        concilResumenC;
             (HashSet<string> Rucs, DateTime? FchCarga, int? Periodo) sscoData = (new HashSet<string>(StringComparer.OrdinalIgnoreCase), null, null);
             List<FabricaHilos.Models.Sire.SscoListaEntry> sscoLista = [];
+            var rucsExcluidosSsco = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (string.IsNullOrWhiteSpace(periodoSeleccionado))
             {
@@ -306,8 +326,9 @@ public class SireController : OracleBaseController
                 // Usar query filtrada por tipo+período en lugar de los 100 más recientes generales
                 var tJobs      = _sireRepo.GetJobsPorTipoPeriodoAsync("compras", periodoSeleccionado, cancellationToken);
                 var tResumen   = _sireRepo.GetConcilResumenAsync("compras", periodoSeleccionado, cancellationToken);
-                var tSsco      = _sireRepo.GetSscoDataAsync(cancellationToken);
-                var tSscoLista = _sireRepo.GetSscoListaAsync(cancellationToken);
+                var tSsco       = _sireRepo.GetSscoDataAsync(cancellationToken);
+                var tSscoLista  = _sireRepo.GetSscoListaAsync(cancellationToken);
+                var tExcluidos  = _sireRepo.GetExcluidosAsync("compras", periodoSeleccionado, cancellationToken);
 
                 // GetPropuestasResumenAsync se cachea por período para evitar round-trip en cada request
                 Task<IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>> tPropResumen;
@@ -317,7 +338,7 @@ public class SireController : OracleBaseController
                 else
                     tPropResumen = Task.FromResult(resumenCached!);
 
-                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen, tSsco, tSscoLista, tPropResumen);
+                await Task.WhenAll(tPropuesta, tLegacy, tConcil, tJobs, tResumen, tSsco, tSscoLista, tExcluidos, tPropResumen);
 
                 registros       = tPropuesta.Result;
                 registrosLegacy = tLegacy.Result;
@@ -329,21 +350,48 @@ public class SireController : OracleBaseController
                 var (sscoRucs, sscoFch, sscoPer) = tSsco.Result;
                 sscoData  = (sscoRucs, sscoFch, sscoPer);
                 sscoLista = tSscoLista.Result;
+                // RUCs del padrón SSCO que tienen al menos un comprobante excluido activamente
+                // en este período. Se cruza con sscoLista para mostrar SOLO los que son SSCO;
+                // los excluidos por otros motivos (NC_AUTO, MANUAL sin SSCO) no se cuentan aquí.
+                var sscoRucsSet = new HashSet<string>(
+                    sscoLista.Select(s => s.Ruc).Where(r => r.Length > 0),
+                    StringComparer.OrdinalIgnoreCase);
+                rucsExcluidosSsco = new HashSet<string>(
+                    tExcluidos.Result
+                        .Where(e => e.Estado == "A"
+                                 && !string.IsNullOrWhiteSpace(e.Ruc)
+                                 && sscoRucsSet.Contains(e.Ruc!))
+                        .Select(e => e.Ruc!),
+                    StringComparer.OrdinalIgnoreCase);
 
-                // Cachear resumen si fue recién consultado
-                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully)
+                // Si hay un job de exportación completado recientemente, invalidar la caché del resumen
+                // para que la UI muestre el panel de acciones sin esperar los 2 minutos de TTL.
+                var hayExportCompletoC = jobsPeriodo.Any(j =>
+                    j.TipoOperacion == TipoOp.Exportar &&
+                    j.Estado        == EstadoJob.Completado);
+                if (hayExportCompletoC)
+                    _cache.Remove(cacheKeyResumen);
+
+                // Cachear resumen si fue recién consultado (y no se acaba de invalidar)
+                if (resumenCached is null && tPropResumen.IsCompletedSuccessfully && !hayExportCompletoC)
                     _cache.Set(cacheKeyResumen, tPropResumen.Result, TimeSpan.FromMinutes(2));
 
-                var todasPropuestasC = tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : (IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>)[];
+                // Si se invalidó, consultar de nuevo sin caché
+                var todasPropuestasC = hayExportCompletoC
+                    ? await _sireRepo.GetPropuestasResumenAsync("compras", cancellationToken)
+                    : (tPropResumen.IsCompletedSuccessfully ? tPropResumen.Result : (IReadOnlyList<FabricaHilos.Models.Sire.PropuestaPeriodoResumen>)[]);
                 propuestasResumen    = todasPropuestasC
                     .Where(r => r.Periodo.ToString() == periodoSeleccionado)
                     .ToList();
             }
 
             // Buscar el ZIP local más reciente con archivo físicamente existente.
+            // Solo se consideran jobs de tipo EXPORTAR: los de ACEPTAR/CERRAR son constancias SUNAT
+            // (o ZIPs stub en modo prueba) y no son reprocesables como propuesta.
             // File.Exists sobre ruta UNC puede fallar si la red no responde: se trata como "sin ZIP" para no romper la página.
             FabricaHilos.Models.Sire.SireExportacionJob? zipJobC = null;
-            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)))
+            foreach (var j in jobsPeriodo.Where(j => !string.IsNullOrWhiteSpace(j.RutaArchivo)
+                                                   && j.TipoOperacion == TipoOp.Exportar))
             {
                 try
                 {
@@ -352,7 +400,7 @@ public class SireController : OracleBaseController
                 catch (Exception exFs)
                 {
                     _logger.LogWarning(exFs, "[SIRE] Compras: no se pudo verificar existencia de ZIP {Ruta}", j.RutaArchivo);
-                    break;
+                    continue;
                 }
             }
 
@@ -370,6 +418,7 @@ public class SireController : OracleBaseController
                 RegistrosConcil         = registrosConcil,
                 PropuestasResumen       = propuestasResumen,
                 EsMock                  = _sireOptions.UseMock,
+                EsStub                  = _sireOptions.UsarStub,
                 Tipo                    = TipoRegistro.Compras,
                 TieneZipLocal           = zipJobC is not null,
                 NombreZipLocal          = zipJobC is not null ? System.IO.Path.GetFileName(zipJobC.RutaArchivo) : null,
@@ -385,6 +434,7 @@ public class SireController : OracleBaseController
                     ? registrosLegacy.Count(r => sscoData.Rucs.Contains(r.Ruc ?? ""))
                     : 0,
                 SscoLista            = sscoLista,
+                RucsExcluidosPorSsco = rucsExcluidosSsco,
             };
 
             return View("~/Views/Contabilidad/Sire/Compras/Index.cshtml", model);
@@ -400,13 +450,14 @@ public class SireController : OracleBaseController
                 PeriodoSeleccionado = periodo ?? string.Empty,
                 RegistrosCompras = Array.Empty<RegistroCompra>(),
                 EsMock = _sireOptions.UseMock,
+                EsStub = _sireOptions.UsarStub,
                 Tipo = TipoRegistro.Compras,
                 Ruc = _sireOptions.Ruc
             });
         }
     }
 
-    // ── Eliminar propuesta descargada ──────────────────────────────────────────
+    // ── Eliminar propuesta
 
     /// <summary>Elimina todos los registros SIRE_PROPUESTA del período indicado.</summary>
     [HttpPost]
@@ -887,11 +938,11 @@ public class SireController : OracleBaseController
     }
 
     /// <summary>
-    /// Acepta una propuesta RVIE o RCE tal como fue generada por SUNAT.
-    /// Flujo: POST aceptarpropuesta → polling ticket → descarga ZIP resultado → guarda en red.
+    /// Acepta una propuesta RVIE o RCE:
+    /// 1. Genera el ZIP de reemplazo desde SIRE_LEGACY (datos ERP).
+    /// 2. Guarda el ZIP en la ruta de red configurada (RutaSireExportacion).
+    /// 3. *** Envío al API de SUNAT COMENTADO — pendiente de habilitar. ***
     /// </summary>
-    /// <param name="periodo">Período YYYYMM</param>
-    /// <param name="tipo">Tipo de registro: 'ventas' (RVIE) o 'compras' (RCE)</param>
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AceptarPropuesta(string periodo, string tipo, CancellationToken cancellationToken)
@@ -912,182 +963,70 @@ public class SireController : OracleBaseController
             };
             await _sireRepo.InsertJobAsync(job, cancellationToken);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // #region STUB TEST — comentar bloque real y usar datos simulados
-            // Para volver al real: borrar el bloque STUB y descomentar el bloque REAL
-            // ═══════════════════════════════════════════════════════════════════
+            // ── 1. Generar ZIP de reemplazo desde SIRE_LEGACY ─────────────────
+            var ruc          = _sireOptions.Ruc;
+            var razonSocial  = _sireOptions.RazonSocial;
+            var (zipBytes, nombreZip, nombreTxt) = await _propuestaZipService.GenerarDesdeLegacyAsync(
+                tipo, periodo, ruc, razonSocial, cancellationToken);
 
-            // ── REAL (comentado para pruebas) ────────────────────────────────
-            // // 1. Llamar API SUNAT → obtener ticket inicial
-            // var ticketInicial = esVentas
-            //     ? await _ventasService.AceptarPropuestaAsync(periodo, cancellationToken)
-            //     : await _comprasService.AceptarPropuestaAsync(periodo, cancellationToken);
-            // ────────────────────────────────────────────────────────────────
-
-            // ── STUB: simular ticket inicial de SUNAT ────────────────────────
-            var ticketSimulado = $"STUB-ACEPTAR-{tipo.ToUpper()}-{periodo}-{DateTime.Now:HHmmss}";
-            var ticketInicial  = new FabricaHilos.Sire.Models.TicketEstado
+            if (zipBytes.Length == 0)
             {
-                NumTicket = ticketSimulado,
-                Estado    = "EN_PROCESO",
-                Mensaje   = "[STUB] Ticket simulado — sin llamada real a SUNAT"
-            };
-            _logger.LogWarning("[STUB] AceptarPropuesta: ticket simulado {Ticket} para tipo={Tipo} periodo={Periodo}",
-                ticketInicial.NumTicket, tipo, periodo);
-            // ────────────────────────────────────────────────────────────────
-            // #endregion STUB TEST
-            // ═══════════════════════════════════════════════════════════════════
-
-            _logger.LogInformation("Propuesta aceptada (ticket inicial): tipo={Tipo} periodo={Periodo} ticket={Ticket}",
-                tipo, periodo, ticketInicial.NumTicket);
-
-            if (string.IsNullOrWhiteSpace(ticketInicial.NumTicket))
-            {
-                if (job?.Id > 0)
-                {
-                    job.Estado            = EstadoJob.Completado;
-                    job.FechaFinalizacion = DateTime.UtcNow;
-                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
-                }
-                TempData["Success"] = "Propuesta aceptada. Sin ticket de seguimiento.";
+                job.Estado            = EstadoJob.Error;
+                job.MensajeError      = $"No hay registros en SIRE_LEGACY para {tipo.ToUpper()} período {periodo}.";
+                job.FechaFinalizacion = DateTime.UtcNow;
+                await _sireRepo.UpdateJobAsync(job, cancellationToken);
+                TempData["Error"] = job.MensajeError;
+                if (Request.Headers.ContainsKey("X-Requested-With"))
+                    return Json(new { ok = false, mensaje = job.MensajeError });
                 return RedirigirPorTipo(tipo, periodo);
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // #region STUB TEST — simular polling de ticket hasta estado COMPLETADO
-            // ═══════════════════════════════════════════════════════════════════
+            _logger.LogInformation("[SIRE] AceptarPropuesta: ZIP reemplazo generado → {Zip} ({Bytes} bytes, TXT: {Txt})",
+                nombreZip, zipBytes.Length, nombreTxt);
 
-            // ── REAL (comentado para pruebas) ────────────────────────────────
-            // // 2. Polling hasta estado final
+            // ── 2. Guardar ZIP en ruta de red configurada ─────────────────────
+            var rutaGuardada = await GuardarZipEnRedAsync(zipBytes, tipo, periodo, nombreZip, cancellationToken);
+            _logger.LogInformation("[SIRE] AceptarPropuesta: ZIP guardado en red → {Ruta}", rutaGuardada);
+
+            // ── 3. API SUNAT — COMENTADO (pendiente de habilitar) ─────────────
+            // TODO: descomentar cuando se quiera enviar realmente a SUNAT.
+            //
+            // var ticketInicial = esVentas
+            //     ? await _ventasService.AceptarPropuestaAsync(periodo, cancellationToken)
+            //     : await _comprasService.AceptarPropuestaAsync(periodo, cancellationToken);
+            //
             // var ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
             //     ct => esVentas
             //         ? _ventasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct)
             //         : _comprasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct),
             //     cancellationToken);
-            // ────────────────────────────────────────────────────────────────
+            //
+            // TusUploadResult uploadResult = esVentas
+            //     ? await _tusUploadService.ReemplazarPropuestaRvieAsync(
+            //           new MemoryStream(zipBytes), periodo, nombreZip, cancellationToken)
+            //     : await _tusUploadService.ReemplazarPropuestaRceAsync(
+            //           new MemoryStream(zipBytes), periodo, nombreZip, cancellationToken);
 
-            // ── STUB: simular ticket final COMPLETADO ────────────────────────
-            var nomArchivoSim = $"PP{(esVentas ? "140000" : "080000")}{periodo}STUB{DateTime.Now:HHmmss}.ZIP";
-            var ticketFinal = new FabricaHilos.Sire.Models.TicketEstado
-            {
-                NumTicket         = ticketInicial.NumTicket,
-                Estado            = "COMPLETADO",
-                CodEstadoProceso  = "3",
-                CodProceso        = "STUB",
-                PerTributario     = periodo,
-                Mensaje           = "[STUB] Aceptación simulada completada",
-                ArchivoReporte    = new FabricaHilos.Sire.Models.ArchivoReporteDto
-                {
-                    NomArchivoReporte      = nomArchivoSim,
-                    CodTipoArchivoReporte  = "ZIP"
-                }
-            };
-            _logger.LogWarning("[STUB] TicketFinal simulado: Estado={Estado} Archivo={Archivo}",
-                ticketFinal.Estado, nomArchivoSim);
-            // ────────────────────────────────────────────────────────────────
-            // #endregion STUB TEST
-            // ═══════════════════════════════════════════════════════════════════
+            // ── 4. Actualizar job con resultado ───────────────────────────────
+            job.NombreArchivo     = nombreZip;
+            job.RutaArchivo       = rutaGuardada;
+            job.Estado            = EstadoJob.Completado;
+            job.FechaFinalizacion = DateTime.UtcNow;
+            job.NumTicket         = $"LOCAL-{DateTime.Now:yyyyMMdd-HHmmss}";
+            await _sireRepo.UpdateJobAsync(job, cancellationToken);
 
-            if (ticketFinal.Estado.Equals("ERROR",    StringComparison.OrdinalIgnoreCase)
-             || ticketFinal.Estado.Equals("RECHAZADO", StringComparison.OrdinalIgnoreCase))
-            {
-                if (job?.Id > 0)
-                {
-                    job.NumTicket         = ticketInicial.NumTicket;
-                    job.Estado            = EstadoJob.Error;
-                    job.MensajeError      = ticketFinal.Mensaje;
-                    job.FechaFinalizacion = DateTime.UtcNow;
-                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
-                }
-                TempData["Error"] = $"SUNAT rechazó la aceptación: {ticketFinal.Mensaje}";
-                return RedirigirPorTipo(tipo, periodo);
-            }
+            // ── 5. Invalidar caché ────────────────────────────────────────────
+            _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}");
+            _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}:all");
+            _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
 
-            // 3. Si SUNAT generó archivo de resultado → descargar y guardar en red
-            if (ticketFinal.ArchivoReporte?.NomArchivoReporte is { Length: > 0 } nomArchivo)
-            {
-                var urlDescarga = SireEndpoints.DescargarArchivo(
-                    nomArchivo,
-                    ticketFinal.ArchivoReporte.CodTipoArchivoReporte ?? string.Empty,
-                    esVentas ? "140000" : "080000",
-                    ticketFinal.PerTributario.Length > 0 ? ticketFinal.PerTributario : periodo,
-                    ticketFinal.CodProceso ?? string.Empty,
-                    ticketInicial.NumTicket);
-
-                // ═══════════════════════════════════════════════════════════════
-                // #region STUB TEST — generar ZIP mínimo en memoria en lugar de descargar de SUNAT
-                // ═══════════════════════════════════════════════════════════════
-
-                // ── REAL (comentado para pruebas) ────────────────────────────
-                // var archivo = esVentas
-                //     ? await _ventasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken)
-                //     : await _comprasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken);
-                // ────────────────────────────────────────────────────────────
-
-                // ── STUB: ZIP mínimo válido con un archivo de texto dentro ────
-                var contenidoStubZip = GenerarZipStub(nomArchivo, periodo, tipo, ticketInicial.NumTicket);
-                var archivo = new FabricaHilos.Sire.Models.ConstanciaCierre
-                {
-                    NombreArchivo = nomArchivo,
-                    ContentType   = "application/zip",
-                    Contenido     = contenidoStubZip
-                };
-                _logger.LogWarning("[STUB] ZIP simulado generado: {Nombre} ({Bytes} bytes)", nomArchivo, contenidoStubZip.Length);
-                // ────────────────────────────────────────────────────────────
-                // #endregion STUB TEST
-                // ═══════════════════════════════════════════════════════════════
-
-                var rutaGuardada = await GuardarZipEnRedAsync(archivo.Contenido, tipo, periodo, archivo.NombreArchivo, cancellationToken);
-                _logger.LogInformation("Archivo aceptar guardado en red: tipo={Tipo} periodo={Periodo} archivo={Archivo}",
-                    tipo, periodo, archivo.NombreArchivo);
-
-                // Cargar registros del ZIP en Oracle SIRE_PROPUESTA (igual que el worker)
-                var resultadoCarga = await _validaService.CargarDesdeZipAsync(
-                    archivo.Contenido, tipo, periodo, job?.JobId ?? "ACEPTAR", cancellationToken);
-                _logger.LogInformation("[SIRE] AceptarPropuesta: SIRE_PROPUESTA actualizado — {Ins} insertados, {Dup} dup, {Err} errores",
-                    resultadoCarga.Insertados, resultadoCarga.Duplicados, resultadoCarga.Errores);
-
-                if (job?.Id > 0)
-                {
-                    job.NumTicket         = ticketInicial.NumTicket;
-                    job.UrlDescarga       = urlDescarga;
-                    job.NombreArchivo     = archivo.NombreArchivo;
-                    job.RutaArchivo       = rutaGuardada;
-                    job.CodTipoArchivo    = ticketFinal.ArchivoReporte.CodTipoArchivoReporte;
-                    job.CodProceso        = ticketFinal.CodProceso;
-                    job.RegistrosInsertados = resultadoCarga.Insertados;
-                    job.RegistrosDuplicados = resultadoCarga.Duplicados;
-                    job.Estado            = EstadoJob.Completado;
-                    job.FechaFinalizacion = DateTime.UtcNow;
-                    await _sireRepo.UpdateJobAsync(job, cancellationToken);
-                }
-
-                // Invalidar conciliación previa — el cruce SUNAT vs ERP debe regenerarse
-                if (int.TryParse(periodo, out var periodoNr))
-                {
-                    try { await _sireRepo.InvalidarConciliacionAsync(tipo, periodoNr, cancellationToken); }
-                    catch (Exception exInv) { _logger.LogWarning(exInv, "[SIRE] No se pudo invalidar conciliación tras aceptar: {Msg}", exInv.Message); }
-                }
-
-                // Invalidar caché de períodos y resumen de propuestas para reflejar el nuevo estado
-                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}");
-                _cache.Remove($"sire:periodos:{tipo.ToLowerInvariant()}:all");
-                _cache.Remove($"sire:propuestas:resumen:{tipo.ToLowerInvariant()}:{periodo}");
-            }
-            else if (job?.Id > 0)
-            {
-                // Ticket completado pero SUNAT no generó archivo descargable
-                job.NumTicket         = ticketInicial.NumTicket;
-                job.Estado            = EstadoJob.Completado;
-                job.FechaFinalizacion = DateTime.UtcNow;
-                await _sireRepo.UpdateJobAsync(job, cancellationToken);
-            }
-
-            TempData["Success"] = $"Propuesta aceptada. Ticket: {ticketInicial.NumTicket}";
+            var mensajeOk = $"ZIP de reemplazo generado y guardado: {nombreZip} ({zipBytes.Length:N0} bytes). " +
+                            $"TXT interior: {nombreTxt}. Ruta: {rutaGuardada}";
+            TempData["Success"] = mensajeOk;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al aceptar propuesta SIRE {Tipo} {Periodo}", tipo, periodo);
+            _logger.LogError(ex, "Error al generar ZIP reemplazo SIRE {Tipo} {Periodo}", tipo, periodo);
             TempData["Error"] = ex.Message;
             if (job?.Id > 0)
             {
@@ -1096,6 +1035,23 @@ public class SireController : OracleBaseController
                 job.FechaFinalizacion = DateTime.UtcNow;
                 try { await _sireRepo.UpdateJobAsync(job, CancellationToken.None); } catch { /* no propagar */ }
             }
+
+            if (Request.Headers.ContainsKey("X-Requested-With"))
+                return Json(new { ok = false, mensaje = ex.Message });
+        }
+
+        if (Request.Headers.ContainsKey("X-Requested-With"))
+        {
+            return Json(new
+            {
+                ok       = TempData["Error"] == null,
+                ticket   = job?.NumTicket ?? "—",
+                periodo  = periodo,
+                tipo     = tipo,
+                estado   = TempData["Error"] == null ? "COMPLETADO" : "ERROR",
+                archivo  = job?.NombreArchivo ?? "—",
+                mensaje  = TempData["Error"]?.ToString() ?? TempData["Success"]?.ToString() ?? string.Empty
+            });
         }
 
         return RedirigirPorTipo(tipo, periodo);
@@ -1202,31 +1158,26 @@ public class SireController : OracleBaseController
             };
             await _sireRepo.InsertJobAsync(job, cancellationToken);
 
-            // ═══════════════════════════════════════════════════════════════════
-            // #region STUB TEST — comentar bloque real y usar datos simulados
-            // Para volver al real: borrar el bloque STUB y descomentar el bloque REAL
-            // ═══════════════════════════════════════════════════════════════════
-
-            // ── REAL (comentado para pruebas) ────────────────────────────────
-            // // 1. Registrar preliminar → obtener ticket inicial
-            // var ticketInicial = esVentas
-            //     ? await _ventasService.CerrarPeriodoAsync(periodo, cancellationToken)
-            //     : await _comprasService.CerrarPeriodoAsync(periodo, cancellationToken);
-            // ────────────────────────────────────────────────────────────────
-
-            // ── STUB: simular ticket inicial de SUNAT ────────────────────────
-            var ticketSimuladoCierre = $"STUB-CERRAR-{tipo.ToUpper()}-{periodo}-{DateTime.Now:HHmmss}";
-            var ticketInicial = new FabricaHilos.Sire.Models.TicketEstado
+            // 1. Registrar preliminar → obtener ticket inicial
+            FabricaHilos.Sire.Models.TicketEstado ticketInicial;
+            if (_sireOptions.UsarStub)
             {
-                NumTicket = ticketSimuladoCierre,
-                Estado    = "EN_PROCESO",
-                Mensaje   = "[STUB] Ticket de cierre simulado — sin llamada real a SUNAT"
-            };
-            _logger.LogWarning("[STUB] CerrarPeriodo: ticket simulado {Ticket} para tipo={Tipo} periodo={Periodo}",
-                ticketInicial.NumTicket, tipo, periodo);
-            // ────────────────────────────────────────────────────────────────
-            // #endregion STUB TEST
-            // ═══════════════════════════════════════════════════════════════════
+                var ticketSimuladoCierre = $"STUB-CERRAR-{tipo.ToUpper()}-{periodo}-{DateTime.Now:HHmmss}";
+                ticketInicial = new FabricaHilos.Sire.Models.TicketEstado
+                {
+                    NumTicket = ticketSimuladoCierre,
+                    Estado    = "EN_PROCESO",
+                    Mensaje   = "[STUB] Ticket de cierre simulado — sin llamada real a SUNAT"
+                };
+                _logger.LogWarning("[STUB] CerrarPeriodo: ticket simulado {Ticket} para tipo={Tipo} periodo={Periodo}",
+                    ticketInicial.NumTicket, tipo, periodo);
+            }
+            else
+            {
+                ticketInicial = esVentas
+                    ? await _ventasService.CerrarPeriodoAsync(periodo, cancellationToken)
+                    : await _comprasService.CerrarPeriodoAsync(periodo, cancellationToken);
+            }
 
             _logger.LogInformation("Período cerrado (ticket inicial): tipo={Tipo} periodo={Periodo} ticket={Ticket}",
                 tipo, periodo, ticketInicial.NumTicket);
@@ -1240,40 +1191,36 @@ public class SireController : OracleBaseController
                 return RedirigirPorTipo(tipo, periodo);
             }
 
-            // ═══════════════════════════════════════════════════════════════════
-            // #region STUB TEST — simular polling de ticket hasta estado COMPLETADO
-            // ═══════════════════════════════════════════════════════════════════
-
-            // ── REAL (comentado para pruebas) ────────────────────────────────
-            // // 2. Polling hasta estado final
-            // var ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
-            //     ct => esVentas
-            //         ? _ventasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct)
-            //         : _comprasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct),
-            //     cancellationToken);
-            // ────────────────────────────────────────────────────────────────
-
-            // ── STUB: simular ticket final COMPLETADO ────────────────────────
-            var nomArchivoSimCierre = $"CC{(esVentas ? "140000" : "080000")}{periodo}STUB{DateTime.Now:HHmmss}.ZIP";
-            var ticketFinal = new FabricaHilos.Sire.Models.TicketEstado
+            // 2. Polling hasta estado final
+            FabricaHilos.Sire.Models.TicketEstado ticketFinal;
+            if (_sireOptions.UsarStub)
             {
-                NumTicket        = ticketInicial.NumTicket,
-                Estado           = "COMPLETADO",
-                CodEstadoProceso = "3",
-                CodProceso       = "STUB",
-                PerTributario    = periodo,
-                Mensaje          = "[STUB] Cierre simulado completado",
-                ArchivoReporte   = new FabricaHilos.Sire.Models.ArchivoReporteDto
+                var nomArchivoSimCierre = $"CC{(esVentas ? "140000" : "080000")}{periodo}STUB{DateTime.Now:HHmmss}.ZIP";
+                ticketFinal = new FabricaHilos.Sire.Models.TicketEstado
                 {
-                    NomArchivoReporte     = nomArchivoSimCierre,
-                    CodTipoArchivoReporte = "ZIP"
-                }
-            };
-            _logger.LogWarning("[STUB] TicketFinal cierre simulado: Estado={Estado} Archivo={Archivo}",
-                ticketFinal.Estado, nomArchivoSimCierre);
-            // ────────────────────────────────────────────────────────────────
-            // #endregion STUB TEST
-            // ═══════════════════════════════════════════════════════════════════
+                    NumTicket        = ticketInicial.NumTicket,
+                    Estado           = "COMPLETADO",
+                    CodEstadoProceso = "3",
+                    CodProceso       = "STUB",
+                    PerTributario    = periodo,
+                    Mensaje          = "[STUB] Cierre simulado completado",
+                    ArchivoReporte   = new FabricaHilos.Sire.Models.ArchivoReporteDto
+                    {
+                        NomArchivoReporte     = nomArchivoSimCierre,
+                        CodTipoArchivoReporte = "ZIP"
+                    }
+                };
+                _logger.LogWarning("[STUB] TicketFinal cierre simulado: Estado={Estado} Archivo={Archivo}",
+                    ticketFinal.Estado, nomArchivoSimCierre);
+            }
+            else
+            {
+                ticketFinal = await _ticketPolling.EsperarEstadoFinalAsync(
+                    ct => esVentas
+                        ? _ventasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct)
+                        : _comprasService.ConsultarTicketAsync(ticketInicial.NumTicket, periodo, ct),
+                    cancellationToken);
+            }
 
             if (ticketFinal.Estado.Equals("ERROR",    StringComparison.OrdinalIgnoreCase)
              || ticketFinal.Estado.Equals("RECHAZADO", StringComparison.OrdinalIgnoreCase))
@@ -1298,29 +1245,26 @@ public class SireController : OracleBaseController
                     ticketFinal.CodProceso ?? string.Empty,
                     ticketInicial.NumTicket);
 
-                // ═══════════════════════════════════════════════════════════════════
-                // #region STUB TEST — generar constancia mínima en lugar de descargar de SUNAT
-                // ═══════════════════════════════════════════════════════════════════
-
-                // ── REAL (comentado para pruebas) ────────────────────────────────
-                // var constancia = esVentas
-                //     ? await _ventasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken)
-                //     : await _comprasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken);
-                // ────────────────────────────────────────────────────────────────
-
-                // ── STUB: ZIP mínimo válido con TXT pipe-delimited ────────────────
-                var contenidoStubCierre = GenerarZipStub(nomArchivo, periodo, tipo, ticketInicial.NumTicket);
-                var constancia = new FabricaHilos.Sire.Models.ConstanciaCierre
+                // 3. Descargar / generar constancia de cierre
+                FabricaHilos.Sire.Models.ConstanciaCierre constancia;
+                if (_sireOptions.UsarStub)
                 {
-                    NombreArchivo = nomArchivo,
-                    ContentType   = "application/zip",
-                    Contenido     = contenidoStubCierre
-                };
-                _logger.LogWarning("[STUB] Constancia ZIP simulada generada: {Nombre} ({Bytes} bytes)",
-                    nomArchivo, contenidoStubCierre.Length);
-                // ────────────────────────────────────────────────────────────────
-                // #endregion STUB TEST
-                // ═══════════════════════════════════════════════════════════════════
+                    var contenidoStubCierre = GenerarZipStub(nomArchivo, periodo, tipo, ticketInicial.NumTicket);
+                    constancia = new FabricaHilos.Sire.Models.ConstanciaCierre
+                    {
+                        NombreArchivo = nomArchivo,
+                        ContentType   = "application/zip",
+                        Contenido     = contenidoStubCierre
+                    };
+                    _logger.LogWarning("[STUB] Constancia ZIP simulada generada: {Nombre} ({Bytes} bytes)",
+                        nomArchivo, contenidoStubCierre.Length);
+                }
+                else
+                {
+                    constancia = esVentas
+                        ? await _ventasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken)
+                        : await _comprasService.DescargarArchivoReporteAsync(urlDescarga, nomArchivo, cancellationToken);
+                }
 
                 var rutaGuardada = await GuardarZipEnRedAsync(constancia.Contenido, tipo, periodo, constancia.NombreArchivo, cancellationToken);
                 _logger.LogInformation("Constancia cierre guardada en red: tipo={Tipo} periodo={Periodo} archivo={Archivo}",
@@ -1372,6 +1316,40 @@ public class SireController : OracleBaseController
         }
 
         return RedirigirPorTipo(tipo, periodo);
+    }
+
+    /// <summary>
+    /// Genera y descarga localmente el ZIP de propuesta con datos reales de SIRE_PROPUESTA.
+    /// NO envía nada a SUNAT. Permite validar el archivo antes del envío real.
+    /// Nombre del archivo: {RUC}-{yyyyMMdd}-{HHmmss}-propuesta.zip
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> DescargarPropuestaLocal(string periodo, string tipo, CancellationToken cancellationToken)
+    {
+        try
+        {
+            ValidarParametrosOperacion(periodo, tipo);
+
+            var ruc = _sireOptions.Ruc;
+            var (zipBytes, nombreZip, nombreTxt) = await _propuestaZipService.GenerarAsync(tipo, periodo, ruc, cancellationToken);
+
+            if (zipBytes.Length == 0)
+            {
+                TempData["Error"] = $"No hay registros en SIRE_PROPUESTA para {tipo.ToUpper()} período {periodo}.";
+                return RedirigirPorTipo(tipo, periodo);
+            }
+
+            _logger.LogInformation("[SIRE] DescargarPropuestaLocal: tipo={Tipo} periodo={Periodo} zip={Zip} txt={Txt} bytes={Bytes}",
+                tipo, periodo, nombreZip, nombreTxt, zipBytes.Length);
+
+            return File(zipBytes, "application/zip", nombreZip);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar ZIP local SIRE {Tipo} {Periodo}", tipo, periodo);
+            TempData["Error"] = ex.Message;
+            return RedirigirPorTipo(tipo, periodo);
+        }
     }
 
     /// <summary>
@@ -2537,6 +2515,63 @@ public class SireController : OracleBaseController
         }
     }
 
+
+    // -- Excluir / Restaurar por RUC SSCO --
+
+    /// <summary>
+    /// Excluye todos los comprobantes de un RUC del padron SSCO para el periodo dado.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExcluirSscoRuc(
+        [FromBody] ExcluirSscoRucRequest request, CancellationToken ct)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Ruc))
+            return Json(new { exitoso = false, error = "RUC invalido" });
+        if (!int.TryParse(request.Periodo, out var periodoNr))
+            return Json(new { exitoso = false, error = "Periodo invalido" });
+
+        try
+        {
+            var usuario   = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "SIG";
+            var tipo      = string.IsNullOrWhiteSpace(request.Tipo) ? "compras" : request.Tipo;
+            var excluidos = await _sireRepo.ExcluirPorRucAsync(tipo, periodoNr, request.Ruc, usuario, ct);
+            return Json(new { exitoso = true, excluidos, mensaje = $"{excluidos} comprobante(s) excluido(s) por SSCO" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE] ExcluirSscoRuc error: ruc={Ruc} periodo={Periodo}", request.Ruc, request.Periodo);
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Restaura todos los excluidos activos de un RUC para el periodo dado.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestaurarSscoRuc(
+        [FromBody] ExcluirSscoRucRequest request, CancellationToken ct)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.Ruc))
+            return Json(new { exitoso = false, error = "RUC invalido" });
+        if (!int.TryParse(request.Periodo, out var periodoNr))
+            return Json(new { exitoso = false, error = "Periodo invalido" });
+
+        try
+        {
+            var usuario     = HttpContext.Session.GetString("OracleUser") ?? User.Identity?.Name ?? "SIG";
+            var tipo        = string.IsNullOrWhiteSpace(request.Tipo) ? "compras" : request.Tipo;
+            var restaurados = await _sireRepo.RestaurarPorRucAsync(tipo, periodoNr, request.Ruc, usuario, ct);
+            return Json(new { exitoso = true, restaurados, mensaje = $"{restaurados} comprobante(s) restaurado(s)" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SIRE] RestaurarSscoRuc error: ruc={Ruc} periodo={Periodo}", request.Ruc, request.Periodo);
+            return Json(new { exitoso = false, error = ex.Message });
+        }
+    }
+
     // ── Carga manual del padrón SSCO (IFormFile) ─────────────────────────────────
 
     /// <summary>
@@ -2748,6 +2783,7 @@ public class SireController : OracleBaseController
             // Calcular hits y obtener solo los RUCs que cruzan con Legacy del período
             // (no se devuelve el padrón completo — solo el subconjunto de coincidencias)
             var rucsHit = new List<string>();
+            int comprobantesExcluidos = 0;
             if (!string.IsNullOrWhiteSpace(periodo) && sscoRucs.Count > 0)
             {
                 var legacyPeriodo = await _sireRepo.GetLegacyAsync("compras", periodo, cancellationToken);
@@ -2756,18 +2792,35 @@ public class SireController : OracleBaseController
                     .Select(r => r.Ruc!)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+
+                // Exclusión automática: por cada RUC con match se excluyen todos sus
+                // comprobantes del período, grabando OBS='SSCO' en SIRE_EXCLUIDOS_LOGIX.
+                if (int.TryParse(periodo, out var periodoNr))
+                {
+                    foreach (var ruc in rucsHit)
+                    {
+                        comprobantesExcluidos += await _sireRepo.ExcluirPorRucAsync(
+                            "compras", periodoNr, ruc, usuario, cancellationToken);
+                    }
+
+                    if (comprobantesExcluidos > 0)
+                        _logger.LogInformation(
+                            "[SIRE-SSCO-AUTO] Exclusión automática por SSCO: {Rucs} RUC(s), {Docs} comprobante(s) excluidos. Período={Periodo} Usuario={Usuario}",
+                            rucsHit.Count, comprobantesExcluidos, periodo, usuario);
+                }
             }
 
             return Json(new
             {
-                ok          = true,
-                mensaje     = $"Padrón SSCO actualizado correctamente: {entries.Count:N0} sujetos descargados e insertados.",
-                sujetos     = entries.Count,
-                filas       = afectadas,
-                sscoFchCarga= sscoFch?.ToString("dd/MM/yyyy HH:mm"),
-                sscoPeriodo = sscoPer,
-                sscoHits    = rucsHit.Count,
-                sscoRucsHit = rucsHit        // solo los RUCs con coincidencia en Legacy
+                ok                   = true,
+                mensaje              = $"Padrón SSCO actualizado correctamente: {entries.Count:N0} sujetos descargados e insertados.",
+                sujetos              = entries.Count,
+                filas                = afectadas,
+                sscoFchCarga         = sscoFch?.ToString("dd/MM/yyyy HH:mm"),
+                sscoPeriodo          = sscoPer,
+                sscoHits             = rucsHit.Count,
+                sscoRucsHit          = rucsHit,       // solo los RUCs con coincidencia en Legacy
+                comprobantesExcluidos= comprobantesExcluidos
             });
         }
         catch (HttpRequestException ex)
@@ -2787,6 +2840,7 @@ public sealed record SirePeriodoDashboardItem(string Periodo, string Descripcion
 public sealed record ReprocesarZipRequest(string Tipo, string Periodo);
 public sealed record ExcluirManualRequest(string Tipo, string Periodo, List<long> IdsConcil, string? Obs);
 public sealed record RestaurarExcluidoRequest(long IdConcil);
+public sealed record ExcluirSscoRucRequest(string Tipo, string Periodo, string Ruc);
 
 
 

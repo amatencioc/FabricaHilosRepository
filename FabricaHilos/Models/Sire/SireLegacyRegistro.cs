@@ -1,8 +1,8 @@
 namespace FabricaHilos.Models.Sire;
 
 /// <summary>
-/// Representa un registro cargado desde el ERP (Logix) a SIG.SIRE_LEGACY
-/// por el SP SP_SIRE_CARGA_LEGACY.
+/// Representa un registro cargado desde el ERP a SIG.SIRE_LEGACY
+/// por el SP SP_SIRE_CARGA_LEGACY (v4).
 /// Columnas: BASE_IMPONIBLE, IGV, OTROS, TOTAL (no BI_GRAV_DG / IGV_IPM_DG / TOTAL_CP).
 /// </summary>
 public sealed class SireLegacyRegistro
@@ -31,13 +31,14 @@ public sealed class SireLegacyRegistro
     public decimal   Otros         { get; init; }  // OTROS_TRIB (compras)
     public decimal   Total         { get; init; }
 
-    // Campos adicionales v2 (necesarios para DIFF_CAMPOS completo)
+    // Campos adicionales (necesarios para DIFF_CAMPOS completo y TXT de reemplazo SUNAT)
     public decimal   Isc           { get; init; }
     public decimal   ValAdqNg      { get; init; }
     public decimal   ValFactGrat   { get; init; }
     public string?   TipoNota      { get; init; }  // ventas
     public string?   FlagDetrac    { get; init; }  // compras: 'D' o null
-    public string?   AnioDam       { get; init; }  // compras: año DUA
+    public string?   AnioDam       { get; init; }  // compras: año DUA (solo 50/52)
+    public string?   TipoBien      { get; init; }  // compras: 1=Bienes 2=Servicios 3=Construcción 4=No aplica 5=Mixto
     public string?   TipDocref     { get; init; }
     public string?   SerDocref     { get; init; }
     public string?   NroDocref     { get; init; }

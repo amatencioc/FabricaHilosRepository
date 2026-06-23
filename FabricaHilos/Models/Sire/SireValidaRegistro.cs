@@ -48,10 +48,18 @@ public sealed class SireValidaRegistro
     public string? TipDocref   { get; init; }
     public string? SerDocref   { get; init; }
     public string? NroDocref   { get; init; }
+    public string? CodDam      { get; init; }   // Código DAM (compras importación)
+
+    // Campos exclusivos compras
+    public string? TipoBien    { get; init; }   // Tipo de bien (compras)
+    public string? IdProyecto  { get; init; }   // Identificador de proyecto
+    public decimal Porcpart    { get; init; }   // % participación (prorrata)
+    public decimal Imb         { get; init; }   // Impuesto a la bolsa plástica
+    public string? CarMod      { get; init; }   // Carácter modificatorio
 
     // Campos adicionales SUNAT
-    public string? FlagDetrac  { get; init; }   // S/N detracci&#xF3;n
-    public string? TipoNota    { get; init; }   // Tipo nota cr&#xE9;dito/d&#xE9;bito
+    public string? FlagDetrac  { get; init; }   // S/N detracción
+    public string? TipoNota    { get; init; }   // Tipo nota crédito/débito
 
     // Estado SUNAT
     public string? EstComp     { get; init; }   // estado de comprobante SUNAT

@@ -44,6 +44,7 @@ public class SireExcluidoLogix
     {
         "NC_AUTO" => "N/C automática",
         "MANUAL"  => "Exclusión manual",
+        "SSCO"    => "Padrón SSCO",
         _         => Motivo
     };
 
@@ -51,6 +52,7 @@ public class SireExcluidoLogix
     {
         "NC_AUTO" => "bi bi-scissors text-warning",
         "MANUAL"  => "bi bi-hand-index-thumb text-secondary",
+        "SSCO"    => "bi bi-shield-exclamation text-danger",
         _         => "bi bi-dash"
     };
 

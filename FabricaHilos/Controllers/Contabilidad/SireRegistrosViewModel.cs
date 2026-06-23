@@ -30,6 +30,8 @@ public class SireRegistrosViewModel
         = new List<PropuestaPeriodoResumen>();
 
     public bool EsMock { get; set; }
+    /// <summary>true cuando Sire:UsarStub está activo (simulación de envío a SUNAT con datos reales).</summary>
+    public bool EsStub { get; set; }
     public TipoRegistro Tipo { get; set; }
     public string? MensajeInfo { get; set; }
     public string Ruc { get; set; } = string.Empty;
@@ -62,6 +64,11 @@ public class SireRegistrosViewModel
     /// Lista completa del padrón SSCO_LISTA (todas las columnas del Excel de SUNAT).
     /// </summary>
     public List<FabricaHilos.Models.Sire.SscoListaEntry> SscoLista { get; set; } = new();
+    /// <summary>
+    /// Set de RUCs del padrón SSCO que ya tienen todos sus comprobantes excluidos activamente.
+    /// Calculado en el controller para que la vista pueda mostrar el botón Restaurar en lugar de Excluir.
+    /// </summary>
+    public HashSet<string> RucsExcluidosPorSsco { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum TipoRegistro
