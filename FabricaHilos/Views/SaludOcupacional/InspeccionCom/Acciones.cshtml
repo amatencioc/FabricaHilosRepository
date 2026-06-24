@@ -1,4 +1,4 @@
-@model FabricaHilos.Models.SaludOcupacional.SoAccionesViewModel
+﻿@model FabricaHilos.Models.SaludOcupacional.SoAccionesViewModel
 @{
     ViewData["Title"] = "Acciones Correctivas — Inspección Comedor";
 
@@ -19,6 +19,12 @@
     var enProc     = Model.TotalEnProceso;
     var vencidas   = Model.TotalVencidas;
     var resueltas  = Model.TotalResueltas;
+
+    // Agrupar por inspección
+    var grupos = Model.Acciones
+        .GroupBy(a => a.IdInsp)
+        .OrderByDescending(g => g.First().FechaInsp)
+        .ToList();
 }
 
 @section Breadcrumb {
@@ -27,6 +33,47 @@
 
 @section Styles {
     <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+    <style>
+        .so-insp-group       { margin-bottom:1.1rem; }
+        .so-insp-group-hdr   { display:flex; align-items:center; gap:.55rem; padding:.45rem .85rem;
+                               background:var(--so-bg-strip,#1c2433); border-radius:.45rem .45rem 0 0;
+                               border:1px solid var(--so-border,#2d3748); font-size:.78rem; }
+        .so-insp-group-body  { border:1px solid var(--so-border,#2d3748); border-top:none;
+                               border-radius:0 0 .45rem .45rem; overflow:hidden; }
+        .so-thumb-grid       { display:flex; flex-wrap:wrap; gap:4px; }
+        .so-thumb            { width:44px; height:44px; object-fit:cover; border-radius:3px;
+                               cursor:pointer; border:1px solid rgba(255,255,255,.15);
+                               transition:transform .15s,box-shadow .15s; flex-shrink:0; }
+        .so-thumb:hover      { transform:scale(1.08); box-shadow:0 0 0 2px var(--so-teal,#4fd1c5); }
+        .so-thumb.active-thumb { box-shadow:0 0 0 2px var(--so-teal,#4fd1c5); opacity:1; }
+        .so-no-thumbs        { font-size:.68rem; color:var(--so-gray-600,#718096); font-style:italic; }
+        /* Modal foto */
+        #modalFotoImg        { max-width:90vw; max-height:72vh; border-radius:.4rem; display:block; margin:0 auto; }
+        .foto-nav-btn        { position:absolute; top:50%; transform:translateY(-50%);
+                               background:rgba(0,0,0,.55); border:none; color:#fff;
+                               width:38px; height:38px; border-radius:50%;
+                               display:flex; align-items:center; justify-content:center;
+                               font-size:1.1rem; cursor:pointer; z-index:10;
+                               transition:background .15s; }
+        .foto-nav-btn:hover  { background:rgba(79,209,197,.7); }
+        .foto-nav-prev       { left:8px; }
+        .foto-nav-next       { right:8px; }
+        .foto-counter        { font-size:.72rem; color:#aaa; text-align:center; margin-top:6px; }
+        /* Botón editar acción */
+        .btn-so-edit         { background:rgba(79,209,197,.12); border:1px solid rgba(79,209,197,.35);
+                               color:var(--so-teal-mid,#4fd1c5); border-radius:.3rem;
+                               padding:.22rem .48rem; font-size:.72rem; cursor:pointer;
+                               transition:background .15s,border-color .15s; line-height:1; }
+        .btn-so-edit:hover   { background:rgba(79,209,197,.25); border-color:var(--so-teal-mid,#4fd1c5); }
+        /* Modal acción — forzar tema oscuro en controles de formulario */
+        #modalAccion .modal-body          { background:var(--so-bg-card); }
+        #modalAccion .form-select,
+        #modalAccion .form-control        { background:var(--so-bg-input) !important;
+                                            color:var(--so-text-primary) !important;
+                                            border-color:var(--so-border) !important; }
+        #modalAccion .form-select option  { background:var(--so-bg-card,#1a2535);
+                                            color:var(--so-text-primary,#e2e8f0); }
+    </style>
 }
 
 @if (TempData["Success"] is string ok)
@@ -40,7 +87,7 @@
 
 @await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
 
-@* ── Strip ──────────────────────────────────────────────────────────────────── *@
+@* ── Strip ──────────────────────────────────────────────────────────────────────── *@
 <div class="so-strip">
     <i class="bi bi-tools" style="color:var(--so-accent-yellow);font-size:.95rem;flex-shrink:0;"></i>
     <span class="so-strip-title">Acciones Correctivas</span>
@@ -70,7 +117,7 @@
     </span>
 </div>
 
-@* ── Pestañas de filtro ─────────────────────────────────────────────────────── *@
+@* ── Pestañas de filtro ───────────────────────────────────────────────────────────── *@
 <div class="so-filter" style="padding:.35rem .85rem;">
     <div class="d-flex align-items-center gap-2 flex-wrap">
         @{
@@ -95,101 +142,162 @@
     </div>
 </div>
 
-@* ── Tabla de acciones ──────────────────────────────────────────────────────── *@
-<div class="so-card">
-    <div class="so-card-header">
-        <i class="bi bi-card-checklist" style="color:var(--so-teal-mid);"></i>
-        <span>@Model.Acciones.Count acciones @(filtroAct == "PR" ? "abiertas" : EstadoLabel(filtroAct))</span>
+@* ── Grupos por inspección ────────────────────────────────────────────────────────── *@
+@if (!Model.Acciones.Any())
+{
+    <div class="so-card">
+        <div class="so-card-body text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+            <div style="font-size:.85rem;">No hay acciones con el filtro seleccionado.</div>
+        </div>
     </div>
-    <div class="so-card-body p-0">
-        @if (!Model.Acciones.Any())
-        {
-            <div class="text-center py-5 text-muted">
-                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                <div style="font-size:.85rem;">No hay acciones con el filtro seleccionado.</div>
-            </div>
-        }
-        else
-        {
-            <table class="so-table w-100">
-                <thead>
-                    <tr>
-                        <th>Descripción</th>
-                        <th>Hallazgo</th>
-                        <th>Inspección</th>
-                        <th>Responsable</th>
-                        <th class="text-center">Plazo</th>
-                        <th class="text-center">Estado</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var ac in Model.Acciones)
-                    {
-                        <tr class="@(ac.EsVencida ? "so-row-danger" : "")">
-                            <td style="font-size:.78rem;max-width:220px;">
-                                @ac.Descripcion
-                            </td>
-                            <td style="font-size:.73rem;color:var(--so-gray-600);max-width:180px;">
-                                @(ac.DescItem ?? "—")
-                            </td>
-                            <td class="text-nowrap" style="font-size:.73rem;">
-                                <a asp-controller="InspeccionCom" asp-action="Detalle"
-                                   asp-route-id="@ac.IdInsp"
-                                   class="text-decoration-none"
-                                   style="color:var(--so-teal-mid);">
-                                    #@ac.IdInsp — @ac.FechaInsp?.ToString("dd/MM/yyyy")
-                                </a>
-                                @if (!string.IsNullOrEmpty(ac.NombreComedor))
-                                {
-                                    <div class="text-muted" style="font-size:.68rem;">@ac.NombreComedor</div>
-                                }
-                            </td>
-                            <td style="font-size:.75rem;">@(ac.Responsable ?? "—")</td>
-                            <td class="text-center text-nowrap" style="font-size:.75rem;">
-                                @if (ac.FchLimite.HasValue)
-                                {
-                                    <span class="@(ac.EsVencida ? "text-danger fw-bold" : "")">
-                                        @ac.FchLimite.Value.ToString("dd/MM/yyyy")
-                                    </span>
-                                    @if (ac.EsVencida)
-                                    {
-                                        var dias = (DateTime.Today - ac.FchLimite.Value).Days;
-                                        <div class="text-danger" style="font-size:.65rem;">
-                                            @dias d. vencida
-                                        </div>
-                                    }
-                                }
-                                else { <span class="text-muted">—</span> }
-                            </td>
-                            <td class="text-center">
-                                <span class="so-badge @EstadoBadge(ac.Estado)" id="badge-@ac.IdAccion">
-                                    @EstadoLabel(ac.Estado)
-                                </span>
-                            </td>
-                            <td class="text-end pe-2">
-                                @if (ac.Estado != "R")
-                                {
-                                    <button class="btn btn-sm btn-outline-primary"
-                                            style="font-size:.7rem;padding:.2rem .5rem;"
-                                            title="Actualizar estado"
-                                            data-id="@ac.IdAccion"
-                                            data-estado="@ac.Estado"
-                                            data-obs="@ac.Observacion"
-                                            onclick="abrirModalAccion(this)">
-                                        <i class="bi bi-pencil-fill"></i>
-                                    </button>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </div>
-</div>
+}
+else
+{
+    foreach (var grupo in grupos)
+    {
+        var primera = grupo.First();
+        var hayVenc = grupo.Any(a => a.EsVencida);
+        var cntPend = grupo.Count(a => a.Estado == "P");
+        var cntProc = grupo.Count(a => a.Estado == "E");
+        var cntRes  = grupo.Count(a => a.Estado == "R");
 
-@* ── Modal actualizar acción ─────────────────────────────────────────────────── *@
+        // Fotos del grupo (solo hallazgos: IdDetalle == 0)
+        var fotosList = grupo
+            .Where(a => a.IdDetalle == 0)
+            .SelectMany(a =>
+                Model.HallazgosPorId.TryGetValue(a.IdAccion, out var h)
+                    ? h.Imgs.Where(i => i.Tipo == "H")
+                             .Select(i => new { i.IdImg, NombreArch = System.IO.Path.GetFileName(i.RutaArch ?? ""), IdInsp = a.IdInsp })
+                    : Enumerable.Empty<dynamic>())
+            .Where(f => !string.IsNullOrEmpty(f.NombreArch))
+            .ToList();
+
+        <div class="so-insp-group">
+            <div class="so-insp-group-hdr @(hayVenc ? "border-danger" : "")">
+                <i class="bi bi-clipboard2-check" style="color:var(--so-teal-mid);"></i>
+                <a asp-controller="InspeccionCom" asp-action="Detalle"
+                   asp-route-id="@primera.IdInsp"
+                   class="fw-semibold text-decoration-none" style="color:var(--so-teal-mid);font-size:.82rem;">
+                    #@primera.IdInsp &mdash; @primera.FechaInsp?.ToString("dd/MM/yyyy")
+                </a>
+                @if (!string.IsNullOrEmpty(primera.NombreComedor))
+                {
+                    <span style="color:var(--so-text-secondary);font-size:.74rem;">| @primera.NombreComedor</span>
+                }
+                <span class="ms-auto d-flex gap-1 align-items-center">
+                    @if (cntPend > 0)
+                    {
+                        <span class="so-badge so-badge-secondary" style="font-size:.67rem;">⏳ @cntPend pend.</span>
+                    }
+                    @if (cntProc > 0)
+                    {
+                        <span class="so-badge so-badge-proc" style="font-size:.67rem;">🔄 @cntProc proc.</span>
+                    }
+                    @if (cntRes > 0)
+                    {
+                        <span class="so-badge so-badge-ok" style="font-size:.67rem;">✅ @cntRes res.</span>
+                    }
+                    @if (hayVenc)
+                    {
+                        <span class="so-badge so-badge-danger" style="font-size:.67rem;">⚠ vencida(s)</span>
+                    }
+                </span>
+            </div>
+            <div class="so-insp-group-body">
+                @* ── Thumbnails de fotos ── *@
+                @if (fotosList.Any())
+                {
+                    <div class="px-3 py-2" style="background:rgba(0,0,0,.08);border-bottom:1px solid var(--so-border);">
+                        @{
+                            // Generar JSON seguro con las URLs — evita &amp; en onclick inline
+                            var fotosUrlsJson = System.Text.Json.JsonSerializer.Serialize(
+                                fotosList.Select(f => Url.Action("ServirImagen", "InspeccionCom",
+                                    new { idInsp = f.IdInsp, nombreArch = f.NombreArch, tipo = "hal" }))
+                                .ToArray());
+                        }
+                        <div class="so-thumb-grid" data-foto-group="@primera.IdInsp"
+                             data-urls="@fotosUrlsJson">
+                            @{ int fotoIdx = 0; }
+                            @foreach (var foto in fotosList)
+                            {
+                                var thumbUrl = Url.Action("ServirImagen", "InspeccionCom",
+                                    new { idInsp = foto.IdInsp, nombreArch = foto.NombreArch, tipo = "hal" });
+                                <img src="@thumbUrl"
+                                     class="so-thumb"
+                                     loading="lazy"
+                                     alt="Foto @(fotoIdx + 1)"
+                                     data-idx="@fotoIdx" />
+                                fotoIdx++;
+                            }
+                        </div>
+                    </div>
+                }
+                @* ── Tabla de acciones ── *@
+                <table class="so-table w-100">
+                    <thead>
+                        <tr>
+                            <th>Descripción</th>
+                            <th>Hallazgo / Item</th>
+                            <th class="text-center">Plazo</th>
+                            <th class="text-center">Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ac in grupo)
+                        {
+                            <tr class="@(ac.EsVencida ? "so-row-danger" : "")">
+                                <td style="font-size:.78rem;max-width:220px;">@ac.Descripcion</td>
+                                <td style="font-size:.73rem;color:var(--so-gray-600);max-width:180px;">
+                                    @(ac.DescItem ?? "—")
+                                </td>
+                                <td class="text-center text-nowrap" style="font-size:.75rem;">
+                                    @if (ac.FchLimite.HasValue)
+                                    {
+                                        <span class="@(ac.EsVencida ? "text-danger fw-bold" : "")">
+                                            @ac.FchLimite.Value.ToString("dd/MM/yyyy")
+                                        </span>
+                                        @if (ac.EsVencida)
+                                        {
+                                            var dias = (DateTime.Today - ac.FchLimite.Value).Days;
+                                            <div class="text-danger" style="font-size:.65rem;">@dias d. vencida</div>
+                                        }
+                                    }
+                                    else { <span class="text-muted">—</span> }
+                                </td>
+                                <td class="text-center">
+                                    <span class="so-badge @EstadoBadge(ac.Estado)" id="badge-@ac.IdAccion">
+                                        @EstadoLabel(ac.Estado)
+                                    </span>
+                                </td>
+                                <td class="text-end pe-2">
+                                    @if (ac.Estado != "R")
+                                    {
+                                        <button class="btn-so-edit"
+                                                title="Actualizar estado"
+                                                data-id="@ac.IdAccion"
+                                                data-detalle="@ac.IdDetalle"
+                                                data-estado="@ac.Estado"
+                                                data-obs="@ac.Observacion"
+                                                onclick="abrirModalAccion(this)">
+                                            <i class="bi bi-pencil-fill"></i>
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@* Token CSRF para peticiones AJAX *@
+<form id="__ajaxTokenForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@* ── Modal actualizar acción ─────────────────────────────────────────────────────── *@
 <div class="modal fade" id="modalAccion" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-sm">
         <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
@@ -200,13 +308,16 @@
                 </h6>
                 <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="background:var(--so-bg-card);padding:1rem;">
                 <input type="hidden" id="modalIdAccion" />
+                <input type="hidden" id="modalIdDetalle" />
                 <div class="mb-3">
                     <label class="form-label" style="font-size:.77rem;color:var(--so-text-secondary);">
                         Nuevo estado
                     </label>
-                    <select id="modalEstado" class="form-select form-select-sm">
+                    <select id="modalEstado" class="form-select form-select-sm"
+                            style="background:var(--so-bg-input);color:var(--so-text-primary);
+                                   border-color:var(--so-border);font-size:.8rem;">
                         <option value="P">Pendiente</option>
                         <option value="E">En proceso</option>
                         <option value="R">Resuelta</option>
@@ -234,23 +345,111 @@
     </div>
 </div>
 
+@* ── Modal foto ampliada ──────────────────────────────────────────────────────────── *@
+<div class="modal fade" id="modalFoto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="background:#111;border:none;">
+            <div class="modal-header" style="border:none;padding:.35rem .7rem;">
+                <span id="modalFotoCounter" class="text-muted" style="font-size:.75rem;"></span>
+                <button type="button" class="btn-close btn-close-white btn-sm ms-auto" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-2" style="position:relative;min-height:120px;">
+                <button class="foto-nav-btn foto-nav-prev" id="fotoPrev" title="Anterior" style="display:none;">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <img id="modalFotoImg" src="" alt="Foto" />
+                <button class="foto-nav-btn foto-nav-next" id="fotoNext" title="Siguiente" style="display:none;">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
 (function () {
     const modal = new bootstrap.Modal(document.getElementById('modalAccion'));
+    const modalFoto = new bootstrap.Modal(document.getElementById('modalFoto'));
+
+    // Estado de navegación de fotos
+    let _fotos = [];
+    let _fotoIdx = 0;
+
+    function actualizarFotoModal() {
+        const img     = document.getElementById('modalFotoImg');
+        const counter = document.getElementById('modalFotoCounter');
+        const btnPrev = document.getElementById('fotoPrev');
+        const btnNext = document.getElementById('fotoNext');
+        img.src = _fotos[_fotoIdx];
+        counter.textContent = _fotos.length > 1 ? `${_fotoIdx + 1} / ${_fotos.length}` : '';
+        btnPrev.style.display = (_fotos.length > 1 && _fotoIdx > 0) ? '' : 'none';
+        btnNext.style.display = (_fotos.length > 1 && _fotoIdx < _fotos.length - 1) ? '' : 'none';
+        // Resaltar thumbnail activo
+        document.querySelectorAll('.so-thumb').forEach(t => t.classList.remove('active-thumb'));
+        const activeThumbs = document.querySelectorAll(`.so-thumb[data-idx="${_fotoIdx}"]`);
+        // Solo resaltar el del grupo actual
+        activeThumbs.forEach(t => {
+            if (t.closest('[data-foto-group]') && _fotos.includes(t.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] ?? '')) {
+                t.classList.add('active-thumb');
+            }
+        });
+    }
+
+    // Clic en thumbnails: leer URLs desde data-urls del contenedor
+    document.addEventListener('click', function (e) {
+        const thumb = e.target.closest('.so-thumb');
+        if (!thumb) return;
+        const grid  = thumb.closest('[data-urls]');
+        if (!grid)  return;
+        const urls = JSON.parse(grid.dataset.urls || '[]');
+        const idx  = parseInt(thumb.dataset.idx ?? '0');
+        _fotos   = urls;
+        _fotoIdx = idx;
+        actualizarFotoModal();
+        modalFoto.show();
+    });
+
+    window.verFotoGrupo = function (urls, idx) {
+        _fotos   = urls;
+        _fotoIdx = idx;
+        actualizarFotoModal();
+        modalFoto.show();
+    };
+
+    document.getElementById('fotoPrev').addEventListener('click', function () {
+        if (_fotoIdx > 0) { _fotoIdx--; actualizarFotoModal(); }
+    });
+    document.getElementById('fotoNext').addEventListener('click', function () {
+        if (_fotoIdx < _fotos.length - 1) { _fotoIdx++; actualizarFotoModal(); }
+    });
+
+    // Navegación con teclado (←/→) mientras el modal de foto esté abierto
+    document.getElementById('modalFoto').addEventListener('shown.bs.modal', function () {
+        document.addEventListener('keydown', onFotoKey);
+    });
+    document.getElementById('modalFoto').addEventListener('hide.bs.modal', function () {
+        document.removeEventListener('keydown', onFotoKey);
+    });
+    function onFotoKey(e) {
+        if (e.key === 'ArrowLeft'  && _fotoIdx > 0)                  { _fotoIdx--; actualizarFotoModal(); }
+        if (e.key === 'ArrowRight' && _fotoIdx < _fotos.length - 1) { _fotoIdx++; actualizarFotoModal(); }
+    }
 
     window.abrirModalAccion = function (btn) {
-        document.getElementById('modalIdAccion').value = btn.dataset.id;
-        document.getElementById('modalEstado').value   = btn.dataset.estado ?? 'P';
-        document.getElementById('modalObs').value      = btn.dataset.obs ?? '';
+        document.getElementById('modalIdAccion').value   = btn.dataset.id;
+        document.getElementById('modalIdDetalle').value  = btn.dataset.detalle ?? '0';
+        document.getElementById('modalEstado').value     = btn.dataset.estado ?? 'P';
+        document.getElementById('modalObs').value        = btn.dataset.obs ?? '';
         modal.show();
     };
 
     document.getElementById('btnGuardarAc').addEventListener('click', async function () {
         const idAccion  = document.getElementById('modalIdAccion').value;
+        const idDetalle = parseInt(document.getElementById('modalIdDetalle').value ?? '0');
         const estado    = document.getElementById('modalEstado').value;
         const obs       = document.getElementById('modalObs').value.trim();
-        const token     = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        const token     = document.querySelector('#__ajaxTokenForm input[name="__RequestVerificationToken"]')?.value;
 
         this.disabled = true;
         this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
@@ -259,8 +458,19 @@
             const res = await fetch('@Url.Action("ActualizarAccion", "InspeccionCom")', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token ?? '' },
-                body: JSON.stringify({ idAccion: parseInt(idAccion), estado, observacion: obs })
+                body: JSON.stringify({ idAccion: parseInt(idAccion), idDetalle, estado, observacion: obs })
             });
+            // Si la sesión expiró el servidor puede devolver 302/401 — redirigir al login
+            if (res.redirected || res.status === 401 || res.status === 302) {
+                window.location.href = '/Account/Login';
+                return;
+            }
+            if (!res.ok) {
+                let errMsg = 'Error al guardar (HTTP ' + res.status + ').';
+                try { const j = await res.json(); errMsg = j.error ?? errMsg; } catch {}
+                alert(errMsg);
+                return;
+            }
             const json = await res.json();
             if (json.ok) {
                 modal.hide();

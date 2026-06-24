@@ -1,8 +1,9 @@
 @using FabricaHilos.Services
 @inject IMenuService MenuService
+@inject IRedInternaService RedInternaSvc
 @inject IEmpresaTemaService EmpresaTemaService
 @{ 
-    var menus = MenuService.GetMenusActuales();
+    var menus = MenuService.GetMenusFiltradosPorRed(RedInternaSvc.EsAccesoExterno, RedInternaSvc.RutasExternasPermitidas);
     var tema  = EmpresaTemaService.GetTemaActual();
 }
 <!DOCTYPE html>

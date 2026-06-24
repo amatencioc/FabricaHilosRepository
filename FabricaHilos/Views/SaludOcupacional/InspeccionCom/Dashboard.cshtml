@@ -80,10 +80,16 @@
             <span style="opacity:.75">última insp.</span>
         </span>
     }
-    <span class="ms-auto">
+    <span class="ms-auto d-flex gap-2">
         <a asp-controller="InspeccionCom" asp-action="Nueva"
-           class="btn btn-sm" style="background:var(--so-teal);color:#fff;font-size:.75rem;font-weight:600;">
-            <i class="bi bi-plus-circle"></i> Nueva Inspección
+           class="btn btn-sm" style="background:var(--so-teal);color:#fff;font-size:.75rem;font-weight:600;"
+           title="Registrar datos generales y puntajes del checklist (10 rubros)">
+            <i class="bi bi-clipboard-check"></i> Nueva Inspección
+        </a>
+        <a asp-controller="InspeccionCom" asp-action="Historial"
+           class="btn btn-sm btn-outline-light" style="font-size:.75rem;font-weight:600;"
+           title="Ir al historial para seleccionar una inspección y registrar evidencias y hallazgos">
+            <i class="bi bi-camera-fill"></i> Registrar Evidencias
         </a>
     </span>
 </div>
@@ -208,19 +214,37 @@
                                     <td class="text-end">
                                         @if (insp.EsBorrador)
                                         {
-                                            <a asp-controller="InspeccionCom" asp-action="Editar"
-                                               asp-route-id="@insp.IdInsp"
-                                               class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:.15rem .4rem;">
-                                                <i class="bi bi-pencil"></i>
-                                            </a>
+                                            <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                                <a asp-controller="InspeccionCom" asp-action="Editar"
+                                                   asp-route-id="@insp.IdInsp"
+                                                   class="btn btn-xs btn-outline-primary" style="font-size:.7rem;padding:.15rem .5rem;"
+                                                   title="Editar checklist: datos generales y puntajes por rubro">
+                                                    <i class="bi bi-clipboard-check"></i> Checklist
+                                                </a>
+                                                <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                                   asp-route-id="@insp.IdInsp"
+                                                   class="btn btn-xs btn-outline-success" style="font-size:.7rem;padding:.15rem .5rem;"
+                                                   title="Registrar observaciones, hallazgos y subir evidencias fotográficas">
+                                                    <i class="bi bi-camera-fill"></i> Evidencias
+                                                </a>
+                                            </div>
                                         }
                                         else
                                         {
-                                            <a asp-controller="InspeccionCom" asp-action="Detalle"
-                                               asp-route-id="@insp.IdInsp"
-                                               class="btn btn-xs btn-outline-secondary" style="font-size:.7rem;padding:.15rem .4rem;">
-                                                <i class="bi bi-eye"></i>
-                                            </a>
+                                            <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                                <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                                   asp-route-id="@insp.IdInsp"
+                                                   class="btn btn-xs btn-outline-secondary" style="font-size:.7rem;padding:.15rem .5rem;"
+                                                   title="Ver detalle, evidencias y observaciones">
+                                                    <i class="bi bi-eye"></i> Detalle
+                                                </a>
+                                                <a asp-controller="InspeccionCom" asp-action="Hallazgos"
+                                                   asp-route-id="@insp.IdInsp"
+                                                   class="btn btn-xs btn-outline-warning" style="font-size:.7rem;padding:.15rem .5rem;"
+                                                   title="Ver hallazgos (ítems con puntaje 0) y acciones correctivas">
+                                                    <i class="bi bi-search"></i> Hallazgos
+                                                </a>
+                                            </div>
                                         }
                                     </td>
                                 </tr>

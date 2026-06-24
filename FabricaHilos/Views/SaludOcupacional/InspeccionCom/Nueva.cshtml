@@ -3,6 +3,7 @@
 @{
     bool esEdicion = Model.Inspeccion.IdInsp > 0;
     ViewData["Title"] = esEdicion ? $"Inspección #{Model.Inspeccion.IdInsp} — Borrador" : "Nueva Inspección de Comedor";
+    if (esEdicion) ViewData["IdInsp"] = Model.Inspeccion.IdInsp;
 
     decimal ptsObt = Model.Rubros.Sum(r => r.PtsObtenidosRubro);
     decimal ptsMx  = Model.Rubros.Sum(r => r.PtsMaximoRubro);
@@ -53,6 +54,17 @@
             <i class="bi bi-exclamation-triangle-fill" style="color:#fc8181;"></i>
             <span class="so-kpi-val" style="color:#fc8181;">@nHallazgos</span>
             <span style="opacity:.8">hallazgos</span>
+        </span>
+    }
+    @if (esEdicion)
+    {
+        <span class="ms-auto">
+            <a asp-controller="InspeccionCom" asp-action="Detalle"
+               asp-route-id="@Model.Inspeccion.IdInsp"
+               class="btn btn-sm" style="background:var(--so-teal-mid);color:#fff;font-size:.75rem;font-weight:600;"
+               title="Registrar observaciones y subir evidencias fotográficas">
+                <i class="bi bi-camera-fill me-1"></i>Observaciones y evidencias
+            </a>
         </span>
     }
 </div>
@@ -137,9 +149,70 @@
                         <i class="bi bi-floppy"></i> Guardar encabezado
                     </button>
                 </div>
+
+                @* ── Separador ──────────────────────────────────────────────── *@
+                <div class="col-12"><hr class="my-1" style="border-color:var(--so-border);opacity:.4;"></div>
+
+                @* ── Observaciones generales ──────────────────────────────── *@
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Observaciones generales</label>
+                    <textarea name="Inspeccion.Observaciones" id="obs-general"
+                              class="form-control form-control-sm"
+                              rows="3" maxlength="2000"
+                              placeholder="Observaciones generales de la inspección (opcional)..."
+                              style="font-size:.82rem;resize:vertical;">@Model.Inspeccion.Observaciones</textarea>
+                </div>
+
+                @* ── Resultado en vivo ────────────────────────────────────── *@
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" style="font-size:.8rem;">Resultado de la Inspección</label>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <span style="font-size:1.4rem;font-weight:800;color:var(--so-teal);line-height:1;">
+                            <span id="resumen-pts">@ptsObt</span>
+                            <span style="font-size:.8rem;font-weight:400;color:var(--so-text-secondary);">/ @ptsMx pts</span>
+                        </span>
+                        <span style="font-size:1.4rem;font-weight:800;line-height:1;"
+                              id="resumen-pct"
+                              class="@(pct >= 75 ? "text-success" : pct >= 51 ? "text-warning" : "text-danger")">
+                            @pct.ToString("0.0")%
+                        </span>
+                    </div>
+                    <span class="so-semaforo @pctBarCss" id="resumen-calif" style="font-size:.78rem;">@pctLabel</span>
+                    <div class="so-pct-bar-track mt-2" style="height:8px;">
+                        <div class="so-pct-bar @pctBarCss" style="width:@(pct)%;height:8px;" id="resumen-bar"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    @* ── Puntajes del checklist (hidden, actualizados por JS al hacer clic) ── *@
+    @{int hiddenRubroIdx = 0;}
+    @foreach (var rubro in Model.Rubros)
+    {
+        int hiddenItemIdx = 0;
+        foreach (var item in rubro.Items)
+        {
+            @* IDs únicos: si IdDetalle=0 (ítem nuevo en catálogo), usamos el IdItem como discriminador *@
+            string hidSuffix = item.IdDetalle > 0 ? item.IdDetalle.ToString() : $"0_{item.IdItem}";
+            <input type="hidden"
+                   id="hid_det_@hidSuffix"
+                   name="Rubros[@hiddenRubroIdx].Items[@hiddenItemIdx].IdDetalle"
+                   value="@item.IdDetalle" />
+            <input type="hidden"
+                   name="Rubros[@hiddenRubroIdx].Items[@hiddenItemIdx].IdItem"
+                   value="@item.IdItem" />
+            <input type="hidden"
+                   name="Rubros[@hiddenRubroIdx].Items[@hiddenItemIdx].IdInsp"
+                   value="@(item.IdInsp > 0 ? item.IdInsp : Model.Inspeccion.IdInsp)" />
+            <input type="hidden"
+                   id="hid_pts_@hidSuffix"
+                   name="Rubros[@hiddenRubroIdx].Items[@hiddenItemIdx].Puntaje"
+                   value="@item.Puntaje" />
+            hiddenItemIdx++;
+        }
+        hiddenRubroIdx++;
+    }
 </form>
 
 @* ── Nota metodológica ─────────────────────────────────────────────────────── *@
@@ -172,8 +245,8 @@
     </div>
 </div>
 
-@* ── Checklist por rubros (accordion) ─────────────────────────────────────── *@
-<div class="accordion so-rubros-accordion" id="accordionRubros">
+@* ── Checklist por rubros (2 columnas en escritorio, 1 en móvil) ─────────── *@
+<div class="row row-cols-1 row-cols-md-2 g-2" id="accordionRubros">
 @{int rubroIdx = 0;}
 @foreach (var rubro in Model.Rubros)
 {
@@ -183,7 +256,8 @@
 
     int nNoCumple = rubro.Items.Count(i => i.NoCumple);
 
-    <div class="accordion-item so-accordion-item mb-2" id="rubroItem_@(rubroIdx)">
+    <div class="col">
+    <div class="accordion-item so-accordion-item" id="rubroItem_@(rubroIdx)">
         <h2 class="accordion-header" id="@headerId">
             <button class="accordion-button so-accordion-btn collapsed"
                     type="button"
@@ -226,7 +300,7 @@
             <div class="accordion-body p-0">
                 @foreach (var item in rubro.Items)
                 {
-                    <div class="so-cl-row @(item.NoCumple && item.TieneHallazgo ? "so-cl-row-noncompliant" : "")"
+                    <div class="so-cl-row @(item.NoCumple ? "so-cl-row-noncompliant" : "")"
                          data-item-id="@item.IdItem"
                          data-detalle-id="@item.IdDetalle"
                          data-pts-max="@item.PtsMax">
@@ -243,29 +317,14 @@
                                     class="so-pts-btn @item.PuntajeBtnCss0 btn-pts"
                                     data-pts="0" data-detalle="@item.IdDetalle">0</button>
                             <button type="button"
-                                    class="so-pts-btn @item.PuntajeBtnCss2 btn-pts"
-                                    data-pts="2" data-detalle="@item.IdDetalle">2</button>
-                            @if (item.PtsMax == 4)
-                            {
-                                <button type="button"
-                                        class="so-pts-btn @item.PuntajeBtnCss4 btn-pts"
-                                        data-pts="4" data-detalle="@item.IdDetalle">4</button>
-                            }
-                        </div>
-
-                        <div>
-                            <input type="text"
-                                   class="form-control form-control-sm inp-hallazgo"
-                                   data-detalle="@item.IdDetalle"
-                                   value="@item.Hallazgo"
-                                   placeholder="Hallazgo (opcional, si puntaje = 0)"
-                                   maxlength="500"
-                                   style="font-size:.77rem;" />
+                                    class="so-pts-btn @(item.PtsMax == 4 ? item.PuntajeBtnCss4 : item.PuntajeBtnCss2) btn-pts"
+                                    data-pts="@item.PtsMax" data-detalle="@item.IdDetalle">@item.PtsMax</button>
                         </div>
                     </div>
                 }
             </div>
         </div>
+    </div>
     </div>
 }
 </div>
@@ -301,14 +360,16 @@
     // Si la inspección aún no existe en BD (IdInsp == 0), los puntajes
     // no se persisten vía AJAX: el usuario debe guardar el encabezado primero.
     const inspeccionCreada = @(Model.Inspeccion.IdInsp > 0 ? "true" : "false");
+    const idInspActual     = @Model.Inspeccion.IdInsp;
 
-    function puedeGuardarAjax(detalleId) {
+    function puedeGuardarAjax(detalleId, itemId) {
         if (!inspeccionCreada) {
             console.info('[SO] Inspección no guardada aún — puntaje se aplicará al guardar encabezado.');
             return false;
         }
-        if (!detalleId || detalleId === 0) {
-            console.warn('[SO] IdDetalle = 0, skip GuardarPuntaje.');
+        // Sí puede guardar si tiene IdDetalle, o si tiene IdItem para el fallback
+        if (!detalleId && !itemId) {
+            console.warn('[SO] Sin IdDetalle ni IdItem, skip GuardarPuntaje.');
             return false;
         }
         return true;
@@ -327,13 +388,16 @@
             });
             this.classList.add(`selected-${pts}`);
 
-            // Mostrar/ocultar campo de hallazgo
-            const inpHallazgo = row.querySelector('.inp-hallazgo');
+            // Actualizar hidden del form para que el POST también lleve el puntaje
+            const itemId  = parseInt(row.dataset.itemId);
+            const hidSuffix = detalleId > 0 ? detalleId : `0_${itemId}`;
+            const hidPts  = document.getElementById(`hid_pts_${hidSuffix}`);
+            if (hidPts) hidPts.value = pts;
+
+            // Marcar fila como no-conforme si puntaje = 0
             if (pts === 0) {
-                inpHallazgo.placeholder = 'Hallazgo requerido para puntaje 0';
                 row.classList.add('so-cl-row-noncompliant');
             } else {
-                inpHallazgo.placeholder = 'Hallazgo (opcional)';
                 row.classList.remove('so-cl-row-noncompliant');
             }
 
@@ -341,7 +405,11 @@
             actualizarBarraProgreso();
 
             // Solo persistir si la inspección ya existe en BD
-            if (!puedeGuardarAjax(detalleId)) return;
+            if (!puedeGuardarAjax(detalleId, itemId)) return;
+
+            // Guardar puntaje previo (antes de actualizar el hidden) para revertir si el server falla
+            const ptsPrevio = hidPts ? parseInt(hidPts.dataset.prevPts ?? hidPts.value) : 0;
+            if (hidPts) hidPts.dataset.prevPts = hidPts.value;  // actualizar previo tras leer
 
             try {
                 const r = await fetch('/SaludOcupacional/InspeccionCom/GuardarPuntaje', {
@@ -351,13 +419,28 @@
                         'RequestVerificationToken': token
                     },
                     body: JSON.stringify({
-                        idDetalle: detalleId,
-                        puntaje: pts,
-                        hallazgo: inpHallazgo.value || null,
+                        idDetalle  : detalleId,
+                        idItem     : itemId,
+                        idInsp     : idInspActual,
+                        puntaje    : pts,
+                        hallazgo   : null,
                         responsable: null
-                    })
+                    }),
+                    noLoading: true
                 });
-                if (!r.ok) console.warn('[SO] Error guardando puntaje:', await r.text());
+                if (!r.ok) {
+                    const errData = await r.json().catch(() => ({ error: 'Error desconocido' }));
+                    console.error('[SO] Error guardando puntaje:', errData);
+                    // Revertir UI al puntaje anterior
+                    row.querySelectorAll('.btn-pts').forEach(b => b.classList.remove('selected-0','selected-2','selected-4'));
+                    row.querySelector(`.btn-pts[data-pts="${ptsPrevio}"]`)?.classList.add(`selected-${ptsPrevio}`);
+                    if (hidPts) hidPts.value = ptsPrevio;
+                    actualizarBarraRubro(row);
+                    actualizarBarraProgreso();
+                    if (typeof AppAlert !== 'undefined') {
+                        AppAlert('No se pudo guardar el puntaje: ' + (errData.error || 'Error en el servidor.'), 'Error al guardar', 'danger');
+                    }
+                }
             } catch(e) {
                 console.error('[SO] Error fetch GuardarPuntaje:', e);
             }
@@ -368,9 +451,10 @@
     document.querySelectorAll('.inp-hallazgo').forEach(inp => {
         inp.addEventListener('blur', async function() {
             const detalleId = parseInt(this.dataset.detalle);
-            if (!puedeGuardarAjax(detalleId)) return;
-
             const row    = this.closest('.so-cl-row');
+            const itemId = parseInt(row?.dataset.itemId || '0');
+            if (!puedeGuardarAjax(detalleId, itemId)) return;
+
             const ptsBtn = row.querySelector('.btn-pts.selected-0, .btn-pts.selected-2, .btn-pts.selected-4');
             const pts    = ptsBtn ? parseInt(ptsBtn.dataset.pts) : 0;
 
@@ -382,11 +466,14 @@
                         'RequestVerificationToken': token
                     },
                     body: JSON.stringify({
-                        idDetalle: detalleId,
-                        puntaje: pts,
-                        hallazgo: this.value || null,
+                        idDetalle  : detalleId,
+                        idItem     : itemId,
+                        idInsp     : idInspActual,
+                        puntaje    : pts,
+                        hallazgo   : this.value || null,
                         responsable: null
-                    })
+                    }),
+                    noLoading: true
                 });
             } catch(e) { /* silencioso */ }
         });
@@ -437,6 +524,7 @@
         });
         const pct = max > 0 ? Math.round(obt / max * 100 * 10) / 10 : 0;
         const css = pct >= 75 ? 'ok' : pct >= 51 ? 'warn' : 'danger';
+        const label = pct >= 75 ? 'ACEPTABLE' : pct >= 51 ? 'CON OBSERVACIONES' : 'DEFICIENTE';
 
         document.querySelectorAll('.so-pct-bar').forEach(b => {
             if (!b.closest('.accordion-item') && !b.closest('.so-cl-section')) {
@@ -444,6 +532,27 @@
                 b.className = 'so-pct-bar ' + css;
             }
         });
+
+        // ── Actualizar tarjeta resumen total ──────────────────────────────
+        const rPts   = document.getElementById('resumen-pts');
+        const rPct   = document.getElementById('resumen-pct');
+        const rCalif = document.getElementById('resumen-calif');
+        const rBar   = document.getElementById('resumen-bar');
+        if (rPts)   rPts.innerHTML   = `${obt} <span style="font-size:.9rem;font-weight:400;color:var(--so-text-secondary);">/ ${max}</span>`;
+        if (rPct) {
+            rPct.textContent = pct.toFixed(1) + '%';
+            rPct.className = pct >= 75 ? 'text-success' : pct >= 51 ? 'text-warning' : 'text-danger';
+            rPct.style.fontSize = '1.6rem';
+            rPct.style.fontWeight = '800';
+        }
+        if (rCalif) {
+            rCalif.textContent = label;
+            rCalif.className = `so-semaforo ${css}`;
+        }
+        if (rBar) {
+            rBar.style.width = pct + '%';
+            rBar.className = `so-pct-bar ${css}`;
+        }
     }
 
     // ── Expandir / Colapsar todo ──────────────────────────────────────────
@@ -464,6 +573,26 @@
         flatpickr('.flatpickr', {
             dateFormat: 'd/m/Y',
             locale: 'es'
+        });
+    }
+
+    // ── Guardar observación general al perder foco ────────────────────────
+    const obsEl = document.getElementById('obs-general');
+    if (obsEl && inspeccionCreada) {
+        obsEl.addEventListener('blur', async function() {
+            try {
+                await fetch('/SaludOcupacional/InspeccionCom/GuardarObservacion', {
+                    method : 'POST',
+                    headers: {
+                        'Content-Type'             : 'application/json',
+                        'RequestVerificationToken' : token
+                    },
+                    body: JSON.stringify({
+                        idInsp     : @Model.Inspeccion.IdInsp,
+                        observacion: this.value || null
+                    })
+                });
+            } catch(e) { console.warn('[SO] No se pudo guardar observación', e); }
         });
     }
 })();

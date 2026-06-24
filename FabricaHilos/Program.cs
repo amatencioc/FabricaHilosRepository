@@ -35,6 +35,10 @@ using System.Net;
 // ══════════════════════════════════════════════════════════════════════════════
 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
+// Dapper: mapear columnas Oracle con guión bajo a propiedades PascalCase
+// Ej: ID_RUBRO → IdRubro, PTS_MAX → PtsMax, COD_ITEM → CodItem
+Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Aumentar límite de Kestrel para subida de archivos (máx. 500 MB por request)
@@ -155,6 +159,7 @@ builder.Services.AddScoped<_IDashboardComercialService, DashboardComercialServic
 builder.Services.AddScoped<IDashboardComercialMaestroService, DashboardComercialMaestroService>();
 builder.Services.AddScoped<IDashboardGerencialService, DashboardGerencialService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IRedInternaService, RedInternaService>();
 builder.Services.AddScoped<IMarcacionesService, MarcacionesService>();
 builder.Services.AddScoped<ICompensacionDiaDiaService, CompensacionDiaDiaService>();
 builder.Services.AddScoped<ICompensacionDdcService, CompensacionDdcService>();
@@ -363,6 +368,49 @@ app.Use(async (context, next) =>
     context.Response.Headers["Referrer-Policy"]         = "strict-origin-when-cross-origin";
     context.Response.Headers["Permissions-Policy"]      = "geolocation=(), microphone=()";
     await next();
+});
+
+// Interceptar HTTP 400 causado por cookies corruptas o indescifrables (DataProtection key rotation).
+// Sin este middleware el navegador muestra "Esta página no funciona - HTTP ERROR 400" de forma
+// permanente hasta que el usuario borre manualmente las cookies, lo cual es difícil en móvil.
+// La solución: expirar todas las cookies conocidas y redirigir al login para que el usuario
+// obtenga cookies frescas en el siguiente request.
+app.Use(async (context, next) =>
+{
+    await next();
+    if (context.Response.StatusCode == 400
+        && !context.Response.HasStarted
+        && context.Request.Cookies.Count > 0)
+    {
+        // Las peticiones AJAX (fetch/JSON) deben recibir 400 directo, no un redirect.
+        // El redirect haría que el fetch reciba HTML del login y falle al parsear JSON.
+        var contentType = context.Request.ContentType ?? string.Empty;
+        var isAjax      = contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase)
+                       || context.Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+        if (isAjax)
+        {
+            // Dejar pasar el 400 original para que el JS lo maneje correctamente
+            return;
+        }
+
+        var logger = context.RequestServices
+            .GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(
+            "HTTP 400 con cookies presentes en {Path}; expirando cookies y redirigiendo al login.",
+            context.Request.Path);
+
+        // Expirar todas las cookies que envió el navegador
+        foreach (var cookie in context.Request.Cookies.Keys)
+        {
+            context.Response.Cookies.Delete(cookie, new CookieOptions
+            {
+                SameSite = SameSiteMode.Lax,
+                Secure   = context.Request.IsHttps
+            });
+        }
+        context.Response.StatusCode  = 302;
+        context.Response.Headers["Location"] = "/Account/Login";
+    }
 });
 app.UseResponseCompression();
 app.UseStaticFiles();

@@ -1,0 +1,735 @@
+﻿@model FabricaHilos.Models.SaludOcupacional.SoHallazgosViewModel
+@using FabricaHilos.Models.SaludOcupacional
+@{
+    var insp = Model.Inspeccion;
+    ViewData["Title"] = $"Hallazgos — Inspección #{insp.IdInsp}";
+    ViewData["IdInsp"] = insp.IdInsp;
+    int nPend = Model.Hallazgos.Count(h => h.Estado == "P");
+    int nRes  = Model.Hallazgos.Count(h => h.Estado == "R");
+    int nVer  = Model.Hallazgos.Count(h => h.Estado == "V");
+}
+
+@section Breadcrumb {
+    <li class="breadcrumb-item">
+        <a asp-controller="InspeccionCom" asp-action="Historial">Historial</a>
+    </li>
+    <li class="breadcrumb-item">
+        <a asp-controller="InspeccionCom" asp-action="Detalle" asp-route-id="@insp.IdInsp">
+            Inspección #@insp.IdInsp
+        </a>
+    </li>
+    <li class="breadcrumb-item active">Hallazgos</li>
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/so-inspeccion.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+@await Html.PartialAsync("~/Views/SaludOcupacional/InspeccionCom/_SoNavBar.cshtml")
+
+@* ── Strip de cabecera ─────────────────────────────────────────────────────── *@
+<div class="so-strip">
+    <i class="bi bi-search" style="color:var(--so-accent-green);font-size:.95rem;flex-shrink:0;"></i>
+    <span class="so-strip-title">Inspección #@insp.IdInsp — @(insp.FechaInsp.ToString("dd/MM/yyyy"))</span>
+    <span class="so-strip-sep"></span>
+    <span class="so-kpi"><i class="bi bi-building"></i><span class="so-kpi-val">@insp.NombreComedor</span></span>
+    <span class="so-kpi" style="background:rgba(255,193,7,.2);border-color:rgba(255,193,7,.4);">
+        <i class="bi bi-hourglass-split" style="color:#997404;"></i>
+        <span class="so-kpi-val" style="color:#997404;">@nPend</span>
+        <span>pendientes</span>
+    </span>
+    <span class="so-kpi" style="background:rgba(25,135,84,.18);border-color:rgba(25,135,84,.35);">
+        <i class="bi bi-check2-circle" style="color:var(--so-teal-mid);"></i>
+        <span class="so-kpi-val" style="color:var(--so-teal-mid);">@nRes</span>
+        <span>resueltos</span>
+    </span>
+</div>
+
+@* ── Info inspección ──────────────────────────────────────────────────────── *@
+<div class="so-card mb-3">
+    <div class="so-card-body" style="padding:.6rem 1rem;">
+        <div class="row g-2 align-items-center" style="font-size:.8rem;">
+            <div class="col-auto"><strong>Inspector:</strong> @(insp.Inspector ?? "—")</div>
+            <div class="col-auto"><strong>Médico:</strong> @(insp.Medico ?? "—")</div>
+            <div class="col-auto"><strong>Encargada:</strong> @(insp.ContactoConc ?? insp.Encargada ?? "—")</div>
+            <div class="col-md-auto ms-auto d-flex gap-2">
+                <a asp-controller="InspeccionCom" asp-action="Detalle" asp-route-id="@insp.IdInsp"
+                   class="btn btn-sm btn-outline-secondary" style="font-size:.76rem;">
+                    <i class="bi bi-arrow-left"></i> Volver al detalle
+                </a>
+                <a asp-controller="InspeccionCom" asp-action="ExportarPdf" asp-route-id="@insp.IdInsp"
+                   class="btn btn-sm" target="_blank" data-no-loading
+                   style="background:var(--so-danger);color:#fff;font-size:.76rem;">
+                    <i class="bi bi-file-earmark-pdf"></i> PDF Informe
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Nota metodológica ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── *@
+<div class="so-alert so-alert-info mb-3">
+	<i class="bi bi-info-circle-fill"></i>
+	<div style="font-size:.8rem;">
+		Registre cada hallazgo con su descripción y fotos. Indique la <strong>acción correctiva</strong> y,
+		una vez ejecutada, complete la <strong>observación de seguimiento</strong> con fotos de verificación.
+	</div>
+</div>
+
+@* ── Formulario: nuevo hallazgo (fijo arriba) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────── *@
+<div class="so-card mb-4" id="panel-nuevo-hallazgo">
+	<div class="so-card-header">
+		<i class="bi bi-plus-circle" style="color:var(--so-teal-mid);"></i>
+		<span>Nuevo hallazgo</span>
+	</div>
+	<div class="so-card-body">
+		<div class="row g-3">
+			<div class="col-lg-6">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">
+					<i class="bi bi-exclamation-circle me-1" style="color:var(--so-danger);"></i>DESCRIPCIÓN DEL HALLAZGO <span class="text-danger">*</span>
+				</label>
+				<textarea id="nuevo-descripcion" rows="3" maxlength="500"
+						  class="form-control form-control-sm"
+						  placeholder="Describa el hallazgo encontrado..."
+						  style="font-size:.82rem;resize:vertical;"></textarea>
+			</div>
+			<div class="col-lg-6">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">
+					<i class="bi bi-tools me-1" style="color:var(--so-teal-mid);"></i>ACCIÓN CORRECTIVA
+				</label>
+				<textarea id="nuevo-accion" rows="3" maxlength="500"
+						  class="form-control form-control-sm"
+						  placeholder="Describa la acción correctiva a tomar..."
+						  style="font-size:.82rem;resize:vertical;"></textarea>
+			</div>
+			<div class="col-sm-4">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">Fecha límite</label>
+				<input type="text" id="nuevo-fch-limite" class="form-control form-control-sm"
+					   placeholder="dd/mm/yyyy" style="font-size:.8rem;" />
+			</div>
+			<div class="col-sm-4">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">Estado</label>
+				<select id="nuevo-estado" class="form-select form-select-sm" style="font-size:.8rem;">
+					<option value="P" selected>Pendiente</option>
+					<option value="R">Resuelto</option>
+					<option value="V">Verificado</option>
+				</select>
+			</div>
+			<div class="col-sm-4">
+				<label class="form-label fw-semibold" style="font-size:.78rem;color:var(--so-gray-600);">
+					<i class="bi bi-camera me-1"></i>Fotos del hallazgo
+				</label>
+				<div class="d-flex gap-2 align-items-center">
+					<label class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;margin:0;" title="Tomar foto con cámara">
+						<i class="bi bi-camera-fill me-1"></i>Cámara
+						<input type="file" accept="image/*" capture="environment" class="d-none" id="nuevo-foto-cam" multiple />
+					</label>
+					<label class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;margin:0;" title="Elegir de galería">
+						<i class="bi bi-image me-1"></i>Galería
+						<input type="file" accept="image/jpeg,image/png,image/webp" class="d-none" id="nuevo-foto-gal" multiple />
+					</label>
+				</div>
+				<div class="so-foto-grid mt-1" id="nuevo-foto-preview"></div>
+			</div>
+		</div>
+		<div class="d-flex justify-content-end mt-3">
+			<button type="button" id="btnNuevoHallazgo"
+					class="btn btn-sm"
+					style="background:var(--so-teal);color:#fff;font-size:.82rem;padding:.42rem 1.4rem;font-weight:700;">
+				<i class="bi bi-plus-circle-fill me-1"></i> Agregar Hallazgo
+			</button>
+		</div>
+	</div>
+</div>
+
+@* ── Lista de hallazgos registrados (abajo) ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────── *@
+@if (Model.Hallazgos.Any())
+{
+	<div class="d-flex align-items-center gap-2 mb-2">
+		<div class="so-card-header flex-grow-1 mb-0" style="border-radius:.4rem;font-size:.78rem;">
+			<i class="bi bi-list-check" style="color:var(--so-teal-mid);"></i>
+			<span>Hallazgos registrados</span>
+			<span class="ms-auto so-badge so-badge-info">@Model.Hallazgos.Count total</span>
+		</div>
+		<button type="button" id="btnExpandAll" class="btn btn-sm btn-outline-secondary"
+				style="font-size:.72rem;white-space:nowrap;flex-shrink:0;" title="Expandir todos">
+			<i class="bi bi-chevron-expand me-1"></i>Expandir todos
+		</button>
+		<button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary"
+				style="font-size:.72rem;white-space:nowrap;flex-shrink:0;" title="Contraer todos">
+			<i class="bi bi-chevron-contract me-1"></i>Contraer todos
+		</button>
+	</div>
+}
+
+<div id="hallazgos-container">
+@foreach (var h in Model.Hallazgos)
+{
+	var tabId = $"tabs-{h.IdHallazgo}";
+	var tHall = $"tab-hall-{h.IdHallazgo}";
+	var tAcc  = $"tab-acc-{h.IdHallazgo}";
+	var tSeg  = $"tab-seg-{h.IdHallazgo}";
+	var pHall = $"pane-hall-{h.IdHallazgo}";
+	var pAcc  = $"pane-acc-{h.IdHallazgo}";
+	var pSeg  = $"pane-seg-{h.IdHallazgo}";
+	<div class="so-card mb-3 so-hallazgo-card" data-hallazgo-id="@h.IdHallazgo" id="hallazgo-@h.IdHallazgo">
+
+		@* Cabecera — actúa como toggle del colapso *@
+		<div class="so-card-header d-flex align-items-center gap-2 so-hallazgo-toggle"
+			 style="cursor:pointer;user-select:none;"
+			 data-bs-toggle="collapse" data-bs-target="#collapse-@h.IdHallazgo"
+			 aria-expanded="false" aria-controls="collapse-@h.IdHallazgo">
+			<i class="bi bi-chevron-right so-chevron me-1" style="font-size:.7rem;transition:transform .2s;"></i>
+			<span class="fw-800" style="font-size:.92rem;color:var(--so-teal);min-width:2.2rem;flex-shrink:0;">
+				N° @h.Correlativo
+			</span>
+			<span style="font-size:.77rem;color:var(--so-gray-600);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+				@(string.IsNullOrWhiteSpace(h.Descripcion) ? "Sin descripción" : h.Descripcion)
+			</span>
+			<span class="badge bg-@h.EstadoCss" style="font-size:.7rem;flex-shrink:0;">@h.EstadoLabel</span>
+			@if (h.EsVencido)
+			{
+				<span class="badge bg-danger" style="font-size:.68rem;flex-shrink:0;">
+					<i class="bi bi-exclamation-triangle-fill"></i> Vencido
+				</span>
+			}
+			@if (h.FchLimite.HasValue)
+			{
+				<span style="font-size:.7rem;color:var(--so-gray-600);flex-shrink:0;">
+					<i class="bi bi-calendar2-event"></i> @h.FchLimite.Value.ToString("dd/MM/yyyy")
+				</span>
+			}
+			<button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-hallazgo"
+					data-id="@h.IdHallazgo"
+					style="font-size:.68rem;padding:.18rem .45rem;flex-shrink:0;"
+					onclick="event.stopPropagation()">
+				<i class="bi bi-trash"></i>
+			</button>
+		</div>
+
+		@* Cuerpo colapsable *@
+		<div class="collapse" id="collapse-@h.IdHallazgo">
+			<div class="so-card-body p-0">
+			<ul class="nav nav-tabs nav-tabs-sm px-3 pt-2" id="@tabId" role="tablist"
+				style="border-bottom:1px solid var(--so-gray-200);gap:.1rem;">
+				<li class="nav-item" role="presentation">
+					<button class="nav-link active py-1 px-3" id="@tHall" data-bs-toggle="tab"
+							data-bs-target="#@pHall" type="button" role="tab"
+							style="font-size:.75rem;font-weight:700;">
+						<i class="bi bi-exclamation-circle me-1" style="color:var(--so-danger);"></i>Hallazgo
+						@if (h.Imgs.Any(i => i.Tipo == "H"))
+						{
+							<span class="badge bg-secondary ms-1" style="font-size:.63rem;">@h.Imgs.Count(i => i.Tipo == "H")</span>
+						}
+					</button>
+				</li>
+				<li class="nav-item" role="presentation">
+					<button class="nav-link py-1 px-3" id="@tAcc" data-bs-toggle="tab"
+							data-bs-target="#@pAcc" type="button" role="tab"
+							style="font-size:.75rem;font-weight:700;">
+						<i class="bi bi-tools me-1" style="color:var(--so-teal-mid);"></i>Acción
+						@if (!string.IsNullOrWhiteSpace(h.AccionCorr))
+						{
+							<i class="bi bi-check2 ms-1" style="color:var(--so-ok);font-size:.7rem;"></i>
+						}
+					</button>
+				</li>
+				<li class="nav-item" role="presentation">
+					<button class="nav-link py-1 px-3" id="@tSeg" data-bs-toggle="tab"
+							data-bs-target="#@pSeg" type="button" role="tab"
+							style="font-size:.75rem;font-weight:700;">
+						<i class="bi bi-clipboard2-check me-1" style="color:#6f42c1;"></i>Seguimiento
+						@if (h.Imgs.Any(i => i.Tipo == "S"))
+						{
+							<span class="badge bg-secondary ms-1" style="font-size:.63rem;">@h.Imgs.Count(i => i.Tipo == "S")</span>
+						}
+					</button>
+				</li>
+			</ul>
+
+			<div class="tab-content p-3" id="@(tabId)Content">
+
+				@* ── Tab: Hallazgo ── *@
+				<div class="tab-pane fade show active" id="@pHall" role="tabpanel">
+					<label class="form-label fw-semibold mb-1" style="font-size:.76rem;color:var(--so-gray-600);">Descripción</label>
+					<textarea class="form-control form-control-sm auto-save"
+							  data-campo="descripcion" data-id="@h.IdHallazgo"
+							  rows="3" maxlength="500"
+							  placeholder="Describa el hallazgo encontrado..."
+							  style="font-size:.82rem;resize:vertical;">@h.Descripcion</textarea>
+
+					<div class="mt-3">
+						<div class="d-flex align-items-center gap-2 mb-1">
+							<span style="font-size:.74rem;color:var(--so-gray-600);">
+								<i class="bi bi-camera me-1"></i>Fotos del hallazgo
+							</span>
+							<span class="ms-auto d-flex gap-1">
+								<label class="so-evidencia-add" title="Tomar foto con cámara"
+									   style="cursor:pointer;font-size:.72rem;color:var(--so-teal-mid);">
+									<i class="bi bi-camera-fill"></i>
+									<input type="file" accept="image/*" capture="environment"
+										   class="d-none inp-foto-cam" data-id="@h.IdHallazgo" data-tipo="H"
+										   data-target="inp-foto-H-@h.IdHallazgo" />
+								</label>
+								<label class="so-evidencia-add" title="Elegir de galería"
+									   style="cursor:pointer;font-size:.72rem;color:var(--so-teal-mid);">
+									<i class="bi bi-image me-1"></i>Agregar
+									<input type="file" accept="image/jpeg,image/png,image/webp"
+										   class="d-none inp-foto" id="inp-foto-H-@h.IdHallazgo"
+										   data-id="@h.IdHallazgo" data-tipo="H" />
+								</label>
+							</span>
+						</div>
+						<div class="so-foto-grid" id="fotos-H-@h.IdHallazgo">
+							@foreach (var img in h.Imgs.Where(i => i.Tipo == "H"))
+							{
+								var urlH = Url.Action("ServirImagen", "InspeccionCom", new { idInsp = insp.IdInsp, nombreArch = System.IO.Path.GetFileName(img.RutaArch), tipo = "hal" });
+								<div class="so-foto-thumb" data-img-id="@img.IdImg">
+									<img src="@urlH" alt="@img.Descripcion" loading="lazy" class="so-ev-thumb"
+										 onclick="abrirLightbox(this.src)" />
+									<button type="button" class="so-foto-del btn-del-img"
+											data-img-id="@img.IdImg" title="Eliminar foto">×</button>
+								</div>
+							}
+						</div>
+					</div>
+				</div>
+
+				@* ── Tab: Acción Correctiva ── *@
+				<div class="tab-pane fade" id="@pAcc" role="tabpanel">
+					<label class="form-label fw-semibold mb-1" style="font-size:.76rem;color:var(--so-gray-600);">Acción correctiva</label>
+					<textarea class="form-control form-control-sm auto-save"
+							  data-campo="accionCorr" data-id="@h.IdHallazgo"
+							  rows="3" maxlength="500"
+							  placeholder="Describa la acción correctiva a tomar..."
+							  style="font-size:.82rem;resize:vertical;">@h.AccionCorr</textarea>
+
+					<div class="row g-2 mt-2">
+						<div class="col-sm-6">
+							<label style="font-size:.72rem;color:var(--so-gray-600);">Fecha límite</label>
+							<input type="text" class="form-control form-control-sm flatpickr auto-save"
+								   data-campo="fchLimite" data-id="@h.IdHallazgo"
+								   value="@(h.FchLimite?.ToString("dd/MM/yyyy"))"
+								   placeholder="dd/mm/yyyy" style="font-size:.8rem;" />
+						</div>
+						<div class="col-sm-6">
+							<label style="font-size:.72rem;color:var(--so-gray-600);">Estado</label>
+							<select class="form-select form-select-sm auto-save"
+									data-campo="estado" data-id="@h.IdHallazgo" style="font-size:.8rem;">
+								<option value="P" selected="@(h.Estado == "P" ? "selected" : null)">Pendiente</option>
+								<option value="R" selected="@(h.Estado == "R" ? "selected" : null)">Resuelto</option>
+								<option value="V" selected="@(h.Estado == "V" ? "selected" : null)">Verificado</option>
+							</select>
+						</div>
+					</div>
+				</div>
+
+				@* ── Tab: Seguimiento ── *@
+				<div class="tab-pane fade" id="@pSeg" role="tabpanel">
+					<label class="form-label fw-semibold mb-1" style="font-size:.76rem;color:var(--so-gray-600);">Observación de seguimiento</label>
+					<textarea class="form-control form-control-sm auto-save"
+							  data-campo="obsSeguim" data-id="@h.IdHallazgo"
+							  rows="3" maxlength="500"
+							  placeholder="Observación de seguimiento: ¿se ejecutó la acción correctiva?..."
+							  style="font-size:.82rem;resize:vertical;">@h.ObsSeguim</textarea>
+
+					<div class="mt-3">
+						<div class="d-flex align-items-center gap-2 mb-1">
+							<span style="font-size:.74rem;color:var(--so-gray-600);">
+								<i class="bi bi-camera2 me-1"></i>Fotos de seguimiento
+							</span>
+							<span class="ms-auto d-flex gap-1">
+								<label class="so-evidencia-add" title="Tomar foto con cámara"
+									   style="cursor:pointer;font-size:.72rem;color:#6f42c1;">
+									<i class="bi bi-camera-fill"></i>
+									<input type="file" accept="image/*" capture="environment"
+										   class="d-none inp-foto-cam" data-id="@h.IdHallazgo" data-tipo="S"
+										   data-target="inp-foto-S-@h.IdHallazgo" />
+								</label>
+								<label class="so-evidencia-add" title="Elegir de galería"
+									   style="cursor:pointer;font-size:.72rem;color:#6f42c1;">
+									<i class="bi bi-image me-1"></i>Agregar
+									<input type="file" accept="image/jpeg,image/png,image/webp"
+										   class="d-none inp-foto" id="inp-foto-S-@h.IdHallazgo"
+										   data-id="@h.IdHallazgo" data-tipo="S" />
+								</label>
+							</span>
+						</div>
+						<div class="so-foto-grid" id="fotos-S-@h.IdHallazgo">
+							@foreach (var img in h.Imgs.Where(i => i.Tipo == "S"))
+							{
+								var urlS = Url.Action("ServirImagen", "InspeccionCom", new { idInsp = insp.IdInsp, nombreArch = System.IO.Path.GetFileName(img.RutaArch), tipo = "hal" });
+								<div class="so-foto-thumb" data-img-id="@img.IdImg">
+									<img src="@urlS" alt="@img.Descripcion" loading="lazy" class="so-ev-thumb"
+										 onclick="abrirLightbox(this.src)" />
+									<button type="button" class="so-foto-del btn-del-img"
+											data-img-id="@img.IdImg" title="Eliminar foto">×</button>
+								</div>
+							}
+						</div>
+					</div>
+				</div>
+
+			</div>
+		</div>
+		</div>@* /.collapse *@
+	</div>
+}
+</div>
+
+@* ── Lightbox ──────────────────────────────────────────────────────────────── *@
+<div class="modal fade" id="soAlertModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-3" style="font-size:.86rem;" id="soAlertModalMsg"></div>
+            <div class="modal-footer justify-content-center py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Modal de confirmación *@
+<div class="modal fade" id="soConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-3" style="font-size:.86rem;" id="soConfirmModalMsg"></div>
+            <div class="modal-footer justify-content-center py-2 gap-2">
+                <button type="button" class="btn btn-sm btn-danger" id="soConfirmOk">Eliminar</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="lightbox" class="so-lightbox d-none" onclick="this.classList.add('d-none')">
+    <img id="lightbox-img" src="" alt="Evidencia" style="max-width:90vw;max-height:90vh;border-radius:.5rem;" />
+</div>
+
+@section Scripts {
+<style>
+/* ── Fotos grid ─────────────────────────────────────────── */
+.so-foto-grid { display:flex; flex-wrap:wrap; gap:.4rem; min-height:60px; }
+.so-foto-thumb { position:relative; width:90px; height:80px; }
+.so-foto-thumb img { width:100%; height:100%; object-fit:cover; border-radius:.3rem;
+                     cursor:pointer; border:1.5px solid var(--so-border); }
+.so-foto-del { position:absolute; top:2px; right:2px; width:18px; height:18px;
+               border-radius:50%; border:none; background:rgba(220,53,69,.85);
+               color:#fff; font-size:.7rem; line-height:1;
+               display:flex; align-items:center; justify-content:center;
+               cursor:pointer; padding:0; }
+.so-foto-del:hover { background:#dc3545; }
+/* ── Lightbox ───────────────────────────────────────────── */
+.so-lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85);
+               display:flex!important; align-items:center; justify-content:center;
+               z-index:9999; cursor:zoom-out; }
+.so-lightbox.d-none { display:none!important; }
+/* ── Hallazgo card accent ───────────────────────────────── */
+.so-hallazgo-card .so-card-header { background:var(--so-teal-xpale);
+                                     border-bottom:1px solid var(--so-border); }
+.so-hallazgo-toggle[aria-expanded="true"] .so-chevron { transform: rotate(90deg); }
+.so-hallazgo-toggle:hover { background: rgba(0,0,0,.04); }
+</style>
+
+<script>
+(function() {
+    const token = document.querySelector('meta[name="__RequestVerificationToken"]')?.content
+               || document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+    const idInsp = @insp.IdInsp;
+
+    // ── Lightbox ──────────────────────────────────────────────────────────
+
+	// ── Expandir / Contraer todos ──────────────────────────────────────────
+	document.getElementById('btnExpandAll')?.addEventListener('click', function() {
+		document.querySelectorAll('#hallazgos-container .collapse').forEach(function(el) {
+			bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+		});
+	});
+	document.getElementById('btnCollapseAll')?.addEventListener('click', function() {
+		document.querySelectorAll('#hallazgos-container .collapse').forEach(function(el) {
+			bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).hide();
+		});
+	});
+
+	// Chevron sincronizado con el estado del collapse
+	document.querySelectorAll('#hallazgos-container .collapse').forEach(function(el) {
+		var toggle = document.querySelector('[data-bs-target="#' + el.id + '"]');
+		el.addEventListener('show.bs.collapse', function() {
+			if (toggle) toggle.setAttribute('aria-expanded', 'true');
+		});
+		el.addEventListener('hide.bs.collapse', function() {
+			if (toggle) toggle.setAttribute('aria-expanded', 'false');
+		});
+	});
+    function abrirLightbox(src) {
+        document.getElementById('lightbox-img').src = src;
+        document.getElementById('lightbox').classList.remove('d-none');
+    }
+    window.abrirLightbox = abrirLightbox;
+
+    // ── Auto-save (blur en textarea / change en select/date) ──────────────
+    async function guardarCampo(idHallazgo) {
+        const card = document.querySelector(`.so-hallazgo-card[data-hallazgo-id="${idHallazgo}"]`);
+        if (!card) return;
+
+        const getVal = campo => card.querySelector(`[data-campo="${campo}"][data-id="${idHallazgo}"]`)?.value ?? null;
+
+        const body = {
+            idHallazgo:  idHallazgo,
+            descripcion: getVal('descripcion'),
+            accionCorr:  getVal('accionCorr'),
+            obsSeguim:   getVal('obsSeguim'),
+            estado:      getVal('estado'),
+            fchLimite:   null
+        };
+
+        const fchRaw = getVal('fchLimite');
+        if (fchRaw) {
+            const [d,m,y] = fchRaw.split('/');
+            if (d && m && y) body.fchLimite = `${y}-${m}-${d}T00:00:00`;
+        }
+
+        try {
+            await fetch('/SaludOcupacional/InspeccionCom/ActualizarHallazgo', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify(body)
+            });
+            // Actualizar badge de estado en la cabecera
+            const badge = card.querySelector('.badge[class*="bg-"]');
+            const estadoMap = { P:'warning', R:'success', V:'info' };
+            const labelMap  = { P:'Pendiente', R:'Resuelto', V:'Verificado' };
+            const est = body.estado ?? 'P';
+            if (badge) {
+                badge.className = `badge bg-${estadoMap[est] ?? 'secondary'}`;
+                badge.textContent = labelMap[est] ?? est;
+            }
+        } catch(e) { console.warn('[SO] Error guardando hallazgo', e); }
+    }
+
+    document.querySelectorAll('.auto-save').forEach(el => {
+        const id = parseInt(el.dataset.id);
+
+        // blur: guarda inmediatamente al salir del campo (desktop y móvil estándar)
+        el.addEventListener('blur', function() {
+            clearTimeout(el._debTimer);
+            guardarCampo(id);
+        });
+
+        // change: para <select> y <input type=date>
+        if (el.tagName === 'SELECT' || el.type === 'date') {
+            el.addEventListener('change', function() { guardarCampo(id); });
+        }
+
+        // input con debounce 1.5 s: cubre Android/iOS que no disparan blur
+        // al cerrar el teclado con el botón "Atrás" del sistema operativo
+        if (el.tagName === 'TEXTAREA' || el.type === 'text') {
+            el.addEventListener('input', function() {
+                clearTimeout(el._debTimer);
+                el._debTimer = setTimeout(() => guardarCampo(id), 1500);
+            });
+        }
+    });
+
+    // ── Fotos pendientes del formulario nuevo ──────────────────────────────
+    const _fotosPendientes = []; // { file, tipo:'H' }
+
+    function registrarFotosPendientes(fileList, tipo) {
+        Array.from(fileList).forEach(f => {
+            _fotosPendientes.push({ file: f, tipo });
+            const reader = new FileReader();
+            reader.onload = ev => {
+                const div = document.createElement('div');
+                div.className = 'so-foto-thumb';
+                div.innerHTML = `<img src="${ev.target.result}" style="width:90px;height:80px;object-fit:cover;border-radius:.3rem;" />`;
+                document.getElementById('nuevo-foto-preview')?.appendChild(div);
+            };
+            reader.readAsDataURL(f);
+        });
+    }
+
+    document.getElementById('nuevo-foto-cam')?.addEventListener('change', function() {
+        if (this.files?.length) registrarFotosPendientes(this.files, 'H');
+        this.value = '';
+    });
+    document.getElementById('nuevo-foto-gal')?.addEventListener('change', function() {
+        if (this.files?.length) registrarFotosPendientes(this.files, 'H');
+        this.value = '';
+    });
+
+    // ── Nuevo hallazgo ─────────────────────────────────────────────────────
+    document.getElementById('btnNuevoHallazgo')?.addEventListener('click', async function() {
+        const descEl   = document.getElementById('nuevo-descripcion');
+        const accEl    = document.getElementById('nuevo-accion');
+        const fchEl    = document.getElementById('nuevo-fch-limite');
+        const estEl    = document.getElementById('nuevo-estado');
+        const desc     = (descEl?.value ?? '').trim();
+        const accion   = (accEl?.value  ?? '').trim();
+        const estado   = estEl?.value ?? 'P';
+        const fchRaw   = fchEl?.value ?? '';
+        let   fchLimite = null;
+        if (fchRaw) {
+            const [d,m,y] = fchRaw.split('/');
+            if (d && m && y) fchLimite = `${y}-${m}-${d}T00:00:00`;
+        }
+        if (!desc) {
+            descEl?.focus();
+            mostrarAlertaSO('Ingrese la descripción del hallazgo antes de agregar.');
+            return;
+        }
+        this.disabled = true;
+        try {
+            const r = await fetch('/SaludOcupacional/InspeccionCom/NuevoHallazgo', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify({ idInsp, descripcion: desc, accionCorr: accion, estado, fchLimite })
+            });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error);
+
+            // Subir fotos pendientes antes de recargar
+            if (_fotosPendientes.length > 0) {
+                for (const p of _fotosPendientes) {
+                    try { await subirImgHallazgo(p.file, data.idHallazgo, p.tipo); }
+                    catch(e) { console.warn('[SO] Error subiendo foto:', e); }
+                }
+                _fotosPendientes.length = 0;
+            }
+
+            location.reload();
+        } catch(e) {
+            mostrarAlertaSO('Error al crear el hallazgo: ' + e.message);
+        } finally { this.disabled = false; }
+    });
+    // ── Eliminar hallazgo ─────────────────────────────────────────────────
+    document.querySelectorAll('.btn-eliminar-hallazgo').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = parseInt(this.dataset.id);
+            confirmarSO('¿Eliminar este hallazgo y todas sus imágenes? Esta acción no se puede deshacer.', async () => {
+                try {
+                    const r = await fetch('/SaludOcupacional/InspeccionCom/EliminarHallazgo', {
+                        method : 'POST',
+                        headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                        body   : JSON.stringify(id)
+                    });
+                    const data = await r.json();
+                    if (!data.ok) throw new Error(data.error);
+                    document.getElementById(`hallazgo-${id}`)?.remove();
+                } catch(e) { mostrarAlertaSO('Error al eliminar hallazgo: ' + e.message); }
+            });
+        });
+    });
+
+    // subir img (helper) con idInsp, galería y cámara móvil
+    function mostrarAlertaSO(msg) {
+        const el = document.getElementById('soAlertModalMsg');
+        if (el) el.textContent = msg;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('soAlertModal')).show();
+    }
+
+    function confirmarSO(msg, onConfirm) {
+        const el = document.getElementById('soConfirmModalMsg');
+        if (el) el.textContent = msg;
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('soConfirmModal'));
+        const btn   = document.getElementById('soConfirmOk');
+        const handler = function() {
+            modal.hide();
+            btn.removeEventListener('click', handler);
+            onConfirm();
+        };
+        btn.removeEventListener('click', handler);
+        btn.addEventListener('click', handler);
+        modal.show();
+    }
+
+    async function subirImgHallazgo(file, idHallazgo, tipo) {
+        const fd = new FormData();
+        fd.append('idHallazgo', idHallazgo);
+        fd.append('idInsp',     idInsp);
+        fd.append('tipo',       tipo);
+        fd.append('archivo',    file);
+        const r = await fetch('/SaludOcupacional/InspeccionCom/SubirImgHallazgo', {
+            method : 'POST',
+            headers: { 'RequestVerificationToken': token },
+            body   : fd
+        });
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error ?? 'Error desconocido');
+        const grid = document.getElementById(`fotos-${tipo}-${idHallazgo}`);
+        if (grid) {
+            const div = document.createElement('div');
+            div.className = 'so-foto-thumb';
+            div.dataset.imgId = data.idImg;
+            div.innerHTML = `<img src="${data.ruta}" loading="lazy" class="so-ev-thumb"
+                     onclick="abrirLightbox(this.src)" /><button type="button" class="so-foto-del btn-del-img"
+                        data-img-id="${data.idImg}" title="Eliminar">&#215;</button>`;
+            div.querySelector('.btn-del-img').addEventListener('click', eliminarImg);
+            grid.appendChild(div);
+        }
+    }
+
+    document.querySelectorAll('.inp-foto').forEach(inp => {
+        inp.addEventListener('change', async function() {
+            if (!this.files?.length) return;
+            const idHallazgo = parseInt(this.dataset.id);
+            const tipo       = this.dataset.tipo;
+            try { await subirImgHallazgo(this.files[0], idHallazgo, tipo); }
+            catch(e) { mostrarAlertaSO('Error al subir imagen: ' + e.message); }
+            finally  { this.value = ''; }
+        });
+    });
+
+    document.querySelectorAll('.inp-foto-cam').forEach(cam => {
+        cam.addEventListener('change', async function() {
+            if (!this.files?.length) return;
+            const camFile    = this.files[0];
+            const idHallazgo = parseInt(this.dataset.id);
+            const tipo       = this.dataset.tipo;
+            const targetInp  = this.dataset.target ? document.getElementById(this.dataset.target) : null;
+            if (targetInp && typeof DataTransfer !== 'undefined') {
+                try { const dt = new DataTransfer(); dt.items.add(camFile); targetInp.files = dt.files; }
+                catch(_) {}
+            }
+            try { await subirImgHallazgo(camFile, idHallazgo, tipo); }
+            catch(e) { mostrarAlertaSO('Error al subir imagen: ' + e.message); }
+            finally  { this.value = ''; }
+        });
+    });
+
+    async function eliminarImg() {
+        const idImg = parseInt(this.dataset.imgId);
+        const thumb = this.closest('.so-foto-thumb');
+        try {
+            const r = await fetch('/SaludOcupacional/InspeccionCom/EliminarImgHallazgo', {
+                method : 'POST',
+                headers: { 'Content-Type':'application/json', 'RequestVerificationToken': token },
+                body   : JSON.stringify(idImg)
+            });
+            const data = await r.json();
+            if (!data.ok) throw new Error(data.error);
+            thumb?.remove();
+        } catch(e) { mostrarAlertaSO('Error al eliminar: ' + e.message); }
+    }
+    document.querySelectorAll('.btn-del-img').forEach(btn => btn.addEventListener('click', eliminarImg));
+
+    if (typeof flatpickr !== 'undefined') {
+        // Inicializar flatpickr en los campos de hallazgos existentes
+        // y registrar onChange para que el auto-save funcione correctamente
+        // (flatpickr reemplaza el input nativo, el evento 'change' nativo no siempre se dispara)
+        document.querySelectorAll('.flatpickr').forEach(el => {
+            const id = parseInt(el.dataset.id);
+            flatpickr(el, {
+                dateFormat: 'd/m/Y',
+                locale: 'es',
+                onChange: function(_selDates, _dateStr) {
+                    if (id) guardarCampo(id);
+                }
+            });
+        });
+        // Flatpickr para el formulario de nuevo hallazgo
+        flatpickr('#nuevo-fch-limite', { dateFormat: 'd/m/Y', locale: 'es' });
+    }
+})();
+</script>
+}

@@ -15,21 +15,25 @@ namespace FabricaHilos.Controllers.Home
         private readonly ApplicationDbContext _context;
         private readonly ILogger<HomeController> _logger;
         private readonly IMenuService _menuService;
+        private readonly IRedInternaService _redSvc;
 
-        public HomeController(ApplicationDbContext context, ILogger<HomeController> logger, IMenuService menuService)
+        public HomeController(ApplicationDbContext context, ILogger<HomeController> logger,
+            IMenuService menuService, IRedInternaService redSvc)
         {
             _context = context;
             _logger = logger;
             _menuService = menuService;
+            _redSvc = redSvc;
         }
 
         // Punto de entrada por defecto: redirige al primer módulo disponible del usuario
         public IActionResult Landing()
         {
-            var (ctrl, act, area, url) = _menuService.GetLanding();
+            var (ctrl, act, area, url) = _menuService.GetLandingParaRed(
+                _redSvc.EsAccesoExterno, _redSvc.RutasExternasPermitidas);
             if (url != null) return Redirect(url);
-            return area != null 
-                ? RedirectToAction(act!, ctrl!, new { area }) 
+            return area != null
+                ? RedirectToAction(act!, ctrl!, new { area })
                 : RedirectToAction(act!, ctrl!);
         }
 

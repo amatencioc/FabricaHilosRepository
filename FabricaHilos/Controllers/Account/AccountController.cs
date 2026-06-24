@@ -68,19 +68,25 @@ namespace FabricaHilos.Controllers.Account
                         _logger.LogWarning(
                             "Sesión Identity válida para {Usuario} pero AccesoWeb vacío tras refresh Oracle; forzando re-login.",
                             oracleUser);
+                        // SignOut + View() directo para evitar ERR_TOO_MANY_REDIRECTS
                         await _signInManager.SignOutAsync();
                         HttpContext.Session.Clear();
-                        return RedirectToAction("Login", new { returnUrl });
+                        ViewData["ReturnUrl"] = returnUrl;
+                        ViewData["InfoMsg"]   = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
+                        return View();
                     }
                     return RedirectToLanding();
                 }
 
                 // Cookie web válida pero sesión Oracle expirada (ej: reinicio de la app)
-                // → cerrar sesión web y redirigir a login limpio para evitar HTTP 400
-                // (si caemos directo a View() el token anti-CSRF queda inválido)
+                // → cerrar sesión web y mostrar login directamente (sin redirect para evitar
+                // ERR_TOO_MANY_REDIRECTS: el browser necesita recibir el Set-Cookie de logout
+                // en la misma respuesta antes de procesar otro redirect a Login).
                 await _signInManager.SignOutAsync();
                 HttpContext.Session.Clear();
-                return RedirectToAction("Login", new { returnUrl });
+                ViewData["ReturnUrl"] = returnUrl;
+                ViewData["InfoMsg"]   = "Tu sesión expiró. Por favor vuelve a iniciar sesión.";
+                return View();
             }
             ViewData["ReturnUrl"] = returnUrl;
             return View();

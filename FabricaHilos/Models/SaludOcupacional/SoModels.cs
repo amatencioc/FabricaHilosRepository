@@ -55,6 +55,7 @@ public class SoInspeccion
     public int       IdCom        { get; set; }
     public string?   NombreComedor{ get; set; }
     public string?   NombreConc   { get; set; }
+    public string?   ContactoConc { get; set; }  // CONTACTO de la concesionaria
     public DateTime  FechaInsp    { get; set; }
     public string?   HoraInsp     { get; set; }
     public string?   Encargada    { get; set; }
@@ -203,18 +204,19 @@ public class SoDashboardViewModel
 /// <summary>ViewModel para crear/editar inspección (checklist interactivo)</summary>
 public class SoNuevaInspeccionViewModel
 {
-    public SoInspeccion              Inspeccion { get; set; } = new();
-    public IReadOnlyList<SoComedor>  Comedores  { get; set; } = Array.Empty<SoComedor>();
+    public SoInspeccion             Inspeccion { get; set; } = new();
+    public IReadOnlyList<SoComedor> Comedores  { get; set; } = Array.Empty<SoComedor>();
 
     /// <summary>Rubros con sus ítems agrupados (para renderizar el checklist)</summary>
-    public IReadOnlyList<SoRubroConDetalles> Rubros { get; set; } = Array.Empty<SoRubroConDetalles>();
+    public List<SoRubroConDetalles> Rubros { get; set; } = new();
 }
 
 /// <summary>Rubro del checklist con los detalles ya resueltos</summary>
 public class SoRubroConDetalles
 {
-    public SoInspRubro              Rubro    { get; set; } = new();
-    public IReadOnlyList<SoInspDetalle> Items { get; set; } = Array.Empty<SoInspDetalle>();
+    public SoInspRubro         Rubro { get; set; } = new();
+    public List<SoInspDetalle> Items { get; set; } = new();
+
     public int PtsObtenidosRubro => Items.Sum(i => i.Puntaje);
     public int PtsMaximoRubro    => Items.Sum(i => i.PtsMax);
     public decimal PctRubro      => PtsMaximoRubro == 0 ? 0
@@ -229,15 +231,75 @@ public class SoDetalleInspeccionViewModel
     public IReadOnlyList<SoRubroConDetalles>  Rubros      { get; set; } = Array.Empty<SoRubroConDetalles>();
     public IReadOnlyList<SoInspAccion>        Acciones    { get; set; } = Array.Empty<SoInspAccion>();
     public IReadOnlyList<SoInspEvidencia>     Evidencias  { get; set; } = Array.Empty<SoInspEvidencia>();
+    public IReadOnlyList<SoHallazgo>          Hallazgos   { get; set; } = Array.Empty<SoHallazgo>();
 }
 
 /// <summary>ViewModel para la bandeja de acciones correctivas</summary>
 public class SoAccionesViewModel
 {
     public IReadOnlyList<SoInspAccion> Acciones    { get; set; } = Array.Empty<SoInspAccion>();
+    /// <summary>Hallazgos con fotos para mostrar thumbnails, indexados por IdHallazgo</summary>
+    public Dictionary<long, SoHallazgo> HallazgosPorId { get; set; } = new();
     public int TotalPendientes  { get; set; }
     public int TotalEnProceso   { get; set; }
     public int TotalVencidas    { get; set; }
     public int TotalResueltas   { get; set; }
     public string FiltroEstado  { get; set; } = "PR";  // 'P','E','R','PR'=todos abiertos
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hallazgos e Informe
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>Hallazgo libre por inspección (N | descripción | fotos | acción | seguimiento)</summary>
+public class SoHallazgo
+{
+    public long      IdHallazgo  { get; set; }
+    public long      IdInsp      { get; set; }
+    public int       Correlativo { get; set; }
+    public string    Descripcion { get; set; } = "";
+    public string?   AccionCorr  { get; set; }
+    public string?   ObsSeguim   { get; set; }
+    public string    Estado      { get; set; } = "P";  // P=Pendiente R=Resuelto V=Verificado
+    public DateTime? FchLimite   { get; set; }
+    public DateTime? FchResol    { get; set; }
+    public string?   UsrCrea     { get; set; }
+    public DateTime  FchCrea     { get; set; }
+    public string?   NombreComedor { get; set; }   // desnormalizado para vista global
+    public DateTime? FechaInsp    { get; set; }    // desnormalizado para vista global
+
+    // Cargado en la aplicación
+    public List<SoHallazgoImg> Imgs { get; set; } = new();
+
+    public string EstadoLabel => Estado switch
+    {
+        "P" => "Pendiente", "R" => "Resuelto", "V" => "Verificado", _ => Estado
+    };
+    public string EstadoCss => Estado switch
+    {
+        "P" => "warning", "R" => "success", "V" => "info", _ => "secondary"
+    };
+    public bool EsVencido => Estado == "P" && FchLimite.HasValue && FchLimite.Value.Date < DateTime.Today;
+}
+
+/// <summary>Imagen asociada a un hallazgo (tipo H = foto del hallazgo, tipo S = seguimiento)</summary>
+public class SoHallazgoImg
+{
+    public long    IdImg       { get; set; }
+    public long    IdHallazgo  { get; set; }
+    public string  Tipo        { get; set; } = "H";
+    public string  RutaArch    { get; set; } = "";
+    public string? Descripcion { get; set; }
+    public string? UsrCrea     { get; set; }
+    public DateTime FchCrea    { get; set; }
+
+    // No mapeado — ruta física en disco, calculada en el servicio PDF
+    public string? RutaFisica  { get; set; }
+}
+
+/// <summary>ViewModel para la página de hallazgos de una inspección</summary>
+public class SoHallazgosViewModel
+{
+    public SoInspeccion      Inspeccion  { get; set; } = new();
+    public List<SoHallazgo>  Hallazgos   { get; set; } = new();
 }

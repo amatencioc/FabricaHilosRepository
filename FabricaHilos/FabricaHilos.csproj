@@ -96,7 +96,6 @@
     <Folder Include="Data\Logistica\" />
     <Folder Include="Data\RecursosHumanos\Indicadores\ConcentracionSobretiempoArea\" />
     <Folder Include="Data\Ventas\ComercialMaestro\" />
-    <Folder Include="Views\SaludOcupacional\" />
   </ItemGroup>
 
   <ItemGroup>

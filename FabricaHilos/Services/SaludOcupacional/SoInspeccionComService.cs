@@ -21,6 +21,7 @@ public interface ISoInspeccionComService
     Task                              ActualizarEncabezadoAsync(SoInspeccion insp, string usuario);
     Task                              CerrarInspeccionAsync(long idInsp, string usuario);
     Task                              AnularInspeccionAsync(long idInsp, string usuario);
+    Task                              GuardarObservacionAsync(long idInsp, string? observacion, string usuario);
 
     // Detalle checklist
     Task<IReadOnlyList<SoInspDetalle>> ObtenerDetalleAsync(long idInsp);
@@ -29,6 +30,7 @@ public interface ISoInspeccionComService
 
     // Evidencias
     Task<IReadOnlyList<SoInspEvidencia>> ObtenerEvidenciasAsync(long idInsp);
+    Task<SoInspEvidencia?>               ObtenerEvidenciaPorIdAsync(long idEvidencia);
     Task<long>                           AgregarEvidenciaAsync(SoInspEvidencia evidencia);
     Task                                 EliminarEvidenciaAsync(long idEvidencia);
 
@@ -38,6 +40,16 @@ public interface ISoInspeccionComService
     Task<IReadOnlyList<SoInspAccion>> ObtenerAccionesResueltasAsync(int? idCom = null);
     Task<long>                        CrearAccionAsync(SoInspAccion accion, string usuario);
     Task                              ActualizarEstadoAccionAsync(long idAccion, string nuevoEstado, string? observacion, string usuario);
+    Task                              ActualizarEstadoHallazgoAsync(long idHallazgo, string nuevoEstado, string? observacion, string usuario);
+
+    // Hallazgos e Informe
+    Task<IReadOnlyList<SoHallazgo>> ObtenerHallazgosAsync(long idInsp);
+    Task<long>                      GuardarHallazgoAsync(SoHallazgo h, string usuario);
+    Task                            ActualizarHallazgoAsync(SoHallazgo h, string usuario);
+    Task                            EliminarHallazgoAsync(long idHallazgo);
+    Task<long>                      AgregarImgHallazgoAsync(SoHallazgoImg img);
+    Task<SoHallazgoImg?>            ObtenerImgHallazgoPorIdAsync(long idImg);
+    Task                            EliminarImgHallazgoAsync(long idImg);
 
     // Dashboard KPIs
     Task<SoDashboardViewModel>        ObtenerDashboardAsync();
@@ -106,7 +118,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         var sql = $@"
             SELECT * FROM (
                 SELECT i.ID_INSP, i.ID_COM, c.NOMBRE AS NOMBRE_COMEDOR,
-                       k.NOMBRE AS NOMBRE_CONC,
+                       k.NOMBRE AS NOMBRE_CONC, k.CONTACTO AS CONTACTO_CONC,
                        i.FECHA_INSP, i.HORA_INSP, i.ENCARGADA, i.INSPECTOR, i.MEDICO,
                        i.PTS_OBTENIDOS, i.PTS_MAXIMO, i.PCT_CUMPL, i.CALIFICACION,
                        i.ESTADO, i.FCH_CREA, i.USR_CREA, i.FCH_CIERRE
@@ -127,7 +139,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         await using var conn = new OracleConnection(GetOracleConnectionString());
         return await conn.QueryFirstOrDefaultAsync<SoInspeccion>($@"
             SELECT i.ID_INSP, i.ID_COM, c.NOMBRE AS NOMBRE_COMEDOR,
-                   k.NOMBRE AS NOMBRE_CONC,
+                   k.NOMBRE AS NOMBRE_CONC, k.CONTACTO AS CONTACTO_CONC,
                    i.FECHA_INSP, i.HORA_INSP, i.ENCARGADA, i.INSPECTOR, i.MEDICO,
                    i.PTS_OBTENIDOS, i.PTS_MAXIMO, i.PCT_CUMPL, i.CALIFICACION,
                    i.OBSERVACIONES, i.ESTADO, i.FCH_CREA, i.USR_CREA, i.FCH_CIERRE
@@ -164,14 +176,25 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                 usr        = usuario
             });
 
-        // Pre-inicializar detalle con todos los ítems activos en puntaje 0
-        await conn.ExecuteAsync($@"
-            INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE)
-            SELECT {S}SO_DETALLE_SEQ.NEXTVAL, :id, ID_ITEM, 0
-            FROM   {S}SO_INSP_ITEM WHERE ESTADO = 'A'",
-            new { id });
+        // Pre-inicializar detalle con todos los ítems activos en puntaje 0.
+        // Se inserta fila por fila para evitar ORA-04091 (tabla mutante) que
+        // se produce cuando el trigger TRG_SO_DET_UPD_INSP lee SO_INSP_DETALLE
+        // dentro de un INSERT-SELECT masivo sobre esa misma tabla.
+        var items = (await conn.QueryAsync<long>(
+            $"SELECT ID_ITEM FROM {S}SO_INSP_ITEM WHERE ESTADO = 'A'")).AsList();
 
-        _logger.LogInformation("[SO] Inspección {Id} creada como borrador por {User}", id, usuario);
+        foreach (var idItem in items)
+        {
+            var idDetalle = await conn.ExecuteScalarAsync<long>(
+                $"SELECT {S}SO_DETALLE_SEQ.NEXTVAL FROM DUAL");
+
+            await conn.ExecuteAsync(
+                $"INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE) " +
+                $"VALUES (:idDet, :idInsp, :idItem, 0)",
+                new { idDet = idDetalle, idInsp = id, idItem });
+        }
+
+        _logger.LogInformation("[SO] Inspección {Id} creada como borrador por {User} ({N} ítems)", id, usuario, items.Count);
         return id;
     }
 
@@ -206,6 +229,18 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         if (affected == 0)
             throw new InvalidOperationException(
                 "La inspección no existe o no está en estado Borrador y no puede modificarse.");
+    }
+
+    public async Task GuardarObservacionAsync(long idInsp, string? observacion, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.ExecuteAsync($@"
+            UPDATE {S}SO_INSPECCION
+            SET    OBSERVACIONES = :obs,
+                   FCH_MOD       = SYSDATE,
+                   USR_MOD       = :usr
+            WHERE  ID_INSP = :id AND ESTADO = 'B'",
+            new { obs = observacion, usr = usuario, id = idInsp });
     }
 
     public async Task CerrarInspeccionAsync(long idInsp, string usuario)
@@ -279,22 +314,88 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                 "El puntaje solo puede ser 0, 2 o 4.");
 
         await using var conn = new OracleConnection(GetOracleConnectionString());
-        var affected = await conn.ExecuteAsync($@"
-            UPDATE {S}SO_INSP_DETALLE d
-            SET    d.PUNTAJE     = :puntaje,
-                   d.HALLAZGO    = :hallazgo,
-                   d.RESPONSABLE = :resp
-            WHERE  d.ID_DETALLE  = :id
-              AND  EXISTS (
-                       SELECT 1 FROM {S}SO_INSPECCION i
-                       WHERE  i.ID_INSP = d.ID_INSP AND i.ESTADO = 'B')",
-            new
+
+        int affected;
+
+        if (detalle.IdDetalle > 0)
+        {
+            // Ruta normal: actualizar por ID_DETALLE
+            affected = await conn.ExecuteAsync($@"
+                UPDATE {S}SO_INSP_DETALLE d
+                SET    d.PUNTAJE     = :puntaje,
+                       d.HALLAZGO    = NVL(:hallazgo, d.HALLAZGO),
+                       d.RESPONSABLE = NVL(:resp, d.RESPONSABLE)
+                WHERE  d.ID_DETALLE  = :id
+                  AND  EXISTS (
+                           SELECT 1 FROM {S}SO_INSPECCION i
+                           WHERE  i.ID_INSP = d.ID_INSP AND i.ESTADO = 'B')",
+                new
+                {
+                    puntaje  = detalle.Puntaje,
+                    hallazgo = detalle.Hallazgo,
+                    resp     = detalle.Responsable,
+                    id       = detalle.IdDetalle
+                });
+        }
+        else if (detalle.IdInsp > 0 && detalle.IdItem > 0)
+        {
+            // Fallback: el front no tenía IdDetalle aún; usar clave natural ID_INSP+ID_ITEM
+            affected = await conn.ExecuteAsync($@"
+                UPDATE {S}SO_INSP_DETALLE d
+                SET    d.PUNTAJE     = :puntaje,
+                       d.HALLAZGO    = NVL(:hallazgo, d.HALLAZGO),
+                       d.RESPONSABLE = NVL(:resp, d.RESPONSABLE)
+                WHERE  d.ID_INSP     = :idInsp
+                  AND  d.ID_ITEM     = :idItem
+                  AND  EXISTS (
+                           SELECT 1 FROM {S}SO_INSPECCION i
+                           WHERE  i.ID_INSP = d.ID_INSP AND i.ESTADO = 'B')",
+                new
+                {
+                    puntaje  = detalle.Puntaje,
+                    hallazgo = detalle.Hallazgo,
+                    resp     = detalle.Responsable,
+                    idInsp   = detalle.IdInsp,
+                    idItem   = detalle.IdItem
+                });
+
+            // Si no existía la fila (borrador creado antes de que el ítem fuera añadido),
+            // intentar insertar el detalle faltante.
+            if (affected == 0)
             {
-                puntaje  = detalle.Puntaje,
-                hallazgo = detalle.Hallazgo,
-                resp     = detalle.Responsable,
-                id       = detalle.IdDetalle
-            });
+                // Verificar que la inspección exista y esté en Borrador
+                var inspExiste = await conn.ExecuteScalarAsync<int>($@"
+                    SELECT COUNT(*) FROM {S}SO_INSPECCION
+                    WHERE  ID_INSP = :idInsp AND ESTADO = 'B'",
+                    new { idInsp = detalle.IdInsp });
+
+                if (inspExiste == 0)
+                    throw new InvalidOperationException(
+                        "No se pudo guardar el puntaje: la inspección no existe o no está en estado Borrador.");
+
+                var idDetNuevo = await conn.ExecuteScalarAsync<long>(
+                    $"SELECT {S}SO_DETALLE_SEQ.NEXTVAL FROM DUAL");
+
+                await conn.ExecuteAsync(
+                    $"INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE) " +
+                    $"VALUES (:idDet, :idInsp, :idItem, :puntaje)",
+                    new
+                    {
+                        idDet   = idDetNuevo,
+                        idInsp  = detalle.IdInsp,
+                        idItem  = detalle.IdItem,
+                        puntaje = detalle.Puntaje
+                    });
+                affected = 1;
+                _logger.LogWarning("[SO] Detalle faltante insertado: IdInsp={IdInsp} IdItem={IdItem} IdDetalle={IdDet}",
+                    detalle.IdInsp, detalle.IdItem, idDetNuevo);
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "No se puede guardar el puntaje: se requiere IdDetalle > 0 o bien IdInsp + IdItem > 0.");
+        }
 
         if (affected == 0)
             throw new InvalidOperationException(
@@ -316,22 +417,59 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         {
             foreach (var d in lista)
             {
-                await conn.ExecuteAsync($@"
-                    UPDATE {S}SO_INSP_DETALLE d
-                    SET    d.PUNTAJE     = :puntaje,
-                           d.HALLAZGO    = :hallazgo,
-                           d.RESPONSABLE = :resp
-                    WHERE  d.ID_DETALLE  = :id
-                      AND  EXISTS (
-                               SELECT 1 FROM {S}SO_INSPECCION i
-                               WHERE  i.ID_INSP = d.ID_INSP AND i.ESTADO = 'B')",
-                    new
+                if (d.IdDetalle > 0)
+                {
+                    await conn.ExecuteAsync($@"
+                        UPDATE {S}SO_INSP_DETALLE dd
+                        SET    dd.PUNTAJE     = :puntaje,
+                               dd.HALLAZGO    = NVL(:hallazgo, dd.HALLAZGO),
+                               dd.RESPONSABLE = NVL(:resp, dd.RESPONSABLE)
+                        WHERE  dd.ID_DETALLE  = :id
+                          AND  EXISTS (
+                                   SELECT 1 FROM {S}SO_INSPECCION i
+                                   WHERE  i.ID_INSP = dd.ID_INSP AND i.ESTADO = 'B')",
+                        new
+                        {
+                            puntaje  = d.Puntaje,
+                            hallazgo = d.Hallazgo,
+                            resp     = d.Responsable,
+                            id       = d.IdDetalle
+                        }, tx);
+                }
+                else if (d.IdInsp > 0 && d.IdItem > 0)
+                {
+                    // Fila aún no cargada en el front: usar IdInsp+IdItem como clave
+                    int n = await conn.ExecuteAsync($@"
+                        UPDATE {S}SO_INSP_DETALLE dd
+                        SET    dd.PUNTAJE     = :puntaje,
+                               dd.HALLAZGO    = NVL(:hallazgo, dd.HALLAZGO),
+                               dd.RESPONSABLE = NVL(:resp, dd.RESPONSABLE)
+                        WHERE  dd.ID_INSP     = :idInsp
+                          AND  dd.ID_ITEM     = :idItem
+                          AND  EXISTS (
+                                   SELECT 1 FROM {S}SO_INSPECCION i
+                                   WHERE  i.ID_INSP = dd.ID_INSP AND i.ESTADO = 'B')",
+                        new
+                        {
+                            puntaje  = d.Puntaje,
+                            hallazgo = d.Hallazgo,
+                            resp     = d.Responsable,
+                            idInsp   = d.IdInsp,
+                            idItem   = d.IdItem
+                        }, tx);
+
+                    // Si la fila no existía, insertarla (detalle faltante en borrador antiguo)
+                    if (n == 0)
                     {
-                        puntaje  = d.Puntaje,
-                        hallazgo = d.Hallazgo,
-                        resp     = d.Responsable,
-                        id       = d.IdDetalle
-                    }, tx);
+                        var idDetNuevo = await conn.ExecuteScalarAsync<long>(
+                            $"SELECT {S}SO_DETALLE_SEQ.NEXTVAL FROM DUAL", transaction: tx);
+                        await conn.ExecuteAsync(
+                            $"INSERT INTO {S}SO_INSP_DETALLE (ID_DETALLE, ID_INSP, ID_ITEM, PUNTAJE) " +
+                            $"VALUES (:idDet, :idInsp, :idItem, :puntaje)",
+                            new { idDet = idDetNuevo, idInsp = d.IdInsp, idItem = d.IdItem, puntaje = d.Puntaje },
+                            tx);
+                    }
+                }
             }
             tx.Commit();
         }
@@ -355,6 +493,17 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
             ORDER  BY FCH_CARGA",
             new { idInsp });
         return rows.ToList();
+    }
+
+    public async Task<SoInspEvidencia?> ObtenerEvidenciaPorIdAsync(long idEvidencia)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        return await conn.QueryFirstOrDefaultAsync<SoInspEvidencia>($@"
+            SELECT ID_EVIDENCIA, ID_DETALLE, ID_INSP,
+                   NOMBRE_ARCH, RUTA_ARCH, DESCRIPCION, FCH_CARGA, USUARIO
+            FROM   {S}SO_INSP_EVIDENCIA
+            WHERE  ID_EVIDENCIA = :id",
+            new { id = idEvidencia });
     }
 
     public async Task<long> AgregarEvidenciaAsync(SoInspEvidencia evidencia)
@@ -418,19 +567,40 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
     {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         var rows = await conn.QueryAsync<SoInspAccion>($@"
-            SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
-                   a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
-                   a.ESTADO, a.OBSERVACION, a.FCH_CREA,
-                   t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
-                   c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
-            FROM   {S}SO_INSP_ACCION  a
-            JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
-            JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
-            JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
-            JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
-            WHERE  a.ESTADO IN ('P','E')
-              AND  (:idCom IS NULL OR i.ID_COM = :idCom)
-            ORDER  BY DECODE(a.ESTADO,'P',1,'E',2), a.FCH_LIMITE NULLS LAST",
+            SELECT ID_ACCION, ID_DETALLE, ID_INSP,
+                   DESCRIPCION, RESPONSABLE, FCH_LIMITE, FCH_CIERRE,
+                   ESTADO, OBSERVACION, FCH_CREA,
+                   COD_ITEM, DESC_ITEM, NOMBRE_COMEDOR, FECHA_INSP,
+                   ORD_ESTADO
+            FROM (
+                SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
+                       a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
+                       a.ESTADO, a.OBSERVACION, a.FCH_CREA,
+                       t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP,
+                       DECODE(a.ESTADO,'P',1,'E',2,3) AS ORD_ESTADO
+                FROM   {S}SO_INSP_ACCION  a
+                JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
+                JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
+                JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
+                JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
+                WHERE  a.ESTADO IN ('P','E')
+                  AND  (:idCom IS NULL OR i.ID_COM = :idCom)
+                UNION ALL
+                SELECT h.ID_HALLAZGO, 0, h.ID_INSP,
+                       h.ACCION_CORR, NULL, h.FCH_LIMITE, NULL,
+                       h.ESTADO, h.OBS_SEGUIM, h.FCH_CREA,
+                       NULL, h.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP,
+                       DECODE(h.ESTADO,'P',1,'E',2,3) AS ORD_ESTADO
+                FROM   {S}SO_INSP_HALLAZGO h
+                JOIN   {S}SO_INSPECCION    i ON i.ID_INSP = h.ID_INSP
+                JOIN   {S}SO_COMEDOR       c ON c.ID_COM  = i.ID_COM
+                WHERE  h.ACCION_CORR IS NOT NULL
+                  AND  h.ESTADO IN ('P','E')
+                  AND  (:idCom IS NULL OR i.ID_COM = :idCom)
+            )
+            ORDER BY 15, 6",
             new { idCom });
         return rows.ToList();
     }
@@ -439,19 +609,37 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
     {
         await using var conn = new OracleConnection(GetOracleConnectionString());
         var rows = await conn.QueryAsync<SoInspAccion>($@"
-            SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
-                   a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
-                   a.ESTADO, a.OBSERVACION, a.USUARIO_CIERRE, a.FCH_CREA,
-                   t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
-                   c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
-            FROM   {S}SO_INSP_ACCION  a
-            JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
-            JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
-            JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
-            JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
-            WHERE  a.ESTADO = 'R'
-              AND  (:idCom IS NULL OR i.ID_COM = :idCom)
-            ORDER  BY a.FCH_CIERRE DESC NULLS LAST",
+            SELECT ID_ACCION, ID_DETALLE, ID_INSP,
+                   DESCRIPCION, RESPONSABLE, FCH_LIMITE, FCH_CIERRE,
+                   ESTADO, OBSERVACION, FCH_CREA,
+                   COD_ITEM, DESC_ITEM, NOMBRE_COMEDOR, FECHA_INSP
+            FROM (
+                SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
+                       a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
+                       a.ESTADO, a.OBSERVACION, a.FCH_CREA,
+                       t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
+                FROM   {S}SO_INSP_ACCION  a
+                JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
+                JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
+                JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
+                JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
+                WHERE  a.ESTADO = 'R'
+                  AND  (:idCom IS NULL OR i.ID_COM = :idCom)
+                UNION ALL
+                SELECT h.ID_HALLAZGO, 0, h.ID_INSP,
+                       h.ACCION_CORR, NULL, h.FCH_LIMITE, h.FCH_RESOL,
+                       h.ESTADO, h.OBS_SEGUIM, h.FCH_CREA,
+                       NULL, h.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
+                FROM   {S}SO_INSP_HALLAZGO h
+                JOIN   {S}SO_INSPECCION    i ON i.ID_INSP = h.ID_INSP
+                JOIN   {S}SO_COMEDOR       c ON c.ID_COM  = i.ID_COM
+                WHERE  h.ACCION_CORR IS NOT NULL
+                  AND  h.ESTADO IN ('R','V')
+                  AND  (:idCom IS NULL OR i.ID_COM = :idCom)
+            )
+            ORDER BY 7 DESC",
             new { idCom });
         return rows.ToList();
     }
@@ -499,6 +687,19 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
             new { estado = nuevoEstado, obs = observacion, usr = usuario, id = idAccion });
     }
 
+    public async Task ActualizarEstadoHallazgoAsync(
+        long idHallazgo, string nuevoEstado, string? observacion, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.ExecuteAsync($@"
+            UPDATE {S}SO_INSP_HALLAZGO
+            SET    ESTADO      = :estado,
+                   OBS_SEGUIM  = :obs,
+                   FCH_RESOL   = CASE WHEN :estado IN ('R','V') THEN SYSDATE ELSE NULL END
+            WHERE  ID_HALLAZGO = :id",
+            new { estado = nuevoEstado, obs = observacion, id = idHallazgo });
+    }
+
     // ── Dashboard ─────────────────────────────────────────────────────────────
 
     public async Task<SoDashboardViewModel> ObtenerDashboardAsync()
@@ -509,7 +710,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         var ultimas = (await conn.QueryAsync<SoInspeccion>($@"
             SELECT * FROM (
                 SELECT i.ID_INSP, i.ID_COM, c.NOMBRE AS NOMBRE_COMEDOR,
-                       k.NOMBRE AS NOMBRE_CONC,
+                       k.NOMBRE AS NOMBRE_CONC, k.CONTACTO AS CONTACTO_CONC,
                        i.FECHA_INSP, i.INSPECTOR, i.PTS_OBTENIDOS,
                        i.PTS_MAXIMO, i.PCT_CUMPL, i.CALIFICACION,
                        i.ESTADO, i.FCH_CREA
@@ -563,5 +764,146 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
             UltimoPctCumpl        = ultima?.PctCumpl,
             UltimaCalificacion    = ultima?.Calificacion
         };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Hallazgos
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<SoHallazgo>> ObtenerHallazgosAsync(long idInsp)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        var hallazgos = (await conn.QueryAsync<SoHallazgo>($@"
+            SELECT h.ID_HALLAZGO, h.ID_INSP, h.CORRELATIVO,
+                   h.DESCRIPCION, h.ACCION_CORR, h.OBS_SEGUIM,
+                   h.ESTADO, h.FCH_LIMITE, h.FCH_RESOL,
+                   h.USR_CREA, h.FCH_CREA
+            FROM   {S}SO_INSP_HALLAZGO h
+            WHERE  h.ID_INSP = :idInsp
+            ORDER  BY h.CORRELATIVO",
+            new { idInsp })).ToList();
+
+        if (hallazgos.Count == 0) return hallazgos;
+
+        var idList = string.Join(",", hallazgos.Select(x => x.IdHallazgo));
+        var imgs = (await conn.QueryAsync<SoHallazgoImg>($@"
+            SELECT ID_IMG, ID_HALLAZGO, TIPO, RUTA_ARCH, DESCRIPCION, FCH_CREA
+            FROM   {S}SO_HALLAZGO_IMG
+            WHERE  ID_HALLAZGO IN ({idList})
+            ORDER  BY ID_HALLAZGO, TIPO, FCH_CREA")).ToList();
+
+        foreach (var h in hallazgos)
+            h.Imgs = imgs.Where(i => i.IdHallazgo == h.IdHallazgo).ToList();
+
+        return hallazgos;
+    }
+
+    public async Task<long> GuardarHallazgoAsync(SoHallazgo h, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        var id = await conn.ExecuteScalarAsync<long>(
+            $"SELECT {S}SO_HALLAZGO_SEQ.NEXTVAL FROM DUAL");
+
+        await conn.ExecuteAsync($@"
+            INSERT INTO {S}SO_INSP_HALLAZGO
+                   (ID_HALLAZGO, ID_INSP, CORRELATIVO, DESCRIPCION, ACCION_CORR,
+                    OBS_SEGUIM, ESTADO, FCH_LIMITE, FCH_CREA, USR_CREA)
+            VALUES (:id, :idInsp, 0, :descripcion, :accion,
+                    :obs, :estado, :fchLim, SYSDATE, :usr)",
+            new
+            {
+                id,
+                idInsp      = h.IdInsp,
+                descripcion = h.Descripcion,
+                accion  = h.AccionCorr,
+                obs     = h.ObsSeguim,
+                estado  = h.Estado,
+                fchLim  = h.FchLimite,
+                usr     = usuario
+            });
+        return id;
+    }
+
+    public async Task ActualizarHallazgoAsync(SoHallazgo h, string usuario)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+
+        // Si la descripción viene vacía/nula no la sobreescribimos (campo NOT NULL en BD)
+        var setDesc = string.IsNullOrWhiteSpace(h.Descripcion) ? "" : "DESCRIPCION = :descripcion,";
+
+        await conn.ExecuteAsync($@"
+            UPDATE {S}SO_INSP_HALLAZGO
+            SET    {setDesc}
+                   ACCION_CORR = :accion,
+                   OBS_SEGUIM  = :obs,
+                   ESTADO      = :estado,
+                   FCH_LIMITE  = :fchLim,
+                   FCH_RESOL   = :fchResol,
+                   FCH_MOD     = SYSDATE,
+                   USR_MOD     = :usr
+            WHERE  ID_HALLAZGO = :id",
+            new
+            {
+                descripcion = string.IsNullOrWhiteSpace(h.Descripcion) ? null! : (object)h.Descripcion,
+                accion  = h.AccionCorr,
+                obs     = h.ObsSeguim,
+                estado  = h.Estado,
+                fchLim  = h.FchLimite,
+                fchResol= h.FchResol,
+                usr     = usuario,
+                id      = h.IdHallazgo
+            });
+    }
+
+    public async Task EliminarHallazgoAsync(long idHallazgo)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.OpenAsync();
+        await conn.ExecuteAsync(
+            $"DELETE FROM {S}SO_HALLAZGO_IMG   WHERE ID_HALLAZGO = :id",
+            new { id = idHallazgo });
+        await conn.ExecuteAsync(
+            $"DELETE FROM {S}SO_INSP_HALLAZGO  WHERE ID_HALLAZGO = :id",
+            new { id = idHallazgo });
+    }
+
+    public async Task<long> AgregarImgHallazgoAsync(SoHallazgoImg img)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        var id = await conn.ExecuteScalarAsync<long>(
+            $"SELECT {S}SO_HALLAZGO_IMG_SEQ.NEXTVAL FROM DUAL");
+
+        await conn.ExecuteAsync($@"
+            INSERT INTO {S}SO_HALLAZGO_IMG
+                   (ID_IMG, ID_HALLAZGO, TIPO, RUTA_ARCH, DESCRIPCION, FCH_CREA, USR_CREA)
+            VALUES (:id, :idHallazgo, :tipo, :ruta, :descripcion, SYSDATE, :usr)",
+            new
+            {
+                id,
+                idHallazgo = img.IdHallazgo,
+                tipo       = img.Tipo,
+                ruta       = img.RutaArch,
+                descripcion = img.Descripcion,
+                usr        = img.UsrCrea
+            });
+        return id;
+    }
+
+    public async Task<SoHallazgoImg?> ObtenerImgHallazgoPorIdAsync(long idImg)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        return await conn.QueryFirstOrDefaultAsync<SoHallazgoImg>($@"
+            SELECT ID_IMG, ID_HALLAZGO, TIPO, RUTA_ARCH, DESCRIPCION, FCH_CREA, USR_CREA
+            FROM   {S}SO_HALLAZGO_IMG
+            WHERE  ID_IMG = :id",
+            new { id = idImg });
+    }
+
+    public async Task EliminarImgHallazgoAsync(long idImg)
+    {
+        await using var conn = new OracleConnection(GetOracleConnectionString());
+        await conn.ExecuteAsync(
+            $"DELETE FROM {S}SO_HALLAZGO_IMG WHERE ID_IMG = :id",
+            new { id = idImg });
     }
 }

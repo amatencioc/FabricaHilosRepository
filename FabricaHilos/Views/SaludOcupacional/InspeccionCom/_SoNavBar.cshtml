@@ -6,8 +6,11 @@
         string.Equals(ctrl, "InspeccionCom", StringComparison.OrdinalIgnoreCase) &&
         string.Equals(action, a, StringComparison.OrdinalIgnoreCase);
 
-    // Detalle y Editar comparten la pestaña Historial
-    bool IsHistorial = IsActive("Historial") || IsActive("Detalle") || IsActive("Editar");
+    // Detalle, Editar, Nueva y Hallazgos comparten la pestaña Historial en el contexto global
+    bool IsHistorial = IsActive("Historial") || IsActive("Detalle") || IsActive("Editar") || IsActive("Nueva") || IsActive("Hallazgos");
+
+    // IdInsp disponible cuando estamos en Detalle o Hallazgos (contexto de una inspección específica)
+    long? navIdInsp = ViewData["IdInsp"] is long l ? l : (long?)null;
 }
 
 <nav class="so-navbar mb-3" aria-label="Navegación Salud Ocupacional — Inspección">
@@ -19,17 +22,34 @@
             </a>
         </li>
 
-        <li class="so-navbar-item @(IsActive("Nueva") ? "active" : "")">
-            <a asp-controller="InspeccionCom" asp-action="Nueva" class="so-navbar-link">
-                <i class="bi bi-plus-circle"></i> Nueva Inspección
-            </a>
-        </li>
-
+        @* Historial: lista de todas las inspecciones; desde aquí se accede a evidencias *@
         <li class="so-navbar-item @(IsHistorial ? "active" : "")">
-            <a asp-controller="InspeccionCom" asp-action="Historial" class="so-navbar-link">
+            <a asp-controller="InspeccionCom" asp-action="Historial" class="so-navbar-link"
+               title="Ver historial de inspecciones — seleccione una para registrar evidencias y hallazgos">
                 <i class="bi bi-journal-text"></i> Historial
             </a>
         </li>
+
+        @if (navIdInsp.HasValue)
+        {
+            @* 2. EVIDENCIAS: registrar observaciones + subir fotos por ítem (Detalle) *@
+            <li class="so-navbar-item @(IsActive("Detalle") ? "active" : "")">
+                <a asp-controller="InspeccionCom" asp-action="Detalle"
+                   asp-route-id="@navIdInsp.Value" class="so-navbar-link"
+                   title="Registrar observaciones y subir evidencias fotográficas por ítem">
+                    <i class="bi bi-camera-fill"></i> Evidencias
+                </a>
+            </li>
+
+            @* Hallazgos: ítems con puntaje 0 de esta inspección *@
+            <li class="so-navbar-item @(IsActive("Hallazgos") ? "active" : "")">
+                <a asp-controller="InspeccionCom" asp-action="Hallazgos"
+                   asp-route-id="@navIdInsp.Value" class="so-navbar-link"
+                   title="Hallazgos detectados en esta inspección (ítems con puntaje 0)">
+                    <i class="bi bi-search"></i> Hallazgos
+                </a>
+            </li>
+        }
 
         <li class="so-navbar-item @(IsActive("Acciones") ? "active" : "")">
             <a asp-controller="InspeccionCom" asp-action="Acciones" class="so-navbar-link">

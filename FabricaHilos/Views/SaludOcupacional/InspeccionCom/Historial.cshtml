@@ -194,8 +194,14 @@
                                         <a asp-controller="InspeccionCom" asp-action="Editar"
                                            asp-route-id="@insp.IdInsp"
                                            class="btn btn-sm btn-outline-primary" style="font-size:.72rem;padding:.2rem .5rem;"
-                                           title="Continuar llenado">
+                                           title="Editar checklist de puntajes">
                                             <i class="bi bi-pencil-fill"></i>
+                                        </a>
+                                        <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                           asp-route-id="@insp.IdInsp"
+                                           class="btn btn-sm btn-outline-success" style="font-size:.72rem;padding:.2rem .5rem;"
+                                           title="Registrar observaciones y evidencias">
+                                            <i class="bi bi-camera-fill"></i>
                                         </a>
                                         <form asp-controller="InspeccionCom" asp-action="Anular"
                                               method="post" class="d-inline">
@@ -214,8 +220,14 @@
                                         <a asp-controller="InspeccionCom" asp-action="Detalle"
                                            asp-route-id="@insp.IdInsp"
                                            class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;padding:.2rem .5rem;"
-                                           title="Ver detalle">
+                                           title="Ver detalle, evidencias y observaciones">
                                             <i class="bi bi-eye-fill"></i>
+                                        </a>
+                                        <a asp-controller="InspeccionCom" asp-action="Hallazgos"
+                                           asp-route-id="@insp.IdInsp"
+                                           class="btn btn-sm btn-outline-warning" style="font-size:.72rem;padding:.2rem .5rem;"
+                                           title="Ver hallazgos">
+                                            <i class="bi bi-search"></i>
                                         </a>
                                     }
                                 </div>

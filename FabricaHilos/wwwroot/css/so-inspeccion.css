@@ -57,6 +57,15 @@
     --so-ac-pend:       #856404;
     --so-ac-proc:       #084298;
     --so-ac-done:       #0f5132;
+
+    /* Aliases semánticos para modales y controles de formulario oscuros */
+    --so-bg-card:       #1a2535;
+    --so-bg-strip:      #1c2433;
+    --so-bg-input:      #243044;
+    --so-text-primary:  #e2e8f0;
+    --so-text-secondary:#a0aec0;
+    --so-border:        #2d3748;
+    --so-accent-yellow: #f6c90e;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -299,9 +308,9 @@
 }
 .so-cl-row {
     display: grid;
-    grid-template-columns: 2.5rem 1fr 7rem 1fr;
+    grid-template-columns: 2.5rem 1fr 7rem;
     gap: .5rem;
-    align-items: start;
+    align-items: center;
     padding: .4rem .6rem;
     border: 1px solid var(--so-gray-200);
     border-radius: .3rem;
@@ -342,7 +351,7 @@
 .so-pts-btn.selected-4  { background: #d1e7dd; border-color: var(--so-ok);         color: var(--so-teal);     }
 
 /* Barra de porcentaje del checklist */
-.so-pct-bar-wrap {
+.so-pct-bar-track {
     height: 6px; background: var(--so-gray-200);
     border-radius: 999px; overflow: hidden;
 }
@@ -350,9 +359,27 @@
     height: 100%; border-radius: 999px;
     transition: width .4s ease;
 }
-.so-pct-bar.ok     { background: var(--so-ok);         }
-.so-pct-bar.warn   { background: var(--so-warn-mid);   }
-.so-pct-bar.danger { background: var(--so-danger-mid); }
+.so-pct-bar-ok     { background: var(--so-ok);         }
+.so-pct-bar-warn   { background: var(--so-warn-mid);   }
+.so-pct-bar-ko     { background: var(--so-danger-mid); }
+
+/* Porcentaje con contorno de color según leyenda (Resumen por rubro) */
+.so-pct-badge {
+    display: inline-block;
+    min-width: 3rem;
+    padding: .18rem .5rem;
+    font-size: .72rem;
+    font-weight: 800;
+    border-radius: .35rem;
+    text-align: center;
+    white-space: nowrap;
+    letter-spacing: .01em;
+    border-width: 1.5px;
+    border-style: solid;
+}
+.so-pct-badge-ok   { background: rgba(25,135,84,.12);  color: #0f5132; border-color: rgba(25,135,84,.45); }
+.so-pct-badge-warn { background: rgba(255,193,7,.18);  color: #664d03; border-color: rgba(255,193,7,.55); }
+.so-pct-badge-ko   { background: rgba(220,53,69,.12);  color: #842029; border-color: rgba(220,53,69,.4);  }
 
 /* ═══════════════════════════════════════════════════════
   12. ALERTAS  (.so-alert-*)
@@ -429,8 +456,7 @@
 @media (max-width: 768px) {
     .so-strip      { flex-direction: column; align-items: flex-start; }
     .so-kpi        { font-size: .65rem; }
-    .so-cl-row     { grid-template-columns: 2rem 1fr 6rem; }
-    .so-cl-row > :last-child { grid-column: 1 / -1; }
+    .so-cl-row     { grid-template-columns: 2rem 1fr 5.5rem; }
     .so-page-header { flex-wrap: wrap; }
     .so-page-actions { margin-left: 0; }
     .so-table      { font-size: .73rem; }
@@ -441,16 +467,17 @@
    ═══════════════════════════════════════════════════════ */
 .so-pts-display {
     display: inline-block;
-    min-width: 1.8rem;
-    padding: .18rem .4rem;
-    font-size: .75rem;
-    font-weight: 700;
+    min-width: 2rem;
+    padding: .2rem .45rem;
+    font-size: .78rem;
+    font-weight: 800;
     border-radius: .3rem;
     text-align: center;
+    letter-spacing: .01em;
 }
-.so-pts-ok     { background: rgba(25,135,84,.18);  color: #0f5132; }
-.so-pts-warn   { background: rgba(255,193,7,.22);  color: #664d03; }
-.so-pts-ko     { background: rgba(220,53,69,.18);  color: #842029; }
+.so-pts-ok     { background: rgba(25,135,84,.18);  color: #0f5132; border: 1.5px solid rgba(25,135,84,.35); }
+.so-pts-warn   { background: rgba(255,193,7,.22);  color: #664d03; border: 1.5px solid rgba(255,193,7,.45); }
+.so-pts-ko     { background: rgba(220,53,69,.18);  color: #842029; border: 1.5px solid rgba(220,53,69,.35); }
 
 /* ═══════════════════════════════════════════════════════
    17. FILAS PELIGRO / VENCIDAS en tablas
@@ -560,3 +587,79 @@
     .so-acc-nombre { max-width: 120px; }
     .so-acc-bar    { display: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RUBROS COLAPSABLES (Detalle inspección)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Encabezado de columnas compartido (fuera de cada panel) */
+.so-rubros-colheader {
+    display: table;
+    table-layout: fixed;
+    width: 100%;
+    padding: 0;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--so-teal);
+    background: #f0f7f4;
+    border: 1px solid var(--so-gray-200);
+    border-radius: .35rem .35rem 0 0;
+    margin-bottom: 0;
+    box-sizing: border-box;
+}
+.so-rubros-colheader .so-col-item { display: table-cell; padding: .3rem .9rem; }
+.so-rubros-colheader .so-col-pts  { display: table-cell; width: 60px; text-align: center; padding: .3rem 0; }
+.so-rubros-colheader .so-col-hal  { display: table-cell; width: 35%; padding: .3rem .9rem; }
+
+/* Filas de la tabla: tabla estándar con layout fijo */
+.so-rubro-table {
+    table-layout: fixed;
+    width: 100%;
+}
+.so-rubro-table tbody tr { display: table-row; }
+.so-rubro-table tbody td { display: table-cell; padding: .42rem .9rem; vertical-align: middle; }
+.so-rubro-table col.col-item { width: auto; }
+.so-rubro-table col.col-pts  { width: 60px; }
+.so-rubro-table col.col-hal  { width: 35%; }
+
+.so-col-item {
+    min-width: 0;
+    overflow: hidden;
+}
+.so-col-pts {
+    text-align: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Botón del header colapsable */
+.so-rubro-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .55rem .9rem;
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--so-dark-bg);
+    background: #f0f7f4;
+    border-bottom: 1px solid var(--so-gray-200);
+    border-radius: 0;
+}
+
+/* Badge de puntaje en el toggle de cada rubro — override para fondo claro */
+.so-rubro-toggle .so-kpi {
+    background: rgba(26,125,98,.12);
+    border: 1.5px solid rgba(26,125,98,.35);
+    color: #155743;
+}
+.so-rubro-toggle .so-kpi span {
+    font-weight: 800;
+    font-size: .78rem;
+    color: #155743;
+}
+.so-rubro-toggle:hover { background: #e6f2ed; }
+.so-rubro-toggle:focus { outline: none; box-shadow: none; }
+
+/* Primer panel: borde superior redondeado para continuar con el encabezado */
+.col-md-8 .so-card:first-of-type .so-rubro-toggle { border-radius: 0; }

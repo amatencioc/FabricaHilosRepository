@@ -1,3 +1,4 @@
+using FabricaHilos.Helpers;
 using FabricaHilos.Models.SaludOcupacional;
 using FabricaHilos.Services.SaludOcupacional;
 using Microsoft.AspNetCore.Authorization;
@@ -13,17 +14,22 @@ public class InspeccionComController : OracleBaseController
     private readonly ISoInspeccionPdfService  _pdf;
     private readonly ILogger<InspeccionComController> _logger;
     private readonly IWebHostEnvironment _env;
+    private readonly string _rutaSO;
 
     public InspeccionComController(
         ISoInspeccionComService  svc,
         ISoInspeccionPdfService  pdf,
         ILogger<InspeccionComController> logger,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        IConfiguration configuration)
     {
-        _svc    = svc;
-        _pdf    = pdf;
+        _svc   = svc;
+        _pdf   = pdf;
         _logger = logger;
         _env    = env;
+        _rutaSO = configuration.GetValue<string>("RutaSaludOcupacional")
+            ?? throw new InvalidOperationException(
+                "La clave 'RutaSaludOcupacional' no está definida en appsettings.json.");
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -145,26 +151,36 @@ public class InspeccionComController : OracleBaseController
             var rubros     = await _svc.ObtenerRUBROSConItemsAsync();
             var acciones   = await _svc.ObtenerAccionesInspeccionAsync(id);
             var evidencias = await _svc.ObtenerEvidenciasAsync(id);
+            var hallazgos  = await _svc.ObtenerHallazgosAsync(id);
 
-            // Resolver ruta física de cada evidencia
+            // RutaArch ya es la ruta UNC física — se asigna directamente
             foreach (var ev in evidencias)
                 if (!string.IsNullOrEmpty(ev.RutaArch))
-                    ev.RutaFisica = Path.Combine(_env.WebRootPath,
-                                                 ev.RutaArch.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                    ev.RutaFisica = ev.RutaArch;
+
+            // Resolver ruta física de imágenes de hallazgos
+            foreach (var h in hallazgos)
+                foreach (var img in h.Imgs)
+                    if (!string.IsNullOrEmpty(img.RutaArch))
+                        img.RutaFisica = img.RutaArch;
 
             var vm = new SoDetalleInspeccionViewModel
             {
                 Inspeccion = insp,
                 Rubros     = BuildRubrosConDetalles(rubros, detalles),
                 Acciones   = acciones,
-                Evidencias = evidencias
+                Evidencias = evidencias,
+                Hallazgos  = hallazgos
             };
 
             var logoPath = Path.Combine(_env.WebRootPath, "img", "logo.png");
             var pdfBytes = _pdf.Generar(vm, logoPath);
 
             var nombreArchivo = $"InspeccionComedor_{insp.FechaInsp:yyyyMMdd}_{insp.NombreComedor?.Replace(" ","_")}.pdf";
-            return File(pdfBytes, "application/pdf", nombreArchivo);
+            // Servir inline para que el browser lo muestre en una pestaña nueva;
+            // el usuario decide si lo descarga o imprime desde el visor del PDF.
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{nombreArchivo}\"";
+            return File(pdfBytes, "application/pdf");
         }
         catch (Exception ex)
         {
@@ -202,6 +218,25 @@ public class InspeccionComController : OracleBaseController
             TotalResueltas = acciones.Count(a => a.Estado == "R"),
             FiltroEstado   = filtro
         };
+
+        // Cargar hallazgos con fotos para cada inspección referenciada
+        var inspeccionIds = acciones
+            .Where(a => a.IdInsp > 0)
+            .Select(a => a.IdInsp)
+            .Distinct();
+        foreach (var idInsp in inspeccionIds)
+        {
+            var halls = await _svc.ObtenerHallazgosAsync(idInsp);
+            foreach (var h in halls)
+            {
+                foreach (var img in h.Imgs)
+                    img.RutaFisica = string.IsNullOrEmpty(img.RutaArch)
+                        ? null
+                        : Path.Combine(_rutaSO, "hallazgos", idInsp.ToString(), System.IO.Path.GetFileName(img.RutaArch));
+                vm.HallazgosPorId.TryAdd(h.IdHallazgo, h);
+            }
+        }
+
         return View("~/Views/SaludOcupacional/InspeccionCom/Acciones.cshtml", vm);
     }
 
@@ -240,6 +275,9 @@ public class InspeccionComController : OracleBaseController
             if (vm.Rubros?.Any() == true)
             {
                 var detalles = vm.Rubros.SelectMany(r => r.Items).ToList();
+                // Asegurarse de que cada detalle tenga el IdInsp correcto
+                foreach (var d in detalles)
+                    if (d.IdInsp <= 0) d.IdInsp = idInsp;
                 if (detalles.Any())
                     await _svc.GuardarDetallesLoteAsync(detalles, usuario);
             }
@@ -282,9 +320,13 @@ public class InspeccionComController : OracleBaseController
         try
         {
             var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            _logger.LogDebug("[SO] GuardarPuntaje → IdDetalle={IdDetalle} IdItem={IdItem} IdInsp={IdInsp} Pts={Pts}",
+                req.IdDetalle, req.IdItem, req.IdInsp, req.Puntaje);
             await _svc.GuardarDetalleAsync(new SoInspDetalle
             {
                 IdDetalle  = req.IdDetalle,
+                IdItem     = req.IdItem,
+                IdInsp     = req.IdInsp,
                 Puntaje    = req.Puntaje,
                 Hallazgo   = req.Hallazgo,
                 Responsable= req.Responsable
@@ -293,7 +335,8 @@ public class InspeccionComController : OracleBaseController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[SO] Error GuardarPuntaje detalle {Id}", req.IdDetalle);
+            _logger.LogError(ex, "[SO] Error GuardarPuntaje detalle {Id} item {Item} insp {Insp}",
+                req.IdDetalle, req.IdItem, req.IdInsp);
             return BadRequest(new { ok = false, error = ex.Message });
         }
     }
@@ -310,40 +353,119 @@ public class InspeccionComController : OracleBaseController
         if (archivo is null || archivo.Length == 0)
             return BadRequest(new { ok = false, error = "Archivo vacío." });
 
-        var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
-        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+        if (Path.GetExtension(archivo.FileName).ToLowerInvariant()
+                is not (".jpg" or ".jpeg" or ".png" or ".webp"))
             return BadRequest(new { ok = false, error = "Solo se permiten imágenes (jpg, png, webp)." });
 
         try
         {
-            var carpeta = Path.Combine(_env.WebRootPath, "uploads", "so", idInsp.ToString());
+            // Carpeta en red: \\server\FabricaHilos\SaludOcupacional\{idInsp}
+            var carpeta = Path.Combine(_rutaSO, idInsp.ToString());
+            EnsureNetworkShare(_rutaSO);
             Directory.CreateDirectory(carpeta);
 
-            var nombreArch = $"{idDetalle}_{DateTime.Now:yyyyMMddHHmmss}{ext}";
-            var ruta       = Path.Combine(carpeta, nombreArch);
-            await using var fs = System.IO.File.Create(ruta);
-            await archivo.CopyToAsync(fs);
+            var nombreArch = $"{idDetalle}_{DateTime.Now:yyyyMMddHHmmss}.jpg";
+            var rutaFisica = Path.Combine(carpeta, nombreArch);
 
-            var rutaRelativa = $"/uploads/so/{idInsp}/{nombreArch}";
-            var usuario      = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            // Procesar: AutoOrient (EXIF móvil) + resize 1600px + JPEG 75%
+            using var ms = new MemoryStream();
+            await archivo.CopyToAsync(ms);
+
+            var procesador = new FabricaHilos.Services.Seguridad.Inspeccion
+                .ProcesadorImagenSeguridad(carpeta, _logger);
+            var imgTask = Task.Run(async () =>
+            {
+                EnsureNetworkShare(_rutaSO);
+                ms.Position = 0;
+                await procesador.GuardarYOptimizarImagenAsync(ms, nombreArch);
+            });
+
+            if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(20))) == imgTask)
+                await imgTask;
+            else
+                _logger.LogWarning("[SO] SubirEvidencia TIMEOUT 20s — detalle {Id}", idDetalle);
+
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
 
             var idEvi = await _svc.AgregarEvidenciaAsync(new SoInspEvidencia
             {
-                IdDetalle  = idDetalle,
-                IdInsp     = idInsp,
-                NombreArch = nombreArch,
-                RutaArch   = rutaRelativa,
-                Descripcion= descripcion,
-                Usuario    = usuario
+                IdDetalle   = idDetalle,
+                IdInsp      = idInsp,
+                NombreArch  = nombreArch,
+                RutaArch    = rutaFisica,   // ruta UNC — usada por PDF y ServirImagen
+                Descripcion = descripcion,
+                Usuario     = usuario
             });
 
-            return Ok(new { ok = true, idEvidencia = idEvi, ruta = rutaRelativa });
+            // URL para visualización en browser
+            var urlVista = Url.Action(nameof(ServirImagen),
+                new { idInsp, nombreArch, tipo = "evi" });
+
+            return Ok(new { ok = true, idEvidencia = idEvi, ruta = urlVista });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SO] Error al subir evidencia inspección {Id}", idInsp);
             return StatusCode(500, new { ok = false, error = "Error al guardar la imagen." });
         }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/EliminarEvidencia  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EliminarEvidencia([FromBody] long idEvidencia)
+    {
+        try
+        {
+            var ev = await _svc.ObtenerEvidenciaPorIdAsync(idEvidencia);
+            if (ev is not null && !string.IsNullOrEmpty(ev.RutaArch)
+                && System.IO.File.Exists(ev.RutaArch))
+            {
+                System.IO.File.Delete(ev.RutaArch);
+            }
+            await _svc.EliminarEvidenciaAsync(idEvidencia);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error al eliminar evidencia {Id}", idEvidencia);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // GET /SaludOcupacional/InspeccionCom/ServirImagen
+    // Sirve archivos de imagen desde la ruta UNC de red al browser.
+    // tipo = "evi" (evidencias checklist) | "hal" (imágenes de hallazgos)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpGet]
+    public IActionResult ServirImagen(long idInsp, string nombreArch, string tipo = "evi")
+    {
+        if (string.IsNullOrWhiteSpace(nombreArch) ||
+            nombreArch.Contains("..") || nombreArch.Contains('/') || nombreArch.Contains('\\'))
+            return BadRequest();
+
+        string rutaFisica = tipo == "hal"
+            ? Path.Combine(_rutaSO, "hallazgos", idInsp.ToString(), nombreArch)
+            : Path.Combine(_rutaSO, idInsp.ToString(), nombreArch);
+
+        EnsureNetworkShare(_rutaSO);
+
+        if (!System.IO.File.Exists(rutaFisica))
+            return NotFound();
+
+        var contentType = Path.GetExtension(nombreArch).ToLowerInvariant() switch
+        {
+            ".png"  => "image/png",
+            ".webp" => "image/webp",
+            _       => "image/jpeg"
+        };
+
+        var stream = new FileStream(rutaFisica, FileMode.Open, FileAccess.Read,
+                                    FileShare.Read, bufferSize: 65536, useAsync: true);
+        return File(stream, contentType);
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -370,7 +492,11 @@ public class InspeccionComController : OracleBaseController
         try
         {
             var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
-            await _svc.ActualizarEstadoAccionAsync(req.IdAccion, req.Estado, req.Observacion, usuario);
+            if (req.IdDetalle == 0)
+                // Viene de SO_INSP_HALLAZGO (IdAccion == ID_HALLAZGO en ese caso)
+                await _svc.ActualizarEstadoHallazgoAsync(req.IdAccion, req.Estado, req.Observacion, usuario);
+            else
+                await _svc.ActualizarEstadoAccionAsync(req.IdAccion, req.Estado, req.Observacion, usuario);
             return Ok(new { ok = true });
         }
         catch (Exception ex)
@@ -382,6 +508,27 @@ public class InspeccionComController : OracleBaseController
 
     // ────────────────────────────────────────────────────────────────────────
     // POST /SaludOcupacional/InspeccionCom/Anular
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/GuardarObservacion  (AJAX)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GuardarObservacion(
+        [FromBody] GuardarObservacionRequest req)
+    {
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            await _svc.GuardarObservacionAsync(req.IdInsp, req.Observacion, usuario);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error al guardar observación inspección {Id}", req.IdInsp);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -406,10 +553,203 @@ public class InspeccionComController : OracleBaseController
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // GET /SaludOcupacional/InspeccionCom/Hallazgos/{id}
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> Hallazgos(long id)
+    {
+        var insp = await _svc.ObtenerPorIdAsync(id);
+        if (insp is null) return NotFound();
+
+        var hallazgos = await _svc.ObtenerHallazgosAsync(id);
+
+        var vm = new SoHallazgosViewModel
+        {
+            Inspeccion = insp,
+            Hallazgos  = hallazgos.ToList()
+        };
+        return View("~/Views/SaludOcupacional/InspeccionCom/Hallazgos.cshtml", vm);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/NuevoHallazgo  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> NuevoHallazgo([FromBody] NuevoHallazgoRequest req)
+    {
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            if (string.IsNullOrWhiteSpace(req.Descripcion))
+                return BadRequest(new { ok = false, error = "La descripción del hallazgo es obligatoria." });
+
+            var id = await _svc.GuardarHallazgoAsync(new SoHallazgo
+            {
+                IdInsp      = req.IdInsp,
+                Descripcion = req.Descripcion.Trim(),
+                AccionCorr  = string.IsNullOrWhiteSpace(req.AccionCorr) ? null : req.AccionCorr.Trim(),
+                Estado      = req.Estado ?? "P",
+                FchLimite   = req.FchLimite
+            }, usuario);
+
+            var hallazgos = await _svc.ObtenerHallazgosAsync(req.IdInsp);
+            var nuevo     = hallazgos.FirstOrDefault(h => h.IdHallazgo == id);
+
+            return Ok(new { ok = true, idHallazgo = id, correlativo = nuevo?.Correlativo ?? 0 });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error creando hallazgo para inspección {Id}", req.IdInsp);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/ActualizarHallazgo  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ActualizarHallazgo([FromBody] ActualizarHallazgoRequest req)
+    {
+        try
+        {
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            await _svc.ActualizarHallazgoAsync(new SoHallazgo
+            {
+                IdHallazgo  = req.IdHallazgo,
+                Descripcion = string.IsNullOrWhiteSpace(req.Descripcion) ? null! : req.Descripcion.Trim(),
+                AccionCorr  = req.AccionCorr,
+                ObsSeguim   = req.ObsSeguim,
+                Estado      = req.Estado ?? "P",
+                FchLimite   = req.FchLimite
+            }, usuario);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error actualizando hallazgo {Id}", req.IdHallazgo);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/EliminarHallazgo  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EliminarHallazgo([FromBody] long idHallazgo)
+    {
+        try
+        {
+            await _svc.EliminarHallazgoAsync(idHallazgo);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error eliminando hallazgo {Id}", idHallazgo);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/SubirImgHallazgo  (AJAX multipart)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(10_485_760)]
+    public async Task<IActionResult> SubirImgHallazgo(
+        long idHallazgo, long idInsp, string tipo, IFormFile archivo, string? descripcion)
+    {
+        if (archivo is null || archivo.Length == 0)
+            return BadRequest(new { ok = false, error = "Archivo vacío." });
+
+        var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+            return BadRequest(new { ok = false, error = "Solo imágenes jpg/png/webp." });
+
+        try
+        {
+            // Carpeta en red: \\server\FabricaHilos\SaludOcupacional\hallazgos\{idInsp}
+            var carpeta = Path.Combine(_rutaSO, "hallazgos", idInsp.ToString());
+            EnsureNetworkShare(_rutaSO);
+            Directory.CreateDirectory(carpeta);
+
+            var tipoNorm   = tipo?.ToUpper() == "S" ? "S" : "H";
+            var nombreArch = $"{idHallazgo}_{tipoNorm}_{DateTime.Now:yyyyMMddHHmmss}.jpg";
+            var rutaFisica = Path.Combine(carpeta, nombreArch);
+
+            // Procesar: AutoOrient (EXIF móvil) + resize 1600px + JPEG 75%
+            using var ms = new MemoryStream();
+            await archivo.CopyToAsync(ms);
+            ms.Position = 0;
+
+            var procesador = new FabricaHilos.Services.Seguridad.Inspeccion
+                .ProcesadorImagenSeguridad(carpeta, _logger);
+            var imgTask = Task.Run(async () =>
+            {
+                EnsureNetworkShare(_rutaSO);
+                ms.Position = 0;
+                await procesador.GuardarYOptimizarImagenAsync(ms, nombreArch);
+            });
+
+            if (await Task.WhenAny(imgTask, Task.Delay(TimeSpan.FromSeconds(20))) == imgTask)
+                await imgTask;
+            else
+                _logger.LogWarning("[SO] SubirImgHallazgo TIMEOUT 20s — hallazgo {Id}", idHallazgo);
+
+            var usuario = HttpContext.Session.GetString("OracleUser") ?? "SISTEMA";
+            var idImg = await _svc.AgregarImgHallazgoAsync(new SoHallazgoImg
+            {
+                IdHallazgo  = idHallazgo,
+                Tipo        = tipoNorm,
+                RutaArch    = rutaFisica,   // ruta UNC física
+                Descripcion = descripcion,
+                UsrCrea     = usuario
+            });
+
+            var urlVista = Url.Action(nameof(ServirImagen),
+                new { idInsp, nombreArch, tipo = "hal" });
+
+            return Ok(new { ok = true, idImg, ruta = urlVista });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error subiendo imagen hallazgo {Id}", idHallazgo);
+            return StatusCode(500, new { ok = false, error = "Error al guardar la imagen." });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // POST /SaludOcupacional/InspeccionCom/EliminarImgHallazgo  (AJAX JSON)
+    // ────────────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EliminarImgHallazgo([FromBody] long idImg)
+    {
+        try
+        {
+            var img = await _svc.ObtenerImgHallazgoPorIdAsync(idImg);
+            if (img is not null && !string.IsNullOrEmpty(img.RutaArch)
+                && System.IO.File.Exists(img.RutaArch))
+            {
+                System.IO.File.Delete(img.RutaArch);
+            }
+            await _svc.EliminarImgHallazgoAsync(idImg);
+            return Ok(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error eliminando imagen hallazgo {Id}", idImg);
+            return BadRequest(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // Helpers privados
     // ────────────────────────────────────────────────────────────────────────
 
-    private static IReadOnlyList<SoRubroConDetalles> BuildRubrosConDetalles(
+    private static List<SoRubroConDetalles> BuildRubrosConDetalles(
         IReadOnlyList<SoInspRubro>   rubros,
         IReadOnlyList<SoInspDetalle>? detallesExistentes)
     {
@@ -447,9 +787,31 @@ public record GuardarPuntajeRequest(
     long    IdDetalle,
     int     Puntaje,
     string? Hallazgo,
-    string? Responsable);
+    string? Responsable,
+    int     IdItem  = 0,
+    long    IdInsp  = 0);
 
 public record ActualizarAccionRequest(
     long    IdAccion,
+    long    IdDetalle,
     string  Estado,
     string? Observacion);
+
+public record GuardarObservacionRequest(
+    long    IdInsp,
+    string? Observacion);
+
+public record NuevoHallazgoRequest(
+    long      IdInsp,
+    string?   Descripcion,
+    string?   AccionCorr  = null,
+    string?   Estado      = "P",
+    DateTime? FchLimite   = null);
+
+public record ActualizarHallazgoRequest(
+    long      IdHallazgo,
+    string?   Descripcion,
+    string?   AccionCorr,
+    string?   ObsSeguim,
+    string?   Estado,
+    DateTime? FchLimite);

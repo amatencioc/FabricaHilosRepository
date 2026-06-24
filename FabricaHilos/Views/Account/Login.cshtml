@@ -53,6 +53,13 @@
                 </div>
             }
 
+            @if (ViewData["InfoMsg"] is string infoMsg)
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-1"></i>@infoMsg
+                </div>
+            }
+
             @if (!ViewData.ModelState.IsValid)
             {
                 <div class="alert alert-danger">

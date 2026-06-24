@@ -20,28 +20,13 @@ public sealed class RedInternaOptions
     /// Prefijos de ruta accesibles desde internet (acceso externo).
     /// La comparación es insensible a mayúsculas y cubre el prefijo completo,
     /// por lo que "/saludocupacional" cubre también "/saludocupacional/inspeccioncom/...".
+    /// Fuente de verdad: sección RedInterna.RutasExternasPermitidas en appsettings.json.
     /// </summary>
-    public string[] RutasExternasPermitidas { get; set; } =
-    [
-        "/account/login",
-        "/account/logout",
-        "/account/accesodenegado",
-        "/seguridad",
-        "/produccion",
-        "/registropreparatoria",
-        "/autoconer",
-    ];
+    public string[] RutasExternasPermitidas { get; set; } = [];
 
     /// <summary>
     /// Prefijos de rutas estáticas que siempre se permiten (CSS, JS, imágenes, etc.).
+    /// Fuente de verdad: sección RedInterna.RutasEstaticasPermitidas en appsettings.json.
     /// </summary>
-    public string[] RutasEstaticasPermitidas { get; set; } =
-    [
-        "/css/",
-        "/js/",
-        "/lib/",
-        "/images/",
-        "/favicon.ico",
-        "/_framework/",
-    ];
+    public string[] RutasEstaticasPermitidas { get; set; } = [];
 }

@@ -137,54 +137,82 @@ public class NetworkAccessMiddleware
         <head>
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>Acceso Restringido – La Colonial</title>
+            <title>Acceso Restringido</title>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
-                    background-color: #1a3a2e;
+                    background: #0f1923;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                     display: flex; align-items: center; justify-content: center;
-                    min-height: 100vh;
+                    min-height: 100vh; padding: 16px;
                 }
-                .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); }
-                .modal-box {
-                    position: relative; z-index: 10; background: #fff;
-                    border-radius: 8px; max-width: 460px; width: 90%;
-                    box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden;
+                .card {
+                    background: #1a2535;
+                    border: 1px solid #2d3a4a;
+                    border-radius: 12px;
+                    max-width: 420px; width: 100%;
+                    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+                    overflow: hidden;
                 }
-                .modal-header {
-                    background-color: #dc3545; color: #fff;
-                    padding: 16px 20px; font-size: 1.15rem; font-weight: 600;
+                .card-top {
+                    background: linear-gradient(135deg, #b91c1c, #991b1b);
+                    padding: 20px 24px;
+                    display: flex; align-items: center; gap: 12px;
                 }
-                .modal-body { padding: 20px; color: #333; line-height: 1.6; }
-                .modal-body strong { color: #000; }
-                .modal-footer { padding: 12px 20px 20px; }
-                .btn-success {
-                    display: block; width: 100%; padding: 12px;
-                    background-color: #198754; color: #fff;
+                .lock-icon {
+                    width: 40px; height: 40px;
+                    background: rgba(255,255,255,0.15);
+                    border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 20px; flex-shrink: 0;
+                }
+                .card-top-text h1 {
+                    color: #fff; font-size: 1.1rem; font-weight: 700; margin: 0;
+                }
+                .card-top-text p {
+                    color: rgba(255,255,255,0.75); font-size: 0.78rem; margin: 2px 0 0;
+                }
+                .card-body { padding: 24px; }
+                .info-row {
+                    display: flex; gap: 10px; align-items: flex-start;
+                    background: #243040; border-radius: 8px;
+                    padding: 14px 16px; margin-bottom: 16px;
+                }
+                .info-row .icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+                .info-row p { color: #a0aec0; font-size: 0.83rem; line-height: 1.55; margin: 0; }
+                .info-row p strong { color: #e2e8f0; }
+                .btn-primary {
+                    display: block; width: 100%; padding: 13px;
+                    background: #2563eb; color: #fff;
                     text-align: center; text-decoration: none;
-                    border: none; border-radius: 6px;
-                    font-size: 1rem; font-weight: 500; cursor: pointer;
+                    border: none; border-radius: 8px;
+                    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+                    transition: background .15s;
                 }
-                .btn-success:hover { background-color: #157347; }
+                .btn-primary:hover { background: #1d4ed8; }
             </style>
         </head>
         <body>
-            <div class="overlay"></div>
-            <div class="modal-box">
-                <div class="modal-header">🔒 Acceso Restringido</div>
-                <div class="modal-body">
-                    <p>
-                        El módulo que intentas acceder <strong>solo está disponible dentro de la
-                        red interna</strong> de La Colonial - Fábrica de Hilos S.A.
-                    </p>
-                    <p style="margin-top:12px;">
-                        Si necesitas acceder a un módulo habilitado para acceso externo,
-                        utiliza los enlaces disponibles.
-                    </p>
+            <div class="card">
+                <div class="card-top">
+                    <div class="lock-icon">🔒</div>
+                    <div class="card-top-text">
+                        <h1>Acceso Restringido</h1>
+                        <p>Este módulo no está disponible externamente</p>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <a href="/Account/Login" class="btn-success">Ir al inicio de sesión</a>
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="icon">ℹ️</span>
+                        <p>
+                            El módulo al que intentas acceder está disponible
+                            <strong>únicamente dentro de la red interna</strong>
+                            de la empresa.<br><br>
+                            Desde acceso externo solo puedes utilizar los
+                            <strong>módulos habilitados para tu perfil</strong>.
+                        </p>
+                    </div>
+                    <a href="/Account/Login" class="btn-primary">Ir al inicio de sesión</a>
                 </div>
             </div>
         </body>
