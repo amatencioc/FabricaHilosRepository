@@ -16,12 +16,15 @@
         codCliente   = x.CodCliente,
         nombreCliente = x.NombreCliente,
         codVende     = x.CodVende,
+        nombreVende  = x.NombreVende,
         giro         = x.Giro,
         nro          = x.Nro,
         codArt       = x.CodArt,
         descArt      = x.DescArt,
         titulo       = x.Titulo,
         tipoFibra    = x.TipoFibra,
+        tfibra       = x.Tfibra,
+        descTfibra   = x.DescTfibra,
         proceso      = x.Proceso,
         nombreProceso = x.NombreProceso,
         codServ      = x.CodServ,
@@ -32,6 +35,7 @@
         color        = x.Color,
         colorDet     = x.ColorDet,
         intensidad   = x.Intensidad,
+        intensidadAbrev = x.IntensidadAbrev,
         presentacion = x.Presentacion,
         estadoItem   = x.EstadoItem,
         fMaxPed      = x.FMaxPed?.ToString("dd/MM/yyyy") ?? "",
@@ -42,6 +46,8 @@
         codLin       = x.CodLin,
         descFamilia  = x.DescFamilia,
         descLinea    = x.DescLinea,
+        pasoActual   = x.PasoActual,
+        pasoColor    = x.PasoActualColor,
         esVencido    = x.EsVencido,
     }));
 
@@ -49,6 +55,22 @@
     var servicios  = Model.Items.Select(x => x.CodServ).Distinct().OrderBy(x => x).ToList();
     var procesos   = Model.Items.Select(x => x.Proceso).Where(x => !string.IsNullOrEmpty(x)).Distinct().OrderBy(x => x).ToList();
     var familias   = Model.Items.Select(x => new { cod = x.CodFam, desc = x.DescFamilia }).Where(x => !string.IsNullOrEmpty(x.cod)).DistinctBy(x => x.cod).OrderBy(x => x.cod).ToList();
+    var tfibras    = Model.Items.Select(x => new { cod = x.Tfibra, desc = x.DescTfibra })
+                         .Where(x => !string.IsNullOrEmpty(x.cod) && x.cod != "0")
+                         .DistinctBy(x => x.cod).OrderBy(x => x.cod).ToList();
+
+    // Pasos PLN_SEGUIMIENTO presentes — ordenados por paso (mapeo hardcoded desde BD)
+    var pasoOrderMap = new Dictionary<string,int> {
+        {"Pedido Registrado",1},{"Planificado",2},{"En Hilanderia",3},{"Lote Disponible",4},
+        {"Laboratorio",5},{"Ingreso Tintoreria",6},{"Tenido Completo",7},{"Secado",8},
+        {"CC TT Aprobado",9},{"Gaseado",10},{"CC TT Rechazado/Reproceso",11},
+        {"Devanado",12},{"Revisado",13},{"Ingresado Almacen PT",14},
+        {"Listo para Despacho",15},{"Despachado/Cerrado",16}
+    };
+    var pasosActivos = Model.Items.Select(x => x.PasoActual).Where(x => !string.IsNullOrEmpty(x))
+        .Distinct()
+        .OrderBy(x => pasoOrderMap.TryGetValue(x, out var o) ? o : 99)
+        .ToList();
 }
 
 @section Styles {
@@ -274,7 +296,7 @@
     <select name="estado" class="form-select form-select-sm" style="width:145px;font-size:.77rem;"
             title="Estado del pedido">
         <option value="">— Todos los estados —</option>
-        @foreach (var est in new[] { ("0","Sin Aprobar"), ("5","Aprobado"), ("9","Cerrado") })
+        @foreach (var est in new[] { ("0","Sin Aprobar"), ("5","Aprobado"), ("6","Cerrado"), ("9","Anulado") })
         {
             if (Model.FiltroEstado == est.Item1)
             { <option value="@est.Item1" selected>@est.Item2</option> }
@@ -282,6 +304,35 @@
             { <option value="@est.Item1">@est.Item2</option> }
         }
     </select>
+
+    @* Tipo de fibra *@
+    <select name="tfibra" class="form-select form-select-sm" style="width:160px;font-size:.77rem;"
+            title="Filtrar por tipo de fibra">
+        <option value="">— Todas las fibras —</option>
+        @foreach (var tf in tfibras)
+        {
+            if (Model.FiltroTfibra == tf.cod)
+            { <option value="@tf.cod" selected>@tf.cod — @tf.desc</option> }
+            else
+            { <option value="@tf.cod">@tf.cod — @tf.desc</option> }
+        }
+    </select>
+
+    @* Estado del proceso (PLN) *@
+    <select name="paso_actual" class="form-select form-select-sm" style="width:175px;font-size:.77rem;"
+            title="Filtrar por estado del proceso">
+        <option value="">— Todos los procesos —</option>
+        @foreach (var paso in pasosActivos)
+        {
+            if (Model.FiltroPasoActual == paso)
+            { <option value="@paso" selected>@paso</option> }
+            else
+            { <option value="@paso">@paso</option> }
+        }
+    </select>
+
+    @* Campo oculto para preservar plantilla de agrupamiento *@
+    <input type="hidden" name="grupo" id="inpGrupo" value="@Model.FiltroGrupo" />
 
     <button type="submit" class="btn btn-sm btn-primary" style="font-size:.77rem;">
         <i class="bi bi-funnel-fill me-1"></i>Filtrar
@@ -316,6 +367,7 @@
             <button type="button" class="btn btn-outline-primary" data-group="familia">🧵 Línea</button>
             <button type="button" class="btn btn-outline-primary" data-group="cliente">👤 Cliente</button>
             <button type="button" class="btn btn-outline-primary" data-group="proceso">⚙️ Proceso</button>
+            <button type="button" class="btn btn-outline-primary" data-group="paso">🔄 Est.Proceso</button>
             <button type="button" class="btn btn-outline-primary" data-group="none">📋 Plano</button>
         </div>
 
@@ -328,7 +380,8 @@
                 <i class="bi bi-layout-three-columns"></i> Cols
             </button>
             <ul class="dropdown-menu dropdown-menu-end p-2" style="min-width:180px;font-size:.78rem;" id="colToggleMenu">
-                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFibra"  checked> Fibra / Título</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colTfibra" checked> T.Fibra</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colPaso"   checked> Estado Proceso</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colColor"  checked> Color</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colLinea"  checked> Línea / Familia</label></li>
                 <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colVende"         > Vendedor / Giro</label></li>
@@ -374,18 +427,18 @@
             <th data-sort="nombreCliente" style="min-width:160px;">Cliente <span class="sort-icon">⇅</span></th>
             <th data-sort="nro" style="width:38px;">Ítem</th>
             <th data-sort="descArt" style="min-width:140px;">Artículo <span class="sort-icon">⇅</span></th>
-            <th data-sort="titulo" class="colFibra" style="min-width:60px;">Título</th>
-            <th data-sort="tipoFibra" class="colFibra" style="min-width:70px;">Fibra <span class="sort-icon">⇅</span></th>
+            <th data-sort="descTfibra" class="colTfibra" style="min-width:90px;">T.Fibra <span class="sort-icon">⇅</span></th>
             <th data-sort="nombreProceso" style="min-width:90px;">Proceso <span class="sort-icon">⇅</span></th>
             <th data-sort="areaServicio" style="min-width:110px;">Servicio <span class="sort-icon">⇅</span></th>
             <th data-sort="cantidad" class="td-kg" style="min-width:70px;">Kg <span class="sort-icon">⇅</span></th>
             <th data-sort="color" class="colColor" style="min-width:70px;">Color <span class="sort-icon">⇅</span></th>
-            <th data-sort="intensidad" class="colColor" style="min-width:55px;">Intens.</th>
+            <th data-sort="intensidadAbrev" class="colColor" style="min-width:55px;">Intens.</th>
             <th data-sort="descFamilia" class="colLinea" style="min-width:100px;">Familia <span class="sort-icon">⇅</span></th>
             <th data-sort="descLinea" class="colLinea" style="min-width:100px;">Línea <span class="sort-icon">⇅</span></th>
             <th data-sort="fMaxPed" style="min-width:80px;">F.Entrega <span class="sort-icon">⇅</span></th>
             <th data-sort="estadoPed" style="min-width:80px;">Estado</th>
-            <th class="colVende" style="min-width:70px;">Vendedor</th>
+            <th data-sort="pasoActual" class="colPaso" style="min-width:110px;">Estado Proceso <span class="sort-icon">⇅</span></th>
+            <th class="colVende" style="min-width:100px;">Vendedor</th>
             <th class="colVende" style="min-width:60px;">Giro</th>
             <th class="colFechAprob" style="min-width:85px;">F.Aprobac.</th>
             <th class="colPresentacion" style="min-width:80px;">Present.</th>
@@ -393,37 +446,6 @@
         </tr>
     </thead>
     <tbody id="regTbody">
-        @* Relleno inicial server-side (fallback sin JS) *@
-        @foreach (var item in Model.Items)
-        {
-        <tr>
-            <td><a asp-action="PedidoGantt" asp-route-numPed="@item.NumPed" asp-route-serie="@item.Serie"
-                   class="fw-bold text-primary text-decoration-none">@item.NumPed</a></td>
-            <td class="colFecha">@item.FchPedido.ToString("dd/MM/yy")</td>
-            <td title="@item.CodCliente">@(item.NombreCliente.Length > 28 ? item.NombreCliente[..28]+"…" : item.NombreCliente)</td>
-            <td>@item.Nro</td>
-            <td title="@item.CodArt">@(item.DescArt.Length > 24 ? item.DescArt[..24]+"…" : item.DescArt)</td>
-            <td class="colFibra">@item.Titulo</td>
-            <td class="colFibra">@item.TipoFibra</td>
-            <td><span class="badge bg-secondary">@item.NombreProceso</span></td>
-            <td><span class="badge-serv @item.AreaBadgeClass">@item.CodServ</span>&nbsp;<small class="text-muted">@item.AreaServicio</small></td>
-            <td class="td-kg fw-bold">@item.Cantidad.ToString("N2")</td>
-            <td class="colColor">@item.Color @(string.IsNullOrEmpty(item.ColorDet) ? "" : "/ " + item.ColorDet)</td>
-            <td class="colColor">@item.Intensidad</td>
-            <td class="colLinea">@item.DescFamilia</td>
-            <td class="colLinea">@item.DescLinea</td>
-            <td class="@(item.EsVencido ? "date-venc" : "")">
-                @(item.FMaxPed.HasValue ? item.FMaxPed.Value.ToString("dd/MM/yy") : "")
-                @if (item.EsVencido) { <i class="bi bi-exclamation-circle-fill text-danger ms-1" title="Vencido"></i> }
-            </td>
-            <td><span class="badge @(item.EstadoPed=="0"?"bg-warning text-dark":item.EstadoPed=="5"?"bg-success":"bg-secondary")">@item.EstadoPedTexto</span></td>
-            <td class="colVende">@item.CodVende</td>
-            <td class="colVende">@item.Giro</td>
-            <td class="colFechAprob">@(item.FchAprobacion.HasValue ? item.FchAprobacion.Value.ToString("dd/MM/yy") : "")</td>
-            <td class="colPresentacion">@item.Presentacion</td>
-            <td class="colDetalle" title="@item.Detalle" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@item.Detalle</td>
-        </tr>
-        }
     </tbody>
 </table>
 </div>@* /regPlanoWrap *@
@@ -471,8 +493,7 @@ function filterItems(items) {
         r.nombreCliente.toLowerCase().includes(q) ||
         r.codArt.toLowerCase().includes(q) ||
         r.descArt.toLowerCase().includes(q) ||
-        r.titulo.toLowerCase().includes(q) ||
-        r.tipoFibra.toLowerCase().includes(q) ||
+        r.descTfibra.toLowerCase().includes(q) ||
         r.color.toLowerCase().includes(q) ||
         r.colorDet.toLowerCase().includes(q) ||
         r.areaServicio.toLowerCase().includes(q) ||
@@ -480,6 +501,8 @@ function filterItems(items) {
         r.nombreProceso.toLowerCase().includes(q) ||
         r.descFamilia.toLowerCase().includes(q) ||
         r.descLinea.toLowerCase().includes(q) ||
+        r.pasoActual.toLowerCase().includes(q) ||
+        (r.nombreVende || r.codVende).toLowerCase().includes(q) ||
         r.detalle.toLowerCase().includes(q)
     );
 }
@@ -492,6 +515,7 @@ function getGroupKey(r) {
         case 'familia':  return r.codFam  + ' — ' + (r.descFamilia || r.codFam || '—');
         case 'cliente':  return r.codCliente + ' — ' + r.nombreCliente;
         case 'proceso':  return r.proceso + ' — ' + r.nombreProceso;
+        case 'paso':     return r.pasoActual || '(Sin proceso PLN)';
         default:         return '__all__';
     }
 }
@@ -520,9 +544,9 @@ function sortItems(items) {
 }
 
 // ── Formatear número ───────────────────────────────────────────────────
-function fmtN(n, dec=2) {
-    return (+n).toLocaleString('es-PE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
+const _fmt2 = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _fmt0 = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+function fmtN(n, dec=2) { return dec === 0 ? _fmt0.format(+n) : _fmt2.format(+n); }
 
 // ── Renderizar badge servicio ──────────────────────────────────────────
 function badgeServ(r) {
@@ -538,25 +562,36 @@ function renderRow(r) {
         ? '<span class="badge bg-warning text-dark">Sin Aprobar</span>'
         : r.estadoPed === 'Aprobado'
         ? '<span class="badge bg-success">Aprobado</span>'
+        : r.estadoPed === 'Cerrado'
+        ? '<span class="badge bg-secondary">Cerrado</span>'
+        : r.estadoPed === 'Anulado'
+        ? '<span class="badge bg-danger">Anulado</span>'
         : `<span class="badge bg-secondary">${r.estadoPed}</span>`;
+    const pasoBadge  = r.pasoActual
+        ? `<span class="badge" style="background-color:${r.pasoColor};font-size:.65rem;">${r.pasoActual}</span>`
+        : '';
+    const tfibDisp   = (r.descTfibra && r.descTfibra !== '.') ? r.descTfibra
+                     : (r.tfibra && r.tfibra !== '0') ? r.tfibra : '';
+    const vendDisp   = r.nombreVende || r.codVende;
+    const intensDisp = r.intensidadAbrev || r.intensidad;
     return `<tr>
   <td><a href="${ganttUrl}" class="fw-bold text-primary text-decoration-none">${r.numPed}</a></td>
   <td class="colFecha">${r.fchPedidoDisp}</td>
   <td title="${r.codCliente}: ${r.nombreCliente}">${r.nombreCliente.length>28 ? r.nombreCliente.slice(0,28)+'…' : r.nombreCliente}</td>
   <td>${r.nro}</td>
   <td title="${r.codArt}">${r.descArt.length>26?r.descArt.slice(0,26)+'…':r.descArt}</td>
-  <td class="colFibra">${r.titulo}</td>
-  <td class="colFibra">${r.tipoFibra}</td>
+  <td class="colTfibra" title="${r.tfibra}">${tfibDisp}</td>
   <td><span class="badge bg-secondary">${r.nombreProceso||r.proceso}</span></td>
   <td>${badgeServ(r)} <small class="text-muted">${r.areaServicio}</small></td>
   <td class="td-kg fw-bold">${fmtN(r.cantidad)}</td>
   <td class="colColor">${r.color}${r.colorDet?' / '+r.colorDet:''}</td>
-  <td class="colColor">${r.intensidad}</td>
+  <td class="colColor">${intensDisp}</td>
   <td class="colLinea">${r.descFamilia}</td>
   <td class="colLinea">${r.descLinea}</td>
   <td class="${venc}">${r.fMaxPed}${vencIco}</td>
   <td>${estadoBadge}</td>
-  <td class="colVende">${r.codVende}</td>
+  <td class="colPaso">${pasoBadge}</td>
+  <td class="colVende">${vendDisp}</td>
   <td class="colVende">${r.giro}</td>
   <td class="colFechAprob">${r.fchAprobacion}</td>
   <td class="colPresentacion">${r.presentacion}</td>
@@ -608,24 +643,34 @@ function render() {
     });
 
     const totalKg   = items.reduce((s,x) => s+x.cantidad, 0);
-    const subThead  = buildSubThead();
     let   html      = '';
 
     Object.entries(groups).sort((a,b) => {
         if (activeGroup === 'dia') return b[0].localeCompare(a[0]);
+        // Para paso: '(Sin proceso PLN)' siempre al final
+        if (activeGroup === 'paso') {
+            if (a[0] === '(Sin proceso PLN)') return 1;
+            if (b[0] === '(Sin proceso PLN)') return -1;
+        }
         return a[0].localeCompare(b[0]);
     }).forEach(([key, gItems]) => {
         const grpId = 'grp_' + key.split('').reduce((h,c) => (Math.imul(31,h) + c.charCodeAt(0)) | 0, 0).toString(16).replace('-','m');
         const gKg   = gItems.reduce((s,x) => s+x.cantidad, 0);
         const gPed  = new Set(gItems.map(x=>x.numPed)).size;
         const rows  = gItems.map(renderRow).join('');
+        // Indicador de color para grupos de tipo "paso"
+        const pasoColorSample = (activeGroup === 'paso' && gItems[0]?.pasoColor && key !== '(Sin proceso PLN)')
+            ? gItems[0].pasoColor : '';
+        const pasoIndicator = pasoColorSample
+            ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${pasoColorSample};flex-shrink:0;margin-right:4px;"></span>`
+            : '';
 
         html += `
 <div class="reg-grp-card">
   <div class="reg-grp-head" data-collapse-target="${grpId}"
        onclick="toggleGrpCard(event,'${grpId}')">
     <i class="bi bi-chevron-right toggle-icon" style="font-size:.75rem;flex-shrink:0;color:#718096;"></i>
-    <span class="reg-grp-num">${getGroupLabel(key)}</span>
+    ${pasoIndicator}<span class="reg-grp-num">${getGroupLabel(key)}</span>
     <span class="reg-grp-meta ms-auto">
       <span class="reg-grp-meta-item reg-grp-meta-kg">
         <i class="bi bi-box2 me-1 text-secondary"></i>${fmtN(gKg,0)} kg
@@ -640,7 +685,7 @@ function render() {
   </div>
   <div class="collapse" id="${grpId}">
     <div style="overflow-x:auto;">
-      ${subThead}
+      ${_subThead}
         ${rows}
       </tbody></table>
     </div>
@@ -668,16 +713,15 @@ function render() {
 }
 
 // ── Thead reutilizable para sub-tablas ────────────────────────────
-function buildSubThead() {
-    return `<table class="reg-subtbl" style="width:100%;border-collapse:collapse;">
+// ── Thead estático cacheado: se evalúa una sola vez en toda la vida del módulo ──
+const _subThead = `<table class="reg-subtbl" style="width:100%;border-collapse:collapse;">
   <thead><tr>
     <th style="min-width:90px;">N° Ped</th>
     <th style="min-width:82px;">Fecha</th>
     <th style="min-width:160px;">Cliente</th>
     <th style="width:38px;">Ítem</th>
     <th style="min-width:140px;">Artículo</th>
-    <th class="colFibra" style="min-width:60px;">Título</th>
-    <th class="colFibra" style="min-width:70px;">Fibra</th>
+    <th class="colTfibra" style="min-width:90px;">T.Fibra</th>
     <th style="min-width:90px;">Proceso</th>
     <th style="min-width:110px;">Servicio</th>
     <th style="min-width:70px;">Kg</th>
@@ -687,14 +731,14 @@ function buildSubThead() {
     <th class="colLinea" style="min-width:100px;">Línea</th>
     <th style="min-width:80px;">F.Entrega</th>
     <th style="min-width:80px;">Estado</th>
-    <th class="colVende" style="min-width:70px;">Vendedor</th>
+    <th class="colPaso" style="min-width:110px;">Estado Proceso</th>
+    <th class="colVende" style="min-width:100px;">Vendedor</th>
     <th class="colVende" style="min-width:60px;">Giro</th>
     <th class="colFechAprob" style="min-width:85px;">F.Aprobac.</th>
     <th class="colPresentacion" style="min-width:80px;">Present.</th>
     <th class="colDetalle" style="min-width:150px;">Observación</th>
   </tr></thead>
   <tbody>`;
-}
 
 // ── Toggle individual de tarjeta ──────────────────────────────────
 function toggleGrpCard(event, grpId) {
@@ -716,17 +760,22 @@ function expandAll() {
 }
 
 
-// ── KPIs dinámicos
+// ── KPIs dinámicos — un único pass sobre la colección ────────────────────────
 function updateKpis(items) {
-    const ped  = new Set(items.map(x=>x.numPed)).size;
-    const kg   = items.reduce((s,x) => s+x.cantidad, 0);
-    const khil = items.filter(x => x.codServ==='C'||x.codServ==='CT').reduce((s,x)=>s+x.cantidad,0);
-    const ktnt = items.filter(x => x.codServ==='CT'||x.codServ==='ST'||x.codServ==='STD'||x.codServ==='STR'||x.codServ==='SRT').reduce((s,x)=>s+x.cantidad,0);
-    document.getElementById('kpiPedidos').textContent = ped;
+    const peds = new Set();
+    let kg = 0, khil = 0, ktnt = 0;
+    for (const x of items) {
+        peds.add(x.numPed);
+        kg += x.cantidad;
+        if (x.codServ === 'C' || x.codServ === 'CT') khil += x.cantidad;
+        if (x.codServ === 'CT' || x.codServ === 'ST' ||
+            x.codServ === 'STD' || x.codServ === 'STR' || x.codServ === 'SRT') ktnt += x.cantidad;
+    }
+    document.getElementById('kpiPedidos').textContent = peds.size;
     document.getElementById('kpiItems').textContent   = items.length;
-    document.getElementById('kpiKg').textContent      = Math.round(kg).toLocaleString('es-PE');
-    document.getElementById('kpiHil').textContent     = Math.round(khil).toLocaleString('es-PE');
-    document.getElementById('kpiTint').textContent    = Math.round(ktnt).toLocaleString('es-PE');
+    document.getElementById('kpiKg').textContent      = _fmt0.format(Math.round(kg));
+    document.getElementById('kpiHil').textContent     = _fmt0.format(Math.round(khil));
+    document.getElementById('kpiTint').textContent    = _fmt0.format(Math.round(ktnt));
 }
 
 // ── Limpiar / Reset completo ─────────────────────────────────────────────────
@@ -737,6 +786,7 @@ function resetForm() {
     document.getElementById('inpHasta').value = hoy.toISOString().slice(0,10);
     document.querySelectorAll('#regForm select').forEach(s => s.value = '');
     document.getElementById('regSearch').value = '';
+    document.getElementById('inpGrupo').value  = 'dia';
     searchTerm = '';
     document.querySelectorAll('#groupBtns .btn').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary'); });
     const btnDia = document.querySelector('#groupBtns [data-group="dia"]');
@@ -761,13 +811,15 @@ function setRango(dias) {
 // ── Export CSV ─────────────────────────────────────────────────────────
 function exportCSV() {
     const items = sortItems(filterItems(ALL_ITEMS));
-    const header = ['NumPed','Serie','FchPedido','Cliente','NroItem','CodArt','Articulo','Titulo','Fibra','Proceso','Servicio','Area','Kg','Color','Intensidad','Familia','Linea','FEntrega','EstadoPed','Vendedor','Giro','FAprobacion','Presentacion','Observacion'];
+    const header = ['NumPed','Serie','FchPedido','Cliente','NroItem','CodArt','Articulo','TFibra','Proceso','Servicio','Area','Kg','Color','Intensidad','Familia','Linea','FEntrega','EstadoPed','EstadoProceso','Vendedor','Giro','FAprobacion','Presentacion','Observacion'];
     const rows   = items.map(r => [
         r.numPed, r.serie, r.fchPedidoDisp, r.nombreCliente, r.nro,
-        r.codArt, r.descArt, r.titulo, r.tipoFibra, r.nombreProceso,
+        r.codArt, r.descArt,
+        ((r.descTfibra && r.descTfibra !== '.') ? r.descTfibra : (r.tfibra && r.tfibra !== '0') ? r.tfibra : ''),
+        r.nombreProceso,
         r.codServ, r.areaServicio, r.cantidad.toFixed(2),
-        r.color, r.intensidad, r.descFamilia, r.descLinea,
-        r.fMaxPed, r.estadoPed, r.codVende, r.giro,
+        r.color, r.intensidadAbrev || r.intensidad, r.descFamilia, r.descLinea,
+        r.fMaxPed, r.estadoPed, r.pasoActual, r.nombreVende || r.codVende, r.giro,
         r.fchAprobacion, r.presentacion, r.detalle
     ].map(v => `"${(v??'').toString().replace(/"/g,'""')}"`).join(','));
     const csv = [header.join(','), ...rows].join('\r\n');
@@ -797,6 +849,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('#groupBtns .btn').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-outline-primary'); });
             btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-primary');
             activeGroup = btn.dataset.group;
+            document.getElementById('inpGrupo').value = activeGroup;
             // Ocultar botones colapsar/expandir en modo Plano
             const showCollapseCtrl = activeGroup !== 'none';
             document.getElementById('btnCollapseAll').style.display = showCollapseCtrl ? '' : 'none';
@@ -805,10 +858,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Búsqueda live
+    // Búsqueda live con debounce (200 ms) — evita render por cada tecla
+    let _searchTimer = 0;
     document.getElementById('regSearch').addEventListener('input', e => {
-        searchTerm = e.target.value.trim();
-        render();
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => {
+            searchTerm = e.target.value.trim();
+            render();
+        }, 200);
     });
 
     // Toggle de columnas
@@ -816,7 +873,21 @@ document.addEventListener('DOMContentLoaded', () => {
         chk.addEventListener('change', applyColVisibility);
     });
 
-    // Render inicial
+    // Restaurar estado de agrupamiento ANTES del primer render (evita doble render)
+    const savedGroup = document.getElementById('inpGrupo')?.value || 'dia';
+    if (savedGroup !== 'dia') {
+        activeGroup = savedGroup;
+        document.querySelectorAll('#groupBtns .btn').forEach(b => {
+            const isActive = b.dataset.group === activeGroup;
+            b.classList.toggle('btn-primary', isActive);
+            b.classList.toggle('btn-outline-primary', !isActive);
+        });
+        const showCollapseCtrl = activeGroup !== 'none';
+        document.getElementById('btnCollapseAll').style.display = showCollapseCtrl ? '' : 'none';
+        document.getElementById('btnExpandAll').style.display   = showCollapseCtrl ? '' : 'none';
+    }
+
+    // Render único inicial
     render();
 });
 </script>

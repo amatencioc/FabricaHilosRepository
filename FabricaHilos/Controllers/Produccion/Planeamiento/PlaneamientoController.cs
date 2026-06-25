@@ -41,12 +41,15 @@ public class PlaneamientoController : OracleBaseController
 
     // GET /Planeamiento/RegistroPedido  — Registro de Pedidos: vista principal del módulo
     public async Task<IActionResult> RegistroPedido(
-        string? fchDesde    = null,
-        string? fchHasta    = null,
-        string? cod_serv    = null,
-        string? cod_cliente = null,
-        string? proceso     = null,
-        string? estado      = null)
+        string? fchDesde       = null,
+        string? fchHasta       = null,
+        string? cod_serv       = null,
+        string? cod_cliente    = null,
+        string? proceso        = null,
+        string? estado         = null,
+        string? tfibra         = null,
+        string? paso_actual    = null,
+        string? grupo          = null)
     {
         var desde = ParseFecha(fchDesde, DateTime.Today.AddDays(-30));
         var hasta = ParseFecha(fchHasta, DateTime.Today);
@@ -56,17 +59,22 @@ public class PlaneamientoController : OracleBaseController
             cod_serv    ?? "",
             cod_cliente ?? "",
             proceso     ?? "",
-            estado      ?? "");
+            estado      ?? "",
+            tfibra      ?? "",
+            paso_actual ?? "");
 
         var vm = new RegistroPedidosViewModel
         {
-            Items         = items,
-            FchDesde      = desde,
-            FchHasta      = hasta,
-            FiltroServ    = cod_serv    ?? "",
-            FiltroCliente = cod_cliente ?? "",
-            FiltroProceso = proceso     ?? "",
-            FiltroEstado  = estado      ?? "",
+            Items            = items,
+            FchDesde         = desde,
+            FchHasta         = hasta,
+            FiltroServ       = cod_serv    ?? "",
+            FiltroCliente    = cod_cliente ?? "",
+            FiltroProceso    = proceso     ?? "",
+            FiltroEstado     = estado      ?? "",
+            FiltroTfibra     = tfibra      ?? "",
+            FiltroPasoActual = paso_actual ?? "",
+            FiltroGrupo      = grupo ?? "dia",
         };
 
         return View("RegistroPedido", vm);

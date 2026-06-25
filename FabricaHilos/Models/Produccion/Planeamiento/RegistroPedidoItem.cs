@@ -1,13 +1,13 @@
 namespace FabricaHilos.Models.Produccion.Planeamiento;
 
 /// <summary>
-/// Fila plana de un ítem de pedido con todos los campos relevantes:
-/// cabecera de pedido + línea ITEMPED + artículo + familia/línea textil.
+/// Fila plana de un item de pedido con todos los campos relevantes:
+/// cabecera de pedido + linea ITEMPED + articulo + familia/linea textil.
 /// Se usa en la vista Registro de Pedidos (Index).
 /// </summary>
 public class RegistroPedidoItem
 {
-    // ── Pedido ────────────────────────────────────────────────────────────
+    // -- Pedido --
     public int      Serie       { get; set; }
     public long     NumPed      { get; set; }
     public DateTime FchPedido   { get; set; }
@@ -18,7 +18,7 @@ public class RegistroPedidoItem
     public string   Giro        { get; set; } = "";
     public string   EstadoPed   { get; set; } = "";   // 0=sin aprobar 5=aprobado 9=cerrado
 
-    // ── Ítem (ITEMPED) ────────────────────────────────────────────────────
+    // -- Item (ITEMPED) --
     public int      Nro         { get; set; }
     public string   CodArt      { get; set; } = "";
     public string   DescArt     { get; set; } = "";
@@ -29,7 +29,7 @@ public class RegistroPedidoItem
     public decimal  Cantidad    { get; set; }
     public decimal  Precio      { get; set; }
     public string   Color       { get; set; } = "";
-    public string   ColorDet    { get; set; } = "";   // descripción libre del color
+    public string   ColorDet    { get; set; } = "";   // descripcion libre del color
     public string   Intensidad  { get; set; } = "";
     public string   Presentacion { get; set; } = "";
     public string   EstadoItem  { get; set; } = "";
@@ -37,40 +37,59 @@ public class RegistroPedidoItem
     public string   SoloDespacho { get; set; } = "N";
     public string   Detalle     { get; set; } = "";
 
-    // ── Artículo → Familia / Línea ────────────────────────────────────────
+    // -- Articulo -> Familia / Linea --
     public string   CodFam      { get; set; } = "";
     public string   CodLin      { get; set; } = "";
     public string   DescFamilia { get; set; } = "";
     public string   DescLinea   { get; set; } = "";
 
-    // ── Computed helpers ──────────────────────────────────────────────────
+    // -- Estado del proceso (PLN_SEGUIMIENTO) --
+    public string   PasoActual      { get; set; } = "";
+    public string   PasoActualColor { get; set; } = "#6c757d";
 
-    /// Área lógica derivada de COD_SERV
+    // -- Tipo de fibra textil (V_TFIBRA) --
+    public string   Tfibra     { get; set; } = "";
+    public string   DescTfibra { get; set; } = "";
+
+    // -- Nombre vendedor abreviado (TABLAS_AUXILIARES tipo=29) --
+    public string   NombreVende     { get; set; } = "";
+
+    // -- Intensidad abreviada (H_TPROD tabla='03') --
+    public string   IntensidadAbrev { get; set; } = "";
+
+    // -- Descripcion proceso (H_PROCESOS) --
+    public string   NombreProcesoDb { get; set; } = "";
+
+    // -- Computed helpers --
+
+    /// Area logica derivada de COD_SERV
     public string AreaServicio => CodServ switch
     {
-        "C"   => "Hilandería",
-        "CT"  => "Hilandería + Tintorería",
-        "ST"  => "Solo Tintorería",
-        "STD" => "Tintorería Directa",
-        "STR" => "Tintorería + Retorcido",
+        "C"   => "Hilanderia",
+        "CT"  => "Hilanderia + Tintoreria",
+        "ST"  => "Solo Tintoreria",
+        "STD" => "Tintoreria Directa",
+        "STR" => "Tintoreria + Retorcido",
         "SR"  => "Retorcido",
-        "SRT" => "Retorcido + Tintorería",
+        "SRT" => "Retorcido + Tintoreria",
         "SE"  => "Servicio Especial",
         "M"   => "Moulinex",
         _     when CodServ.StartsWith("S") => "Servicio " + CodServ,
         _     => CodServ
     };
 
-    /// Nombre legible del proceso productivo
-    public string NombreProceso => Proceso switch
-    {
-        "01" => "Cardado",
-        "20" => "Peinado",
-        "24" => "Peinado Gaseado",
-        _    => Proceso
-    };
+    /// Nombre legible del proceso productivo (prioriza BD, fallback hardcoded)
+    public string NombreProceso => !string.IsNullOrEmpty(NombreProcesoDb)
+        ? NombreProcesoDb
+        : Proceso switch
+        {
+            "01" => "Cardado",
+            "20" => "Peinado",
+            "24" => "Peinado Gaseado",
+            _    => Proceso
+        };
 
-    /// Bootstrap color class para el badge de área
+    /// Bootstrap color class para el badge de area
     public string AreaBadgeClass => CodServ switch
     {
         "C"   => "bg-info text-dark",
@@ -85,11 +104,12 @@ public class RegistroPedidoItem
     {
         "0" => "Sin Aprobar",
         "5" => "Aprobado",
-        "9" => "Cerrado",
+        "6" => "Cerrado",
+        "9" => "Anulado",
         _   => EstadoPed
     };
 
-    /// Indica si el item ya tiene fecha de entrega y está vencido
+    /// Indica si el item ya tiene fecha de entrega y esta vencido
     public bool EsVencido => FMaxPed.HasValue && FMaxPed.Value < DateTime.Today;
 }
 
@@ -98,24 +118,72 @@ public class RegistroPedidoItem
 /// </summary>
 public class RegistroPedidosViewModel
 {
-    public IReadOnlyList<RegistroPedidoItem> Items { get; set; } = [];
+    private IReadOnlyList<RegistroPedidoItem> _items = [];
+    private int     _totalPedidos;
+    private decimal _totalKg;
+    private decimal _kgHilanderia;
+    private decimal _kgTintoreria;
+    private int     _pedidosHoy;
+    private int     _itemsConVencido;
 
-    // ── Filtros activos ───────────────────────────────────────────────────
-    public DateTime FchDesde    { get; set; }
-    public DateTime FchHasta    { get; set; }
-    public string   FiltroServ  { get; set; } = "";
+    public IReadOnlyList<RegistroPedidoItem> Items
+    {
+        get => _items;
+        set { _items = value; ComputeKpis(); }
+    }
+
+    // -- Filtros activos --
+    public DateTime FchDesde      { get; set; }
+    public DateTime FchHasta      { get; set; }
+    public string   FiltroServ    { get; set; } = "";
     public string   FiltroCliente { get; set; } = "";
     public string   FiltroProceso { get; set; } = "";
     public string   FiltroEstado  { get; set; } = "";
+    public string   FiltroTfibra  { get; set; } = "";
+    public string   FiltroPasoActual { get; set; } = "";
+    public string   FiltroGrupo   { get; set; } = "dia";
 
-    // ── KPIs calculados ───────────────────────────────────────────────────
-    public int     TotalPedidos    => Items.Select(x => x.NumPed).Distinct().Count();
-    public int     TotalItems      => Items.Count;
-    public decimal TotalKg         => Items.Sum(x => x.Cantidad);
-    public decimal KgHilanderia    => Items.Where(x => x.CodServ == "C" || x.CodServ == "CT").Sum(x => x.Cantidad);
-    public decimal KgTintoreria    => Items.Where(x => x.CodServ == "CT" || x.CodServ == "ST" ||
-                                                        x.CodServ == "STD" || x.CodServ == "STR" ||
-                                                        x.CodServ == "SRT").Sum(x => x.Cantidad);
-    public int     PedidosHoy      => Items.Where(x => x.FchPedido.Date == DateTime.Today).Select(x => x.NumPed).Distinct().Count();
-    public int     ItemsConVencido => Items.Count(x => x.EsVencido);
+    // -- KPIs (calculados en un unico pass al asignar Items) --
+    public int     TotalPedidos    => _totalPedidos;
+    public int     TotalItems      => _items.Count;
+    public decimal TotalKg         => _totalKg;
+    public decimal KgHilanderia    => _kgHilanderia;
+    public decimal KgTintoreria    => _kgTintoreria;
+    public int     PedidosHoy      => _pedidosHoy;
+    public int     ItemsConVencido => _itemsConVencido;
+
+    private void ComputeKpis()
+    {
+        var pedidos = new HashSet<long>(_items.Count);
+        var pedHoy  = new HashSet<long>();
+        decimal totalKg = 0, kgHil = 0, kgTint = 0;
+        int     vencido = 0;
+        var     hoy     = DateTime.Today;
+
+        foreach (var x in _items)
+        {
+            pedidos.Add(x.NumPed);
+            totalKg += x.Cantidad;
+
+            if (x.CodServ == "C" || x.CodServ == "CT")
+                kgHil += x.Cantidad;
+
+            if (x.CodServ == "CT" || x.CodServ == "ST" ||
+                x.CodServ == "STD" || x.CodServ == "STR" || x.CodServ == "SRT")
+                kgTint += x.Cantidad;
+
+            if (x.FchPedido.Date == hoy)
+                pedHoy.Add(x.NumPed);
+
+            if (x.FMaxPed.HasValue && x.FMaxPed.Value < hoy)
+                vencido++;
+        }
+
+        _totalPedidos    = pedidos.Count;
+        _totalKg         = totalKg;
+        _kgHilanderia    = kgHil;
+        _kgTintoreria    = kgTint;
+        _pedidosHoy      = pedHoy.Count;
+        _itemsConVencido = vencido;
+    }
 }

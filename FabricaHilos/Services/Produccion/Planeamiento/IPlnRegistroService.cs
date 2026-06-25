@@ -11,8 +11,10 @@ public interface IPlnRegistroService
     Task<IReadOnlyList<RegistroPedidoItem>> GetRegistroDiarioAsync(
         DateTime fchDesde,
         DateTime fchHasta,
-        string   filtroServ     = "",
-        string   filtroCliente  = "",
-        string   filtroProceso  = "",
-        string   filtroEstado   = "");
+        string   filtroServ         = "",
+        string   filtroCliente      = "",
+        string   filtroProceso      = "",
+        string   filtroEstado       = "",
+        string   filtroTfibra       = "",
+        string   filtroPasoActual   = "");
 }
