@@ -118,22 +118,38 @@ public class InspeccionComController : OracleBaseController
     [HttpGet("{id:long}")]
     public async Task<IActionResult> Detalle(long id)
     {
-        var insp = await _svc.ObtenerPorIdAsync(id);
-        if (insp is null) return NotFound();
-
-        var detalles  = await _svc.ObtenerDetalleAsync(id);
-        var rubros    = await _svc.ObtenerRUBROSConItemsAsync();
-        var acciones  = await _svc.ObtenerAccionesInspeccionAsync(id);
-        var evidencias= await _svc.ObtenerEvidenciasAsync(id);
-
-        var vm = new SoDetalleInspeccionViewModel
+        try
         {
-            Inspeccion = insp,
-            Rubros     = BuildRubrosConDetalles(rubros, detalles),
-            Acciones   = acciones,
-            Evidencias = evidencias
-        };
-        return View("~/Views/SaludOcupacional/InspeccionCom/Detalle.cshtml", vm);
+            var insp = await _svc.ObtenerPorIdAsync(id);
+            if (insp is null) return NotFound();
+
+            var detalles  = await _svc.ObtenerDetalleAsync(id);
+            var rubros    = await _svc.ObtenerRUBROSConItemsAsync();
+            var acciones  = await _svc.ObtenerAccionesInspeccionAsync(id);
+            var evidencias= await _svc.ObtenerEvidenciasAsync(id);
+            var hallazgos = await _svc.ObtenerHallazgosAsync(id);
+
+            foreach (var h in hallazgos)
+                foreach (var img in h.Imgs)
+                    if (!string.IsNullOrEmpty(img.RutaArch))
+                        img.RutaFisica = img.RutaArch;
+
+            var vm = new SoDetalleInspeccionViewModel
+            {
+                Inspeccion = insp,
+                Rubros     = BuildRubrosConDetalles(rubros, detalles),
+                Acciones   = acciones,
+                Evidencias = evidencias,
+                Hallazgos  = hallazgos
+            };
+            return View("~/Views/SaludOcupacional/InspeccionCom/Detalle.cshtml", vm);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SO] Error al cargar Detalle de inspección {Id}", id);
+            TempData["Error"] = "Error al cargar el detalle de la inspección. Intente nuevamente.";
+            return RedirectToAction(nameof(Historial));
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -196,26 +212,29 @@ public class InspeccionComController : OracleBaseController
     [HttpGet]
     public async Task<IActionResult> Acciones(string filtro = "PR", int? idCom = null)
     {
-        IReadOnlyList<SoInspAccion> acciones;
-        if (filtro == "R")
-        {
-            acciones = await _svc.ObtenerAccionesResueltasAsync(idCom);
-        }
-        else
-        {
-            var abiertas = await _svc.ObtenerAccionesAbiertasAsync(idCom);
-            acciones = filtro == "P" ? abiertas.Where(a => a.Estado == "P").ToList()
-                     : filtro == "E" ? abiertas.Where(a => a.Estado == "E").ToList()
-                     : abiertas;
-        }
+        // Siempre cargamos ambas fuentes para los KPIs globales
+        var abiertas  = await _svc.ObtenerAccionesAbiertasAsync(idCom);
+        var resueltas = await _svc.ObtenerAccionesResueltasAsync(idCom);
 
+        IReadOnlyList<SoInspAccion> acciones = filtro switch
+        {
+            "P"  => abiertas.Where(a => a.Estado == "P").ToList(),
+            "R"  => resueltas,
+            "V"  => resueltas.Where(a => a.Estado == "V").ToList(),
+            _    => abiertas.Concat(resueltas)
+                            .OrderByDescending(a => a.FechaInsp)
+                            .ThenBy(a => a.FchLimite)
+                            .ToList()   // "PR" = Todas
+        };
+
+        // KPIs sobre el universo completo (no solo el filtro aplicado)
+        var todas = abiertas.Concat(resueltas).ToList();
         var vm = new SoAccionesViewModel
         {
             Acciones       = acciones,
-            TotalPendientes= acciones.Count(a => a.Estado == "P"),
-            TotalEnProceso = acciones.Count(a => a.Estado == "E"),
-            TotalVencidas  = acciones.Count(a => a.EsVencida),
-            TotalResueltas = acciones.Count(a => a.Estado == "R"),
+            TotalPendientes= todas.Count(a => a.Estado == "P"),
+            TotalVencidas  = todas.Count(a => a.EsVencida),
+            TotalResueltas = resueltas.Count,
             FiltroEstado   = filtro
         };
 
@@ -267,8 +286,12 @@ public class InspeccionComController : OracleBaseController
             }
             else
             {
-                await _svc.ActualizarEncabezadoAsync(vm.Inspeccion, usuario);
                 idInsp = vm.Inspeccion.IdInsp;
+
+                // Al cerrar no actualizamos el encabezado: los datos ya están guardados en BD
+                // y sobreescribirlos con el form dinámico del modal podría borrar campos.
+                if (accion != "cerrar")
+                    await _svc.ActualizarEncabezadoAsync(vm.Inspeccion, usuario);
             }
 
             // Guardar puntajes del checklist si vienen en el form

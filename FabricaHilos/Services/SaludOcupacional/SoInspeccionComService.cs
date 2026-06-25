@@ -600,7 +600,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                   AND  h.ESTADO IN ('P','E')
                   AND  (:idCom IS NULL OR i.ID_COM = :idCom)
             )
-            ORDER BY 15, 6",
+            ORDER BY 14 DESC, 15, 10",
             new { idCom });
         return rows.ToList();
     }
@@ -639,7 +639,7 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
                   AND  h.ESTADO IN ('R','V')
                   AND  (:idCom IS NULL OR i.ID_COM = :idCom)
             )
-            ORDER BY 7 DESC",
+            ORDER BY 14 DESC, 10",
             new { idCom });
         return rows.ToList();
     }
@@ -722,18 +722,35 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
             ) WHERE ROWNUM <= 10")).ToList();
 
         var acciones = (await conn.QueryAsync<SoInspAccion>($@"
-            SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
-                   a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
-                   a.ESTADO, a.OBSERVACION, a.FCH_CREA,
-                   t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
-                   c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
-            FROM   {S}SO_INSP_ACCION  a
-            JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
-            JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
-            JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
-            JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
-            WHERE  a.ESTADO IN ('P','E')
-            ORDER  BY DECODE(a.ESTADO,'P',1,'E',2), a.FCH_LIMITE NULLS LAST")).ToList();
+            SELECT ID_ACCION, ID_DETALLE, ID_INSP,
+                   DESCRIPCION, RESPONSABLE, FCH_LIMITE, FCH_CIERRE,
+                   ESTADO, OBSERVACION, FCH_CREA,
+                   COD_ITEM, DESC_ITEM,
+                   NOMBRE_COMEDOR, FECHA_INSP
+            FROM (
+                SELECT a.ID_ACCION, a.ID_DETALLE, a.ID_INSP,
+                       a.DESCRIPCION, a.RESPONSABLE, a.FCH_LIMITE, a.FCH_CIERRE,
+                       a.ESTADO, a.OBSERVACION, a.FCH_CREA,
+                       t.COD_ITEM, t.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
+                FROM   {S}SO_INSP_ACCION  a
+                JOIN   {S}SO_INSP_DETALLE d ON d.ID_DETALLE = a.ID_DETALLE
+                JOIN   {S}SO_INSP_ITEM    t ON t.ID_ITEM    = d.ID_ITEM
+                JOIN   {S}SO_INSPECCION   i ON i.ID_INSP    = a.ID_INSP
+                JOIN   {S}SO_COMEDOR      c ON c.ID_COM     = i.ID_COM
+                UNION ALL
+                SELECT h.ID_HALLAZGO, 0, h.ID_INSP,
+                       h.ACCION_CORR, NULL, h.FCH_LIMITE, NULL,
+                       h.ESTADO, h.OBS_SEGUIM, h.FCH_CREA,
+                       NULL, h.DESCRIPCION AS DESC_ITEM,
+                       c.NOMBRE AS NOMBRE_COMEDOR, i.FECHA_INSP
+                FROM   {S}SO_INSP_HALLAZGO h
+                JOIN   {S}SO_INSPECCION    i ON i.ID_INSP = h.ID_INSP
+                JOIN   {S}SO_COMEDOR       c ON c.ID_COM  = i.ID_COM
+                WHERE  h.ACCION_CORR IS NOT NULL
+            )
+            ORDER BY 14 DESC, 6 NULLS LAST")).ToList();
+        var totalAbiertas = acciones.Count(a => a.Estado == "P");
 
         var comedores = (await conn.QueryAsync<SoComedor>($@"
             SELECT c.ID_COM, c.NOMBRE, c.UBICACION, c.ID_CONC,
@@ -755,11 +772,11 @@ public class SoInspeccionComService : OracleServiceBase, ISoInspeccionComService
         return new SoDashboardViewModel
         {
             UltimasInspecciones   = ultimas,
-            AccionesPendientes    = acciones,
+            AccionesRecientes     = acciones,
             Comedores             = comedores,
             TotalInspecciones     = (int)(kpis.TOTAL_INSP ?? 0),
             InspeccionesEsteAno   = (int)(kpis.INSP_ANO  ?? 0),
-            AccionesPend          = acciones.Count(a => a.Estado == "P"),
+            AccionesPend          = totalAbiertas,
             AccionesVencidas      = acciones.Count(a => a.EsVencida),
             UltimoPctCumpl        = ultima?.PctCumpl,
             UltimaCalificacion    = ultima?.Calificacion

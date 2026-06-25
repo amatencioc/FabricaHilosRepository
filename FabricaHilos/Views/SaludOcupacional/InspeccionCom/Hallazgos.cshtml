@@ -1,4 +1,4 @@
-﻿@model FabricaHilos.Models.SaludOcupacional.SoHallazgosViewModel
+@model FabricaHilos.Models.SaludOcupacional.SoHallazgosViewModel
 @using FabricaHilos.Models.SaludOcupacional
 @{
     var insp = Model.Inspeccion;
@@ -306,24 +306,28 @@
 							  placeholder="Describa la acción correctiva a tomar..."
 							  style="font-size:.82rem;resize:vertical;">@h.AccionCorr</textarea>
 
+					@{ var hFchStr = h.FchLimite.HasValue ? h.FchLimite.Value.ToString("dd/MM/yyyy") : "";
+					   var selP = h.Estado == "P" ? "selected" : null;
+					   var selR = h.Estado == "R" ? "selected" : null;
+					   var selV = h.Estado == "V" ? "selected" : null; }
 					<div class="row g-2 mt-2">
-						<div class="col-sm-6">
-							<label style="font-size:.72rem;color:var(--so-gray-600);">Fecha límite</label>
-							<input type="text" class="form-control form-control-sm flatpickr auto-save"
-								   data-campo="fchLimite" data-id="@h.IdHallazgo"
-								   value="@(h.FchLimite?.ToString("dd/MM/yyyy"))"
-								   placeholder="dd/mm/yyyy" style="font-size:.8rem;" />
+							<div class="col-sm-6">
+								<label style="font-size:.72rem;color:var(--so-gray-600);">Fecha límite</label>
+								<input type="text" class="form-control form-control-sm flatpickr auto-save"
+									   data-campo="fchLimite" data-id="@h.IdHallazgo"
+									   value="@hFchStr"
+									   placeholder="dd/mm/yyyy" style="font-size:.8rem;" />
 						</div>
-						<div class="col-sm-6">
-							<label style="font-size:.72rem;color:var(--so-gray-600);">Estado</label>
-							<select class="form-select form-select-sm auto-save"
-									data-campo="estado" data-id="@h.IdHallazgo" style="font-size:.8rem;">
-								<option value="P" selected="@(h.Estado == "P" ? "selected" : null)">Pendiente</option>
-								<option value="R" selected="@(h.Estado == "R" ? "selected" : null)">Resuelto</option>
-								<option value="V" selected="@(h.Estado == "V" ? "selected" : null)">Verificado</option>
-							</select>
+							<div class="col-sm-6">
+								<label style="font-size:.72rem;color:var(--so-gray-600);">Estado</label>
+								<select class="form-select form-select-sm auto-save"
+										data-campo="estado" data-id="@h.IdHallazgo" style="font-size:.8rem;">
+									<option value="P" selected="@selP">Pendiente</option>
+									<option value="R" selected="@selR">Resuelto</option>
+									<option value="V" selected="@selV">Verificado</option>
+								</select>
+							</div>
 						</div>
-					</div>
 				</div>
 
 				@* ── Tab: Seguimiento ── *@

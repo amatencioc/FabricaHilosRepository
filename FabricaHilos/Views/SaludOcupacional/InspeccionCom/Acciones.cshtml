@@ -1,22 +1,21 @@
-﻿@model FabricaHilos.Models.SaludOcupacional.SoAccionesViewModel
+@model FabricaHilos.Models.SaludOcupacional.SoAccionesViewModel
 @{
     ViewData["Title"] = "Acciones Correctivas — Inspección Comedor";
 
     string EstadoBadge(string e) => e switch
     {
-        "P" => "so-badge-secondary", "E" => "so-badge-proc",
-        "R" => "so-badge-ok",        _ => "so-badge-secondary"
+        "P" => "so-badge-secondary", "R" => "so-badge-ok",
+        "V" => "so-badge-proc",      _   => "so-badge-secondary"
     };
     string EstadoLabel(string e) => e switch
     {
-        "P" => "Pendiente", "E" => "En Proceso",
-        "R" => "Resuelta",  _ => e
+        "P" => "Pendiente", "R" => "Resuelta",
+        "V" => "Verificado", _ => e
     };
 
     string filtroAct = Model.FiltroEstado;
 
     var pendientes = Model.TotalPendientes;
-    var enProc     = Model.TotalEnProceso;
     var vencidas   = Model.TotalVencidas;
     var resueltas  = Model.TotalResueltas;
 
@@ -40,6 +39,27 @@
                                border:1px solid var(--so-border,#2d3748); font-size:.78rem; }
         .so-insp-group-body  { border:1px solid var(--so-border,#2d3748); border-top:none;
                                border-radius:0 0 .45rem .45rem; overflow:hidden; }
+        /* Tabs de inspección */
+        .so-insp-tabs        { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:.6rem; }
+        .so-insp-tab         { display:flex; align-items:center; gap:.3rem; padding:.28rem .65rem;
+                               border-radius:.35rem; border:1px solid var(--so-border,#2d3748);
+                               background:var(--so-bg-card); color:var(--so-text-secondary);
+                               font-size:.72rem; cursor:pointer; transition:background .15s,border-color .15s;
+                               white-space:nowrap; text-decoration:none; }
+        .so-insp-tab:hover   { background:rgba(79,209,197,.12); border-color:rgba(79,209,197,.35);
+                               color:var(--so-teal-mid); }
+        .so-insp-tab.active  { background:rgba(79,209,197,.18); border-color:var(--so-teal-mid);
+                               color:var(--so-teal-mid); font-weight:600; }
+        .so-insp-tab.has-venc { border-color:rgba(220,53,69,.5); color:#ff8fa3; }
+        .so-insp-tab.has-venc.active { background:rgba(220,53,69,.15); }
+        /* Botones expandir/contraer */
+        .so-expand-bar       { display:flex; align-items:center; gap:.5rem; margin-bottom:.55rem; }
+        /* Número de ítem */
+        .so-item-num         { display:inline-flex; align-items:center; justify-content:center;
+                               min-width:22px; height:18px; padding:0 4px;
+                               border-radius:3px; background:rgba(79,209,197,.15);
+                               color:var(--so-teal-mid); font-size:.65rem; font-weight:700;
+                               flex-shrink:0; }
         .so-thumb-grid       { display:flex; flex-wrap:wrap; gap:4px; }
         .so-thumb            { width:44px; height:44px; object-fit:cover; border-radius:3px;
                                cursor:pointer; border:1px solid rgba(255,255,255,.15);
@@ -97,11 +117,6 @@
         <span class="so-kpi-val">@pendientes</span>
         <span style="opacity:.75">pendientes</span>
     </span>
-    <span class="so-kpi" style="background:rgba(13,110,253,.18);border-color:rgba(13,110,253,.3);">
-        <i class="bi bi-arrow-repeat" style="color:#90c2ff;"></i>
-        <span class="so-kpi-val" style="color:#90c2ff;">@enProc</span>
-        <span style="opacity:.8">en proceso</span>
-    </span>
     @if (vencidas > 0)
     {
         <span class="so-kpi" style="background:rgba(220,53,69,.22);border-color:rgba(220,53,69,.4);">
@@ -122,27 +137,28 @@
     <div class="d-flex align-items-center gap-2 flex-wrap">
         @{
             var tabs = new[] {
-                ("",  "Todas",      "bi-list-ul"),
-                ("P", "Pendientes", "bi-hourglass-split"),
-                ("E", "En proceso", "bi-arrow-repeat"),
-                ("V", "Vencidas",   "bi-alarm-fill"),
-                ("R", "Resueltas",  "bi-check2-all"),
+                ("PR", "Todas",      "bi-list-ul"),
+                ("P",  "Pendientes", "bi-hourglass-split"),
+                ("V",  "Vencidas",   "bi-alarm-fill"),
+                ("R",  "Resueltas",  "bi-check2-all"),
             };
         }
         @foreach (var (est, label, icon) in tabs)
         {
-            bool active = filtroAct == est || (string.IsNullOrEmpty(est) && filtroAct == "PR");
+            bool active = filtroAct == est;
+            var tabClass = active ? "btn btn-sm" : "btn btn-sm btn-outline-secondary";
+            var tabStyle = active ? "font-size:.73rem;background:var(--so-teal);color:#fff;border-color:var(--so-teal);" : "font-size:.73rem;";
             <a asp-controller="InspeccionCom" asp-action="Acciones"
-               asp-route-filtro="@(string.IsNullOrEmpty(est) ? "PR" : est)"
-               class="btn btn-sm @(active ? "" : "btn-outline-secondary")"
-               style="font-size:.73rem;@(active ? "background:var(--so-teal);color:#fff;border-color:var(--so-teal);" : "")">
+               asp-route-filtro="@est"
+               class="@tabClass"
+               style="@tabStyle">
                 <i class="bi @icon"></i> @label
             </a>
         }
     </div>
 </div>
 
-@* ── Grupos por inspección ────────────────────────────────────────────────────────── *@
+@* ── Grupos por inspección ──────────────────────────────────────────────────── *@
 @if (!Model.Acciones.Any())
 {
     <div class="so-card">
@@ -154,16 +170,57 @@
 }
 else
 {
+    @* ── Barra expandir/contraer ── *@
+    <div class="so-expand-bar">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnExpandAll"
+                style="font-size:.72rem;">
+            <i class="bi bi-chevron-double-down"></i> Expandir todos
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCollapseAll"
+                style="font-size:.72rem;">
+            <i class="bi bi-chevron-double-up"></i> Contraer todos
+        </button>
+        <span style="font-size:.7rem;color:var(--so-text-secondary);">@grupos.Count inspecci&oacute;n(es)</span>
+    </div>
+
+    @* ── Tabs de navegación (más reciente primero) ── *@
+    <div class="so-insp-tabs" id="inspTabs">
+        @{ int tabIdx = 0; }
+        @foreach (var g in grupos)
+        {
+            var gPrim    = g.First();
+            var gHasVenc = g.Any(a => a.EsVencida);
+            var gTabCss  = "so-insp-tab" + (gHasVenc ? " has-venc" : "") + (tabIdx == 0 ? " active" : "");
+            <a class="@gTabCss"
+               href="#"
+               data-no-loading
+               data-target="insp-panel-@gPrim.IdInsp"
+               data-tab-trigger="1">
+                <i class="bi bi-clipboard2-check"></i>
+                #@gPrim.IdInsp
+                @if (gPrim.FechaInsp.HasValue)
+                {
+                    <span style="opacity:.75;">@gPrim.FechaInsp.Value.ToString("dd/MM/yy")</span>
+                }
+                @if (gHasVenc) { <i class="bi bi-alarm-fill" style="font-size:.65rem;"></i> }
+            </a>
+            tabIdx++;
+        }
+    </div>
+
+    @* ── Paneles ── *@
+    int panelIdx = 0;
     foreach (var grupo in grupos)
     {
-        var primera = grupo.First();
-        var hayVenc = grupo.Any(a => a.EsVencida);
-        var cntPend = grupo.Count(a => a.Estado == "P");
-        var cntProc = grupo.Count(a => a.Estado == "E");
-        var cntRes  = grupo.Count(a => a.Estado == "R");
-
-        // Fotos del grupo (solo hallazgos: IdDetalle == 0)
-        var fotosList = grupo
+        var primera    = grupo.First();
+        var hayVenc    = grupo.Any(a => a.EsVencida);
+        var cntPend    = grupo.Count(a => a.Estado == "P");
+        var cntProc    = grupo.Count(a => a.Estado == "E");
+        var cntRes     = grupo.Count(a => a.Estado == "R");
+        var hdrVencCss = hayVenc ? "border-danger" : "";
+        var panelStyle = panelIdx > 0 ? "display:none;" : "";
+        var acOrdenadas = grupo.OrderBy(a => a.IdDetalle == 0 ? int.MaxValue : a.IdDetalle).ToList();
+        var fotosList  = grupo
             .Where(a => a.IdDetalle == 0)
             .SelectMany(a =>
                 Model.HallazgosPorId.TryGetValue(a.IdAccion, out var h)
@@ -173,11 +230,10 @@ else
             .Where(f => !string.IsNullOrEmpty(f.NombreArch))
             .ToList();
 
-        <div class="so-insp-group">
-            <div class="so-insp-group-hdr @(hayVenc ? "border-danger" : "")">
+        <div class="so-insp-group" id="insp-panel-@primera.IdInsp" style="@panelStyle">
+            <div class="so-insp-group-hdr @hdrVencCss">
                 <i class="bi bi-clipboard2-check" style="color:var(--so-teal-mid);"></i>
-                <a asp-controller="InspeccionCom" asp-action="Detalle"
-                   asp-route-id="@primera.IdInsp"
+                <a asp-controller="InspeccionCom" asp-action="Detalle" asp-route-id="@primera.IdInsp"
                    class="fw-semibold text-decoration-none" style="color:var(--so-teal-mid);font-size:.82rem;">
                     #@primera.IdInsp &mdash; @primera.FechaInsp?.ToString("dd/MM/yyyy")
                 </a>
@@ -186,68 +242,54 @@ else
                     <span style="color:var(--so-text-secondary);font-size:.74rem;">| @primera.NombreComedor</span>
                 }
                 <span class="ms-auto d-flex gap-1 align-items-center">
-                    @if (cntPend > 0)
-                    {
-                        <span class="so-badge so-badge-secondary" style="font-size:.67rem;">⏳ @cntPend pend.</span>
-                    }
-                    @if (cntProc > 0)
-                    {
-                        <span class="so-badge so-badge-proc" style="font-size:.67rem;">🔄 @cntProc proc.</span>
-                    }
-                    @if (cntRes > 0)
-                    {
-                        <span class="so-badge so-badge-ok" style="font-size:.67rem;">✅ @cntRes res.</span>
-                    }
-                    @if (hayVenc)
-                    {
-                        <span class="so-badge so-badge-danger" style="font-size:.67rem;">⚠ vencida(s)</span>
-                    }
+                    @if (cntPend > 0) { <span class="so-badge so-badge-secondary" style="font-size:.67rem;">&#x23F3; @cntPend pend.</span> }
+                    @if (cntProc > 0) { <span class="so-badge so-badge-proc"      style="font-size:.67rem;">&#x1F504; @cntProc proc.</span> }
+                    @if (cntRes  > 0) { <span class="so-badge so-badge-ok"        style="font-size:.67rem;">&#x2705; @cntRes res.</span> }
+                    @if (hayVenc)     { <span class="so-badge so-badge-danger"     style="font-size:.67rem;">&#x26A0; vencida(s)</span> }
                 </span>
             </div>
             <div class="so-insp-group-body">
-                @* ── Thumbnails de fotos ── *@
                 @if (fotosList.Any())
                 {
                     <div class="px-3 py-2" style="background:rgba(0,0,0,.08);border-bottom:1px solid var(--so-border);">
                         @{
-                            // Generar JSON seguro con las URLs — evita &amp; en onclick inline
                             var fotosUrlsJson = System.Text.Json.JsonSerializer.Serialize(
                                 fotosList.Select(f => Url.Action("ServirImagen", "InspeccionCom",
                                     new { idInsp = f.IdInsp, nombreArch = f.NombreArch, tipo = "hal" }))
                                 .ToArray());
                         }
-                        <div class="so-thumb-grid" data-foto-group="@primera.IdInsp"
-                             data-urls="@fotosUrlsJson">
+                        <div class="so-thumb-grid" data-foto-group="@primera.IdInsp" data-urls="@fotosUrlsJson">
                             @{ int fotoIdx = 0; }
                             @foreach (var foto in fotosList)
                             {
                                 var thumbUrl = Url.Action("ServirImagen", "InspeccionCom",
                                     new { idInsp = foto.IdInsp, nombreArch = foto.NombreArch, tipo = "hal" });
-                                <img src="@thumbUrl"
-                                     class="so-thumb"
-                                     loading="lazy"
-                                     alt="Foto @(fotoIdx + 1)"
-                                     data-idx="@fotoIdx" />
+                                <img src="@thumbUrl" class="so-thumb" loading="lazy"
+                                     alt="Foto @(fotoIdx + 1)" data-idx="@fotoIdx" />
                                 fotoIdx++;
                             }
                         </div>
                     </div>
                 }
-                @* ── Tabla de acciones ── *@
                 <table class="so-table w-100">
                     <thead>
                         <tr>
-                            <th>Descripción</th>
-                            <th>Hallazgo / Item</th>
+                            <th style="width:38px;" class="text-center">#</th>
+                            <th>Descripci&oacute;n</th>
+                            <th>Hallazgo / &Iacute;tem</th>
                             <th class="text-center">Plazo</th>
                             <th class="text-center">Estado</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var ac in grupo)
+                        @{ int itemNum = 1; }
+                        @foreach (var ac in acOrdenadas)
                         {
-                            <tr class="@(ac.EsVencida ? "so-row-danger" : "")">
+                            var trCss  = ac.EsVencida ? "so-row-danger" : "";
+                            var fchCss = ac.EsVencida ? "text-danger fw-bold" : "";
+                            <tr class="@trCss">
+                                <td class="text-center"><span class="so-item-num">@itemNum</span></td>
                                 <td style="font-size:.78rem;max-width:220px;">@ac.Descripcion</td>
                                 <td style="font-size:.73rem;color:var(--so-gray-600);max-width:180px;">
                                     @(ac.DescItem ?? "—")
@@ -255,9 +297,7 @@ else
                                 <td class="text-center text-nowrap" style="font-size:.75rem;">
                                     @if (ac.FchLimite.HasValue)
                                     {
-                                        <span class="@(ac.EsVencida ? "text-danger fw-bold" : "")">
-                                            @ac.FchLimite.Value.ToString("dd/MM/yyyy")
-                                        </span>
+                                        <span class="@fchCss">@ac.FchLimite.Value.ToString("dd/MM/yyyy")</span>
                                         @if (ac.EsVencida)
                                         {
                                             var dias = (DateTime.Today - ac.FchLimite.Value).Days;
@@ -274,8 +314,7 @@ else
                                 <td class="text-end pe-2">
                                     @if (ac.Estado != "R")
                                     {
-                                        <button class="btn-so-edit"
-                                                title="Actualizar estado"
+                                        <button class="btn-so-edit" title="Actualizar estado"
                                                 data-id="@ac.IdAccion"
                                                 data-detalle="@ac.IdDetalle"
                                                 data-estado="@ac.Estado"
@@ -286,11 +325,13 @@ else
                                     }
                                 </td>
                             </tr>
+                            itemNum++;
                         }
                     </tbody>
                 </table>
             </div>
         </div>
+        panelIdx++;
     }
 }
 
@@ -319,7 +360,6 @@ else
                             style="background:var(--so-bg-input);color:var(--so-text-primary);
                                    border-color:var(--so-border);font-size:.8rem;">
                         <option value="P">Pendiente</option>
-                        <option value="E">En proceso</option>
                         <option value="R">Resuelta</option>
                     </select>
                 </div>
@@ -372,9 +412,44 @@ else
     const modal = new bootstrap.Modal(document.getElementById('modalAccion'));
     const modalFoto = new bootstrap.Modal(document.getElementById('modalFoto'));
 
-    // Estado de navegación de fotos
-    let _fotos = [];
+    // ── Tabs de inspección ──────────────────────────────────────────────
+    // Tabs de inspeccion
+    function soShowTab(tabEl) {
+        const targetId = tabEl.dataset.target;
+        const panel    = document.getElementById(targetId);
+        const yaActivo = tabEl.classList.contains('active');
+
+        // Ocultar todos y desactivar todos
+        document.querySelectorAll('#inspTabs .so-insp-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.so-insp-group').forEach(p => p.style.display = 'none');
+
+        // Si no estaba activo, mostrarlo; si ya estaba activo, queda colapsado
+        if (!yaActivo) {
+            tabEl.classList.add('active');
+            if (panel) panel.style.display = '';
+        }
+    }
+
+    document.getElementById('inspTabs')?.addEventListener('click', function (e) {
+        const tabEl = e.target.closest('[data-tab-trigger]');
+        if (!tabEl) return;
+        e.preventDefault();
+        soShowTab(tabEl);
+    });
+
+
+    // Expandir / Contraer todos
+    document.getElementById('btnExpandAll')?.addEventListener('click', function () {
+        document.querySelectorAll('.so-insp-group').forEach(p => p.style.display = '');
+        document.querySelectorAll('#inspTabs .so-insp-tab').forEach(t => t.classList.add('active'));
+    });
+    document.getElementById('btnCollapseAll')?.addEventListener('click', function () {
+        document.querySelectorAll('.so-insp-group').forEach(p => p.style.display = 'none');
+        document.querySelectorAll('#inspTabs .so-insp-tab').forEach(t => t.classList.remove('active'));
+    });
+
     let _fotoIdx = 0;
+    let _fotos = [];
 
     function actualizarFotoModal() {
         const img     = document.getElementById('modalFotoImg');
@@ -437,10 +512,17 @@ else
     }
 
     window.abrirModalAccion = function (btn) {
-        document.getElementById('modalIdAccion').value   = btn.dataset.id;
-        document.getElementById('modalIdDetalle').value  = btn.dataset.detalle ?? '0';
-        document.getElementById('modalEstado').value     = btn.dataset.estado ?? 'P';
-        document.getElementById('modalObs').value        = btn.dataset.obs ?? '';
+        const idDetalle    = parseInt(btn.dataset.detalle ?? '0');
+        const estadoActual = btn.dataset.estado ?? 'P';
+        document.getElementById('modalIdAccion').value  = btn.dataset.id;
+        document.getElementById('modalIdDetalle').value = idDetalle;
+        document.getElementById('modalObs').value       = btn.dataset.obs ?? '';
+        // Los hallazgos (IdDetalle == 0) solo aceptan P/R/V; las acciones aceptan P/E/R
+        const sel = document.getElementById('modalEstado');
+        sel.innerHTML = idDetalle === 0
+            ? '<option value="P">Pendiente</option><option value="R">Resuelto</option><option value="V">Verificado</option>'
+            : '<option value="P">Pendiente</option><option value="R">Resuelta</option>';
+        sel.value = estadoActual;
         modal.show();
     };
 

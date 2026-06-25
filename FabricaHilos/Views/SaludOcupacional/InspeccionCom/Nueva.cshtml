@@ -96,10 +96,14 @@
                         <option value="">— Seleccionar —</option>
                         @foreach (var c in Model.Comedores)
                         {
-                            <option value="@c.IdCom"
-                                    selected="@(Model.Inspeccion.IdCom == c.IdCom ? "selected" : null)">
-                                @c.Nombre
-                            </option>
+                            if (Model.Inspeccion.IdCom == c.IdCom)
+                            {
+                                <option value="@c.IdCom" selected>@c.Nombre</option>
+                            }
+                            else
+                            {
+                                <option value="@c.IdCom">@c.Nombre</option>
+                            }
                         }
                     </select>
                 </div>
@@ -107,10 +111,11 @@
                     <label class="form-label fw-semibold" style="font-size:.8rem;">
                         Fecha <span class="text-danger">*</span>
                     </label>
-                    <input type="text" name="Inspeccion.FechaInsp"
-                           class="form-control form-control-sm flatpickr"
-                           value="@Model.Inspeccion.FechaInsp.ToString("dd/MM/yyyy")"
-                           placeholder="dd/mm/aaaa" required />
+                    @{ var fechaInspStr = Model.Inspeccion.FechaInsp.ToString("dd/MM/yyyy"); }
+                                        <input type="text" name="Inspeccion.FechaInsp"
+                                               class="form-control form-control-sm flatpickr"
+                                               value="@fechaInspStr"
+                                               placeholder="dd/mm/aaaa" required />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold" style="font-size:.8rem;">Hora</label>
@@ -173,8 +178,9 @@
                         </span>
                         <span style="font-size:1.4rem;font-weight:800;line-height:1;"
                               id="resumen-pct"
-                              class="@(pct >= 75 ? "text-success" : pct >= 51 ? "text-warning" : "text-danger")">
-                            @pct.ToString("0.0")%
+                              @{ var pctClassNueva = pct >= 75 ? "text-success" : pct >= 51 ? "text-warning" : "text-danger"; }
+                                                            class="@pctClassNueva">
+                                                          @pct.ToString("0.0")%
                         </span>
                     </div>
                     <span class="so-semaforo @pctBarCss" id="resumen-calif" style="font-size:.78rem;">@pctLabel</span>
@@ -266,7 +272,8 @@
                     aria-expanded="false"
                     aria-controls="@collapseId">
 
-                <i class="bi @(rubro.Rubro.IconoBi ?? "bi-list-check") me-2"
+                @{ var rubroIcon = rubro.Rubro.IconoBi ?? "bi-list-check"; }
+                                <i class="bi @rubroIcon me-2"
                    style="font-size:.9rem;flex-shrink:0;"></i>
 
                 <span class="so-acc-cod me-1">@rubro.Rubro.CodRubro.</span>
@@ -300,7 +307,8 @@
             <div class="accordion-body p-0">
                 @foreach (var item in rubro.Items)
                 {
-                    <div class="so-cl-row @(item.NoCumple ? "so-cl-row-noncompliant" : "")"
+                    var clRowCss = item.NoCumple ? "so-cl-row-noncompliant" : "";
+                    <div class="so-cl-row @clRowCss"
                          data-item-id="@item.IdItem"
                          data-detalle-id="@item.IdDetalle"
                          data-pts-max="@item.PtsMax">
@@ -341,10 +349,10 @@
               method="post" class="d-inline">
             @Html.AntiForgeryToken()
             <input type="hidden" name="Inspeccion.IdInsp" value="@Model.Inspeccion.IdInsp" />
-            <button type="submit" name="accion" value="cerrar"
+            <button type="button" id="btnAbrirCerrarInsp"
                     class="btn btn-sm"
                     style="background:var(--so-ok);color:#fff;font-weight:600;"
-                    onclick="return confirm('¿Cerrar esta inspección? Esta acción es irreversible.')">
+                    data-bs-toggle="modal" data-bs-target="#modalCerrarInsp">
                 <i class="bi bi-check2-circle"></i> Cerrar Inspección
             </button>
         </form>
@@ -595,6 +603,75 @@
             } catch(e) { console.warn('[SO] No se pudo guardar observación', e); }
         });
     }
+})();
+</script>
+
+@* ── Modal confirmación cierre de inspección ── *@
+<div class="modal fade" id="modalCerrarInsp" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:var(--so-bg-card);border-color:var(--so-border);">
+            <div class="modal-header" style="border-color:var(--so-border);padding:.65rem 1rem;">
+                <h6 class="modal-title mb-0" style="font-size:.9rem;color:var(--so-text-primary);">
+                    <i class="bi bi-exclamation-triangle-fill me-2" style="color:var(--so-accent-yellow);"></i>
+                    Cerrar inspección
+                </h6>
+                <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="font-size:.85rem;color:var(--so-text-secondary);padding:1rem 1.2rem;">
+                <p class="mb-1">
+                    <strong style="color:var(--so-text-primary);">¿Cerrar esta inspección?</strong>
+                </p>
+                <p class="mb-0">Esta acción es <strong>irreversible</strong>. Una vez cerrada no podrá editarse.</p>
+            </div>
+            <div class="modal-footer" style="border-color:var(--so-border);padding:.5rem 1rem;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"
+                        style="font-size:.78rem;">Cancelar</button>
+                <button type="button" id="btnConfirmarCerrar"
+                        class="btn btn-sm"
+                        style="background:var(--so-ok);color:#fff;font-size:.78rem;font-weight:600;">
+                    <i class="bi bi-check2-circle me-1"></i>Sí, cerrar inspección
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    document.getElementById('btnConfirmarCerrar')?.addEventListener('click', function() {
+        // Crear y enviar el form de cierre dinámicamente preservando todos los campos del encabezado
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = '@Url.Action("GuardarInspeccion", "InspeccionCom")';
+
+        function addHidden(name, value) {
+            const inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = name; inp.value = value ?? '';
+            form.appendChild(inp);
+        }
+
+        const tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (tokenEl) { const t = tokenEl.cloneNode(); form.appendChild(t); }
+
+        addHidden('Inspeccion.IdInsp', '@Model.Inspeccion.IdInsp');
+        addHidden('Inspeccion.IdCom',
+            document.querySelector('select[name="Inspeccion.IdCom"]')?.value || '@Model.Inspeccion.IdCom');
+        addHidden('Inspeccion.FechaInsp',
+            document.querySelector('input[name="Inspeccion.FechaInsp"]')?.value || '');
+        addHidden('Inspeccion.HoraInsp',
+            document.querySelector('input[name="Inspeccion.HoraInsp"]')?.value || '');
+        addHidden('Inspeccion.Encargada',
+            document.querySelector('input[name="Inspeccion.Encargada"]')?.value || '');
+        addHidden('Inspeccion.Inspector',
+            document.querySelector('input[name="Inspeccion.Inspector"]')?.value || '');
+        addHidden('Inspeccion.Medico',
+            document.querySelector('input[name="Inspeccion.Medico"]')?.value || '');
+        addHidden('Inspeccion.Observaciones',
+            document.querySelector('textarea[name="Inspeccion.Observaciones"]')?.value || '');
+        addHidden('accion', 'cerrar');
+
+        document.body.appendChild(form);
+        form.submit();
+    });
 })();
 </script>
 }

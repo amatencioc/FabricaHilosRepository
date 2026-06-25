@@ -168,15 +168,15 @@ public class SoInspAccion
     public string EstadoLabel => Estado switch
     {
         "P" => "Pendiente",
-        "E" => "En Proceso",
         "R" => "Resuelta",
+        "V" => "Verificado",
         _   => Estado
     };
     public string EstadoBadgeCss => Estado switch
     {
         "P" => "so-badge-pend",
-        "E" => "so-badge-proc",
         "R" => "so-badge-done",
+        "V" => "so-badge-ok",
         _   => "so-badge-secondary"
     };
 }
@@ -189,7 +189,7 @@ public class SoInspAccion
 public class SoDashboardViewModel
 {
     public IReadOnlyList<SoInspeccion> UltimasInspecciones { get; set; } = Array.Empty<SoInspeccion>();
-    public IReadOnlyList<SoInspAccion> AccionesPendientes  { get; set; } = Array.Empty<SoInspAccion>();
+    public IReadOnlyList<SoInspAccion> AccionesRecientes   { get; set; } = Array.Empty<SoInspAccion>();
     public IReadOnlyList<SoComedor>    Comedores           { get; set; } = Array.Empty<SoComedor>();
 
     // KPIs
@@ -241,10 +241,9 @@ public class SoAccionesViewModel
     /// <summary>Hallazgos con fotos para mostrar thumbnails, indexados por IdHallazgo</summary>
     public Dictionary<long, SoHallazgo> HallazgosPorId { get; set; } = new();
     public int TotalPendientes  { get; set; }
-    public int TotalEnProceso   { get; set; }
     public int TotalVencidas    { get; set; }
     public int TotalResueltas   { get; set; }
-    public string FiltroEstado  { get; set; } = "PR";  // 'P','E','R','PR'=todos abiertos
+    public string FiltroEstado  { get; set; } = "PR";  // 'P','R','V','PR'=todos abiertos
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

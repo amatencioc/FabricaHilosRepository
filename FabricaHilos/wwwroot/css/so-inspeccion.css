@@ -610,7 +610,6 @@
 }
 .so-rubros-colheader .so-col-item { display: table-cell; padding: .3rem .9rem; }
 .so-rubros-colheader .so-col-pts  { display: table-cell; width: 60px; text-align: center; padding: .3rem 0; }
-.so-rubros-colheader .so-col-hal  { display: table-cell; width: 35%; padding: .3rem .9rem; }
 
 /* Filas de la tabla: tabla estándar con layout fijo */
 .so-rubro-table {
@@ -621,7 +620,6 @@
 .so-rubro-table tbody td { display: table-cell; padding: .42rem .9rem; vertical-align: middle; }
 .so-rubro-table col.col-item { width: auto; }
 .so-rubro-table col.col-pts  { width: 60px; }
-.so-rubro-table col.col-hal  { width: 35%; }
 
 .so-col-item {
     min-width: 0;

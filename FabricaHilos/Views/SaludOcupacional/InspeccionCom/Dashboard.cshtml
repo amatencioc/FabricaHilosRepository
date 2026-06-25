@@ -119,8 +119,9 @@
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="so-kpi-card @(Model.AccionesPend > 0 ? "warn" : "ok")">
-            <div class="so-kpi-card-icon @(Model.AccionesPend > 0 ? "warn" : "ok")">
+@{ var kpiAccCard = Model.AccionesPend > 0 ? "warn" : "ok"; }
+        <div class="so-kpi-card @kpiAccCard">
+            <div class="so-kpi-card-icon @kpiAccCard">
                 <i class="bi bi-clipboard-x"></i>
             </div>
             <div>
@@ -130,9 +131,12 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="so-kpi-card @(!Model.UltimoPctCumpl.HasValue ? "" : Model.UltimoPctCumpl >= 75 ? "ok" : Model.UltimoPctCumpl >= 51 ? "warn" : "danger")">
-            <div class="so-kpi-card-icon @(!Model.UltimoPctCumpl.HasValue ? "" : Model.UltimoPctCumpl >= 75 ? "ok" : Model.UltimoPctCumpl >= 51 ? "warn" : "danger")">
+    @{
+        var kpiPctCard = !Model.UltimoPctCumpl.HasValue ? "" : Model.UltimoPctCumpl >= 75 ? "ok" : Model.UltimoPctCumpl >= 51 ? "warn" : "danger";
+    }
+        <div class="col-6 col-md-3">
+            <div class="so-kpi-card @kpiPctCard">
+                <div class="so-kpi-card-icon @kpiPctCard">
                 <i class="bi bi-percent"></i>
             </div>
             <div>
@@ -260,27 +264,29 @@
     <div class="col-12 col-lg-5">
         <div class="so-card">
             <div class="so-card-header">
-                <i class="bi bi-clipboard-x" style="color:var(--so-warn-mid);"></i>
-                <span>Acciones correctivas abiertas</span>
+                <i class="bi bi-clipboard-check" style="color:var(--so-warn-mid);"></i>
+                <span>Acciones correctivas</span>
                 <a asp-controller="InspeccionCom" asp-action="Acciones"
                    class="ms-auto" style="font-size:.72rem;color:var(--so-warn-mid);">
                     Ver todas <i class="bi bi-arrow-right"></i>
                 </a>
             </div>
             <div class="so-card-body p-0">
-                @if (!Model.AccionesPendientes.Any())
+                @if (!Model.AccionesRecientes.Any())
                 {
                     <div class="text-center py-4 text-muted" style="font-size:.82rem;">
-                        <i class="bi bi-check2-all fs-4 d-block mb-2" style="color:var(--so-ok);"></i>
-                        Sin acciones correctivas abiertas
+                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                        Sin acciones correctivas registradas
                     </div>
                 }
                 else
                 {
                     <div class="list-group list-group-flush" style="font-size:.78rem;">
-                        @foreach (var ac in Model.AccionesPendientes.Take(8))
+                        @foreach (var ac in Model.AccionesRecientes.Take(8))
                         {
-                            <div class="list-group-item py-2 px-3 @(ac.EsVencida ? "list-group-item-danger" : "")">
+                            var acItemCss = ac.EsVencida ? "list-group-item-danger" : "";
+                            var acFchCss  = ac.EsVencida ? "text-danger fw-bold" : "";
+                            <div class="list-group-item py-2 px-3 @acItemCss">
                                 <div class="d-flex align-items-start gap-2">
                                     <span class="so-badge @ac.EstadoBadgeCss" style="flex-shrink:0;margin-top:.1rem;">
                                         @ac.EstadoLabel
@@ -289,9 +295,24 @@
                                         <div class="fw-semibold text-truncate">@ac.Descripcion</div>
                                         <div class="text-muted" style="font-size:.7rem;">
                                             <i class="bi bi-building"></i> @ac.NombreComedor
+                                            @if (ac.IdInsp > 0)
+                                            {
+                                                <span class="ms-2">
+                                                    <a asp-controller="InspeccionCom" asp-action="Detalle"
+                                                       asp-route-id="@ac.IdInsp"
+                                                       style="color:inherit;text-decoration:underline dotted;"
+                                                       data-no-loading>
+                                                        <i class="bi bi-clipboard2-check"></i> Insp. #@ac.IdInsp
+                                                        @if (ac.FechaInsp.HasValue)
+                                                        {
+                                                            <span>(@ac.FechaInsp.Value.ToString("dd/MM/yy"))</span>
+                                                        }
+                                                    </a>
+                                                </span>
+                                            }
                                             @if (ac.FchLimite.HasValue)
                                             {
-                                                <span class="ms-2 @(ac.EsVencida ? "text-danger fw-bold" : "")">
+                                                <span class="ms-2 @acFchCss">
                                                     <i class="bi bi-calendar-x"></i>
                                                     límite: @ac.FchLimite.Value.ToString("dd/MM/yy")
                                                 </span>
@@ -302,10 +323,10 @@
                             </div>
                         }
                     </div>
-                    @if (Model.AccionesPendientes.Count > 8)
+                    @if (Model.AccionesRecientes.Count > 8)
                     {
                         <div class="text-center py-2" style="font-size:.73rem;color:var(--so-gray-500);">
-                            + @(Model.AccionesPendientes.Count - 8) más —
+                            + @(Model.AccionesRecientes.Count - 8) más —
                             <a asp-controller="InspeccionCom" asp-action="Acciones">ver todas</a>
                         </div>
                     }

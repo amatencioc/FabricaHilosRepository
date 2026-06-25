@@ -347,6 +347,7 @@ using (var scope = app.Services.CreateScope())
 // Configure pipeline HTTP
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage();
     // En desarrollo se puede redirigir a HTTPS con el certificado de desarrollo de .NET
     app.UseHttpsRedirection();
 }
@@ -358,6 +359,30 @@ else
     // HSTS también desactivado: el servidor corre en HTTP puro (IP sin dominio/cert).
     app.UseExceptionHandler("/Home/Error");
 }
+
+// Middleware de diagnóstico: intercepta excepciones durante el render de vistas
+// ANTES de que el compresor Brotli/Gzip empiece a escribir bytes en el stream.
+// Sin esto, una excepción mid-render produce ERR_CONTENT_DECODING_FAILED porque
+// el stream comprimido queda truncado y el browser no puede descomprimirlo.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        var log = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        log.LogError(ex, "[RenderError] Excepción durante render de {Method} {Path}",
+            context.Request.Method, context.Request.Path);
+
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = 500;
+            await context.Response.WriteAsync("Error interno del servidor. Por favor recargue la página.");
+        }
+    }
+});
 
 // Security headers: previene clickjacking, MIME sniffing, XSS y fuga de Referer
 app.Use(async (context, next) =>
@@ -412,7 +437,10 @@ app.Use(async (context, next) =>
         context.Response.Headers["Location"] = "/Account/Login";
     }
 });
-app.UseResponseCompression();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseResponseCompression();
+}
 app.UseStaticFiles();
 app.UseRouting();
 app.UseRateLimiter();

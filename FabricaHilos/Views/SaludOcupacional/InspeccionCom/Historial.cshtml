@@ -92,7 +92,8 @@
                 <option value="">Todos los comedores</option>
                 @foreach (var c in comedores)
                 {
-                    <option value="@c.IdCom" selected="@(filtroIdCom == c.IdCom ? "selected" : null)">
+                    var selCom = filtroIdCom == c.IdCom ? "selected" : null;
+                    <option value="@c.IdCom" selected="@selCom">
                         @c.Nombre
                     </option>
                 }
@@ -101,9 +102,12 @@
             <select name="estado" class="form-select form-select-sm" style="width:140px;"
                     onchange="this.form.submit()">
                 <option value="">Todos los estados</option>
-                <option value="B" selected="@(filtroEst == "B" ? "selected" : null)">Borrador</option>
-                <option value="C" selected="@(filtroEst == "C" ? "selected" : null)">Cerrada</option>
-                <option value="A" selected="@(filtroEst == "A" ? "selected" : null)">Anulada</option>
+                @{ var selB = filtroEst == "B" ? "selected" : null;
+                   var selC = filtroEst == "C" ? "selected" : null;
+                   var selA = filtroEst == "A" ? "selected" : null; }
+                <option value="B" selected="@selB">Borrador</option>
+                                <option value="C" selected="@selC">Cerrada</option>
+                                <option value="A" selected="@selA">Anulada</option>
             </select>
 
             @if (filtroIdCom.HasValue || !string.IsNullOrEmpty(filtroEst))

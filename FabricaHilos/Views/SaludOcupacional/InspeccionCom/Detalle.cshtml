@@ -1,6 +1,7 @@
 ﻿@model FabricaHilos.Models.SaludOcupacional.SoDetalleInspeccionViewModel
 @{
-    ViewData["Title"] = $"Inspección #{Model.Inspeccion.IdInsp} — {Model.Inspeccion.NombreComedor}";    ViewData["IdInsp"] = Model.Inspeccion.IdInsp;
+    ViewData["Title"] = $"Inspección #{Model.Inspeccion.IdInsp} — {Model.Inspeccion.NombreComedor}";
+    ViewData["IdInsp"] = Model.Inspeccion.IdInsp;
     string CalifCss(string? c) => c switch
     {
         "ACEPTABLE"       => "so-semaforo-ok",
@@ -12,6 +13,7 @@
     var insp = Model.Inspeccion;
     var rubros = Model.Rubros;
     var acciones = Model.Acciones;
+    var hallazgos = Model.Hallazgos;
 }
 
 @section Breadcrumb {
@@ -33,6 +35,8 @@
         var target = document.querySelector(btn.dataset.bsTarget);
         if (!target) return;
         var chevron = btn.querySelector('.so-chevron');
+        // Estado inicial: colapsado
+        if (chevron) chevron.style.transform = 'rotate(-90deg)';
         target.addEventListener('hide.bs.collapse', function () {
             if (chevron) chevron.style.transform = 'rotate(-90deg)';
         });
@@ -77,7 +81,7 @@
     {
         <span class="so-semaforo @CalifCss(insp.Calificacion)"
               style="font-size:.8rem;padding:.3rem .8rem;font-weight:700;">
-            @insp.Calificacion &nbsp;@insp.PctCumpl?.ToString("0.0")%
+            @insp.Calificacion &nbsp;@(insp.PctCumpl?.ToString("0.0") + "%")
         </span>
     }
 
@@ -171,6 +175,7 @@
                                       : 0;
                             string barCss   = pct >= 75 ? "so-pct-bar-ok"   : pct >= 51 ? "so-pct-bar-warn"   : "so-pct-bar-ko";
                             string badgeCss = pct >= 75 ? "so-pct-badge-ok" : pct >= 51 ? "so-pct-badge-warn" : "so-pct-badge-ko";
+                            string pctStr   = pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
                             <tr>
                                 <td style="font-size:.78rem;">@r.Rubro.Nombre</td>
                                 <td class="text-center" style="font-size:.78rem;white-space:nowrap;font-weight:700;">
@@ -179,11 +184,11 @@
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="so-pct-badge @badgeCss">
-                                            @pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%
+                                            @pctStr%
                                         </span>
                                         <div class="so-pct-bar-track flex-grow-1">
                                             <div class="so-pct-bar @barCss"
-                                                 style="width:@(pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
+                                                 style="width:@(pctStr)%;"></div>
                                         </div>
                                     </div>
                                 </td>
@@ -214,7 +219,6 @@
         <div class="so-rubros-colheader">
             <span class="so-col-item">ÍTEM</span>
             <span class="so-col-pts">PTS</span>
-            <span class="so-col-hal">HALLAZGO / EVIDENCIAS</span>
         </div>
 
         @{ int rubroIdx = 0; }
@@ -226,7 +230,7 @@
                         class="so-rubro-toggle w-100 text-start border-0"
                         data-bs-toggle="collapse"
                         data-bs-target="#@collapseId"
-                        aria-expanded="true"
+                        aria-expanded="false"
                         aria-controls="@collapseId">
                     <i class="bi bi-check2-square" style="color:var(--so-teal-mid);"></i>
                     <span>@r.Rubro.Nombre</span>
@@ -237,27 +241,22 @@
                     </span>
                     <i class="bi bi-chevron-down so-chevron ms-2" style="font-size:.7rem;transition:transform .2s;"></i>
                 </button>
-                <div class="collapse show" id="@collapseId">
+                <div class="collapse" id="@collapseId">
                     <div class="so-card-body p-0">
                         <table class="so-table w-100 mb-0 so-rubro-table">
                             <colgroup>
                                 <col class="col-item" />
                                 <col class="col-pts" />
-                                <col class="col-hal" />
                             </colgroup>
                             <thead class="visually-hidden">
                                 <tr>
                                     <th>Ítem</th>
                                     <th class="text-center" style="width:60px;">Pts</th>
-                                    <th>Hallazgo / Evidencias</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var det in r.Items)
                                 {
-                                    var hayHallazgo = !string.IsNullOrEmpty(det.Hallazgo);
-                                    var evsDetalle  = Model.Evidencias
-                                        .Where(e => e.IdDetalle == det.IdDetalle).ToList();
                                     <tr>
                                         <td class="so-col-item" style="font-size:.78rem;line-height:1.4;">
                                             @det.Descripcion
@@ -266,36 +265,6 @@
                                             <span class="so-pts-display @PuntajeCss(det.Puntaje)">
                                                 @det.Puntaje
                                             </span>
-                                        </td>
-                                        <td class="so-col-hal">
-                                            @if (hayHallazgo)
-                                            {
-                                                <div style="font-size:.75rem;color:var(--so-danger-text);
-                                                            border-left:3px solid var(--so-danger-border);
-                                                            padding-left:.4rem;margin-bottom:.35rem;">
-                                                    <i class="bi bi-exclamation-triangle-fill" style="font-size:.65rem;"></i>
-                                                    @det.Hallazgo
-                                                </div>
-                                            }
-                                            @if (evsDetalle.Any())
-                                            {
-                                                <div class="so-evidencias-thumb">
-                                                    @foreach (var ev in evsDetalle)
-                                                    {
-                                                        var urlEv = Url.Action("ServirImagen", "InspeccionCom", new { idInsp = insp.IdInsp, nombreArch = System.IO.Path.GetFileName(ev.RutaArch), tipo = "evi" });
-                                                        <a href="@urlEv" target="_blank" class="so-ev-thumb-link"
-                                                           title="@ev.Descripcion">
-                                                            <img src="@urlEv"
-                                                                 alt="@(ev.Descripcion ?? "Evidencia")"
-                                                                 class="so-ev-thumb" loading="lazy" />
-                                                        </a>
-                                                    }
-                                                </div>
-                                            }
-                                            @if (!hayHallazgo && !evsDetalle.Any())
-                                            {
-                                                <span class="text-muted" style="font-size:.72rem;">—</span>
-                                            }
                                         </td>
                                     </tr>
                                 }
@@ -328,7 +297,9 @@
                         <tbody>
                             @foreach (var ac in acciones)
                             {
-                                <tr class="@(ac.EsVencida ? "so-row-danger" : "")">
+                                var trCss  = ac.EsVencida ? "so-row-danger" : "";
+                                var fchCss = ac.EsVencida ? "text-danger fw-bold" : "";
+                                <tr class="@trCss">
                                     <td style="font-size:.78rem;">
                                         @ac.Descripcion
                                         @if (!string.IsNullOrEmpty(ac.Observacion))
@@ -342,7 +313,7 @@
                                     <td class="text-center text-nowrap" style="font-size:.75rem;">
                                         @if (ac.FchLimite.HasValue)
                                         {
-                                            <span class="@(ac.EsVencida ? "text-danger fw-bold" : "")">
+                                            <span class="@fchCss">
                                                 @ac.FchLimite.Value.ToString("dd/MM/yyyy")
                                             </span>
                                         }
@@ -357,6 +328,68 @@
                             }
                         </tbody>
                     </table>
+                </div>
+            </div>
+        }
+
+        @* ── Hallazgos ────────────────────────────────────────────────────────────── *@
+        @if (hallazgos.Any())
+        {
+            <div class="so-card mt-2">
+                <div class="so-card-header">
+                    <i class="bi bi-exclamation-triangle-fill" style="color:var(--so-accent-yellow);"></i>
+                    <span>Hallazgos (@hallazgos.Count)</span>
+                    <a asp-controller="InspeccionCom" asp-action="Hallazgos" asp-route-id="@insp.IdInsp"
+                       class="ms-auto" style="font-size:.72rem;color:var(--so-warn-mid);">
+                        Ver detalle <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                <div class="so-card-body p-0">
+                    @foreach (var h in hallazgos)
+                    {
+                        <div class="px-3 py-2" style="border-bottom:1px solid var(--so-border);">
+                            <div class="d-flex align-items-start gap-2 mb-1">
+                                <span class="so-badge so-badge-@h.EstadoCss" style="flex-shrink:0;margin-top:.15rem;">
+                                    @h.EstadoLabel
+                                </span>
+                                <div class="flex-grow-1 min-width-0">
+                                    <div style="font-size:.8rem;font-weight:600;color:var(--so-text-heading,#1a202c);">
+                                        #@h.Correlativo &mdash; @h.Descripcion
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(h.AccionCorr))
+                                    {
+                                        <div class="text-muted" style="font-size:.74rem;margin-top:.1rem;">
+                                            <i class="bi bi-arrow-return-right"></i> @h.AccionCorr
+                                        </div>
+                                    }
+                                    @if (h.FchLimite.HasValue)
+                                    {
+                                        string limCss = h.EsVencido ? "text-danger fw-bold" : "text-muted";
+                                        <div class="@limCss" style="font-size:.72rem;">
+                                            <i class="bi bi-calendar-x"></i>
+                                            l&iacute;mite: @h.FchLimite.Value.ToString("dd/MM/yyyy")
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            @if (h.Imgs.Any())
+                            {
+                                <div class="d-flex flex-wrap gap-2 mt-1 ms-1">
+                                    @foreach (var img in h.Imgs)
+                                    {
+                                        string imgNombre = System.IO.Path.GetFileName(img.RutaArch ?? "");
+                                        string imgUrl    = Url.Action("ServirImagen", "InspeccionCom",
+                                            new { idInsp = insp.IdInsp, nombreArch = imgNombre, tipo = "hal" }) ?? "#";
+                                        <a href="@imgUrl" target="_blank" data-no-loading>
+                                            <img src="@imgUrl"
+                                                 alt="Hallazgo"
+                                                 style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--so-border);cursor:zoom-in;" />
+                                        </a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
         }
