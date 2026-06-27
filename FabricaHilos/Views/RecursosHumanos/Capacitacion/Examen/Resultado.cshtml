@@ -1,0 +1,141 @@
+@model FabricaHilos.Models.Capacitacion.ExamenResultadoVm
+@{
+    ViewData["Title"] = "Resultado del Examen";
+    var aprobado = Model.Aprobado;
+}
+
+@section Styles {
+<style>
+    .resultado-hero { text-align:center; padding:3rem 1rem 2rem; }
+    .score-ring { width:160px; height:160px; margin:0 auto 1.5rem; }
+    .confetti-wrap { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:9999; }
+</style>
+}
+
+@if (aprobado)
+{
+    <div class="confetti-wrap" id="confettiWrap"></div>
+}
+
+<div class="container-sm py-4" style="max-width:640px">
+    <div class="card border-0 shadow text-center p-5">
+        <!-- Ícono resultado -->
+        <div class="mb-3">
+            @if (aprobado)
+            {
+                <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center"
+                     style="width:100px;height:100px">
+                    <i class="bi bi-check-lg" style="font-size:3rem"></i>
+                </div>
+            }
+            else
+            {
+                <div class="bg-danger text-white rounded-circle d-inline-flex align-items-center justify-content-center"
+                     style="width:100px;height:100px">
+                    <i class="bi bi-x-lg" style="font-size:3rem"></i>
+                </div>
+            }
+        </div>
+
+        <h3 class="fw-bold @(aprobado ? "text-success" : "text-danger") mb-1">
+            @(aprobado ? "¡Felicitaciones, aprobaste!" : "No aprobado")
+        </h3>
+        <div class="text-muted mb-4">@Model.TituloExamen · @Model.TituloCurso</div>
+
+        <!-- Puntaje -->
+        <div class="mb-4">
+            <div class="display-4 fw-bold @(aprobado ? "text-success" : "text-danger")">
+                @Model.PuntajeObt.ToString("F1")
+            </div>
+            <div class="text-muted">sobre 100</div>
+            <div class="mt-2 progress mx-auto" style="max-width:300px;height:12px">
+                <div class="progress-bar @(aprobado ? "bg-success" : "bg-danger")"
+                     style="width:@Model.PuntajeObt%"></div>
+            </div>
+            <div class="small text-muted mt-1">Nota mínima para aprobar: @Model.NotaAprobacion</div>
+        </div>
+
+        <!-- Info intentos -->
+        <div class="text-muted small mb-4">
+            Intento @Model.NroIntento de @Model.MaxIntentos
+        </div>
+
+        <!-- Acciones -->
+        <div class="d-flex flex-column gap-2">
+            @if (aprobado && Model.TieneCertificado)
+            {
+                <a asp-controller="Capacitacion" asp-action="MiPanel"
+                   class="btn btn-success btn-lg">
+                    <i class="bi bi-patch-check-fill me-2"></i>Ver mi certificado
+                </a>
+            }
+
+            <a asp-controller="Curso" asp-action="Ver"
+               asp-route-idCurso="@Model.IdCurso"
+               class="btn @(aprobado ? "btn-outline-success" : "btn-outline-primary")">
+                <i class="bi bi-collection-play me-2"></i>Volver al curso
+            </a>
+
+            @if (Model.PuedeReintentar)
+            {
+                <a asp-controller="Examen" asp-action="IniciarExamen"
+                   asp-route-idExamen="@Model.IdExamen"
+                   asp-route-idInscripcion="0"
+                   class="btn btn-outline-danger">
+                    <i class="bi bi-arrow-repeat me-2"></i>Intentar nuevamente
+                    <span class="badge bg-danger ms-1">@(Model.MaxIntentos - Model.NroIntento) restantes</span>
+                </a>
+            }
+            else if (!aprobado)
+            {
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Has agotado todos los intentos disponibles. Contacta al administrador.
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@if (aprobado)
+{
+    @section Scripts {
+    <script>
+    // Confetti simple con canvas
+    (function() {
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999';
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const pieces = Array.from({length:120}, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height - canvas.height,
+            w: Math.random()*10+5, h: Math.random()*10+5,
+            color: ['#0d6efd','#198754','#ffd700','#fd7e14','#dc3545'][Math.floor(Math.random()*5)],
+            vx: (Math.random()-0.5)*3, vy: Math.random()*4+2,
+            rot: Math.random()*360, rv: (Math.random()-0.5)*6
+        }));
+        let frame = 0;
+        function draw() {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            pieces.forEach(p => {
+                ctx.save();
+                ctx.translate(p.x+p.w/2, p.y+p.h/2);
+                ctx.rotate(p.rot*Math.PI/180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+                ctx.restore();
+                p.x += p.vx; p.y += p.vy; p.rot += p.rv;
+                if (p.y > canvas.height) { p.y = -20; p.x = Math.random()*canvas.width; }
+            });
+            frame++;
+            if (frame < 180) requestAnimationFrame(draw);
+            else { ctx.clearRect(0,0,canvas.width,canvas.height); canvas.remove(); }
+        }
+        draw();
+    })();
+    </script>
+    }
+}

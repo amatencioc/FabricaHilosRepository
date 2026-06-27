@@ -102,7 +102,12 @@ public class MenuOptions
     public bool PlaneamientoPendTenido                { get; set; } = true;
     public bool PlaneamientoPendSecado                { get; set; } = true;
     public bool PlaneamientoPendMadeja                { get; set; } = true;
-    public bool PlaneamientoPendPartidasDef           { get; set; } = true;
+
+    // ── Módulo: Capacitación
+    public bool Capacitacion             { get; set; } = false;
+    public bool CapacitacionCatalogo     { get; set; } = true;   // ver catálogo e inscribirse
+    public bool CapacitacionMisCursos    { get; set; } = true;   // mis inscripciones + certificados
+    public bool CapacitacionAdmin        { get; set; } = false;  // CRUD cursos, reportes (solo admins)
 
     /// <summary>
     /// Devuelve una instancia con todos los menús y submenús visibles.
@@ -178,7 +183,6 @@ public class MenuOptions
         PlaneamientoPendTenido                = true,
         PlaneamientoPendSecado                = true,
         PlaneamientoPendMadeja                = true,
-        PlaneamientoPendPartidasDef           = true,
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,
@@ -187,6 +191,11 @@ public class MenuOptions
         SistemasIndicadoresSeguimientoDev     = true,
         SistemasRequerimientos                = true,
         SistemasRequerimientosAnularDocumento = true,
+
+        Capacitacion          = true,
+        CapacitacionCatalogo  = true,
+        CapacitacionMisCursos = true,
+        CapacitacionAdmin     = true,
     };
 }
 

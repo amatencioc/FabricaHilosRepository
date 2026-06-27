@@ -1,0 +1,179 @@
+﻿@* TOOLBAR *@
+<form method="get" asp-action="RegistroPedido" id="regForm">
+<input type="hidden" name="grupo" id="inpGrupo" value="@Model.FiltroGrupo" />
+<div class="reg-toolbar" style="flex-direction:column;align-items:stretch;gap:.32rem;padding:.45rem .85rem;">
+
+    @* FILA 1 | Fechas + atajos + buscador *@
+    <div class="d-flex align-items-center gap-1" style="flex-wrap:nowrap;">
+
+        @* F. Registro (servidor) *@
+        <div class="d-flex align-items-center gap-1 rounded px-2 py-1" style="background:#eef2ff;border:1px solid #c7d2fe;flex-shrink:0;">
+            <i class="bi bi-calendar3 text-primary" style="font-size:.72rem;"></i>
+            <span style="font-size:.62rem;font-weight:700;color:#4338ca;white-space:nowrap;">F.Reg.</span>
+            <input type="date" name="fchDesde" id="inpDesde" value="@Model.FchDesde.ToString(&quot;yyyy-MM-dd&quot;)"
+                   class="form-control form-control-sm" style="width:114px;font-size:.73rem;" />
+            <span style="font-size:.63rem;color:#9ca3af;">&#8211;</span>
+            <input type="date" name="fchHasta" id="inpHasta" value="@Model.FchHasta.ToString(&quot;yyyy-MM-dd&quot;)"
+                   class="form-control form-control-sm" style="width:114px;font-size:.73rem;" />
+        </div>
+
+        @* Atajos F.Registro *@
+        <div class="d-flex gap-1" style="flex-shrink:0;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.64rem;padding:.11rem .32rem;" onclick="setRango(0)">Hoy</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.64rem;padding:.11rem .32rem;" onclick="setRango(7)">7d</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.64rem;padding:.11rem .32rem;" onclick="setRango(30)">30d</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.64rem;padding:.11rem .32rem;" onclick="setRango(90)">3m</button>
+        </div>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        @* F. Entrega (client-side) *@
+        <div class="d-flex align-items-center gap-1 rounded px-2 py-1" style="background:#ecfdf5;border:1px solid #a7f3d0;flex-shrink:0;">
+            <i class="bi bi-truck text-success" style="font-size:.72rem;"></i>
+            <span style="font-size:.62rem;font-weight:700;color:#065f46;white-space:nowrap;">F.Entrega</span>
+            <input type="date" id="inpEntregaDesde"
+                   class="form-control form-control-sm" style="width:114px;font-size:.73rem;" />
+            <span style="font-size:.63rem;color:#9ca3af;">&#8211;</span>
+            <input type="date" id="inpEntregaHasta"
+                   class="form-control form-control-sm" style="width:114px;font-size:.73rem;" />
+        </div>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        @* Buscador live *@
+        <input type="text" id="regSearch" placeholder="&#128269; Buscar&hellip;"
+               class="form-control form-control-sm" style="width:165px;font-size:.73rem;"
+               autocomplete="off" />
+    </div>
+
+    @* FILA 2 | Clasificadores + acciones *@
+    <div class="d-flex align-items-center gap-1" style="flex-wrap:nowrap;">
+
+        @* Servicio *@
+        <select name="cod_serv" class="form-select form-select-sm" style="width:152px;font-size:.73rem;" title="Servicio">
+            <option value="">&#8212; Servicio &#8212;</option>
+            @foreach (var svc in new[] {
+                          (&quot;C&quot;,   &quot;C &#8212; Hilandería&quot;),
+                          (&quot;CT&quot;,  &quot;CT &#8212; Hil.+Tint.&quot;),
+                          (&quot;ST&quot;,  &quot;ST &#8212; Solo Tint.&quot;),
+                          (&quot;RT&quot;,  &quot;RT &#8212; Retorcedora&quot;) }
+                      .Concat(servicios.Where(x => x != &quot;C&quot; &amp;&amp; x != &quot;CT&quot; &amp;&amp; x != &quot;ST&quot; &amp;&amp; x != &quot;RT&quot; &amp;&amp; x != &quot;Z&quot;).Select(x => (x, x))))
+            {
+                if (Model.FiltroServ == svc.Item1)
+                { <option value="@svc.Item1" selected>@svc.Item2</option> }
+                else
+                { <option value="@svc.Item1">@svc.Item2</option> }
+            }
+        </select>
+
+        @* Proceso *@
+        <select name="proceso" class="form-select form-select-sm" style="width:138px;font-size:.73rem;" title="Proceso">
+            <option value="">&#8212; Proceso &#8212;</option>
+            @foreach (var pr in new[] { (&quot;01&quot;,&quot;01 &#8212; Cardado&quot;), (&quot;20&quot;,&quot;20 &#8212; Peinado&quot;), (&quot;24&quot;,&quot;24 &#8212; P.Gaseado&quot;) })
+            {
+                if (Model.FiltroProceso == pr.Item1)
+                { <option value="@pr.Item1" selected>@pr.Item2</option> }
+                else
+                { <option value="@pr.Item1">@pr.Item2</option> }
+            }
+        </select>
+
+        @* Estado pedido *@
+        <select name="estado" class="form-select form-select-sm" style="width:120px;font-size:.73rem;" title="Estado del pedido">
+            <option value="">&#8212; Estado &#8212;</option>
+            @foreach (var est in new[] { (&quot;0&quot;,&quot;Sin Aprobar&quot;), (&quot;5&quot;,&quot;Aprobado&quot;), (&quot;6&quot;,&quot;Cerrado&quot;), (&quot;9&quot;,&quot;Anulado&quot;) })
+            {
+                if (Model.FiltroEstado == est.Item1)
+                { <option value="@est.Item1" selected>@est.Item2</option> }
+                else
+                { <option value="@est.Item1">@est.Item2</option> }
+            }
+        </select>
+
+        @* Tipo de fibra *@
+        <select name="tfibra" class="form-select form-select-sm" style="width:138px;font-size:.73rem;" title="Tipo de fibra">
+            <option value="">&#8212; Fibra &#8212;</option>
+            @foreach (var tf in tfibras)
+            {
+                if (Model.FiltroTfibra == tf.cod)
+                { <option value="@tf.cod" selected>@tf.cod &#8212; @tf.desc</option> }
+                else
+                { <option value="@tf.cod">@tf.cod &#8212; @tf.desc</option> }
+            }
+        </select>
+
+        @* Estado proceso PLN *@
+        <select name="paso_actual" class="form-select form-select-sm" style="width:160px;font-size:.73rem;" title="Estado del proceso">
+            <option value="">&#8212; Est. Proceso &#8212;</option>
+            @foreach (var paso in pasosActivos)
+            {
+                if (Model.FiltroPasoActual == paso)
+                { <option value="@paso" selected>@paso</option> }
+                else
+                { <option value="@paso">@paso</option> }
+            }
+        </select>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        <button type="submit" class="btn btn-sm btn-primary" style="font-size:.73rem;padding:.2rem .55rem;">
+            <i class="bi bi-funnel-fill me-1"></i>Filtrar
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetForm()" style="font-size:.73rem;padding:.2rem .5rem;" title="Limpiar filtros">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+
+    @* FILA 3 | Agrupamiento + herramientas de vista *@
+    <div class="d-flex align-items-center gap-1" style="flex-wrap:nowrap;">
+
+        @* Agrupamiento *@
+        <div class="btn-group btn-group-sm" id="groupBtns" role="group">
+            <button type="button" class="btn btn-primary"         data-group="dia"     >&#128197; Día</button>
+            <button type="button" class="btn btn-outline-primary" data-group="servicio">&#127981; Servicio</button>
+            <button type="button" class="btn btn-outline-primary" data-group="familia" >&#129525; Línea</button>
+            <button type="button" class="btn btn-outline-primary" data-group="cliente" >&#128100; Cliente</button>
+            <button type="button" class="btn btn-outline-primary" data-group="proceso" >&#9881;&#65039; Proceso</button>
+            <button type="button" class="btn btn-outline-primary" data-group="paso"    >&#128260; Est.Proc.</button>
+            <button type="button" class="btn btn-outline-primary" data-group="none"    >&#128203; Plano</button>
+        </div>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        @* Toggle columnas *@
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" style="font-size:.7rem;padding:.2rem .45rem;">
+                <i class="bi bi-layout-three-columns"></i> Cols
+            </button>
+            <ul class="dropdown-menu p-2" style="min-width:170px;font-size:.76rem;" id="colToggleMenu">
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colTfibra" checked> T.Fibra</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colPaso"   checked> Estado Proceso</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colColor"  checked> Color</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colLinea"  checked> Línea / Familia</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colVende"        > Vendedor</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colFechAprob"    > F. Aprobación</label></li>
+                <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colDetalle"      > Observación</label></li>
+            </ul>
+        </div>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        @* Colapsar / Expandir *@
+        <button type="button" id="btnCollapseAll" class="btn btn-sm btn-outline-secondary" onclick="collapseAll()" style="font-size:.7rem;padding:.2rem .4rem;" title="Colapsar todos">
+            <i class="bi bi-arrows-collapse"></i>
+        </button>
+        <button type="button" id="btnExpandAll"   class="btn btn-sm btn-outline-secondary" onclick="expandAll()"   style="font-size:.7rem;padding:.2rem .4rem;" title="Expandir todos">
+            <i class="bi bi-arrows-expand"></i>
+        </button>
+
+        <div style="width:1px;height:1.25rem;background:#dee2e6;flex-shrink:0;margin:0 .2rem;"></div>
+
+        @* CSV *@
+        <button type="button" class="btn btn-sm btn-outline-success" onclick="exportCSV()" style="font-size:.7rem;padding:.2rem .45rem;">
+            <i class="bi bi-download me-1"></i>CSV
+        </button>
+    </div>
+
+</div>
+</form>

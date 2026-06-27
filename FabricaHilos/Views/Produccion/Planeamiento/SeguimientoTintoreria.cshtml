@@ -150,473 +150,69 @@
 @section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
-/* ════════════════════════════════════════════════════════════
-   PANEL PRINCIPAL
-   ════════════════════════════════════════════════════════════ */
-.spt-card {
-    border: 1px solid #d1d9e6;
-    border-radius: .6rem;
-    overflow: hidden;
-    box-shadow: 0 2px 12px rgba(15,41,71,.10);
-    margin-bottom: .6rem;
-}
-.spt-card + .spt-card {
-    margin-top: .6rem;
-}
-
-/* ── Header ─────────────────────────────────────────────────── */
-.spt-header {
-    background: linear-gradient(135deg, #0f2947 0%, #1a4971 60%, #1e5a8a 100%);
-    padding: .6rem 1.1rem;
-    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-}
-.spt-header-title {
-    font-size: .82rem; font-weight: 800; letter-spacing: .07em;
-    text-transform: uppercase; color: #e2f0ff; white-space: nowrap;
-}
-.spt-sep { width: 1px; height: 1rem; background: rgba(255,255,255,.22); flex-shrink: 0; }
-.spt-kpi {
-    display: inline-flex; align-items: center; gap: .3rem;
-    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15);
-    border-radius: 999px; padding: .2rem .7rem; font-size: .71rem; color: #cde4ff; white-space: nowrap;
-}
-.spt-kpi b { font-size: .82rem; color: #fff; }
-
-/* ── Bloque de filtros ───────────────────────────────────────── */
-.spt-filters {
-    background: #f4f7fb;
-    border-bottom: 1px solid #d1d9e6;
-    padding: .75rem 1rem .6rem;
-}
-.spt-filters-row1 {
-    display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
-    padding-bottom: .55rem;
-    border-bottom: 1px dashed #d1d9e6;
-    margin-bottom: .55rem;
-}
-.spt-filters-row2 {
-    display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
-}
-.spt-fld { display: flex; flex-direction: column; gap: .18rem; }
-.spt-label {
-    font-size: .69rem; font-weight: 700; color: #4a6080;
-    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
-    display: flex; align-items: center; gap: .25rem;
-}
-.spt-label i { font-size: .75rem; opacity: .7; }
-.spt-ctrl {
-    font-size: .78rem !important;
-    border-radius: .32rem !important;
-    border: 1px solid #bfcad8 !important;
-    background: #fff !important;
-    color: #1e2d3d !important;
-    padding: .28rem .55rem !important;
-    height: auto !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04) !important;
-    transition: border-color .15s, box-shadow .15s;
-}
-.spt-ctrl:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important;
-    outline: none !important;
-}
-.spt-btn-buscar {
-    background: #1a4971; color: #fff; border: none;
-    border-radius: .35rem; font-size: .78rem; font-weight: 600;
-    padding: .32rem .9rem; cursor: pointer;
-    display: inline-flex; align-items: center; gap: .3rem;
-    transition: background .15s, transform .1s;
-    box-shadow: 0 2px 4px rgba(0,0,0,.15);
-}
-.spt-btn-buscar:hover  { background: #0f2947; transform: translateY(-1px); }
-.spt-btn-buscar:active { transform: translateY(0); }
-.spt-btn-limpiar {
-    background: #fff; color: #64748b; border: 1px solid #bfcad8;
-    border-radius: .35rem; font-size: .78rem; font-weight: 500;
-    padding: .32rem .8rem; cursor: pointer; text-decoration: none;
-    display: inline-flex; align-items: center; gap: .3rem;
-    transition: border-color .15s, color .15s;
-}
-.spt-btn-limpiar:hover { border-color: #94a3b8; color: #1e2d3d; }
-
-/* ── Chips de filtros activos ──────────────────────────────── */
-.spt-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem 1rem; background: #edf2f7; border-bottom: 1px solid #d1d9e6; }
-
-/* ── Barra de filtros client-side (sobre data cargada) ──────── */
-.cf-bar {
-    display: flex; flex-wrap: wrap; gap: .45rem; align-items: flex-end;
-    padding: .5rem 1rem .45rem;
-    background: #f0f4ff;
-    border-bottom: 2px solid #c7d7f9;
-}
-.cf-bar .spt-label { color: #2563eb; }
-.cf-badge {
-    display: inline-flex; align-items: center; gap: .25rem;
-    background: #1a4971; color: #e2f0ff;
-    border-radius: .28rem; padding: .2rem .55rem;
-    font-size: .68rem; font-weight: 700; white-space: nowrap;
-    letter-spacing: .04em;
-}
-.cf-count {
-    font-size: .72rem; color: #2563eb; font-weight: 700;
-    background: #dbeafe; border: 1px solid #93c5fd;
-    border-radius: .28rem; padding: .15rem .5rem;
-    white-space: nowrap; align-self: flex-end; margin-bottom: .08rem;
-}
-.cf-reset {
-    background: #fff; color: #64748b; border: 1px solid #bfcad8;
-    border-radius: .28rem; font-size: .72rem; padding: .2rem .55rem;
-    cursor: pointer; align-self: flex-end; margin-bottom: .05rem;
-    display: inline-flex; align-items: center; gap: .2rem;
-    transition: border-color .15s;
-}
-.cf-reset:hover { border-color: #94a3b8; color: #1e2d3d; }
-.spt-chip {
-    display: inline-flex; align-items: center; gap: .25rem;
-    background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe;
-    border-radius: 999px; padding: .12rem .55rem; font-size: .68rem; font-weight: 600;
-}
-.spt-chip-label { color: #64748b; font-weight: 500; }
-
-/* ── Tabla ─────────────────────────────────────────────────────────── */
-.spt-table-wrap {
-    overflow-x: auto;
-    max-height: calc(100vh - 290px);
-    overflow-y: auto;
-    position: relative;
-}
-.spt-table-wrap::-webkit-scrollbar { height: 6px; width: 6px; }
-.spt-table-wrap::-webkit-scrollbar-track { background: #f1f5f9; }
-.spt-table-wrap::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
-.spt-table-wrap::-webkit-scrollbar-thumb:hover { background: #64748b; }
-
-#stTable {
-    table-layout: auto; width: 100%; min-width: 3200px;
-    border-collapse: collapse; border-spacing: 0;
-}
-
-/* ── thead: fila de grupos (azul oscuro) ──────────────────────────── */
-#stTable thead tr.thead-grupos th {
-    font-size: .60rem; font-weight: 700; letter-spacing: .07em;
-    text-transform: uppercase; white-space: nowrap;
-    background: #1a4971; color: #e8f0fa;
-    padding: .22rem .4rem; text-align: center;
-    border-bottom: 2px solid #f59e0b;
-    position: sticky; top: 0; z-index: 12;
-    line-height: 1.3;
-}
-/* columnas fijas en fila de grupos: z-index mayor */
-#stTable thead tr.thead-grupos th.fc-5,
-#stTable thead tr.thead-grupos th.fc-6,
-#stTable thead tr.thead-grupos th.fc-7,
-#stTable thead tr.thead-grupos th.fc-8 { z-index: 22; }
-
-/* ── thead: fila de columnas individuales ─────────────────────────── */
-#stTable thead tr.thead-cols th {
-    font-size: .60rem; font-weight: 700; letter-spacing: .02em;
-    text-transform: uppercase; white-space: nowrap;
-    background: #dde5f0; color: #1e2d3d;
-    padding: .22rem .4rem; text-align: center;
-    border-bottom: 2px solid #a8bbcf;
-    position: sticky; top: var(--thead-grp-h, 28px); z-index: 11;
-    line-height: 1.3;
-}
-/* columnas fijas en fila de columnas: z-index mayor */
-#stTable thead tr.thead-cols th.fc-5,
-#stTable thead tr.thead-cols th.fc-6,
-#stTable thead tr.thead-cols th.fc-7,
-#stTable thead tr.thead-cols th.fc-8 { z-index: 21; background: #ccd7ea; }
-
-/* hover en toda la cabecera */
-#stTable thead th:hover { filter: brightness(.93); }
-
-/* ── tbody ─────────────────────────────────────────────────────────── */
-#stTable tbody td {
-    font-size: .70rem; vertical-align: middle;
-    padding: .22rem .38rem;
-    border-bottom: 1px solid #edf2f7;
-    white-space: nowrap;
-}
-#stTable tbody tr:nth-child(even) td { background: #f8fafc; }
-#stTable tbody tr:nth-child(odd)  td { background: #fff; }
-#stTable tbody tr:hover td { background: #eff6ff !important; }
-#stTable tbody tr.row-retraso:nth-child(even) td { background: #fef2f2 !important; }
-#stTable tbody tr.row-retraso:nth-child(odd)  td { background: #fff5f5 !important; }
-#stTable tbody tr.row-retraso:hover td { background: #fee2e2 !important; }
-
-/* ── Columnas fijas (sticky left) — primeras 8 cols ──────────────────── */
-#stTable .fc-1  { position: sticky; left:   0px; z-index: 3; min-width:  38px; max-width:  38px; display:none; }
-#stTable .fc-2  { position: sticky; left:  38px; z-index: 3; min-width:  46px; max-width:  46px; display:none; }
-#stTable .fc-3  { position: sticky; left:  84px; z-index: 3; min-width:  42px; max-width:  42px; display:none; }
-#stTable .fc-4  { position: sticky; left: 126px; z-index: 3; min-width:  38px; max-width:  38px; display:none; }
-#stTable .fc-5  { position: sticky; left:   0px; z-index: 3; min-width: 106px; max-width: 106px; }
-#stTable .fc-6  { position: sticky; left: 106px; z-index: 3; min-width: 130px; max-width: 130px; }
-#stTable .fc-7  { position: sticky; left: 236px; z-index: 3; min-width: 200px; max-width: 200px; }
-#stTable .fc-8  { position: sticky; left: 436px; z-index: 3; min-width:  38px; max-width:  38px; }
-
-/* Sombra derecha en la última columna fija para separar visualmente */
-#stTable .fc-8 { box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
-
-/* Columnas Ne y Mat ocultas (no eliminadas) */
-#stTable .col-ne  { display: none; }
-#stTable .col-mat { display: none; }
-/* Columnas De y Bp ocultas (no eliminadas) */
-#stTable .col-de    { display: none; }
-#stTable .col-bp    { display: none; }
-/* Columna KG_PEDIDO visible */
-#stTable .col-kgped { /* visible — no ocultar */ }
-
-/* Fondo base para celdas fijas
-#stTable tbody tr:nth-child(even) td.fc-1,
-#stTable tbody tr:nth-child(even) td.fc-2,
-#stTable tbody tr:nth-child(even) td.fc-3,
-#stTable tbody tr:nth-child(even) td.fc-4,
-#stTable tbody tr:nth-child(even) td.fc-5,
-#stTable tbody tr:nth-child(even) td.fc-6,
-#stTable tbody tr:nth-child(even) td.fc-7,
-#stTable tbody tr:nth-child(even) td.fc-8  { background: #f8fafc; }
-#stTable tbody tr:nth-child(odd) td.fc-1,
-#stTable tbody tr:nth-child(odd) td.fc-2,
-#stTable tbody tr:nth-child(odd) td.fc-3,
-#stTable tbody tr:nth-child(odd) td.fc-4,
-#stTable tbody tr:nth-child(odd) td.fc-5,
-#stTable tbody tr:nth-child(odd) td.fc-6,
-#stTable tbody tr:nth-child(odd) td.fc-7,
-#stTable tbody tr:nth-child(odd) td.fc-8   { background: #fff; }
-#stTable tbody tr:hover td.fc-1,
-#stTable tbody tr:hover td.fc-2,
-#stTable tbody tr:hover td.fc-3,
-#stTable tbody tr:hover td.fc-4,
-#stTable tbody tr:hover td.fc-5,
-#stTable tbody tr:hover td.fc-6,
-#stTable tbody tr:hover td.fc-7,
-#stTable tbody tr:hover td.fc-8            { background: #eff6ff !important; }
-#stTable tbody tr.row-retraso td.fc-1,
-#stTable tbody tr.row-retraso td.fc-2,
-#stTable tbody tr.row-retraso td.fc-3,
-#stTable tbody tr.row-retraso td.fc-4,
-#stTable tbody tr.row-retraso td.fc-5,
-#stTable tbody tr.row-retraso td.fc-6,
-#stTable tbody tr.row-retraso td.fc-7,
-#stTable tbody tr.row-retraso td.fc-8      { background: #fff5f5 !important; }
-
-/* Fondo en thead: fila grupos = azul oscuro, fila cols = gris-azul */
-#stTable thead tr.thead-grupos th.fc-1,
-#stTable thead tr.thead-grupos th.fc-2,
-#stTable thead tr.thead-grupos th.fc-3,
-#stTable thead tr.thead-grupos th.fc-4,
-#stTable thead tr.thead-grupos th.fc-5,
-#stTable thead tr.thead-grupos th.fc-6,
-#stTable thead tr.thead-grupos th.fc-7,
-#stTable thead tr.thead-grupos th.fc-8 { background: #1a4971; z-index: 22; }
-#stTable thead tr.thead-cols th.fc-1,
-#stTable thead tr.thead-cols th.fc-2,
-#stTable thead tr.thead-cols th.fc-3,
-#stTable thead tr.thead-cols th.fc-4,
-#stTable thead tr.thead-cols th.fc-5,
-#stTable thead tr.thead-cols th.fc-6,
-#stTable thead tr.thead-cols th.fc-7,
-#stTable thead tr.thead-cols th.fc-8  { background: #ccd7ea; z-index: 21; }
-
-/* tfoot */
-#stTable tfoot td.fc-1,
-#stTable tfoot td.fc-2,
-#stTable tfoot td.fc-3,
-#stTable tfoot td.fc-4,
-#stTable tfoot td.fc-5,
-#stTable tfoot td.fc-6,
-#stTable tfoot td.fc-7,
-#stTable tfoot td.fc-8  { background: #dee2e6; position: sticky; z-index: 3; }
-#stTable tfoot td.fc-1  { left:   0px; }
-#stTable tfoot td.fc-2  { left:  38px; }
-#stTable tfoot td.fc-3  { left:  84px; }
-#stTable tfoot td.fc-4  { left: 126px; }
-#stTable tfoot td.fc-5  { left:   0px; }
-#stTable tfoot td.fc-6  { left: 106px; }
-#stTable tfoot td.fc-7  { left: 236px; }
-#stTable tfoot td.fc-8  { left: 436px; box-shadow: 3px 0 6px -2px rgba(0,0,0,.18); }
-
-
-/* ── Separadores de grupo en la tabla ─────────────────────── */
-.col-sep { border-left: 2px solid #d1d9e6 !important; }
-
-.th-grupo {
-    text-align: center;
-    font-size: .58rem;
-    font-weight: 700;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    color: #e2f0ff;
-    background: #1a4971;
-    border-bottom: 2px solid #f59e0b;
-    padding: 2px 5px;
-    line-height: 1.4;
-}
-.th-grupo-adicional {
-    text-align: center;
-    font-size: .63rem;
-    font-weight: 700;
-    letter-spacing: .06em;
-    white-space: nowrap;
-    color: #856404;
-    background: #fff3cd;
-    border-bottom: 2px solid #ffc107;
-    padding: 2px 6px;
-}
-
-/* ── Badges ───────────────────────────────────────────────── */
-.eb {
-    display: inline-flex; align-items: center; gap: .2rem;
-    border-radius: .22rem; padding: .08rem .3rem;
-    font-size: .63rem; font-weight: 600; white-space: nowrap;
-}
-.eb-ok   { background: #d1fae5; color: #065f46; }
-.eb-sin  { background: #f1f5f9; color: #94a3b8; }
-.eb-proc { background: #dbeafe; color: #1e40af; }
-.eb-est  { background: #e0e7ff; color: #3730a3; }
-
-.dias-ok  { color: #059669; font-weight: 700; }
-.dias-ret { color: #dc2626; font-weight: 700; }
-
-/* ── Footer tabla ─────────────────────────────────────────── */
-.spt-footer {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: .45rem .9rem; background: #f4f7fb;
-    border-top: 1px solid #d1d9e6; font-size: .71rem; color: #64748b;
-    flex-wrap: wrap; gap: .4rem;
-}
-.spt-legend { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-
-/* ── Paginación ─────────────────────────────────────────────────────────── */
-.pg-bar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
-    padding: .38rem .9rem;
-    background: #f0f4ff; border-bottom: 1px solid #c7d7f9;
-    font-size: .72rem;
-}
-.pg-info {
-    font-size: .71rem; color: #2563eb; font-weight: 700;
-    background: #dbeafe; border: 1px solid #93c5fd;
-    border-radius: .28rem; padding: .12rem .45rem; white-space: nowrap;
-    margin-left: auto;
-}
-.pg-size {
-    font-size: .72rem; border: 1px solid #bfcad8; border-radius: .28rem;
-    background: #fff; color: #1e2d3d; padding: .18rem .45rem;
-    cursor: pointer;
-}
-.pg-btn {
-    border: 1px solid #bfcad8; border-radius: .28rem;
-    background: #fff; color: #334155; padding: .18rem .55rem;
-    font-size: .72rem; cursor: pointer; display: inline-flex; align-items: center; gap: .2rem;
-    transition: background .12s, border-color .12s;
-    white-space: nowrap;
-}
-.pg-btn:hover:not(:disabled) { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
-.pg-btn:disabled { opacity: .4; cursor: not-allowed; }
-.pg-btn.pg-active { background: #1a4971; color: #fff; border-color: #1a4971; font-weight: 700; }
-.pg-nums { display: flex; gap: .2rem; flex-wrap: wrap; }
-
-/* ── Separador vertical en cf-bar ── */
-.cf-vsep { width:1px; height:28px; background:#c7d7f9; align-self:flex-end; margin-bottom:.32rem; flex-shrink:0; }
-
-/* ── Botones de mes (estilo imagen: cuadrados numerados) ── */
-.cf-mes-btns { display:flex; gap:.18rem; flex-wrap:wrap; }
-.cf-mes-btn {
-    width: 24px; height: 24px; border-radius: 4px;
-    border: 1px solid #9cb3d0; background: #e8f0fb; color: #1a4971;
-    font-size: .65rem; font-weight: 700; cursor: pointer; line-height: 1;
-    display: inline-flex; align-items: center; justify-content: center;
-    transition: background .12s, border-color .12s, color .12s;
-    padding: 0;
-}
-.cf-mes-btn:hover   { background: #cfe0f5; border-color: #1a4971; }
-.cf-mes-btn.active  { background: #1a4971; color: #fff; border-color: #0f2947; }
-.cf-mes-sf { width: auto; padding: 0 6px; font-size: .6rem; }
-
-/* ── Panel de acción (colorear seleccionados) ── */
-.st-color-bar {
-    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-    padding: .38rem 1rem; background: #fffbea;
-    border-bottom: 2px solid #fde68a; font-size: .75rem;
-    position: relative;
-}
-.st-cb-label { font-weight: 700; color: #92400e; white-space: nowrap; }
-.st-cb-btn {
-    display: inline-flex; align-items: center; gap: .25rem;
-    background: #1a4971; color: #fff; border: none;
-    border-radius: .32rem; font-size: .74rem; font-weight: 600;
-    padding: .28rem .75rem; cursor: pointer;
-    transition: background .12s;
-}
-.st-cb-btn:hover  { background: #0f2947; }
-.st-cb-clr { background: #6c757d; }
-.st-cb-clr:hover { background: #495057; }
-
-/* ── Paleta flotante ── */
-.st-paleta {
-    position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
-    background: #fff; border: 1px solid #d1d9e6;
-    border-radius: .45rem; box-shadow: 0 6px 20px rgba(0,0,0,.18);
-    padding: .45rem; display: flex; gap: .35rem; flex-wrap: wrap;
-    min-width: 200px;
-}
-.st-pal-item {
-    flex: 0 0 calc(50% - .18rem);
-    border-radius: .3rem; padding: .28rem .5rem;
-    font-size: .68rem; font-weight: 700; color: #fff;
-    cursor: pointer; text-align: center; white-space: nowrap;
-    border: 2px solid transparent;
-    transition: transform .1s, border-color .1s;
-}
-.st-pal-item:hover { transform: scale(1.05); border-color: rgba(0,0,0,.3); }
-
-/* ── Checkbox col ── */
-#stTable .col-chk { width: 28px; min-width: 28px; max-width: 28px; text-align: center; padding: 0 4px; }
-#stTable .col-chk input[type=checkbox] { cursor: pointer; width: 14px; height: 14px; }
-
-/* ── Fila coloreada por etiqueta ── */
-#stTable tbody tr.row-etiqueta td { transition: background-color .2s; }
-
-/* ── Col Área Responsable ── */
-#stTable .col-area { min-width: 155px; }
-.area-input {
-    width: 100%; font-size: .7rem; border: 1px solid #bfcad8; border-radius: .25rem;
-    padding: .15rem .3rem; background: #fafafa; resize: none; height: 28px;
-}
-.area-input:focus { border-color: #3b82f6; outline: none; background: #fff; }
-
-/* ── Multi-select dropdown (Est.Flujo) ── */
-.cf-msel-wrap { position: relative; }
-.cf-msel-btn {
-    text-align: left !important; cursor: pointer;
-    display: flex !important; align-items: center; justify-content: space-between; gap: .3rem;
-    white-space: nowrap; overflow: hidden; min-width: 130px;
-}
-.cf-msel-panel {
-    position: fixed; z-index: 9000;
-    background: #fff; border: 1px solid #bfcad8; border-radius: .35rem;
-    box-shadow: 0 6px 16px rgba(0,0,0,.14); padding: .3rem .45rem;
-    min-width: 210px; max-height: 260px; overflow-y: auto;
-}
-.cf-msel-item {
-    display: flex; align-items: center; gap: .4rem;
-    padding: .22rem .3rem; border-radius: .22rem; cursor: pointer;
-    font-size: .76rem; color: #1e2d3d; transition: background .1s;
-    white-space: nowrap; margin: 0; font-weight: 400;
-}
-.cf-msel-item:hover { background: #eff6ff; }
-.cf-msel-item input[type=checkbox] { cursor: pointer; width: 13px; height: 13px; flex-shrink: 0; }
-.cf-msel-footer {
-    display: flex; gap: .35rem; padding: .28rem .3rem 0; margin-top: .25rem;
-    border-top: 1px solid #e2e8f0;
-}
-.cf-msel-clr {
-    font-size: .68rem; color: #64748b; background: none; border: none;
-    cursor: pointer; padding: .1rem .3rem; border-radius: .2rem;
-}
-.cf-msel-clr:hover { color: #dc2626; }
+.spt-card{border:1px solid #d1d9e6;border-radius:.6rem;overflow:hidden;box-shadow:0 2px 12px rgba(15,41,71,.10);margin-bottom:.6rem;}
+.spt-card+.spt-card{margin-top:.6rem;}
+.spt-table-wrap{overflow-x:auto;max-height:calc(100vh - 290px);overflow-y:auto;position:relative;}
+.spt-table-wrap::-webkit-scrollbar{height:6px;width:6px;}
+.spt-table-wrap::-webkit-scrollbar-track{background:#f1f5f9;}
+.spt-table-wrap::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
+#stTable{table-layout:auto;width:100%;min-width:3200px;border-collapse:collapse;border-spacing:0;}
+#stTable thead tr.thead-grupos th{font-size:.60rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;background:#1a4971;color:#e8f0fa;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #f59e0b;position:sticky;top:0;z-index:12;}
+#stTable thead tr.thead-grupos th.fc-5,#stTable thead tr.thead-grupos th.fc-6,#stTable thead tr.thead-grupos th.fc-7,#stTable thead tr.thead-grupos th.fc-8{z-index:22;}
+#stTable thead tr.thead-cols th{font-size:.60rem;font-weight:700;text-transform:uppercase;white-space:nowrap;background:#dde5f0;color:#1e2d3d;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #a8bbcf;position:sticky;top:var(--thead-grp-h,28px);z-index:11;}
+#stTable thead tr.thead-cols th.fc-5,#stTable thead tr.thead-cols th.fc-6,#stTable thead tr.thead-cols th.fc-7,#stTable thead tr.thead-cols th.fc-8{z-index:21;background:#ccd7ea;}
+#stTable thead th:hover{filter:brightness(.93);}
+#stTable tbody td{font-size:.70rem;vertical-align:middle;padding:.22rem .38rem;border-bottom:1px solid #edf2f7;white-space:nowrap;}
+#stTable tbody tr:nth-child(even) td{background:#f8fafc;}
+#stTable tbody tr:nth-child(odd) td{background:#fff;}
+#stTable tbody tr:hover td{background:#eff6ff !important;}
+#stTable tbody tr.row-retraso:nth-child(even) td{background:#fef2f2 !important;}
+#stTable tbody tr.row-retraso:nth-child(odd) td{background:#fff5f5 !important;}
+#stTable tbody tr.row-retraso:hover td{background:#fee2e2 !important;}
+#stTable .fc-1{position:sticky;left:0px;z-index:3;min-width:38px;max-width:38px;display:none;}
+#stTable .fc-2{position:sticky;left:38px;z-index:3;min-width:46px;max-width:46px;display:none;}
+#stTable .fc-3{position:sticky;left:84px;z-index:3;min-width:42px;max-width:42px;display:none;}
+#stTable .fc-4{position:sticky;left:126px;z-index:3;min-width:38px;max-width:38px;display:none;}
+#stTable .fc-5{position:sticky;left:0px;z-index:3;min-width:106px;max-width:106px;}
+#stTable .fc-6{position:sticky;left:106px;z-index:3;min-width:130px;max-width:130px;}
+#stTable .fc-7{position:sticky;left:236px;z-index:3;min-width:200px;max-width:200px;}
+#stTable .fc-8{position:sticky;left:436px;z-index:3;min-width:38px;max-width:38px;box-shadow:3px 0 6px -2px rgba(0,0,0,.18);}
+#stTable .col-ne{display:none;}
+#stTable .col-mat{display:none;}
+#stTable .col-de{display:none;}
+#stTable .col-bp{display:none;}
+#stTable .col-chk{width:28px;min-width:28px;max-width:28px;text-align:center;padding:0 4px;}
+#stTable .col-chk input[type=checkbox]{cursor:pointer;width:14px;height:14px;}
+#stTable tbody tr.row-etiqueta td{transition:background-color .2s;}
+#stTable .col-area{min-width:155px;}
+.area-input{width:100%;font-size:.7rem;border:1px solid #bfcad8;border-radius:.25rem;padding:.15rem .3rem;background:#fafafa;resize:none;height:28px;}
+.area-input:focus{border-color:#3b82f6;outline:none;background:#fff;}
+.st-color-bar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.38rem 1rem;background:#fffbea;border-bottom:2px solid #fde68a;font-size:.75rem;position:relative;}
+.st-cb-label{font-weight:700;color:#92400e;white-space:nowrap;}
+.st-cb-btn{display:inline-flex;align-items:center;gap:.25rem;background:#1a4971;color:#fff;border:none;border-radius:.32rem;font-size:.74rem;font-weight:600;padding:.28rem .75rem;cursor:pointer;transition:background .12s;}
+.st-cb-btn:hover{background:#0f2947;}
+.st-cb-clr{background:#6c757d;}
+.st-cb-clr:hover{background:#495057;}
+.st-paleta{position:absolute;top:calc(100% + 4px);left:0;z-index:200;background:#fff;border:1px solid #d1d9e6;border-radius:.45rem;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:.45rem;display:flex;gap:.35rem;flex-wrap:wrap;min-width:200px;}
+.st-pal-item{flex:0 0 calc(50% - .18rem);border-radius:.3rem;padding:.28rem .5rem;font-size:.68rem;font-weight:700;color:#fff;cursor:pointer;text-align:center;white-space:nowrap;border:2px solid transparent;transition:transform .1s,border-color .1s;}
+.st-pal-item:hover{transform:scale(1.05);border-color:rgba(0,0,0,.3);}
+.cf-count{font-size:.72rem;color:#2563eb;font-weight:700;background:#dbeafe;border:1px solid #93c5fd;border-radius:.28rem;padding:.15rem .5rem;white-space:nowrap;align-self:flex-end;margin-bottom:.08rem;}
+.cf-reset{background:#fff;color:#64748b;border:1px solid #bfcad8;border-radius:.28rem;font-size:.72rem;padding:.2rem .55rem;cursor:pointer;align-self:flex-end;margin-bottom:.05rem;display:inline-flex;align-items:center;gap:.2rem;transition:border-color .15s;}
+.cf-reset:hover{border-color:#94a3b8;color:#1e2d3d;}
+.cf-mes-grp{display:flex;gap:.2rem;align-self:flex-end;flex-wrap:wrap;}
+.cf-mes-btn{font-size:.64rem;padding:.18rem .45rem;border-radius:.25rem;background:#fff;border:1px solid #bfcad8;color:#1e2d3d;cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap;}
+.cf-mes-btn:hover{background:#eff6ff;border-color:#93c5fd;}
+.cf-mes-btn.active{background:#1a4971;color:#fff;border-color:#1a4971;}
+.cf-mes-sf{width:auto;padding:0 6px;font-size:.6rem;}
+.cf-msel-wrap{position:relative;}
+.cf-msel-btn{text-align:left !important;cursor:pointer;display:flex !important;align-items:center;justify-content:space-between;gap:.3rem;white-space:nowrap;overflow:hidden;min-width:130px;}
+.cf-msel-panel{position:fixed;z-index:9000;background:#fff;border:1px solid #bfcad8;border-radius:.35rem;box-shadow:0 6px 16px rgba(0,0,0,.14);padding:.3rem .45rem;min-width:210px;max-height:260px;overflow-y:auto;}
+.cf-msel-item{display:flex;align-items:center;gap:.4rem;padding:.22rem .3rem;border-radius:.22rem;cursor:pointer;font-size:.76rem;color:#1e2d3d;transition:background .1s;white-space:nowrap;margin:0;font-weight:400;}
+.cf-msel-item:hover{background:#eff6ff;}
+.cf-msel-item input[type=checkbox]{cursor:pointer;width:13px;height:13px;flex-shrink:0;}
+.cf-msel-footer{display:flex;gap:.35rem;padding:.28rem .3rem 0;margin-top:.25rem;border-top:1px solid #e2e8f0;}
+.cf-msel-clr{font-size:.68rem;color:#64748b;background:none;border:none;cursor:pointer;padding:.1rem .3rem;border-radius:.2rem;}
+.cf-msel-clr:hover{color:#dc2626;}
 </style>
 }
 
@@ -631,44 +227,49 @@
 <div class="spt-card">
 
     @* ── Header ──────────────────────────────────────────────────────── *@
-    <div class="spt-header">
+    <div class="pend-strip">
         <i class="bi bi-grid-3x3-gap-fill" style="color:#93c5fd;font-size:1rem;flex-shrink:0;"></i>
-        <span class="spt-header-title">Seguimiento Programación Tintorería</span>
-        <span class="spt-sep"></span>
+        <span class="pend-strip-title">Seguimiento Programación Tintorería</span>
+        <span class="pend-strip-sep"></span>
         @if (buscado && items.Any())
         {
-            <span class="spt-kpi"><i class="bi bi-list-check"></i><b>@items.Count</b> registros</span>
-            <span class="spt-kpi" style="--c:#6ee7b7"><i class="bi bi-droplet-half" style="color:#6ee7b7"></i><b style="color:#6ee7b7">@conTenido</b> teñidos</span>
-            <span class="spt-kpi"><i class="bi bi-patch-check" style="color:#a5f3fc"></i><b style="color:#a5f3fc">@conCc</b> CC ok</span>
-            <span class="spt-kpi"><i class="bi bi-truck" style="color:#fcd34d"></i><b style="color:#fcd34d">@despachados</b> desp.</span>
+            <span class="pend-kpi"><i class="bi bi-list-check" style="color:#93c5fd;"></i><span class="pend-kpi-val">@items.Count</span> registros</span>
+            <span class="pend-kpi"><i class="bi bi-droplet-half" style="color:#6ee7b7"></i><span class="pend-kpi-val" style="color:#6ee7b7">@conTenido</span> teñidos</span>
+            <span class="pend-kpi"><i class="bi bi-patch-check" style="color:#a5f3fc"></i><span class="pend-kpi-val" style="color:#a5f3fc">@conCc</span> CC ok</span>
+            <span class="pend-kpi"><i class="bi bi-truck" style="color:#fcd34d"></i><span class="pend-kpi-val" style="color:#fcd34d">@despachados</span> desp.</span>
             @if (retrasados > 0)
             {
-                <span class="spt-kpi"><i class="bi bi-exclamation-triangle-fill" style="color:#f87171"></i><b style="color:#f87171">@retrasados</b> retraso</span>
+                <span class="pend-kpi"><i class="bi bi-exclamation-triangle-fill" style="color:#f87171"></i><span class="pend-kpi-val" style="color:#f87171">@retrasados</span> retraso</span>
             }
-            <span class="ms-auto" style="font-size:.68rem;color:rgba(200,225,255,.7);white-space:nowrap;">
+            <span class="pv-strip-ts">
                 <i class="bi bi-funnel me-1"></i>@opc
                 @if (opc == "POR PEDIDO")
-                { <span> · Ped. <b style="color:#fff">@numPed</b></span> }
+                { <span> &middot; Ped. <b style="color:#fff">@numPed</b></span> }
                 else
-                { <span> · <b style="color:#fff">@fchIni</b> → <b style="color:#fff">@fchFin</b></span> }
+                { <span> &middot; <b style="color:#fff">@fchIni</b> &rarr; <b style="color:#fff">@fchFin</b></span> }
             </span>
         }
         else if (!buscado)
         {
             <span style="font-size:.75rem;color:rgba(200,225,255,.7);">Aplica los filtros para consultar los datos.</span>
         }
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
+            </a>
+        </span>
     </div>
 
 
     @* ── Filtros ──────────────────────────────────────────────────────────────────────────────────────────────────────── *@
-    <div class="spt-filters">
+    <div class="pend-filter">
         <form method="get" asp-action="SeguimientoTintoreria" id="stForm">
 
             @* Fila 1: modo búsqueda + fechas + acciones *@
-            <div class="spt-filters-row1">
-                <div class="spt-fld">
-                    <label class="spt-label" for="stOpc"><i class="bi bi-search"></i>Buscar por</label>
-                    <select class="spt-ctrl" name="opc" id="stOpc" style="min-width:200px;">
+            <div class="pend-filter-row">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stOpc"><i class="bi bi-search"></i>Buscar por</label>
+                    <select class="pend-ctrl" name="opc" id="stOpc" style="min-width:200px;">
                         @foreach (var op in opciones)
                         {
                             <option value="@op" selected="@(opc == op ? "selected" : null)">@op</option>
@@ -676,28 +277,28 @@
                     </select>
                 </div>
 
-                <div class="spt-fld" id="stGrpFechas">
-                    <label class="spt-label" for="stFchIni"><i class="bi bi-calendar-event"></i>Fecha inicio</label>
-                    <input type="date" class="spt-ctrl" name="fchIni" id="stFchIni" value="@iniHtml" style="min-width:135px;" />
+                <div class="pend-fld" id="stGrpFechas">
+                    <label class="pend-label" for="stFchIni"><i class="bi bi-calendar-event"></i>Fecha inicio</label>
+                    <input type="date" class="pend-ctrl" name="fchIni" id="stFchIni" value="@iniHtml" style="min-width:135px;" />
                 </div>
-                <div class="spt-fld" id="stGrpFechaFin">
-                    <label class="spt-label" for="stFchFin"><i class="bi bi-calendar-check"></i>Fecha fin</label>
-                    <input type="date" class="spt-ctrl" name="fchFin" id="stFchFin" value="@finHtml" style="min-width:135px;" />
+                <div class="pend-fld" id="stGrpFechaFin">
+                    <label class="pend-label" for="stFchFin"><i class="bi bi-calendar-check"></i>Fecha fin</label>
+                    <input type="date" class="pend-ctrl" name="fchFin" id="stFchFin" value="@finHtml" style="min-width:135px;" />
                 </div>
 
-                <div class="spt-fld" id="stGrpNumPed" style="display:none;">
-                    <label class="spt-label" for="stNumPed"><i class="bi bi-hash"></i>N.° Pedido</label>
-                    <input type="number" class="spt-ctrl" name="numPed" id="stNumPed"
+                <div class="pend-fld" id="stGrpNumPed" style="display:none;">
+                    <label class="pend-label" for="stNumPed"><i class="bi bi-hash"></i>N.° Pedido</label>
+                    <input type="number" class="pend-ctrl" name="numPed" id="stNumPed"
                            value="@numPed" style="width:125px;" placeholder="Ej. 88797" />
                 </div>
 
-                <div class="spt-fld">
-                    <label class="spt-label" style="visibility:hidden;">Acción</label>
+                <div class="pend-fld">
+                    <label class="pend-label" style="visibility:hidden;">Acción</label>
                     <div style="display:flex;gap:.4rem;align-items:center;">
-                        <button type="submit" class="spt-btn-buscar">
+                        <button type="submit" class="btn btn-sm btn-primary">
                             <i class="bi bi-search"></i> Buscar
                         </button>
-                        <a asp-action="SeguimientoTintoreria" class="spt-btn-limpiar">
+                        <a asp-action="SeguimientoTintoreria" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-x-circle"></i> Limpiar
                         </a>
                     </div>
@@ -705,10 +306,10 @@
             </div>
 
             @* Fila 2: filtros adicionales (ocultos — se envían igual via form) *@
-            <div class="spt-filters-row2" style="display:none;">
-                <div class="spt-fld">
-                    <label class="spt-label" for="stCliente"><i class="bi bi-building"></i>Cliente</label>
-                    <select class="spt-ctrl" name="cliente" id="stCliente" style="min-width:260px;">
+            <div class="pend-filter-row" style="display:none;">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stCliente"><i class="bi bi-building"></i>Cliente</label>
+                    <select class="pend-ctrl" name="cliente" id="stCliente" style="min-width:260px;">
                         <option value="">— Todos —</option>
                         @foreach (var c in filtroClientes)
                         {
@@ -716,9 +317,9 @@
                         }
                     </select>
                 </div>
-                <div class="spt-fld">
-                    <label class="spt-label" for="stAsesor"><i class="bi bi-person-badge"></i>Asesor</label>
-                    <select class="spt-ctrl" name="asesor" id="stAsesor" style="min-width:210px;">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stAsesor"><i class="bi bi-person-badge"></i>Asesor</label>
+                    <select class="pend-ctrl" name="asesor" id="stAsesor" style="min-width:210px;">
                         <option value="">— Todos —</option>
                         @foreach (var a in filtroAsesores)
                         {
@@ -726,9 +327,9 @@
                         }
                     </select>
                 </div>
-                <div class="spt-fld">
-                    <label class="spt-label" for="stTitulo"><i class="bi bi-tag"></i>Título</label>
-                    <select class="spt-ctrl" name="titulo" id="stTitulo" style="min-width:180px;">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stTitulo"><i class="bi bi-tag"></i>Título</label>
+                    <select class="pend-ctrl" name="titulo" id="stTitulo" style="min-width:180px;">
                         <option value="">— Todos —</option>
                         @foreach (var t in filtroTitulos)
                         {
@@ -736,9 +337,9 @@
                         }
                     </select>
                 </div>
-                <div class="spt-fld">
-                    <label class="spt-label" for="stFibra"><i class="bi bi-layers"></i>Fibra</label>
-                    <select class="spt-ctrl" name="fibra" id="stFibra" style="min-width:190px;">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stFibra"><i class="bi bi-layers"></i>Fibra</label>
+                    <select class="pend-ctrl" name="fibra" id="stFibra" style="min-width:190px;">
                         <option value="">— Todas —</option>
                         @foreach (var f in filtroFibras)
                         {
@@ -746,9 +347,9 @@
                         }
                     </select>
                 </div>
-                <div class="spt-fld">
-                    <label class="spt-label" for="stProceso"><i class="bi bi-cpu"></i>Proceso</label>
-                    <select class="spt-ctrl" name="proceso" id="stProceso" style="min-width:220px;">
+                <div class="pend-fld">
+                    <label class="pend-label" for="stProceso"><i class="bi bi-cpu"></i>Proceso</label>
+                    <select class="pend-ctrl" name="proceso" id="stProceso" style="min-width:220px;">
                         <option value="">— Todos —</option>
                         @foreach (var p in filtroProcesos)
                         {
@@ -763,14 +364,14 @@
     @* ── Chips de filtros activos ─────────────────────────────────────── *@
     @if (buscado && (hayMesAno || hayCliente || hayAsesor || hayTitulo || hayFibra || hayProceso))
     {
-        <div class="spt-chips">
+        <div class="pend-chips">
             <span style="font-size:.68rem;color:#64748b;font-weight:600;margin-right:.2rem;">Filtros:</span>
-            @if (hayMesAno)  { <span class="spt-chip" style="background:#dbeafe;border-color:#93c5fd;"><span class="spt-chip-label">Mes</span> @nombresMes[stMes!.Value] @stAno</span> }
-            @if (hayCliente) { <span class="spt-chip"><span class="spt-chip-label">Cliente</span> @nombreCliente</span> }
-            @if (hayAsesor)  { <span class="spt-chip"><span class="spt-chip-label">Asesor</span>  @nombreAsesor</span>  }
-            @if (hayTitulo)  { <span class="spt-chip"><span class="spt-chip-label">Título</span>  @nombreTitulo</span>  }
-            @if (hayFibra)   { <span class="spt-chip"><span class="spt-chip-label">Fibra</span>   @nombreFibra</span>   }
-            @if (hayProceso) { <span class="spt-chip"><span class="spt-chip-label">Proceso</span> @nombreProceso</span> }
+            @if (hayMesAno)  { <span class="pend-chip" style="background:#dbeafe;border-color:#93c5fd;"><span class="pend-chip-label">Mes</span> @nombresMes[stMes!.Value] @stAno</span> }
+            @if (hayCliente) { <span class="pend-chip"><span class="pend-chip-label">Cliente</span> @nombreCliente</span> }
+            @if (hayAsesor)  { <span class="pend-chip"><span class="pend-chip-label">Asesor</span>  @nombreAsesor</span>  }
+            @if (hayTitulo)  { <span class="pend-chip"><span class="pend-chip-label">Título</span>  @nombreTitulo</span>  }
+            @if (hayFibra)   { <span class="pend-chip"><span class="pend-chip-label">Fibra</span>   @nombreFibra</span>   }
+            @if (hayProceso) { <span class="pend-chip"><span class="pend-chip-label">Proceso</span> @nombreProceso</span> }
         </div>
     }
 
@@ -797,7 +398,7 @@
     else
     {
         @* ── Barra de filtros client-side ── *@
-        <div class="cf-bar" id="cfBar">
+        <div class="pend-cfbar" id="cfBar">
 
             @* 0. Limpiar (primero) *@
             <button id="cfResetBtn" class="cf-reset" type="button">
@@ -807,8 +408,8 @@
             <div class="cf-vsep"></div>
 
             @* 1. MES — botones numéricos estilo imagen *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-calendar-month"></i>MES</label>
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-calendar-month"></i>MES</label>
                 <div class="cf-mes-btns" id="cfMesBtns">
                     @foreach (var m in cfMesesDisp) {
                         <button type="button" class="cf-mes-btn" data-mes="@m">@m</button>
@@ -820,9 +421,9 @@
             </div>
 
             @* Etiqueta (7 colores fijos) — filtro rápido *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-palette2"></i>Etiqueta</label>
-                <select class="spt-ctrl" id="cfEtiqueta" data-cf="colorhexa" style="min-width:115px;">
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-palette2"></i>Etiqueta</label>
+                <select class="pend-ctrl" id="cfEtiqueta" data-cf="colorhexa" style="min-width:115px;">
                     <option value="">Todas</option>
                     <option value="#dc3545">🔴 Etiqueta 1 (#dc3545)</option>
                     <option value="#fd7e14">🟠 Etiqueta 2 (#fd7e14)</option>
@@ -838,9 +439,9 @@
             <div class="cf-vsep"></div>
 
             @* 2. AÑO — select, default 2026 *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-calendar-check"></i>Año</label>
-                <select class="spt-ctrl" id="cfAno" data-cf="ano" style="min-width:68px;">
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-calendar-check"></i>Año</label>
+                <select class="pend-ctrl" id="cfAno" data-cf="ano" style="min-width:68px;">
                     <option value="">——</option>
                     @foreach (var y in cfAnosDisp) {
                         <option value="@y" selected="@(y == 2026 ? "selected" : null)">@y</option>
@@ -851,9 +452,9 @@
             <div class="cf-vsep"></div>
 
             @* 3. Partida *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-hash"></i>Partida</label>
-                <input type="text" class="spt-ctrl" data-cf="partida" list="dlPartida"
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-hash"></i>Partida</label>
+                <input type="text" class="pend-ctrl" data-cf="partida" list="dlPartida"
                        placeholder="Buscar…" style="min-width:90px;" autocomplete="off" />
                 <datalist id="dlPartida">
                     @foreach (var v in cfPartidaOpts) { <option value="@v"></option> }
@@ -861,9 +462,9 @@
             </div>
 
             @* 4. Material *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-box-seam"></i>Material</label>
-                <input type="text" class="spt-ctrl" data-cf="material" list="dlMaterial"
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-box-seam"></i>Material</label>
+                <input type="text" class="pend-ctrl" data-cf="material" list="dlMaterial"
                        placeholder="Buscar…" style="min-width:110px;" autocomplete="off" />
                 <datalist id="dlMaterial">
                     @foreach (var v in cfMaterialOpts) { <option value="@v"></option> }
@@ -871,9 +472,9 @@
             </div>
 
             @* 5. Cliente *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-building"></i>Cliente</label>
-                <input type="text" class="spt-ctrl" data-cf="cliente" list="dlCliente"
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-building"></i>Cliente</label>
+                <input type="text" class="pend-ctrl" data-cf="cliente" list="dlCliente"
                        placeholder="Buscar…" style="min-width:120px;" autocomplete="off" />
                 <datalist id="dlCliente">
                     @foreach (var v in cfClienteOpts) { <option value="@v"></option> }
@@ -881,9 +482,9 @@
             </div>
 
             @* 6. Revisado (con/sin fecha revisado) *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-check2-all"></i>Revisado</label>
-                <select class="spt-ctrl" data-cf-ind="revisado" style="min-width:90px;">
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-check2-all"></i>Revisado</label>
+                <select class="pend-ctrl" data-cf-ind="revisado" style="min-width:90px;">
                     <option value="">Todos</option>
                     <option value="1">Con revisado</option>
                     <option value="0">Sin revisado</option>
@@ -891,36 +492,36 @@
             </div>
 
             @* 7. Procesos *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-cpu"></i>Proceso</label>
-                <select class="spt-ctrl" data-cf="proceso" style="min-width:100px;">
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-cpu"></i>Proceso</label>
+                <select class="pend-ctrl" data-cf="proceso" style="min-width:100px;">
                     <option value="">Todos</option>
                     @foreach (var v in filtroProcesos) { <option value="@v.Descripcion">@v.Descripcion</option> }
                 </select>
             </div>
 
             @* 8. Despachos *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-truck"></i>Despachos</label>
-                <select class="spt-ctrl" data-cf="estdesp" style="min-width:90px;">
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-truck"></i>Despachos</label>
+                <select class="pend-ctrl" data-cf="estdesp" style="min-width:90px;">
                     <option value="">Todos</option>
                     @foreach (var v in cfDespOpts) { <option value="@v">@v</option> }
                 </select>
             </div>
 
             @* 9. Fecha Entrega *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-calendar-event"></i>F.Entrega</label>
-                <input type="date" class="spt-ctrl" id="cfFchEntDes" data-cf-fch="fchent-des" style="min-width:120px;" title="Desde" />
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-calendar-event"></i>F.Entrega</label>
+                <input type="date" class="pend-ctrl" id="cfFchEntDes" data-cf-fch="fchent-des" style="min-width:120px;" title="Desde" />
             </div>
-            <div class="spt-fld">
-                <label class="spt-label" style="visibility:hidden;">F.Hasta</label>
-                <input type="date" class="spt-ctrl" id="cfFchEntHas" data-cf-fch="fchent-has" style="min-width:120px;" title="Hasta" />
+            <div class="pend-fld">
+                <label class="pend-label" style="visibility:hidden;">F.Hasta</label>
+                <input type="date" class="pend-ctrl" id="cfFchEntHas" data-cf-fch="fchent-has" style="min-width:120px;" title="Hasta" />
             </div>
 
             @* 10. Est. Flujo — multi-select *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-activity"></i>Est.Flujo</label>
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-activity"></i>Est.Flujo</label>
                 <div class="cf-msel-wrap" id="cfFlujoWrap">
                     <button type="button" class="spt-ctrl cf-msel-btn" id="cfFlujoBtn">
                         <span id="cfFlujoBtnTxt">Todos</span>
@@ -940,8 +541,8 @@
             </div>
 
             @* 11. Ev.Encon — multi-select (mismo patrón que Est.Flujo) *@
-            <div class="spt-fld">
-                <label class="spt-label"><i class="bi bi-check2-circle"></i>Ev.Encon</label>
+            <div class="pend-fld">
+                <label class="pend-label"><i class="bi bi-check2-circle"></i>Ev.Encon</label>
                 <div class="cf-msel-wrap" id="cfEvEnconWrap">
                     <button type="button" class="spt-ctrl cf-msel-btn" id="cfEvEnconBtn">
                         <span id="cfEvEnconBtnTxt">Todos</span>

@@ -45,11 +45,29 @@ public class RegistroPedidoItem
 
     // -- Estado del proceso (PLN_SEGUIMIENTO) --
     public string   PasoActual      { get; set; } = "";
+    public string   CodPasoAct      { get; set; } = "";
     public string   PasoActualColor { get; set; } = "#6c757d";
+    public int      DiasRetraso     { get; set; }
+    public string   IndRetraso      { get; set; } = "N";
+    public string   IndUrgente      { get; set; } = "N";
+    public long?    NumPartida      { get; set; }
+    public decimal  KgPendientes    { get; set; }
+    public DateTime? FchEntregaComp { get; set; }
 
-    // -- Tipo de fibra textil (V_TFIBRA) --
-    public string   Tfibra     { get; set; } = "";
-    public string   DescTfibra { get; set; } = "";
+    // -- Hilandería (ITEMPED_DET) --
+    public long?    NroRmc          { get; set; }
+    public string   Rmc             { get; set; } = "";
+    public string   DescRmc         { get; set; } = "";
+    public string   Lote            { get; set; } = "";
+    public DateTime? FhcEntrega     { get; set; }
+    public long?    Nroprog         { get; set; }
+    public string   EstadoProg      { get; set; } = "";
+    public string   Urgente         { get; set; } = "N";
+
+    // -- Tipo de fibra textil (H_FIBRA) --
+    // DescTfibra: backward-compat alias para DESC_FIBRA (antes V_TFIBRA, ahora H_FIBRA)
+    public string   DescTfibra     { get; set; } = "";
+    public string   DescFibra      { get => DescTfibra; set => DescTfibra = value; }
 
     // -- Nombre vendedor abreviado (TABLAS_AUXILIARES tipo=29) --
     public string   NombreVende     { get; set; } = "";
@@ -59,6 +77,9 @@ public class RegistroPedidoItem
 
     // -- Descripcion proceso (H_PROCESOS) --
     public string   NombreProcesoDb { get; set; } = "";
+
+    // -- Backward-compat: Tfibra (antes ITEMPED.TFIBRA char1, ahora = TipoFibra) --
+    public string   Tfibra { get => TipoFibra; }
 
     // -- Computed helpers --
 
@@ -133,15 +154,17 @@ public class RegistroPedidosViewModel
     }
 
     // -- Filtros activos --
-    public DateTime FchDesde      { get; set; }
-    public DateTime FchHasta      { get; set; }
-    public string   FiltroServ    { get; set; } = "";
-    public string   FiltroCliente { get; set; } = "";
-    public string   FiltroProceso { get; set; } = "";
-    public string   FiltroEstado  { get; set; } = "";
-    public string   FiltroTfibra  { get; set; } = "";
-    public string   FiltroPasoActual { get; set; } = "";
-    public string   FiltroGrupo   { get; set; } = "dia";
+    public DateTime? FchDesde         { get; set; }
+    public DateTime? FchHasta         { get; set; }
+    public DateTime? FchEntDesde      { get; set; }
+    public DateTime? FchEntHasta      { get; set; }
+    public string    FiltroServ       { get; set; } = "";
+    public string    FiltroCliente    { get; set; } = "";
+    public string    FiltroProceso    { get; set; } = "";
+    public string    FiltroEstado     { get; set; } = "";
+    public string    FiltroTfibra     { get; set; } = "";
+    public string    FiltroPasoActual { get; set; } = "";
+    public string    FiltroGrupo      { get; set; } = "dia";
 
     // -- KPIs (calculados en un unico pass al asignar Items) --
     public int     TotalPedidos    => _totalPedidos;

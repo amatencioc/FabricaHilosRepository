@@ -851,3 +851,158 @@
 /* ── Content grid uniforme para pares tt-lbl/tt-val ── */
 .tt-data-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .35rem .6rem; padding: .5rem; border-radius: 6px; }
 .tt-data-grid .tt-full { grid-column: 1/-1; }
+
+/* ══════════════════════════════════════════════════════════════
+   PENDIENTES — Header strip + filtros + tabla compartidos
+   Usado por: PendientesEnconado, PendientesTenido, PendientesEvalCalidad,
+              PendientesSecado, PendientesMadeja, PendientesRevisado,
+              PartidasPorDefinir.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Strip de cabecera oscuro con KPIs inline */
+.pend-strip {
+    background: linear-gradient(135deg, var(--pln-dark-bg) 0%, var(--pln-gray-700) 100%);
+    color: var(--pln-light-text);
+    border-radius: .5rem .5rem 0 0;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    border-bottom: 3px solid var(--pln-dark-deep);
+    box-shadow: var(--pln-shadow-md);
+}
+.pend-strip-title {
+    font-size: .82rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #f7fafc; white-space: nowrap;
+    margin-right: .25rem;
+}
+.pend-strip-sub {
+    font-size: .68rem; color: var(--pln-light-muted); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.pend-strip-sep { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.pend-kpi {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px; padding: .18rem .6rem;
+    font-size: .7rem; white-space: nowrap; color: var(--pln-light-text);
+}
+.pend-kpi-val { font-weight: 700; font-size: .82rem; }
+/* Variante para KPIs sobre fondo claro (fuera del strip oscuro) */
+.pend-kpi-light {
+    background: #f1f5f9; border: 1px solid #cbd5e1;
+    color: #1e293b;
+}
+.pend-strip-actions { margin-left: auto; display: flex; gap: .35rem; align-items: center; flex-shrink: 0; }
+.pv-strip-ts { margin-left: auto; font-size: .68rem; color: rgba(254,249,240,.7); white-space: nowrap; }
+
+/* Panel de filtros adherido al strip */
+.pend-filter {
+    background: #f8fafc;
+    border: 1px solid var(--pln-gray-200);
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    padding: .55rem .9rem;
+    margin-bottom: .85rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+}
+
+/* Tabla de datos estilo Dashboard */
+.pend-tbl { font-size: .77rem; background: #eef1f6; }
+.pend-tbl thead th {
+    font-size: .68rem; font-weight: 700; color: var(--pln-gray-600);
+    text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 2px solid #cdd4e0; padding: .28rem .45rem;
+    background: #e2e7f0;
+}
+.pend-tbl td { vertical-align: middle; }
+.pend-tbl tbody td { padding: .25rem .45rem; }
+.pend-tbl tbody tr { background: #eef1f6; }
+.pend-tbl tbody tr:hover td { background: #dde4f0; }
+.pend-tbl tfoot td { background: #e2e7f0; padding: .25rem .45rem; }
+
+/* ── Controles de formulario en paneles pend-filter ─────────────────────── */
+/* Campo compuesto: label + control apilados */
+.pend-fld { display: flex; flex-direction: column; gap: .18rem; }
+/* Label de filtro */
+.pend-label {
+    font-size: .69rem; font-weight: 700; color: #4a6080;
+    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+    display: flex; align-items: center; gap: .25rem;
+}
+.pend-label i { font-size: .75rem; opacity: .7; }
+/* Input / select en paneles de filtro */
+.pend-ctrl {
+    font-size: .78rem !important;
+    border-radius: .32rem !important;
+    border: 1px solid #bfcad8 !important;
+    background: #fff !important;
+    color: #1e2d3d !important;
+    padding: .28rem .55rem !important;
+    height: auto !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04) !important;
+    transition: border-color .15s, box-shadow .15s;
+}
+.pend-ctrl:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important;
+    outline: none !important;
+}
+
+/* ── Chips de filtros activos ────────────────────────────────────────────── */
+.pend-chips {
+    display: flex; flex-wrap: wrap; gap: .3rem;
+    padding: .4rem 1rem;
+    background: #edf2f7;
+    border: 1px solid #d1d9e6;
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    margin-bottom: .85rem;
+}
+.pend-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: #fff; border: 1px solid #bfcad8;
+    border-radius: .28rem; padding: .18rem .55rem;
+    font-size: .71rem; color: #1e2d3d; white-space: nowrap;
+}
+.pend-chip-label {
+    font-size: .63rem; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: .04em;
+}
+
+/* ── Fila de filtros dentro de pend-filter ───────────────────────────────── */
+.pend-filter-row {
+    display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
+}
+.pend-filter-row + .pend-filter-row {
+    padding-top: .55rem;
+    margin-top: .45rem;
+    border-top: 1px dashed #d1d9e6;
+}
+
+/* ── Barra de filtros client-side (sobre datos ya cargados) ──────────────── */
+.pend-cfbar {
+    display: flex; flex-wrap: wrap; gap: .45rem; align-items: flex-end;
+    padding: .5rem 1rem .45rem;
+    background: #f0f4ff;
+    border: 1px solid #c7d7f9;
+    border-top: none;
+    border-radius: 0 0 .45rem .45rem;
+    margin-bottom: .85rem;
+}
+.pend-cfbar .pend-label { color: #2563eb; }
+.pend-cfbadge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: #1a4971; color: #e2f0ff;
+    border-radius: .28rem; padding: .2rem .55rem;
+    font-size: .68rem; font-weight: 700; white-space: nowrap;
+    letter-spacing: .04em;
+}
+
+/* ── pv-label / pv-input (ProximosVencer) ────────────────────────────────── */
+.pv-label { font-size: .69rem; font-weight: 700; color: #4a6080;
+    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+    display: flex; align-items: center; gap: .25rem; margin-bottom: .1rem;
+}
+.pv-input { font-size: .78rem !important; }

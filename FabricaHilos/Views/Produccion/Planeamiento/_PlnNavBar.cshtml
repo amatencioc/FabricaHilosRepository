@@ -17,7 +17,6 @@
     bool esPendEvalCal     = ctrl == "Planeamiento" && act == "PendientesEvalCalidad";
     bool esPendEnconado    = ctrl == "Planeamiento" && act == "PendientesEnconado";
     bool esPendTenido      = ctrl == "Planeamiento" && act == "PendientesTenido";
-    bool esPartidasDef     = ctrl == "Planeamiento" && act == "PartidasPorDefinir";
     bool esPendSecado      = ctrl == "Planeamiento" && act == "PendientesSecado";
     bool esPendMadeja      = ctrl == "Planeamiento" && act == "PendientesMadeja";
 
@@ -27,7 +26,6 @@
         "PendientesDespacho"     => 180,
         "PendientesRevisado"     => 180,
         "PendientesEvalCalidad"  => 180,
-        "PartidasPorDefinir"     => 180,
         "PendientesSecado"       => 180,
         "PendientesMadeja"       => 180,
         "PendientesEnconado"     => 180,
@@ -110,16 +108,7 @@
             <li class="pln-navbar-item @(esPendEvalCal ? "active" : "")">
                 <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="pln-navbar-link">
                     <i class="bi bi-patch-check"></i>
-                    <span>Pend. Eval. Calidad</span>
-                </a>
-            </li>
-        }
-        @if (menus.PlaneamientoPendPartidasDef)
-        {
-            <li class="pln-navbar-item @(esPartidasDef ? "active" : "")">
-                <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="pln-navbar-link">
-                    <i class="bi bi-question-circle"></i>
-                    <span>Partidas por Definir</span>
+                    <span>Eval. Calidad</span>
                 </a>
             </li>
         }
@@ -137,7 +126,7 @@
             <li class="pln-navbar-item @(esPendRevisado ? "active" : "")">
                 <a asp-controller="Planeamiento" asp-action="PendientesRevisado" class="pln-navbar-link">
                     <i class="bi bi-clipboard2-check"></i>
-                    <span>Pend. Revisado</span>
+                    <span>Revisado</span>
                 </a>
             </li>
         }

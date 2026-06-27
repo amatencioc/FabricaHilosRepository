@@ -1,0 +1,292 @@
+@model FabricaHilos.Models.Capacitacion.CursoPlayerVm
+@{
+    ViewData["Title"] = Model.TituloCurso;
+    var actual = Model.Actual;
+    var curso  = Model.Curso;
+}
+
+@section Styles {
+<style>
+    body { overflow-x: hidden; }
+    .player-layout { display:grid; grid-template-columns:320px 1fr; min-height: calc(100vh - 60px); }
+    .lms-sidebar { overflow-y:auto; height: calc(100vh - 60px); background:#f8f9fa; border-right:1px solid #dee2e6; position:sticky; top:60px; }
+    .lms-lesson-item { padding:.5rem .75rem; border-radius:6px; cursor:pointer; transition:background .1s; }
+    .lms-lesson-item:hover { background:rgba(13,110,253,.06); }
+    .lms-lesson-item.active { background:rgba(13,110,253,.12); color:#0d6efd; font-weight:600; }
+    .lms-lesson-item.completed::after { content:'\F26B'; font-family:'bootstrap-icons'; color:#198754; float:right; }
+    .lms-lesson-item.locked { opacity:.5; pointer-events:none; }
+    .content-area { padding:2rem; }
+    .progress-top { height:4px; background:#dee2e6; }
+    .progress-top-bar { height:100%; background:#0d6efd; transition:width .3s; }
+    .video-wrapper { position:relative; padding-bottom:56.25%; height:0; border-radius:10px; overflow:hidden; background:#000; }
+    .video-wrapper video { position:absolute; top:0; left:0; width:100%; height:100%; }
+    .pdf-wrapper { width:100%; height:75vh; border:none; border-radius:10px; }
+    @@media (max-width:768px) {
+        .player-layout { grid-template-columns:1fr; }
+        .lms-sidebar { height:auto; position:relative; }
+    }
+</style>
+}
+
+<!-- Barra de progreso superior -->
+<div class="progress-top">
+    <div class="progress-top-bar" style="width:@Model.PctProgreso%"></div>
+</div>
+
+<div class="player-layout">
+    <!-- SIDEBAR -->
+    <aside class="lms-sidebar p-3">
+        <!-- Cabecera -->
+        <a asp-controller="Curso" asp-action="Detalle" asp-route-idCurso="@curso.IdCurso"
+           class="text-decoration-none text-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-arrow-left"></i>
+                <span class="fw-semibold text-truncate small">@curso.Titulo</span>
+            </div>
+        </a>
+
+        <!-- Progreso -->
+        <div class="mb-3 px-1">
+            <div class="d-flex justify-content-between small text-muted mb-1">
+                <span>@Model.LeccionesVistas de @Model.TotalLecciones completadas</span>
+                <span class="fw-bold text-primary">@Model.PctProgreso%</span>
+            </div>
+            <div class="progress" style="height:6px">
+                <div class="progress-bar" style="width:@Model.PctProgreso%"></div>
+            </div>
+        </div>
+
+        <!-- Contenidos sin sección -->
+        @foreach (var ct in Model.ContenidosSinSeccion)
+        {
+            var isCurrent = ct.IdContenido == Model.IdContenidoActual;
+            var cssClass  = isCurrent ? "active" : (ct.Completado ? "completed" : "");
+            if (ct.Bloqueado) cssClass += " locked";
+            <a asp-controller="Curso" asp-action="Ver"
+               asp-route-idCurso="@Model.IdCurso"
+               asp-route-contenido="@ct.IdContenido"
+               class="d-flex align-items-center gap-2 lms-lesson-item mb-1 text-decoration-none text-body @cssClass">
+                <i class="bi @ct.TipoIcono" style="width:1.3rem;color:var(--lms-primary)"></i>
+                <span class="small flex-grow-1 text-truncate">@ct.Titulo</span>
+                @if (!string.IsNullOrEmpty(ct.DuracionFormato))
+                {
+                    <span class="text-muted" style="font-size:.7rem">@ct.DuracionFormato</span>
+                }
+            </a>
+        }
+
+        <!-- Secciones -->
+        @foreach (var sec in Model.Secciones)
+        {
+            <div class="mt-3 mb-2">
+                <div class="text-uppercase fw-bold text-muted" style="font-size:.7rem;letter-spacing:.05em">
+                    @sec.Titulo
+                    @if (sec.EstaCompleta)
+                    {
+                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                    }
+                </div>
+            </div>
+            @foreach (var ct in sec.Contenidos)
+            {
+                var isCurrent = ct.IdContenido == Model.IdContenidoActual;
+                var cssClass  = isCurrent ? "active" : (ct.Completado ? "completed" : "");
+                if (ct.Bloqueado) cssClass += " locked";
+                <a asp-controller="Curso" asp-action="Ver"
+                   asp-route-idCurso="@Model.IdCurso"
+                   asp-route-contenido="@ct.IdContenido"
+                   class="d-flex align-items-center gap-2 lms-lesson-item mb-1 text-decoration-none text-body @cssClass">
+                    <i class="bi @ct.TipoIcono" style="width:1.3rem;color:var(--lms-primary)"></i>
+                    <span class="small flex-grow-1 text-truncate">@ct.Titulo</span>
+                    @if (!string.IsNullOrEmpty(ct.DuracionFormato))
+                    {
+                        <span class="text-muted" style="font-size:.7rem">@ct.DuracionFormato</span>
+                    }
+                </a>
+            }
+        }
+
+        <!-- Examen final -->
+        @if (Model.TieneExamen && Model.IdExamen.HasValue)
+        {
+            <div class="mt-3 border-top pt-3">
+                @if (Model.ExamenFinalAprobado)
+                {
+                    <div class="lms-lesson-item d-flex align-items-center gap-2 text-success">
+                        <i class="bi bi-patch-check-fill"></i>
+                        <span class="small fw-semibold">Examen aprobado</span>
+                    </div>
+                }
+                else if (!Model.ExamenFinalBloqueado)
+                {
+                    <a asp-controller="Examen" asp-action="IniciarExamen"
+                       asp-route-idExamen="@Model.IdExamen"
+                       asp-route-idInscripcion="@Model.IdInscripcion"
+                       class="btn btn-primary w-100 btn-sm">
+                        <i class="bi bi-pencil-square me-1"></i>Rendir examen
+                    </a>
+                }
+                else
+                {
+                    <div class="lms-lesson-item locked d-flex align-items-center gap-2">
+                        <i class="bi bi-lock-fill"></i>
+                        <span class="small">Completa todas las lecciones para habilitar el examen</span>
+                    </div>
+                }
+            </div>
+        }
+    </aside>
+
+    <!-- ÁREA DE CONTENIDO -->
+    <main class="content-area">
+        <h4 class="fw-bold mb-1">@actual.Titulo</h4>
+        <div class="text-muted small mb-4">
+            <i class="bi @actual.TipoIcono me-1"></i>
+            @(actual.Tipo switch { "VID"=>"Video", "PDF"=>"PDF", "TXT"=>"Artículo", "URL"=>"Enlace externo", "ARC"=>"Archivo", _=>"" })
+            @if (!string.IsNullOrEmpty(actual.DuracionFormato))
+            {
+                <span class="ms-2">· @actual.DuracionFormato</span>
+            }
+        </div>
+
+        @if (actual.Tipo == "VID")
+        {
+            <div class="video-wrapper mb-4">
+                <video id="videoPlayer" controls autoplay
+                       data-inscripcion="@Model.IdInscripcion"
+                       data-contenido="@actual.IdContenido"
+                       data-seg="@actual.SegReproducido">
+                    <source src="@Url.Action("ServirMedia","Curso",new{idContenido=actual.IdContenido})"
+                            type="@(actual.MimeType ?? "video/mp4")">
+                    Tu navegador no soporta video HTML5.
+                </video>
+            </div>
+        }
+        else if (actual.Tipo == "PDF")
+        {
+            <iframe src="@Url.Action("ServirMedia","Curso",new{idContenido=actual.IdContenido})"
+                    class="pdf-wrapper mb-4" title="@actual.Titulo"></iframe>
+        }
+        else if (actual.Tipo == "URL" && !string.IsNullOrEmpty(actual.UrlExterna))
+        {
+            <div class="card border mb-4 p-4 text-center">
+                <i class="bi bi-link-45deg fs-1 text-primary mb-2"></i>
+                <p>Este contenido está alojado en una URL externa.</p>
+                <a href="@actual.UrlExterna" target="_blank" rel="noopener noreferrer"
+                   class="btn btn-primary">
+                    <i class="bi bi-box-arrow-up-right me-2"></i>Abrir enlace externo
+                </a>
+            </div>
+        }
+        else if (actual.Tipo == "TXT" && !string.IsNullOrEmpty(actual.ContenidoHtml))
+        {
+            <div class="card border-0 shadow-sm mb-4 p-4">
+                @Html.Raw(actual.ContenidoHtml)
+            </div>
+        }
+        else if (actual.Tipo == "ARC")
+        {
+            <div class="card border mb-4 p-4">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-file-earmark-arrow-down-fill fs-2 text-primary"></i>
+                    <div>
+                        <div class="fw-semibold">@(actual.NombreArchOri ?? actual.Titulo)</div>
+                        @if (!string.IsNullOrEmpty(actual.TamanioFormato))
+                        {
+                            <div class="text-muted small">@actual.TamanioFormato</div>
+                        }
+                    </div>
+                    <a href="@Url.Action("ServirMedia","Curso",new{idContenido=actual.IdContenido})"
+                       download class="btn btn-primary ms-auto">
+                        <i class="bi bi-download me-1"></i>Descargar
+                    </a>
+                </div>
+            </div>
+        }
+
+        <!-- Botón completar -->
+        @if (!actual.Completado)
+        {
+            <div class="mb-4">
+                <button id="btnCompletar" class="btn btn-success"
+                        data-inscripcion="@Model.IdInscripcion"
+                        data-contenido="@actual.IdContenido">
+                    <i class="bi bi-check-circle me-2"></i>Marcar como completado
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-success d-flex align-items-center mb-4">
+                <i class="bi bi-check-circle-fill me-2"></i>Completado
+            </div>
+        }
+
+        <!-- Navegación anterior / siguiente -->
+        <div class="d-flex justify-content-between">
+            @if (Model.Anterior != null)
+            {
+                <a asp-controller="Curso" asp-action="Ver"
+                   asp-route-idCurso="@Model.IdCurso"
+                   asp-route-contenido="@Model.Anterior.IdContenido"
+                   class="btn btn-outline-secondary">
+                    <i class="bi bi-chevron-left me-1"></i>@Model.Anterior.Titulo
+                </a>
+            }
+            else { <div></div> }
+
+            @if (Model.Siguiente != null)
+            {
+                <a asp-controller="Curso" asp-action="Ver"
+                   asp-route-idCurso="@Model.IdCurso"
+                   asp-route-contenido="@Model.Siguiente.IdContenido"
+                   class="btn btn-outline-primary">
+                    @Model.Siguiente.Titulo<i class="bi bi-chevron-right ms-1"></i>
+                </a>
+            }
+        </div>
+    </main>
+</div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<script>
+const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+// Completar lección
+const btnCompletar = document.getElementById('btnCompletar');
+if (btnCompletar) {
+    btnCompletar.addEventListener('click', async function() {
+        const { inscripcion, contenido } = this.dataset;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+        await fetch('@Url.Action("MarcarCompletado","Curso")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: `idInscripcion=${inscripcion}&idContenido=${contenido}&segReproducido=0`
+        });
+        location.reload();
+    });
+}
+
+// Auto-completar video al terminar
+const video = document.getElementById('videoPlayer');
+if (video) {
+    const seg = parseInt(video.dataset.seg || '0');
+    if (seg > 0) video.currentTime = seg;
+
+    let guardado = false;
+    video.addEventListener('ended', async () => {
+        if (guardado) return; guardado = true;
+        const inscripcion = video.dataset.inscripcion;
+        const contenido   = video.dataset.contenido;
+        await fetch('@Url.Action("MarcarCompletado","Curso")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'RequestVerificationToken': token },
+            body: `idInscripcion=${inscripcion}&idContenido=${contenido}&segReproducido=${Math.floor(video.duration)}`
+        });
+        setTimeout(() => location.reload(), 800);
+    });
+}
+</script>
+}

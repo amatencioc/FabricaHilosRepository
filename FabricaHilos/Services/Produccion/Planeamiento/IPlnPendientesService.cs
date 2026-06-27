@@ -11,6 +11,14 @@ public interface IPlnPendientesService
     Task<IEnumerable<PlnPendienteRevisado>> GetPendientesRevisadoAsync(
         string tipo = "%", string asesor = "%", string cliente = "%");
 
+    /// <summary>PLN_PRIOR_REVISADO: guarda o actualiza la prioridad de una partida en la lista de revisado.</summary>
+    Task GuardarPrioridadRevisadoAsync(decimal guia, int prioridad);
+
+    /// <summary>SP_PLN_OBS_REVISADO: partidas con observación en el proceso de revisado.</summary>
+    Task<IEnumerable<PlnObservacionRevisado>> GetObservacionesRevisadoAsync(
+        string tipo = "%", string asesor = "%", string cliente = "%",
+        DateTime? fechaI = null, DateTime? fechaF = null);
+
     /// <summary>SP_PLN_PEND_EVAL_CALIDAD: partidas pendientes de evaluación de calidad (Ivon).</summary>
     Task<IEnumerable<PlnPendienteEvalCalidad>> GetPendientesEvalCalidadAsync(
         string tipo = "%", string asesor = "%", string cliente = "%");
@@ -34,4 +42,8 @@ public interface IPlnPendientesService
     /// <summary>SP_PLN_PEND_PARTIDAS_DEF: partidas con evaluación de calidad pendiente de definición (Karen).</summary>
     Task<IEnumerable<PlnPendientePartidaDef>> GetPendientesPartidasDefAsync(
         string estEval = "%");
+
+    /// <summary>SP_PLN_RECT_RECETA: partidas con rectificación de receta (laboratorio/Control Calidad).</summary>
+    Task<IEnumerable<PlnRectificacionReceta>> GetRectificacionesRecetaAsync(
+        string estado = "%");
 }

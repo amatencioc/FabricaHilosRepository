@@ -1,4 +1,4 @@
-@section Styles {
+﻿@section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
@@ -9,6 +9,7 @@
     var lista      = Model.ToList();
     var nVencidos  = lista.Count(x => x.EstaVencido);
     var kgTotal    = lista.Sum(x => x.Peso);
+    var nMaquinas  = lista.Select(x => x.CodMaq).Distinct().Count();
 }
 
 @section Breadcrumb {
@@ -20,56 +21,47 @@
 
 <div class="container-fluid py-3">
 
-    @* ── Encabezado ─────────────────────────────────────────────────────── *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-0"><i class="bi bi-thermometer-half me-2 text-warning"></i>Pendientes de Secado</h4>
-            <small class="text-muted">Partidas terminadas en tintorería aún sin secado ni evaluación de calidad registrada &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsables: Freddy / Malena</small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            @if (nVencidos > 0)
-            {
-                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
-            }
-            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
-            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+    @* ── Strip de cabecera ─────────────────────────────────────────────── *@
+    <div class="pend-strip">
+        <i class="bi bi-thermometer-half" style="color:#f6ad55;font-size:.95rem;flex-shrink:0;"></i>
+        <span class="pend-strip-title">Pendientes de Secado</span>
+        <span class="pend-strip-sep"></span>
+
+        <span class="pend-kpi" title="Total de partidas pendientes de secado.">
+            <i class="bi bi-boxes" style="color:#90cdf4;"></i>
+            <span class="pend-kpi-val">@lista.Count</span>
+            <span style="opacity:.75">partidas</span>
+        </span>
+        <span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
+              title="Partidas cuya fecha de entrega ya venció.">
+            <i class="bi bi-clock-history" style="color:#fc8181;"></i>
+            <span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
+            <span style="opacity:.75">vencidas</span>
+        </span>
+        <span class="pend-kpi" title="Máquinas distintas involucradas.">
+            <i class="bi bi-gear" style="color:#fbd38d;"></i>
+            <span class="pend-kpi-val">@nMaquinas</span>
+            <span style="opacity:.75">máquinas</span>
+        </span>
+        <span class="pend-kpi" title="Total de kg pendientes.">
+            <i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
+            <span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
+            <span style="opacity:.75">kg</span>
+        </span>
+
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
                 <i class="bi bi-arrow-left me-1"></i>Seguimiento
             </a>
-        </div>
+        </span>
     </div>
 
-    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-warning text-center py-2">
-                <div class="fw-bold fs-4 text-warning">@lista.Count</div>
-                <small class="text-muted">Partidas pendientes</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
-                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
-                <small class="text-muted">Con fecha vencida</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
-                <small class="text-muted">Total kg</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@lista.Select(x => x.CodMaq).Distinct().Count()</div>
-                <small class="text-muted">Máquinas distintas</small>
-            </div>
-        </div>
+    @* ── Filtros ───────────────────────────────────────────────────────── *@
+    <div class="pend-filter">
+        @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesSecado")
     </div>
 
-    @* ── Filtros ─────────────────────────────────────────────────────────── *@
-    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesSecado")
-
-    @* ── Tabla ───────────────────────────────────────────────────────────── *@
+    @* ── Tabla ─────────────────────────────────────────────────────────── *@
     @if (!lista.Any())
     {
         <div class="alert alert-success">
@@ -79,8 +71,8 @@
     else
     {
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
-                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-secado">
+                <thead>
                     <tr>
                         <th>Partida</th>
                         <th>Material</th>
@@ -91,9 +83,13 @@
                         <th class="text-center">RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
-                        <th>Color</th>
-                        <th class="text-center">F. Fin TT</th>
-                        <th class="text-center">F. Entrega</th>
+                        <th>Presentacion</th>
+                        <th class="text-center pend-th-sort" data-col="ffintt" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Fin TT">
+                            F. Fin TT <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
+                        <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+                            F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
                         <th class="text-center">Estado</th>
                     </tr>
                 </thead>
@@ -102,7 +98,9 @@
                     {
                         var rowCss = item.EstaVencido ? "table-danger" :
                                      item.DiasRetraso >= -2 ? "table-warning" : "";
-                        <tr class="@rowCss">
+                        <tr class="@rowCss"
+                            data-ffintt="@(item.Fecha.HasValue ? item.Fecha.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
                             <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
                             <td>@item.Material</td>
                             <td>
@@ -151,8 +149,8 @@
                         </tr>
                     }
                 </tbody>
-                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
-                    <tr>
+                <tfoot>
+                    <tr class="fw-semibold">
                         <td colspan="7" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
                         <td colspan="5"></td>
@@ -163,3 +161,42 @@
     }
 
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    var tbl = document.getElementById('tbl-secado');
+    if (!tbl) return;
+    var tbody = tbl.querySelector('tbody');
+    var sortState = { col: null, dir: '' };
+    function updateIcons() {
+        tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'bi sort-icon ms-1 ' + (th.dataset.col === sortState.col
+                ? (sortState.dir === 'asc' ? 'bi-sort-up' : 'bi-sort-down')
+                : 'bi-arrow-down-up');
+        });
+    }
+    function sortTable(col, dir) {
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+            var va = a.dataset[col] || '99999999';
+            var vb = b.dataset[col] || '99999999';
+            if (va === vb) return 0;
+            return dir === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortState.col = col; sortState.dir = dir;
+        updateIcons();
+    }
+    tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var col = this.dataset.col;
+            var dir = (sortState.col === col && sortState.dir === 'asc') ? 'desc' : 'asc';
+            sortTable(col, dir);
+        });
+    });
+})();
+</script>
+}

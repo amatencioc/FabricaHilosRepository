@@ -1,4 +1,4 @@
-@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnProximoVencer>
+﻿@model IEnumerable<FabricaHilos.Models.Produccion.Planeamiento.PlnProximoVencer>
 
 @{
     ViewData["Title"] = "Próximos a Vencer";
@@ -20,72 +20,9 @@
 @section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 <style>
-    /* ── Dot de paso ─────────────────────────────────────────────────── */
-    .paso-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-    .urgente-flame { color: var(--pln-warning); }
-
-    /* ── Panel de filtros ────────────────────────────────────────────── */
-    .pv-label {
-        display: block; font-size: .72rem; font-weight: 600;
-        color: #4a5568; margin-bottom: .22rem; white-space: nowrap;
-        letter-spacing: .01em;
-    }
-    .pv-input  { min-width: 128px; font-size: .78rem; border-radius: .3rem; }
-    .pv-input:focus { border-color: #63b3ed; box-shadow: 0 0 0 .15rem rgba(66,153,225,.2); }
-    .pv-preset { font-size: .69rem; padding: .18rem .5rem; color: #718096; border-color: #cbd5e0; }
-    .pv-preset.pv-preset-active,
-    .pv-preset:hover {
-        background: #667eea !important; color: #fff !important; border-color: #667eea !important;
-    }
-
-    /* ── Strip ámbar ──────────────────────────────────────────────────── */
-    .pv-strip-header {
-        background: linear-gradient(135deg, #78350f 0%, #9a3412 100%);
-        color: #fef9f0;
-        border-radius: .5rem .5rem 0 0;
-        padding: .55rem 1rem;
-        display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
-        border-bottom: 3px solid #431407;
-        box-shadow: 0 2px 8px rgba(0,0,0,.18);
-    }
-    .pv-strip-title { font-size: .82rem; font-weight: 800; letter-spacing: .08em;
-        text-transform: uppercase; color: #fef9f0; white-space: nowrap; margin-right: .25rem; }
-    .pv-strip-sep   { width: 1px; height: 1.1rem; background: rgba(255,255,255,.25); flex-shrink: 0; }
-    .dash-kpi {
-        display: inline-flex; align-items: center; gap: .25rem;
-        background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
-        border-radius: 999px; padding: .18rem .6rem;
-        font-size: .7rem; white-space: nowrap; color: #fef9f0;
-    }
-    .dash-kpi-val  { font-weight: 700; font-size: .82rem; }
-    .pv-strip-ts   { margin-left: auto; font-size: .68rem; color: rgba(254,249,240,.7); white-space: nowrap; }
-
-    /* ── Panel filtros debajo del strip ─────────────────────────────── */
-    .dash-filter {
-        background: #f8fafc;
-        border: 1px solid var(--pln-gray-200, #e2e8f0);
-        border-top: none;
-        border-radius: 0 0 .45rem .45rem;
-        padding: .55rem .9rem;
-        margin-bottom: .85rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,.05);
-    }
-
-    /* ── Tabla ────────────────────────────────────────────────────────── */
-    #pvTable { table-layout: fixed; width: 100%; min-width: 900px; }
-    #pvTable thead th {
-        font-size: .68rem; font-weight: 700; color: #4a5568;
-        text-transform: uppercase; letter-spacing: .04em;
-        border-bottom: 2px solid #cdd4e0; padding: .28rem .45rem;
-        background: #e2e7f0; white-space: nowrap; overflow: hidden;
-    }
-    #pvTable tbody td { font-size: .77rem; vertical-align: middle; padding: .27rem .45rem; overflow: hidden; }
-    #pvTable tbody tr { background: #f8fafc; }
-    #pvTable tbody tr:hover td                  { background: #edf2f7 !important; }
-    #pvTable tbody tr.table-danger              { background: #fff5f5 !important; }
-    #pvTable tbody tr.table-danger:hover td     { background: #ffe4e4 !important; }
-    #pvTable tbody tr.table-warning             { background: #fffbeb !important; }
-    #pvTable tbody tr.table-warning:hover td    { background: #fef3c7 !important; }
+    /* ── Presets de rango ────────────────────────────────────── */
+    .pv-preset       { transition: background .15s, color .15s; }
+    .pv-preset-active{ background: #1a4971 !important; color: #fff !important; border-color: #1a4971 !important; }
 </style>
 }
 
@@ -99,45 +36,45 @@
 <div class="container-fluid py-3">
 
     @* ─── Strip ámbar ──────────────────────────────────────────────────── *@
-    <div class="pv-strip-header mb-0">
+    <div class="pend-strip mb-0">
         <i class="bi bi-calendar-event-fill" style="color:#fcd34d;font-size:.95rem;flex-shrink:0;"></i>
-        <span class="pv-strip-title">Próximos a Vencer</span>
-        <span class="pv-strip-sep"></span>
+        <span class="pend-strip-title">Próximos a Vencer</span>
+        <span class="pend-strip-sep"></span>
 
-        <span class="dash-kpi" title="Total ítems con FCH_ENTREGA_COMP en el rango">
+        <span class="pend-kpi" title="Total ítems con FCH_ENTREGA_COMP en el rango">
             <i class="bi bi-list-check" style="color:#93c5fd;"></i>
-            <span class="dash-kpi-val">@pvItems.Count</span>
+            <span class="pend-kpi-val">@pvItems.Count</span>
             <span style="opacity:.75">ítems</span>
         </span>
         @if (pvVencidos > 0)
         {
-            <span class="dash-kpi" title="FCH_ENTREGA_COMP &lt; hoy — ya vencidos">
+            <span class="pend-kpi" title="FCH_ENTREGA_COMP &lt; hoy — ya vencidos">
                 <i class="bi bi-exclamation-octagon-fill" style="color:#fca5a5;"></i>
-                <span class="dash-kpi-val" style="color:#fca5a5;">@pvVencidos</span>
+                <span class="pend-kpi-val" style="color:#fca5a5;">@pvVencidos</span>
                 <span style="opacity:.75">vencidos</span>
             </span>
         }
         @if (pvCrit > 0)
         {
-            <span class="dash-kpi" title="Vencen en ≤3 días">
+            <span class="pend-kpi" title="Vencen en ≤3 días">
                 <i class="bi bi-alarm-fill" style="color:#fcd34d;"></i>
-                <span class="dash-kpi-val" style="color:#fcd34d;">@pvCrit</span>
+                <span class="pend-kpi-val" style="color:#fcd34d;">@pvCrit</span>
                 <span style="opacity:.75">≤3 d</span>
             </span>
         }
         @if (pvAlerta > 0)
         {
-            <span class="dash-kpi" title="Vencen en 4–7 días">
+            <span class="pend-kpi" title="Vencen en 4–7 días">
                 <i class="bi bi-clock-history" style="color:#fde68a;"></i>
-                <span class="dash-kpi-val" style="color:#fde68a;">@pvAlerta</span>
+                <span class="pend-kpi-val" style="color:#fde68a;">@pvAlerta</span>
                 <span style="opacity:.75">4–7 d</span>
             </span>
         }
         @if (pvOk > 0)
         {
-            <span class="dash-kpi" title="Vencen en más de 7 días">
+            <span class="pend-kpi" title="Vencen en más de 7 días">
                 <i class="bi bi-check-circle" style="color:#6ee7b7;"></i>
-                <span class="dash-kpi-val" style="color:#6ee7b7;">@pvOk</span>
+                <span class="pend-kpi-val" style="color:#6ee7b7;">@pvOk</span>
                 <span style="opacity:.75">&gt;7 d</span>
             </span>
         }
@@ -146,10 +83,15 @@
             <i class="bi bi-funnel me-1"></i>FCH_ENTREGA_COMP entre
             <b>@pvDesde.ToString("dd/MM/yy")</b> y <b>@pvHasta.ToString("dd/MM/yy")</b>
         </span>
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+                <i class="bi bi-arrow-left me-1"></i>Seguimiento
+            </a>
+        </span>
     </div>
 
     @* ─── Panel de filtros ──────────────────────────────────────────────── *@
-    <div class="dash-filter">
+    <div class="pend-filter">
         <form method="get" asp-action="ProximosVencer" id="pvForm">
             <div class="row g-2 align-items-end">
                 <div class="col-auto">
@@ -212,7 +154,7 @@
     else
     {
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" id="pvTable">
+            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="pvTable">
                 <thead>
                     <tr>
                         <th style="width:2%;"></th>

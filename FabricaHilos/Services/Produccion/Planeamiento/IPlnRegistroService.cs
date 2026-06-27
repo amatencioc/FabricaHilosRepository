@@ -9,12 +9,14 @@ public interface IPlnRegistroService
     /// con todos los datos de cabecera, artículo, familia y línea textil.
     /// </summary>
     Task<IReadOnlyList<RegistroPedidoItem>> GetRegistroDiarioAsync(
-        DateTime fchDesde,
-        DateTime fchHasta,
+        DateTime? fchDesde,
+        DateTime? fchHasta,
         string   filtroServ         = "",
         string   filtroCliente      = "",
         string   filtroProceso      = "",
         string   filtroEstado       = "",
         string   filtroTfibra       = "",
-        string   filtroPasoActual   = "");
+        string   filtroPasoActual   = "",
+        DateTime? fchEntDesde       = null,
+        DateTime? fchEntHasta       = null);
 }

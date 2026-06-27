@@ -1,0 +1,68 @@
+@model FabricaHilos.Models.Capacitacion.CapCertificado?
+@{
+    ViewData["Title"] = "Verificar Certificado";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-sm py-5" style="max-width:600px">
+    <div class="text-center mb-4">
+        <i class="bi bi-patch-check-fill text-primary" style="font-size:3rem"></i>
+        <h2 class="fw-bold mt-2">Verificador de Certificados</h2>
+        <p class="text-muted">Ingresa el código de verificación del certificado.</p>
+    </div>
+
+    <form method="get" asp-controller="Certificado" asp-action="Verificar" class="mb-4">
+        <div class="input-group">
+            <input name="c" class="form-control form-control-lg"
+                   value="@(Context.Request.Query["c"].ToString())"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            <button class="btn btn-primary btn-lg" type="submit">
+                <i class="bi bi-search me-1"></i>Verificar
+            </button>
+        </div>
+    </form>
+
+    @if (!string.IsNullOrEmpty(Context.Request.Query["c"]))
+    {
+        if (Model == null)
+        {
+            <div class="card border-danger text-center p-4">
+                <i class="bi bi-x-circle-fill text-danger" style="font-size:3rem"></i>
+                <h4 class="text-danger mt-3">Certificado no encontrado</h4>
+                <p class="text-muted">El código ingresado no corresponde a ningún certificado válido.</p>
+            </div>
+        }
+        else
+        {
+            <div class="card border-@(Model.EsVigente ? "success" : "warning") text-center p-4">
+                @if (Model.EsVigente)
+                {
+                    <i class="bi bi-patch-check-fill text-success" style="font-size:3rem"></i>
+                    <h4 class="text-success mt-3">Certificado válido</h4>
+                }
+                else
+                {
+                    <i class="bi bi-patch-exclamation-fill text-warning" style="font-size:3rem"></i>
+                    <h4 class="text-warning mt-3">Certificado @Model.EstadoTexto</h4>
+                }
+
+                <table class="table table-sm text-start mt-3">
+                    <tr><th>Titular</th><td>@Model.NombreUsuario</td></tr>
+                    <tr><th>Curso</th><td>@Model.TituloCurso</td></tr>
+                    <tr><th>Nota</th><td>@Model.PuntajeObt.ToString("F1") / 100</td></tr>
+                    <tr><th>Emitido</th><td>@Model.FchEmision.ToString("dd/MM/yyyy")</td></tr>
+                    @if (Model.FchVencimiento.HasValue)
+                    {
+                        <tr>
+                            <th>Válido hasta</th>
+                            <td class="@(!Model.EsVigente ? "text-danger fw-bold" : "")">
+                                @Model.FchVencimiento.Value.ToString("dd/MM/yyyy")
+                            </td>
+                        </tr>
+                    }
+                    <tr><th>Estado</th><td>@Model.EstadoTexto</td></tr>
+                </table>
+            </div>
+        }
+    }
+</div>

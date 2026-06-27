@@ -171,22 +171,11 @@ namespace FabricaHilos.Controllers.Produccion
                 {
                     planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
                     {
-                        Nombre = "Pendientes Eval. Calidad",
+                        Nombre = "Eval. Calidad",
                         Descripcion = "Partidas secadas sin evaluación de calidad tintorería registrada. Responsable: Ivon.",
                         Icono = "bi-patch-check",
                         Controller = "Planeamiento",
                         Action = "PendientesEvalCalidad"
-                    });
-                }
-                if (menus.PlaneamientoPendPartidasDef)
-                {
-                    planeamientoModulo.SubModulos.Add(new SgcSubModuloDto
-                    {
-                        Nombre = "Partidas por Definir",
-                        Descripcion = "Partidas con evaluación de calidad pendiente de definición (resultado no aprobado). Responsable: Karen.",
-                        Icono = "bi-question-circle",
-                        Controller = "Planeamiento",
-                        Action = "PartidasPorDefinir"
                     });
                 }
                 if (menus.PlaneamientoPendEnconado)

@@ -1,0 +1,172 @@
+@using FabricaHilos.Models.Produccion.Planeamiento
+@model IEnumerable<PlnObservacionRevisado>
+@{
+    var listaObs      = Model.ToList();
+    var nVencidosObs  = listaObs.Count(x => x.EstaVencido);
+    var kgTotalObs    = listaObs.Sum(x => x.Peso);
+    var nLotesObs     = listaObs.Select(x => x.Lote).Distinct().Count();
+    var faltTotalObs  = listaObs.Sum(x => x.Faltante);
+    var rechTotalObs  = listaObs.Sum(x => x.Rechazado);
+    var reenTotalObs  = listaObs.Sum(x => x.Reenconado);
+    var evalTotalObs  = listaObs.Sum(x => x.Evaluado);
+    var obsFchIni     = ViewBag.ObsFchIni as string ?? DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+    var obsFchFin     = ViewBag.ObsFchFin as string ?? DateTime.Today.ToString("yyyy-MM-dd");
+}
+
+@* Filtro de rango de fechas *@
+<form method="get" asp-action="ObservacionesRevisadoPartial" class="d-flex align-items-center gap-2 flex-wrap mb-3 pt-1">
+    <input type="hidden" name="tipo"    value="@ViewBag.FiltroTipoSel" />
+    <input type="hidden" name="asesor"  value="@ViewBag.FiltroAsesor" />
+    <input type="hidden" name="cliente" value="@ViewBag.FiltroCliente" />
+    <input type="hidden" name="tab"     value="obs" />
+    <i class="bi bi-calendar-range text-muted"></i>
+    <label class="text-muted small mb-0">F. Fin Prog.:</label>
+    <input type="date" name="fchIni" class="form-control form-control-sm" style="width:150px"
+           value="@obsFchIni" />
+    <span class="text-muted">&ndash;</span>
+    <input type="date" name="fchFin" class="form-control form-control-sm" style="width:150px"
+           value="@obsFchFin" />
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-funnel me-1"></i>Filtrar
+    </button>
+</form>
+
+@* KPIs *@
+<div class="d-flex gap-2 flex-wrap mb-3">
+    <span class="pend-kpi pend-kpi-light">
+        <i class="bi bi-chat-square-text" style="color:#3b82f6;"></i>
+        <span class="pend-kpi-val">@listaObs.Count</span>
+        <span>con observaciones</span>
+    </span>
+    <span class="pend-kpi pend-kpi-light" style="@(nVencidosObs > 0 ? "" : "opacity:.5")">
+        <i class="bi bi-clock-history" style="color:#dc2626;"></i>
+        <span class="pend-kpi-val" style="@(nVencidosObs > 0 ? "color:#dc2626;" : "")">@nVencidosObs</span>
+        <span>vencidas</span>
+    </span>
+    <span class="pend-kpi pend-kpi-light">
+        <i class="bi bi-bag-fill" style="color:#d97706;"></i>
+        <span class="pend-kpi-val">@kgTotalObs.ToString("N0")</span>
+        <span>kg</span>
+    </span>
+    <span class="pend-kpi pend-kpi-light">
+        <i class="bi bi-layers" style="color:#16a34a;"></i>
+        <span class="pend-kpi-val">@nLotesObs</span>
+        <span>lotes distintos</span>
+    </span>
+</div>
+
+@if (!listaObs.Any())
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>No hay partidas con observaciones de revisado en el rango de F. Fin Prog. seleccionado.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0 pend-tbl">
+            <thead>
+                <tr>
+                    <th>Partida</th>
+                    <th>Material</th>
+                    <th>Cliente</th>
+                    <th>Asesor</th>
+                    <th>Máquina</th>
+                    <th class="text-center">RMC</th>
+                    <th class="text-end">Kg</th>
+                    <th class="text-end text-danger">Faltante</th>
+                    <th class="text-end text-danger">Rechazado</th>
+                    <th class="text-end text-warning">Reenconado</th>
+                    <th class="text-end text-info">Evaluado</th>
+                    <th>Lote</th>
+                    <th>Presentacion</th>
+                    <th class="text-center">F. Fin Prog.</th>
+                    <th class="text-center">F. Entrega</th>
+                    <th>Observación</th>
+                    <th class="text-center">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in listaObs)
+                {
+                    var rowCss = item.EstaVencido ? "table-danger" :
+                                 item.DiasRetraso >= -2 ? "table-warning" : "";
+                    <tr class="@rowCss">
+                        <td class="fw-bold">@item.Partida</td>
+                        <td>@item.Material</td>
+                        <td>
+                            <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                  title="@item.Cliente">@item.Cliente</span>
+                        </td>
+                        <td style="font-size:.78rem;">
+                            <span style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                  title="@item.DescAsesor">@item.DescAsesor</span>
+                        </td>
+                        <td>@item.Maquina</td>
+                        <td class="text-center text-muted">
+                            @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                        </td>
+                        <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+                        <td class="text-end @(item.Faltante > 0 ? "text-danger fw-semibold" : "text-muted")">
+                            @(item.Faltante > 0 ? item.Faltante.ToString("N2") : "—")
+                        </td>
+                        <td class="text-end @(item.Rechazado > 0 ? "text-danger fw-semibold" : "text-muted")">
+                            @(item.Rechazado > 0 ? item.Rechazado.ToString("N2") : "—")
+                        </td>
+                        <td class="text-end @(item.Reenconado > 0 ? "text-warning fw-semibold" : "text-muted")">
+                            @(item.Reenconado > 0 ? item.Reenconado.ToString("N2") : "—")
+                        </td>
+                        <td class="text-end @(item.Evaluado > 0 ? "text-info fw-semibold" : "text-muted")">
+                            @(item.Evaluado > 0 ? item.Evaluado.ToString("N2") : "—")
+                        </td>
+                        <td style="font-size:.78rem;">@item.Lote</td>
+                        <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                        <td class="text-center text-muted">
+                            @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
+                        </td>
+                        <td class="text-center">
+                            @if (item.FchEntrega.HasValue)
+                            {
+                                <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+                                    @item.FchEntrega.Value.ToString("dd/MM/yy")
+                                </span>
+                            }
+                            else { <span class="text-muted">—</span> }
+                        </td>
+                        <td style="font-size:.78rem;">
+                            <span title="@item.Observacion"
+                                  style="max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                @item.Observacion
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            @if (item.EstaVencido)
+                            {
+                                <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
+                            }
+                            else if (item.DiasRetraso >= -2)
+                            {
+                                <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">@(-item.DiasRetraso) d</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td colspan="6" class="text-end text-muted">Totales:</td>
+                    <td class="text-end">@kgTotalObs.ToString("N2")</td>
+                    <td class="text-end text-danger">@(faltTotalObs > 0 ? faltTotalObs.ToString("N2") : "—")</td>
+                    <td class="text-end text-danger">@(rechTotalObs > 0 ? rechTotalObs.ToString("N2") : "—")</td>
+                    <td class="text-end text-warning">@(reenTotalObs > 0 ? reenTotalObs.ToString("N2") : "—")</td>
+                    <td class="text-end text-info">@(evalTotalObs > 0 ? evalTotalObs.ToString("N2") : "—")</td>
+                    <td colspan="6"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+}

@@ -1,0 +1,94 @@
+using FabricaHilos.Models.Capacitacion;
+using FabricaHilos.Services.Capacitacion;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace FabricaHilos.Controllers.Capacitacion;
+
+[Authorize]
+[Route("RecursosHumanos/Capacitacion/[action]")]
+public class CapacitacionController : OracleBaseController
+{
+    private readonly ICapacitacionService _svc;
+
+    public CapacitacionController(ICapacitacionService svc) => _svc = svc;
+
+    private string UsuarioActual => HttpContext.Session.GetString("OracleUser") ?? "";
+
+    // Verifica si el usuario activo es admin LMS, usando sesión como cache.
+    // Consistente con la misma lógica en CapacitacionAdminController.
+    private async Task<bool> GetEsAdminAsync()
+    {
+        var cached = HttpContext.Session.GetString("EsCapAdmin");
+        if (cached != null) return cached == "S";
+        var esAdmin = await _svc.IsCapAdminAsync(UsuarioActual);
+        HttpContext.Session.SetString("EsCapAdmin", esAdmin ? "S" : "N");
+        return esAdmin;
+    }
+
+    // GET /RecursosHumanos/Capacitacion/MiPanel
+    [HttpGet]
+    public async Task<IActionResult> MiPanel()
+    {
+        var vmTask     = _svc.GetMiPanelAsync(UsuarioActual);
+        var esAdminTask = GetEsAdminAsync();
+        await Task.WhenAll(vmTask, esAdminTask);
+
+        var vm = vmTask.Result;
+        vm.NombreUsuario = UsuarioActual;
+        ViewBag.EsAdmin  = esAdminTask.Result;
+        return View("~/Views/RecursosHumanos/Capacitacion/MiPanel.cshtml", vm);
+    }
+
+    // GET /RecursosHumanos/Capacitacion/Catalogo
+    [HttpGet]
+    public async Task<IActionResult> Catalogo(
+        int? categoria, string? busqueda, string? nivel,
+        bool soloObligatorios = false, bool soloPendientes = false, int pagina = 1)
+    {
+        const int tamPag = 12;
+        pagina = pagina < 1 ? 1 : pagina;
+
+        var categoriasTask = _svc.GetCategoriasAsync();
+        var cursosTask     = _svc.GetCatalogoAsync(
+            UsuarioActual, categoria, busqueda, nivel, soloObligatorios, soloPendientes,
+            pagina: pagina, tamPag: tamPag);
+        var totalTask      = _svc.GetCatalogoTotalAsync(
+            UsuarioActual, categoria, busqueda, nivel, soloObligatorios, soloPendientes);
+
+        await Task.WhenAll(categoriasTask, cursosTask, totalTask);
+
+        var vm = new CatalogoVm
+        {
+            Categorias       = categoriasTask.Result,
+            Cursos           = cursosTask.Result,
+            FiltroCategoria  = categoria,
+            FiltroBusqueda   = busqueda,
+            FiltroNivel      = nivel,
+            SoloObligatorios = soloObligatorios,
+            SoloPendientes   = soloPendientes,
+            TotalCursos      = totalTask.Result,
+            Pagina           = pagina,
+            TamPag           = tamPag,
+        };
+
+        ViewBag.EsAdmin = HttpContext.Session.GetString("EsCapAdmin") == "S";
+        return View("~/Views/RecursosHumanos/Capacitacion/Catalogo.cshtml", vm);
+    }
+
+    // POST /RecursosHumanos/Capacitacion/Inscribirse
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Inscribirse(int idCurso)
+    {
+        var (ok, msg, idInscripcion) = await _svc.InscribirseAsync(idCurso, UsuarioActual);
+        if (!ok)
+            return Json(new { ok = false, msg });
+
+        // Obtener primer contenido del curso para redirigir al player
+        var player = await _svc.GetPlayerAsync(idCurso, 0, UsuarioActual);
+        long primerContenido = player?.Actual.IdContenido ?? 0;
+
+        return Json(new { ok = true, msg, idCurso, primerContenido });
+    }
+}

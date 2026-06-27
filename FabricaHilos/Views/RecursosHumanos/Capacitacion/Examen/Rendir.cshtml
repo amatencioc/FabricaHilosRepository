@@ -1,0 +1,230 @@
+@model FabricaHilos.Models.Capacitacion.ExamenRendirVm
+@{
+    ViewData["Title"] = Model.TituloExamen;
+}
+
+@section Styles {
+<style>
+    body { background:#f8f9fa; }
+    .exam-layout { max-width:800px; margin:0 auto; padding:2rem 1rem; }
+    .timer-bar { height:6px; background:#dee2e6; border-radius:3px; }
+    .timer-fill { height:100%; border-radius:3px; transition:width 1s linear; background:#0d6efd; }
+    .timer-fill.warning { background:#fd7e14; }
+    .timer-fill.danger { background:#dc3545; }
+    .q-navigator { display:flex; flex-wrap:wrap; gap:6px; }
+    .q-nav-btn { width:36px; height:36px; border-radius:6px; border:2px solid #dee2e6;
+                 background:white; font-size:.8rem; cursor:pointer; transition:all .1s; }
+    .q-nav-btn.respondida { border-color:#0d6efd; background:#0d6efd; color:white; }
+    .q-nav-btn.actual { border-color:#fd7e14; }
+    .option-label { display:block; padding:.75rem 1rem; border:2px solid #dee2e6; border-radius:8px;
+                    cursor:pointer; transition:all .15s; }
+    .option-label:hover { border-color:#0d6efd; background:rgba(13,110,253,.05); }
+    input[type=radio]:checked + .option-label,
+    input[type=checkbox]:checked + .option-label {
+        border-color:#0d6efd; background:rgba(13,110,253,.08); font-weight:600;
+    }
+    input[type=radio], input[type=checkbox] { display:none; }
+</style>
+}
+
+<div class="exam-layout">
+    <!-- Cabecera con timer -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <div class="text-muted small mb-0">@Model.TituloCurso</div>
+            <h5 class="fw-bold mb-0">@Model.TituloExamen</h5>
+        </div>
+        <div class="text-center">
+            <div id="timerDisplay" class="h4 fw-bold font-monospace mb-0">
+                @Model.MinutosRestantes:00
+            </div>
+            <div class="text-muted small">restantes</div>
+        </div>
+    </div>
+
+    <!-- Barra de tiempo -->
+    <div class="timer-bar mb-3">
+        <div id="timerFill" class="timer-fill"
+             style="width:@(Model.TiempoMin>0?Model.MinutosRestantes*100/Model.TiempoMin:100)%"></div>
+    </div>
+
+    <!-- Progreso de preguntas -->
+    <div class="d-flex justify-content-between small text-muted mb-2">
+        <span>Pregunta @(Model.PregActual + 1) de @Model.TotalPreguntas</span>
+        <span>@Model.Respondidas.Count(r => r) respondidas</span>
+    </div>
+    <div class="progress mb-4" style="height:4px">
+        <div class="progress-bar" style="width:@Model.PctPreguntaActual%"></div>
+    </div>
+
+    <!-- Navegador de preguntas -->
+    <div class="q-navigator mb-4">
+        @for (int i = 0; i < Model.TotalPreguntas; i++)
+        {
+            var css = (i == Model.PregActual ? "actual " : "") + (Model.Respondidas[i] ? "respondida" : "");
+            <button type="button" class="q-nav-btn @css"
+                    onclick="irA(@i)">@(i+1)</button>
+        }
+    </div>
+
+    <!-- Tarjeta de pregunta -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body p-4">
+            <div class="fw-semibold fs-5 mb-4">@Model.PreguntaActual.Enunciado</div>
+
+            @if (Model.PreguntaActual.Tipo != "RC" && Model.PreguntaActual.Tipo != "ENS")
+            {
+                <div class="d-flex flex-column gap-2" id="opcionesContainer">
+                    @foreach (var op in Model.PreguntaActual.Opciones)
+                    {
+                        var inputType = Model.PreguntaActual.TieneOpciones ? "radio" : "checkbox";
+                        <div>
+                            <input type="@inputType" name="opcion" id="op_@op.IdOpcion"
+                                   value="@op.IdOpcion"
+                                   @(op.Seleccionada ? "checked" : "")
+                                   class="opcion-input">
+                            <label for="op_@op.IdOpcion" class="option-label">
+                                @op.Texto
+                            </label>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Respuesta de texto (RC/ENS) -->
+                <textarea id="txtRespuesta" rows="@(Model.PreguntaActual.Tipo=="ENS" ? 8 : 3)"
+                          class="form-control"
+                          placeholder="Escribe tu respuesta aquí..."></textarea>
+            }
+        </div>
+    </div>
+
+    <!-- Navegación -->
+    <div class="d-flex justify-content-between">
+        @if (!Model.EsPrimeraPregunta)
+        {
+            <button class="btn btn-outline-secondary" onclick="irA(@(Model.PregActual - 1))">
+                <i class="bi bi-chevron-left me-1"></i>Anterior
+            </button>
+        }
+        else { <div></div> }
+
+        @if (!Model.EsUltimaPregunta)
+        {
+            <button class="btn btn-primary" onclick="irA(@(Model.PregActual + 1))">
+                Siguiente<i class="bi bi-chevron-right ms-1"></i>
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-success" onclick="confirmarEnvio()">
+                <i class="bi bi-send-fill me-1"></i>Finalizar examen
+            </button>
+        }
+    </div>
+</div>
+
+<!-- Modal de confirmación de envío -->
+<div class="modal fade" id="modalEnviar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">¿Finalizar examen?</h5>
+            </div>
+            <div class="modal-body" id="modalEnviarBody">
+                ¿Seguro que deseas enviar el examen?
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Seguir respondiendo</button>
+                <form method="post" asp-controller="Examen" asp-action="Enviar" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="idIntento" value="@Model.IdIntento">
+                    <input type="hidden" name="idInscripcion" value="@Model.IdInscripcion">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-send-fill me-1"></i>Enviar respuestas
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+@Html.AntiForgeryToken()
+<script>
+const TOKEN   = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+const INTENTO = @Model.IdIntento;
+const PREG_ID = @Model.PreguntaActual.IdPregunta;
+const TIPO    = '@Model.PreguntaActual.TipoPreg';
+const VENCIMIENTO = new Date('@Model.FchVencimientoISO');
+
+// ── Timer ──────────────────────────────────────────────────────────────
+let secsLeft = @Model.MinutosRestantes * 60;
+const timerDisplay = document.getElementById('timerDisplay');
+const timerFill    = document.getElementById('timerFill');
+const TOTAL_SECS   = @Model.TiempoMin * 60;
+
+function actualizarTimer() {
+    if (secsLeft <= 0) {
+        timerDisplay.textContent = '0:00';
+        enviarForzado();
+        return;
+    }
+    const m = Math.floor(secsLeft / 60);
+    const s = secsLeft % 60;
+    timerDisplay.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    const pct = (secsLeft / TOTAL_SECS) * 100;
+    timerFill.style.width = pct + '%';
+    timerFill.className = 'timer-fill' + (pct < 25 ? ' danger' : pct < 50 ? ' warning' : '');
+    secsLeft--;
+}
+
+setInterval(actualizarTimer, 1000);
+actualizarTimer();
+
+function enviarForzado() {
+    document.querySelector('#modalEnviar form').submit();
+}
+
+// ── Guardar respuesta automáticamente al cambiar ──────────────────────
+document.querySelectorAll('.opcion-input').forEach(inp => {
+    inp.addEventListener('change', async function() {
+        await fetch('@Url.Action("GuardarRespuesta","Examen")', {
+            method:'POST',
+            headers:{'Content-Type':'application/x-www-form-urlencoded','RequestVerificationToken':TOKEN},
+            body:`idIntento=${INTENTO}&idPregunta=${PREG_ID}&idOpcion=${this.value}`
+        });
+    });
+});
+
+const txtResp = document.getElementById('txtRespuesta');
+if (txtResp) {
+    let debounce;
+    txtResp.addEventListener('input', function() {
+        clearTimeout(debounce);
+        debounce = setTimeout(async () => {
+            await fetch('@Url.Action("GuardarTexto","Examen")', {
+                method:'POST',
+                headers:{'Content-Type':'application/x-www-form-urlencoded','RequestVerificationToken':TOKEN},
+                body:`idIntento=${INTENTO}&idPregunta=${PREG_ID}&texto=${encodeURIComponent(this.value)}`
+            });
+        }, 800);
+    });
+}
+
+// ── Navegación ────────────────────────────────────────────────────────
+function irA(n) {
+    window.location = `@Url.Action("Rendir","Examen")?idIntento=${INTENTO}&nro=${n}`;
+}
+
+function confirmarEnvio() {
+    const pendientes = @Model.Respondidas.Count(r => !r);
+    const body = document.getElementById('modalEnviarBody');
+    body.innerHTML = pendientes > 0
+        ? `<div class="alert alert-warning">Tienes <strong>${pendientes}</strong> pregunta(s) sin responder.</div>¿Deseas enviar de todas formas?`
+        : '¿Seguro que deseas finalizar y enviar el examen?';
+    new bootstrap.Modal(document.getElementById('modalEnviar')).show();
+}
+</script>
+}

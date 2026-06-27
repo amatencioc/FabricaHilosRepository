@@ -203,6 +203,24 @@ builder.Services.AddScoped<IPlnParamService, PlnParamService>();
 builder.Services.AddScoped<IPlnReporteService, PlnReporteService>();
 builder.Services.AddScoped<IPlnPendientesService, PlnPendientesService>();
 
+// Capacitación (LMS)
+builder.Services.AddScoped<FabricaHilos.Services.Capacitacion.ICapacitacionService,
+                           FabricaHilos.Services.Capacitacion.CapacitacionService>();
+builder.Services.AddScoped<FabricaHilos.Services.Capacitacion.IExamenService,
+                           FabricaHilos.Services.Capacitacion.ExamenService>();
+builder.Services.AddScoped<FabricaHilos.Services.Capacitacion.ICertificadoService,
+                           FabricaHilos.Services.Capacitacion.CertificadoService>();
+builder.Services.AddScoped<FabricaHilos.Services.Capacitacion.ContenidoMediaService>();
+// Habilitar subida de archivos grandes (video hasta 500 MB)
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.MultipartBodyLengthLimit = 600_000_000; // 600 MB
+});
+builder.WebHost.ConfigureKestrel(o =>
+{
+    o.Limits.MaxRequestBodySize = 600_000_000;
+});
+
 // Registrar servicios de notificaciones
 builder.Services.AddNotificaciones(builder.Configuration);
 

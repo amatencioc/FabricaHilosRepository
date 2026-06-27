@@ -1,4 +1,4 @@
-@*
+﻿@*
     Partial reutilizable de filtros para las 4 vistas de Partidas Pendientes.
     Parámetros vía ViewBag:
       FiltroTipo      → List<PlnFiltroTipo>
@@ -19,6 +19,7 @@
     var asesorActual   = ViewBag.FiltroAsesor  as string ?? "";
     var clienteActual  = ViewBag.FiltroCliente as string ?? "";
     var actionName     = Model as string ?? "";
+    var tipoUnico      = filtroTipo.Count == 1 ? filtroTipo[0] : null;
 }
 
 <form method="get" class="row g-2 mb-3 align-items-end" id="frmFiltrosPend">
@@ -26,13 +27,23 @@
     @* ── Tipo ───────────────────────────────────────────────── *@
     <div class="col-auto">
         <label class="form-label form-label-sm mb-0">Tipo</label>
-        <select name="tipo" class="form-select form-select-sm" style="min-width:150px;">
-            <option value="">Todos</option>
-            @foreach (var ft in filtroTipo)
-            {
-                <option value="@ft.Tipo" selected="@(tipoSel == ft.Tipo ? "selected" : null)">@ft.Descripcion</option>
-            }
-        </select>
+        @if (tipoUnico != null)
+        {
+            <select name="tipo" class="form-select form-select-sm" style="min-width:150px;" disabled>
+                <option value="@tipoUnico.Tipo" selected>@tipoUnico.Descripcion</option>
+            </select>
+            <input type="hidden" name="tipo" value="@tipoUnico.Tipo" />
+        }
+        else
+        {
+            <select name="tipo" class="form-select form-select-sm" style="min-width:150px;">
+                <option value="">Todos</option>
+                @foreach (var ft in filtroTipo)
+                {
+                    <option value="@ft.Tipo" selected="@(tipoSel == ft.Tipo ? "selected" : null)">@ft.Descripcion</option>
+                }
+            </select>
+        }
     </div>
 
     @* ── Asesor (filtrable) ─────────────────────────────────── *@

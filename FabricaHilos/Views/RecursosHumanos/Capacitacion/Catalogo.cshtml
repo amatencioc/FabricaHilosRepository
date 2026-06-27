@@ -1,0 +1,281 @@
+@model FabricaHilos.Models.Capacitacion.CatalogoVm
+@{
+    ViewData["Title"] = "Catálogo de Cursos";
+}
+
+@section Styles {
+<style>
+    .category-chip { cursor:pointer; border-radius:2rem; padding:.35rem 1rem; transition:all .15s; }
+    .category-chip.active { color:white !important; }
+    .course-card { transition: transform .15s, box-shadow .15s; border:none; box-shadow: 0 2px 6px rgba(0,0,0,.07); }
+    .course-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.13) !important; }
+    .badge-nivel-B { background:#198754; }
+    .badge-nivel-I { background:#fd7e14; }
+    .badge-nivel-A { background:#dc3545; }
+    .overlay-complete { position:absolute;top:8px;right:8px; }
+</style>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="fw-bold mb-0"><i class="bi bi-grid-fill text-primary me-2"></i>Catálogo de Cursos</h2>
+    <div class="d-flex align-items-center gap-3">
+        <span class="text-muted">@Model.Cursos.Count curso(s)</span>
+        @if (ViewBag.EsAdmin == true)
+        {
+            <a asp-controller="CapacitacionAdmin" asp-action="CursoForm"
+               class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-plus-circle me-1"></i>Nuevo Curso
+            </a>
+        }
+    </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" asp-controller="Capacitacion" asp-action="Catalogo" class="mb-4">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input name="busqueda" value="@Model.FiltroBusqueda" class="form-control"
+                       placeholder="Buscar cursos..." />
+            </div>
+        </div>
+        <div class="col-md-2">
+            <select name="nivel" class="form-select">
+                <option value="">Todos los niveles</option>
+                <option value="B" selected="@(Model.FiltroNivel=="B")">Básico</option>
+                <option value="I" selected="@(Model.FiltroNivel=="I")">Intermedio</option>
+                <option value="A" selected="@(Model.FiltroNivel=="A")">Avanzado</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <div class="form-check form-switch d-flex align-items-center gap-2 mt-1">
+                <input class="form-check-input" type="checkbox" name="soloObligatorios"
+                       value="true" checked="@Model.SoloObligatorios" id="chkOblig">
+                <label class="form-check-label" for="chkOblig">Solo obligatorios</label>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="form-check form-switch d-flex align-items-center gap-2 mt-1">
+                <input class="form-check-input" type="checkbox" name="soloPendientes"
+                       value="true" checked="@Model.SoloPendientes" id="chkPend">
+                <label class="form-check-label" for="chkPend">No inscritos</label>
+            </div>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        </div>
+        @if (!string.IsNullOrEmpty(Model.FiltroBusqueda) || Model.FiltroNivel != null
+             || Model.SoloObligatorios || Model.SoloPendientes || Model.FiltroCategoria.HasValue)
+        {
+            <div class="col-auto">
+                <a asp-controller="Capacitacion" asp-action="Catalogo" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar
+                </a>
+            </div>
+        }
+    </div>
+</form>
+
+<!-- Chips de categoría -->
+<div class="d-flex flex-wrap gap-2 mb-4">
+    <a asp-controller="Capacitacion" asp-action="Catalogo"
+       class="category-chip border text-body @(Model.FiltroCategoria == null ? "active bg-primary border-primary" : "border-secondary")">
+        <i class="bi bi-grid me-1"></i>Todos
+    </a>
+    @foreach (var cat in Model.Categorias)
+    {
+        var isActive = Model.FiltroCategoria == cat.IdCategoria;
+        <a asp-controller="Capacitacion" asp-action="Catalogo"
+           asp-route-categoria="@cat.IdCategoria"
+           asp-route-busqueda="@Model.FiltroBusqueda"
+           class="category-chip border @(isActive ? "active" : "text-body")"
+           style="@(isActive ? $"background:{cat.ColorUi};border-color:{cat.ColorUi};" : $"border-color:{cat.ColorUi};")">
+            <i class="bi @cat.IconoBs me-1" style="color:@(isActive?"white":cat.ColorUi)"></i>
+            @cat.Nombre
+            <span class="badge bg-white text-dark ms-1 small">@cat.TotalCursos</span>
+        </a>
+    }
+</div>
+
+<!-- Grid de cursos -->
+@if (!Model.Cursos.Any())
+{
+    <div class="text-center py-5">
+        <i class="bi bi-journal-x text-muted" style="font-size:4rem"></i>
+        <p class="mt-3 text-muted">No se encontraron cursos con los filtros actuales.</p>
+        <a asp-controller="Capacitacion" asp-action="Catalogo" class="btn btn-outline-primary mt-1">
+            Ver todos los cursos
+        </a>
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        @foreach (var c in Model.Cursos)
+        {
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="card course-card h-100 position-relative">
+                    @if (c.TieneCertificadoEmitido)
+                    {
+                        <div class="overlay-complete">
+                            <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Certificado</span>
+                        </div>
+                    }
+                    else if (c.EstaInscrito && c.PctProgreso == 100)
+                    {
+                        <div class="overlay-complete">
+                            <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Completado</span>
+                        </div>
+                    }
+
+                    <div class="card-body d-flex flex-column">
+                        <!-- Header categoría -->
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <div class="rounded-2 p-2 d-flex" style="background:@(c.ColorCategoria)22">
+                                <i class="bi @c.IconoCategoria" style="color:@c.ColorCategoria;font-size:1.4rem"></i>
+                            </div>
+                            <div>
+                                <div class="text-muted small">@c.NombreCategoria</div>
+                                <div class="d-flex gap-1">
+                                    <span class="badge badge-nivel-@c.Nivel">@c.NivelTexto</span>
+                                    @if (c.EsObligatorio)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Obligatorio</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 class="fw-semibold flex-grow-1">@c.Titulo</h6>
+
+                        @if (!string.IsNullOrEmpty(c.Descripcion))
+                        {
+                            <p class="text-muted small mb-2">
+                                @(c.Descripcion!.Length > 90 ? c.Descripcion[..90] + "…" : c.Descripcion)
+                            </p>
+                        }
+
+                        <!-- Metadatos -->
+                        <div class="d-flex flex-wrap gap-3 text-muted small mb-3">
+                            @if (c.DuracionMin.HasValue)
+                            {
+                                <span><i class="bi bi-clock me-1"></i>@c.DuracionFormato</span>
+                            }
+                            @if (c.TotalLecciones > 0)
+                            {
+                                <span><i class="bi bi-collection-play me-1"></i>@c.TotalLecciones lecciones</span>
+                            }
+                            @if (c.TieneExamen == "S")
+                            {
+                                <span><i class="bi bi-pencil-square me-1"></i>Con examen</span>
+                            }
+                        </div>
+
+                        <!-- Progreso si está inscrito -->
+                        @if (c.EstaInscrito && c.TotalLecciones > 0)
+                        {
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted">Progreso</span>
+                                    <span class="fw-semibold">@c.LeccionesVistas/@c.TotalLecciones</span>
+                                </div>
+                                <div class="progress" style="height:5px">
+                                    <div class="progress-bar bg-success" style="width:@c.PctProgreso%"></div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Acción -->
+                        <div class="mt-auto">
+                            @if (ViewBag.EsAdmin == true)
+                            {
+                                <div class="d-flex gap-1 mb-2">
+                                    <a asp-controller="CapacitacionAdmin" asp-action="CursoForm"
+                                       asp-route-id="@c.IdCurso"
+                                       class="btn btn-sm btn-outline-secondary flex-grow-1">
+                                        <i class="bi bi-pencil me-1"></i>Editar
+                                    </a>
+                                    <a asp-controller="CapacitacionAdmin" asp-action="Reportes"
+                                       asp-route-idCurso="@c.IdCurso"
+                                       class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-bar-chart"></i>
+                                    </a>
+                                </div>
+                            }
+                            @if (c.EstaInscrito)
+                            {
+                                <a asp-controller="Curso" asp-action="Ver"
+                                   asp-route-idCurso="@c.IdCurso"
+                                   class="btn btn-success w-100">
+                                    <i class="bi bi-play-fill me-1"></i>
+                                    @(c.PctProgreso > 0 ? "Continuar" : "Empezar")
+                                </a>
+                            }
+                            else
+                            {
+                                <div class="d-flex gap-2">
+                                    <a asp-controller="Curso" asp-action="Detalle"
+                                       asp-route-idCurso="@c.IdCurso"
+                                       class="btn btn-outline-primary flex-grow-1">Ver detalles</a>
+                                    <button class="btn btn-primary btn-inscribir" data-id="@c.IdCurso">
+                                        <i class="bi bi-plus-circle me-1"></i>Inscribirse
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@section Scripts {
+<div class="modal fade" id="modalInscripcionError" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-danger"><i class="bi bi-exclamation-circle-fill me-2"></i>No se pudo inscribir</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalInscripcionErrorMsg"></div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.querySelectorAll('.btn-inscribir').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const idCurso = this.dataset.id;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const resp = await fetch('@Url.Action("Inscribirse","Capacitacion")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+                },
+                body: `idCurso=${idCurso}`
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                window.location = `/RecursosHumanos/Curso/Ver/${idCurso}`;
+            } else {
+                document.getElementById('modalInscripcionErrorMsg').textContent = data.msg;
+                new bootstrap.Modal(document.getElementById('modalInscripcionError')).show();
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Inscribirse';
+            }
+        } catch {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Inscribirse';
+        }
+    });
+});
+</script>
+@Html.AntiForgeryToken()
+}

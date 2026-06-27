@@ -1,212 +1,318 @@
-@section Styles {
+﻿@section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
 @using FabricaHilos.Models.Produccion.Planeamiento
-@model IEnumerable<PlnPendientePartidaDef>
+@model PlnPartidasDefViewModel
 @{
-    ViewData["Title"] = "Partidas por Definir";
-    var lista      = Model.ToList();
-    var nVencidos  = lista.Count(x => x.EstaVencido);
-    var kgTotal    = lista.Sum(x => x.PesoNeto);
-    var estEvalSel = ViewBag.FiltroEstEval as string ?? "";
-    // Opciones de tipo de evaluación: siempre la lista completa (sin filtro)
-    // para que el dropdown no pierda opciones al filtrar
-    var tiposEval = (ViewBag.TiposEvalAll as List<string>)
-        ?? lista
-            .Where(x => !string.IsNullOrWhiteSpace(x.DescEvaluacion))
-            .Select(x => x.DescEvaluacion!)
-            .Distinct().OrderBy(e => e).ToList();
+	ViewData["Title"] = "Partidas por Definir";
+	var lista      = Model.Partidas.ToList();
+	var nVencidos  = lista.Count(x => x.EstaVencido);
+	var kgTotal    = lista.Sum(x => x.PesoNeto);
+	var estEvalSel = ViewBag.FiltroEstEval as string ?? "";
+	var tiposEval  = (ViewBag.TiposEvalAll as List<string>)
+		?? lista
+			.Where(x => !string.IsNullOrWhiteSpace(x.DescEvaluacion))
+			.Select(x => x.DescEvaluacion!)
+			.Distinct().OrderBy(e => e).ToList();
 }
 
 @section Breadcrumb {
-    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item active">Partidas por Definir</li>
+	<li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Produccion</a></li>
+	<li class="breadcrumb-item active">Partidas por Definir</li>
 }
 
 @await Html.PartialAsync("_PlnNavBar")
 
 <div class="container-fluid py-3">
 
-    @* ── Encabezado ─────────────────────────────────────────────────────── *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-0"><i class="bi bi-question-circle me-2 text-danger"></i>Partidas por Definir</h4>
-            <small class="text-muted">Partidas con evaluación de calidad pendiente de definición (resultado no aprobado) &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Karen</small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            @if (nVencidos > 0)
-            {
-                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
-            }
-            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
-            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i>Seguimiento
-            </a>
-        </div>
-    </div>
+	@* -- Strip de cabecera -- *@
+	<div class="pend-strip">
+		<i class="bi bi-question-circle" style="color:#fc8181;font-size:.95rem;flex-shrink:0;"></i>
+		<span class="pend-strip-title">Partidas por Definir</span>
+		<span class="pend-strip-sep"></span>
 
-    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-danger text-center py-2">
-                <div class="fw-bold fs-4 text-danger">@lista.Count</div>
-                <small class="text-muted">Partidas pendientes</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
-                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
-                <small class="text-muted">Con fecha vencida</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
-                <small class="text-muted">Total kg</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@lista.Select(x => x.CodCliente).Distinct().Count()</div>
-                <small class="text-muted">Clientes distintos</small>
-            </div>
-        </div>
-    </div>
+		<span class="pend-kpi" title="Total de partidas con evaluacion de calidad pendiente de definicion.">
+			<i class="bi bi-boxes" style="color:#90cdf4;"></i>
+			<span class="pend-kpi-val">@lista.Count</span>
+			<span style="opacity:.75">partidas</span>
+		</span>
+		<span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
+			  title="Partidas cuya fecha de entrega ya vencio.">
+			<i class="bi bi-clock-history" style="color:#fc8181;"></i>
+			<span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
+			<span style="opacity:.75">vencidas</span>
+		</span>
+		<span class="pend-kpi" title="Total de kg pendientes.">
+			<i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
+			<span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
+			<span style="opacity:.75">kg</span>
+		</span>
+		<span class="pend-kpi" title="Rectificaciones de receta (carga al abrir la pestana).">
+			<i class="bi bi-flask" style="color:#b794f4;"></i>
+			<span class="pend-kpi-val" id="kpi-rect-count">—</span>
+			<span style="opacity:.75">rectificaciones</span>
+		</span>
 
-    @* ── Filtro tipo de evaluación ─────────────────────────────────────── *@
-    <form method="get" class="row g-2 mb-3 align-items-end" id="frmFiltrosPartDef">
-        <div class="col-auto">
-            <label class="form-label form-label-sm mb-0">Tipo de Evaluación</label>
-            <select name="estEval" class="form-select form-select-sm" style="min-width:180px;">
-                <option value="">Todas</option>
-                @foreach (var ev in tiposEval)
-                {
-                    <option value="@ev" selected="@(estEvalSel == ev ? "selected" : null)">@ev</option>
-                }
-            </select>
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">
-                <i class="bi bi-search me-1"></i>Filtrar
-            </button>
-            <a asp-action="PartidasPorDefinir" class="btn btn-outline-secondary btn-sm ms-1">Limpiar</a>
-        </div>
-    </form>
+		<span class="pend-strip-actions">
+			<a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+				<i class="bi bi-arrow-left me-1"></i>Seguimiento
+			</a>
+		</span>
+	</div>
 
-    @* ── Tabla ───────────────────────────────────────────────────────────── *@
-    @if (!lista.Any())
-    {
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de definición en este momento.
-        </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
-                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
-                    <tr>
-                        <th class="text-center">Fecha</th>
-                        <th>Partida</th>
-                        <th>Material</th>
-                        <th>Color</th>
-                        <th>Intensidad</th>
-                        <th class="text-center">RMC</th>
-                        <th class="text-end">Kg Neto</th>
-                        <th>Cliente</th>
-                        <th>Consulta</th>
-                        <th>Defecto</th>
-                        <th>Evaluación</th>
-                        <th>Observaciones</th>
-                        <th class="text-center">F. Entrega</th>
-                        <th class="text-center">Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in lista)
-                    {
-                        var rowCss = item.EstaVencido ? "table-danger" :
-                                     item.DiasRetraso >= -2 ? "table-warning" : "";
-                        <tr class="@rowCss">
-                            <td class="text-center text-muted">
-                                @(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
-                            <td>@item.Material</td>
-                            <td style="font-size:.78rem;">@item.Color</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.DescIntensidad</td>
-                            <td class="text-center text-muted">
-                                @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
-                            </td>
-                            <td class="text-end fw-semibold">@item.PesoNeto.ToString("N2")</td>
-                            <td>
-                                <span style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                      title="@item.Cliente">@item.Cliente</span>
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.Consulta))
-                                {
-                                    <span class="badge bg-warning text-dark">@item.Consulta</span>
-                                }
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.DescDefecto))
-                                {
-                                    <span class="badge bg-secondary">@item.DescDefecto</span>
-                                }
-                            </td>
-                            <td style="font-size:.78rem;">
-                                @if (!string.IsNullOrWhiteSpace(item.DescEvaluacion))
-                                {
-                                    <span class="badge @(item.DescEvaluacion == "RECHAZADO" ? "bg-danger" : "bg-info text-dark")">
-                                        @item.DescEvaluacion
-                                    </span>
-                                }
-                            </td>
-                            <td style="font-size:.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                title="@item.Observaciones">
-                                @item.Observaciones
-                            </td>
-                            <td class="text-center">
-                                @if (item.FchEntrega.HasValue)
-                                {
-                                    <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
-                                        @item.FchEntrega.Value.ToString("dd/MM/yy")
-                                    </span>
-                                }
-                                else { <span class="text-muted">—</span> }
-                            </td>
-                            <td class="text-center">
-                                @if (!item.FchEntrega.HasValue)
-                                {
-                                    <span class="text-muted">—</span>
-                                }
-                                else if (item.EstaVencido)
-                                {
-                                    <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
-                                }
-                                else if (item.DiasRetraso >= -2)
-                                {
-                                    <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success">@(-item.DiasRetraso) d</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
-                    <tr>
-                        <td colspan="6" class="text-end text-muted">Totales:</td>
-                        <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="7"></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    }
+	@* -- Filtro compartido -- *@
+	<div class="pend-filter">
+		<form method="get" class="d-flex gap-2 align-items-end flex-wrap" id="frmFiltrosPartDef">
+			<div>
+				<label class="form-label form-label-sm mb-0">Tipo de Evaluacion</label>
+				<select name="estEval" class="form-select form-select-sm" style="min-width:180px;">
+					<option value="">Todas</option>
+					@foreach (var ev in tiposEval)
+					{
+						<option value="@ev" selected="@(estEvalSel == ev ? "selected" : null)">@ev</option>
+					}
+				</select>
+			</div>
+			<div>
+				<button type="submit" class="btn btn-primary btn-sm">
+					<i class="bi bi-search me-1"></i>Filtrar
+				</button>
+				<a asp-action="PartidasPorDefinir" class="btn btn-outline-secondary btn-sm ms-1">Limpiar</a>
+			</div>
+		</form>
+	</div>
+
+	@* -- Tabs -- *@
+	<ul class="nav nav-tabs mt-3 mb-0" id="tabsPartDef" role="tablist">
+		<li class="nav-item" role="presentation">
+			<button class="nav-link active" id="tab-part-btn" data-bs-toggle="tab"
+					data-bs-target="#tab-part" type="button" role="tab">
+				<i class="bi bi-question-circle me-1"></i>Partidas por Definir
+				<span class="badge bg-secondary ms-1">@lista.Count</span>
+			</button>
+		</li>
+		<li class="nav-item" role="presentation">
+			<button class="nav-link" id="tab-rect-btn" data-bs-toggle="tab"
+					data-bs-target="#tab-rect" type="button" role="tab">
+				<i class="bi bi-flask me-1"></i>Rectificacion de Receta
+				<span class="badge bg-secondary ms-1" id="badge-rect-count">
+					<span class="spinner-border spinner-border-sm" role="status" style="width:.6rem;height:.6rem;"></span>
+				</span>
+			</button>
+		</li>
+	</ul>
+
+	<div class="tab-content border border-top-0 rounded-bottom p-3 bg-white">
+
+		@* -- TAB 1: Partidas por Definir (flujo actual) -- *@
+		<div class="tab-pane fade show active" id="tab-part" role="tabpanel">
+
+			@if (!lista.Any())
+			{
+				<div class="alert alert-success">
+					<i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de definicion en este momento.
+				</div>
+			}
+			else
+			{
+				<div class="table-responsive">
+					<table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-partdef">
+						<thead>
+							<tr>
+								<th class="text-center">Fecha</th>
+								<th>Partida</th>
+								<th>Material</th>
+								<th>Presentacion</th>
+								<th>Intensidad</th>
+								<th class="text-center">RMC</th>
+								<th class="text-end">Kg Neto</th>
+								<th>Cliente</th>
+								<th>Defecto</th>
+								<th>Evaluacion</th>
+								<th>Observaciones</th>
+								<th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+									F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+								</th>
+								<th class="text-center">Estado</th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach (var item in lista)
+							{
+								var rowCss = item.EstaVencido ? "table-danger" :
+										 item.DiasRetraso >= -2 ? "table-warning" : "";
+								<tr class="@rowCss"
+									data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+									<td class="text-center text-muted">
+										@(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yy") : "—")
+									</td>
+									<td class="fw-bold" style="white-space:nowrap;">@item.Partida</td>
+									<td>@item.Material</td>
+									<td style="font-size:.78rem;">@item.Color</td>
+									<td style="font-size:.78rem;" class="text-muted">@item.DescIntensidad</td>
+									<td class="text-center text-muted">
+										@(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+									</td>
+									<td class="text-end fw-semibold">@item.PesoNeto.ToString("N2")</td>
+									<td>
+										<span style="max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+											  title="@item.Cliente">@item.Cliente</span>
+									</td>
+									<td style="font-size:.78rem;">
+										@if (!string.IsNullOrWhiteSpace(item.DescDefecto))
+										{
+											<span class="badge bg-secondary">@item.DescDefecto</span>
+										}
+									</td>
+									<td style="font-size:.78rem;">
+										@if (!string.IsNullOrWhiteSpace(item.DescEvaluacion))
+										{
+											<span class="badge @(item.DescEvaluacion == "RECHAZADO" ? "bg-danger" : "bg-info text-dark")">
+												@item.DescEvaluacion
+											</span>
+										}
+									</td>
+									<td style="font-size:.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+										title="@item.Observaciones">
+										@item.Observaciones
+									</td>
+									<td class="text-center">
+										@if (item.FchEntrega.HasValue)
+										{
+											<span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+												@item.FchEntrega.Value.ToString("dd/MM/yy")
+											</span>
+										}
+										else { <span class="text-muted">—</span> }
+									</td>
+									<td class="text-center">
+										@if (!item.FchEntrega.HasValue)
+										{
+											<span class="text-muted">—</span>
+										}
+										else if (item.EstaVencido)
+										{
+											<span class="badge bg-danger" title="@item.DiasRetraso dias vencido">+@item.DiasRetraso d</span>
+										}
+										else if (item.DiasRetraso >= -2)
+										{
+											<span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+										}
+										else
+										{
+											<span class="badge bg-success">@(-item.DiasRetraso) d</span>
+										}
+									</td>
+								</tr>
+							}
+						</tbody>
+						<tfoot>
+							<tr class="fw-semibold">
+								<td colspan="6" class="text-end text-muted">Totales:</td>
+								<td class="text-end">@kgTotal.ToString("N2")</td>
+								<td colspan="6"></td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			}
+		</div>
+
+		@* -- TAB 2: Rectificacion de Receta – carga lazy al primer click -- *@
+		<div class="tab-pane fade" id="tab-rect" role="tabpanel">
+			<div id="rect-tab-body" class="pt-2">
+				<div class="d-flex align-items-center justify-content-center py-5">
+					<div class="spinner-border text-secondary me-2" role="status"></div>
+					<span class="text-muted">Cargando rectificaciones&hellip;</span>
+				</div>
+			</div>
+		</div>
+
+	</div>
 
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    var tbl = document.getElementById('tbl-partdef');
+    if (!tbl) return;
+    var tbody = tbl.querySelector('tbody');
+    var sortState = { col: null, dir: '' };
+    function updateIcons() {
+        tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'bi sort-icon ms-1 ' + (th.dataset.col === sortState.col
+                ? (sortState.dir === 'asc' ? 'bi-sort-up' : 'bi-sort-down')
+                : 'bi-arrow-down-up');
+        });
+    }
+    function sortTable(col, dir) {
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+            var va = a.dataset[col] || '99999999';
+            var vb = b.dataset[col] || '99999999';
+            if (va === vb) return 0;
+            return dir === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortState.col = col; sortState.dir = dir;
+        updateIcons();
+    }
+    tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var col = this.dataset.col;
+            var dir = (sortState.col === col && sortState.dir === 'asc') ? 'desc' : 'asc';
+            sortTable(col, dir);
+        });
+    });
+})();
+</script>
+<script>
+(function () {
+	var loaded  = false;
+	var tabBtn  = document.getElementById('tab-rect-btn');
+	var tabBody = document.getElementById('rect-tab-body');
+	var badgeEl = document.getElementById('badge-rect-count');
+	var kpiEl   = document.getElementById('kpi-rect-count');
+	var estado  = '@(ViewBag.FiltroEstadoRec as string ?? string.Empty)';
+
+	function buildUrl() {
+		var p = new URLSearchParams();
+		if (estado) p.set('estado', estado);
+		return '@Url.Action("RectificacionRecetaPartial", "Planeamiento")?' + p.toString();
+	}
+
+	function loadRect() {
+		if (loaded) return;
+		loaded = true;
+		fetch(buildUrl(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+			.then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+			.then(function (html) {
+				tabBody.innerHTML = html;
+				var rows = tabBody.querySelectorAll('tbody tr');
+				var cnt  = rows.length;
+				if (badgeEl) badgeEl.textContent = cnt;
+				if (kpiEl)   kpiEl.textContent   = cnt;
+			})
+			.catch(function () {
+				tabBody.innerHTML = '<div class="alert alert-danger m-2"><i class="bi bi-exclamation-triangle me-1"></i>Error al cargar las rectificaciones.</div>';
+				if (badgeEl) badgeEl.textContent = '!';
+			});
+	}
+
+	if (tabBtn) tabBtn.addEventListener('show.bs.tab', loadRect);
+
+	// Si la URL activa la pestana de rectificacion, cargar directamente
+	var params = new URLSearchParams(window.location.search);
+	if (params.get('tab') === 'rect' || params.has('estado')) {
+		if (tabBtn) {
+			loadRect();
+			new bootstrap.Tab(tabBtn).show();
+		}
+	}
+})();
+</script>
+}

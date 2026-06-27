@@ -1,0 +1,256 @@
+@model FabricaHilos.Models.Capacitacion.CapCurso
+@{
+    ViewData["Title"] = Model.IdCurso == 0 ? "Nuevo Curso" : $"Editar: {Model.Titulo}";
+    var categorias = ViewBag.Categorias as List<FabricaHilos.Models.Capacitacion.CapCategoria> ?? [];
+    var esNuevo = Model.IdCurso == 0;
+}
+
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-controller="CapacitacionAdmin" asp-action="Index">Admin</a></li>
+        <li class="breadcrumb-item active">@(esNuevo ? "Nuevo Curso" : "Editar Curso")</li>
+    </ol>
+</nav>
+
+<h3 class="fw-bold mb-4">
+    <i class="bi @(esNuevo?"bi-plus-circle":"bi-pencil") text-primary me-2"></i>
+    @(esNuevo ? "Nuevo Curso" : Model.Titulo)
+</h3>
+
+<div class="row g-4">
+    <!-- Datos del curso -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm p-4 mb-4">
+            <h6 class="fw-semibold mb-3">Información general</h6>
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">Título <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="titulo" value="@Model.Titulo" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Categoría <span class="text-danger">*</span></label>
+                    <select class="form-select" id="categoria">
+                        @foreach (var cat in categorias)
+                        {
+                            <option value="@cat.IdCategoria" selected="@(cat.IdCategoria==Model.IdCategoria)">
+                                @cat.Nombre
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Nivel</label>
+                    <select class="form-select" id="nivel">
+                        <option value="B" selected="@(Model.Nivel=="B")">Básico</option>
+                        <option value="I" selected="@(Model.Nivel=="I")">Intermedio</option>
+                        <option value="A" selected="@(Model.Nivel=="A")">Avanzado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Duración (min)</label>
+                    <input type="number" class="form-control" id="duracion" value="@Model.DuracionMin" min="0">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Descripción</label>
+                    <textarea class="form-control" id="descripcion" rows="3">@Model.Descripcion</textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Objetivo</label>
+                    <textarea class="form-control" id="objetivo" rows="2">@Model.Objetivo</textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Nota mínima (%)</label>
+                    <input type="number" class="form-control" id="notaAprob"
+                           value="@Model.NotaAprobacion" min="0" max="100">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Máx. intentos examen</label>
+                    <input type="number" class="form-control" id="maxIntentos"
+                           value="@Model.MaxIntentos" min="1">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Validez cert. (días)</label>
+                    <input type="number" class="form-control" id="certValidez"
+                           value="@Model.CertValidezDias" min="0" placeholder="Sin vencimiento">
+                </div>
+                <div class="col-12">
+                    <div class="d-flex gap-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="obligatorio"
+                                   @(Model.EsObligatorio?"checked":"")>
+                            <label class="form-check-label" for="obligatorio">Obligatorio</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tieneExamen"
+                                   @(Model.TieneExamen=="S"?"checked":"")>
+                            <label class="form-check-label" for="tieneExamen">Tiene examen</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tieneCert"
+                                   @(Model.TieneCertificado=="S"?"checked":"")>
+                            <label class="form-check-label" for="tieneCert">Con certificado</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenidos -->
+        @if (Model.IdCurso > 0)
+        {
+            <div class="card border-0 shadow-sm p-4">
+                <div class="d-flex justify-content-between mb-3">
+                    <h6 class="fw-semibold mb-0">Contenidos del curso</h6>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                            data-bs-target="#modalContenido">
+                        <i class="bi bi-plus me-1"></i>Agregar
+                    </button>
+                </div>
+                <div id="listaContenidos">
+                    <div class="text-muted small text-center py-3">
+                        Guarda el curso primero, luego agrega contenidos.
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Acciones -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm p-4 sticky-top" style="top:80px">
+            <h6 class="fw-semibold mb-3">Publicación</h6>
+            <div class="mb-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select" id="estadoCurso">
+                    <option value="I" selected="@(Model.Estado=="I")">Borrador</option>
+                    <option value="A" selected="@(Model.Estado=="A")">Publicado</option>
+                    <option value="B" selected="@(Model.Estado=="B")">Archivado</option>
+                </select>
+            </div>
+            <button class="btn btn-primary w-100 mb-2" onclick="guardarCurso()">
+                <i class="bi bi-save me-2"></i>Guardar curso
+            </button>
+            <a asp-controller="CapacitacionAdmin" asp-action="Index"
+               class="btn btn-outline-secondary w-100">Cancelar</a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar contenido -->
+<div class="modal fade" id="modalContenido" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Agregar contenido</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formContenido" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="idCurso" value="@Model.IdCurso">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Título</label>
+                            <input type="text" name="titulo" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo</label>
+                            <select name="tipo" class="form-select" id="tipoContenido"
+                                    onchange="cambiarTipo(this.value)">
+                                <option value="VID">Video</option>
+                                <option value="PDF">PDF</option>
+                                <option value="ARC">Archivo</option>
+                                <option value="URL">URL externa</option>
+                                <option value="TXT">Artículo HTML</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Orden</label>
+                            <input type="number" name="orden" class="form-control" value="1" min="1">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Duración (seg)</label>
+                            <input type="number" name="duracionSeg" class="form-control" value="0" min="0" id="fieldDuracion">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Obligatorio</label>
+                            <select name="obligatorio" class="form-select">
+                                <option value="S">Sí</option>
+                                <option value="N">No (opcional)</option>
+                            </select>
+                        </div>
+
+                        <!-- Campo archivo -->
+                        <div class="col-12" id="fieldArchivo">
+                            <label class="form-label">Archivo</label>
+                            <input type="file" name="archivo" class="form-control"
+                                   accept=".mp4,.webm,.pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.zip,.rar">
+                            <div class="form-text">Máx 500 MB para video, 50 MB para documentos.</div>
+                        </div>
+
+                        <!-- Campo URL -->
+                        <div class="col-12 d-none" id="fieldUrl">
+                            <label class="form-label">URL externa</label>
+                            <input type="url" name="urlExterna" class="form-control"
+                                   placeholder="https://...">
+                        </div>
+
+                        <!-- Campo HTML -->
+                        <div class="col-12 d-none" id="fieldHtml">
+                            <label class="form-label">Contenido HTML</label>
+                            <textarea name="contenidoHtml" class="form-control" rows="6"
+                                      placeholder="<p>Contenido del artículo...</p>"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="subirContenido()">
+                        <i class="bi bi-cloud-upload me-1"></i>Guardar contenido
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function cambiarTipo(tipo) {
+    document.getElementById('fieldArchivo').classList.toggle('d-none', tipo==='URL'||tipo==='TXT');
+    document.getElementById('fieldUrl').classList.toggle('d-none', tipo!=='URL');
+    document.getElementById('fieldHtml').classList.toggle('d-none', tipo!=='TXT');
+    document.getElementById('fieldDuracion').closest('.col-md-4').classList.toggle('d-none', tipo!=='VID');
+}
+
+async function subirContenido() {
+    const form = document.getElementById('formContenido');
+    const fd   = new FormData(form);
+    const btn  = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Subiendo...';
+
+    try {
+        const resp = await fetch('@Url.Action("GuardarContenido","CapacitacionAdmin")', {
+            method: 'POST', body: fd
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalContenido')).hide();
+            form.reset();
+            alert('Contenido guardado correctamente.');
+        } else {
+            alert('Error: ' + data.msg);
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Guardar contenido';
+    }
+}
+
+function guardarCurso() {
+    // TODO: POST al endpoint de guardar/actualizar curso
+    alert('Función de guardar curso en desarrollo. Use el panel Oracle para insertar directamente.');
+}
+</script>
+}

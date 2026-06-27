@@ -1,4 +1,4 @@
-using FabricaHilos.Models.Produccion.Planeamiento;
+﻿using FabricaHilos.Models.Produccion.Planeamiento;
 using FabricaHilos.Models.Sgc;
 using FabricaHilos.Services;
 using FabricaHilos.Services.Produccion.Planeamiento;
@@ -49,10 +49,14 @@ public class PlaneamientoController : OracleBaseController
         string? estado         = null,
         string? tfibra         = null,
         string? paso_actual    = null,
-        string? grupo          = null)
+        string? grupo          = null,
+        string? fchEntDesde    = null,
+        string? fchEntHasta    = null)
     {
-        var desde = ParseFecha(fchDesde, DateTime.Today.AddDays(-30));
-        var hasta = ParseFecha(fchHasta, DateTime.Today);
+        var desde    = string.IsNullOrWhiteSpace(fchDesde)    ? (DateTime?)null : ParseFecha(fchDesde,    DateTime.Today.AddDays(-30));
+        var hasta    = string.IsNullOrWhiteSpace(fchHasta)    ? (DateTime?)null : ParseFecha(fchHasta,    DateTime.Today);
+        var entDesde = string.IsNullOrWhiteSpace(fchEntDesde) ? (DateTime?)null : ParseFecha(fchEntDesde, DateTime.Today);
+        var entHasta = string.IsNullOrWhiteSpace(fchEntHasta) ? (DateTime?)null : ParseFecha(fchEntHasta, DateTime.Today);
 
         var items = await _registro.GetRegistroDiarioAsync(
             desde, hasta,
@@ -61,7 +65,9 @@ public class PlaneamientoController : OracleBaseController
             proceso     ?? "",
             estado      ?? "",
             tfibra      ?? "",
-            paso_actual ?? "");
+            paso_actual ?? "",
+            entDesde,
+            entHasta);
 
         var vm = new RegistroPedidosViewModel
         {
@@ -75,6 +81,8 @@ public class PlaneamientoController : OracleBaseController
             FiltroTfibra     = tfibra      ?? "",
             FiltroPasoActual = paso_actual ?? "",
             FiltroGrupo      = grupo ?? "dia",
+            FchEntDesde      = entDesde,
+            FchEntHasta      = entHasta,
         };
 
         return View("RegistroPedido", vm);
@@ -161,23 +169,12 @@ public class PlaneamientoController : OracleBaseController
         if (menus.PlaneamientoPendEvalCalidad)
             modulos.Add(new SgcModuloDto
             {
-                Nombre      = "Pendientes Eval. Calidad",
+                Nombre      = "Eval. Calidad",
                 Descripcion = "Partidas secadas sin evaluación de calidad tintorería registrada. Responsable: Ivon.",
                 Icono       = "bi-patch-check",
                 ColorClase  = "text-success",
                 Controller  = "Planeamiento",
                 Action      = "PendientesEvalCalidad"
-            });
-
-        if (menus.PlaneamientoPendPartidasDef)
-            modulos.Add(new SgcModuloDto
-            {
-                Nombre      = "Partidas por Definir",
-                Descripcion = "Partidas con evaluación de calidad pendiente de definición (resultado no aprobado). Responsable: Karen.",
-                Icono       = "bi-question-circle",
-                ColorClase  = "text-danger",
-                Controller  = "Planeamiento",
-                Action      = "PartidasPorDefinir"
             });
 
         if (menus.PlaneamientoPendEnconado)
@@ -904,28 +901,82 @@ public class PlaneamientoController : OracleBaseController
     // ── Partidas pendientes de revisado ─────────────────────────────────────
     // GET /Planeamiento/PendientesRevisado
     public async Task<IActionResult> PendientesRevisado(
-        string? tipo = null, string? asesor = null, string? cliente = null)
+        string? tipo = null, string? asesor = null, string? cliente = null,
+        string? fchIni = null, string? fchFin = null)
     {
-        var tFiltroTipo  = _pendientes.GetFiltroTipoAsync();
-        var tDatos       = _pendientes.GetPendientesRevisadoAsync(
-            tipo ?? "%", asesor ?? "%", cliente ?? "%");
-        var tUniverso    = _pendientes.GetPendientesRevisadoAsync("%", "%", "%");
-        await Task.WhenAll(tFiltroTipo, tDatos, tUniverso);
+        var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var fechaI  = DateTime.TryParseExact(fchIni, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today.AddDays(-30);
+        var fechaF  = DateTime.TryParseExact(fchFin, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d2) ? d2 : DateTime.Today;
+        ViewBag.ObsFchIni  = fechaI.ToString("yyyy-MM-dd");
+        ViewBag.ObsFchFin  = fechaF.ToString("yyyy-MM-dd");
+
+        // Una sola llamada DB al universo completo + las otras 3 en paralelo (P1 + P2)
+        var tFiltroTipo = _pendientes.GetFiltroTipoAsync();
+        var tUniverso   = _pendientes.GetPendientesRevisadoAsync("%", "%", "%");
+        var tAsesores   = _reporte.GetFiltroAsesoresAsync();
+        var tClientes   = _reporte.GetFiltroClientesAsync();
+        await Task.WhenAll(tFiltroTipo, tUniverso, tAsesores, tClientes);
+
+        // Filtrado en memoria — elimina la segunda round-trip a Oracle
         var universo = tUniverso.Result.ToList();
+        IEnumerable<PlnPendienteRevisado> datos = universo;
+        if (!string.IsNullOrEmpty(tipo)    && tipo    != "%") datos = datos.Where(x => x.Tipo       == tipo);
+        if (!string.IsNullOrEmpty(asesor)  && asesor  != "%") datos = datos.Where(x => x.CodVende   == asesor);
+        if (!string.IsNullOrEmpty(cliente) && cliente != "%") datos = datos.Where(x => x.CodCliente == cliente);
+
         var codVende = universo.Select(d => d.CodVende).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
-        var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
-        ViewBag.FiltroAsesores = asesores;
-        ViewBag.FiltroClientes = clientes;
+        ViewBag.FiltroAsesores = tAsesores.Result.Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
+        ViewBag.FiltroClientes = tClientes.Result.Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        var vm = new PlnRevisadoViewModel
+        {
+            Pendientes    = datos
+                .OrderBy(x => x.Prioridad < 99 ? x.Prioridad : int.MaxValue)
+                .ThenBy(x => x.FechaFin ?? DateTime.MaxValue)
+                .ToList(),
+            Observaciones = [],
+        };
+        return View(vm);
     }
 
-    // ── Partidas pendientes de evaluación de calidad ─────────────────────────
+    // POST /Planeamiento/GuardarPrioridadRevisado
+    [HttpPost]
+    public async Task<IActionResult> GuardarPrioridadRevisado(decimal guia, int prioridad)
+    {
+        await _pendientes.GuardarPrioridadRevisadoAsync(guia, prioridad);
+        return Json(new { ok = true });
+    }
+
+    // GET /Planeamiento/ObservacionesRevisadoPartial  (lazy load – tab 2)
+    public async Task<IActionResult> ObservacionesRevisadoPartial(
+        string? tipo = null, string? asesor = null, string? cliente = null,
+        string? fchIni = null, string? fchFin = null)
+    {
+        var fmts    = new[] { "yyyy-MM-dd", "dd/MM/yyyy" };
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var fechaI  = DateTime.TryParseExact(fchIni, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d1) ? d1 : DateTime.Today.AddDays(-30);
+        var fechaF  = DateTime.TryParseExact(fchFin, fmts, culture,
+                          System.Globalization.DateTimeStyles.None, out var d2) ? d2 : DateTime.Today;
+        ViewBag.ObsFchIni     = fechaI.ToString("yyyy-MM-dd");
+        ViewBag.ObsFchFin     = fechaF.ToString("yyyy-MM-dd");
+        ViewBag.FiltroTipoSel = tipo;
+        ViewBag.FiltroAsesor  = asesor;
+        ViewBag.FiltroCliente = cliente;
+        var obs = await _pendientes.GetObservacionesRevisadoAsync(
+            tipo ?? "%", asesor ?? "%", cliente ?? "%", fechaI, fechaF);
+        return PartialView("_ObsRevisadoTabContent", obs);
+    }
+
+
+    // -- Evaluacion de Calidad (3 tabs: EvalCalidad + PartidasDef + RectReceta)
     // GET /Planeamiento/PendientesEvalCalidad
     public async Task<IActionResult> PendientesEvalCalidad(
         string? tipo = null, string? asesor = null, string? cliente = null)
@@ -940,16 +991,36 @@ public class PlaneamientoController : OracleBaseController
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
         var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
-        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.Where(t => t.Tipo == "G").ToList();
         ViewBag.FiltroAsesores = asesores;
         ViewBag.FiltroClientes = clientes;
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        var vm = new PlnEvalCalidadViewModel
+        {
+            EvalCalidad = tDatos.Result.OrderBy(x => x.FechaFin ?? DateTime.MaxValue).ToList(),
+        };
+        return View(vm);
     }
 
-    // ── Partidas con evaluación de calidad pendiente de definición ───────────
+    // GET /Planeamiento/PartidasDefPartial  (lazy load - tab 2)
+    public async Task<IActionResult> PartidasDefPartial(string? estEval = null)
+    {
+        var todos = (await _pendientes.GetPendientesPartidasDefAsync("%")).ToList();
+        var tiposEval = todos
+            .Where(x => !string.IsNullOrWhiteSpace(x.DescEvaluacion))
+            .Select(x => x.DescEvaluacion!)
+            .Distinct().OrderBy(e => e).ToList();
+        var datos = string.IsNullOrEmpty(estEval)
+            ? todos
+            : todos.Where(x => x.DescEvaluacion == estEval).ToList();
+        ViewBag.FiltroEstEval = estEval;
+        ViewBag.TiposEvalAll  = tiposEval;
+        return PartialView("_PartDefTabContent", datos.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList());
+    }
+
+    // ── Partidas con evaluación de calidad pendiente de definición
     // GET /Planeamiento/PartidasPorDefinir
     public async Task<IActionResult> PartidasPorDefinir(string? estEval = null)
     {
@@ -966,7 +1037,22 @@ public class PlaneamientoController : OracleBaseController
             : todos.Where(x => x.DescEvaluacion == estEval).ToList();
         ViewBag.FiltroEstEval = estEval;
         ViewBag.TiposEvalAll  = tiposEval;
-        return View(datos);
+        var vm = new PlnPartidasDefViewModel
+        {
+            Partidas        = datos.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList(),
+            Rectificaciones = [],
+        };
+        return View(vm);
+    }
+
+    // GET /Planeamiento/RectificacionRecetaPartial  (lazy load – tab 2)
+    public async Task<IActionResult> RectificacionRecetaPartial(string? estado = null)
+    {
+        // null = carga inicial → pendientes por defecto | "" = "Todos"
+        var filtro = estado switch { null => "1", "" => "%", _ => estado };
+        ViewBag.FiltroEstadoRec = estado ?? "1";
+        var rects = await _pendientes.GetRectificacionesRecetaAsync(filtro);
+        return PartialView("_RectRecetaTabContent", rects);
     }
 
     // ── Partidas terminadas en tintorería pendientes de secado ───────────────
@@ -984,16 +1070,16 @@ public class PlaneamientoController : OracleBaseController
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
         var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
-        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.Where(t => t.Tipo == "G").ToList(); // solo Tintorería
         ViewBag.FiltroAsesores = asesores;
         ViewBag.FiltroClientes = clientes;
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        return View(tDatos.Result.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList());
     }
 
-    // ── Partidas programadas pendientes de acabado de madeja ─────────────────
+    // ── Partidas programadas pendientes de acabado de madeja
     // GET /Planeamiento/PendientesMadeja
     public async Task<IActionResult> PendientesMadeja(
         string? tipo = null, string? asesor = null, string? cliente = null)
@@ -1008,16 +1094,16 @@ public class PlaneamientoController : OracleBaseController
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
         var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
-        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.Where(t => t.Tipo == "G").ToList(); // solo Tintorería
         ViewBag.FiltroAsesores = asesores;
         ViewBag.FiltroClientes = clientes;
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        return View(tDatos.Result.OrderBy(x => x.FchProg ?? DateTime.MaxValue).ToList());
     }
 
-    // ── Partidas aprobadas pendientes de enconado/devanado ───────────────────
+    // ── Partidas aprobadas pendientes de enconado/devanado
     // GET /Planeamiento/PendientesEnconado
     public async Task<IActionResult> PendientesEnconado(
         string? tipo = null, string? asesor = null, string? cliente = null)
@@ -1038,10 +1124,10 @@ public class PlaneamientoController : OracleBaseController
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        return View(tDatos.Result.OrderBy(x => x.Fecha ?? DateTime.MaxValue).ToList());
     }
 
-    // ── Partidas pendientes de teñido ────────────────────────────────────────
+    // ── Partidas pendientes de teñido
     // GET /Planeamiento/PendientesTenido
     public async Task<IActionResult> PendientesTenido(
         string? tipo = null, string? asesor = null, string? cliente = null)
@@ -1056,12 +1142,12 @@ public class PlaneamientoController : OracleBaseController
         var codCli   = universo.Select(d => d.CodCliente).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var asesores = (await _reporte.GetFiltroAsesoresAsync()).Where(a => codVende.Contains(a.CodVende ?? "")).ToList();
         var clientes = (await _reporte.GetFiltroClientesAsync()).Where(c => codCli.Contains(c.CodCliente ?? "")).ToList();
-        ViewBag.FiltroTipo     = tFiltroTipo.Result.ToList();
+        ViewBag.FiltroTipo     = tFiltroTipo.Result.Where(t => t.Tipo == "G").ToList(); // solo Tintorería
         ViewBag.FiltroAsesores = asesores;
         ViewBag.FiltroClientes = clientes;
         ViewBag.FiltroTipoSel  = tipo;
         ViewBag.FiltroAsesor   = asesor;
         ViewBag.FiltroCliente  = cliente;
-        return View(tDatos.Result.ToList());
+        return View(tDatos.Result.OrderBy(x => x.FechaProg ?? DateTime.MaxValue).ToList());
     }
 }

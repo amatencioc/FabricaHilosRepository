@@ -320,8 +320,7 @@ public class MenuService : IMenuService
                 "PlaneamientoPendEnconado",
                 "PlaneamientoPendTenido",
                 "PlaneamientoPendSecado",
-                "PlaneamientoPendMadeja",
-                "PlaneamientoPendPartidasDef"),
+                "PlaneamientoPendMadeja"),
 
             PlaneamientoRegistroPedidos = global.PlaneamientoRegistroPedidos
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoRegistroPedidos"),
@@ -368,9 +367,6 @@ public class MenuService : IMenuService
             PlaneamientoPendMadeja = global.PlaneamientoPendMadeja
                 && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendMadeja"),
 
-            PlaneamientoPendPartidasDef = global.PlaneamientoPendPartidasDef
-                && TieneAlguno("Produccion", "Planeamiento", "PlaneamientoPendPartidasDef"),
-
             // ?? Sub-m
             // Sub-padre SistemasIndicadores visible si tiene tambi�n cualquier hijo suyo
             SistemasIndicadores = global.SistemasIndicadores
@@ -395,6 +391,20 @@ public class MenuService : IMenuService
 
             SistemasRequerimientosAnularDocumento = global.SistemasRequerimientosAnularDocumento
                 && TieneAlguno("Sistemas", "SistemasRequerimientos", "SistemasRequerimientosAnularDocumento"),
+
+            // ── Capacitación (LMS) ───────────────────────────────────────────
+            Capacitacion = global.Capacitacion
+                && TieneAlguno("Capacitacion", "CapacitacionCatalogo",
+                               "CapacitacionMisCursos", "CapacitacionAdmin"),
+
+            CapacitacionCatalogo = global.CapacitacionCatalogo
+                && TieneAlguno("Capacitacion", "CapacitacionCatalogo"),
+
+            CapacitacionMisCursos = global.CapacitacionMisCursos
+                && TieneAlguno("Capacitacion", "CapacitacionMisCursos"),
+
+            CapacitacionAdmin = global.CapacitacionAdmin
+                && TieneAlguno("Capacitacion", "CapacitacionAdmin"),
         };
     }
 
@@ -521,7 +531,6 @@ public class MenuService : IMenuService
             PlaneamientoPendTenido          = ModuloVisible("/planeamiento", menus.PlaneamientoPendTenido),
             PlaneamientoPendSecado          = ModuloVisible("/planeamiento", menus.PlaneamientoPendSecado),
             PlaneamientoPendMadeja          = ModuloVisible("/planeamiento", menus.PlaneamientoPendMadeja),
-            PlaneamientoPendPartidasDef     = ModuloVisible("/planeamiento", menus.PlaneamientoPendPartidasDef),
 
             Sistemas                              = ModuloVisible("/sistemas", menus.Sistemas),
             SistemasIndicadores                   = ModuloVisible("/sistemas", menus.SistemasIndicadores),
@@ -530,6 +539,11 @@ public class MenuService : IMenuService
             SistemasIndicadoresSeguimientoDev     = ModuloVisible("/sistemas", menus.SistemasIndicadoresSeguimientoDev),
             SistemasRequerimientos                = ModuloVisible("/sistemas", menus.SistemasRequerimientos),
             SistemasRequerimientosAnularDocumento = ModuloVisible("/sistemas", menus.SistemasRequerimientosAnularDocumento),
+
+            Capacitacion          = ModuloVisible("/recursoshumanos/capacitacion", menus.Capacitacion),
+            CapacitacionCatalogo  = ModuloVisible("/recursoshumanos/capacitacion", menus.CapacitacionCatalogo),
+            CapacitacionMisCursos = ModuloVisible("/recursoshumanos/capacitacion", menus.CapacitacionMisCursos),
+            CapacitacionAdmin     = ModuloVisible("/recursoshumanos/capacitacion", menus.CapacitacionAdmin),
         };
     }
 

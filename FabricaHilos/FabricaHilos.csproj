@@ -113,6 +113,20 @@
     <Content Include="Views\RecursosHumanos\Aquarius\Compensacion\DiaLibrePorCompensar\Index.cshtml" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Views\RecursosHumanos\Capacitacion\Admin\CursoForm.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Admin\Index.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Admin\Reportes.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Catalogo.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\MiCertificado.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Certificado\Verificar.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Curso\Detalle.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Curso\Ver.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Examen\Rendir.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\Examen\Resultado.cshtml" />
+    <None Include="Views\RecursosHumanos\Capacitacion\MiPanel.cshtml" />
+  </ItemGroup>
+
 
 
 

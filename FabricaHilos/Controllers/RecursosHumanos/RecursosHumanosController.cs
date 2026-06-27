@@ -131,6 +131,48 @@ namespace FabricaHilos.Controllers.RecursosHumanos
             if (moduloIndicadores.SubModulos.Any())
                 modulos.Add(moduloIndicadores);
 
+            // Capacitación
+            var moduloCapacitacion = new SgcModuloDto
+            {
+                Nombre      = "Capacitación",
+                Descripcion = "Plataforma de aprendizaje en línea: cursos, exámenes y certificados.",
+                Icono       = "bi-mortarboard-fill",
+                ColorClase  = "text-success"
+            };
+
+            if (menus.CapacitacionMisCursos)
+                moduloCapacitacion.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Mi Panel",
+                    Descripcion = "Mis cursos activos, progreso y certificados obtenidos.",
+                    Icono       = "bi-mortarboard",
+                    Controller  = "Capacitacion",
+                    Action      = "MiPanel"
+                });
+
+            if (menus.CapacitacionCatalogo)
+                moduloCapacitacion.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Catálogo",
+                    Descripcion = "Explora y accede a todos los cursos disponibles.",
+                    Icono       = "bi-grid",
+                    Controller  = "Capacitacion",
+                    Action      = "Catalogo"
+                });
+
+            if (menus.CapacitacionAdmin)
+                moduloCapacitacion.SubModulos.Add(new SgcSubModuloDto
+                {
+                    Nombre      = "Administración",
+                    Descripcion = "Gestión de cursos, inscripciones y reportes.",
+                    Icono       = "bi-gear-fill",
+                    Controller  = "CapacitacionAdmin",
+                    Action      = "Index"
+                });
+
+            if (moduloCapacitacion.SubModulos.Any())
+                modulos.Add(moduloCapacitacion);
+
             return View("~/Views/RecursosHumanos/Index.cshtml", modulos);
         }
     }

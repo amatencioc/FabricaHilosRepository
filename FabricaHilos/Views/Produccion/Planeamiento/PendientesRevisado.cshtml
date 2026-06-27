@@ -1,157 +1,469 @@
-@section Styles {
+﻿@section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
 @using FabricaHilos.Models.Produccion.Planeamiento
-@model IEnumerable<PlnPendienteRevisado>
+@model PlnRevisadoViewModel
 @{
-    ViewData["Title"] = "Pendientes de Revisado";
-    var lista     = Model.ToList();
-    var nVencidos = lista.Count(x => x.EstaVencido);
-    var kgTotal   = lista.Sum(x => x.Peso);
+    ViewData["Title"] = "Revisado";
+    var listaPend   = Model.Pendientes.ToList();
+    var nVencidos   = listaPend.Count(x => x.EstaVencido);
+    var kgTotal     = listaPend.Sum(x => x.Peso);
+    var nTintoreria = listaPend.Count(x => x.Tipo == "G");
+    var nHilanderia = listaPend.Count(x => x.Tipo == "H");
+    var obsFchIni   = ViewBag.ObsFchIni as string ?? DateTime.Today.AddDays(-30).ToString("yyyy-MM-dd");
+    var obsFchFin   = ViewBag.ObsFchFin as string ?? DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 @section Breadcrumb {
     <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item active">Pendientes de Revisado</li>
+    <li class="breadcrumb-item active">Revisado</li>
 }
 
 @await Html.PartialAsync("_PlnNavBar")
 
 <div class="container-fluid py-3">
 
-    @* ── Encabezado ─────────────────────────────────────────────────────── *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-0"><i class="bi bi-clipboard2-check me-2 text-primary"></i>Pendientes de Revisado</h4>
-            <small class="text-muted">Partidas en programa (estado 6) sin revisado aprobado &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Martín</small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            @if (nVencidos > 0)
-            {
-                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
-            }
-            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
-            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+    @* ── Strip de cabecera ─────────────────────────────────────────────── *@
+    <div class="pend-strip">
+        <i class="bi bi-clipboard2-check" style="color:#90cdf4;font-size:.95rem;flex-shrink:0;"></i>
+        <span class="pend-strip-title">Revisado</span>
+        <span class="pend-strip-sep"></span>
+
+        <span class="pend-kpi" title="Partidas en pestaña Pendiente de Revisado.">
+            <i class="bi bi-hourglass-split" style="color:#90cdf4;"></i>
+            <span class="pend-kpi-val">@listaPend.Count</span>
+            <span style="opacity:.75">pendientes</span>
+        </span>
+        <span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
+              title="Partidas vencidas en pestaña Pendiente.">
+            <i class="bi bi-clock-history" style="color:#fc8181;"></i>
+            <span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
+            <span style="opacity:.75">vencidas</span>
+        </span>
+        <span class="pend-kpi" title="Tintorería (G) / Hilandería (H) en Pendiente.">
+            <i class="bi bi-grid-1x2" style="color:#68d391;"></i>
+            <span class="pend-kpi-val">@nTintoreria</span>
+            <span style="opacity:.75">/ @nHilanderia</span>
+            <span style="opacity:.6;font-size:.65rem;">Tint./Hil.</span>
+        </span>
+        <span class="pend-strip-sep"></span>
+        <span class="pend-kpi" title="Partidas con observaciones (carga al abrir la pestaña).">
+            <i class="bi bi-chat-square-text" style="color:#fbd38d;"></i>
+            <span class="pend-kpi-val" id="kpi-obs-count">—</span>
+            <span style="opacity:.75">con obs.</span>
+        </span>
+
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
                 <i class="bi bi-arrow-left me-1"></i>Seguimiento
             </a>
-        </div>
+        </span>
     </div>
 
-    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-primary text-center py-2">
-                <div class="fw-bold fs-4 text-primary">@lista.Count</div>
-                <small class="text-muted">Partidas pendientes</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
-                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
-                <small class="text-muted">Con fecha vencida</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
-                <small class="text-muted">Total kg</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@lista.Select(x => x.Lote).Distinct().Count()</div>
-                <small class="text-muted">Lotes distintos</small>
-            </div>
-        </div>
+    @* ── Filtros compartidos ───────────────────────────────────────────── *@
+    <div class="pend-filter">
+        @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesRevisado")
     </div>
 
-    @* ── Filtros ─────────────────────────────────────────────────────────── *@
-    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesRevisado")
+    @* ── Pestañas ──────────────────────────────────────────────────────── *@
+    <ul class="nav nav-tabs" id="tabsRevisado" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-pendiente-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-pendiente" type="button" role="tab">
+                <i class="bi bi-hourglass-split me-1"></i>Pendiente de Revisado
+                <span class="badge bg-primary ms-1">@listaPend.Count</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-obs-btn" data-bs-toggle="tab"
+                    data-bs-target="#tab-obs" type="button" role="tab">
+                <i class="bi bi-chat-square-text me-1"></i>Observaciones de Revisado
+                <span class="badge bg-secondary ms-1" id="badge-obs-count">
+                    <span class="spinner-border spinner-border-sm" role="status" style="width:.6rem;height:.6rem;"></span>
+                </span>
+            </button>
+        </li>
+    </ul>
 
-    @* ── Tabla ───────────────────────────────────────────────────────────── *@
-    @if (!lista.Any())
-    {
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de revisado en este momento.
+    <div class="tab-content border border-top-0 rounded-bottom p-3 mb-3" id="tabsRevisadoContent">
+
+        @* ── TAB 1: Pendiente de Revisado ─────────────────────────────── *@
+        <div class="tab-pane fade show active" id="tab-pendiente" role="tabpanel">
+
+            @if (!listaPend.Any())
+            {
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de revisado en este momento.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-revisado">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width:62px;" title="Prioridad de atención. Mismo número = mismo nivel. Recargar para ver orden actualizado.">Prio.</th>
+                                <th>Partida</th>
+                                <th>Material</th>
+                                <th>Cliente</th>
+                                <th>Asesor</th>
+                                <th class="text-center">Tipo</th>
+                                <th>Máquina</th>
+                                <th class="text-center">RMC</th>
+                                <th class="text-end">Kg</th>
+                                <th>Lote</th>
+                                <th>Presentacion</th>
+                                <th class="text-center pend-th-sort" data-col="fecfin" data-dir="asc" style="cursor:pointer;user-select:none;" title="Ordenar por F. Fin Prog.">
+                                    F. Fin Prog. <i class="bi bi-sort-up sort-icon" id="sort-icon-fecfin"></i>
+                                </th>
+                                <th class="text-center pend-th-sort" data-col="fchentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+                                    F. Entrega <i class="bi bi-arrow-down-up sort-icon" id="sort-icon-fchentrega"></i>
+                                </th>
+                                <th class="text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in listaPend)
+                            {
+                                var rowCss = item.EstaVencido ? "table-danger" :
+                                             (item.FchEntrega.HasValue && item.DiasRetraso >= -2) ? "table-warning" : "";
+                                <tr class="@rowCss"
+                                    data-prio="@(item.Prioridad < 99 ? item.Prioridad.ToString() : "9999")"
+                                    data-fecfin="@(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("yyyyMMdd") : "99999999")"
+                                    data-fchentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+                                    <td class="text-center" style="padding:.2rem .3rem;">
+                                        <div class="d-flex align-items-center justify-content-center gap-1">
+                                            <input type="number" min="1" max="999"
+                                                   class="form-control form-control-sm text-center prio-rev-input"
+                                                   style="width:50px;padding:.15rem .2rem;font-size:.78rem;"
+                                                   value="@(item.Prioridad < 99 ? item.Prioridad.ToString() : "")"
+                                                   placeholder="—"
+                                                   data-guia="@item.Guia"
+                                                   title="Prioridad (1=más urgente). Recargar página para reordenar." />
+                                            <span class="prio-rev-status" style="font-size:.7rem;width:14px;"></span>
+                                        </div>
+                                    </td>
+                                    <td class="fw-bold">@item.Partida</td>
+                                    <td>@item.Material</td>
+                                    <td>
+                                        <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                              title="@item.Cliente">@item.Cliente</span>
+                                    </td>
+                                    <td style="font-size:.78rem;">
+                                        <span style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                                              title="@item.DescAsesor">@item.DescAsesor</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.Tipo == "H")
+                                        {
+                                            <span class="badge bg-primary" style="font-size:.68rem;" title="Hilandería">H</span>
+                                        }
+                                        else if (item.Tipo == "G")
+                                        {
+                                            <span class="badge bg-info text-dark" style="font-size:.68rem;" title="Tintorería">G</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">@item.Tipo</span>
+                                        }
+                                    </td>
+                                    <td>@item.Maquina</td>
+                                    <td class="text-center text-muted">
+                                        @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                                    </td>
+                                    <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+                                    <td style="font-size:.78rem;">@item.Lote</td>
+                                    <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+                                    <td class="text-center text-muted">
+                                        @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.FchEntrega.HasValue)
+                                        {
+                                            <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
+                                                @item.FchEntrega.Value.ToString("dd/MM/yy")
+                                            </span>
+                                        }
+                                        else { <span class="text-muted">—</span> }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.EstaVencido)
+                                        {
+                                            <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
+                                        }
+                                        else if (!item.FchEntrega.HasValue)
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                        else if (item.DiasRetraso >= -2)
+                                        {
+                                            <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">@(-item.DiasRetraso) d</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-semibold">
+                                <td colspan="8" class="text-end text-muted">Totales:</td>
+                                <td class="text-end">@kgTotal.ToString("N2")</td>
+                                <td colspan="5"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
         </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
-                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
-                    <tr>
-                        <th>Partida</th>
-                        <th>Material</th>
-                        <th>Cliente</th>
-                        <th>Máquina</th>
-                        <th class="text-center">RMC</th>
-                        <th class="text-end">Kg</th>
-                        <th>Lote</th>
-                        <th>Color</th>
-                        <th class="text-center">F. Fin Prog.</th>
-                        <th class="text-center">F. Entrega</th>
-                        <th class="text-center">Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in lista)
-                    {
-                        var rowCss = item.EstaVencido ? "table-danger" :
-                                     item.DiasRetraso >= -2 ? "table-warning" : "";
-                        <tr class="@rowCss">
-                            <td class="fw-bold">@item.Partida</td>
-                            <td>@item.Material</td>
-                            <td>
-                                <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                      title="@item.Cliente">@item.Cliente</span>
-                            </td>
-                            <td>@item.Maquina</td>
-                            <td class="text-center text-muted">
-                                @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
-                            </td>
-                            <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
-                            <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
-                            <td class="text-center text-muted">
-                                @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td class="text-center">
-                                @if (item.FchEntrega.HasValue)
-                                {
-                                    <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
-                                        @item.FchEntrega.Value.ToString("dd/MM/yy")
-                                    </span>
-                                }
-                                else { <span class="text-muted">—</span> }
-                            </td>
-                            <td class="text-center">
-                                @if (item.EstaVencido)
-                                {
-                                    <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
-                                }
-                                else if (item.DiasRetraso >= -2)
-                                {
-                                    <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success">@(-item.DiasRetraso) d</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
-                    <tr>
-                        <td colspan="5" class="text-end text-muted">Totales:</td>
-                        <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="5"></td>
-                    </tr>
-                </tfoot>
-            </table>
+
+
+        @* -- TAB 2: Observaciones de Revisado - carga lazy al primer click -- *@
+        <div class="tab-pane fade" id="tab-obs" role="tabpanel">
+
+            <div id="obs-tab-body" class="pt-2">
+                <div class="d-flex align-items-center justify-content-center py-5" id="obs-spinner">
+                    <div class="spinner-border text-secondary me-2" role="status"></div>
+                    <span class="text-muted">Cargando observaciones&hellip;</span>
+                </div>
+            </div>
         </div>
-    }
+
+    </div>
 
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    // ── Ordenamiento client-side de la tabla de Pendientes Revisado ──────────
+    var tbl = document.getElementById('tbl-revisado');
+    if (!tbl) return;
+    var tbody = tbl.querySelector('tbody');
+
+    var sortState = { col: null, dir: '' };
+    var ICON_NONE = 'bi-arrow-down-up';
+    var ICON_ASC  = 'bi-sort-up';
+    var ICON_DESC = 'bi-sort-down';
+
+    function updateIcons() {
+        tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'bi sort-icon ms-1 ' + (th.dataset.col === sortState.col
+                ? (sortState.dir === 'asc' ? ICON_ASC : ICON_DESC)
+                : ICON_NONE);
+        });
+    }
+
+    function sortTable(col, dir) {
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+            var va = a.dataset[col] || '99999999';
+            var vb = b.dataset[col] || '99999999';
+            // Para prioridad: comparar numéricamente
+            if (col === 'prio') {
+                va = parseInt(va, 10); vb = parseInt(vb, 10);
+                if (va === vb) return 0;
+                return dir === 'asc' ? va - vb : vb - va;
+            }
+            if (va === vb) return 0;
+            return dir === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortState.col = col;
+        sortState.dir = dir;
+        updateIcons();
+    }
+
+    tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var col = this.dataset.col;
+            var dir = (sortState.col === col && sortState.dir === 'asc') ? 'desc' : 'asc';
+            sortTable(col, dir);
+        });
+    });
+
+    // Orden inicial: si hay alguna fila con prioridad asignada → ordenar por Prio ASC
+    // Si no hay ninguna → ordenar por F. Fin Prog. DESC (default visual)
+    var hayPrioridad = Array.from(tbody.querySelectorAll('tr'))
+        .some(function (r) { return parseInt(r.dataset.prio, 10) < 9999; });
+    if (hayPrioridad) {
+        sortTable('prio', 'asc');
+    } else {
+        sortTable('fecfin', 'desc');
+    }
+})();
+</script>
+<script>
+(function () {
+    // ── Auto-guardado de prioridad ──────────────────────────────────────
+    var SAVE_URL = '@Url.Action("GuardarPrioridadRevisado", "Planeamiento")';
+    var TOKEN    = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+    function savePrio(input) {
+        var guia     = input.dataset.guia;
+        var rawVal   = input.value.trim();
+        var prioridad = rawVal === '' ? 99 : parseInt(rawVal, 10);
+        if (isNaN(prioridad) || prioridad < 1) { prioridad = 99; input.value = ''; }
+        var statusEl = input.parentElement.querySelector('.prio-rev-status');
+        if (statusEl) statusEl.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.6rem;height:.6rem;"></span>';
+        fetch(SAVE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'RequestVerificationToken': TOKEN },
+            body: 'guia=' + encodeURIComponent(guia) + '&prioridad=' + encodeURIComponent(prioridad)
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) {
+            if (statusEl) { statusEl.innerHTML = d.ok ? '&#10003;' : '&#10007;'; statusEl.style.color = d.ok ? '#16a34a' : '#dc3545'; }
+            setTimeout(function () { if (statusEl) { statusEl.innerHTML = ''; statusEl.style.color = ''; } }, 2000);
+        })
+        .catch(function () {
+            if (statusEl) { statusEl.innerHTML = '&#10007;'; statusEl.style.color = '#dc3545'; }
+        });
+    }
+
+    document.querySelectorAll('.prio-rev-input').forEach(function (inp) {
+        inp.addEventListener('blur',  function () { savePrio(this); });
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); this.blur(); } });
+    });
+})();
+
+(function () {
+    var loaded  = false;
+    var tabBtn  = document.getElementById('tab-obs-btn');
+    var tabBody = document.getElementById('obs-tab-body');
+    var badgeEl = document.getElementById('badge-obs-count');
+    var kpiEl   = document.getElementById('kpi-obs-count');
+
+    // Holder persistente por referencia — permite cancelar el fetch en curso
+    var holderObs = { ctrl: null };
+    // Última URL usada en la carga — permite detectar si los filtros cambiaron
+    var lastLoadedUrl = null;
+
+    var SPINNER_HTML = '<div class="d-flex align-items-center justify-content-center py-4">' +
+        '<div class="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>' +
+        '<span class="text-muted small">Cargando&hellip;</span></div>';
+
+    function setSubmitLoading(btn, loading) {
+        if (!btn) return;
+        btn.disabled = loading;
+        if (loading) {
+            btn.dataset.origHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" style="width:.75rem;height:.75rem;"></span>Filtrando&hellip;';
+        } else if (btn.dataset.origHtml) {
+            btn.innerHTML = btn.dataset.origHtml;
+        }
+    }
+
+    // Lee los filtros del form principal EN TIEMPO REAL (no del ViewBag congelado)
+    function buildUrl() {
+        var p = new URLSearchParams();
+        var frm = document.getElementById('frmFiltrosPend');
+        if (frm) {
+            var fd = new FormData(frm);
+            var tipo    = fd.get('tipo')    || '';
+            var asesor  = fd.get('asesor')  || '';
+            var cliente = fd.get('cliente') || '';
+            if (tipo)    p.set('tipo',    tipo);
+            if (asesor)  p.set('asesor',  asesor);
+            if (cliente) p.set('cliente', cliente);
+        }
+        // Conservar rango de fechas de observaciones si ya fue filtrado
+        var obsForm = tabBody ? tabBody.querySelector('form') : null;
+        if (obsForm) {
+            var ofd = new FormData(obsForm);
+            p.set('fchIni', ofd.get('fchIni') || '@obsFchIni');
+            p.set('fchFin', ofd.get('fchFin') || '@obsFchFin');
+        } else {
+            p.set('fchIni', '@obsFchIni');
+            p.set('fchFin', '@obsFchFin');
+        }
+        return '@Url.Action("ObservacionesRevisadoPartial", "Planeamiento")?' + p.toString();
+    }
+
+    function fetchObs(url, submitBtn) {
+        // Cancelar fetch previo usando el holder persistente
+        if (holderObs.ctrl) { holderObs.ctrl.abort(); holderObs.ctrl = null; }
+        var ctrl = new AbortController();
+        holderObs.ctrl = ctrl;
+
+        tabBody.innerHTML = SPINNER_HTML;
+        setSubmitLoading(submitBtn, true);
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctrl.signal })
+            .then(function (r) { return r.ok ? r.text() : Promise.reject('HTTP ' + r.status); })
+            .then(function (html) {
+                if (holderObs.ctrl !== ctrl) return; // respuesta stale — ignorar
+                holderObs.ctrl = null;
+                lastLoadedUrl = url;
+                tabBody.innerHTML = html;
+                var cnt = tabBody.querySelectorAll('tbody tr').length;
+                if (badgeEl) badgeEl.textContent = cnt;
+                if (kpiEl)   kpiEl.textContent   = cnt;
+                bindForms();
+                setSubmitLoading(submitBtn, false);
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return; // cancelado — no tocar el DOM
+                holderObs.ctrl = null;
+                tabBody.innerHTML = '<div class="alert alert-danger m-2"><i class="bi bi-exclamation-triangle me-1"></i>Error al cargar las observaciones. <button class="btn btn-sm btn-outline-danger ms-2" onclick="location.reload()">Reintentar</button></div>';
+                if (badgeEl) badgeEl.textContent = '!';
+                setSubmitLoading(submitBtn, false);
+                loaded = false; // liberar guard para permitir reintento al volver al tab
+            });
+    }
+
+    function bindForms() {
+        tabBody.querySelectorAll('form').forEach(function (form) {
+            if (form.dataset.ajaxBound) return;
+            form.dataset.ajaxBound = '1';
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var submitBtn = form.querySelector('button[type="submit"]');
+                fetchObs(form.action + '?' + new URLSearchParams(new FormData(form)).toString(), submitBtn);
+            });
+        });
+    }
+
+    function loadObs() {
+        var url = buildUrl();
+        // Cargar si: nunca se cargó, o si los filtros activos cambiaron desde la última carga
+        if (!loaded || lastLoadedUrl !== url) {
+            loaded = true;
+            fetchObs(url, null);
+        }
+    }
+
+    if (tabBtn) tabBtn.addEventListener('show.bs.tab', loadObs);
+
+    // Preservar la pestaña activa al filtrar con el filtro principal
+    var frmPrincipal = document.getElementById('frmFiltrosPend');
+    if (frmPrincipal) {
+        frmPrincipal.addEventListener('submit', function () {
+            var tabObsActive = tabBtn && tabBtn.classList.contains('active');
+            var hidTab = frmPrincipal.querySelector('input[name="tab"]');
+            if (!hidTab) {
+                hidTab = document.createElement('input');
+                hidTab.type = 'hidden';
+                hidTab.name = 'tab';
+                frmPrincipal.appendChild(hidTab);
+            }
+            hidTab.value = tabObsActive ? 'obs' : '';
+        });
+    }
+
+    // Si la URL trae tab=obs o fchIni/fchFin, activar la pestaña de observaciones
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'obs' || params.has('fchIni') || params.has('fchFin')) {
+        if (tabBtn) {
+            loadObs();
+            new bootstrap.Tab(tabBtn).show();
+        }
+    }
+})();
+</script>
+}

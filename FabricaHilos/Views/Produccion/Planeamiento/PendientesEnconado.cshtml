@@ -1,4 +1,4 @@
-@section Styles {
+﻿@section Styles {
 <link rel="stylesheet" href="~/css/planeamiento.css" asp-append-version="true" />
 }
 
@@ -22,56 +22,48 @@
 
 <div class="container-fluid py-3">
 
-    @* ── Encabezado ─────────────────────────────────────────────────────── *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-0"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Pendientes de Enconado / Devanado</h4>
-            <small class="text-muted">Partidas aprobadas en CC pendientes de enconado o devanado &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Guevara</small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            @if (nVencidos > 0)
-            {
-                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
-            }
-            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
-            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
+    @* ── Strip de cabecera ─────────────────────────────────────────────── *@
+    <div class="pend-strip">
+        <i class="bi bi-arrow-repeat" style="color:#f6ad55;font-size:.95rem;flex-shrink:0;"></i>
+        <span class="pend-strip-title">Enconado / Devanado</span>
+        <span class="pend-strip-sep"></span>
+
+        <span class="pend-kpi" title="Total de partidas pendientes de enconado o devanado.">
+            <i class="bi bi-boxes" style="color:#90cdf4;"></i>
+            <span class="pend-kpi-val">@lista.Count</span>
+            <span style="opacity:.75">partidas</span>
+        </span>
+        <span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
+              title="Partidas cuya fecha de entrega ya venció.">
+            <i class="bi bi-clock-history" style="color:#fc8181;"></i>
+            <span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
+            <span style="opacity:.75">vencidas</span>
+        </span>
+        <span class="pend-kpi" title="Tintorería / Hilandería">
+            <i class="bi bi-grid-1x2" style="color:#68d391;"></i>
+            <span class="pend-kpi-val">@nTintoreria</span>
+            <span style="opacity:.75">/ @nHilanderia</span>
+            <span style="opacity:.6;font-size:.65rem;">Tint./Hil.</span>
+        </span>
+        <span class="pend-kpi" title="Total de kg pendientes.">
+            <i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
+            <span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
+            <span style="opacity:.75">kg</span>
+        </span>
+
+        <span class="pend-strip-actions">
+            <a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
                 <i class="bi bi-arrow-left me-1"></i>Seguimiento
             </a>
-        </div>
+        </span>
     </div>
 
-    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-warning text-center py-2">
-                <div class="fw-bold fs-4 text-warning">@lista.Count</div>
-                <small class="text-muted">Partidas pendientes</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@nTintoreria <small class="fs-6 text-muted">/ @nHilanderia</small></div>
-                <small class="text-muted">Tintorería / Hilandería</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
-                <small class="text-muted">Total kg</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
-                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
-                <small class="text-muted">Con fecha vencida</small>
-            </div>
-        </div>
+    @* ── Filtros ───────────────────────────────────────────────────────── *@
+    <div class="pend-filter">
+        @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesEnconado")
     </div>
 
-    @* ── Filtros ─────────────────────────────────────────────────────────── *@
-    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesEnconado")
-
-    @* ── Tabla ───────────────────────────────────────────────────────────── *@
+    @* ── Tabla ─────────────────────────────────────────────────────────── *@
     @if (!lista.Any())
     {
         <div class="alert alert-success">
@@ -80,22 +72,38 @@
     }
     else
     {
+        @* ── Filtro de estado de vencimiento ────────────────────────── *@
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-funnel text-muted" style="font-size:.85rem;"></i>
+            <label class="text-muted small mb-0" for="filtro-estado-enc">Estado:</label>
+            <select id="filtro-estado-enc" class="form-select form-select-sm" style="width:auto;">
+                <option value="">Todos</option>
+                <option value="vencido">🔴 Vencidas</option>
+                <option value="porvencer">🟡 Por vencer</option>
+                <option value="atiempo">🟢 A tiempo</option>
+                <option value="sinfecha">— Sin fecha</option>
+            </select>
+            <span class="text-muted small" id="enc-count-label"></span>
+        </div>
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
-                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
+            <table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tbl-enconado">
+                <thead>
                     <tr>
                         <th>Partida</th>
                         <th>Material</th>
                         <th>Cliente</th>
                         <th class="text-center">Origen</th>
-                        <th>Est. Evaluación</th>
-                        <th>Resultado</th>
-                        <th class="text-center">RMC</th>
+                        <th class="text-center">#RMC</th>
+                        <th>RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
-                        <th>Color</th>
-                        <th class="text-center">F. Evaluación</th>
-                        <th class="text-center">F. Entrega</th>
+                        <th>Presentacion</th>
+                        <th class="text-center pend-th-sort" data-col="feval" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Evaluación">
+                            F. Evaluación <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
+                        <th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+                            F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+                        </th>
                         <th class="text-center">Estado</th>
                     </tr>
                 </thead>
@@ -104,7 +112,13 @@
                     {
                         var rowCss = item.EstaVencido ? "table-danger" :
                                      item.DiasRetraso >= -2 ? "table-warning" : "";
-                        <tr class="@rowCss">
+                        var estadoEnc = !item.FchEntrega.HasValue ? "sinfecha" :
+                                         item.EstaVencido       ? "vencido"   :
+                                         item.DiasRetraso >= -2 ? "porvencer" : "atiempo";
+                        <tr class="@rowCss"
+                            data-estado="@estadoEnc"
+                            data-feval="@(item.Fecha.HasValue ? item.Fecha.Value.ToString("yyyyMMdd") : "99999999")"
+                            data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
                             <td class="fw-bold">@item.Partida</td>
                             <td>@item.Material</td>
                             <td>
@@ -121,10 +135,11 @@
                                     <span class="badge bg-secondary" style="font-size:.68rem;">Hilandería</span>
                                 }
                             </td>
-                            <td style="font-size:.78rem;">@item.EstEval</td>
-                            <td style="font-size:.78rem;">@item.Resultado</td>
                             <td class="text-center text-muted">
                                 @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+                            </td>
+                            <td class="text-muted" style="font-size:.78rem;">
+                                @(!string.IsNullOrWhiteSpace(item.Rmc) ? item.Rmc : "—")
                             </td>
                             <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
                             <td style="font-size:.78rem;">@item.Lote</td>
@@ -158,15 +173,80 @@
                         </tr>
                     }
                 </tbody>
-                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
-                    <tr>
-                        <td colspan="7" class="text-end text-muted">Totales:</td>
-                        <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="5"></td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
     }
 
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    var tbl = document.getElementById('tbl-enconado');
+    if (!tbl) return;
+    var tbody      = tbl.querySelector('tbody');
+    var selEstado  = document.getElementById('filtro-estado-enc');
+    var lblCount   = document.getElementById('enc-count-label');
+
+    var sortState = { col: 'fentrega', dir: 'asc' };
+
+    function updateIcons() {
+        tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'bi sort-icon ms-1 ' + (th.dataset.col === sortState.col
+                ? (sortState.dir === 'asc' ? 'bi-sort-up' : 'bi-sort-down')
+                : 'bi-arrow-down-up');
+        });
+    }
+
+    function applyFilter() {
+        var filtro = selEstado ? selEstado.value : '';
+        var visible = 0;
+        tbody.querySelectorAll('tr').forEach(function (r) {
+            var show = !filtro || r.dataset.estado === filtro;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (lblCount) {
+            lblCount.textContent = filtro
+                ? visible + ' de @lista.Count partida@(lista.Count == 1 ? "" : "s")'
+                : '';
+        }
+    }
+
+    function sortTable(col, dir) {
+        var NODATE = '99999999';
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+            var va = a.dataset[col] || NODATE;
+            var vb = b.dataset[col] || NODATE;
+            // filas sin fecha siempre al final, independientemente de la dirección
+            var aNoDate = va === NODATE;
+            var bNoDate = vb === NODATE;
+            if (aNoDate && bNoDate) return 0;
+            if (aNoDate) return 1;
+            if (bNoDate) return -1;
+            if (va === vb) return 0;
+            return dir === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortState.col = col; sortState.dir = dir;
+        updateIcons();
+    }
+
+    tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var col = this.dataset.col;
+            var dir = (sortState.col === col && sortState.dir === 'asc') ? 'desc' : 'asc';
+            sortTable(col, dir);
+        });
+    });
+
+    if (selEstado) selEstado.addEventListener('change', applyFilter);
+
+    // Orden inicial: F. Entrega ASC
+    sortTable('fentrega', 'asc');
+})();
+</script>
+}

@@ -3,161 +3,531 @@
 }
 
 @using FabricaHilos.Models.Produccion.Planeamiento
-@model IEnumerable<PlnPendienteEvalCalidad>
+@model PlnEvalCalidadViewModel
 @{
-    ViewData["Title"] = "Pendientes Evaluación de Calidad";
-    var lista      = Model.ToList();
-    var nVencidos  = lista.Count(x => x.EstaVencido);
-    var kgTotal    = lista.Sum(x => x.Peso);
+ViewData["Title"] = "Eval. Calidad";
+var lista     = Model.EvalCalidad.ToList();
+var nVencidos = lista.Count(x => x.EstaVencido);
+var kgTotal   = lista.Sum(x => x.Peso);
+var nMaquinas = lista.Select(x => x.CodMaq).Distinct().Count();
+
+var tipo    = ViewBag.FiltroTipoSel  as string ?? "";
+var asesor  = ViewBag.FiltroAsesor   as string ?? "";
+var cliente = ViewBag.FiltroCliente  as string ?? "";
 }
 
 @section Breadcrumb {
-    <li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Producción</a></li>
-    <li class="breadcrumb-item active">Pendientes Eval. Calidad</li>
+<li class="breadcrumb-item"><a asp-controller="Produccion" asp-action="Index">Produccion</a></li>
+<li class="breadcrumb-item active">Eval. Calidad</li>
 }
 
 @await Html.PartialAsync("_PlnNavBar")
 
 <div class="container-fluid py-3">
 
-    @* ── Encabezado ─────────────────────────────────────────────────────── *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-0"><i class="bi bi-patch-check me-2 text-success"></i>Pendientes de Evaluación de Calidad</h4>
-            <small class="text-muted">Partidas secadas sin evaluación de calidad tintorería registrada &middot; @DateTime.Now.ToString("dd/MM/yyyy HH:mm") &middot; Responsable: Ivon</small>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-            @if (nVencidos > 0)
-            {
-                <span class="badge bg-danger fs-6"><i class="bi bi-clock-history me-1"></i>@nVencidos vencido@(nVencidos != 1 ? "s" : "")</span>
-            }
-            <span class="badge bg-secondary fs-6">@lista.Count partida@(lista.Count != 1 ? "s" : "")</span>
-            <a asp-action="Dashboard" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i>Seguimiento
-            </a>
-        </div>
+@* -- Strip de cabecera -- *@
+<div class="pend-strip">
+<i class="bi bi-patch-check" style="color:#68d391;font-size:.95rem;flex-shrink:0;"></i>
+<span class="pend-strip-title">Eval. Calidad</span>
+<span class="pend-strip-sep"></span>
+
+<span class="pend-kpi" title="Partidas pendientes de evaluacion de calidad.">
+<i class="bi bi-boxes" style="color:#90cdf4;"></i>
+<span class="pend-kpi-val">@lista.Count</span>
+<span style="opacity:.75">partidas</span>
+</span>
+<span class="pend-kpi" style="@(nVencidos > 0 ? "" : "opacity:.45")"
+  title="Partidas cuya fecha de entrega ya vencio.">
+<i class="bi bi-clock-history" style="color:#fc8181;"></i>
+<span class="pend-kpi-val" style="@(nVencidos > 0 ? "color:#fc8181;" : "")">@nVencidos</span>
+<span style="opacity:.75">vencidas</span>
+</span>
+<span class="pend-kpi" title="Maquinas distintas involucradas.">
+<i class="bi bi-gear" style="color:#fbd38d;"></i>
+<span class="pend-kpi-val">@nMaquinas</span>
+<span style="opacity:.75">maquinas</span>
+</span>
+<span class="pend-kpi" title="Total de kg pendientes.">
+<i class="bi bi-bag-fill" style="color:#fbd38d;"></i>
+<span class="pend-kpi-val">@kgTotal.ToString("N0")</span>
+<span style="opacity:.75">kg</span>
+</span>
+<span class="pend-kpi" title="Partidas por definir (carga al abrir la pestana).">
+<i class="bi bi-question-circle" style="color:#fc8181;"></i>
+<span class="pend-kpi-val" id="kpi-partdef-count">—</span>
+<span style="opacity:.75">por definir</span>
+</span>
+<span class="pend-kpi" title="Rectificaciones de receta (carga al abrir la pestana).">
+<i class="bi bi-flask" style="color:#b794f4;"></i>
+<span class="pend-kpi-val" id="kpi-rect-count">—</span>
+<span style="opacity:.75">rectificaciones</span>
+</span>
+
+<span class="pend-strip-actions">
+<a asp-action="Dashboard" class="btn btn-sm btn-outline-light py-0 px-2" style="font-size:.72rem;">
+<i class="bi bi-arrow-left me-1"></i>Seguimiento
+</a>
+</span>
+</div>
+
+@* -- Filtros (solo para Tab 1: Eval. Calidad) -- *@
+<div class="pend-filter" id="filtros-evalcal">
+@await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesEvalCalidad")
+</div>
+
+@* -- Tabs -- *@
+<ul class="nav nav-tabs mt-3 mb-0" id="tabsEvalCal" role="tablist">
+<li class="nav-item" role="presentation">
+<button class="nav-link active" id="tab-eval-btn" data-bs-toggle="tab"
+data-bs-target="#tab-eval" type="button" role="tab">
+<i class="bi bi-patch-check me-1"></i>Pend. Eval. Calidad
+<span class="badge bg-secondary ms-1">@lista.Count</span>
+</button>
+</li>
+<li class="nav-item" role="presentation">
+<button class="nav-link" id="tab-partdef-btn" data-bs-toggle="tab"
+data-bs-target="#tab-partdef" type="button" role="tab">
+<i class="bi bi-question-circle me-1"></i>Partidas por Definir
+<span class="badge bg-secondary ms-1" id="badge-partdef-count">
+<span class="spinner-border spinner-border-sm" role="status" style="width:.6rem;height:.6rem;"></span>
+</span>
+</button>
+</li>
+<li class="nav-item" role="presentation">
+<button class="nav-link" id="tab-rect-btn" data-bs-toggle="tab"
+data-bs-target="#tab-rect" type="button" role="tab">
+<i class="bi bi-flask me-1"></i>Rectificacion de Receta
+<span class="badge bg-secondary ms-1" id="badge-rect-count">
+<span class="spinner-border spinner-border-sm" role="status" style="width:.6rem;height:.6rem;"></span>
+</span>
+</button>
+</li>
+</ul>
+
+<div class="tab-content border border-top-0 rounded-bottom p-3 bg-white">
+
+@* -- TAB 1: Pend. Eval. Calidad (server-side) -- *@
+<div class="tab-pane fade show active" id="tab-eval" role="tabpanel">
+@if (!lista.Any())
+{
+<div class="alert alert-success">
+<i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de evaluacion de calidad en este momento.
+</div>
+}
+else
+{
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="d-flex align-items-center gap-2">
+        <label class="form-label mb-0 small text-muted">Filas:</label>
+        <select id="pagerSizeEval" class="form-select form-select-sm" style="width:80px;">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+        </select>
     </div>
+    <div id="pagerInfoEval" class="small text-muted"></div>
+</div>
+<div class="table-responsive">
+<table class="table table-sm table-hover align-middle mb-0 pend-tbl" id="tblEvalCal">
+<thead>
+<tr>
+<th>Partida</th>
+<th>Material</th>
+<th>Cliente</th>
+<th>Cod. Maq.</th>
+<th>Maquina</th>
+<th class="text-center">RMC</th>
+<th class="text-end">Kg</th>
+<th>Lote</th>
+                                <th>Presentacion</th>
+<th class="text-center pend-th-sort" data-col="ffinsec" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Fin Sec.">
+    F. Fin Sec. <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+</th>
+<th class="text-center pend-th-sort" data-col="fentrega" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Entrega">
+    F. Entrega <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
+</th>
+<th class="text-center">Estado</th>
+</tr>
+</thead>
+<tbody>
+@foreach (var item in lista)
+{
+var rowCss = item.EstaVencido ? "table-danger" :
+ item.DiasRetraso >= -2 ? "table-warning" : "";
+<tr class="@rowCss"
+    data-ffinsec="@(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("yyyyMMdd") : "99999999")"
+    data-fentrega="@(item.FchEntrega.HasValue ? item.FchEntrega.Value.ToString("yyyyMMdd") : "99999999")">
+<td class="fw-bold">@item.Partida</td>
+<td>@item.Material</td>
+<td>
+<span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+  title="@item.Cliente">@item.Cliente</span>
+</td>
+<td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
+<td>@item.Maquina</td>
+<td class="text-center text-muted">
+@(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
+</td>
+<td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
+<td style="font-size:.78rem;">@item.Lote</td>
+<td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+<td class="text-center text-muted">
+@(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
+</td>
+<td class="text-center">
+@if (item.FchEntrega.HasValue)
+{
+if (item.EstaVencido)
+{
+<span class="fw-semibold text-danger">@item.FchEntrega.Value.ToString("dd/MM/yy")</span>
+}
+else if (item.DiasRetraso >= -2)
+{
+<span class="fw-semibold text-warning">@item.FchEntrega.Value.ToString("dd/MM/yy")</span>
+}
+else
+{
+<span class="fw-semibold text-success">@item.FchEntrega.Value.ToString("dd/MM/yy")</span>
+}
+}
+else
+{
+<span class="text-muted">—</span>
+}
+</td>
+<td class="text-center">
+@if (!item.FchEntrega.HasValue)
+{
+<span class="text-muted">—</span>
+}
+else if (item.EstaVencido)
+{
+<span class="badge bg-danger" title="@item.DiasRetraso dias vencido">+@item.DiasRetraso d</span>
+}
+else if (item.DiasRetraso >= -2)
+{
+<span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
+}
+else
+{
+<span class="badge bg-success">@(-item.DiasRetraso) d</span>
+}
+</td>
+</tr>
+}
+</tbody>
+<tfoot>
+<tr class="fw-semibold">
+<td colspan="6" class="text-end text-muted">Totales:</td>
+<td class="text-end">@kgTotal.ToString("N2")</td>
+<td colspan="5"></td>
+</tr>
+</tfoot>
+</table>
+</div>
+<div class="d-flex align-items-center justify-content-between mt-2">
+    <nav><ul class="pagination pagination-sm mb-0" id="pagerNavEval"></ul></nav>
+    <div id="pagerInfoEvalBot" class="small text-muted"></div>
+</div>
+}
+</div>
 
-    @* ── KPI Cards ───────────────────────────────────────────────────────── *@
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="card border-success text-center py-2">
-                <div class="fw-bold fs-4 text-success">@lista.Count</div>
-                <small class="text-muted">Partidas pendientes</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card @(nVencidos > 0 ? "border-danger" : "border-0 bg-light") text-center py-2">
-                <div class="fw-bold fs-4 @(nVencidos > 0 ? "text-danger" : "")">@nVencidos</div>
-                <small class="text-muted">Con fecha vencida</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@kgTotal.ToString("N0") kg</div>
-                <small class="text-muted">Total kg</small>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 bg-light text-center py-2">
-                <div class="fw-bold fs-4">@lista.Select(x => x.CodMaq).Distinct().Count()</div>
-                <small class="text-muted">Máquinas distintas</small>
-            </div>
-        </div>
-    </div>
+@* -- TAB 2: Partidas por Definir – lazy load -- *@
+<div class="tab-pane fade" id="tab-partdef" role="tabpanel">
+<div id="partdef-tab-body" class="pt-2">
+<div class="d-flex align-items-center justify-content-center py-5">
+<div class="spinner-border text-secondary me-2" role="status"></div>
+<span class="text-muted">Cargando partidas por definir&hellip;</span>
+</div>
+</div>
+</div>
 
-    @* ── Filtros ─────────────────────────────────────────────────────────── *@
-    @await Html.PartialAsync("_PlnFiltrosPendientes", (object)"PendientesEvalCalidad")
-
-    @* ── Tabla ───────────────────────────────────────────────────────────── *@
-    @if (!lista.Any())
-    {
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle me-2"></i>No hay partidas pendientes de evaluación de calidad en este momento.
-        </div>
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
-                <thead class="table-light" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:#6c757d;">
-                    <tr>
-                        <th>Partida</th>
-                        <th>Material</th>
-                        <th>Cliente</th>
-                        <th>Cód. Maq.</th>
-                        <th>Máquina</th>
-                        <th class="text-center">RMC</th>
-                        <th class="text-end">Kg</th>
-                        <th>Lote</th>
-                        <th>Color</th>
-                        <th class="text-center">F. Fin Sec.</th>
-                        <th class="text-center">F. Entrega</th>
-                        <th class="text-center">Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var item in lista)
-                    {
-                        var rowCss = item.EstaVencido ? "table-danger" :
-                                     item.DiasRetraso >= -2 ? "table-warning" : "";
-                        <tr class="@rowCss">
-                            <td class="fw-bold">@item.Partida</td>
-                            <td>@item.Material</td>
-                            <td>
-                                <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                      title="@item.Cliente">@item.Cliente</span>
-                            </td>
-                            <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
-                            <td>@item.Maquina</td>
-                            <td class="text-center text-muted">
-                                @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
-                            </td>
-                            <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
-                            <td style="font-size:.78rem;">@item.Lote</td>
-                            <td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
-                            <td class="text-center text-muted">
-                                @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
-                            </td>
-                            <td class="text-center">
-                                @if (item.FchEntrega.HasValue)
-                                {
-                                    <span class="fw-semibold @(item.EstaVencido ? "text-danger" : item.DiasRetraso >= -2 ? "text-warning" : "text-success")">
-                                        @item.FchEntrega.Value.ToString("dd/MM/yy")
-                                    </span>
-                                }
-                                else { <span class="text-muted">—</span> }
-                            </td>
-                            <td class="text-center">
-                                @if (!item.FchEntrega.HasValue)
-                                {
-                                    <span class="text-muted">—</span>
-                                }
-                                else if (item.EstaVencido)
-                                {
-                                    <span class="badge bg-danger" title="@item.DiasRetraso días vencido">+@item.DiasRetraso d</span>
-                                }
-                                else if (item.DiasRetraso >= -2)
-                                {
-                                    <span class="badge bg-warning text-dark">@(-item.DiasRetraso) d</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success">@(-item.DiasRetraso) d</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-                <tfoot class="table-light fw-semibold" style="font-size:.78rem;">
-                    <tr>
-                        <td colspan="6" class="text-end text-muted">Totales:</td>
-                        <td class="text-end">@kgTotal.ToString("N2")</td>
-                        <td colspan="5"></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    }
+@* -- TAB 3: Rectificacion de Receta – lazy load -- *@
+<div class="tab-pane fade" id="tab-rect" role="tabpanel">
+<div id="rect-tab-body" class="pt-2">
+<div class="d-flex align-items-center justify-content-center py-5">
+<div class="spinner-border text-secondary me-2" role="status"></div>
+<span class="text-muted">Cargando rectificaciones&hellip;</span>
+</div>
+</div>
+</div>
 
 </div>
+
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var tbl = document.getElementById('tblEvalCal');
+    if (!tbl) return;
+    var tbody = tbl.querySelector('tbody');
+    var sortState = { col: null, dir: '' };
+    function updateIcons() {
+        tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'bi sort-icon ms-1 ' + (th.dataset.col === sortState.col
+                ? (sortState.dir === 'asc' ? 'bi-sort-up' : 'bi-sort-down')
+                : 'bi-arrow-down-up');
+        });
+    }
+    function sortTable(col, dir) {
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function (a, b) {
+            var va = a.dataset[col] || '99999999';
+            var vb = b.dataset[col] || '99999999';
+            if (va === vb) return 0;
+            return dir === 'asc' ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+        sortState.col = col; sortState.dir = dir;
+        updateIcons();
+    }
+    tbl.querySelectorAll('.pend-th-sort').forEach(function (th) {
+        th.addEventListener('click', function () {
+            var col = this.dataset.col;
+            var dir = (sortState.col === col && sortState.dir === 'asc') ? 'desc' : 'asc';
+            sortTable(col, dir);
+        });
+    });
+})();
+</script>
+<script>
+(function () {
+
+    /* =====================================================================
+       PAGINACIÓN — función genérica reutilizable
+       Parámetros:
+         tableId   : id de la <table>
+         sizeSelId : id del <select> de tamaño de página
+         navId     : id del <ul> de paginación Bootstrap
+         infoTopId : id del div de info superior  (puede ser null)
+         infoBotId : id del div de info inferior  (puede ser null)
+       ===================================================================== */
+    function initPager(tableId, sizeSelId, navId, infoTopId, infoBotId) {
+        var table   = document.getElementById(tableId);
+        var sizeSel = document.getElementById(sizeSelId);
+        var navEl   = document.getElementById(navId);
+        var infoTop = infoTopId ? document.getElementById(infoTopId) : null;
+        var infoBot = infoBotId ? document.getElementById(infoBotId) : null;
+        if (!table || !sizeSel || !navEl) return;
+
+        var tbody   = table.querySelector('tbody');
+        var curPage = 1;
+
+        function allRows() {
+            return Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        }
+
+        function render() {
+            var rows     = allRows();
+            var pageSize = parseInt(sizeSel.value, 10) || 20;
+            var total    = rows.length;
+            var pages    = Math.max(1, Math.ceil(total / pageSize));
+            if (curPage > pages) curPage = pages;
+
+            var start = (curPage - 1) * pageSize;
+            var end   = Math.min(start + pageSize, total);
+
+            rows.forEach(function (r, i) {
+                r.style.display = (i >= start && i < end) ? '' : 'none';
+            });
+
+            // Texto informativo
+            var infoTxt = total === 0 ? '' :
+                'Mostrando ' + (start + 1) + ' – ' + end + ' de ' + total + ' filas';
+            if (infoTop) infoTop.textContent = infoTxt;
+            if (infoBot) infoBot.textContent = infoTxt;
+
+            // Construir nav de páginas
+            navEl.innerHTML = '';
+            if (pages <= 1) return;
+
+            function addItem(label, page, disabled, active) {
+                var li = document.createElement('li');
+                li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+                var a = document.createElement('a');
+                a.className = 'page-link';
+                a.href = '#';
+                a.innerHTML = label;
+                if (!disabled && !active) {
+                    a.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        curPage = page;
+                        render();
+                    });
+                } else {
+                    a.addEventListener('click', function (e) { e.preventDefault(); });
+                }
+                li.appendChild(a);
+                navEl.appendChild(li);
+            }
+
+            addItem('&laquo;', curPage - 1, curPage === 1, false);
+
+            // Ventana deslizante de páginas
+            var winStart = Math.max(1, curPage - 2);
+            var winEnd   = Math.min(pages, winStart + 4);
+            if (winEnd - winStart < 4) winStart = Math.max(1, winEnd - 4);
+
+            if (winStart > 1) {
+                addItem('1', 1, false, false);
+                if (winStart > 2) addItem('…', null, true, false);
+            }
+            for (var p = winStart; p <= winEnd; p++) {
+                addItem(p, p, false, p === curPage);
+            }
+            if (winEnd < pages) {
+                if (winEnd < pages - 1) addItem('…', null, true, false);
+                addItem(pages, pages, false, false);
+            }
+
+            addItem('&raquo;', curPage + 1, curPage === pages, false);
+        }
+
+        sizeSel.addEventListener('change', function () { curPage = 1; render(); });
+        render();
+
+        // Exponer re-render para que fetchAndInject lo llame tras inyectar HTML
+        table._pagerRender = render;
+    }
+
+    /* =====================================================================
+       PAGINACIÓN Tab 1 — Pend. Eval. Calidad (tabla server-side)
+       ===================================================================== */
+    initPager('tblEvalCal', 'pagerSizeEval', 'pagerNavEval', 'pagerInfoEval', 'pagerInfoEvalBot');
+
+    /* =====================================================================
+       LAZY LOAD — Tab 2 y Tab 3
+       ===================================================================== */
+    var loadedPartDef = false;
+    var loadedRect    = false;
+
+    var tabPartDefBtn = document.getElementById('tab-partdef-btn');
+    var tabRectBtn    = document.getElementById('tab-rect-btn');
+    var partDefBody   = document.getElementById('partdef-tab-body');
+    var rectBody      = document.getElementById('rect-tab-body');
+    var badgePartDef  = document.getElementById('badge-partdef-count');
+    var badgeRect     = document.getElementById('badge-rect-count');
+    var kpiPartDef    = document.getElementById('kpi-partdef-count');
+    var kpiRect       = document.getElementById('kpi-rect-count');
+
+    var holderPartDef = { ctrl: null };
+    var holderRect    = { ctrl: null };
+
+    var SPINNER_HTML = '<div class="d-flex align-items-center justify-content-center py-4">' +
+        '<div class="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>' +
+        '<span class="text-muted small">Cargando&hellip;</span></div>';
+
+    function setSubmitLoading(btn, loading) {
+        if (!btn) return;
+        btn.disabled = loading;
+        if (loading) {
+            btn.dataset.origHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" style="width:.75rem;height:.75rem;"></span>Filtrando&hellip;';
+        } else if (btn.dataset.origHtml) {
+            btn.innerHTML = btn.dataset.origHtml;
+        }
+    }
+
+    function fetchAndInject(url, bodyEl, badgeEl, kpiEl, holder, submitBtn) {
+        if (holder.ctrl) { holder.ctrl.abort(); holder.ctrl = null; }
+        var ctrl = new AbortController();
+        holder.ctrl = ctrl;
+
+        bodyEl.innerHTML = SPINNER_HTML;
+        setSubmitLoading(submitBtn, true);
+
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctrl.signal })
+            .then(function (r) { return r.ok ? r.text() : Promise.reject('HTTP ' + r.status); })
+            .then(function (html) {
+                if (holder.ctrl !== ctrl) return;
+                holder.ctrl = null;
+                bodyEl.innerHTML = html;
+
+                // Inicializar paginación del partial recién inyectado
+                var tbl = bodyEl.querySelector('table[id]');
+                if (tbl) {
+                    var tblId     = tbl.id;
+                    var sizeSelId = tblId + '-pgsize';
+                    var navId     = tblId + '-pgnav';
+                    var infoId    = tblId + '-pginfo';
+                    initPager(tblId, sizeSelId, navId, null, infoId);
+                }
+
+                var cnt = bodyEl.querySelectorAll('tbody tr').length;
+                if (badgeEl) badgeEl.textContent = cnt;
+                if (kpiEl)   kpiEl.textContent   = cnt;
+                bindForms(bodyEl);
+                setSubmitLoading(submitBtn, false);
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                holder.ctrl = null;
+                bodyEl.innerHTML = '<div class="alert alert-danger m-2"><i class="bi bi-exclamation-triangle me-1"></i>Error al cargar los datos. <button class="btn btn-sm btn-outline-danger ms-2" onclick="location.reload()">Reintentar</button></div>';
+                if (badgeEl) badgeEl.textContent = '!';
+                setSubmitLoading(submitBtn, false);
+                if (bodyEl === partDefBody) loadedPartDef = false;
+                if (bodyEl === rectBody)    loadedRect    = false;
+            });
+    }
+
+    function bindForms(container) {
+        container.querySelectorAll('form').forEach(function (form) {
+            if (form.dataset.ajaxBound) return;
+            form.dataset.ajaxBound = '1';
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var submitBtn = form.querySelector('button[type="submit"]');
+                var url = form.action + '?' + new URLSearchParams(new FormData(form)).toString();
+                var inPartDef = !!partDefBody.contains(form);
+                if (inPartDef) {
+                    fetchAndInject(url, partDefBody, badgePartDef, kpiPartDef, holderPartDef, submitBtn);
+                } else {
+                    fetchAndInject(url, rectBody, badgeRect, kpiRect, holderRect, submitBtn);
+                }
+            });
+        });
+    }
+
+    function loadPartDef() {
+        if (loadedPartDef) return;
+        loadedPartDef = true;
+        fetchAndInject(
+            '@Url.Action("PartidasDefPartial", "Planeamiento")',
+            partDefBody, badgePartDef, kpiPartDef, holderPartDef, null);
+    }
+
+    function loadRect() {
+        if (loadedRect) return;
+        loadedRect = true;
+        fetchAndInject(
+            '@Url.Action("RectificacionRecetaPartial", "Planeamiento", new { estado = "1" })',
+            rectBody, badgeRect, kpiRect, holderRect, null);
+    }
+
+    // Mostrar/ocultar filtros del Tab 1 segun el tab activo
+    var filtrosEval = document.getElementById('filtros-evalcal');
+    function setFiltrosVisibility(tabBtn) {
+        if (!filtrosEval) return;
+        filtrosEval.style.display = (tabBtn === document.getElementById('tab-eval-btn')) ? '' : 'none';
+    }
+    document.querySelectorAll('#tabsEvalCal button[data-bs-toggle="tab"]').forEach(function (btn) {
+        btn.addEventListener('show.bs.tab', function () { setFiltrosVisibility(btn); });
+    });
+
+    if (tabPartDefBtn) tabPartDefBtn.addEventListener('show.bs.tab', loadPartDef);
+    if (tabRectBtn)    tabRectBtn.addEventListener('show.bs.tab', loadRect);
+
+    // Activar tab si viene por URL
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'partdef') {
+        if (tabPartDefBtn) { loadPartDef(); new bootstrap.Tab(tabPartDefBtn).show(); }
+    } else if (params.get('tab') === 'rect') {
+        if (tabRectBtn) { loadRect(); new bootstrap.Tab(tabRectBtn).show(); }
+    }
+})();
+</script>
+}

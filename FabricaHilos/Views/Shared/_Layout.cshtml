@@ -164,15 +164,7 @@
                                 {
                                 <li>
                                     <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEvalCalidad" ? "active" : "")">
-                                        <i class="bi bi-patch-check"></i> Pend. Eval. Calidad
-                                    </a>
-                                </li>
-                                }
-                                @if (menus.PlaneamientoPendPartidasDef)
-                                {
-                                <li>
-                                    <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PartidasPorDefinir" ? "active" : "")">
-                                        <i class="bi bi-question-circle"></i> Partidas por Definir
+                                        <i class="bi bi-patch-check"></i> Eval. Calidad
                                     </a>
                                 </li>
                                 }
@@ -283,15 +275,7 @@
                         {
                         <li>
                             <a asp-controller="Planeamiento" asp-action="PendientesEvalCalidad" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PendientesEvalCalidad" ? "active" : "")">
-                                <i class="bi bi-patch-check"></i> Pend. Eval. Calidad
-                            </a>
-                        </li>
-                        }
-                        @if (menus.PlaneamientoPendPartidasDef)
-                        {
-                        <li>
-                            <a asp-controller="Planeamiento" asp-action="PartidasPorDefinir" class="sidebar-link sidebar-sublink @(ctrl == "Planeamiento" && act == "PartidasPorDefinir" ? "active" : "")">
-                                <i class="bi bi-question-circle"></i> Partidas por Definir
+                                <i class="bi bi-patch-check"></i> Eval. Calidad
                             </a>
                         </li>
                         }
@@ -621,6 +605,49 @@
                                     </li>
                                     }
                                 </ul>
+                            </li>
+                            }
+                        </ul>
+                    </li>
+                }
+
+                @if (menus.Capacitacion)
+                {
+                    <!-- CAPACITACIÓN (LMS) -->
+                    <li class="sidebar-section">CAPACITACIÓN</li>
+                    <li>
+                        <a asp-controller="Capacitacion" asp-action="MiPanel"
+                           class="sidebar-link @(ctrl is "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" ? "active" : "")">
+                            <i class="bi bi-mortarboard-fill"></i>
+                            <span>Capacitación</span>
+                            <i class="bi bi-chevron-down ms-auto toggle-icon"></i>
+                        </a>
+                        <ul class="list-unstyled ps-3 submenu @(ctrl is "Capacitacion" or "Curso" or "Examen" or "Certificado" or "CapacitacionAdmin" ? "show" : "")">
+                            @if (menus.CapacitacionMisCursos)
+                            {
+                            <li>
+                                <a asp-controller="Capacitacion" asp-action="MiPanel"
+                                   class="sidebar-link @(ctrl=="Capacitacion"?"active":"")">
+                                    <i class="bi bi-grid-1x2"></i><span>Mi Panel</span>
+                                </a>
+                            </li>
+                            }
+                            @if (menus.CapacitacionCatalogo)
+                            {
+                            <li>
+                                <a asp-controller="Capacitacion" asp-action="Catalogo"
+                                   class="sidebar-link @(ctrl=="Capacitacion"?"active":"")">
+                                    <i class="bi bi-collection-play"></i><span>Catálogo</span>
+                                </a>
+                            </li>
+                            }
+                            @if (menus.CapacitacionAdmin)
+                            {
+                            <li>
+                                <a asp-controller="CapacitacionAdmin" asp-action="Index"
+                                   class="sidebar-link @(ctrl=="CapacitacionAdmin"?"active":"")">
+                                    <i class="bi bi-gear"></i><span>Administración</span>
+                                </a>
                             </li>
                             }
                         </ul>

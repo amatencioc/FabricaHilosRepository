@@ -1,4 +1,4 @@
-namespace FabricaHilos.Models.Produccion.Planeamiento;
+﻿namespace FabricaHilos.Models.Produccion.Planeamiento;
 
 // ── SP_PLN_PEND_REVISADO ────────────────────────────────────────────────────
 /// <summary>Partida pendiente de revisado (Martín). Columnas de SP_PLN_PEND_REVISADO.</summary>
@@ -16,6 +16,10 @@ public class PlnPendienteRevisado
     public string    Lote         { get; set; } = "";   // LOTE_07
     public string    ColoSer      { get; set; } = "";   // COLO_SER_07
     public DateTime? FchEntrega   { get; set; }         // FCH_ENTREGA_07
+    public string    Tipo         { get; set; } = "";   // TIPO_07 (G=Tintorería, H=Hilandería)
+    public string    DescAsesor   { get; set; } = "";   // DESC_ASESOR_07
+    public decimal   Guia         { get; set; }         // GUIA_07
+    public int       Prioridad    { get; set; } = 99;   // PRIORIDAD_07 (99 = sin asignar)
 
     public int DiasRetraso => FchEntrega.HasValue
         ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
@@ -59,6 +63,7 @@ public class PlnPendienteEnconado
     public DateTime? Fecha         { get; set; }        // FECHA_05 (nullable en parte Hilandería)
     public string    EstEval       { get; set; } = "";  // DESC_EST_EVAL_05
     public string    Resultado     { get; set; } = "";  // DESC_RESULTADO_05
+    public string    Rmc           { get; set; } = "";  // RMC
     public decimal   NroRmc        { get; set; }        // NRO_RMC_05
     public decimal   Peso          { get; set; }        // PESO_PARTIDA_05
     public string    Lote          { get; set; } = "";  // LOTE_05
@@ -180,4 +185,57 @@ public class PlnFiltroTipo
 {
     public string Tipo        { get; set; } = "";
     public string Descripcion { get; set; } = "";
+}
+
+// ── SP_PLN_OBS_REVISADO ──────────────────────────────────────────────────────────────────────────
+/// <summary>Partida con observacion en el proceso de revisado. Columnas de SP_PLN_OBS_REVISADO.</summary>
+public class PlnObservacionRevisado
+{
+    public string    Partida     { get; set; } = "";
+    public string    Material    { get; set; } = "";
+    public DateTime? FechaFin    { get; set; }    // REVISADO_D.FECHA
+    public string    Cliente     { get; set; } = "";
+    public string    CodCliente  { get; set; } = "";
+    public string    CodVende    { get; set; } = "";
+    public string    CodMaq      { get; set; } = "";
+    public string    Maquina     { get; set; } = "";
+    public decimal   NroRmc      { get; set; }
+    public decimal   Peso        { get; set; }
+    public string    Lote        { get; set; } = "";
+    public string    ColoSer     { get; set; } = "";
+    public decimal   Faltante    { get; set; }    // REVISADO_D.FALTANTE
+    public decimal   Rechazado   { get; set; }    // REVISADO_D.RECHAZADO
+    public decimal   Reenconado  { get; set; }    // REVISADO_D.REENCONADO
+    public decimal   Evaluado    { get; set; }    // REVISADO_D.EVALUADO (CONSULTA)
+    public DateTime? FchEntrega  { get; set; }
+    public string    Observacion { get; set; } = "";
+    public string    DescAsesor  { get; set; } = "";   // DESC_ASESOR_07
+
+    public int DiasRetraso => FchEntrega.HasValue
+        ? (int)(DateTime.Today - FchEntrega.Value.Date).TotalDays
+        : 0;
+    public bool EstaVencido => DiasRetraso > 0;
+}
+
+// ── PlnRevisadoViewModel ─────────────────────────────────────────────────────────────────────────
+/// <summary>ViewModel para la vista PendientesRevisado con sus dos pestanas.</summary>
+public class PlnRevisadoViewModel
+{
+    public IList<PlnPendienteRevisado>   Pendientes    { get; set; } = new List<PlnPendienteRevisado>();
+    public IList<PlnObservacionRevisado> Observaciones { get; set; } = new List<PlnObservacionRevisado>();
+}
+
+// -- PlnPartidasDefViewModel
+/// <summary>ViewModel para PartidasPorDefinir con dos pestanas.</summary>
+public class PlnPartidasDefViewModel
+{
+    public IList<PlnPendientePartidaDef>  Partidas        { get; set; } = new List<PlnPendientePartidaDef>();
+    public IList<PlnRectificacionReceta>  Rectificaciones { get; set; } = new List<PlnRectificacionReceta>();
+}
+
+// -- PlnEvalCalidadViewModel
+/// <summary>ViewModel para la vista EvalCalidad con tres pestanas (EvalCalidad + PartidasDef + RectReceta).</summary>
+public class PlnEvalCalidadViewModel
+{
+    public IList<PlnPendienteEvalCalidad> EvalCalidad { get; set; } = new List<PlnPendienteEvalCalidad>();
 }

@@ -1,0 +1,154 @@
+@model List<FabricaHilos.Models.Capacitacion.CapInscripcion>
+@{
+    ViewData["Title"] = "Reportes de Capacitación";
+    var cursos = ViewBag.Cursos as List<FabricaHilos.Models.Capacitacion.CapCurso> ?? [];
+    int? idCursoActivo = ViewBag.IdCursoActivo;
+    var cursoActivo = cursos.FirstOrDefault(c => c.IdCurso == idCursoActivo);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold mb-0">
+        <i class="bi bi-bar-chart-fill text-primary me-2"></i>
+        Reportes · @(cursoActivo?.Titulo ?? "Todos los cursos")
+    </h3>
+    <a asp-controller="CapacitacionAdmin" asp-action="Index" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+    </a>
+</div>
+
+<!-- Selector de curso -->
+<div class="card border-0 shadow-sm p-3 mb-4">
+    <form method="get" asp-controller="CapacitacionAdmin" asp-action="Reportes" class="d-flex gap-3 align-items-end">
+        <div class="flex-grow-1">
+            <label class="form-label small fw-semibold">Filtrar por curso</label>
+            <select name="idCurso" class="form-select" onchange="this.form.submit()">
+                <option value="">— Todos los cursos —</option>
+                @foreach (var c in cursos)
+                {
+                    <option value="@c.IdCurso" selected="@(c.IdCurso==idCursoActivo)">@c.Titulo</option>
+                }
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-funnel me-1"></i>Filtrar
+        </button>
+    </form>
+</div>
+
+@if (idCursoActivo.HasValue && Model.Any())
+{
+    <!-- KPIs del curso -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card text-center p-3 border-0 shadow-sm">
+                <div class="h3 fw-bold text-primary">@Model.Count</div>
+                <div class="text-muted small">Inscritos</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center p-3 border-0 shadow-sm">
+                <div class="h3 fw-bold text-success">@Model.Count(i => i.Estado == "C")</div>
+                <div class="text-muted small">Completados</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center p-3 border-0 shadow-sm">
+                <div class="h3 fw-bold text-info">
+                    @(Model.Any() ? (int)Model.Average(i => i.PctProgreso) : 0)%
+                </div>
+                <div class="text-muted small">Progreso promedio</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center p-3 border-0 shadow-sm">
+                <div class="h3 fw-bold text-warning">@Model.Count(i => i.Obligatorio=="S")</div>
+                <div class="text-muted small">Obligatorios</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de inscritos -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h6 class="mb-0 fw-semibold">Detalle por usuario</h6>
+            <input class="form-control form-control-sm w-auto" id="searchReporte" placeholder="Buscar usuario…">
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="tablaReporte">
+                <thead class="table-light">
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Inscripción</th>
+                        <th>Progreso</th>
+                        <th>Estado</th>
+                        <th>Obligatorio</th>
+                        <th>Vence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var i in Model)
+                    {
+                        <tr>
+                            <td class="fw-semibold">@i.CodUsuario</td>
+                            <td>@i.FchInscripcion.ToString("dd/MM/yyyy")</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height:6px;max-width:100px">
+                                        <div class="progress-bar @(i.Estado=="C"?"bg-success":"bg-primary")"
+                                             style="width:@i.PctProgreso%"></div>
+                                    </div>
+                                    <span class="small">@i.PctProgreso%</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge @(i.Estado switch {"C"=>"bg-success","P"=>"bg-primary","V"=>"bg-danger",_=>"bg-secondary"})">
+                                    @(i.Estado switch {"C"=>"Completado","P"=>"En progreso","V"=>"Vencido","X"=>"Anulado",_=>i.Estado})
+                                </span>
+                            </td>
+                            <td>@(i.Obligatorio=="S" ? "Sí" : "No")</td>
+                            <td>
+                                @if (i.FchVencimiento.HasValue)
+                                {
+                                    var diasFalta = (i.FchVencimiento.Value - DateTime.Today).Days;
+                                    <span class="@(diasFalta < 7 ? "text-danger fw-semibold" : "")">
+                                        @i.FchVencimiento.Value.ToString("dd/MM/yyyy")
+                                        @if (diasFalta >= 0 && diasFalta < 30)
+                                        {
+                                            <span class="badge bg-warning text-dark ms-1">@diasFalta d</span>
+                                        }
+                                    </span>
+                                }
+                                else { <span class="text-muted">—</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else if (idCursoActivo.HasValue)
+{
+    <div class="alert alert-info">No hay inscritos en este curso aún.</div>
+}
+else
+{
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-bar-chart" style="font-size:4rem"></i>
+        <p class="mt-3">Selecciona un curso para ver los reportes de inscripción y progreso.</p>
+    </div>
+}
+
+@section Scripts {
+<script>
+const inp = document.getElementById('searchReporte');
+if (inp) {
+    inp.addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        document.querySelectorAll('#tablaReporte tbody tr').forEach(tr => {
+            tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+}
+</script>
+}
