@@ -165,6 +165,7 @@ public class PlnReporteService : OracleServiceBase, IPlnReporteService
                 FchEnconado         = D(r["FCH_ENCONADO"]),
                 FchRevisado         = D(r["FCH_REVISADO"]),
                 EvEncon             = Str(r["EV_ENCON"]),
+                Calificacion        = Str(Col(r, "CALIFICACION")),
 
                 // Cols 38-42: Entrega y espera
                 FchEntrega          = D(r["FCH_ENTREGA"]),

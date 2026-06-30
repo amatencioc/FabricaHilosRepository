@@ -19,7 +19,8 @@ public class OrdenCompraDto
     public string?   CCosto         { get; set; }
     public DateTime? FEntrega       { get; set; }
 
-    // ── Importes ───────────────────────────────────────────────────────────
+    // ── Importes ───────────────────────────────────────────────────────
+    public decimal   Impsto         { get; set; }   // tasa IGV (ej: 0.18, -0.08, -0.10)
     public decimal   ValVenta       { get; set; }
     public decimal   ImpDescto      { get; set; }
     public decimal   ImpNeto        { get; set; }

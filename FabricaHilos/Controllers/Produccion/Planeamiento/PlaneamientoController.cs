@@ -53,13 +53,33 @@ public class PlaneamientoController : OracleBaseController
         string? fchEntDesde    = null,
         string? fchEntHasta    = null)
     {
-        var desde    = string.IsNullOrWhiteSpace(fchDesde)    ? (DateTime?)null : ParseFecha(fchDesde,    DateTime.Today.AddDays(-30));
-        var hasta    = string.IsNullOrWhiteSpace(fchHasta)    ? (DateTime?)null : ParseFecha(fchHasta,    DateTime.Today);
-        var entDesde = string.IsNullOrWhiteSpace(fchEntDesde) ? (DateTime?)null : ParseFecha(fchEntDesde, DateTime.Today);
-        var entHasta = string.IsNullOrWhiteSpace(fchEntHasta) ? (DateTime?)null : ParseFecha(fchEntHasta, DateTime.Today);
+        // Detectar carga inicial: sin parámetros en la query o petición de "reset" desde el cliente
+        // El botón "Limpiar" establecerá el parámetro reset=1 para indicar que debe
+        // comportarse igual que la carga inicial (traer 1 mes por defecto) pero manteniendo
+        // los inputs visibles en blanco.
+        string? reset = HttpContext.Request.Query["reset"].FirstOrDefault();
+        var isInitialLoad = HttpContext.Request.Query.Count == 0 || (!string.IsNullOrWhiteSpace(reset) && (reset == "1" || reset.Equals("true", StringComparison.OrdinalIgnoreCase)));
+
+        // Convertir parámetros entrantes; si vienen vacíos permanecen null
+        var desdeParam = string.IsNullOrWhiteSpace(fchDesde)    ? (DateTime?)null : ParseFecha(fchDesde,    DateTime.Today);
+        var hastaParam = string.IsNullOrWhiteSpace(fchHasta)    ? (DateTime?)null : ParseFecha(fchHasta,    DateTime.Today);
+        var entDesde   = string.IsNullOrWhiteSpace(fchEntDesde) ? (DateTime?)null : ParseFecha(fchEntDesde, DateTime.Today);
+        var entHasta   = string.IsNullOrWhiteSpace(fchEntHasta) ? (DateTime?)null : ParseFecha(fchEntHasta, DateTime.Today);
+
+        // Para la carga inicial queremos traer un mes por defecto, pero
+        // dejar los campos de fecha en la vista en blanco. Por eso
+        // llamamos al service con un rango por defecto solo cuando es
+        // la primera carga (isInitialLoad == true).
+        DateTime? desdeForQuery = desdeParam;
+        DateTime? hastaForQuery = hastaParam;
+        if (isInitialLoad && desdeParam == null && hastaParam == null)
+        {
+            desdeForQuery = DateTime.Today.AddMonths(-1);
+            hastaForQuery = DateTime.Today;
+        }
 
         var items = await _registro.GetRegistroDiarioAsync(
-            desde, hasta,
+            desdeForQuery, hastaForQuery,
             cod_serv    ?? "",
             cod_cliente ?? "",
             proceso     ?? "",
@@ -72,8 +92,9 @@ public class PlaneamientoController : OracleBaseController
         var vm = new RegistroPedidosViewModel
         {
             Items            = items,
-            FchDesde         = desde,
-            FchHasta         = hasta,
+            // Mantener nulos los valores mostrados para que los inputs queden en blanco
+            FchDesde         = isInitialLoad ? (DateTime?)null : desdeParam,
+            FchHasta         = isInitialLoad ? (DateTime?)null : hastaParam,
             FiltroServ       = cod_serv    ?? "",
             FiltroCliente    = cod_cliente ?? "",
             FiltroProceso    = proceso     ?? "",

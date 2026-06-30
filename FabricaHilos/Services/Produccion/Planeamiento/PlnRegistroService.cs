@@ -113,6 +113,7 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
         var oDiasRetraso      = reader.GetOrdinal("dias_retraso");
         var oIndRetraso       = reader.GetOrdinal("ind_retraso");
         var oIndUrgente       = reader.GetOrdinal("ind_urgente");
+        var oLeadTime         = reader.GetOrdinal("lead_time");
         var oUrgente          = reader.GetOrdinal("urgente");
         var oNroprog          = reader.GetOrdinal("nroprog");
         var oNumPartida       = reader.GetOrdinal("num_partida");
@@ -120,6 +121,10 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
         var oEstadoProg       = reader.GetOrdinal("estado_prog");
         var oSoloDespacho     = reader.GetOrdinal("solo_despacho");
         var oDetalle          = reader.GetOrdinal("detalle");
+        var oObservaciones    = reader.GetOrdinal("observaciones");
+        var oUnidad           = reader.GetOrdinal("unidad");
+        var oEnconado         = reader.GetOrdinal("enconado");
+        var oParafina         = reader.GetOrdinal("parafina");
         var oCodFam           = reader.GetOrdinal("cod_fam");
         var oDescFamilia      = reader.GetOrdinal("desc_familia");
         var oCodLin           = reader.GetOrdinal("cod_lin");
@@ -176,6 +181,7 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
                 DiasRetraso     = (int)SafeDec(reader.GetValue(oDiasRetraso)),
                 IndRetraso      = SafeStr(reader.GetValue(oIndRetraso)),
                 IndUrgente      = SafeStr(reader.GetValue(oIndUrgente)),
+                LeadTime        = reader.IsDBNull(oLeadTime) ? null : (int?)Convert.ToInt32(reader.GetValue(oLeadTime)),
                 Urgente         = SafeStr(reader.GetValue(oUrgente)),
                 Nroprog         = SafeLong(reader.GetValue(oNroprog)),
                 NumPartida      = SafeLong(reader.GetValue(oNumPartida)),
@@ -184,6 +190,10 @@ public class PlnRegistroService : OracleServiceBase, IPlnRegistroService
                 // ─ Flags / familias ────────────────────────────────────────────────
                 SoloDespacho    = SafeStr(reader.GetValue(oSoloDespacho)),
                 Detalle         = SafeStr(reader.GetValue(oDetalle)),
+                Observaciones   = SafeStr(reader.GetValue(oObservaciones)),
+                Unidad          = SafeStr(reader.GetValue(oUnidad)),
+                Enconado        = SafeStr(reader.GetValue(oEnconado)),
+                Parafina        = SafeStr(reader.GetValue(oParafina)),
                 CodFam          = SafeStr(reader.GetValue(oCodFam)),
                 DescFamilia     = SafeStr(reader.GetValue(oDescFamilia)),
                 CodLin          = SafeStr(reader.GetValue(oCodLin)),

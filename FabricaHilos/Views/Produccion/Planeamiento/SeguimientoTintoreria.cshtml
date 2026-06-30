@@ -152,15 +152,45 @@
 <style>
 .spt-card{border:1px solid #d1d9e6;border-radius:.6rem;overflow:hidden;box-shadow:0 2px 12px rgba(15,41,71,.10);margin-bottom:.6rem;}
 .spt-card+.spt-card{margin-top:.6rem;}
-.spt-table-wrap{overflow-x:auto;max-height:calc(100vh - 290px);overflow-y:auto;position:relative;}
-.spt-table-wrap::-webkit-scrollbar{height:6px;width:6px;}
-.spt-table-wrap::-webkit-scrollbar-track{background:#f1f5f9;}
-.spt-table-wrap::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
-#stTable{table-layout:auto;width:100%;min-width:3200px;border-collapse:collapse;border-spacing:0;}
+/* ── FIX CRÍTICO: la cadena flex #wrapper > #content > main debe tener
+   min-width:0 en CADA nivel para que el contenido no expanda al ancho
+   de la tabla interna (2600px). overflow-x:hidden contiene el desborde
+   horizontal dentro de spt-scroll-panel (overflow:auto). ────── */
+#wrapper{min-width:0;overflow-x:hidden;max-width:100vw;}
+#content{min-width:0!important;overflow-x:hidden!important;}
+#content>main{overflow:hidden;min-width:0;}
+/* ── Split frozen-table layout ──────────────────────────────────────────── */
+/* align-items:stretch: ambos paneles tienen la MISMA altura (= max-height)
+   El panel derecho maneja H+V scroll; el izquierdo sincroniza su scrollTop via JS */
+.spt-outer-wrap{display:flex;align-items:stretch;width:100%;max-width:100%;max-height:calc(100vh - 290px);overflow:hidden;position:relative;}
+.spt-frozen-panel{flex:0 0 auto;overflow:hidden;box-shadow:4px 0 8px -3px rgba(0,0,0,0.18);position:relative;z-index:5;max-height:100%;overflow-y:hidden;}
+.spt-scroll-panel{flex:1 1 0%;overflow:auto;min-width:0;max-height:100%;}
+.spt-scroll-panel::-webkit-scrollbar{height:10px;width:6px;}
+.spt-scroll-panel::-webkit-scrollbar-track{background:#f1f5f9;}
+.spt-scroll-panel::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
+.spt-scroll-panel::-webkit-scrollbar-thumb:hover{background:#64748b;}
+#stTable,#stTableL{table-layout:auto;border-collapse:separate;border-spacing:0;}
+#stTable{width:100%;min-width:2600px;}
+#stTableL{width:634px;}
+/* stTableL: misma tipografia/colores que stTable */
+#stTableL thead tr.thead-grupos th{font-size:.60rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;background:#1a4971;color:#e8f0fa;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #f59e0b;position:sticky;top:0;z-index:12;}
+#stTableL thead tr.thead-cols th{font-size:.60rem;font-weight:700;text-transform:uppercase;white-space:nowrap;background:#dde5f0;color:#1e2d3d;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #a8bbcf;position:sticky;top:var(--thead-grp-h,28px);z-index:11;}
+#stTableL tbody td{font-size:.70rem;vertical-align:middle;padding:.22rem .38rem;border-bottom:1px solid #edf2f7;white-space:nowrap;}
+#stTableL tbody tr:nth-child(even) td{background:#f8fafc;}
+#stTableL tbody tr:nth-child(odd) td{background:#fff;}
+#stTableL tbody tr:hover td{background:#eff6ff !important;}
+#stTableL tbody tr.row-retraso:nth-child(even) td{background:#fef2f2 !important;}
+#stTableL tbody tr.row-retraso:nth-child(odd) td{background:#fff5f5 !important;}
+#stTableL tbody tr.row-retraso:hover td{background:#fee2e2 !important;}
+/* fc-* widths (ahora solo en stTableL para columnas fijas) */
+#stTableL .fc-5{min-width:106px;max-width:106px;}
+#stTableL .fc-6{min-width:130px;max-width:130px;}
+#stTableL .fc-7{min-width:200px;max-width:200px;}
+#stTableL .fc-8{min-width:38px;max-width:38px;}
+#stTableL .fc-9{min-width:62px;max-width:62px;}
+#stTableL .fc-10{min-width:70px;max-width:70px;}
 #stTable thead tr.thead-grupos th{font-size:.60rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;background:#1a4971;color:#e8f0fa;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #f59e0b;position:sticky;top:0;z-index:12;}
-#stTable thead tr.thead-grupos th.fc-5,#stTable thead tr.thead-grupos th.fc-6,#stTable thead tr.thead-grupos th.fc-7,#stTable thead tr.thead-grupos th.fc-8{z-index:22;}
 #stTable thead tr.thead-cols th{font-size:.60rem;font-weight:700;text-transform:uppercase;white-space:nowrap;background:#dde5f0;color:#1e2d3d;padding:.22rem .4rem;text-align:center;border-bottom:2px solid #a8bbcf;position:sticky;top:var(--thead-grp-h,28px);z-index:11;}
-#stTable thead tr.thead-cols th.fc-5,#stTable thead tr.thead-cols th.fc-6,#stTable thead tr.thead-cols th.fc-7,#stTable thead tr.thead-cols th.fc-8{z-index:21;background:#ccd7ea;}
 #stTable thead th:hover{filter:brightness(.93);}
 #stTable tbody td{font-size:.70rem;vertical-align:middle;padding:.22rem .38rem;border-bottom:1px solid #edf2f7;white-space:nowrap;}
 #stTable tbody tr:nth-child(even) td{background:#f8fafc;}
@@ -169,14 +199,10 @@
 #stTable tbody tr.row-retraso:nth-child(even) td{background:#fef2f2 !important;}
 #stTable tbody tr.row-retraso:nth-child(odd) td{background:#fff5f5 !important;}
 #stTable tbody tr.row-retraso:hover td{background:#fee2e2 !important;}
-#stTable .fc-1{position:sticky;left:0px;z-index:3;min-width:38px;max-width:38px;display:none;}
-#stTable .fc-2{position:sticky;left:38px;z-index:3;min-width:46px;max-width:46px;display:none;}
-#stTable .fc-3{position:sticky;left:84px;z-index:3;min-width:42px;max-width:42px;display:none;}
-#stTable .fc-4{position:sticky;left:126px;z-index:3;min-width:38px;max-width:38px;display:none;}
-#stTable .fc-5{position:sticky;left:0px;z-index:3;min-width:106px;max-width:106px;}
-#stTable .fc-6{position:sticky;left:106px;z-index:3;min-width:130px;max-width:130px;}
-#stTable .fc-7{position:sticky;left:236px;z-index:3;min-width:200px;max-width:200px;}
-#stTable .fc-8{position:sticky;left:436px;z-index:3;min-width:38px;max-width:38px;box-shadow:3px 0 6px -2px rgba(0,0,0,.18);}
+#stTable .fc-1{min-width:38px;max-width:38px;display:none;}
+#stTable .fc-2{min-width:46px;max-width:46px;display:none;}
+#stTable .fc-3{min-width:42px;max-width:42px;display:none;}
+#stTable .fc-4{min-width:38px;max-width:38px;display:none;}
 #stTable .col-ne{display:none;}
 #stTable .col-mat{display:none;}
 #stTable .col-de{display:none;}
@@ -213,6 +239,35 @@
 .cf-msel-footer{display:flex;gap:.35rem;padding:.28rem .3rem 0;margin-top:.25rem;border-top:1px solid #e2e8f0;}
 .cf-msel-clr{font-size:.68rem;color:#64748b;background:none;border:none;cursor:pointer;padding:.1rem .3rem;border-radius:.2rem;}
 .cf-msel-clr:hover{color:#dc2626;}
+/* ── spt-ctrl: iguala pend-ctrl para botones multi-select ─────────────────── */
+.spt-ctrl{font-size:.78rem !important;border-radius:.32rem !important;border:1px solid #bfcad8 !important;background:#fff !important;color:#1e2d3d !important;padding:.28rem .55rem !important;height:auto !important;box-shadow:0 1px 2px rgba(0,0,0,.04) !important;transition:border-color .15s,box-shadow .15s;}
+.spt-ctrl:hover{border-color:#94a3b8 !important;}
+.spt-ctrl:focus,.spt-ctrl:focus-visible{border-color:#3b82f6 !important;box-shadow:0 0 0 3px rgba(59,130,246,.15) !important;outline:none !important;}
+/* ── cf-vsep: separador vertical en barra de filtros ────────────────────── */
+.cf-vsep{width:1px;height:26px;background:#d1d9e6;align-self:flex-end;margin-bottom:.1rem;flex-shrink:0;}
+/* ── spt-footer / spt-legend ────────────────────────────────────────────── */
+.spt-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:.42rem 1rem;background:#f8fafc;border-top:1px solid #d1d9e6;font-size:.74rem;color:#374151;}
+.spt-legend{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;}
+/* ── eb: badges de estado de etapa ──────────────────────────────────────── */
+.eb{display:inline-flex;align-items:center;gap:.18rem;border-radius:.28rem;padding:.12rem .42rem;font-size:.68rem;font-weight:700;white-space:nowrap;line-height:1.3;}
+.eb-ok    {background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;}
+.eb-sin   {background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;}
+.eb-est   {background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;}
+.eb-proc  {background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}
+.eb-retaso{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;}
+/* ── dias-ret / dias-ok: indicadores de color en leyenda ────────────────── */
+.dias-ret{color:#f87171;}
+.dias-ok {color:#4ade80;}
+/* ── Paginación ──────────────────────────────────────────────────────────── */
+.pg-nums{display:flex;align-items:center;gap:.2rem;flex-wrap:wrap;}
+.pg-btn{display:inline-flex;align-items:center;justify-content:center;min-width:1.7rem;height:1.7rem;border:1px solid #d1d9e6;background:#fff;border-radius:.28rem;font-size:.70rem;color:#374151;cursor:pointer;padding:0 .3rem;transition:background .12s,border-color .12s;line-height:1;}
+.pg-btn:hover:not(:disabled){background:#eff6ff;border-color:#93c5fd;color:#1d4ed8;}
+.pg-btn:disabled{opacity:.4;cursor:default;}
+.pg-btn.pg-active{background:#1a4971;color:#fff;border-color:#1a4971;font-weight:700;}
+.pg-size{font-size:.72rem !important;border-radius:.28rem !important;border:1px solid #d1d9e6 !important;padding:.15rem .32rem !important;height:auto !important;background:#fff !important;color:#374151 !important;}
+.pg-info{font-size:.70rem;color:#64748b;white-space:nowrap;}
+/* ── tfoot KPI: borde superior para separar del body ────────────────────── */
+#stTable tfoot tr.tfoot-kpi td{border-top:2px solid #b8c8db;}
 </style>
 }
 
@@ -509,6 +564,9 @@
                 </select>
             </div>
 
+            @* --- salto de línea flex --- *@
+            <div style="flex-basis:100%;height:0;"></div>
+
             @* 9. Fecha Entrega *@
             <div class="pend-fld">
                 <label class="pend-label"><i class="bi bi-calendar-event"></i>F.Entrega</label>
@@ -610,33 +668,39 @@
             </div>
         </div>
 
-        <div class="spt-table-wrap">
+        <div class="spt-outer-wrap">
+            @* LEFT: columnas fijas (no scroll horizontal) *@
+            <div class="spt-frozen-panel">
+                <table id="stTableL">
+                    <thead>
+                        <tr class="thead-grupos">
+                            <th class="col-chk th-fix" rowspan="2" style="padding:0;vertical-align:middle;"><input type="checkbox" id="chkAll" title="Seleccionar todos"></th>
+                            <th class="th-grp col-sep" colspan="6" style="text-align:center;">DATOS GENERALES</th>
+                        </tr>
+                        <tr class="thead-cols">
+                            <th class="col-sep fc-5 th-fix">Partida</th>
+                            <th class="fc-6 th-fix">Cliente</th>
+                            <th class="fc-7 th-fix">Material</th>
+                            <th class="fc-8 th-fix">Est</th>
+                            <th class="fc-9 th-fix">Lote</th>
+                            <th class="fc-10 th-fix">F.Pedido</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stTbodyL"></tbody>
+                </table>
+            </div>
+            @* RIGHT: columnas desplazables *@
+            <div class="spt-scroll-panel">
             <table id="stTable">
 				<thead>
 					@* ── Fila 1: Grupos ──────────────────────────────────────────────────── *@
 					<tr class="thead-grupos">
-						<th class="col-chk th-fix" rowspan="2" style="padding:0;vertical-align:middle;"><input type="checkbox" id="chkAll" title="Seleccionar todos"></th>
 						<th class="fc-1 th-fix" rowspan="2">Mes</th>
 						<th class="fc-2 th-fix" rowspan="2">Mes.Tex</th>
 						<th class="fc-3 th-fix" rowspan="2">Año</th>
 						<th class="fc-4 th-fix" rowspan="2">Sem</th>
-						<th class="col-sep fc-5 th-fix" rowspan="2">Partida</th>
-						<th class="fc-6 th-fix" rowspan="2">Cliente</th>
-						<th class="fc-7 th-fix" rowspan="2">Material</th>
-						<th class="fc-8 th-fix" rowspan="2">
-							Est
-							<span tabindex="0" class="est-info-icon"
-								  data-bs-toggle="popover" data-bs-placement="right" data-bs-trigger="hover focus"
-								  data-bs-html="true"
-								  data-bs-title="Campo EST (Estado Programa)"
-								  data-bs-content="&lt;div style='font-size:.75rem;line-height:1.5;'&gt;&lt;p style='margin:0 0 .4rem;'&gt;Estado de programación del ítem en Hilandería. &lt;b&gt;Independiente&lt;/b&gt; del Estado de Flujo de Tintorería.&lt;/p&gt;&lt;table style='width:100%;border-collapse:collapse;'&gt;&lt;thead&gt;&lt;tr style='background:#e2e8f0;'&gt;&lt;th style='padding:2px 5px;text-align:center;'&gt;EST&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Significado&lt;/th&gt;&lt;th style='padding:2px 5px;'&gt;Estado de Flujo&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;1&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;PROG DIARIO&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;3&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;CON RECETA&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;EN LABORATORIO / CON RECETA&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;4&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;SIN RECETA&lt;/td&gt;&lt;td style='padding:2px 5px;color:#dc3545;'&gt;SIN RECETA&lt;/td&gt;&lt;/tr&gt;&lt;tr style='background:#f8fafc;'&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;7&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;LABDIP&lt;/td&gt;&lt;td style='padding:2px 5px;color:#6f42c1;'&gt;LABDIP&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td style='text-align:center;font-weight:700;padding:2px 5px;'&gt;11&lt;/td&gt;&lt;td style='padding:2px 5px;'&gt;PROG DIARIO&lt;/td&gt;&lt;td style='padding:2px 5px;color:#0d6efd;'&gt;PENDIENTE DE TEÑIR&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;">
-								<i class="bi bi-info-circle-fill" style="font-size:.65rem;opacity:.75;cursor:pointer;vertical-align:middle;"></i>
-							</span>
-						</th>
 						<th class="col-ne th-fix" rowspan="2">Ne</th>
 						<th class="col-mat th-fix" rowspan="2">Mat</th>
-						<th rowspan="2">Lote</th>
-						<th rowspan="2">F.Pedido</th>
 						<th class="th-grp col-sep" colspan="4">RODETE</th>
 						<th class="th-grp col-sep" colspan="3">ENT. MATERIAL HILAND.</th>
 						<th class="th-grp col-sep" colspan="3">RECETA</th>
@@ -645,7 +709,7 @@
 						<th class="th-grp col-sep" colspan="5">TENIDO</th>
 						<th class="th-grp col-sep" colspan="1">TIPO ACAB.</th>
 						<th class="th-grp col-sep" colspan="5">SECADO</th>
-						<th class="th-grp col-sep" colspan="2">EVAL. CALIDAD</th>
+						<th class="th-grp col-sep" colspan="3">EVAL. CALIDAD</th>
 						<th class="th-grp col-sep" colspan="2">ENCONADO</th>
 						<th class="th-grp col-sep" colspan="4">ALMACEN</th>
 						<th class="th-grp col-sep" colspan="5">KG.</th>
@@ -683,6 +747,7 @@
 						<th style="text-align:center">Sem.Sec</th>
 						<th class="col-sep">F.Revis</th>
 						<th>Ev.Encon</th>
+						<th>Calif.</th>
 						<th class="col-sep">Acabado</th>
 						<th>F.Encon</th>
 						<th class="col-sep">F.Entrega</th>
@@ -719,9 +784,10 @@
 					</tr>
 				</thead>
                 <tbody id="stTbody"></tbody>
-                <tfoot></tfoot>
+
             </table>
-        </div>
+            </div>@* /spt-scroll-panel *@
+        </div>@* /spt-outer-wrap *@
 
 
 
@@ -792,6 +858,7 @@ window.stData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(items.Select
     fchEncon   = r.FchEnconado.HasValue   ? r.FchEnconado.Value.ToString("dd/MM/yy")   : (string?)null,
     fchRev     = r.FchRevisado.HasValue   ? r.FchRevisado.Value.ToString("dd/MM/yy")   : (string?)null,
     evEncon    = r.EvEncon,
+    calificacion = r.Calificacion,
     fchEntrega = r.FchEntrega.HasValue    ? r.FchEntrega.Value.ToString("dd/MM/yy")    : (string?)null,
     ingAlmpt   = r.IngAlmpt.HasValue      ? r.IngAlmpt.Value.ToString("dd/MM/yy")      : (string?)null,
     diasEsp    = r.DiasEnEspera,
@@ -864,20 +931,25 @@ function buildRow(r, idx) {
         : '<span class="eb eb-sin">\u2014</span>';
     var semCls = r.estDesp==='VENCIDO' ? 'eb-retaso' : 'eb-ok';
     var areaVal = r._area != null ? r._area : (r.area || '');
-    return '<tr class="'+cls+'" style="'+rowBg+'" data-idx="'+idx+'">' +
+    var ro = '<tr class="'+cls+'" style="'+rowBg+'" data-idx="'+idx+'">';
+    // ── Fila izquierda: columnas fijas (Partida, Cliente, Material, Est, Lote, F.Pedido)
+    var lRow = ro +
         '<td class="col-chk" style="text-align:center;padding:2px 4px;'+cellHx+'"><input type="checkbox" class="row-chk" data-idx="'+idx+'"></td>' +
-        '<td class="fc-1" style="white-space:nowrap;text-align:center;">'+d(r.mes)+'</td>' +
-        '<td class="fc-2" style="white-space:nowrap;text-align:center;">'+d(r.mesTex)+'</td>' +
-        '<td class="fc-3" style="white-space:nowrap;text-align:center;">'+d(r.ano)+'</td>' +
-        '<td class="fc-4" style="white-space:nowrap;text-align:center;">'+d(r.sem)+'</td>' +
         '<td class="col-sep fc-5" style="white-space:nowrap;font-weight:600;'+partColor+cellHx+'">'+d(r.partida)+'</td>' +
         '<td class="fc-6" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.cliente||'')+'">'+d(r.cliente)+'</td>' +
         '<td class="fc-7" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(r.material||'')+'">'+d(r.material)+'</td>' +
         '<td class="fc-8" style="white-space:nowrap;"><span class="eb eb-est">'+d(r.est)+'</span></td>' +
+        '<td class="fc-9" style="white-space:nowrap;">'+d(r.lote)+'</td>' +
+        '<td class="fc-10" style="white-space:nowrap;">'+d(r.fchPedido)+'</td>' +
+        '</tr>';
+    // ── Fila derecha: columnas de datos (scroll horizontal)
+    var rRow = ro +
+        '<td class="fc-1" style="white-space:nowrap;text-align:center;">'+d(r.mes)+'</td>' +
+        '<td class="fc-2" style="white-space:nowrap;text-align:center;">'+d(r.mesTex)+'</td>' +
+        '<td class="fc-3" style="white-space:nowrap;text-align:center;">'+d(r.ano)+'</td>' +
+        '<td class="fc-4" style="white-space:nowrap;text-align:center;">'+d(r.sem)+'</td>' +
         '<td class="col-ne" style="white-space:nowrap;">'+d(r.ne)+'</td>' +
         '<td class="col-mat" style="white-space:nowrap;">'+d(r.mat)+'</td>' +
-        '<td style="white-space:nowrap;">'+d(r.lote)+'</td>' +
-        '<td style="white-space:nowrap;">'+d(r.fchPedido)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.estimaRod)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.entregRod)+'</td>' +
         '<td style="text-align:right;white-space:nowrap;">'+n0(r.diasRod)+'</td>' +
@@ -903,6 +975,7 @@ function buildRow(r, idx) {
         '<td style="text-align:center;white-space:nowrap;">'+iconSec(r.timeAprov)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.fchRev)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.evEncon)+'</td>' +
+        '<td style="white-space:nowrap;">'+d(r.calificacion)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;">'+d(r.acabado)+'</td>' +
         '<td style="white-space:nowrap;">'+d(r.fchEncon)+'</td>' +
         '<td class="col-sep" style="white-space:nowrap;'+r.semClass+'">'+d(r.fchEntrega)+'</td>' +
@@ -920,12 +993,14 @@ function buildRow(r, idx) {
         '<td class="col-sep col-area"><textarea class="area-input" data-idx="'+idx+'" rows="1" placeholder="Ingresar \u00e1rea resp.">'+escHtml(areaVal)+'</textarea></td>' +
         '<td class="col-bp" style="white-space:nowrap;">'+d(r.bp)+'</td>' +
         '</tr>';
+    return { l: lRow, r: rRow };
 }
 
 function escHtml(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── Referencias DOM ───────────────────────────────────────────────────────────
 var tbody    = document.getElementById('stTbody');
+var tbodyL   = document.getElementById('stTbodyL');  // tabla izquierda (columnas fijas)
 var tbl      = document.getElementById('stTable');
 var cntEl    = document.getElementById('cfCount');
 var totalEl  = document.getElementById('cfTotal');
@@ -1030,9 +1105,10 @@ function renderPage() {
     if(curPage>pages) curPage=pages;
     var start=(curPage-1)*(ps>0?ps:total), end=ps>0?Math.min(start+ps,total):total;
     var page=filtered.slice(start,end);
-    var html='';
-    for(var i=0;i<page.length;i++) html+=buildRow(page[i], start+i);
-    tbody.innerHTML=html;
+    var htmlL='', htmlR='';
+    for(var i=0;i<page.length;i++){ var row=buildRow(page[i],start+i); htmlL+=row.l; htmlR+=row.r; }
+    tbody.innerHTML=htmlR;
+    if(tbodyL) tbodyL.innerHTML=htmlL;
     if(pgInfo) pgInfo.textContent=total===0?'0 registros':(ps<=0?'Todos ('+total+')':(start+1)+'\u2013'+end+' de '+total);
     if(pgPrev) pgPrev.disabled=(curPage<=1);
     if(pgNext) pgNext.disabled=(curPage>=pages);
@@ -1049,6 +1125,7 @@ function renderPage() {
     }
     // reconectar checkboxes y obs inputs tras render
     bindRowEvents();
+    syncRowHeights();
 }
 
 // ── KPIs ─────────────────────────────────────────────────────────────────────
@@ -1057,20 +1134,9 @@ function promedio(arr){var n=arr.filter(function(v){return v!==null;});return n.
 function kpiFmt(v){return v!==null?v.toFixed(1):'\u2014';}
 
 function updateKpis(){
-    if(!tbl) return;
-    var kpiRod=promedioNeg(filtered.map(function(r){return r.diasRod!=null?+r.diasRod:null;}));
-    var kpiMh=promedioNeg(filtered.map(function(r){return r.diasMh!=null?+r.diasMh:null;}));
-    var kpiRec=promedio(filtered.map(function(r){return r.diasRec!=null?+r.diasRec:null;}));
-    var kpiDiasT=promedio(filtered.map(function(r){return r.diasT!=null?+r.diasT:null;}));
-    tbl.querySelectorAll('tfoot td[data-kpi]').forEach(function(td){
-        var k=td.dataset.kpi,val=null;
-        if(k==='rod'){val=kpiRod;td.style.backgroundColor=(kpiRod!=null&&kpiRod>0)?'#FEA8B4':'';}
-        if(k==='mh'){val=kpiMh;td.style.backgroundColor=(kpiMh!=null&&kpiMh>0)?'#FEA8B4':'';}
-        if(k==='rec'){val=kpiRec;td.style.backgroundColor=(kpiRec!=null&&kpiRec>0)?'#FEA8B4':'';}
-        if(k==='diast'){val=kpiDiasT;td.style.backgroundColor=(kpiDiasT!=null&&kpiDiasT>0)?'#FE9CB1':'';}
-        if(k==='timeaprov'){val=kpiDiasT;td.style.backgroundColor=(kpiDiasT!=null&&kpiDiasT>0)?'#FEA8B4':'';}
-        td.textContent=kpiFmt(val);
-    });
+    // Pie de KPIs eliminado (se removió la fila tfoot con data-kpi).
+    // Esta función queda como no-op para evitar errores si se invoca en otros flujos.
+    return;
 }
 
 // ── Botones MES ───────────────────────────────────────────────────────────────
@@ -1317,9 +1383,35 @@ function updateColorBar(){
     }
 }
 
+// Sincroniza la altura de la fila de cabeceras individuales (thead-cols) entre ambas tablas.
+// La tabla izquierda tiene esa fila vacía (los th tienen rowspan=2); se le da la misma
+// altura que la fila equivalente de la tabla derecha para que los cuerpos arranquen igual.
+function syncTheadHeights() {
+    if (!tbl) return;
+    var rightColsRow = tbl.querySelector('thead tr.thead-cols');
+    var tblL = document.getElementById('stTableL');
+    var leftColsRow = tblL ? tblL.querySelector('thead tr.thead-cols') : null;
+    if (!rightColsRow || !leftColsRow) return;
+    var h = rightColsRow.getBoundingClientRect().height || rightColsRow.offsetHeight || 0;
+    leftColsRow.style.height = h + 'px';
+}
+
+// Sincroniza alturas de filas entre panel izquierdo (stTbodyL) y panel derecho (stTbody)
+function syncRowHeights() {
+    if (!tbodyL || !tbody) return;
+    var rRows = tbody.rows;
+    var lRows = tbodyL.rows;
+    var len = Math.min(lRows.length, rRows.length);
+    for (var i = 0; i < len; i++) {
+        lRows[i].style.height = rRows[i].offsetHeight + 'px';
+    }
+    syncTheadHeights();
+}
+
 function bindRowEvents(){
-    // checkboxes de fila
-    tbody.querySelectorAll('.row-chk').forEach(function(chk){
+    // checkboxes: en la tabla izquierda (stTbodyL)
+    var chkSrc = tbodyL || tbody;
+    chkSrc.querySelectorAll('.row-chk').forEach(function(chk){
         chk.addEventListener('change',function(){
             var idx=this.dataset.idx;
             if(this.checked) selected[idx]=true; else delete selected[idx];
@@ -1328,7 +1420,7 @@ function bindRowEvents(){
         // restaurar estado seleccionado tras re-render
         if(selected[chk.dataset.idx]) chk.checked=true;
     });
-    // area-resp inputs: actualiza solo el borrador (_area), no el valor guardado (_areaSaved)
+    // area-resp inputs: en la tabla derecha (stTbody)
     tbody.querySelectorAll('.area-input').forEach(function(ta){
         ta.addEventListener('input',function(){
             var idx=parseInt(this.dataset.idx);
@@ -1346,7 +1438,8 @@ if(chkAll) chkAll.addEventListener('change',function(){
         var end=ps>0?Math.min(start+ps,filtered.length):filtered.length;
         filtered.slice(start,end).forEach(function(r,i){ selected[start+i]=true; });
     } else { selected={}; }
-    tbody.querySelectorAll('.row-chk').forEach(function(c){ c.checked=chkAll.checked; });
+    var chkSrc = tbodyL || tbody;
+    chkSrc.querySelectorAll('.row-chk').forEach(function(c){ c.checked=chkAll.checked; });
     updateColorBar();
 });
 
@@ -1441,11 +1534,29 @@ function fixTheadRowTops(){
     var gr = tbl.querySelector('thead tr.thead-grupos');
     if(!gr) return;
     var h = gr.getBoundingClientRect().height || gr.offsetHeight || 28;
-    var wrap = tbl.closest('.spt-table-wrap') || tbl.parentElement;
-    if(wrap) wrap.style.setProperty('--thead-grp-h', h + 'px');
+    // Aplicar a ambas tablas (derecha e izquierda)
+    tbl.style.setProperty('--thead-grp-h', h + 'px');
+    var tblL = document.getElementById('stTableL');
+    if(tblL) {
+        tblL.style.setProperty('--thead-grp-h', h + 'px');
+        var grL = tblL.querySelector('thead tr.thead-grupos');
+        if(grL) grL.style.height = h + 'px';
+    }
+    // Sincronizar altura de la fila de cabeceras de columnas
+    syncTheadHeights();
 }
 requestAnimationFrame(fixTheadRowTops);
 window.addEventListener('resize', fixTheadRowTops);
+
+// Sincronizar scroll vertical: el panel derecho arrastra al panel izquierdo
+// (el panel izquierdo tiene overflow:hidden pero acepta scrollTop por JS)
+var scrollPanel = document.querySelector('.spt-scroll-panel');
+var frozenPanel = document.querySelector('.spt-frozen-panel');
+if (scrollPanel && frozenPanel) {
+    scrollPanel.addEventListener('scroll', function() {
+        frozenPanel.scrollTop = this.scrollTop;
+    });
+}
 
 // ── Exportar Excel ──────────────────────────────────────────────────────────
 var btnExportXlsx = document.getElementById('btnExportXlsx');
@@ -1475,7 +1586,7 @@ if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
         'Tipo.Acab',
         'F.Sec.Rod','F.Sec.Mad',
         'CC.Aprobado',
-        'F.Revisado','Ev.Encon','Acabado','F.Enconado',
+        'F.Revisado','Ev.Encon','Calif.','Acabado','F.Enconado',
         'F.Entrega','Ing.AlmPT','Dias.Esp',
         'KG.Pedido','KG.Prog','KG.Despa','GAP','%Tol',
         'Est.Flujo','Est.Desp',
@@ -1495,7 +1606,7 @@ if(btnExportXlsx) btnExportXlsx.addEventListener('click', function(){
             r.tipoAc,
             r.fchSecRod, r.fchSecMad,
             r.fchAprobCal,
-            r.fchRev, r.evEncon, r.acabado, r.fchEncon,
+            r.fchRev, r.evEncon, r.calificacion, r.acabado, r.fchEncon,
             r.fchEntrega, r.ingAlmpt, r.diasEsp != null ? +r.diasEsp : null,
             r.kgPedido != null ? +r.kgPedido : null,
             r.kgProg   != null ? +r.kgProg   : null,

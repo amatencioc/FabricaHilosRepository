@@ -61,12 +61,15 @@
         _   => "#784212"
     };
 
-    // Totales desde los valores almacenados en DB — respetan el IMPSTO configurado
-    // en la O/C (IGV 18%, retención I.RENTA -8%, descuento/N.C. -10%, etc.).
-    // NO recalcular con tasa fija: cada O/C puede tener un tipo de impuesto distinto.
+    // Totales calculados desde los ítems + tasa IMPSTO de la O/C.
+    // Se usa la tasa almacenada en IMPSTO (no una fija) para respetar
+    // retenciones I.RENTA (-8%), descuentos/N.C. (-10%), IGV 18%, etc.
+    // Al calcular valVenta desde los ítems (IMP_VVTA = CANTIDAD × PRECIO × descuentos),
+    // el total siempre refleja la cantidad real aunque el Legacy haya cambiado CANTIDAD
+    // sin actualizar los campos agregados de la cabecera.
     decimal valVenta = items.Sum(i => i.ImpVvta);
-    decimal impIgv   = oc.ImpIgv;
-    decimal total    = oc.PrecioVta;
+    decimal impIgv   = Math.Round(valVenta * oc.Impsto, 2);
+    decimal total    = valVenta + impIgv;
 }
 <!DOCTYPE html>
 <html lang="es">

@@ -140,7 +140,7 @@ else
 <th class="text-center">RMC</th>
 <th class="text-end">Kg</th>
 <th>Lote</th>
-                                <th>Presentacion</th>
+                                <th>Colonial/Servicio</th>
 <th class="text-center pend-th-sort" data-col="ffinsec" data-dir="" style="cursor:pointer;user-select:none;" title="Ordenar por F. Fin Sec.">
     F. Fin Sec. <i class="bi bi-arrow-down-up sort-icon ms-1"></i>
 </th>
@@ -171,7 +171,13 @@ var rowCss = item.EstaVencido ? "table-danger" :
 </td>
 <td class="text-end fw-semibold">@item.Peso.ToString("N2")</td>
 <td style="font-size:.78rem;">@item.Lote</td>
-<td style="font-size:.78rem;" class="text-muted">@item.ColoSer</td>
+<td style="font-size:.78rem;" class="text-muted">
+@{
+    var _coloSerCode = item.ColoSer?.Length > 0 ? item.ColoSer.Substring(0, 1).ToUpper() : "";
+    var _coloSerLabel = _coloSerCode == "C" ? "Colonial" : _coloSerCode == "S" ? "Servicio" : item.ColoSer;
+}
+@_coloSerLabel
+</td>
 <td class="text-center text-muted">
 @(item.FechaFin.HasValue ? item.FechaFin.Value.ToString("dd/MM/yy") : "—")
 </td>

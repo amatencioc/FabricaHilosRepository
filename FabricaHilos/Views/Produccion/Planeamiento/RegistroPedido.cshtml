@@ -68,14 +68,20 @@
         kgPendientes  = x.KgPendientes,
         // ── Computed ───────────────────────────────────────────
         esVencido     = x.EsVencido,
+        // ── Nuevos campos ITEMPED / ARTICUL ──────────────────
+        observaciones = x.Observaciones,
+        unidad        = x.Unidad,
+        enconado      = x.Enconado,
+        parafina      = x.Parafina,
+        leadTime      = x.LeadTime,
     }));
 
     // Combos dinámicos únicos
     var servicios = Model.Items.Select(x => x.CodServ).Distinct().OrderBy(x => x).ToList();
-    // Fibras: usa TipoFibra (ITEMPED_DET.TIPO_FIBRA, código 8-char) con desc de H_FIBRA
+    // Fibras: usa TipoFibra con desc de H_FIBRA; incluye TFIBRA (char1) como fallback
     var tfibras   = Model.Items
         .Select(x => new { cod = x.TipoFibra, desc = x.DescTfibra })
-        .Where(x => !string.IsNullOrEmpty(x.cod) && x.cod != "0" && x.cod != "000")
+        .Where(x => !string.IsNullOrEmpty(x.cod) && x.cod != "0")
         .DistinctBy(x => x.cod).OrderBy(x => x.cod).ToList();
     // Pasos PLN: usa CodPasoAct (código BD) como value para que el SP filtre correctamente
     var pasoOrderMap = new Dictionary<string,int> {
@@ -380,7 +386,7 @@
     <div class="reg-filt-grp">
       <span class="reg-filt-lbl">Buscar</span>
       <input type="text" id="regSearch" placeholder="&#128269; texto libre&hellip;"
-             class="form-control form-control-sm" style="width:160px;font-size:.73rem;"
+             class="form-control form-control-sm" style="width:180px;font-size:.73rem;"
              autocomplete="off" />
       <span class="reg-filt-lbl" style="margin-left:.3rem;">Pedido</span>
       <select id="selEstado" class="form-select form-select-sm" style="width:130px;font-size:.73rem;" title="Estado del pedido">
@@ -393,9 +399,6 @@
           { <option value="@est.Item1">@est.Item2</option> }
         }
       </select>
-      <input type="text" id="inpCliente" placeholder="Cliente…" autocomplete="off"
-             value="@Model.FiltroCliente"
-             class="form-control form-control-sm" style="width:138px;font-size:.73rem;" />
     </div>
 
     <div class="reg-vsep"></div>
@@ -491,7 +494,7 @@
         <li class="dropdown-item py-0 px-1 text-muted" style="font-size:.62rem;font-weight:700;letter-spacing:.05em;">ACTIVAS POR DEFECTO</li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colTfibra"  checked> T.Fibra</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colColor"   checked> Color / Intens.</label></li>
-        <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colLinea"   checked> Familia / Línea</label></li>
+        <!-- Familia / Línea removida según solicitud -->
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colPaso"    checked> Estado PLN</label></li>
         <li><label class="dropdown-item d-flex gap-2 py-1"><input type="checkbox" class="col-chk" data-col="colRetraso" checked> Retraso</label></li>
         <li class="dropdown-divider"></li>
@@ -538,23 +541,24 @@
             <th data-sort="fchPedido"     style="min-width:80px;">Fecha <span class="sort-icon">⇅</span></th>
             <th data-sort="nombreCliente" style="min-width:155px;">Cliente <span class="sort-icon">⇅</span></th>
             <th data-sort="nro"           style="width:36px;text-align:center;">Ítem</th>
-            <th data-sort="descArt"       style="min-width:135px;">Artículo <span class="sort-icon">⇅</span></th>
+            <th data-sort="descArt"       style="min-width:220px;">Material <span class="sort-icon">⇅</span></th>
             <th data-sort="descFibra"     class="colTfibra" style="min-width:80px;">T.Fibra <span class="sort-icon">⇅</span></th>
-            <th data-sort="nombreProceso" style="min-width:80px;">Proceso <span class="sort-icon">⇅</span></th>
             <th data-sort="areaServicio"  style="min-width:80px;">Servicio <span class="sort-icon">⇅</span></th>
             <th                           class="colRmc"    style="min-width:120px;">RMC / Lote</th>
-            <th data-sort="cantidad"      class="td-kg"     style="min-width:65px;">Kg <span class="sort-icon">⇅</span></th>
+            <th data-sort="cantidad"      class="td-kg"     style="min-width:65px;">Cantidad <span class="sort-icon">⇅</span></th>
             <th data-sort="color"         class="colColor"  style="min-width:70px;">Color <span class="sort-icon">⇅</span></th>
             <th                           class="colColor"  style="min-width:48px;">Intens.</th>
-            <th data-sort="descFamilia"   class="colLinea"  style="min-width:90px;">Familia <span class="sort-icon">⇅</span></th>
-            <th data-sort="descLinea"     class="colLinea"  style="min-width:90px;">Línea <span class="sort-icon">⇅</span></th>
+            <th                           style="min-width:55px;">Unidad</th>
+            <th                           style="min-width:60px;">Enconado</th>
+            <th                           style="min-width:80px;">Parafina</th>
+            <th data-sort="leadTime"      style="min-width:75px;" title="FCH_ENTREGA &minus; F_APROBACION">Lead Time <span class="sort-icon">⇅</span></th>
             <th data-sort="fchEntregaCompIso" style="min-width:82px;">F.Entrega <span class="sort-icon">⇅</span></th>
             <th                           class="colRetraso" style="min-width:62px;">Retraso</th>
             <th                           class="colKgPend"  style="min-width:65px;">KgPend</th>
+            <th                           class="colFechAprob" style="min-width:82px;">F.Aprobac.</th>
             <th data-sort="estadoPed"     style="min-width:75px;">Estado <span class="sort-icon">⇅</span></th>
             <th data-sort="pasoActual"    class="colPaso"   style="min-width:115px;">Estado PLN <span class="sort-icon">⇅</span></th>
             <th                           class="colVende"   style="min-width:95px;">Vendedor</th>
-            <th                           class="colFechAprob" style="min-width:82px;">F.Aprobac.</th>
             <th                           class="colDetalle" style="min-width:140px;">Observación</th>
         </tr>
     </thead>
@@ -586,7 +590,6 @@ let sortField    = 'fchPedido';
 let sortAsc      = false;
 let searchTerm   = '';
 let filtEstado   = '@Model.FiltroEstado';
-let filtCliente  = '@Model.FiltroCliente';
 let filtServ     = '@Model.FiltroServ';
 let filtProceso  = '@Model.FiltroProceso';
 let filtFibra    = '@Model.FiltroTfibra';
@@ -618,9 +621,7 @@ function filterItems(items) {
             r.colorDet.toLowerCase().includes(q) ||
             r.areaServicio.toLowerCase().includes(q) ||
             r.codServ.toLowerCase().includes(q) ||
-            r.nombreProceso.toLowerCase().includes(q) ||
-            r.descFamilia.toLowerCase().includes(q) ||
-            r.descLinea.toLowerCase().includes(q) ||
+            // Proceso, Familia y Línea removidos de la grilla; no se buscan aquí
             (r.pasoActual || '').toLowerCase().includes(q) ||
             (r.nombreVende || r.codVende).toLowerCase().includes(q) ||
             r.detalle.toLowerCase().includes(q) ||
@@ -635,10 +636,6 @@ function filterItems(items) {
         const estadoMap = {'0':'Sin Aprobar','5':'Aprobado','6':'Cerrado','9':'Anulado'};
         const estadoTxt = estadoMap[filtEstado] ?? filtEstado;
         res = res.filter(r => r.estadoPed === estadoTxt);
-    }
-    if (filtCliente) {
-        const qc = filtCliente.toLowerCase();
-        res = res.filter(r => r.nombreCliente.toLowerCase().includes(qc) || r.codCliente.toLowerCase().includes(qc));
     }
     if (filtServ)    res = res.filter(r => r.codServ    === filtServ);
     if (filtProceso) res = res.filter(r => r.proceso    === filtProceso);
@@ -735,29 +732,34 @@ function renderRow(r) {
     const tfibDisp   = (r.descFibra && r.descFibra !== '.') ? r.descFibra : r.tipoFibra || '';
     const vendDisp   = r.nombreVende || r.codVende;
     const intensDisp = r.intensidadAbrev || r.intensidad;
+    const parafinaDisp = r.parafina === '0' ? 'Sin parafina'
+                       : r.parafina === '1' ? 'Con parafina'
+                       : r.parafina === '2' ? 'Doble parafina'
+                       : (r.parafina || '—');
     return `<tr>
   <td>${urgIco}<a href="${ganttUrl}" class="fw-bold text-primary text-decoration-none">${r.numPed}</a></td>
   <td>${r.fchPedidoDisp}</td>
   <td title="${r.codCliente}: ${r.nombreCliente}">${r.nombreCliente.length>28 ? r.nombreCliente.slice(0,28)+'…' : r.nombreCliente}</td>
   <td class="text-center">${r.nro}</td>
-  <td title="${r.codArt}  ${r.titulo}">${r.descArt.length>24?r.descArt.slice(0,24)+'…':r.descArt}</td>
+  <td title="${r.codArt}  ${r.titulo}">${r.descArt.length>40?r.descArt.slice(0,40)+'…':r.descArt}</td>
   <td class="colTfibra" title="${r.tipoFibra}">${tfibDisp}</td>
-  <td><span class="badge bg-secondary" style="font-size:.6rem;">${r.nombreProceso||r.proceso}</span></td>
   <td>${badgeServ(r)}</td>
   <td class="colRmc">${rmcDisp}${loteDisp}</td>
   <td class="td-kg fw-bold">${fmtN(r.cantidad)}</td>
   <td class="colColor">${r.color}${r.colorDet?' / '+r.colorDet:''}</td>
   <td class="colColor">${intensDisp}</td>
-  <td class="colLinea">${r.descFamilia}</td>
-  <td class="colLinea">${r.descLinea}</td>
+  <td class="text-muted" style="font-size:.8rem;">${r.unidad || '—'}</td>
+  <td class="text-muted" style="font-size:.8rem;">${r.enconado || '—'}</td>
+  <td class="text-muted" style="font-size:.8rem;">${parafinaDisp}</td>
+  <td class="text-center" style="font-size:.8rem;">${r.leadTime != null ? r.leadTime + 'd' : '—'}</td>
   <td class="${entCls}">${entDisp}${entIco}</td>
   <td class="colRetraso">${retBadge}</td>
   <td class="colKgPend">${kgPend}</td>
+  <td class="colFechAprob">${r.fchAprobacion}</td>
   <td>${estadoBadge}</td>
   <td class="colPaso">${pasoBadge}</td>
   <td class="colVende">${vendDisp}</td>
-  <td class="colFechAprob">${r.fchAprobacion}</td>
-  <td class="colDetalle" title="${r.detalle}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.detalle}</td>
+  <td class="colDetalle" title="${r.observaciones}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.observaciones}</td>
 </tr>`;
 }
 
@@ -882,23 +884,24 @@ const _subThead = `<table class="reg-subtbl" style="width:100%;border-collapse:c
     <th style="min-width:82px;">Fecha</th>
     <th style="min-width:160px;">Cliente</th>
     <th style="width:38px;">Ítem</th>
-    <th style="min-width:135px;">Artículo</th>
+    <th style="min-width:220px;">Material</th>
     <th class="colTfibra" style="min-width:80px;">T.Fibra</th>
-    <th style="min-width:80px;">Proceso</th>
     <th style="min-width:80px;">Servicio</th>
     <th class="colRmc" style="min-width:120px;">RMC / Lote</th>
     <th style="min-width:65px;">Kg</th>
     <th class="colColor" style="min-width:70px;">Color</th>
     <th class="colColor" style="min-width:48px;">Intens.</th>
-    <th class="colLinea" style="min-width:90px;">Familia</th>
-    <th class="colLinea" style="min-width:90px;">Línea</th>
+    <th style="min-width:55px;">Unidad</th>
+    <th style="min-width:60px;">Enconado</th>
+    <th style="min-width:80px;">Parafina</th>
+    <th style="min-width:75px;" title="FCH_ENTREGA &minus; F_APROBACION">Lead Time</th>
     <th style="min-width:82px;">F.Entrega</th>
     <th class="colRetraso" style="min-width:62px;">Retraso</th>
     <th class="colKgPend" style="min-width:65px;">KgPend</th>
+    <th class="colFechAprob" style="min-width:82px;">F.Aprobac.</th>
     <th style="min-width:75px;">Estado</th>
     <th class="colPaso" style="min-width:115px;">Estado PLN</th>
     <th class="colVende" style="min-width:95px;">Vendedor</th>
-    <th class="colFechAprob" style="min-width:82px;">F.Aprobac.</th>
     <th class="colDetalle" style="min-width:140px;">Observación</th>
   </tr></thead>
   <tbody>`;
@@ -953,8 +956,7 @@ function resetForm() {
     ['selEstado','selServ','selProceso','selFibra','selPaso'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
     });
-    const ci = document.getElementById('inpCliente'); if (ci) ci.value = '';
-    filtEstado = ''; filtCliente = ''; filtServ = ''; filtProceso = ''; filtFibra = ''; filtPaso = '';
+    filtEstado = ''; filtServ = ''; filtProceso = ''; filtFibra = ''; filtPaso = '';
     document.getElementById('regSearch').value = '';
     document.getElementById('inpGrupo').value  = 'dia';
     searchTerm = '';
@@ -991,25 +993,25 @@ function setRango(dias) {
 function exportCSV() {
     const items = sortItems(filterItems(ALL_ITEMS));
     const header = ['NumPed','Serie','FchPedido','Cliente','NroItem','CodArt','Articulo',
-        'TFibra','DescFibra','Titulo','Proceso','Servicio','Area',
+        'TFibra','DescFibra','Titulo','Servicio','Area',
         'NroRmc','Rmc','DescRmc','Lote','KgPedido','Precio','KgPendiente',
-        'Color','Intensidad','Presentacion','Familia','Linea',
+        'Color','Intensidad','Presentacion','Unidad','Enconado','Parafina','LeadTime_dias',
         'FEntregaPLN','FEntregaHC','FMaxPed','Retraso','DiasRetraso','Urgente',
-        'EstadoPed','EstadoPLN','CodPLN','FAprobacion','Observacion'];
+        'EstadoPed','EstadoPLN','CodPLN','FAprobacion','Detalle','Observaciones'];
     const rows   = items.map(r => [
         r.numPed, r.serie, r.fchPedidoDisp, r.nombreCliente, r.nro,
         r.codArt, r.descArt,
-        r.tipoFibra, r.descFibra, r.titulo, r.nombreProceso,
+        r.tipoFibra, r.descFibra, r.titulo,
         r.codServ, r.areaServicio,
         r.nroRmc || '', r.rmc, r.descRmc, r.lote,
         r.cantidad.toFixed(2), r.precio.toFixed(4), r.kgPendientes.toFixed(2),
         r.color, r.intensidadAbrev || r.intensidad, r.presentacion,
-        r.descFamilia, r.descLinea,
+        r.unidad, r.enconado, r.parafina, r.leadTime ?? '',
         r.fchEntregaComp, r.fhcEntrega, r.fMaxPed,
         r.indRetraso, r.diasRetraso,
         (r.indUrgente === 'S' || r.urgente === 'S') ? 'S' : 'N',
         r.estadoPed, r.pasoActual, r.codPasoAct,
-        r.fchAprobacion, r.detalle
+        r.fchAprobacion, r.detalle, r.observaciones
     ].map(v => `"${(v??'').toString().replace(/"/g,'""')}"`).join(','));
     const csv = [header.join(','), ...rows].join('\r\n');
     const link = document.createElement('a');
@@ -1063,11 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('selProceso')?.addEventListener('change', e => { filtProceso = e.target.value; render(); });
     document.getElementById('selFibra')  ?.addEventListener('change', e => { filtFibra   = e.target.value; render(); });
     document.getElementById('selPaso')   ?.addEventListener('change', e => { filtPaso    = e.target.value; render(); });
-    let _clienteTimer = 0;
-    document.getElementById('inpCliente')?.addEventListener('input', e => {
-        clearTimeout(_clienteTimer);
-        _clienteTimer = setTimeout(() => { filtCliente = e.target.value.trim(); render(); }, 250);
-    });
+
 
     // Toggle de columnas
     document.querySelectorAll('.col-chk').forEach(chk => {

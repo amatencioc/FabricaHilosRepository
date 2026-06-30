@@ -46,12 +46,14 @@
         return nombresUsuarios.TryGetValue(cod, out var n) && n != cod ? $"{n} ({cod})" : cod;
     };
 
-    // Totales desde los valores almacenados en DB — respetan el IMPSTO configurado
-    // en la O/C (IGV 18%, retención I.RENTA -8%, descuento/N.C. -10%, etc.).
-    // NO recalcular con tasa fija: cada O/C puede tener un tipo de impuesto distinto.
+    // ImpVvta ya se calcula en tiempo real en ObtenerItemsAsync (CANTIDAD×PRECIO×descuentos),
+    // por lo que valVenta es inmune a cambios directos del Legacy en ITEMORD.CANTIDAD.
+    // impIgv y total se derivan de valVenta × oc.Impsto para evitar leer columnas
+    // almacenadas (IMP_IGV, PRECIO_VTA) que pueden quedar desincronizadas.
+    // oc.Impsto preserva la tasa configurada por O/C (18%, -8%, -10%, etc.).
     decimal valVenta = items.Sum(i => i.ImpVvta);
-    decimal impIgv   = oc.ImpIgv;
-    decimal total    = oc.PrecioVta;
+    decimal impIgv   = Math.Round(valVenta * oc.Impsto, 2);
+    decimal total    = valVenta + impIgv;
 
     // Agrupar ítems por NumReq para mostrar secciones desagregadas
     // Ordenar numéricamente (no como string) para que REQ 9 vaya después de REQ 100

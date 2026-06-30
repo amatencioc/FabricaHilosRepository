@@ -118,6 +118,7 @@ public class PlnPendienteSecado
     public string    Maquina     { get; set; } = "";  // DESC_MAQ_01
     public string    Proceso     { get; set; } = "";  // PROCESO_01
     public decimal   NroRmc      { get; set; }        // NRO_RMC_01
+    public string    Rmc         { get; set; } = "";  // RMC
     public decimal   Peso        { get; set; }        // PESO_PARTIDA_01
     public string    Lote        { get; set; } = "";  // LOTE_01
     public string    ColoSer     { get; set; } = "";  // COLO_SER_01
@@ -139,8 +140,9 @@ public class PlnPendienteMadeja
     public string    CodCliente { get; set; } = "";  // COD_CLIENTE_000
     public string    CodVende   { get; set; } = "";  // COD_VENDE_000
     public DateTime? FchProg    { get; set; }        // FCH_PROG_000
-    public string    CodMaq     { get; set; } = "";  // RMC_000
+    public string    CodMaq     { get; set; } = "";  // COD_MAQ_000
     public string    Maquina    { get; set; } = "";  // DESC_MAQUINA_000
+    public string    Rmc        { get; set; } = "";  // RMC_000
     public decimal   NroRmc     { get; set; }        // NRO_RMC_000
     public decimal   Peso       { get; set; }        // NETO_GUIA_000
     public string    Lote       { get; set; } = "";  // LOTE_000

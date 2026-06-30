@@ -70,6 +70,7 @@ public class PlnReporteProduccion
     public DateTime? FchEnconado     { get; set; }   // 35 FCH_ENCONADO
     public DateTime? FchRevisado     { get; set; }   // 36 FCH_REVISADO
     public string?   EvEncon         { get; set; }   // 37 EV_ENCON
+    public string?   Calificacion     { get; set; }   // 37b CALIFICACION (TT_RPRODUC último baño)
 
     // ── Cols 38-42: Entrega y días de espera ──────────────────────────────
     public DateTime? FchEntrega      { get; set; }   // 38 FCH_ENTREGA

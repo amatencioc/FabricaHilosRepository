@@ -77,9 +77,12 @@
                         <th>Partida</th>
                         <th>Material</th>
                         <th>Cliente</th>
+                        <th>Cód. Cliente</th>
+                        <th>Cód. Vende</th>
                         <th class="text-center">F. Prog.</th>
                         <th>Cód. Maq.</th>
                         <th>Máquina</th>
+                        <th>RMC</th>
                         <th class="text-center">Nro RMC</th>
                         <th class="text-end">Kg</th>
                         <th>Lote</th>
@@ -103,11 +106,14 @@
                                 <span style="max-width:160px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                       title="@item.Cliente">@item.Cliente</span>
                             </td>
+                            <td class="text-muted" style="font-size:.75rem;">@item.CodCliente</td>
+                            <td class="text-muted" style="font-size:.75rem;">@item.CodVende</td>
                             <td class="text-center text-muted">
                                 @(item.FchProg.HasValue ? item.FchProg.Value.ToString("dd/MM/yy") : "—")
                             </td>
                             <td class="text-muted" style="font-size:.75rem;">@item.CodMaq</td>
                             <td style="font-size:.78rem;">@item.Maquina</td>
+                            <td style="font-size:.78rem;">@item.Rmc</td>
                             <td class="text-center text-muted">
                                 @(item.NroRmc > 0 ? item.NroRmc.ToString("N0") : "—")
                             </td>
@@ -146,7 +152,7 @@
                 </tbody>
                 <tfoot>
                     <tr class="fw-semibold">
-                        <td colspan="7" class="text-end text-muted">Totales:</td>
+                        <td colspan="10" class="text-end text-muted">Totales:</td>
                         <td class="text-end">@kgTotal.ToString("N2")</td>
                         <td colspan="4"></td>
                     </tr>

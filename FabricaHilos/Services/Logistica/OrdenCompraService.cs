@@ -129,6 +129,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                    PAGED.TIPO_DOCTO, PAGED.SERIE, PAGED.NUM_PED, PAGED.ESTADO, PAGED.FECHA,
                    PAGED.COD_PROVEED, PAGED.COND_PAG, PAGED.MONEDA, PAGED.COD_VENDE,
                    PAGED.PLAZO_ENTREGA, PAGED.DETALLE, PAGED.C_COSTO, PAGED.F_ENTREGA,
+                   PAGED.IMPSTO,
                    PAGED.VAL_VENTA, PAGED.IMP_DESCTO, PAGED.IMP_NETO, PAGED.IMP_IGV,
                    PAGED.PRECIO_VTA, PAGED.TOTAL_FACTURADO,
                    PAGED.APROB_GERENCIA, PAGED.F_APROB_GER,
@@ -139,6 +140,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
                        O.TIPO_DOCTO, O.SERIE, O.NUM_PED, O.ESTADO, O.FECHA,
                        O.COD_PROVEED, O.COND_PAG, O.MONEDA, O.COD_VENDE,
                        O.PLAZO_ENTREGA, O.DETALLE, O.C_COSTO, O.F_ENTREGA,
+                       O.IMPSTO,
                        O.VAL_VENTA, O.IMP_DESCTO, O.IMP_NETO, O.IMP_IGV,
                        O.PRECIO_VTA, O.TOTAL_FACTURADO,
                        O.APROB_GERENCIA, O.F_APROB_GER,
@@ -194,6 +196,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
     {
         string sql  = $@"SELECT TIPO_DOCTO, SERIE, NUM_PED, ESTADO, FECHA, COD_PROVEED,
                                COND_PAG, MONEDA, COD_VENDE, PLAZO_ENTREGA, DETALLE, C_COSTO, F_ENTREGA,
+                               IMPSTO,
                                VAL_VENTA, IMP_DESCTO, IMP_NETO, IMP_IGV, PRECIO_VTA, TOTAL_FACTURADO,
                                APROB_GERENCIA, F_APROB_GER,
                                A_ADUSER, A_ADFECHA, A_MDUSER, A_MDFECHA
@@ -225,7 +228,11 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         var items   = new List<ItemOrdDto>();
         string sql  = $@"SELECT I.TIPO_DOCTO, I.SERIE, I.NUM_PED, I.ORDEN,
                                I.COD_ART, I.COD_ORIG, I.UNIDAD, I.DESCRIPCION,
-                               I.CANTIDAD, I.SALDO, I.PRECIO, I.POR_DESC1, I.POR_DESC2, I.IMP_VVTA, I.ESTADO,
+                               I.CANTIDAD, I.SALDO, I.PRECIO, I.POR_DESC1, I.POR_DESC2,
+                               ROUND(I.CANTIDAD * I.PRECIO
+                                     * (1 - NVL(I.POR_DESC1,0)/100)
+                                     * (1 - NVL(I.POR_DESC2,0)/100), 2) AS IMP_VVTA,
+                               I.ESTADO,
                                I.ID_GRUPO, I.F_GRUPO,
                                D.NUMREQ, D.ORDEN_REQ,
                                R.CENTRO_COSTO
@@ -420,6 +427,7 @@ public class OrdenCompraService : OracleServiceBase, IOrdenCompraService
         Detalle        = GetStr(r, "DETALLE"),
         CCosto         = GetStr(r, "C_COSTO"),
         FEntrega       = GetDt(r, "F_ENTREGA"),
+        Impsto         = GetDec(r, "IMPSTO"),
         ValVenta       = GetDec(r, "VAL_VENTA"),
         ImpDescto      = GetDec(r, "IMP_DESCTO"),
         ImpNeto        = GetDec(r, "IMP_NETO"),

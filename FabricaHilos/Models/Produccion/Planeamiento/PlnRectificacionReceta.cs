@@ -21,6 +21,8 @@ public class PlnRectificacionReceta
     public string?   DefectoOrig    { get; set; }
     public string    CodCausa       { get; set; } = "";
     public string?   Observacion    { get; set; }
+    public string?   MaqProd        { get; set; }
+    public string?   DescMaqProd    { get; set; }
     public string    MarcaEnproc    { get; set; } = "";
     public DateTime? FchEnProceso   { get; set; }
     public string    MarcaRectif    { get; set; } = "";

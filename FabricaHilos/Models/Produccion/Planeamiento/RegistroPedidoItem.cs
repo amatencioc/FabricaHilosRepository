@@ -81,6 +81,16 @@ public class RegistroPedidoItem
     // -- Backward-compat: Tfibra (antes ITEMPED.TFIBRA char1, ahora = TipoFibra) --
     public string   Tfibra { get => TipoFibra; }
 
+    // -- Nuevos campos ITEMPED / ARTICUL --
+    public string   Observaciones { get; set; } = "";
+    public string   Unidad        { get; set; } = "";
+    public string   Enconado      { get; set; } = "";
+    public string   Parafina      { get; set; } = "";
+
+    // -- Lead Time: FCH_ENTREGA - F_APROBACION (días ventana planificada) --
+    // NULL si el pedido no está aprobado o no tiene fecha de entrega
+    public int?     LeadTime      { get; set; }
+
     // -- Computed helpers --
 
     /// Area logica derivada de COD_SERV

@@ -1,4 +1,4 @@
-﻿@using FabricaHilos.Models.Produccion.Planeamiento
+@using FabricaHilos.Models.Produccion.Planeamiento
 @model IEnumerable<PlnRectificacionReceta>
 @{
 	var lista        = Model.ToList();
@@ -89,12 +89,13 @@ else
 				<tr>
 					<th class="text-center">F. Registro</th>
 					<th>Area</th>
+					<th>Supervisor</th>
 					<th>Partida</th>
 					<th>Material</th>
 					<th>Cliente</th>
 					<th>Defecto</th>
 					<th>Laboratorista</th>
-					<th>Supervisor</th>
+					<th>Máq. Producción</th>
 					<th class="text-center">F. Entrega</th>
 					<th class="text-center">Estado</th>
 				</tr>
@@ -111,10 +112,11 @@ else
 							@if (!string.IsNullOrWhiteSpace(item.Area))
 							{
 								var areaCss   = item.Area == "CC" ? "bg-danger" : item.Area == "PT" ? "bg-primary" : "bg-info text-dark";
-								var areaLabel = item.Area == "CC" ? "Control Cal." : item.Area;
+								var areaLabel = item.Area == "CC" ? "Control Cal." : item.Area == "PT" ? "Tintorería" : item.Area;
 								<span class="badge @areaCss">@areaLabel</span>
 							}
 						</td>
+						<td style="font-size:.78rem;">@item.UserRegistro</td>
 						<td class="fw-semibold" style="font-size:.82rem;">@item.Partida</td>
 						<td style="font-size:.78rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@item.Material">@item.Material</td>
 						<td style="font-size:.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@item.DescCliente">@item.DescCliente</td>
@@ -125,7 +127,16 @@ else
 							}
 						</td>
 						<td style="font-size:.78rem;">@item.DescLabo</td>
-						<td style="font-size:.78rem;">@item.UserRegistro</td>
+						<td style="font-size:.78rem;">
+							@if (!string.IsNullOrWhiteSpace(item.DescMaqProd))
+							{
+								<span title="@item.MaqProd">@item.DescMaqProd</span>
+							}
+							else if (!string.IsNullOrWhiteSpace(item.MaqProd))
+							{
+								<span>@item.MaqProd</span>
+							}
+						</td>
 						<td class="text-center">
 							@if (item.FentregaPed.HasValue)
 							{
