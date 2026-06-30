@@ -769,18 +769,26 @@
                             @if (menus.SistemasIndicadores)
                             {
                             <li>
-                                <a class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "active" : "")"
+                                <a class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" || ctrl == "DesarrolloComplejidad" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "active" : "")"
                                    data-bs-toggle="collapse" href="#submenuSistemasInd" role="button"
-                                   aria-expanded="@(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "true" : "false")"
+                                   aria-expanded="@(ctrl == "Desarrollo" || ctrl == "DesarrolloComplejidad" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "true" : "false")"
                                    aria-controls="submenuSistemasInd">
                                     <i class="bi bi-graph-up-arrow"></i> Indicadores
                                 </a>
-                                <ul class="collapse @(ctrl == "Desarrollo" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "show" : "") list-unstyled ps-3" id="submenuSistemasInd">
+                                <ul class="collapse @(ctrl == "Desarrollo" || ctrl == "DesarrolloComplejidad" || ctrl == "Incidencia" || ctrl == "SeguimientoDev" ? "show" : "") list-unstyled ps-3" id="submenuSistemasInd">
                                     @if (menus.SistemasIndicadoresDesarrollo)
                                     {
                                     <li>
                                         <a href="/Sistemas/Desarrollo" class="sidebar-link sidebar-sublink @(ctrl == "Desarrollo" ? "active" : "")">
                                             <i class="bi bi-kanban-fill"></i> KPI Desarrollo
+                                        </a>
+                                    </li>
+                                    }
+                                    @if (menus.SistemasIndicadoresDesarrolloComplejidad)
+                                    {
+                                    <li>
+                                        <a href="/Sistemas/DesarrolloComplejidad" class="sidebar-link sidebar-sublink @(ctrl == "DesarrolloComplejidad" ? "active" : "")">
+                                            <i class="bi bi-bar-chart-steps"></i> KPI Desarrollo - Complejidad
                                         </a>
                                     </li>
                                     }

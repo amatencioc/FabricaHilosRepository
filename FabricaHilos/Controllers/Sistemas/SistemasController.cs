@@ -43,6 +43,18 @@ public class SistemasController : Controller
             });
         }
 
+        if (menus.SistemasIndicadoresDesarrolloComplejidad)
+        {
+            moduloIndicadores.SubModulos.Add(new SgcSubModuloDto
+            {
+                Nombre      = "KPI Desarrollo - Complejidad",
+                Descripcion = "Requerimientos ponderados por nivel BAJA / MEDIA / ALTA. Distribución y avance por complejidad.",
+                Icono       = "bi-bar-chart-steps",
+                Controller  = "DesarrolloComplejidad",
+                Action      = "Index"
+            });
+        }
+
         if (menus.SistemasIndicadoresIncidencia)
         {
             moduloIndicadores.SubModulos.Add(new SgcSubModuloDto

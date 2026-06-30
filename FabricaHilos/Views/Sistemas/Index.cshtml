@@ -54,10 +54,11 @@
                                 {
                                     var href = sub.Controller switch
                                     {
-                                        "Desarrollo"     => "/Sistemas/Desarrollo",
-                                        "Incidencia"     => "/Sistemas/Incidencia",
-                                        "SeguimientoDev" => "/Sistemas/SeguimientoDev",
-                                        _                => $"/{sub.Controller}/{sub.Action}"
+                                        "Desarrollo"             => "/Sistemas/Desarrollo",
+                                        "DesarrolloComplejidad"  => "/Sistemas/DesarrolloComplejidad",
+                                        "Incidencia"             => "/Sistemas/Incidencia",
+                                        "SeguimientoDev"         => "/Sistemas/SeguimientoDev",
+                                        _                        => $"/{sub.Controller}/{sub.Action}"
                                     };
                                     <a href="@href" class="btn btn-outline-secondary btn-sm text-start">
                                         <i class="bi @sub.Icono me-2"></i>

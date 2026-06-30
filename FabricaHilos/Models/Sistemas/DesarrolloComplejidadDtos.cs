@@ -15,6 +15,8 @@ namespace FabricaHilos.Models.Sistemas
         public DateTime? FechaTermino    { get; set; }
         public string?   Estado          { get; set; }
         public string?   Complejidad     { get; set; }
+        /// <summary>Código fuente de PRIORIDAD: '01'=BAJA · '02'=MEDIA · '03'=ALTA.</summary>
+        public string?   CodComplejidad  { get; set; }
 
         public bool EsPendiente => Estado == "1";
         public bool EsEntregado => Estado == "2";

@@ -79,8 +79,7 @@ public class MenuOptions
     // ── Menús: Sistemas ──────────────────────────────────────────────────
     public bool Sistemas                                    { get; set; } = false;
     public bool SistemasIndicadores                         { get; set; } = true;
-    public bool SistemasIndicadoresDesarrollo               { get; set; } = true;
-    public bool SistemasIndicadoresIncidencia               { get; set; } = true;
+    public bool SistemasIndicadoresDesarrollo               { get; set; } = true;    public bool SistemasIndicadoresDesarrolloComplejidad    { get; set; } = true;     public bool SistemasIndicadoresIncidencia               { get; set; } = true;
     public bool SistemasIndicadoresSeguimientoDev           { get; set; } = true;
     public bool SistemasRequerimientos                      { get; set; } = true;
     public bool SistemasRequerimientosAnularDocumento       { get; set; } = true;
@@ -186,9 +185,10 @@ public class MenuOptions
 
         Sistemas                              = true,
         SistemasIndicadores                   = true,
-        SistemasIndicadoresDesarrollo         = true,
-        SistemasIndicadoresIncidencia         = true,
-        SistemasIndicadoresSeguimientoDev     = true,
+        SistemasIndicadoresDesarrollo                  = true,
+        SistemasIndicadoresDesarrolloComplejidad       = true,
+        SistemasIndicadoresIncidencia                  = true,
+        SistemasIndicadoresSeguimientoDev              = true,
         SistemasRequerimientos                = true,
         SistemasRequerimientosAnularDocumento = true,
 
